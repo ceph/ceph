@@ -5,9 +5,6 @@
 
 #include <boost/utility/string_ref.hpp>
 
-#include <curl/curl.h>
-#include <curl/easy.h>
-#include <curl/multi.h>
 
 #include "rgw_common.h"
 #include "rgw_http_client.h"
@@ -52,8 +49,13 @@ struct rgw_http_req_data : public RefCountedObject {
   void finish(int r) {
     Mutex::Locker l(lock);
     ret = r;
-    if (easy_handle)
-      curl_easy_cleanup(easy_handle);
+    if (easy_handle) {
+      if (mgr) {
+        mgr->put_easy_handle(easy_handle);
+      } else {
+        curl_easy_cleanup(easy_handle);
+      }
+    }
 
     if (h)
       curl_slist_free_all(h);
@@ -322,11 +324,16 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   _req_data->get();
   req_data = _req_data;
 
+  /*
   CURL *easy_handle;
 
   easy_handle = curl_easy_init();
 
   req_data->easy_handle = easy_handle;
+  */
+
+  CURL *easy_handle = req_data->easy_handle;
+  curl_easy_reset(easy_handle);
 
   dout(20) << "sending request to " << url << dendl;
 
@@ -609,6 +616,7 @@ void *RGWHTTPManager::ReqsThread::entry()
 RGWHTTPManager::RGWHTTPManager(CephContext *_cct, RGWCompletionManager *_cm) : cct(_cct),
                                                     completion_mgr(_cm), is_threaded(false),
                                                     reqs_lock("RGWHTTPManager::reqs_lock"), num_reqs(0), max_threaded_req(0),
+                                                    handle_cache_lock("RGWHTTPManager::handle_cache_lock"),
                                                     reqs_thread(NULL)
 {
   multi_handle = (void *)curl_multi_init();
@@ -618,6 +626,11 @@ RGWHTTPManager::RGWHTTPManager(CephContext *_cct, RGWCompletionManager *_cm) : c
 
 RGWHTTPManager::~RGWHTTPManager() {
   stop();
+
+  for (auto &c : curl_handle_cache) {
+    curl_easy_cleanup(c);
+  }
+
   if (multi_handle)
     curl_multi_cleanup((CURLM *)multi_handle);
 }
@@ -753,9 +766,34 @@ void RGWHTTPManager::manage_pending_requests()
   }
 }
 
+CURL* RGWHTTPManager::get_easy_handle()
+{
+  Mutex::Locker l(handle_cache_lock);
+
+  CURL *easy_handle = nullptr;
+  if (curl_handle_cache.empty()) {
+    easy_handle = curl_easy_init();
+    cached_handle_size ++;
+  } else {
+    easy_handle = curl_handle_cache.front();
+    curl_handle_cache.pop_front();
+  }
+
+  return easy_handle;
+}
+
+void RGWHTTPManager::put_easy_handle(CURL *c)
+{
+  Mutex::Locker l(handle_cache_lock);
+
+  curl_handle_cache.push_back(c);
+}
+
 int RGWHTTPManager::add_request(RGWHTTPClient *client, const char *method, const char *url, bool send_data_hint)
 {
   rgw_http_req_data *req_data = new rgw_http_req_data;
+
+  req_data->easy_handle = get_easy_handle();
 
   int ret = client->init_request(method, url, req_data, send_data_hint);
   if (ret < 0) {

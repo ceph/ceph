@@ -58,11 +58,14 @@ class RGWRESTConn
   string remote_id;
   std::atomic<int64_t> counter = { 0 };
 
+  RGWHTTPManager *http_manager;
+
 public:
 
   RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints);
   // custom move needed for atomic
   RGWRESTConn(RGWRESTConn&& other);
+  ~RGWRESTConn();
   RGWRESTConn& operator=(RGWRESTConn&& other);
 
   int get_url(string& endpoint);
