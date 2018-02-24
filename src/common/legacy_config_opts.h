@@ -938,6 +938,8 @@ OPTION(bdev_debug_aio_suicide_timeout, OPT_FLOAT)
 // NVMe driver is loaded while osd is running.
 OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL)
 OPTION(bdev_nvme_retry_count, OPT_INT) // -1 means by default which is 4
+OPTION(bdev_enable_discard, OPT_BOOL)
+OPTION(bdev_async_discard, OPT_BOOL)
 
 OPTION(objectstore_blackhole, OPT_BOOL)
 

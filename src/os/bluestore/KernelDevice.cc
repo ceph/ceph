@@ -32,15 +32,20 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
-KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
+KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd_direct(-1),
     fd_buffered(-1),
     fs(NULL), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
+    discard_callback(d_cb),
+    discard_callback_priv(d_cbpriv),
     aio_stop(false),
+    discard_started(false),
+    discard_stop(false),
     aio_thread(this),
+    discard_thread(this),
     injecting_crash(0)
 {
 }
@@ -145,6 +150,7 @@ int KernelDevice::open(const string& p)
   if (r < 0) {
     goto out_fail;
   }
+  _discard_start();
 
   fs = FS::create_by_fd(fd_direct);
   assert(fs);
@@ -187,6 +193,7 @@ void KernelDevice::close()
 {
   dout(1) << __func__ << dendl;
   _aio_stop();
+  _discard_stop();
 
   assert(fs);
   delete fs;
@@ -342,6 +349,40 @@ void KernelDevice::_aio_stop()
   }
 }
 
+int KernelDevice::_discard_start()
+{
+    discard_thread.create("bstore_discard");
+    return 0;
+}
+
+void KernelDevice::_discard_stop()
+{
+  dout(10) << __func__ << dendl;
+  {
+    std::unique_lock<std::mutex> l(discard_lock);
+    while (!discard_started) {
+      discard_cond.wait(l);
+    }
+    discard_stop = true;
+    discard_cond.notify_all();
+  }
+  discard_thread.join();
+  {
+    std::lock_guard<std::mutex> l(discard_lock);
+    discard_stop = false;
+  }
+  dout(10) << __func__ << " stopped" << dendl;
+}
+
+void KernelDevice::discard_drain()
+{
+  dout(10) << __func__ << dendl;
+  std::unique_lock<std::mutex> l(discard_lock);
+  while (!discard_queued.empty() || discard_running) {
+    discard_cond.wait(l);
+  }
+}
+
 void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -438,6 +479,54 @@ void KernelDevice::_aio_thread()
   }
   reap_ioc();
   dout(10) << __func__ << " end" << dendl;
+}
+
+void KernelDevice::_discard_thread()
+{
+  std::unique_lock<std::mutex> l(discard_lock);
+  assert(!discard_started);
+  discard_started = true;
+  discard_cond.notify_all();
+  while (true) {
+    assert(discard_finishing.empty());
+    if (discard_queued.empty()) {
+      if (discard_stop)
+	break;
+      dout(20) << __func__ << " sleep" << dendl;
+      discard_cond.notify_all(); // for the thread trying to drain...
+      discard_cond.wait(l);
+      dout(20) << __func__ << " wake" << dendl;
+    } else {
+      discard_finishing.swap(discard_queued);
+      discard_running = true;
+      l.unlock();
+      dout(20) << __func__ << " finishing" << dendl;
+      for (auto p = discard_finishing.begin();p != discard_finishing.end(); ++p) {
+	discard(p.get_start(), p.get_len());
+      }
+
+      discard_callback(discard_callback_priv, static_cast<void*>(&discard_finishing));
+      discard_finishing.clear();
+      l.lock();
+      discard_running = false;
+    }
+  }
+  dout(10) << __func__ << " finish" << dendl;
+  discard_started = false;
+}
+
+int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
+{
+  if (rotational)
+    return -1;
+
+  if (to_release.empty())
+    return 0;
+
+  std::lock_guard<std::mutex> l(discard_lock);
+  discard_queued.insert(to_release);
+  discard_cond.notify_all();
+  return 0;
 }
 
 void KernelDevice::_aio_log_start(
@@ -657,6 +746,14 @@ int KernelDevice::aio_write(
       return r;
   }
   return 0;
+}
+
+int KernelDevice::discard(uint64_t offset, uint64_t len)
+{
+  int r = 0;
+  if (!rotational)
+    r = block_device_discard(fd_direct, (int64_t)offset, (int64_t)len);
+  return r;
 }
 
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,

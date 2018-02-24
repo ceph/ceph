@@ -32,7 +32,7 @@
 #endif
 #include "include/assert.h"
 #include "include/buffer.h"
-
+#include "include/interval_set.h"
 #define SPDK_PREFIX "spdk:"
 
 class CephContext;
@@ -129,7 +129,7 @@ public:
   virtual ~BlockDevice() = default;
 
   static BlockDevice *create(
-    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv);
+    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
   virtual bool supported_bdev_label() { return true; }
   virtual bool is_rotational() { return rotational; }
 
@@ -178,6 +178,9 @@ public:
     IOContext *ioc,
     bool buffered) = 0;
   virtual int flush() = 0;
+  virtual int discard(uint64_t offset, uint64_t len) { return 0; }
+  virtual int queue_discard(interval_set<uint64_t> &to_release) { return -1; }
+  virtual void discard_drain() { return; }
 
   void queue_reap_ioc(IOContext *ioc);
   void reap_ioc();

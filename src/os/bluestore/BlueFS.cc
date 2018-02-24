@@ -24,6 +24,23 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileReaderBuffer,
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileReader, bluefs_file_reader, bluefs);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileLock, bluefs_file_lock, bluefs);
 
+static void wal_discard_cb(void *priv, void* priv2) {
+  BlueFS *bluefs = static_cast<BlueFS*>(priv);
+  interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
+  bluefs->handle_discard(BlueFS::BDEV_WAL, *tmp);
+}
+
+static void db_discard_cb(void *priv, void* priv2) {
+  BlueFS *bluefs = static_cast<BlueFS*>(priv);
+  interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
+  bluefs->handle_discard(BlueFS::BDEV_DB, *tmp);
+}
+
+static void slow_discard_cb(void *priv, void* priv2) {
+  BlueFS *bluefs = static_cast<BlueFS*>(priv);
+  interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
+  bluefs->handle_discard(BlueFS::BDEV_SLOW, *tmp);
+}
 
 BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
@@ -31,6 +48,9 @@ BlueFS::BlueFS(CephContext* cct)
     ioc(MAX_BDEV),
     block_all(MAX_BDEV)
 {
+  discard_cb[BDEV_WAL] = wal_discard_cb;
+  discard_cb[BDEV_DB] = db_discard_cb;
+  discard_cb[BDEV_SLOW] = slow_discard_cb;
 }
 
 BlueFS::~BlueFS()
@@ -133,7 +153,7 @@ int BlueFS::add_block_device(unsigned id, const string& path)
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id < bdev.size());
   assert(bdev[id] == NULL);
-  BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL);
+  BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL, discard_cb[id], static_cast<void*>(this));
   int r = b->open(path);
   if (r < 0) {
     delete b;
@@ -220,6 +240,13 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   dout(1) << __func__ << " bdev " << id << " want 0x" << std::hex << want
 	  << " got " << *extents << dendl;
   return 0;
+}
+
+void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)
+{
+  dout(10) << __func__ << " bdev " << id << dendl;
+  assert(alloc[id]);
+  alloc[id]->release(to_release);
 }
 
 uint64_t BlueFS::get_fs_usage()
@@ -379,6 +406,11 @@ void BlueFS::_init_alloc()
 void BlueFS::_stop_alloc()
 {
   dout(20) << __func__ << dendl;
+  for (auto p : bdev) {
+    if (p)
+      p->discard_drain();
+  }
+
   for (auto p : alloc) {
     if (p != nullptr)  {
       p->shutdown();
@@ -1572,6 +1604,16 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   for (unsigned i = 0; i < to_release.size(); ++i) {
     if (!to_release[i].empty()) {
       /* OK, now we have the guarantee alloc[i] won't be null. */
+      int r = 0;
+      if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
+	r = bdev[i]->queue_discard(to_release[i]);
+	if (r == 0)
+	  continue;
+      } else if (cct->_conf->bdev_enable_discard) {
+	for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
+	  bdev[i]->discard(p.get_start(), p.get_len());
+	}
+      }
       alloc[i]->release(to_release[i]);
     }
   }
