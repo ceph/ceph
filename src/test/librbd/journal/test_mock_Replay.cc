@@ -838,6 +838,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 					  "snap")},
                &on_snap_remove_ready,
 	       &on_snap_remove_safe);
+  ictx->op_work_queue->drain();
   ASSERT_EQ(0, on_snap_remove_ready.wait());
 
   C_SaferCond on_snap_create_ready;
@@ -848,6 +849,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEvent) {
 					  "snap")},
                &on_snap_create_ready,
 	       &on_snap_create_safe);
+  ictx->op_work_queue->drain();
 
   C_SaferCond on_shut_down;
   mock_journal_replay.shut_down(false, &on_shut_down);
@@ -894,6 +896,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 					  "snap")},
                &on_snap_remove_ready,
 	       &on_snap_remove_safe);
+  ictx->op_work_queue->drain();
   ASSERT_EQ(0, on_snap_remove_ready.wait());
 
   C_SaferCond on_snap_create_ready;
@@ -904,6 +907,7 @@ TEST_F(TestMockJournalReplay, MissingOpFinishEventCancelOps) {
 					  "snap")},
                &on_snap_create_ready,
 	       &on_snap_create_safe);
+  ictx->op_work_queue->drain();
 
   C_SaferCond on_resume;
   when_replay_op_ready(mock_journal_replay, 123, &on_resume);
