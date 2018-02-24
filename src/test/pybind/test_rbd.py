@@ -22,7 +22,8 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
                  RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
-                 RBD_SNAP_NAMESPACE_TYPE_TRASH)
+                 RBD_SNAP_NAMESPACE_TYPE_TRASH,
+                 RBD_IMAGE_MIGRATION_STATE_PREPARED)
 
 rados = None
 ioctx = None
@@ -1910,3 +1911,28 @@ class TestGroups(object):
 def test_rename():
     rbd = RBD()
     image_name2 = get_temp_image_name()
+
+class TestMigration(object):
+
+    def test_migration(self):
+        create_image()
+        RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
+                                order=23, stripe_unit=1<<23, stripe_count=1,
+                                data_pool=None)
+
+        status = RBD().migration_status(ioctx, image_name)
+        eq(image_name, status['source_image_name'])
+        eq(image_name, status['dest_image_name'])
+        eq(RBD_IMAGE_MIGRATION_STATE_PREPARED, status['state'])
+
+        RBD().migration_execute(ioctx, image_name)
+        RBD().migration_commit(ioctx, image_name)
+        remove_image()
+
+    def test_migrate_abort(self):
+        create_image()
+        RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
+                                order=23, stripe_unit=1<<23, stripe_count=1,
+                                data_pool=None)
+        RBD().migration_abort(ioctx, image_name)
+        remove_image()
