@@ -33,6 +33,9 @@ OpenRequest<I>::OpenRequest(I *image_ctx, uint64_t flags,
   if ((flags & OPEN_FLAG_OLD_FORMAT) != 0) {
     m_image_ctx->old_format = true;
   }
+  if ((flags & OPEN_FLAG_IGNORE_MIGRATING) != 0) {
+    m_image_ctx->ignore_migrating = true;
+  }
 }
 
 template <typename I>
