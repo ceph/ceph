@@ -3,6 +3,7 @@
 
 #include "librbd/api/Migration.h"
 #include "include/rados/librados.hpp"
+#include "include/stringify.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -31,7 +32,117 @@
 namespace librbd {
 namespace api {
 
+using util::create_rados_callback;
+
 namespace {
+
+class MigrationProgressContext : public ProgressContext {
+public:
+  MigrationProgressContext(librados::IoCtx& io_ctx,
+                           const std::string &header_oid,
+                           cls::rbd::MigrationState state,
+                           ProgressContext *prog_ctx)
+    : m_io_ctx(io_ctx), m_header_oid(header_oid), m_state(state),
+      m_prog_ctx(prog_ctx), m_cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
+      m_lock(util::unique_lock_name("librbd::api::MigrationProgressContext",
+                                    this)) {
+    assert(m_prog_ctx != nullptr);
+  }
+
+  ~MigrationProgressContext() {
+    wait_for_in_flight_updates();
+  }
+
+  int update_progress(uint64_t offset, uint64_t total) override {
+    ldout(m_cct, 20) << "offset=" << offset << ", total=" << total << dendl;
+
+    m_prog_ctx->update_progress(offset, total);
+
+    std::string description = stringify(offset * 100 / total) + "% complete";
+
+    send_state_description_update(description);
+
+    return 0;
+  }
+
+private:
+  librados::IoCtx& m_io_ctx;
+  std::string m_header_oid;
+  cls::rbd::MigrationState m_state;
+  ProgressContext *m_prog_ctx;
+
+  CephContext* m_cct;
+  mutable Mutex m_lock;
+  Cond m_cond;
+  std::string m_state_description;
+  bool m_pending_update = false;
+  int m_in_flight_state_updates = 0;
+
+  void send_state_description_update(const std::string &description) {
+    Mutex::Locker locker(m_lock);
+
+    if (description == m_state_description) {
+      return;
+    }
+
+    m_state_description = description;
+
+    if (m_in_flight_state_updates > 0) {
+      m_pending_update = true;
+      return;
+    }
+
+    set_state_description();
+  }
+
+  void set_state_description() {
+    ldout(m_cct, 20) << "state_description=" << m_state_description << dendl;
+
+    assert(m_lock.is_locked());
+
+    librados::ObjectWriteOperation op;
+    cls_client::migration_set_state(&op, m_state, m_state_description);
+
+    using klass = MigrationProgressContext;
+    librados::AioCompletion *comp =
+      create_rados_callback<klass, &klass::handle_set_state_description>(this);
+    int r = m_io_ctx.aio_operate(m_header_oid, comp, &op);
+    assert(r == 0);
+    comp->release();
+
+    m_in_flight_state_updates++;
+  }
+
+  void handle_set_state_description(int r) {
+    ldout(m_cct, 20) << "r=" << r << dendl;
+
+    Mutex::Locker locker(m_lock);
+
+    m_in_flight_state_updates--;
+
+    if (r < 0) {
+      lderr(m_cct) << "failed to update migration state: " << cpp_strerror(r)
+                   << dendl;
+    } else if (m_pending_update) {
+      set_state_description();
+      m_pending_update = false;
+    } else {
+      m_cond.Signal();
+    }
+  }
+
+  void wait_for_in_flight_updates() {
+    Mutex::Locker locker(m_lock);
+
+    ldout(m_cct, 20) << "m_in_flight_state_updates="
+                     << m_in_flight_state_updates << dendl;
+
+    m_pending_update = false;
+    while (m_in_flight_state_updates > 0) {
+      m_cond.Wait(m_lock);
+    }
+  }
+};
 
 int trash_search(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                  const std::string &image_name, std::string *image_id) {
@@ -600,7 +711,10 @@ int Migration<I>::execute() {
   }
 
   while (true) {
-    r = dst_image_ctx->operations->migrate(*m_prog_ctx);
+    MigrationProgressContext prog_ctx(m_src_io_ctx, m_src_header_oid,
+                                      cls::rbd::MIGRATION_STATE_EXECUTING,
+                                      m_prog_ctx);
+    r = dst_image_ctx->operations->migrate(prog_ctx);
     if (r == -EROFS) {
       RWLock::RLocker owner_locker(dst_image_ctx->owner_lock);
       if (dst_image_ctx->exclusive_lock != nullptr &&
