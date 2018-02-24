@@ -124,6 +124,57 @@ int execute_remove(const po::variables_map &vm,
   return 0;
 }
 
+int execute_rename(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  size_t arg_index = 0;
+
+  std::string group_name;
+  std::string pool_name;
+
+  int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                      &arg_index, &pool_name, &group_name,
+                                      nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string dest_group_name;
+  std::string dest_pool_name;
+
+  r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                  &arg_index, &dest_pool_name,
+                                  &dest_group_name, nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  if (pool_name != dest_pool_name) {
+    std::cerr << "rbd: group rename across pools not supported" << std::endl
+              << "source pool: " << pool_name<< ", dest pool: " << dest_pool_name
+              << std::endl;
+    return -EINVAL;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  r = rbd.group_rename(io_ctx, group_name.c_str(),
+                       dest_group_name.c_str());
+
+  if (r < 0) {
+    std::cerr << "rbd: failed to rename group: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
 int execute_add(const po::variables_map &vm,
                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
@@ -560,6 +611,14 @@ void get_list_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
+void get_rename_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE,
+                             false);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST,
+                             false);
+}
+
 void get_add_arguments(po::options_description *positional,
                        po::options_description *options) {
   positional->add_options()
@@ -651,6 +710,9 @@ Shell::Action action_remove(
 Shell::Action action_list(
   {"group", "list"}, {"group", "ls"}, "List rbd groups.",
   "", &get_list_arguments, &execute_list);
+Shell::Action action_rename(
+  {"group", "rename"}, {}, "Rename a group within pool.",
+  "", &get_rename_arguments, &execute_rename);
 Shell::Action action_add(
   {"group", "image", "add"}, {}, "Add an image to a group.",
   "", &get_add_arguments, &execute_add);

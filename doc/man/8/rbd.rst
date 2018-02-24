@@ -282,6 +282,9 @@ Commands
 :command:`group ls` [-p | --pool *pool-name*]
   List rbd groups.
 
+:command:`group rename` *src-group-spec* *dest-group-spec*
+  Rename a group.  Note: rename across pools is not supported.
+
 :command:`group rm` *group-spec*
   Delete a group.
 

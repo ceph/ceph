@@ -30,6 +30,7 @@
       group image remove (group image rm) Remove an image from a group.
       group list (group ls)               List rbd groups.
       group remove (group rm)             Delete a group.
+      group rename                        Rename a group within pool.
       group snap create                   Make a snapshot of a group.
       group snap list (group snap ls)     List snapshots of a group.
       group snap remove (group snap rm)   Remove a snapshot from a group.
@@ -631,6 +632,25 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --group arg          group name
+  
+  rbd help group rename
+  usage: rbd group rename [--pool <pool>] [--group <group>] 
+                          [--dest-pool <dest-pool>] [--dest-group <dest-group>] 
+                          <source-group-spec> <dest-group-spec> 
+  
+  Rename a group within pool.
+  
+  Positional arguments
+    <source-group-spec>  source group specification
+                         (example: [<pool-name>/]<group-name>)
+    <dest-group-spec>    destination group specification
+                         (example: [<pool-name>/]<group-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    source pool name
+    --group arg          source group name
+    --dest-pool arg      destination pool name
+    --dest-group arg     destination group name
   
   rbd help group snap create
   usage: rbd group snap create [--pool <pool>] [--group <group>] [--snap <snap>] 
