@@ -6869,7 +6869,6 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->apply_changes(NULL);
 }
-#endif
 
 TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice) {
   if (string(GetParam()) != "bluestore")
@@ -7067,6 +7066,7 @@ TEST_P(StoreTest, BluestoreRepairTest) {
 
   g_ceph_context->_conf->apply_changes(NULL);
 }
+#endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
   vector<const char*> args;
