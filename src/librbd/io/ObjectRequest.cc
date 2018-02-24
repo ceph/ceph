@@ -480,7 +480,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
     ldout(image_ctx->cct, 20) << "guarding write" << dendl;
     if (!image_ctx->migration_info.empty()) {
       cls_client::assert_snapc_seq(
-        &write, m_snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_NOT_GT_SNAPSET_SEQ);
+        &write, m_snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ);
     } else {
       write.assert_exists();
     }
