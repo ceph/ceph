@@ -28,24 +28,35 @@ namespace cache {
 using namespace librbd::cache::rwl;
 using namespace librbd::cache::file;
 
-BlockExtent block_extent(uint64_t offset_bytes, uint64_t length_bytes)
+namespace rwl {
+
+typedef ReplicatedWriteLog<ImageCtx>::Extent Extent;
+typedef ReplicatedWriteLog<ImageCtx>::Extents Extents;
+
+BlockExtent block_extent(const uint64_t offset_bytes, const uint64_t length_bytes)
 {
   return BlockExtent(offset_bytes / MIN_WRITE_SIZE,
 		     ((offset_bytes + length_bytes) / MIN_WRITE_SIZE) - 1);
 }
 
-BlockExtent block_extent(ImageCache::Extent& image_extent)
+BlockExtent block_extent(const Extent& image_extent)
 {
   return block_extent(image_extent.first, image_extent.second);
 }
 
-ImageCache::Extent image_extent(BlockExtent block_extent)
+Extent image_extent(const BlockExtent& block_extent)
 {
-  return ImageCache::Extent(block_extent.block_start * MIN_WRITE_SIZE,
-			    (block_extent.block_end - block_extent.block_start + 1) * MIN_WRITE_SIZE);
+  return Extent(block_extent.block_start * MIN_WRITE_SIZE,
+		(block_extent.block_end - block_extent.block_start + 1) * MIN_WRITE_SIZE);
 }
 
-namespace rwl {
+BlockExtent WriteLogPmemEntry::block_extent() {
+  return BlockExtent(librbd::cache::rwl::block_extent(image_offset_bytes, write_bytes));
+}
+
+BlockExtent WriteLogEntry::block_extent() { return ram_entry.block_extent(); }
+void WriteLogEntry::add_reader() { reader_count++; }
+void WriteLogEntry::remove_reader() { reader_count--; }
 
 SyncPoint::SyncPoint(CephContext *cct, uint64_t sync_gen_num)
   : m_cct(cct), m_sync_gen_num(sync_gen_num) {
@@ -88,8 +99,18 @@ WriteLogOperationSet::WriteLogOperationSet(CephContext *cct, SyncPoint *sync_poi
 
 WriteLogOperationSet::~WriteLogOperationSet() { }
 
-void WriteLogEntry::add_reader() { reader_count++; }
-void WriteLogEntry::remove_reader() { reader_count--; }
+WriteLogMapEntry::WriteLogMapEntry(BlockExtent block_extent,
+				   WriteLogEntry *log_entry)
+  : block_extent(block_extent) , log_entry(log_entry) {
+}
+
+WriteLogMapEntry::WriteLogMapEntry(WriteLogEntry *log_entry)
+  : block_extent(log_entry->block_extent()) , log_entry(log_entry) {
+}
+
+WriteLogMap::WriteLogMap(CephContext *cct)
+  : m_cct(cct), m_lock("librbd::cache::rwl::WriteLogMap::m_lock") {
+}
 
 /**
  * Add a write log entry to the map. Subsequent queries for blocks
@@ -210,6 +231,7 @@ void WriteLogMap::remove_log_entry_locked(WriteLogEntry *log_entry) {
 
 void WriteLogMap::add_map_entry_locked(WriteLogMapEntry &map_entry)
 {
+  assert(map_entry.log_entry);
   m_block_to_log_entry_map.insert(map_entry);
   map_entry.log_entry->referring_map_entries++;
 }
@@ -288,7 +310,37 @@ WriteLogMapEntries WriteLogMap::find_map_entries_locked(BlockExtent &block_exten
   return overlaps;
 }
 
-bool is_block_aligned(const ImageCache::Extents &image_extents) {
+/* We map block extents to write log entries, or portions of write log
+ * entries. These are both represented by a WriteLogMapEntry. When a
+ * WriteLogEntry is added to this map, a WriteLogMapEntry is created to
+ * represent the entire block extent of the WriteLogEntry, and the
+ * WriteLogMapEntry is added to the set.
+ *
+ * The set must not contain overlapping WriteLogMapEntrys. WriteLogMapEntrys
+ * in the set that overlap with one being added are adjusted (shrunk, split,
+ * or removed) before the new entry is added.
+ *
+ * This comparison works despite the ambiguity because we ensure the set
+ * contains no overlapping entries. This comparison works to find entries
+ * that overlap with a given block extent because equal_range() returns the
+ * first entry in which the extent doesn't end before the given extent
+ * starts, and the last entry for which the extent starts before the given
+ * extent ends (the first entry that the key is less than, and the last entry
+ * that is less than the key).
+ */
+bool WriteLogMap::WriteLogMapEntryCompare::operator()(const WriteLogMapEntry &lhs,
+						      const WriteLogMapEntry &rhs) const {
+  if (lhs.block_extent.block_end < rhs.block_extent.block_start) {
+    return true;
+  }
+  return false;
+}
+
+WriteLogMapEntry WriteLogMap::block_extent_to_map_key(BlockExtent &block_extent) {
+  return WriteLogMapEntry(block_extent);
+}
+
+bool is_block_aligned(const Extents &image_extents) {
   for (auto &extent : image_extents) {
     if (extent.first % MIN_WRITE_SIZE != 0 || extent.second % MIN_WRITE_SIZE != 0) {
       return false;
@@ -365,7 +417,7 @@ public:
 } // namespace rwl
 
 template <typename I>
-ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx, StackingImageCache<I> *lower)
+ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx, ImageCache<I> *lower)
   : m_image_ctx(image_ctx),
     m_log_pool_size(DEFAULT_POOL_SIZE),
     m_image_writeback(lower), m_write_log_guard(image_ctx.cct),
@@ -420,18 +472,18 @@ public:
   }
 };
 
-struct ImageExtentBuf : public ImageCache::Extent {
+struct ImageExtentBuf : public Extent {
 public:
   buffer::raw *m_buf;
-  ImageExtentBuf(ImageCache::Extent extent, buffer::raw *buf = nullptr)
-    : ImageCache::Extent(extent), m_buf(buf) {}
+  ImageExtentBuf(Extent extent, buffer::raw *buf = nullptr)
+    : Extent(extent), m_buf(buf) {}
 };
 typedef std::vector<ImageExtentBuf> ImageExtentBufs;
 
 struct C_ReadRequest : public Context {
   CephContext *m_cct;
   Context *m_on_finish;
-  ImageCache::Extents m_miss_extents; // move back to caller
+  Extents m_miss_extents; // move back to caller
   ImageExtentBufs m_read_extents;
   bufferlist m_miss_bl;
   bufferlist *m_out_bl;
@@ -524,13 +576,13 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
     uint64_t extent_offset = 0;
     WriteLogMapEntries map_entries = m_blocks_to_log_entries.find_map_entries(block_extent(extent));
     for (auto &entry : map_entries) {
-      ImageCache::Extent entry_image_extent(image_extent(entry.block_extent));
+      Extent entry_image_extent(image_extent(entry.block_extent));
       /* If this map entry starts after the current image extent offset ... */
       if (entry_image_extent.first > extent.first + extent_offset) {
 	/* ... add range before map_entry to miss extents */
 	uint64_t miss_extent_start = extent.first + extent_offset;
 	uint64_t miss_extent_length = entry_image_extent.first - miss_extent_start;
-	ImageCache::Extent miss_extent(miss_extent_start, miss_extent_length);
+	Extent miss_extent(miss_extent_start, miss_extent_length);
 	read_ctx->m_miss_extents.push_back(miss_extent);
 	/* Add miss range to read extents */
 	ImageExtentBuf miss_extent_buf(miss_extent);
@@ -548,7 +600,7 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
 	 entry, whichever is less. */
       uint64_t entry_hit_length = min(entry_image_extent.second - entry_offset,
 				      extent.second - extent_offset);
-      ImageCache::Extent hit_extent(entry_image_extent.first, entry_hit_length);
+      Extent hit_extent(entry_image_extent.first, entry_hit_length);
       /* Offset of the map entry into the log entry's buffer */
       uint64_t map_entry_buffer_offset = entry_image_extent.first - entry.log_entry->ram_entry.image_offset_bytes;
       /* Offset into the log entry buffer of this read hit */
@@ -579,7 +631,7 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
       /* ... add the rest of this extent to miss extents */
       uint64_t miss_extent_start = extent.first + extent_offset;
       uint64_t miss_extent_length = extent.second - extent_offset;
-      ImageCache::Extent miss_extent(miss_extent_start, miss_extent_length);
+      Extent miss_extent(miss_extent_start, miss_extent_length);
       read_ctx->m_miss_extents.push_back(miss_extent);
       /* Add miss range to read extents */
       ImageExtentBuf miss_extent_buf(miss_extent);
@@ -646,14 +698,14 @@ void ReplicatedWriteLog<I>::release_guarded_request(BlockGuardCell *cell)
  */
 struct C_WriteRequest : public C_GuardedBlockIORequest {
   CephContext *m_cct;
-  ImageCache::Extents m_image_extents;
+  Extents m_image_extents;
   bufferlist bl;
   int fadvise_flags;
   Context *user_req; /* User write request */
   Context *_on_finish = nullptr; /* Block guard release */
   std::atomic<bool> m_user_req_completed = {false};
-  ExtentsSummary<ImageCache::Extents> m_image_extents_summary;
-  C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents,
+  ExtentsSummary<Extents> m_image_extents_summary;
+  C_WriteRequest(CephContext *cct, Extents &&image_extents,
 		 bufferlist&& bl, int fadvise_flags, Context *user_req)
     : C_GuardedBlockIORequest(cct), m_cct(cct), m_image_extents(std::move(image_extents)),
       bl(std::move(bl)), fadvise_flags(fadvise_flags),

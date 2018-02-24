@@ -7,7 +7,7 @@
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
 #include "include/Context.h"
-#include "librbd/cache/StackingImageCache.h"
+#include "librbd/cache/ImageCache.h"
 #include <vector>
 
 class Context;
@@ -22,11 +22,13 @@ namespace cache {
  * client-side, image extent cache writeback handler
  */
 template <typename ImageCtxT = librbd::ImageCtx>
-class ImageWriteback : public StackingImageCache<ImageCtxT> {
+class ImageWriteback : public ImageCache<ImageCtxT> {
 public:
-  typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
+  using typename ImageCache<ImageCtxT>::Extent;
+  using typename ImageCache<ImageCtxT>::Extents;
 
   ImageWriteback(ImageCtxT &image_ctx);
+  ~ImageWriteback();
 
   void aio_read(Extents &&image_extents, ceph::bufferlist *bl,
                 int fadvise_flags, Context *on_finish);
@@ -52,7 +54,6 @@ public:
   void flush(Context *on_finish) override {on_finish->complete(0);};
 private:
   ImageCtxT &m_image_ctx;
-
 };
 
 } // namespace cache

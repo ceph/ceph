@@ -4,10 +4,10 @@
 #ifndef CEPH_LIBRBD_CACHE_FILE_IMAGE_CACHE
 #define CEPH_LIBRBD_CACHE_FILE_IMAGE_CACHE
 
-#include "librbd/cache/StackingImageCache.h"
+#include "librbd/cache/ImageCache.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/BlockGuard.h"
-#include "librbd/cache/ImageWriteback.h"
+#include "librbd/cache/ImageCache.h"
 #include "librbd/cache/file/Policy.h"
 #include <functional>
 #include <list>
@@ -30,12 +30,12 @@ template <typename> class MetaStore;
  * Prototype file-based, client-side, image extent cache
  */
 template <typename ImageCtxT = librbd::ImageCtx>
-class FileImageCache : public StackingImageCache<ImageCtxT> {
-  using typename ImageCache::Extent;
-  using typename ImageCache::Extents;
+class FileImageCache : public ImageCache<ImageCtxT> {
 public:
+  using typename ImageCache<ImageCtxT>::Extent;
+  using typename ImageCache<ImageCtxT>::Extents;
   FileImageCache(ImageCtx &image_ctx,
-		 ImageWriteback<ImageCtxT> *lower);
+		 ImageCache<ImageCtxT> *lower);
   ~FileImageCache();
 
   /// client AIO methods
@@ -67,8 +67,7 @@ private:
   typedef std::list<Context *> Contexts;
 
   ImageCtxT &m_image_ctx;
-  //StackingImageCache<ImageCtxT> *m_image_writeback;
-  ImageWriteback<ImageCtxT> *m_image_writeback;
+  ImageCache<ImageCtxT> *m_image_writeback;
   BlockGuard m_block_guard;
 
   file::Policy *m_policy = nullptr;
@@ -104,7 +103,6 @@ private:
   void process_deferred_block_ios();
 
   void invalidate(Extents&& image_extents, Context *on_finish);
-
 };
 
 } // namespace cache

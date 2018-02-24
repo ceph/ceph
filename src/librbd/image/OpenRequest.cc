@@ -7,7 +7,8 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
-#include "librbd/cache/StackingImageCache.h"
+#include "librbd/cache/ImageCache.h"
+#include "librbd/cache/ImageWriteback.h"
 #include "librbd/cache/FileImageCache.h"
 #include "librbd/cache/ReplicatedWriteLog.h"
 #include "librbd/image/CloseRequest.h"
@@ -581,7 +582,7 @@ Context *OpenRequest<I>::send_init_image_cache(int *result) {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   // TODO: hard-coded for prototype
-  cache::StackingImageCache<I> *layer =
+  cache::ImageCache<I> *layer =
     new cache::ImageWriteback<I>(*m_image_ctx);
   m_image_ctx->image_cache = layer;
   if (m_image_ctx->persistent_cache_enabled) {

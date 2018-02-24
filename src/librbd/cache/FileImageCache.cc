@@ -32,10 +32,12 @@ typedef std::list<bufferlist> Buffers;
 typedef std::map<uint64_t, bufferlist> ExtentBuffers;
 typedef std::function<void(uint64_t)> ReleaseBlock;
 typedef std::function<void(BlockGuard::BlockIO)> AppendDetainedBlock;
+typedef FileImageCache<ImageCtx>::Extent Extent;
+typedef FileImageCache<ImageCtx>::Extents Extents;
 
 static const uint32_t BLOCK_SIZE = 4096;
 
-bool is_block_aligned(const ImageCache::Extents &image_extents) {
+  bool is_block_aligned(const Extents &image_extents) {
   for (auto &extent : image_extents) {
     if (extent.first % BLOCK_SIZE != 0 || extent.second % BLOCK_SIZE != 0) {
       return false;
@@ -193,11 +195,11 @@ struct C_ReadFromCacheRequest : public C_BlockIORequest {
 
 template <typename I>
 struct C_ReadFromImageRequest : public C_BlockIORequest {
-  ImageWriteback<I> &image_writeback;
+  ImageCache<I> &image_writeback;
   BlockGuard::BlockIO block_io;
   ExtentBuffers *extent_buffers;
 
-  C_ReadFromImageRequest(CephContext *cct, ImageWriteback<I> &image_writeback,
+  C_ReadFromImageRequest(CephContext *cct, ImageCache<I> &image_writeback,
                          BlockGuard::BlockIO &&block_io,
                          ExtentBuffers *extent_buffers,
                          C_BlockIORequest *next_block_request)
@@ -255,11 +257,11 @@ struct C_WriteToMetaRequest : public C_BlockIORequest {
 
 template <typename I>
 struct C_WriteToImageRequest : public C_BlockIORequest {
-  ImageWriteback<I> &image_writeback;
+  ImageCache<I> &image_writeback;
   BlockGuard::BlockIO block_io;
   const bufferlist &bl;
 
-  C_WriteToImageRequest(CephContext *cct, ImageWriteback<I> &image_writeback,
+  C_WriteToImageRequest(CephContext *cct, ImageCache<I> &image_writeback,
                         BlockGuard::BlockIO &&block_io, const bufferlist &bl,
                         C_BlockIORequest *next_block_request)
     : C_BlockIORequest(cct, next_block_request),
@@ -272,7 +274,7 @@ struct C_WriteToImageRequest : public C_BlockIORequest {
 
     uint64_t image_offset = block_io.block * BLOCK_SIZE;
 
-    ImageCache::Extents image_extents;
+    Extents image_extents;
     bufferlist scatter_bl;
     for (auto &extent : block_io.extents) {
       image_extents.emplace_back(image_offset + extent.block_offset,
@@ -319,12 +321,12 @@ struct C_ReadBlockFromCacheRequest : public C_BlockIORequest {
 
 template <typename I>
 struct C_ReadBlockFromImageRequest : public C_BlockIORequest {
-  ImageWriteback<I> &image_writeback;
+  ImageCache<I> &image_writeback;
   uint64_t block;
   bufferlist *block_bl;
 
   C_ReadBlockFromImageRequest(CephContext *cct,
-                              ImageWriteback<I> &image_writeback,
+                              ImageCache<I> &image_writeback,
                               uint64_t block, bufferlist *block_bl,
                               C_BlockIORequest *next_block_request)
     : C_BlockIORequest(cct, next_block_request),
@@ -470,7 +472,7 @@ struct C_DemoteBlockToJournal : public C_BlockIORequest {
 template <typename I>
 struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
   I &image_ctx;
-  ImageWriteback<I> &image_writeback;
+  ImageCache<I> &image_writeback;
   ImageStore<I> &image_store;
   ReleaseBlock &release_block;
   bufferlist *bl;
@@ -479,7 +481,7 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
   Buffers promote_buffers;
 
   C_ReadBlockRequest(I &image_ctx,
-                     ImageWriteback<I> &image_writeback,
+                     ImageCache<I> &image_writeback,
                      ImageStore<I> &image_store,
                      ReleaseBlock &release_block, bufferlist *bl,
                      Context *on_finish)
@@ -552,7 +554,7 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
 template <typename I>
 struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
   I &image_ctx;
-  ImageWriteback<I> &image_writeback;
+  ImageCache<I> &image_writeback;
   Policy &policy;
   JournalStore<I> &journal_store;
   ImageStore<I> &image_store;
@@ -564,7 +566,7 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
 
   Buffers promote_buffers;
 
-  C_WriteBlockRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
+  C_WriteBlockRequest(I &image_ctx, ImageCache<I> &image_writeback,
                       Policy &policy, JournalStore<I> &journal_store,
                       ImageStore<I> &image_store, MetaStore<I> &meta_store,
                       ReleaseBlock &release_block, AppendDetainedBlock &append_detain_block,
@@ -671,7 +673,7 @@ struct C_WriteBlockRequest : BlockGuard::C_BlockRequest {
 template <typename I>
 struct C_WritebackRequest : public Context {
   I &image_ctx;
-  ImageWriteback<I> &image_writeback;
+  ImageCache<I> &image_writeback;
   Policy &policy;
   JournalStore<I> &journal_store;
   ImageStore<I> &image_store;
@@ -685,7 +687,7 @@ struct C_WritebackRequest : public Context {
 
   bufferlist bl;
 
-  C_WritebackRequest(I &image_ctx, ImageWriteback<I> &image_writeback,
+  C_WritebackRequest(I &image_ctx, ImageCache<I> &image_writeback,
                      Policy &policy, JournalStore<I> &journal_store,
                      ImageStore<I> &image_store,
                      const ReleaseBlock &release_block,
@@ -811,7 +813,7 @@ struct C_WritebackRequest : public Context {
 
 template <typename I>
 FileImageCache<I>::FileImageCache(ImageCtx &image_ctx,
-				  ImageWriteback<I> *lower)
+				  ImageCache<I> *lower)
   : m_image_ctx(image_ctx), m_image_writeback(lower),
     m_block_guard(image_ctx.cct, 256, BLOCK_SIZE),
     m_policy(new StupidPolicy<I>(m_image_ctx, m_block_guard)),

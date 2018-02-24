@@ -9,10 +9,8 @@
 //#endif
 #include "common/RWLock.h"
 #include "librbd/cache/ImageCache.h"
-#include "librbd/cache/FileImageCache.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/BlockGuard.h"
-#include "librbd/cache/ImageWriteback.h"
 #include "librbd/cache/file/Policy.h"
 #include "librbd/BlockGuard.h"
 #include <functional>
@@ -39,9 +37,6 @@ static const uint32_t MIN_WRITE_ALLOC_SIZE =
 /* Crash consistent flusher ignores these, and must flush in FIFO ordrer */
 static const int IN_FLIGHT_FLUSH_WRITE_LIMIT = 8;
 static const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
-
-BlockExtent block_extent(uint64_t offset_bytes, uint64_t length_bytes);
-BlockExtent block_extent(ImageCache::Extent& image_extent);
 
 namespace rwl {
 
@@ -79,9 +74,7 @@ struct WriteLogPmemEntry {
     : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), 
       entry_valid(0), sync_point(0), sequenced(0), has_data(0), unmap(0) {
   }
-  BlockExtent block_extent() {
-    return BlockExtent(librbd::cache::block_extent(image_offset_bytes, write_bytes));
-  }
+  BlockExtent block_extent();
   friend std::ostream &operator<<(std::ostream &os,
 				  const WriteLogPmemEntry &entry) {
     os << "entry_valid=" << (bool)entry.entry_valid << ", "
@@ -128,7 +121,7 @@ public:
   }
   WriteLogEntry(const WriteLogEntry&) = delete;
   WriteLogEntry &operator=(const WriteLogEntry&) = delete;
-  BlockExtent block_extent() { return ram_entry.block_extent(); }
+  BlockExtent block_extent();
   void add_reader();
   void remove_reader();
   friend std::ostream &operator<<(std::ostream &os,
@@ -275,13 +268,9 @@ struct WriteLogMapEntry {
   BlockExtent block_extent;
   WriteLogEntry *log_entry;
   
-  WriteLogMapEntry(BlockExtent block_extent = BlockExtent(0, 0),
-		   WriteLogEntry *log_entry = nullptr)
-    : block_extent(block_extent) , log_entry(log_entry) {
-  }
-  WriteLogMapEntry(WriteLogEntry *log_entry)
-    : block_extent(log_entry->block_extent()) , log_entry(log_entry) {
-  }
+  WriteLogMapEntry(BlockExtent block_extent,
+		   WriteLogEntry *log_entry = nullptr);
+  WriteLogMapEntry(WriteLogEntry *log_entry);
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogMapEntry &e) {
     os << "block_extent=" << e.block_extent << ", "
@@ -293,10 +282,7 @@ struct WriteLogMapEntry {
 typedef std::list<WriteLogMapEntry> WriteLogMapEntries;
 class WriteLogMap {
 public:
-  WriteLogMap(CephContext *cct)
-    : m_cct(cct), m_lock("librbd::cache::rwl::WriteLogMap::m_lock") {
-  }
-
+  WriteLogMap(CephContext *cct);
   WriteLogMap(const WriteLogMap&) = delete;
   WriteLogMap &operator=(const WriteLogMap&) = delete;
 
@@ -317,41 +303,15 @@ private:
   WriteLogEntries find_log_entries_locked(BlockExtent &block_extent);
   WriteLogMapEntries find_map_entries_locked(BlockExtent &block_extent);
 
-  /* We map block extents to write log entries, or portions of write log
-   * entries. These are both represented by a WriteLogMapEntry. When a
-   * WriteLogEntry is added to this map, a WriteLogMapEntry is created to
-   * represent the entire block extent of the WriteLogEntry, and the
-   * WriteLogMapEntry is added to the set.
-   *
-   * The set must not contain overlapping WriteLogMapEntrys. WriteLogMapEntrys
-   * in the set that overlap with one being added are adjusted (shrunk, split,
-   * or removed) before the new entry is added.
-   *
-   * This comparison works despite the ambiguity because we ensure the set
-   * contains no overlapping entries. This comparison works to find entries
-   * that overlap with a given block extent because equal_range() returns the
-   * first entry in which the extent doesn't end before the given extent
-   * starts, and the last entry for which the extent starts before the given
-   * extent ends (the first entry that the key is less than, and the last entry
-   * that is less than the key).
-   */
   struct WriteLogMapEntryCompare {
     bool operator()(const WriteLogMapEntry &lhs,
-                    const WriteLogMapEntry &rhs) const {
-      // check for range overlap (lhs < rhs)
-      if (lhs.block_extent.block_end < rhs.block_extent.block_start) {
-        return true;
-      }
-      return false;
-    }
+                    const WriteLogMapEntry &rhs) const;
   };
 
   typedef std::set<WriteLogMapEntry,
 		   WriteLogMapEntryCompare> BlockExtentToWriteLogMapEntries;
 
-  WriteLogMapEntry block_extent_to_map_key(BlockExtent &block_extent) {
-    return WriteLogMapEntry(block_extent);
-  }
+  WriteLogMapEntry block_extent_to_map_key(BlockExtent &block_extent);
 
   CephContext *m_cct;
 
@@ -369,11 +329,11 @@ struct C_WriteRequest;
  * Prototype pmem-based, client-side, replicated write log
  */
 template <typename ImageCtxT = librbd::ImageCtx>
-class ReplicatedWriteLog : public StackingImageCache<ImageCtxT> {
-  using typename ImageCache::Extent;
-  using typename ImageCache::Extents;
+class ReplicatedWriteLog : public ImageCache<ImageCtxT> {
 public:
-  ReplicatedWriteLog(ImageCtx &image_ctx, StackingImageCache<ImageCtxT> *lower);
+  using typename ImageCache<ImageCtxT>::Extent;
+  using typename ImageCache<ImageCtxT>::Extents;
+  ReplicatedWriteLog(ImageCtx &image_ctx, ImageCache<ImageCtxT> *lower);
   ~ReplicatedWriteLog();
   ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
   ReplicatedWriteLog &operator=(const ReplicatedWriteLog&) = delete;
@@ -419,7 +379,7 @@ private:
   uint32_t m_total_log_entries = 0;
   uint32_t m_free_log_entries = 0;
 
-  StackingImageCache<ImageCtxT> *m_image_writeback;
+  ImageCache<ImageCtxT> *m_image_writeback;
   WriteLogGuard m_write_log_guard;
   
   /* 

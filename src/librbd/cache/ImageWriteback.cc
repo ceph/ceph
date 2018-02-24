@@ -18,6 +18,14 @@ namespace cache {
 
 template <typename I>
 ImageWriteback<I>::ImageWriteback(I &image_ctx) : m_image_ctx(image_ctx) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 3) << dendl;
+}
+
+template <typename I>
+ImageWriteback<I>::~ImageWriteback() {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 3) << dendl;
 }
 
 template <typename I>

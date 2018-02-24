@@ -11,12 +11,17 @@
 class Context;
 
 namespace librbd {
+struct ImageCtx;
 namespace cache {
 
 /**
  * client-side, image extent cache interface
  */
-struct ImageCache {
+template <typename ImageCtxT = ImageCtx>
+class ImageCache {
+protected:
+  ImageCache() {}
+public:
   /* Extent: offset in bytes, length in bytes */
   typedef std::pair<uint64_t,uint64_t> Extent;
   typedef std::vector<Extent> Extents;
@@ -26,8 +31,7 @@ struct ImageCache {
     CACHE_MODE_WRITETHROUGH
   };
 
-  virtual ~ImageCache() {
-  }
+  virtual ~ImageCache() {}
 
   /// client AIO methods
   virtual void aio_read(Extents&& image_extents, ceph::bufferlist* bl,
