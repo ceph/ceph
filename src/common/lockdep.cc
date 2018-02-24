@@ -11,11 +11,11 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "lockdep.h"
-#include "common/dout.h"
-#include "common/valgrind.h"
 
 #if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
+#include <pthread.h>
+#include <functional>
+
 namespace std {
   template<>
     struct hash<pthread_t>
@@ -26,6 +26,10 @@ namespace std {
     };
 } // namespace std
 #endif
+
+#include "lockdep.h"
+#include "common/dout.h"
+#include "common/valgrind.h"
 
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
