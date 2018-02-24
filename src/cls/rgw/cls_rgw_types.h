@@ -1046,6 +1046,55 @@ struct cls_rgw_gc_obj_info
 };
 WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)
 
+extern const char* LC_STATUS[];
+
+typedef enum {
+  lc_uninitial = 0,
+  lc_processing,
+  lc_failed,
+  lc_complete,
+} LC_BUCKET_STATUS;
+
+struct cls_rgw_lc_entry
+{
+  string bucket;
+  int status{lc_uninitial};
+  ceph::real_time start_time;
+  ceph::real_time finish_time;
+  uint64_t deleted_count{0};
+  uint64_t aborted_count{0};
+
+  cls_rgw_lc_entry() {}
+  explicit cls_rgw_lc_entry(const string& _bucket) : bucket(_bucket) {}
+  cls_rgw_lc_entry(const string& _bucket, int _status) : bucket(_bucket), status(_status) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(bucket, bl);
+    encode(status, bl);
+    encode(start_time, bl);
+    encode(finish_time, bl);
+    encode(deleted_count, bl);
+    encode(aborted_count, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    decode(bucket, bl);
+    decode(status, bl);
+    decode(start_time, bl);
+    decode(finish_time, bl);
+    decode(deleted_count, bl);
+    decode(aborted_count, bl);
+    DECODE_FINISH(bl);
+  }
+  
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_lc_entry*>& ls);
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_entry)
+
 struct cls_rgw_lc_obj_head
 {
   time_t start_date = 0;

@@ -748,7 +748,7 @@ int cls_rgw_lc_put_head(IoCtx& io_ctx, string& oid, cls_rgw_lc_obj_head& head)
   return r;
 }
 
-int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, string& oid, string& marker, pair<string, int>& entry)
+int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, string& oid, string& marker, cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_get_next_entry_op call;
@@ -770,7 +770,7 @@ int cls_rgw_lc_get_next_entry(IoCtx& io_ctx, string& oid, string& marker, pair<s
  return r;
 }
 
-int cls_rgw_lc_rm_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
+int cls_rgw_lc_rm_entry(IoCtx& io_ctx, string& oid, cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_rm_entry_op call;
@@ -780,7 +780,7 @@ int cls_rgw_lc_rm_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
  return r;
 }
 
-int cls_rgw_lc_set_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
+int cls_rgw_lc_set_entry(IoCtx& io_ctx, string& oid, cls_rgw_lc_entry& entry)
 {
   bufferlist in, out;
   cls_rgw_lc_set_entry_op call;
@@ -793,7 +793,7 @@ int cls_rgw_lc_set_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
 int cls_rgw_lc_list(IoCtx& io_ctx, string& oid,
                     const string& marker,
                     uint32_t max_entries,
-                    map<string, int>& entries)
+                    vector<cls_rgw_lc_entry>& entries)
 {
   bufferlist in, out;
   cls_rgw_lc_list_entries_op op;
@@ -816,7 +816,7 @@ int cls_rgw_lc_list(IoCtx& io_ctx, string& oid,
   } catch (buffer::error& err) {
     return -EIO;
   }
-  entries.insert(ret.entries.begin(),ret.entries.end());
+  entries = ret.entries;
 
  return r;
 }

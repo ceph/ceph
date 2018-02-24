@@ -3408,7 +3408,7 @@ static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
   bufferlist bl;
   encode(op.entry, bl);
 
-  int ret = cls_cxx_map_set_val(hctx, op.entry.first, &bl);
+  int ret = cls_cxx_map_set_val(hctx, op.entry.bucket, &bl);
   return ret;
 }
 
@@ -3424,7 +3424,7 @@ static int rgw_cls_lc_rm_entry(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  int ret = cls_cxx_map_remove_key(hctx, op.entry.first);
+  int ret = cls_cxx_map_remove_key(hctx, op.entry.bucket);
   return ret;
 }
 
@@ -3447,7 +3447,7 @@ static int rgw_cls_lc_get_next_entry(cls_method_context_t hctx, bufferlist *in, 
   if (ret < 0)
     return ret;
   map<string, bufferlist>::iterator it;
-  pair<string, int> entry;
+  cls_rgw_lc_entry entry;
   if (!vals.empty()) {
     it=vals.begin();
     in_iter = it->second.begin();
@@ -3482,7 +3482,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in, bu
   if (ret < 0)
     return ret;
   map<string, bufferlist>::iterator it;
-  pair<string, int> entry;
+  cls_rgw_lc_entry entry;
   for (it = vals.begin(); it != vals.end(); ++it) {
     iter = it->second.begin();
     try {
@@ -3491,7 +3491,7 @@ static int rgw_cls_lc_list_entries(cls_method_context_t hctx, bufferlist *in, bu
     CLS_LOG(1, "ERROR: rgw_cls_lc_list_entries(): failed to decode entry\n");
     return -EIO;
    }
-   op_ret.entries.insert(entry);
+   op_ret.entries.push_back(entry);
   }
   encode(op_ret, *out);
   return 0;

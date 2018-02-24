@@ -5981,29 +5981,25 @@ next:
 
   if (opt_cmd == OPT_LC_LIST) {
     formatter->open_array_section("lifecycle_list");
-    map<string, int> bucket_lc_map;
+    vector<cls_rgw_lc_entry> entries;
     string marker;
 #define MAX_LC_LIST_ENTRIES 100
     if (max_entries < 0) {
       max_entries = MAX_LC_LIST_ENTRIES;
     }
     do {
-      int ret = store->list_lc_progress(marker, max_entries, &bucket_lc_map);
+      int ret = store->list_lc_progress(marker, max_entries, &entries);
       if (ret < 0) {
         cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
         return 1;
       }
-      map<string, int>::iterator iter;
-      for (iter = bucket_lc_map.begin(); iter != bucket_lc_map.end(); ++iter) {
-        formatter->open_object_section("bucket_lc_info");
-        formatter->dump_string("bucket", iter->first);
-        string lc_status = LC_STATUS[iter->second];
-        formatter->dump_string("status", lc_status);
-        formatter->close_section(); // objs
+      vector<cls_rgw_lc_entry>::iterator iter;
+      for (iter = entries.begin(); iter != entries.end(); ++iter) {
+        encode_json("bucket_lc_info", *iter, formatter);
         formatter->flush(cout);
-        marker = iter->first;
+        marker = iter->bucket;
       }
-    } while (!bucket_lc_map.empty());
+    } while (!entries.empty());
 
     formatter->close_section(); //lifecycle list
     formatter->flush(cout);

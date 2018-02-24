@@ -26,15 +26,6 @@
 static string lc_oid_prefix = "lc";
 static string lc_index_lock_name = "lc_process";
 
-extern const char* LC_STATUS[];
-
-typedef enum {
-  lc_uninitial = 0,
-  lc_processing,
-  lc_failed,
-  lc_complete,
-}LC_BUCKET_STATUS;
-
 class LCExpiration
 {
 protected:
@@ -372,10 +363,10 @@ class RGWLC {
   int process();
   int process(int index, int max_secs);
   bool if_already_run_today(time_t& start_date);
-  int list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map);
+  int list_lc_progress(const string& marker, uint32_t max_entries, vector<cls_rgw_lc_entry> *progress_vec);
   int bucket_lc_prepare(int index);
-  int bucket_lc_process(string& shard_id);
-  int bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry, int& result);
+  int bucket_lc_process(string& shard_id, uint64_t* delected_count, uint64_t* aborted_count);
+  int bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_entry& entry, int& result);
   bool going_down();
   void start_processor();
   void stop_processor();
@@ -383,7 +374,8 @@ class RGWLC {
   private:
   int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed = true);
   bool obj_has_expired(ceph::real_time mtime, int days);
-  int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
+  int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map, 
+                                  uint64_t* aborted_count);
 };
 
 

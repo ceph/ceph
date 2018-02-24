@@ -4897,7 +4897,7 @@ void RGWPutLC::execute()
   string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;  
   string oid; 
   get_lc_oid(s, oid);
-  pair<string, int> entry(shard_id, lc_uninitial);
+  cls_rgw_lc_entry entry(shard_id, lc_uninitial);
   int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
   rados::cls::lock::Lock l(lc_index_lock_name); 
   utime_t time(max_lock_secs, 0);
@@ -4937,7 +4937,7 @@ void RGWDeleteLC::execute()
     return;
   }
   string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;
-  pair<string, int> entry(shard_id, lc_uninitial);
+  cls_rgw_lc_entry entry(shard_id, lc_uninitial);
   string oid; 
   get_lc_oid(s, oid);
   int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;

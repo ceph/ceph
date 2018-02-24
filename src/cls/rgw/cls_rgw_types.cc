@@ -629,7 +629,30 @@ void cls_rgw_bucket_instance_entry::generate_test_instances(list<cls_rgw_bucket_
   ls.back()->reshard_status = CLS_RGW_RESHARD_IN_PROGRESS;
   ls.back()->new_bucket_instance_id = "new_instance_id";
 }
-  
+
+const char* LC_STATUS[] = {
+      "UNINITIAL",
+      "PROCESSING",
+      "FAILED",
+      "COMPLETE"
+};
+
+void cls_rgw_lc_entry::dump(Formatter *f) const 
+{
+  encode_json("bucket", bucket, f);
+  string lc_status = LC_STATUS[status];
+  encode_json("status", lc_status, f);
+  encode_json("start_time", utime_t(start_time), f);
+  encode_json("finish_time", utime_t(finish_time), f);
+  encode_json("deleted_count", deleted_count, f);
+  encode_json("aborted_count", aborted_count, f);
+}
+
+void cls_rgw_lc_entry::generate_test_instances(list<cls_rgw_lc_entry*>& ls) 
+{
+  ls.push_back(new cls_rgw_lc_entry("test_bucket"));
+}
+
 void cls_rgw_lc_obj_head::dump(Formatter *f) const 
 {
   encode_json("start_date", start_date, f);

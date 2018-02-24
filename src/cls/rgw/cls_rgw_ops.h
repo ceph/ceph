@@ -1002,19 +1002,29 @@ struct cls_rgw_lc_get_next_entry_op {
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_op)
 
 struct cls_rgw_lc_get_next_entry_ret {
-  pair<string, int> entry;
+  cls_rgw_lc_entry entry;
 
   cls_rgw_lc_get_next_entry_ret() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
+    pair<string, int> compat_entry = make_pair(entry.bucket, entry.status);
+    encode(compat_entry, bl); 
     encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    decode(entry, bl);
+    DECODE_START(2, bl);
+    pair<string, int> compat_entry;
+    decode(compat_entry, bl);
+    if (struct_v < 2) {
+      entry.bucket = compat_entry.first;
+      entry.status = compat_entry.second;
+    }
+    if (struct_v >= 2) {
+      decode(entry, bl);
+    }
     DECODE_FINISH(bl);
   }
 
@@ -1022,36 +1032,56 @@ struct cls_rgw_lc_get_next_entry_ret {
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_ret)
 
 struct cls_rgw_lc_rm_entry_op {
-  pair<string, int> entry;
+  cls_rgw_lc_entry entry;
   cls_rgw_lc_rm_entry_op() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
+    pair<string, int> compat_entry = make_pair(entry.bucket, entry.status);
+    encode(compat_entry, bl); 
     encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    decode(entry, bl);
+    DECODE_START(2, bl);
+    pair<string, int> compat_entry;
+    decode(compat_entry, bl);
+    if (struct_v < 2) {
+      entry.bucket = compat_entry.first;
+      entry.status = compat_entry.second;
+    }
+    if (struct_v >= 2) {
+      decode(entry, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_rm_entry_op)
 
 struct cls_rgw_lc_set_entry_op {
-  pair<string, int> entry;
+  cls_rgw_lc_entry entry;
   cls_rgw_lc_set_entry_op() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
+    pair<string, int> compat_entry = make_pair(entry.bucket, entry.status);
+    encode(compat_entry, bl); 
     encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
-    decode(entry, bl);
+    DECODE_START(2, bl);
+    pair<string, int> compat_entry;
+    decode(compat_entry, bl);
+    if (struct_v < 2) {
+      entry.bucket = compat_entry.first;
+      entry.status = compat_entry.second;
+    }
+    if (struct_v >= 2) {
+      decode(entry, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -1122,23 +1152,38 @@ struct cls_rgw_lc_list_entries_op {
 WRITE_CLASS_ENCODER(cls_rgw_lc_list_entries_op)
 
 struct cls_rgw_lc_list_entries_ret {
-  map<string, int> entries;
+  vector<cls_rgw_lc_entry> entries;
   bool is_truncated{false};
 
   cls_rgw_lc_list_entries_ret() {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    encode(entries, bl);
+    ENCODE_START(3, 1, bl);
+    map<string, int> compat_entries;
+    for (auto& entry : entries) {
+      compat_entries[entry.bucket] = entry.status;
+    }
+    encode(compat_entries, bl);
     encode(is_truncated, bl);
+    encode(entries, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(2, bl);
-    decode(entries, bl);
+    DECODE_START(3, bl);
+    map<string, int> compat_entries;
+    decode(compat_entries, bl);
+    if (struct_v < 3) {
+      for (auto& compat_entry : compat_entries) {
+        cls_rgw_lc_entry entry(compat_entry.first, compat_entry.second);
+        entries.push_back(entry);
+      }
+    }
     if (struct_v >= 2) {
       decode(is_truncated, bl);
+    }
+    if (struct_v >= 3) {
+      decode(entries, bl);
     }
     DECODE_FINISH(bl);
   }

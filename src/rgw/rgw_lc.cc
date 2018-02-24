@@ -17,13 +17,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-const char* LC_STATUS[] = {
-      "UNINITIAL",
-      "PROCESSING",
-      "FAILED",
-      "COMPLETE"
-};
-
 using namespace librados;
 
 bool LCRule::valid()
@@ -223,7 +216,7 @@ bool RGWLC::if_already_run_today(time_t& start_date)
 
 int RGWLC::bucket_lc_prepare(int index)
 {
-  map<string, int > entries;
+  vector<cls_rgw_lc_entry> entries;
 
   string marker;
 
@@ -232,10 +225,9 @@ int RGWLC::bucket_lc_prepare(int index)
     int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, MAX_LC_LIST_ENTRIES, entries);
     if (ret < 0)
       return ret;
-    map<string, int>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      pair<string, int > entry(iter->first, lc_uninitial);
-      ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
+    for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+      cls_rgw_lc_entry entry(iter->bucket);
+      ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index], entry);
       if (ret < 0) {
         ldout(cct, 0) << "RGWLC::bucket_lc_prepare() failed to set entry on "
             << obj_names[index] << dendl;
@@ -244,7 +236,7 @@ int RGWLC::bucket_lc_prepare(int index)
     }
 
     if (!entries.empty()) {
-      marker = std::move(entries.rbegin()->first);
+      marker = std::move(entries.rbegin()->bucket);
     }
   } while (!entries.empty());
 
@@ -281,7 +273,8 @@ int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, b
   }
 }
 
-int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
+int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map, 
+                                       uint64_t* aborted_count)
 {
   MultipartMetaFilter mp_filter;
   vector<rgw_bucket_dir_entry> objs;
@@ -321,6 +314,7 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
             ldout(cct, 0) << "ERROR: abort_multipart_upload failed, ret=" << ret <<dendl;
             return ret;
           }
+          (*aborted_count)++;
           if (going_down())
             return 0;
         }
@@ -339,7 +333,7 @@ static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& o
 }
 
 
-int RGWLC::bucket_lc_process(string& shard_id)
+int RGWLC::bucket_lc_process(string& shard_id, uint64_t* delected_count, uint64_t* aborted_count)
 {
   RGWLifecycleConfiguration  config(cct);
   RGWBucketInfo bucket_info;
@@ -461,6 +455,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
               ldout(cct, 2) << "DELETED:" << bucket_name << ":" << key << dendl;
+              (*delected_count)++;
             }
 
             if (going_down())
@@ -566,6 +561,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
               ldout(cct, 2) << "DELETED:" << bucket_name << ":" << obj_iter->key << dendl;
+              (*delected_count)++;
             }
 
             if (going_down())
@@ -576,12 +572,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
     }
   }
 
-  ret = handle_multipart_expiration(&target, prefix_map);
+  ret = handle_multipart_expiration(&target, prefix_map, aborted_count);
 
   return ret;
 }
 
-int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry, int& result)
+int RGWLC::bucket_lc_post(int index, int max_lock_sec, cls_rgw_lc_entry& entry, int& result)
 {
   utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
 
@@ -608,9 +604,9 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
       }
       goto clean;
     } else if (result < 0) {
-      entry.second = lc_failed;
+      entry.status = lc_failed;
     } else {
-      entry.second = lc_complete;
+      entry.status = lc_complete;
     }
 
     ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
@@ -625,12 +621,11 @@ clean:
   } while (true);
 }
 
-int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map)
+int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries, vector<cls_rgw_lc_entry> *progress_vec)
 {
-  int index = 0;
-  progress_map->clear();
-  for(; index <max_objs; index++) {
-    map<string, int > entries;
+  progress_vec->clear();
+  for(int index = 0; index <max_objs; index++) {
+    vector<cls_rgw_lc_entry> entries;
     int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, max_entries, entries);
     if (ret < 0) {
       if (ret == -ENOENT) {
@@ -641,9 +636,8 @@ int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries, map<stri
         return ret;
       }
     }
-    map<string, int>::iterator iter;
-    for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      progress_map->insert(*iter);
+    for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+      progress_vec->push_back(*iter);
     }
   }
   return 0;
@@ -670,7 +664,7 @@ int RGWLC::process(int index, int max_lock_secs)
   rados::cls::lock::Lock l(lc_index_lock_name);
   do {
     utime_t now = ceph_clock_now();
-    pair<string, int > entry;//string = bucket_name:bucket_id ,int = LC_BUCKET_STATUS
+    cls_rgw_lc_entry entry;
     if (max_lock_secs <= 0)
       return -EAGAIN;
 
@@ -713,25 +707,29 @@ int RGWLC::process(int index, int max_lock_secs)
       goto exit;
     }
 
-    if (entry.first.empty())
+    if (entry.bucket.empty())
       goto exit;
 
-    entry.second = lc_processing;
+    entry.status = lc_processing;
+    entry.start_time = ceph::real_clock::now();
+    entry.deleted_count = 0;
+    entry.aborted_count = 0;
     ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
     if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::process() failed to set obj entry " << obj_names[index]
-          << " (" << entry.first << "," << entry.second << ")" << dendl;
+      ldout(cct, 0) << "RGWLC::process() failed to set obj entry " << obj_names[index] 
+          << " (" << entry.bucket << ","<< entry.status << ")" << dendl;
       goto exit;
     }
 
-    head.marker = entry.first;
+    head.marker = entry.bucket;
     ret = cls_rgw_lc_put_head(store->lc_pool_ctx, obj_names[index],  head);
     if (ret < 0) {
       ldout(cct, 0) << "RGWLC::process() failed to put head " << obj_names[index] << dendl;
       goto exit;
     }
     l.unlock(&store->lc_pool_ctx, obj_names[index]);
-    ret = bucket_lc_process(entry.first);
+    ret = bucket_lc_process(entry.bucket, &entry.deleted_count, &entry.aborted_count);
+    entry.finish_time = ceph::real_clock::now();
     bucket_lc_post(index, max_lock_secs, entry, ret);
   }while(1);
 
