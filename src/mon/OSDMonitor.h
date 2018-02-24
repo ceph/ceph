@@ -315,6 +315,7 @@ private:
 				const string &erasure_code_profile,
 				unsigned *stripe_width,
 				ostream *ss);
+  int check_pg_num(int64_t pool, int pg_num, int size, ostream* ss);
   int prepare_new_pool(string& name, uint64_t auid,
 		       int crush_ruleset,
 		       const string &crush_ruleset_name,
