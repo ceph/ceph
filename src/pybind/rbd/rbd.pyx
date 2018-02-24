@@ -185,7 +185,7 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef struct rbd_group_image_info_t:
         char *name
-        uint64_t pool
+        int64_t pool
         rbd_group_image_state_t state
 
     ctypedef enum rbd_group_snap_state_t:
