@@ -15,18 +15,6 @@
 #include "common/dout.h"
 #include "common/valgrind.h"
 
-#if defined(__FreeBSD__) && defined(__LP64__)	// On FreeBSD pthread_t is a pointer.
-namespace std {
-  template<>
-    struct hash<pthread_t>
-    {
-      size_t
-      operator()(pthread_t __x) const
-      { return (uintptr_t)__x; }
-    };
-} // namespace std
-#endif
-
 /******* Constants **********/
 #define lockdep_dout(v) lsubdout(g_lockdep_ceph_ctx, lockdep, v)
 #define MAX_LOCKS  4096   // increase me as needed
