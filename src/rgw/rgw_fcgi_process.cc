@@ -132,6 +132,7 @@ void RGWFCGXProcess::handle_request(RGWRequest* r)
   }
 
   FCGX_Finish_r(req->fcgx);
+  FCGX_Free(req->fcgx, 1);
 
   delete req;
 } /* RGWFCGXProcess::handle_request */
