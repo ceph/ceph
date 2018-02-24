@@ -40,14 +40,16 @@ template <>
 struct RefreshParentRequest<MockRefreshImageCtx> {
   static RefreshParentRequest* s_instance;
   static RefreshParentRequest* create(MockRefreshImageCtx &mock_image_ctx,
-                                      const ParentInfo& parent_md,
+                                      const ParentInfo &parent_md,
+                                      const MigrationInfo &migration_info,
                                       Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
   static bool is_refresh_required(MockRefreshImageCtx &mock_image_ctx,
-                                  const ParentInfo& parent_md) {
+                                  const ParentInfo& parent_md,
+                                  const MigrationInfo &migration_info) {
     assert(s_instance != nullptr);
     return s_instance->is_refresh_required();
   }
@@ -134,6 +136,17 @@ public:
   typedef RefreshParentRequest<MockRefreshImageCtx> MockRefreshParentRequest;
   typedef io::ImageDispatchSpec<librbd::MockRefreshImageCtx> MockIoImageDispatchSpec;
 
+  void set_v1_migration_header(ImageCtx *ictx) {
+    bufferlist hdr;
+    ASSERT_EQ(0, read_header_bl(ictx->md_ctx, ictx->header_oid, hdr, nullptr));
+    ASSERT_TRUE(hdr.length() >= sizeof(rbd_obj_header_ondisk));
+    ASSERT_EQ(0, memcmp(RBD_HEADER_TEXT, hdr.c_str(), sizeof(RBD_HEADER_TEXT)));
+
+    bufferlist::iterator it = hdr.begin();
+    it.copy_in(sizeof(RBD_MIGRATE_HEADER_TEXT), RBD_MIGRATE_HEADER_TEXT);
+    ASSERT_EQ(0, ictx->md_ctx.write(ictx->header_oid, hdr, hdr.length(), 0));
+  }
+
   void expect_set_require_lock(MockRefreshImageCtx &mock_image_ctx,
                                librbd::io::Direction direction, bool enabled) {
     EXPECT_CALL(*mock_image_ctx.io_work_queue, set_require_lock(direction,
@@ -198,6 +211,17 @@ public:
       EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                   exec(mock_image_ctx.header_oid, _, StrEq("lock"), StrEq("get_info"), _, _, _))
                     .WillOnce(DoDefault());
+    }
+  }
+
+  void expect_get_migration_header(MockRefreshImageCtx &mock_image_ctx, int r) {
+    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                               exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                                    StrEq("migration_get"), _, _, _));
+    if (r < 0) {
+      expect.WillOnce(Return(r));
+    } else {
+      expect.WillOnce(DoDefault());
     }
   }
 

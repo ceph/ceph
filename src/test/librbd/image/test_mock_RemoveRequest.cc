@@ -357,10 +357,8 @@ public:
   }
 
   void expect_test_features(MockTestImageCtx &mock_image_ctx) {
-    if (m_mock_imctx->exclusive_lock != nullptr) {
-      EXPECT_CALL(mock_image_ctx, test_features(_))
-        .WillRepeatedly(TestFeatures(&mock_image_ctx));
-    }
+    EXPECT_CALL(mock_image_ctx, test_features(_))
+      .WillRepeatedly(TestFeatures(&mock_image_ctx));
   }
 
   void expect_set_journal_policy(MockTestImageCtx &mock_image_ctx) {
@@ -391,6 +389,7 @@ TEST_F(TestMockImageRemoveRequest, SuccessV1) {
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, 0);
+  expect_test_features(*m_mock_imctx);
 
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_image_watchers(*m_mock_imctx, mock_list_watchers_request, 0);
@@ -446,10 +445,15 @@ TEST_F(TestMockImageRemoveRequest, SuccessV2CloneV1) {
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, 0);
-
   expect_test_features(*m_mock_imctx);
+
+  if (m_mock_imctx->exclusive_lock != nullptr) {
+    expect_test_features(*m_mock_imctx);
+  }
   expect_set_journal_policy(*m_mock_imctx);
   expect_shut_down_exclusive_lock(*m_mock_imctx, *mock_exclusive_lock, 0);
+
+  expect_test_features(*m_mock_imctx);
 
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_image_watchers(*m_mock_imctx, mock_list_watchers_request, 0);
@@ -499,10 +503,15 @@ TEST_F(TestMockImageRemoveRequest, SuccessV2CloneV2) {
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, 0);
-
   expect_test_features(*m_mock_imctx);
+
+  if (m_mock_imctx->exclusive_lock != nullptr) {
+    expect_test_features(*m_mock_imctx);
+  }
   expect_set_journal_policy(*m_mock_imctx);
   expect_shut_down_exclusive_lock(*m_mock_imctx, *mock_exclusive_lock, 0);
+
+  expect_test_features(*m_mock_imctx);
 
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_image_watchers(*m_mock_imctx, mock_list_watchers_request, 0);
@@ -552,10 +561,13 @@ TEST_F(TestMockImageRemoveRequest, NotExistsV2) {
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, 0);
+  expect_test_features(*m_mock_imctx);
 
   expect_test_features(*m_mock_imctx);
   expect_set_journal_policy(*m_mock_imctx);
   expect_shut_down_exclusive_lock(*m_mock_imctx, *mock_exclusive_lock, 0);
+
+  expect_test_features(*m_mock_imctx);
 
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_image_watchers(*m_mock_imctx, mock_list_watchers_request, 0);
@@ -598,6 +610,7 @@ TEST_F(TestMockImageRemoveRequest, OperationsDisabled) {
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, 0);
+  expect_test_features(*m_mock_imctx);
   expect_state_close(*m_mock_imctx);
 
   C_SaferCond ctx;
@@ -610,12 +623,31 @@ TEST_F(TestMockImageRemoveRequest, OperationsDisabled) {
   ASSERT_EQ(-EROFS, ctx.wait());
 }
 
+TEST_F(TestMockImageRemoveRequest, Migration) {
+  m_mock_imctx->features |= RBD_FEATURE_MIGRATING;
+
+  InSequence seq;
+  expect_state_open(*m_mock_imctx, 0);
+  expect_test_features(*m_mock_imctx);
+  expect_state_close(*m_mock_imctx);
+
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
+  ContextWQ op_work_queue;
+  MockRemoveRequest *req = MockRemoveRequest::create(
+    m_ioctx, m_image_name, "", true, false, no_op, &op_work_queue, &ctx);
+  req->send();
+
+  ASSERT_EQ(-EBUSY, ctx.wait());
+}
+
 TEST_F(TestMockImageRemoveRequest, Snapshots) {
   m_mock_imctx->snap_info = {
     {123, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, {}, {}, {}, {}, {}}}};
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, 0);
+  expect_test_features(*m_mock_imctx);
   expect_state_close(*m_mock_imctx);
 
   C_SaferCond ctx;
@@ -643,10 +675,15 @@ TEST_F(TestMockImageRemoveRequest, AutoDeleteSnapshots) {
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, 0);
-
   expect_test_features(*m_mock_imctx);
+
+  if (m_mock_imctx->exclusive_lock != nullptr) {
+    expect_test_features(*m_mock_imctx);
+  }
   expect_set_journal_policy(*m_mock_imctx);
   expect_shut_down_exclusive_lock(*m_mock_imctx, *mock_exclusive_lock, 0);
+
+  expect_test_features(*m_mock_imctx);
 
   MockListWatchersRequest mock_list_watchers_request;
   expect_list_image_watchers(*m_mock_imctx, mock_list_watchers_request, 0);

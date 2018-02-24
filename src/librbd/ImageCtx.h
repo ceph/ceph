@@ -122,6 +122,7 @@ namespace librbd {
     ParentInfo parent_md;
     ImageCtx *parent;
     ImageCtx *child = nullptr;
+    MigrationInfo migration_info;
     cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
@@ -157,6 +158,8 @@ namespace librbd {
     EventSocket event_socket;
 
     ContextWQ *op_work_queue;
+
+    bool ignore_migrating = false;
 
     // Configuration
     static const string METADATA_CONF_PREFIX;

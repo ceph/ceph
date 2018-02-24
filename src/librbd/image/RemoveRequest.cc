@@ -202,6 +202,13 @@ template<typename I>
 void RemoveRequest<I>::validate_image_removal() {
   ldout(m_cct, 20) << dendl;
 
+  if (!m_image_ctx->ignore_migrating &&
+      m_image_ctx->test_features(RBD_FEATURE_MIGRATING)) {
+    lderr(m_cct) << "image in migration state - not removing" << dendl;
+    send_close_image(-EBUSY);
+    return;
+  }
+
   check_image_snaps();
 }
 
