@@ -53,6 +53,9 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
+OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
+             'norecover', 'noscrub', 'nodeep-scrub')
+
 OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
 
 OSD_STATUS = ['weight', 'up', 'in']
@@ -179,6 +182,20 @@ class Module(MgrModule):
             'POOL Metadata',
             POOL_METADATA
         )
+
+        metrics['pg_total'] = Metric(
+            'gauge',
+            'pg_total',
+            'PG Total Count'
+        )
+
+        for flag in OSD_FLAGS:
+            path = 'osd_flag_{}'.format(flag)
+            metrics[path] = Metric(
+                'untyped',
+                path,
+                'OSD Flag {}'.format(flag)
+            )
         for state in OSD_STATUS:
             path = 'osd_{}'.format(state)
             self.log.debug("init: creating {}".format(path))
@@ -249,16 +266,25 @@ class Module(MgrModule):
 
     def get_pg_status(self):
         # TODO add per pool status?
-        pg_s = self.get('pg_summary')['all']
-        reported_pg_s = [(s,v) for key, v in pg_s.items() for s in
-                         key.split('+')]
-        for state, value in reported_pg_s:
+        pg_status = self.get('pg_status')
+
+        # Set total count of PGs, first
+        self.metrics['pg_total'].set(
+            pg_status['num_pgs'],
+        )
+
+        reported_states = {}
+        for pg in pg_status['pgs_by_state']:
+            for state in pg['state_name'].split('+'):
+                reported_states[state] =  reported_states.get(state, 0) + pg['count']
+
+        for state in reported_states:
             path = 'pg_{}'.format(state)
             try:
-                self.metrics[path].set(value)
+                self.metrics[path].set(reported_states[state])
             except KeyError:
                 self.log.warn("skipping pg in unknown state {}".format(state))
-        reported_states = [s[0] for s in reported_pg_s]
+
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             if state not in reported_states:
@@ -279,11 +305,22 @@ class Module(MgrModule):
 
     def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')
+        osd_flags = osd_map['flags'].split(',')
+        for flag in OSD_FLAGS:
+            self.metrics['osd_flag_{}'.format(flag)].set(
+                int(flag in osd_flags)
+            )
         osd_devices = self.get('osd_map_crush')['devices']
         for osd in osd_map['osds']:
             id_ = osd['osd']
             p_addr = osd['public_addr'].split(':')[0]
             c_addr = osd['cluster_addr'].split(':')[0]
+            if p_addr == "-" or c_addr == "-":
+                self.log.info(
+                    "Missing address metadata for osd {0}, skipping occupation"
+                    " and metadata records for this osd".format(id_)
+                )
+                continue
             dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
             self.metrics['osd_metadata'].set(1, (
                 c_addr,
