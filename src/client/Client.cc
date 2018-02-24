@@ -12169,6 +12169,12 @@ void Client::ms_handle_remote_reset(Connection *con)
   }
 }
 
+bool Client::ms_handle_refused(Connection *con)
+{
+  ldout(cct, 1) << "ms_handle_refused on " << con->get_peer_addr() << dendl;
+  return false;
+}
+
 bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)

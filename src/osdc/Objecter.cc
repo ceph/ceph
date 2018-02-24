@@ -4293,6 +4293,18 @@ void Objecter::ms_handle_remote_reset(Connection *con)
   ms_handle_reset(con);
 }
 
+bool Objecter::ms_handle_refused(Connection *con)
+{
+  // just log for now
+  if (osdmap && (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD)) {
+    int osd = osdmap->identify_osd(con->get_peer_addr());
+    if (osd >= 0) {
+      ldout(cct, 1) << "ms_handle_refused on osd." << osd << dendl;
+    }
+  }
+  return false;
+}
+
 bool Objecter::ms_get_authorizer(int dest_type,
 				 AuthAuthorizer **authorizer,
 				 bool force_new)
@@ -4304,7 +4316,6 @@ bool Objecter::ms_get_authorizer(int dest_type,
   *authorizer = monc->auth->build_authorizer(dest_type);
   return *authorizer != NULL;
 }
-
 
 void Objecter::op_target_t::dump(Formatter *f) const
 {

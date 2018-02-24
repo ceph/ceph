@@ -39,6 +39,7 @@ set_property(TEST
   PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind
   )
 
+add_ceph_test(osd-fast-mark-down.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-fast-mark-down.sh)
 
 # unittest_osdmap
 add_executable(unittest_osdmap EXCLUDE_FROM_ALL

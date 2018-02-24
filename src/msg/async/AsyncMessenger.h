@@ -33,6 +33,7 @@ using namespace std;
 #include "common/Throttle.h"
 
 #include "msg/SimplePolicyMessenger.h"
+#include "msg/DispatchQueue.h"
 #include "include/assert.h"
 #include "AsyncConnection.h"
 #include "Event.h"
@@ -71,7 +72,7 @@ class Worker : public Thread {
     : cct(c), pool(p), done(false), id(i), perf_logger(NULL), center(c), references(0) {
     center.init(InitEventNumber);
     char name[128];
-    sprintf(name, "AsyncMessenger::Worker-%d", id);
+    sprintf(name, "AsyncMessenger::Worker-%u", id);
     // initialize perf_logger
     PerfCountersBuilder plb(cct, name, l_msgr_first, l_msgr_last);
 
@@ -205,11 +206,11 @@ public:
   void set_addr_unknowns(entity_addr_t& addr);
 
   int get_dispatch_queue_len() {
-    return 0;
+    return dispatch_queue.get_queue_len();
   }
 
   double get_dispatch_queue_max_age(utime_t now) {
-    return 0;
+    return dispatch_queue.get_max_age(now);
   }
   /** @} Accessors */
 
@@ -268,7 +269,7 @@ public:
   Connection *create_anon_connection() {
     Mutex::Locker l(lock);
     Worker *w = pool->get_worker();
-    return new AsyncConnection(cct, this, &w->center, w->get_perf_counter());
+    return new AsyncConnection(cct, this, &dispatch_queue, &w->center, w->get_perf_counter());
   }
 
   /**
@@ -330,6 +331,7 @@ private:
 
   Processor processor;
   friend class Processor;
+  DispatchQueue dispatch_queue;
 
   class C_handle_reap : public EventCallback {
     AsyncMessenger *msgr;

@@ -1,11 +1,13 @@
 libmsg_la_SOURCES = \
 	msg/Message.cc \
 	msg/Messenger.cc \
+	msg/DispatchQueue.cc \
 	msg/msg_types.cc
 
 noinst_HEADERS += \
 	msg/Connection.h \
 	msg/Dispatcher.h \
+	msg/DispatchQueue.h \
 	msg/Message.h \
 	msg/Messenger.h \
 	msg/SimplePolicyMessenger.h \
@@ -13,7 +15,6 @@ noinst_HEADERS += \
 
 libmsg_la_SOURCES += \
 	msg/simple/Accepter.cc \
-	msg/simple/DispatchQueue.cc \
 	msg/simple/Pipe.cc \
 	msg/simple/PipeConnection.cc \
 	msg/simple/SimpleMessenger.cc \
@@ -38,7 +39,6 @@ endif
 
 noinst_HEADERS += \
 	msg/simple/Accepter.h \
-	msg/simple/DispatchQueue.h \
 	msg/simple/Pipe.h \
 	msg/simple/PipeConnection.h \
 	msg/simple/SimpleMessenger.h \
