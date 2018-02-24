@@ -478,7 +478,12 @@ void AbstractObjectWriteRequest<I>::write_object() {
   librados::ObjectWriteOperation write;
   if (m_copyup_enabled) {
     ldout(image_ctx->cct, 20) << "guarding write" << dendl;
-    write.assert_exists();
+    if (!image_ctx->migration_info.empty()) {
+      cls_client::assert_snapc_seq(
+        &write, m_snap_seq, cls::rbd::ASSERT_SNAPC_SEQ_NOT_GT_SNAPSET_SEQ);
+    } else {
+      write.assert_exists();
+    }
   }
 
   add_write_hint(&write);
@@ -501,7 +506,7 @@ void AbstractObjectWriteRequest<I>::handle_write_object(int r) {
   ldout(image_ctx->cct, 20) << "r=" << r << dendl;
 
   r = filter_write_result(r);
-  if (r == -ENOENT) {
+  if (r == -ENOENT || (r == -ERANGE && !image_ctx->migration_info.empty())) {
     if (m_copyup_enabled) {
       copyup();
       return;

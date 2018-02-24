@@ -8,6 +8,7 @@ set(librbd_test
   test_BlockGuard.cc
   test_DeepCopy.cc
   test_Groups.cc
+  test_Migration.cc
   test_MirroringWatcher.cc
   test_ObjectMap.cc
   test_Operations.cc

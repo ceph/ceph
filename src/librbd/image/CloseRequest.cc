@@ -290,6 +290,7 @@ void CloseRequest<I>::handle_close_parent(int r) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
   delete m_image_ctx->parent;
+  m_image_ctx->parent = nullptr;
   save_result(r);
   if (r < 0) {
     lderr(cct) << "error closing parent image: " << cpp_strerror(r) << dendl;

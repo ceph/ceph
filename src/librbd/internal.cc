@@ -244,8 +244,14 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       off += r;
     } while (r == READ_SIZE);
 
+    static_assert(sizeof(RBD_HEADER_TEXT) == sizeof(RBD_MIGRATE_HEADER_TEXT),
+                  "length of rbd headers must be the same");
+
     if (header.length() < sizeof(RBD_HEADER_TEXT) ||
-	memcmp(RBD_HEADER_TEXT, header.c_str(), sizeof(RBD_HEADER_TEXT))) {
+        (memcmp(RBD_HEADER_TEXT, header.c_str(),
+                sizeof(RBD_HEADER_TEXT)) != 0 &&
+         memcmp(RBD_MIGRATE_HEADER_TEXT, header.c_str(),
+                sizeof(RBD_MIGRATE_HEADER_TEXT)) != 0)) {
       CephContext *cct = (CephContext *)io_ctx.cct();
       lderr(cct) << "unrecognized header format" << dendl;
       return -ENXIO;
@@ -1418,6 +1424,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       }
     }
     ictx->owner_lock.put_read();
+
+    if (!ictx->migration_info.empty()) {
+      lderr(cct) << "cannot move migrating image to trash" << dendl;
+      ictx->state->close();
+      return -EINVAL;
+    }
 
     utime_t delete_time{ceph_clock_now()};
     utime_t deferment_end_time{delete_time};

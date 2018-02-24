@@ -29,6 +29,7 @@
 #include "librbd/api/DiffIterate.h"
 #include "librbd/api/Group.h"
 #include "librbd/api/Image.h"
+#include "librbd/api/Migration.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/api/Namespace.h"
 #include "librbd/api/Snapshot.h"
@@ -649,6 +650,105 @@ namespace librbd {
     tracepoint(librbd, rename_enter, src_io_ctx.get_pool_name().c_str(), src_io_ctx.get_id(), srcname, destname);
     int r = librbd::rename(src_io_ctx, srcname, destname);
     tracepoint(librbd, rename_exit, r);
+    return r;
+  }
+
+  int RBD::migration_prepare(IoCtx& io_ctx, const char *image_name,
+                             IoCtx& dest_io_ctx, const char *dest_image_name,
+                             ImageOptions& opts)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, migration_prepare_enter, io_ctx.get_pool_name().c_str(),
+               io_ctx.get_id(), image_name, dest_io_ctx.get_pool_name().c_str(),
+               dest_io_ctx.get_id(), dest_image_name, opts.opts);
+    int r = librbd::api::Migration<>::prepare(io_ctx, image_name, dest_io_ctx,
+                                              dest_image_name, opts);
+    tracepoint(librbd, migration_prepare_exit, r);
+    return r;
+  }
+
+  int RBD::migration_execute(IoCtx& io_ctx, const char *image_name)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, migration_execute_enter, io_ctx.get_pool_name().c_str(),
+               io_ctx.get_id(), image_name);
+    librbd::NoOpProgressContext prog_ctx;
+    int r = librbd::api::Migration<>::execute(io_ctx, image_name, prog_ctx);
+    tracepoint(librbd, migration_execute_exit, r);
+    return r;
+  }
+
+  int RBD::migration_execute_with_progress(IoCtx& io_ctx,
+                                           const char *image_name,
+                                           librbd::ProgressContext &prog_ctx)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, migration_execute_enter, io_ctx.get_pool_name().c_str(),
+               io_ctx.get_id(), image_name);
+    int r = librbd::api::Migration<>::execute(io_ctx, image_name, prog_ctx);
+    tracepoint(librbd, migration_execute_exit, r);
+    return r;
+  }
+
+  int RBD::migration_abort(IoCtx& io_ctx, const char *image_name)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, migration_abort_enter, io_ctx.get_pool_name().c_str(),
+               io_ctx.get_id(), image_name);
+    librbd::NoOpProgressContext prog_ctx;
+    int r = librbd::api::Migration<>::abort(io_ctx, image_name, prog_ctx);
+    tracepoint(librbd, migration_abort_exit, r);
+    return r;
+  }
+
+  int RBD::migration_abort_with_progress(IoCtx& io_ctx, const char *image_name,
+                                         librbd::ProgressContext &prog_ctx)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, migration_abort_enter, io_ctx.get_pool_name().c_str(),
+               io_ctx.get_id(), image_name);
+    int r = librbd::api::Migration<>::abort(io_ctx, image_name, prog_ctx);
+    tracepoint(librbd, migration_abort_exit, r);
+    return r;
+  }
+
+  int RBD::migration_commit(IoCtx& io_ctx, const char *image_name)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, migration_commit_enter, io_ctx.get_pool_name().c_str(),
+               io_ctx.get_id(), image_name);
+    librbd::NoOpProgressContext prog_ctx;
+    int r = librbd::api::Migration<>::commit(io_ctx, image_name, prog_ctx);
+    tracepoint(librbd, migration_commit_exit, r);
+    return r;
+  }
+
+  int RBD::migration_commit_with_progress(IoCtx& io_ctx, const char *image_name,
+                                          librbd::ProgressContext &prog_ctx)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, migration_commit_enter, io_ctx.get_pool_name().c_str(),
+               io_ctx.get_id(), image_name);
+    int r = librbd::api::Migration<>::commit(io_ctx, image_name, prog_ctx);
+    tracepoint(librbd, migration_commit_exit, r);
+    return r;
+  }
+
+  int RBD::migration_status(IoCtx& io_ctx, const char *image_name,
+                            image_migration_status_t *status,
+                            size_t status_size)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+    tracepoint(librbd, migration_status_enter, io_ctx.get_pool_name().c_str(),
+               io_ctx.get_id(), image_name);
+
+    if (status_size != sizeof(image_migration_status_t)) {
+      tracepoint(librbd, migration_status_exit, -ERANGE);
+      return -ERANGE;
+    }
+
+    int r = librbd::api::Migration<>::status(io_ctx, image_name, status);
+    tracepoint(librbd, migration_status_exit, r);
     return r;
   }
 
@@ -2941,6 +3041,153 @@ extern "C" int rbd_rename(rados_ioctx_t src_p, const char *srcname,
   int r = librbd::rename(src_io_ctx, srcname, destname);
   tracepoint(librbd, rename_exit, r);
   return r;
+}
+
+extern "C" int rbd_migration_prepare(rados_ioctx_t p, const char *image_name,
+                                     rados_ioctx_t dest_p,
+                                     const char *dest_image_name,
+                                     rbd_image_options_t opts_)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  librados::IoCtx dest_io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(dest_p, dest_io_ctx);
+  tracepoint(librbd, migration_prepare_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), image_name, dest_io_ctx.get_pool_name().c_str(),
+             dest_io_ctx.get_id(), dest_image_name, opts_);
+  librbd::ImageOptions opts(opts_);
+  int r = librbd::api::Migration<>::prepare(io_ctx, image_name, dest_io_ctx,
+                                            dest_image_name, opts);
+  tracepoint(librbd, migration_prepare_exit, r);
+  return r;
+}
+
+extern "C" int rbd_migration_execute(rados_ioctx_t p, const char *image_name)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, migration_execute_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), image_name);
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::api::Migration<>::execute(io_ctx, image_name, prog_ctx);
+  tracepoint(librbd, migration_execute_exit, r);
+  return r;
+}
+
+extern "C" int rbd_migration_execute_with_progress(rados_ioctx_t p,
+                                                   const char *name,
+                                                   librbd_progress_fn_t fn,
+                                                   void *data)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, migration_execute_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), name);
+  librbd::CProgressContext prog_ctx(fn, data);
+  int r = librbd::api::Migration<>::execute(io_ctx, name, prog_ctx);
+  tracepoint(librbd, migration_execute_exit, r);
+  return r;
+}
+
+extern "C" int rbd_migration_abort(rados_ioctx_t p, const char *image_name)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, migration_abort_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), image_name);
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::api::Migration<>::abort(io_ctx, image_name, prog_ctx);
+  tracepoint(librbd, migration_abort_exit, r);
+  return r;
+}
+
+extern "C" int rbd_migration_abort_with_progress(rados_ioctx_t p,
+                                                 const char *name,
+                                                 librbd_progress_fn_t fn,
+                                                 void *data)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, migration_abort_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), name);
+  librbd::CProgressContext prog_ctx(fn, data);
+  int r = librbd::api::Migration<>::abort(io_ctx, name, prog_ctx);
+  tracepoint(librbd, migration_abort_exit, r);
+  return r;
+}
+
+extern "C" int rbd_migration_commit(rados_ioctx_t p, const char *image_name)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, migration_commit_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), image_name);
+  librbd::NoOpProgressContext prog_ctx;
+  int r = librbd::api::Migration<>::commit(io_ctx, image_name, prog_ctx);
+  tracepoint(librbd, migration_commit_exit, r);
+  return r;
+}
+
+extern "C" int rbd_migration_commit_with_progress(rados_ioctx_t p,
+                                                  const char *name,
+                                                  librbd_progress_fn_t fn,
+                                                  void *data)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, migration_commit_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), name);
+  librbd::CProgressContext prog_ctx(fn, data);
+  int r = librbd::api::Migration<>::commit(io_ctx, name, prog_ctx);
+  tracepoint(librbd, migration_commit_exit, r);
+  return r;
+}
+
+extern "C" int rbd_migration_status(rados_ioctx_t p, const char *image_name,
+                                    rbd_image_migration_status_t *status,
+                                    size_t status_size)
+{
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(p, io_ctx);
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
+  tracepoint(librbd, migration_status_enter, io_ctx.get_pool_name().c_str(),
+             io_ctx.get_id(), image_name);
+
+  if (status_size != sizeof(rbd_image_migration_status_t)) {
+    tracepoint(librbd, migration_status_exit, -ERANGE);
+    return -ERANGE;
+  }
+
+  librbd::image_migration_status_t cpp_status;
+  int r = librbd::api::Migration<>::status(io_ctx, image_name, &cpp_status);
+  if (r >= 0) {
+    status->source_pool_id = cpp_status.source_pool_id;
+    status->source_image_name = strdup(cpp_status.source_image_name.c_str());
+    status->source_image_id = strdup(cpp_status.source_image_id.c_str());
+    status->dest_pool_id = cpp_status.dest_pool_id;
+    status->dest_image_name = strdup(cpp_status.dest_image_name.c_str());
+    status->dest_image_id = strdup(cpp_status.dest_image_id.c_str());
+    status->state = cpp_status.state;
+    status->state_description = strdup(cpp_status.state_description.c_str());
+  }
+
+  tracepoint(librbd, migration_status_exit, r);
+  return r;
+}
+
+extern "C" void rbd_migration_status_cleanup(rbd_image_migration_status_t *s)
+{
+  free(s->source_image_name);
+  free(s->source_image_id);
+  free(s->dest_image_name);
+  free(s->dest_image_id);
+  free(s->state_description);
 }
 
 extern "C" int rbd_open(rados_ioctx_t p, const char *name, rbd_image_t *image,

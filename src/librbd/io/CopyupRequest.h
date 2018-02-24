@@ -113,6 +113,8 @@ private:
   bool send_object_map();
   bool send_copyup();
   bool is_copyup_required();
+  bool is_update_object_map_required();
+  bool is_deep_copy() const;
 };
 
 } // namespace io

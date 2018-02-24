@@ -12,6 +12,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ObjectRequest.h"
@@ -204,9 +205,47 @@ bool CopyupRequest<I>::is_copyup_required() {
 }
 
 template <typename I>
+bool CopyupRequest<I>::is_update_object_map_required() {
+  RWLock::RLocker owner_locker(m_ictx->owner_lock);
+  RWLock::RLocker snap_locker(m_ictx->snap_lock);
+  if (m_ictx->object_map == nullptr) {
+    return false;
+  }
+
+  if (!is_deep_copy()) {
+    return false;
+  }
+
+  auto it = m_ictx->migration_info.snap_map.find(CEPH_NOSNAP);
+  assert(it != m_ictx->migration_info.snap_map.end());
+  return it->second[0] != CEPH_NOSNAP;
+}
+
+template <typename I>
+bool CopyupRequest<I>::is_deep_copy() const {
+  return !m_ictx->migration_info.empty() &&
+    m_ictx->migration_info.snap_map.size() > 1;
+}
+
+template <typename I>
 void CopyupRequest<I>::send()
 {
   m_state = STATE_READ_FROM_PARENT;
+
+  if (is_deep_copy()) {
+    bool flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
+    auto req = deep_copy::ObjectCopyRequest<I>::create(
+        m_ictx->parent, m_ictx->parent->parent /* TODO */, m_ictx,
+        m_ictx->migration_info.snap_map, m_object_no, flatten,
+        util::create_context_callback(this));
+    ldout(m_ictx->cct, 20) << "deep copy object req " << req
+                           << ", object_no " << m_object_no
+                           << ", flatten " << flatten
+                           << dendl;
+    req->send();
+    return;
+  }
+
   AioCompletion *comp = AioCompletion::create_and_start(
     this, m_ictx, AIO_TYPE_READ);
 
@@ -240,8 +279,8 @@ bool CopyupRequest<I>::should_complete(int r)
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
     remove_from_list();
     if (r >= 0 || r == -ENOENT) {
-      if (!is_copyup_required()) {
-        ldout(cct, 20) << "nop, skipping" << dendl;
+      if (!is_copyup_required() && !is_update_object_map_required()) {
+        ldout(cct, 20) << "skipping" << dendl;
         return true;
       }
 
@@ -257,6 +296,10 @@ bool CopyupRequest<I>::should_complete(int r)
   case STATE_OBJECT_MAP:
     ldout(cct, 20) << "OBJECT_MAP" << dendl;
     assert(r == 0);
+    if (!is_copyup_required()) {
+      ldout(cct, 20) << "skipping copyup" << dendl;
+      return true;
+    }
     return send_copyup();
 
   case STATE_COPYUP:
@@ -310,9 +353,25 @@ bool CopyupRequest<I>::send_object_map_head() {
       assert(m_ictx->exclusive_lock->is_lock_owner());
 
       RWLock::WLocker object_map_locker(m_ictx->object_map_lock);
+
       if (!m_ictx->snaps.empty()) {
-        m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
-                          m_ictx->snaps.end());
+        if (is_deep_copy()) {
+          // don't copy ids for the snaps updated by object deep copy
+          std::set<uint64_t> deep_copied;
+          for (auto &it : m_ictx->migration_info.snap_map) {
+            if (it.first != CEPH_NOSNAP) {
+              deep_copied.insert(it.second.front());
+            }
+          }
+          std::copy_if(m_ictx->snaps.begin(), m_ictx->snaps.end(),
+                       std::back_inserter(m_snap_ids),
+                       [&deep_copied](uint64_t i) {
+                         return !deep_copied.count(i);
+                       });
+        } else {
+          m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
+                            m_ictx->snaps.end());
+        }
       }
       if (copy_on_read &&
           (*m_ictx->object_map)[m_object_no] != OBJECT_EXISTS) {

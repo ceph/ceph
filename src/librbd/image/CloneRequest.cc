@@ -238,7 +238,12 @@ void CloneRequest<I>::send_open() {
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_open>(this);
 
-  m_imctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
+  uint64_t flags = OPEN_FLAG_SKIP_OPEN_PARENT;
+  if ((m_features & RBD_FEATURE_MIGRATING) != 0) {
+    flags |= OPEN_FLAG_IGNORE_MIGRATING;
+  }
+
+  m_imctx->state->open(flags, ctx);
 }
 
 template <typename I>
