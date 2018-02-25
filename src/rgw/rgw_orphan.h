@@ -15,9 +15,6 @@
 #ifndef CEPH_RGW_ORPHAN_H
 #define CEPH_RGW_ORPHAN_H
 
-#include "common/config.h"
-#include "common/Formatter.h"
-#include "common/errno.h"
 
 #include "rgw_rados.h"
 

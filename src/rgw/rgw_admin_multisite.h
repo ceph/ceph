@@ -2,10 +2,6 @@
 #define CEPH_RGW_ADMIN_MULTISITE_H
 
 #include <boost/optional.hpp>
-#include <common/errno.h>
-#include <compressor/Compressor.h>
-#include "rgw_rest_conn.h"
-#include "rgw_admin_common.h"
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 

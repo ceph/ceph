@@ -1,13 +1,6 @@
 #ifndef CEPH_RGW_ADMIN_COMMON_H
 #define CEPH_RGW_ADMIN_COMMON_H
 
-#include "cls/rgw/cls_rgw_types.h"
-
-#include "common/ceph_json.h"
-#include <common/errno.h>
-#include <common/safe_io.h>
-
-#include "rgw_common.h"
 #include "rgw_rados.h"
 
 enum RgwAdminCommand {

@@ -1,13 +1,7 @@
 #ifndef CEPH_RGW_ADMIN_OPT_ROLE_H
 #define CEPH_RGW_ADMIN_OPT_ROLE_H
 
-
-#include "rgw_rest_conn.h"
-#include "rgw_realm_watcher.h"
-
-#include "common/ceph_json.h"
-#include "rgw_role.h"
-#include "rgw_admin_common.h"
+#include "rgw_rados.h"
 
 // This header and the corresponding source file contain handling of the following commads / groups of commands:
 // Role, role policy

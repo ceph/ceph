@@ -1,5 +1,7 @@
 #include "rgw_admin_other.h"
 
+#include "rgw_usage.h"
+#include "rgw_lc.h"
 #include "rgw_data_sync.h"
 #include "rgw_admin_argument_parsing.h"
 

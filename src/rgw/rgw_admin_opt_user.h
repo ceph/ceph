@@ -1,9 +1,8 @@
 #ifndef CEPH_RGW_ADMIN_OPT_USER_H
 #define CEPH_RGW_ADMIN_OPT_USER_H
 
-#include <common/errno.h>
+#include "rgw_rados.h"
 #include "rgw_user.h"
-#include "rgw_bucket.h"
 
 // This header and the corresponding source file contain handling of the following commads / groups of commands:
 // User

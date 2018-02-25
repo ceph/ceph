@@ -4,12 +4,10 @@
 #include <string>
 #include <map>
 #include "rgw_rados.h"
-#include "rgw_admin_argument_parsing.h"
-#include "rgw_usage.h"
-#include "rgw_lc.h"
 #include "rgw_sync.h"
 #include "rgw_bucket.h"
 #include "rgw_replica_log.h"
+#include "rgw_admin_common.h"
 
 // This header and the corresponding source file contain handling of the following commads / groups of commands:
 // Pool, log, usage, olh, gc, lc, metadata (except metadata sync), user list, mdlog, sync error,

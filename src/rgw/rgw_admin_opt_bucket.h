@@ -1,15 +1,11 @@
 #ifndef CEPH_RGW_ADMIN_BUCKET_H
 #define CEPH_RGW_ADMIN_BUCKET_H
 
-#include "common/ceph_json.h"
-#include "common/errno.h"
-
-#include "rgw_admin_argument_parsing.h"
-#include "rgw_admin_common.h"
+#include "rgw_basic_types.h"
 #include "rgw_bucket.h"
-#include "rgw_reshard.h"
-
-#include "common/ceph_argparse.h"
+#include "rgw_formats.h"
+#include "rgw_rados.h"
+#include "rgw_admin_common.h"
 
 // This header and the corresponding source file contain handling of the following commads / groups of commands:
 // Bucket, bucket sync, bi, bilog, reshard, object

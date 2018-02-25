@@ -1,7 +1,10 @@
 #include "rgw_admin_multisite.h"
 
 #include "common/ceph_json.h"
-#include "common/errno.h"
+#include <common/errno.h>
+#include <compressor/Compressor.h>
+#include "rgw_rest_conn.h"
+#include "rgw_admin_common.h"
 
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,

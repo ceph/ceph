@@ -1,5 +1,7 @@
 #include "rgw_admin_opt_user.h"
 
+#include "rgw_bucket.h"
+
 int handle_opt_user_create(const std::string& subuser, RGWUserAdminOpState& user_op, RGWUser& user)
 {
   if (!user_op.has_existing_user()) {

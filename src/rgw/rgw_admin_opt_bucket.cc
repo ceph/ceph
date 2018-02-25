@@ -1,7 +1,13 @@
 #include "rgw_admin_opt_bucket.h"
 
+#include "common/ceph_argparse.h"
+#include "common/ceph_json.h"
+#include "common/errno.h"
+
+#include "rgw_reshard.h"
 #include "rgw_orphan.h"
 #include "rgw_data_sync.h"
+#include "rgw_admin_argument_parsing.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

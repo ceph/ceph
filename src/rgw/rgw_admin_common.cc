@@ -1,5 +1,14 @@
 #include "rgw_admin_common.h"
 
+#include "cls/rgw/cls_rgw_types.h"
+
+#include "common/ceph_json.h"
+#include <common/errno.h>
+#include <common/safe_io.h>
+
+#include "rgw_common.h"
+#include "rgw_rados.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 int init_bucket(RGWRados *store, const std::string& tenant_name, const std::string& bucket_name, const std::string& bucket_id,

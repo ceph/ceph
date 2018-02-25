@@ -14,6 +14,7 @@
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
 
+#include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
 #include "common/config.h"
 
