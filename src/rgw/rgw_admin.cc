@@ -77,8 +77,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  boost::intrusive_ptr<CephContext> cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
-                                                      CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf->rgw_region.empty() && g_conf->rgw_zonegroup.empty()) {
