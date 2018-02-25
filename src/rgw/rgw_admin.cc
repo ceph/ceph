@@ -1,10 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <cerrno>
+#include <errno.h>
 #include <iostream>
 #include <sstream>
-#include <cstdlib>
+#include <stdlib.h>
 #include <string>
 
 #include <boost/optional.hpp>
