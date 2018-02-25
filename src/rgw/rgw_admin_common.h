@@ -10,9 +10,6 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
-
 enum RgwAdminCommand {
   OPT_NO_CMD = 0,
   OPT_USER_CREATE,

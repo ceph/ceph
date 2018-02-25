@@ -3,6 +3,9 @@
 #include "rgw_orphan.h"
 #include "rgw_data_sync.h"
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_rgw
+
 static bool bucket_object_check_filter(const std::string& name)
 {
   rgw_obj_key k;

@@ -3,6 +3,8 @@
 #include "rgw_data_sync.h"
 #include "rgw_admin_argument_parsing.h"
 
+#define dout_context g_ceph_context
+
 int handle_opt_pool_add(const std::string& pool_name, rgw_pool& pool, RGWRados *store)
 {
   if (pool_name.empty()) {
