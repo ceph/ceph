@@ -984,88 +984,88 @@ int parse_common_commandline_params(std::vector<const char*>& args, rgw_user& us
     }
       // keep the parsing of other options to ensure the validity of the passed parameters
     else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--subuser", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--object-version", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--client-id", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--op-id", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--state", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--op-mask", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--key-type", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--job-id", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--show-log-entries", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--show-log-sum", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--skip-zero-entries", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--admin", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--system", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--verbose", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--staging", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--commit", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--max-size", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--max-objects", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--num-shards", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--access", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--categories", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--purge-keys", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--remove-bad", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--check-head-obj-locator", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--check-objects", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--sync-stats", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--include-all", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--extra-info", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--bypass-gc", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--warnings-only", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--inconsistent-index", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--caps", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--index-type", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--master", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--default", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--redirect-zone", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--read-only", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--master-zone", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--epoch", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--remote", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--url", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--placement-id", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--tags", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--tags-add", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--api-name", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--zone-id", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--endpoints", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--sync-from", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*) nullptr) ||
-        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--sync-from-all", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--tier-type", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--tier-config", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--index-pool", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--data-pool", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--compression", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--role-name", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--path", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--assume-role-policy-doc", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--policy-name", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--policy-doc", (char*) nullptr) ||
-        ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*) nullptr)) {
+             ceph_argparse_witharg(args, i, &val, "--subuser", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--object-version", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--client-id", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--op-id", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--state", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--op-mask", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--key-type", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--job-id", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--show-log-entries", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--show-log-sum", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--skip-zero-entries", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--admin", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--system", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--verbose", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--staging", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--commit", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--max-size", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--max-objects", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--num-shards", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--access", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--categories", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--purge-keys", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--remove-bad", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--check-head-obj-locator", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--check-objects", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--sync-stats", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--include-all", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--extra-info", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--bypass-gc", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--warnings-only", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--inconsistent-index", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--caps", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--index-type", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--master", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--default", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--redirect-zone", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--read-only", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--master-zone", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--epoch", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--remote", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--url", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--placement-id", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--tags", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--tags-add", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--api-name", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--zone-id", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--endpoints", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--sync-from", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*) nullptr) ||
+             ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--sync-from-all", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--tier-type", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--tier-config", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--index-pool", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--data-pool", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--compression", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--role-name", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--path", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--assume-role-policy-doc", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--policy-name", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--policy-doc", (char*) nullptr) ||
+             ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*) nullptr)) {
       // do nothing
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
@@ -1085,7 +1085,6 @@ int parse_bucket_commandline_params(std::vector<const char*>& args, int& num_sha
                                     uint64_t& min_rewrite_size, uint64_t& max_rewrite_size,
                                     uint64_t& min_rewrite_stripe_size)
 {
-  long long tmp = 0;
   std::string val, key_type_str, err;
   std::ostringstream errs;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
@@ -1158,7 +1157,6 @@ int parse_multisite_commandline_params(std::vector<const char*>& args, int& set_
                                        std::string& zonegroup_name, std::string& zonegroup_new_name)
 {
   int is_master_int, read_only_int, tmp_int;
-  long long tmp = 0;
   std::string val, key_type_str, err;
   std::ostringstream errs;
   for (auto i = args.begin(); i != args.end(); ) {
@@ -1255,7 +1253,6 @@ int parse_quota_commandline_params(std::vector<const char*>& args, std::string& 
                                    int64_t& max_size, bool& have_max_size,
                                    int64_t& max_objects, bool& have_max_objects)
 {
-  long long tmp = 0;
   std::string val, key_type_str, err;
   std::ostringstream errs;
   for (auto i = args.begin(); i != args.end(); ) {
@@ -1292,7 +1289,6 @@ int parse_role_commandline_params(std::vector<const char*>& args, std::string& r
                                   std::string& perm_policy_doc, std::string& path,
                                   std::string& path_prefix)
 {
-  long long tmp = 0;
   std::string val, key_type_str, err;
   std::ostringstream errs;
   for (auto i = args.begin(); i != args.end(); ) {
@@ -1327,7 +1323,6 @@ int parse_user_commandline_params(std::vector<const char*>& args,
                                   std::string& access, uint32_t& perm_mask, bool& set_perm,
                                   int& sync_stats)
 {
-  long long tmp = 0;
   std::string val, key_type_str, err;
   std::ostringstream errs;
   for (auto i = args.begin(); i != args.end(); ) {
@@ -1396,7 +1391,6 @@ int parse_other_commandline_params(std::vector<const char*>& args, std::string& 
                                    int& skip_zero_entries, std::map<std::string, bool>& categories,
                                    uint64_t& orphan_stale_secs, std::string& job_id)
 {
-  long long tmp = 0;
   std::string val, key_type_str, err;
   std::ostringstream errs;
   for (auto i = args.begin(); i != args.end(); ) {
