@@ -309,7 +309,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
        const PGPool &_pool, spg_t p) :
   pg_id(p),
   coll(p),
-  osr(o->osr_registry.lookup_or_create(p, (stringify(p)))),
   osd(o),
   cct(o->cct),
   osdmap_ref(curmap),
@@ -366,7 +365,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   ss << "PG " << info.pgid;
   trace_endpoint.copy_name(ss.str());
 #endif
-  osr->shard_hint = p;
 }
 
 PG::~PG()
@@ -1617,7 +1615,6 @@ void PG::activate(ObjectStore::Transaction& t,
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
-  last_update_applied = info.last_update;
   last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
 
   need_up_thru = false;
@@ -3054,18 +3051,17 @@ void PG::upgrade(ObjectStore *store)
   dirty_big_info = true;
   write_if_dirty(t);
 
-  ceph::shared_ptr<ObjectStore::Sequencer> osr (std::make_shared<
-                                      ObjectStore::Sequencer>("upgrade"));
-  int r = store->apply_transaction(osr.get(), std::move(t));
+  ObjectStore::CollectionHandle ch = store->open_collection(coll);
+  int r = store->queue_transaction(ch, std::move(t));
   if (r != 0) {
-    derr << __func__ << ": apply_transaction returned "
+    derr << __func__ << ": queue_transaction returned "
 	 << cpp_strerror(r) << dendl;
     ceph_abort();
   }
   assert(r == 0);
 
   C_SaferCond waiter;
-  if (!osr->flush_commit(&waiter)) {
+  if (!ch->flush_commit(&waiter)) {
     waiter.wait();
   }
 }
@@ -3203,7 +3199,9 @@ bool PG::_has_removal_flag(ObjectStore *store,
   set<string> keys;
   keys.insert("_remove");
   map<string,bufferlist> values;
-  if (store->omap_get_values(coll, pgmeta_oid, keys, &values) == 0 &&
+  auto ch = store->open_collection(coll);
+  assert(ch);
+  if (store->omap_get_values(ch, pgmeta_oid, keys, &values) == 0 &&
       values.size() == 1)
     return true;
 
@@ -3227,7 +3225,9 @@ int PG::peek_map_epoch(ObjectStore *store,
   keys.insert(infover_key);
   keys.insert(epoch_key);
   map<string,bufferlist> values;
-  int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
+  auto ch = store->open_collection(coll);
+  assert(ch);
+  int r = store->omap_get_values(ch, pgmeta_oid, keys, &values);
   if (r == 0) {
     assert(values.size() == 2);
 
@@ -3309,7 +3309,7 @@ void PG::handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t tr
     pg_log.trim(trim_to, info);
     dirty_info = true;
     write_if_dirty(t);
-    int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+    int tr = osd->store->queue_transaction(ch, std::move(t), NULL);
     assert(tr == 0);
   }
 }
@@ -3390,11 +3390,7 @@ void PG::append_log(
     pg_log.roll_forward_to(
       roll_forward_to,
       &handler);
-    t.register_on_applied(
-      new C_UpdateLastRollbackInfoTrimmedToApplied(
-	this,
-	get_osdmap()->get_epoch(),
-	roll_forward_to));
+    last_rollback_info_trimmed_to_applied = roll_forward_to;
   }
 
   pg_log.trim(trim_to, info);
@@ -3440,7 +3436,9 @@ int PG::read_info(
   keys.insert(fastinfo_key);
   ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
   map<string,bufferlist> values;
-  int r = store->omap_get_values(coll, pgmeta_oid, keys, &values);
+  auto ch = store->open_collection(coll);
+  assert(ch);
+  int r = store->omap_get_values(ch, pgmeta_oid, keys, &values);
   assert(r == 0);
   assert(values.size() == 3 ||
 	 values.size() == 4);
@@ -3482,7 +3480,7 @@ void PG::read_state(ObjectStore *store)
   ostringstream oss;
   pg_log.read_log_and_missing(
     store,
-    coll,
+    ch,
     pgmeta_oid,
     info,
     oss,
@@ -3519,7 +3517,7 @@ void PG::read_state(ObjectStore *store)
   PG::RecoveryCtx rctx(0, 0, 0, 0, 0, new ObjectStore::Transaction);
   handle_loaded(&rctx);
   write_if_dirty(*rctx.transaction);
-  store->apply_transaction(osr.get(), std::move(*rctx.transaction));
+  store->queue_transaction(ch, std::move(*rctx.transaction));
   delete rctx.transaction;
 }
 
@@ -4102,7 +4100,7 @@ void PG::_scan_rollback_obs(
   if (!t.empty()) {
     derr << __func__ << ": queueing trans to clean up obsolete rollback objs"
 	 << dendl;
-    osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+    osd->store->queue_transaction(ch, std::move(t), NULL);
   }
 }
 
@@ -4182,9 +4180,9 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << "...repaired";
 	}
 	snap_mapper.add_oid(hoid, obj_snaps, &_t);
-	r = osd->store->apply_transaction(osr.get(), std::move(t));
+	r = osd->store->queue_transaction(ch, std::move(t));
 	if (r != 0) {
-	  derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
+	  derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
 	       << dendl;
 	}
       }
@@ -4229,9 +4227,9 @@ void PG::_repair_oinfo_oid(ScrubMap &smap)
       o.attrs[OI_ATTR] = bp;
 
       t.setattr(coll, ghobject_t(hoid), OI_ATTR, bl);
-      int r = osd->store->apply_transaction(osr.get(), std::move(t));
+      int r = osd->store->queue_transaction(ch, std::move(t));
       if (r != 0) {
-	derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
+	derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
 	     << dendl;
       }
     }
@@ -4253,7 +4251,6 @@ int PG::build_scrub_map_chunk(
   while (pos.empty()) {
     pos.deep = deep;
     map.valid_through = info.last_update;
-    osr->flush();
 
     // objects
     vector<ghobject_t> rollback_obs;
@@ -4357,8 +4354,7 @@ void PG::repair_object(
 
 /* replica_scrub
  *
- * Wait for last_update_applied to match msg->scrub_to as above. Wait
- * for pushes to complete in case of recent recovery. Build a single
+ * Wait for pushes to complete in case of recent recovery. Build a single
  * scrubmap of objects that are in the range [msg->start, msg->end).
  */
 void PG::replica_scrub(
@@ -4377,12 +4373,6 @@ void PG::replica_scrub(
   }
 
   assert(msg->chunky);
-  if (last_update_applied < msg->scrub_to) {
-    dout(10) << "waiting for last_update_applied to catch up" << dendl;
-    scrubber.active_rep_scrub = op;
-    return;
-  }
-
   if (active_pushes > 0) {
     dout(10) << "waiting for active pushes to finish" << dendl;
     scrubber.active_rep_scrub = op;
@@ -4525,11 +4515,6 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
  *           |              |   |
  *  _________v__________    |   |
  * |                    |   |   |
- * |  WAIT_LAST_UPDATE  |   |   |
- * |____________________|   |   |
- *           |              |   |
- *  _________v__________    |   |
- * |                    |   |   |
  * |      BUILD_MAP     |   |   |
  * |____________________|   |   |
  *           |              |   |
@@ -4606,7 +4591,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  scrubber.cleanup_store(&t);
 	  scrubber.store.reset(Scrub::Store::create(osd->store, &t,
 						    info.pgid, coll));
-	  osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+	  osd->store->queue_transaction(ch, std::move(t), nullptr);
 	}
 
         // Don't include temporary objects when scrubbing
@@ -4665,7 +4650,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
-	  osr->flush();
 	  ret = get_pgbackend()->objects_list_partial(
 	    start,
 	    min,
@@ -4730,8 +4714,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  }
 	}
 
-        // ask replicas to wait until
-        // last_update_applied >= scrubber.subset_last_update and then scan
+        // ask replicas to scan
         scrubber.waiting_on_whom.insert(pg_whoami);
 
         // request maps from replicas
@@ -4751,29 +4734,16 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         break;
 
       case PG::Scrubber::WAIT_PUSHES:
-        if (active_pushes == 0) {
-          scrubber.state = PG::Scrubber::WAIT_LAST_UPDATE;
-        } else {
+        if (active_pushes > 0) {
           dout(15) << "wait for pushes to apply" << dendl;
-          done = true;
-        }
-        break;
-
-      case PG::Scrubber::WAIT_LAST_UPDATE:
-        if (last_update_applied < scrubber.subset_last_update) {
-          // will be requeued by op_applied
-          dout(15) << "wait for writes to flush" << dendl;
           done = true;
 	  break;
 	}
-
-	scrubber.state = PG::Scrubber::BUILD_MAP;
 	scrubber.primary_scrubmap_pos.reset();
+	scrubber.state = PG::Scrubber::BUILD_MAP;
         break;
 
       case PG::Scrubber::BUILD_MAP:
-        assert(last_update_applied >= scrubber.subset_last_update);
-
         // build my own scrub map
 	if (scrub_preempted) {
 	  dout(10) << __func__ << " preempted" << dendl;
@@ -4828,7 +4798,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         break;
 
       case PG::Scrubber::COMPARE_MAPS:
-        assert(last_update_applied >= scrubber.subset_last_update);
         assert(scrubber.waiting_on_whom.empty());
 
         scrub_compare_maps();
@@ -5084,7 +5053,7 @@ void PG::scrub_compare_maps()
       dout(10) << __func__ << ": updating scrub object" << dendl;
       ObjectStore::Transaction t;
       scrubber.store->flush(&t);
-      osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+      osd->store->queue_transaction(ch, std::move(t), nullptr);
     }
   }
 }
@@ -5224,7 +5193,7 @@ void PG::scrub_finish()
     ObjectStore::Transaction t;
     dirty_info = true;
     write_if_dirty(t);
-    int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+    int tr = osd->store->queue_transaction(ch, std::move(t), NULL);
     assert(tr == 0);
   }
 
@@ -5524,7 +5493,7 @@ void PG::reset_interval_flush()
   
   Context *c = new QueuePeeringEvt<IntervalFlush>(
     this, get_osdmap()->get_epoch(), IntervalFlush());
-  if (!osr->flush_commit(c)) {
+  if (!ch->flush_commit(c)) {
     dout(10) << "Beginning to block outgoing recovery messages" << dendl;
     recovery_state.begin_block_outgoing();
   } else {
@@ -5790,8 +5759,6 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.is_peered()) {
     if (pg.last_update_ondisk != pg.info.last_update)
       out << " luod=" << pg.last_update_ondisk;
-    if (pg.last_update_applied != pg.info.last_update)
-      out << " lua=" << pg.last_update_applied;
   }
 
   if (pg.recovery_ops_active)
@@ -6191,7 +6158,7 @@ void PG::handle_query_state(Formatter *f)
 
 void PG::update_store_with_options()
 {
-  auto r = osd->store->set_collection_opts(coll, pool.info.opts);
+  auto r = osd->store->set_collection_opts(ch, pool.info.opts);
   if(r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << " set_collection_opts returns error:" << r << dendl;
   }
@@ -6201,14 +6168,14 @@ void PG::update_store_on_load()
 {
   if (osd->store->get_type() == "filestore") {
     // legacy filestore didn't store collection bit width; fix.
-    int bits = osd->store->collection_bits(coll);
+    int bits = osd->store->collection_bits(ch);
     if (bits < 0) {
       assert(!coll.is_meta()); // otherwise OSD::load_pgs() did a bad thing
       bits = info.pgid.get_split_bits(pool.info.get_pg_num());
       lderr(cct) << __func__ << " setting bit width to " << bits << dendl;
       ObjectStore::Transaction t;
       t.collection_set_bits(coll, bits);
-      osd->store->apply_transaction(osr.get(), std::move(t));
+      osd->store->queue_transaction(ch, std::move(t));
     }
   }
 }
@@ -6216,18 +6183,12 @@ void PG::update_store_on_load()
 struct C_DeleteMore : public Context {
   PGRef pg;
   epoch_t epoch;
-  int count = 2;
   C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
   void finish(int r) override {
     ceph_abort();
   }
   void complete(int r) override {
     assert(r == 0);
-    // complete will be called exactly count times; only the last time will actualy
-    // complete.
-    if (--count) {
-      return;
-    }
     pg->lock();
     if (!pg->pg_has_reset_since(epoch)) {
       pg->osd->queue_for_pg_delete(pg->get_pgid(), epoch);
@@ -6241,17 +6202,13 @@ void PG::_delete_some()
 {
   dout(10) << __func__ << dendl;
 
-  // we do not need to flush here because (1) we only start deleting after
-  // the initial metadata changes are applied and committed, and (2) we do not
-  // process the next chunk until we have applied and committed our work.
-
   vector<ghobject_t> olist;
   ObjectStore::Transaction t;
   int max = std::min(osd->store->get_ideal_list_max(),
 		     (int)cct->_conf->osd_target_transaction_size);
   ghobject_t next;
   osd->store->collection_list(
-    coll,
+    ch,
     next,
     ghobject_t::get_max(),
     max,
@@ -6276,27 +6233,37 @@ void PG::_delete_some()
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, e);
+    t.register_on_commit(fin);
     osd->store->queue_transaction(
-      osr.get(),
-      std::move(t),
-      fin,
-      fin);
+      ch,
+      std::move(t));
   } else {
     dout(20) << __func__ << " finished" << dendl;
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
       _exit(1);
     }
 
+    // final flush here to ensure completions drop refs.  Of particular concern
+    // are the SnapMapper ContainerContexts.
+    {
+      ObjectStore::Transaction t;
+      PGRef pgref(this);
+      t.register_on_commit(new ContainerContext<PGRef>(pgref));
+      t.register_on_applied(new ContainerContext<PGRef>(pgref));
+      osd->store->queue_transaction(ch, std::move(t));
+    }
+    ch->flush();
+
     ObjectStore::Transaction t;
     PGLog::clear_info_log(info.pgid, &t);
     t.remove_collection(coll);
     PGRef pgref(this);
+    // keep pg ref around until txn completes to avoid any issues
+    // with Sequencer lifecycle (seen w/ filestore).
+    t.register_on_commit(new ContainerContext<PGRef>(pgref));
+    t.register_on_applied(new ContainerContext<PGRef>(pgref));
     int r = osd->store->queue_transaction(
-      osd->meta_osr.get(), std::move(t),
-      // keep pg ref around until txn completes to avoid any issues
-      // with Sequencer lifecycle (seen w/ filestore).
-      new ContainerContext<PGRef>(pgref),
-      new ContainerContext<PGRef>(pgref));
+      osd->meta_ch, std::move(t));
     assert(r == 0);
 
     osd->finish_pg_delete(this);
@@ -8201,7 +8168,6 @@ PG::RecoveryState::Deleting::Deleting(my_context ctx)
   pg->on_removal(t);
   RecoveryCtx *rctx = context<RecoveryMachine>().get_recovery_ctx();
   Context *fin = new C_DeleteMore(pg, pg->get_osdmap()->get_epoch());
-  rctx->on_applied->contexts.push_back(fin);
   rctx->on_safe->contexts.push_back(fin);
 }
 

@@ -2767,6 +2767,153 @@ function TEST_periodic_scrub_replicated() {
     rados list-inconsistent-obj $pg | jq '.' | grep -qv $objname || return 1
 }
 
+#
+# Corrupt snapset in replicated pool
+#
+function TEST_corrupt_snapset_scrub_rep() {
+    local dir=$1
+    local poolname=csr_pool
+    local total_objs=2
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+
+    create_pool foo 1 || return 1
+    create_pool $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 1 $total_objs) ; do
+        objname=ROBJ${i}
+        add_something $dir $poolname $objname || return 1
+
+        rados --pool $poolname setomapheader $objname hdr-$objname || return 1
+        rados --pool $poolname setomapval $objname key-$objname val-$objname || return 1
+    done
+
+    local pg=$(get_pg $poolname ROBJ0)
+
+    for i in $(seq 1 $total_objs) ; do
+        objname=ROBJ${i}
+
+        # Alternate corruption between osd.0 and osd.1
+        local osd=$(expr $i % 2)
+
+        rados -p $poolname mksnap snap1
+        echo -n head_of_snapshot_data > $dir/change
+
+        case $i in
+        1)
+          rados --pool $poolname put $objname $dir/change
+          objectstore_tool $dir $osd --head $objname clear-snapset corrupt || return 1
+          ;;
+
+        2)
+          rados --pool $poolname put $objname $dir/change
+          objectstore_tool $dir $osd --head $objname clear-snapset corrupt || return 1
+          ;;
+
+        esac
+    done
+    rm $dir/change
+
+    pg_scrub $pg
+
+    rados list-inconsistent-pg $poolname > $dir/json || return 1
+    # Check pg count
+    test $(jq '. | length' $dir/json) = "1" || return 1
+    # Check pgid
+    test $(jq -r '.[0]' $dir/json) = $pg || return 1
+
+    rados list-inconsistent-obj $pg > $dir/json || return 1
+
+    jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+{
+  "epoch": 34,
+  "inconsistents": [
+    {
+      "object": {
+        "name": "ROBJ1",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 8
+      },
+      "errors": [
+        "snapset_inconsistency"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": "3:ce3f1d6a:::ROBJ1:head(27'8 client.4143.0:1 dirty|omap|data_digest s 21 uv 8 dd 53acb008 alloc_hint [0 0 0])",
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "errors": [],
+          "size": 21,
+          "snapset": "1=[1]:{1=[1]}"
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "errors": [],
+          "size": 21,
+          "snapset": "0=[]:{1=[1]}"
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "ROBJ2",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 10
+      },
+      "errors": [
+        "snapset_inconsistency"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": "3:e97ce31e:::ROBJ2:head(31'10 client.4155.0:1 dirty|omap|data_digest s 21 uv 10 dd 53acb008 alloc_hint [0 0 0])",
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "errors": [],
+          "size": 21,
+          "snapset": "0=[]:{1=[1]}"
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "errors": [],
+          "size": 21,
+          "snapset": "1=[1]:{1=[1]}"
+        }
+      ]
+    }
+  ]
+}
+EOF
+
+    jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    if test $getjson = "yes"
+    then
+        jq '.' $dir/json > save6.json
+    fi
+
+    if which jsonschema > /dev/null;
+    then
+      jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
+    fi
+
+    rados rmpool $poolname $poolname --yes-i-really-really-mean-it
+    teardown $dir || return 1
+}
 
 main osd-scrub-repair "$@"
 

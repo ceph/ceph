@@ -129,6 +129,8 @@ struct OSDCapMatch {
   OSDCapMatch() {}
   OSDCapMatch(const OSDCapPoolTag& pt) : pool_tag(pt) {}
   OSDCapMatch(const OSDCapPoolNamespace& pns) : pool_namespace(pns) {}
+  OSDCapMatch(const OSDCapPoolNamespace& pns, const std::string& pre)
+    : pool_namespace(pns), object_prefix(pre) {}
   OSDCapMatch(const std::string& pl, const std::string& pre)
     : pool_namespace(pl), object_prefix(pre) {}
   OSDCapMatch(const std::string& pl, const std::string& ns,

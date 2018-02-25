@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
@@ -3663,6 +3662,15 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
+  auto admin_socket = cct->get_admin_socket();
+  for (auto cmd : admin_commands) {
+    int r = admin_socket->unregister_command(cmd[0]);
+    if (r < 0) {
+      lderr(cct) << "ERROR: fail to unregister admin socket command (r=" << r
+                 << ")" << dendl;
+    }
+  }
+
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread->stop();
@@ -3768,6 +3776,17 @@ void RGWRados::finalize()
 int RGWRados::init_rados()
 {
   int ret = 0;
+  auto admin_socket = cct->get_admin_socket();
+  for (auto cmd : admin_commands) {
+    int r = admin_socket->register_command(cmd[0], cmd[1], this,
+                                           cmd[2]);
+    if (r < 0) {
+      lderr(cct) << "ERROR: fail to register admin socket command (r=" << r
+                 << ")" << dendl;
+      return r;
+    }
+  }
+
   auto handles = std::vector<librados::Rados>{cct->_conf->rgw_num_rados_handles};
 
   for (auto& r : handles) {
@@ -5192,6 +5211,22 @@ int RGWRados::trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoc
   return 0;
 }
 
+
+int RGWRados::clear_usage()
+{
+  auto max_shards = cct->_conf->rgw_usage_max_shards;
+  int ret=0;
+  for (unsigned i=0; i < max_shards; i++){
+    string oid = RGW_USAGE_OBJ_PREFIX + to_string(i);
+    ret = cls_obj_usage_log_clear(oid);
+    if (ret < 0){
+      ldout(cct,0) << "usage clear on oid="<< oid << "failed with ret=" << ret << dendl;
+      return ret;
+    }
+  }
+  return ret;
+}
+
 int RGWRados::key_to_shard_id(const string& key, int max_shards)
 {
   return rgw_shard_id(key, max_shards);
@@ -5749,7 +5784,8 @@ int RGWRados::create_pool(const rgw_pool& pool)
     ldout(cct, 0)
       << __func__
       << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-ret)
-      << " (this can be due to a pool or placement group misconfiguration, e.g., pg_num < pgp_num)"
+      << " (this can be due to a pool or placement group misconfiguration, e.g."
+      << " pg_num < pgp_num or mon_max_pg_per_osd exceeded)"
       << dendl;
   }
   if (ret < 0)
@@ -12870,9 +12906,12 @@ int RGWRados::cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_
     return r;
 
   // Create a list of iterators that are used to iterate each shard
-  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vcurrents(list_results.size());
-  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vends(list_results.size());
-  vector<string> vnames(list_results.size());
+  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vcurrents;
+  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vends;
+  vector<string> vnames;
+  vcurrents.reserve(list_results.size());
+  vends.reserve(list_results.size());
+  vnames.reserve(list_results.size());
   map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
   *is_truncated = false;
   for (; iter != list_results.end(); ++iter) {
@@ -13002,6 +13041,22 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   r = cls_rgw_usage_log_trim(ref.ioctx, ref.oid, user, start_epoch, end_epoch);
   return r;
 }
+
+int RGWRados::cls_obj_usage_log_clear(string& oid)
+{
+  rgw_raw_obj obj(get_zone_params().usage_log_pool, oid);
+
+  rgw_rados_ref ref;
+  int r = get_raw_obj_ref(obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  librados::ObjectWriteOperation op;
+  cls_rgw_usage_log_clear(op);
+  r = ref.ioctx.operate(ref.oid, &op);
+  return r;
+}
+
 
 int RGWRados::remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list)
 {
@@ -13991,3 +14046,70 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
   }
 }
 
+bool RGWRados::call(std::string_view command, const cmdmap_t& cmdmap,
+		    std::string_view format, bufferlist& out)
+{
+  if (command == "cache list"sv) {
+    std::optional<std::string> filter;
+    if (auto i = cmdmap.find("filter"); i != cmdmap.cend()) {
+      filter = boost::get<std::string>(i->second);
+    }
+    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "table"));
+    if (f) {
+      f->open_array_section("cache_entries");
+      call_list(filter, f.get());
+      f->close_section();
+      f->flush(out);
+      return true;
+    } else {
+      out.append("Unable to create Formatter.\n");
+      return false;
+    }
+  } else if (command == "cache inspect"sv) {
+    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "json-pretty"));
+    if (f) {
+      const auto& target = boost::get<std::string>(cmdmap.at("target"));
+      if (call_inspect(target, f.get())) {
+        f->flush(out);
+        return true;
+      } else {
+        out.append("Unable to find entry "s + target + ".\n");
+        return false;
+      }
+    } else {
+      out.append("Unable to create Formatter.\n");
+      return false;
+    }
+  } else if (command == "cache erase"sv) {
+    const auto& target = boost::get<std::string>(cmdmap.at("target"));
+    if (call_erase(target)) {
+      return true;
+    } else {
+      out.append("Unable to find entry "s + target + ".\n");
+      return false;
+    }
+  } else if (command == "cache zap"sv) {
+    call_zap();
+    return true;
+  }
+  return false;
+}
+
+void RGWRados::call_list(const std::optional<std::string>&,
+                         ceph::Formatter*)
+{
+  return;
+}
+
+bool RGWRados::call_inspect(const std::string&, Formatter*)
+{
+  return false;
+}
+
+bool RGWRados::call_erase(const std::string&) {
+  return false;
+}
+
+void RGWRados::call_zap() {
+  return;
+}

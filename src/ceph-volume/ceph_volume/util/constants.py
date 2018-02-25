@@ -1,7 +1,7 @@
 
 # mount flags
 mount = dict(
-    xfs='noatime,inode64',
+    xfs=['rw', 'noatime' , 'inode64']
 )
 
 

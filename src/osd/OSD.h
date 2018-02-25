@@ -25,6 +25,7 @@
 #include "common/WorkQueue.h"
 #include "common/AsyncReserver.h"
 #include "common/ceph_context.h"
+#include "common/config_cacher.h"
 #include "common/zipkin_trace.h"
 
 #include "mgr/MgrClient.h"
@@ -236,7 +237,6 @@ struct C_CompleteSplits;
 struct C_OpenPGs;
 class LogChannel;
 class CephContext;
-typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 class MOSDOp;
 
 class OSD;
@@ -245,8 +245,7 @@ class OSDService {
 public:
   OSD *osd;
   CephContext *cct;
-  SharedPtrRegistry<spg_t, ObjectStore::Sequencer> osr_registry;
-  ceph::shared_ptr<ObjectStore::Sequencer> meta_osr;
+  ObjectStore::CollectionHandle meta_ch;
   const int whoami;
   ObjectStore *&store;
   LogClient &log_client;
@@ -261,6 +260,9 @@ public:
   MonClient   *&monc;
   GenContextWQ recovery_gen_wq;
   ClassHandler  *&class_handler;
+
+  md_config_cacher_t<uint64_t> osd_max_object_size;
+  md_config_cacher_t<bool> osd_skip_data_digest;
 
   void enqueue_back(OpQueueItem&& qi);
   void enqueue_front(OpQueueItem&& qi);
@@ -861,12 +863,6 @@ public:
   SimpleLRU<epoch_t, bufferlist> map_bl_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
 
-  /// newest map fully consumed by handle_osd_map (i.e., written to disk)
-  epoch_t map_cache_pinned_epoch = 0;
-
-  /// true if pg consumption affected our unpinning
-  std::atomic<bool> map_cache_pinned_low = {false};
-
   /// final pg_num values for recently deleted pools
   map<int64_t,int> deleted_pool_pg_nums;
 
@@ -886,7 +882,6 @@ public:
     Mutex::Locker l(map_cache_lock);
     return _add_map_bl(e, bl);
   }
-  void pin_map_bl(epoch_t e, bufferlist &bl);
   void _add_map_bl(epoch_t e, bufferlist& bl);
   bool get_map_bl(epoch_t e, bufferlist& bl) {
     Mutex::Locker l(map_cache_lock);
@@ -898,12 +893,8 @@ public:
     Mutex::Locker l(map_cache_lock);
     return _add_map_inc_bl(e, bl);
   }
-  void pin_map_inc_bl(epoch_t e, bufferlist &bl);
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
-
-  void clear_map_bl_cache_pins(epoch_t e);
-  void check_map_bl_cache_pins();
 
   /// get last pg_num before a pool was deleted (if any)
   int get_deleted_pool_pg_num(int64_t pool);
@@ -1160,7 +1151,8 @@ protected:
   // asok
   friend class OSDSocketHook;
   class OSDSocketHook *asok_hook;
-  bool asok_command(string admin_command, cmdmap_t& cmdmap, string format, ostream& ss);
+  bool asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
+		    std::string_view format, std::ostream& ss);
 
 public:
   ClassHandler  *class_handler = nullptr;
@@ -1828,17 +1820,11 @@ private:
   void add_map_bl(epoch_t e, bufferlist& bl) {
     return service.add_map_bl(e, bl);
   }
-  void pin_map_bl(epoch_t e, bufferlist &bl) {
-    return service.pin_map_bl(e, bl);
-  }
   bool get_map_bl(epoch_t e, bufferlist& bl) {
     return service.get_map_bl(e, bl);
   }
   void add_map_inc_bl(epoch_t e, bufferlist& bl) {
     return service.add_map_inc_bl(e, bl);
-  }
-  void pin_map_inc_bl(epoch_t e, bufferlist &bl) {
-    return service.pin_map_inc_bl(e, bl);
   }
 
 protected:
@@ -2234,6 +2220,9 @@ private:
   int get_num_op_threads();
 
   float get_osd_recovery_sleep();
+
+  void probe_smart(ostream& ss);
+  int probe_smart_device(const char *device, int timeout, std::string *result);
 
 public:
   static int peek_meta(ObjectStore *store, string& magic,

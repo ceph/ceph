@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_H
 #define CEPH_MDS_H
 
+#include <string_view>
+
 #include "common/LogClient.h"
 #include "common/Mutex.h"
 #include "common/Timer.h"
@@ -63,7 +65,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   MDSRankDispatcher *mds_rank;
 
  public:
-  MDSDaemon(const std::string &n, Messenger *m, MonClient *mc);
+  MDSDaemon(std::string_view n, Messenger *m, MonClient *mc);
   ~MDSDaemon() override;
   int orig_argc;
   const char **orig_argv;
@@ -111,8 +113,8 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   void set_up_admin_socket();
   void clean_up_admin_socket();
   void check_ops_in_flight(); // send off any slow ops to monitor
-  bool asok_command(string command, cmdmap_t& cmdmap, string format,
-		    ostream& ss);
+  bool asok_command(std::string_view command, const cmdmap_t& cmdmap,
+		    std::string_view format, ostream& ss);
 
   void dump_status(Formatter *f);
 
@@ -141,7 +143,7 @@ protected:
   // special message types
   friend class C_MDS_Send_Command_Reply;
   static void send_command_reply(MCommand *m, MDSRank* mds_rank, int r,
-				 bufferlist outbl, const std::string& outs);
+				 bufferlist outbl, std::string_view outs);
   int _handle_command(
       const cmdmap_t &cmdmap,
       MCommand *m,

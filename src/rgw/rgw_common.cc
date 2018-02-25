@@ -139,6 +139,10 @@ int rgw_perf_start(CephContext *cct)
 {
   PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_rgw_first, l_rgw_last);
 
+  // RGW emits comparatively few metrics, so let's be generous
+  // and mark them all USEFUL to get transmission to ceph-mgr by default.
+  plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
   plb.add_u64_counter(l_rgw_req, "req", "Requests");
   plb.add_u64_counter(l_rgw_failed_req, "failed_req", "Aborted requests");
 
@@ -1738,7 +1742,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "bilog",
                                     "mdlog",
                                     "datalog",
-                                    "opstate" };
+                                    "opstate",
+                                    "roles"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {

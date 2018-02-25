@@ -694,7 +694,7 @@ public:
   friend class RGWUserCapPool;
 };
 
-/* Wrapers for admin API functionality */
+/* Wrappers for admin API functionality */
 
 class RGWUserAdminOp_User
 {

@@ -320,9 +320,9 @@ void OSDCapGrant::expand_profile()
 
   if (profile.name == "rbd") {
     // RBD read-write grant
-    profile_grants.emplace_back(OSDCapMatch("", "", "rbd_children"),
+    profile_grants.emplace_back(OSDCapMatch({}, "rbd_children"),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
-    profile_grants.emplace_back(OSDCapMatch("", "", "rbd_mirroring"),
+    profile_grants.emplace_back(OSDCapMatch({}, "rbd_mirroring"),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_CLS_R)));
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
@@ -334,6 +334,12 @@ void OSDCapGrant::expand_profile()
     profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace),
                                 OSDCapSpec(osd_rwxa_t(OSD_CAP_R |
                                                       OSD_CAP_CLS_R)));
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace,
+                                            "rbd_header."),
+                                OSDCapSpec("rbd", "child_attach"));
+    profile_grants.emplace_back(OSDCapMatch(profile.pool_namespace,
+                                            "rbd_header."),
+                                OSDCapSpec("rbd", "child_detach"));
   }
 }
 

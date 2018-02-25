@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef CEPH_RGW_SYNC_LOG_H
 #define CEPH_RGW_SYNC_LOG_H
 
@@ -129,7 +131,8 @@ public:
   void finish_node(RGWSyncTraceNode *node);
 
   int hook_to_admin_command();
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& out);
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+            std::string_view format, bufferlist& out) override;
   string get_active_names();
 };
 

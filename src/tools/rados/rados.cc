@@ -82,10 +82,10 @@ void usage(ostream& out)
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "\n"
 "OBJECT COMMANDS\n"
-"   get <obj-name> [outfile]         fetch object\n"
-"   put <obj-name> [infile] [--offset offset]\n"
+"   get <obj-name> <outfile>         fetch object\n"
+"   put <obj-name> <infile> [--offset offset]\n"
 "                                    write object with start offset (default:0)\n"
-"   append <obj-name> [infile]       append object\n"
+"   append <obj-name> <infile>       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
 "   rm <obj-name> ...[--force-full]  [force no matter full or not]remove object(s)\n"
@@ -173,6 +173,8 @@ void usage(ostream& out)
 "        select given pool by name\n"
 "   --target-pool=pool\n"
 "        select target pool by name\n"
+"   -f [--format plain|json|json-pretty]\n"
+"   --format=[--format plain|json|json-pretty]\n"
 "   -b op_size\n"
 "        set the block size for put/get ops and for write benchmarking\n"
 "   -o object_size\n"
@@ -182,7 +184,6 @@ void usage(ostream& out)
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
-"   -i infile\n"
 "   --create\n"
 "        create the pool or directory that was specified\n"
 "   -N namespace\n"
@@ -1378,6 +1379,16 @@ static void dump_shard(const shard_info_t& shard,
     decode(oi, bliter);  // Can't be corrupted
     f.dump_stream("object_info") << oi;
   }
+  if (!shard.has_ss_attr_missing() && !shard.has_ss_attr_corrupted() &&
+      inc.has_snapset_inconsistency()) {
+    SnapSet ss;
+    bufferlist bl;
+    map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(SS_ATTR);
+    assert(k != shard.attrs.end()); // Can't be missing
+    bufferlist::iterator bliter = k->second.begin();
+    decode(ss, bliter);  // Can't be corrupted
+    f.dump_stream("snapset") << ss;
+  }
   if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
      || inc.union_shards.has_oi_attr_missing()
      || inc.union_shards.has_oi_attr_corrupted()
@@ -1411,6 +1422,8 @@ static void dump_obj_errors(const obj_err_t &err, Formatter &f)
     f.dump_string("error", "attr_value_mismatch");
   if (err.has_attr_name_mismatch())
     f.dump_string("error", "attr_name_mismatch");
+  if (err.has_snapset_inconsistency())
+    f.dump_string("error", "snapset_inconsistency");
   f.close_section();
 }
 
@@ -3731,8 +3744,6 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage(cout);
       exit(0);
-    } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)NULL)) {
-      opts["force"] = "true";
     } else if (ceph_argparse_flag(args, i, "--force-full", (char*)NULL)) {
       opts["force-full"] = "true";
     } else if (ceph_argparse_flag(args, i, "-d", "--delete-after", (char*)NULL)) {
@@ -3806,7 +3817,7 @@ int main(int argc, const char **argv)
       opts["run-length"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--workers", (char*)NULL)) {
       opts["workers"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-f", "--format", (char*)NULL)) {
       opts["format"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--lock-tag", (char*)NULL)) {
       opts["lock-tag"] = val;

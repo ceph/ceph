@@ -310,11 +310,11 @@ public:
   }
   void queue_transaction(ObjectStore::Transaction&& t,
 			 OpRequestRef op) override {
-    osd->store->queue_transaction(osr.get(), std::move(t), 0, 0, 0, op);
+    osd->store->queue_transaction(ch, std::move(t), op);
   }
   void queue_transactions(vector<ObjectStore::Transaction>& tls,
 			  OpRequestRef op) override {
-    osd->store->queue_transactions(osr.get(), tls, 0, 0, 0, op, NULL);
+    osd->store->queue_transactions(ch, tls, op, NULL);
   }
   epoch_t get_epoch() const override {
     return get_osdmap()->get_epoch();
@@ -413,10 +413,6 @@ public:
     }
     append_log(logv, trim_to, roll_forward_to, t, transaction_applied);
   }
-
-  struct C_OSD_OnApplied;
-  void op_applied(
-    const eversion_t &applied_version) override;
 
   bool should_send_op(
     pg_shard_t peer,
@@ -701,11 +697,8 @@ public:
 
     ceph_tid_t rep_tid;
 
-    bool rep_aborted, rep_done;
-
-    bool all_applied;
+    bool rep_aborted;
     bool all_committed;
-    const bool applies_with_commit;
     
     utime_t   start;
     
@@ -713,26 +706,22 @@ public:
 
     ObcLockManager lock_manager;
 
-    list<std::function<void()>> on_applied;
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
     
     RepGather(
       OpContext *c, ceph_tid_t rt,
-      eversion_t lc,
-      bool applies_with_commit) :
+      eversion_t lc) :
       hoid(c->obc->obs.oi.soid),
       op(c->op),
       queue_item(this),
       nref(1),
       rep_tid(rt), 
-      rep_aborted(false), rep_done(false),
-      all_applied(false), all_committed(false),
-      applies_with_commit(applies_with_commit),
+      rep_aborted(false),
+      all_committed(false),
       pg_local_last_complete(lc),
       lock_manager(std::move(c->lock_manager)),
-      on_applied(std::move(c->on_applied)),
       on_committed(std::move(c->on_committed)),
       on_success(std::move(c->on_success)),
       on_finish(std::move(c->on_finish)) {}
@@ -743,16 +732,14 @@ public:
       boost::optional<std::function<void(void)> > &&on_complete,
       ceph_tid_t rt,
       eversion_t lc,
-      bool applies_with_commit,
       int r) :
       op(o),
       queue_item(this),
       nref(1),
       r(r),
       rep_tid(rt),
-      rep_aborted(false), rep_done(false),
-      all_applied(false), all_committed(false),
-      applies_with_commit(applies_with_commit),
+      rep_aborted(false),
+      all_committed(false),
       pg_local_last_complete(lc),
       lock_manager(std::move(manager)) {
       if (on_complete) {
@@ -767,7 +754,6 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	assert(on_applied.empty());
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
       }
@@ -872,9 +858,7 @@ protected:
   // [primary|tail]
   xlist<RepGather*> repop_queue;
 
-  friend class C_OSD_RepopApplied;
   friend class C_OSD_RepopCommit;
-  void repop_all_applied(RepGather *repop);
   void repop_all_committed(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, OpContext *ctx);
@@ -1270,7 +1254,6 @@ protected:
   void send_remove_op(const hobject_t& oid, eversion_t v, pg_shard_t peer);
 
 
-  class C_OSD_OndiskWriteUnlock;
   class C_OSD_AppliedRecoveredObject;
   class C_OSD_CommittedPushedObject;
   class C_OSD_AppliedRecoveredObjectReplica;
@@ -1318,8 +1301,8 @@ protected:
   void _copy_some(ObjectContextRef obc, CopyOpRef cop);
   void finish_copyfrom(CopyFromCallback *cb);
   void finish_promote(int r, CopyResults *results, ObjectContextRef obc);
-  void cancel_copy(CopyOpRef cop, bool requeue);
-  void cancel_copy_ops(bool requeue);
+  void cancel_copy(CopyOpRef cop, bool requeue, vector<ceph_tid_t> *tids);
+  void cancel_copy_ops(bool requeue, vector<ceph_tid_t> *tids);
 
   friend struct C_Copyfrom;
 
@@ -1333,8 +1316,8 @@ protected:
     boost::optional<std::function<void()>> &&on_flush);
   void finish_flush(hobject_t oid, ceph_tid_t tid, int r);
   int try_flush_mark_clean(FlushOpRef fop);
-  void cancel_flush(FlushOpRef fop, bool requeue);
-  void cancel_flush_ops(bool requeue);
+  void cancel_flush(FlushOpRef fop, bool requeue, vector<ceph_tid_t> *tids);
+  void cancel_flush_ops(bool requeue, vector<ceph_tid_t> *tids);
 
   /// @return false if clone is has been evicted
   bool is_present_clone(hobject_t coid);
@@ -1383,14 +1366,14 @@ protected:
 
   map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);
-  void cancel_proxy_ops(bool requeue);
+  void cancel_proxy_ops(bool requeue, vector<ceph_tid_t> *tids);
 
   // -- proxyread --
   map<ceph_tid_t, ProxyReadOpRef> proxyread_ops;
 
   void do_proxy_read(OpRequestRef op, ObjectContextRef obc = NULL);
   void finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r);
-  void cancel_proxy_read(ProxyReadOpRef prdop);
+  void cancel_proxy_read(ProxyReadOpRef prdop, vector<ceph_tid_t> *tids);
 
   friend struct C_ProxyRead;
 
@@ -1399,7 +1382,7 @@ protected:
 
   void do_proxy_write(OpRequestRef op, ObjectContextRef obc = NULL);
   void finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r);
-  void cancel_proxy_write(ProxyWriteOpRef pwop);
+  void cancel_proxy_write(ProxyWriteOpRef pwop, vector<ceph_tid_t> *tids);
 
   friend struct C_ProxyWrite_Commit;
 
@@ -1876,7 +1859,6 @@ inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
       << " " << repop.v
       << " rep_tid=" << repop.rep_tid 
       << " committed?=" << repop.all_committed
-      << " applied?=" << repop.all_applied
       << " r=" << repop.r
       << ")";
   return out;

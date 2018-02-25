@@ -69,7 +69,7 @@
 #define dout_prefix *_dout << "mds." << name << ' '
 
 // cons/des
-MDSDaemon::MDSDaemon(const std::string &n, Messenger *m, MonClient *mc) :
+MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
   mds_lock("MDSDaemon::mds_lock"),
   stopping(false),
@@ -117,8 +117,8 @@ class MDSSocketHook : public AdminSocketHook {
   MDSDaemon *mds;
 public:
   explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     stringstream ss;
     bool r = mds->asok_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -126,8 +126,8 @@ public:
   }
 };
 
-bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
-		    ostream& ss)
+bool MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
+			     std::string_view format, std::ostream& ss)
 {
   dout(1) << "asok_command: " << command << " (starting...)" << dendl;
 
@@ -437,7 +437,8 @@ int MDSDaemon::init()
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
   dout(10) << sizeof(elist<void*>::item) << "\t elist<>::item   *7=" << 7*sizeof(elist<void*>::item) << dendl;
-  dout(10) << sizeof(inode_t) << "\t inode_t " << dendl;
+  dout(10) << sizeof(CInode::mempool_inode) << "\t inode  " << dendl;
+  dout(10) << sizeof(CInode::mempool_old_inode) << "\t old_inode " << dendl;
   dout(10) << sizeof(nest_info_t) << "\t  nest_info_t " << dendl;
   dout(10) << sizeof(frag_info_t) << "\t  frag_info_t " << dendl;
   dout(10) << sizeof(SimpleLock) << "\t SimpleLock   *5=" << 5*sizeof(SimpleLock) << dendl;
@@ -564,24 +565,25 @@ void MDSDaemon::tick()
 
 void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
 				   int r, bufferlist outbl,
-				   const std::string& outs)
+				   std::string_view outs)
 {
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   assert(session != NULL);
   // If someone is using a closed session for sending commands (e.g.
   // the ceph CLI) then we should feel free to clean up this connection
   // as soon as we've sent them a response.
-  const bool live_session = mds_rank &&
-    mds_rank->sessionmap.get_session(session->info.inst.name) != nullptr
-    && session->get_state_seq() > 0;
+  const bool live_session =
+    session->get_state_seq() > 0 &&
+    mds_rank &&
+    mds_rank->sessionmap.get_session(session->info.inst.name);
 
   if (!live_session) {
     // This session only existed to issue commands, so terminate it
     // as soon as we can.
     assert(session->is_closed());
     session->connection->mark_disposable();
-    session->put();
   }
+  session->put();
 
   MCommandReply *reply = new MCommandReply(r, outs);
   reply->set_tid(m->get_tid());
@@ -620,6 +622,7 @@ void MDSDaemon::handle_command(MCommand *m)
   } else {
     r = _handle_command(cmdmap, m, &outbl, &outs, &run_after, &need_reply);
   }
+  session->put();
 
   if (need_reply) {
     send_command_reply(m, mds_rank, r, outbl, outs);

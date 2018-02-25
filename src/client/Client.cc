@@ -137,8 +137,9 @@ Client::CommandHook::CommandHook(Client *client) :
 {
 }
 
-bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
-			       std::string format, bufferlist& out)
+bool Client::CommandHook::call(std::string_view command,
+			       const cmdmap_t& cmdmap,
+			       std::string_view format, bufferlist& out)
 {
   std::unique_ptr<Formatter> f(Formatter::create(format));
   f->open_object_section("result");
@@ -3502,6 +3503,8 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
     capsnap.btime = in->btime;
     capsnap.xattrs = in->xattrs;
     capsnap.xattr_version = in->xattr_version;
+    capsnap.cap_dirtier_uid = in->cap_dirtier_uid;
+    capsnap.cap_dirtier_gid = in->cap_dirtier_gid;
  
     if (used & CEPH_CAP_FILE_WR) {
       ldout(cct, 10) << __func__ << " WR used on " << *in << dendl;
@@ -3523,8 +3526,13 @@ void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
   capsnap.ctime = in->ctime;
   capsnap.time_warp_seq = in->time_warp_seq;
   capsnap.change_attr = in->change_attr;
-
   capsnap.dirty |= in->caps_dirty();
+
+  /* Only reset it if it wasn't set before */
+  if (capsnap.cap_dirtier_uid == -1) {
+    capsnap.cap_dirtier_uid = in->cap_dirtier_uid;
+    capsnap.cap_dirtier_gid = in->cap_dirtier_gid;
+  }
 
   if (capsnap.dirty & CEPH_CAP_FILE_WR) {
     capsnap.inline_data = in->inline_data;
@@ -3584,10 +3592,8 @@ void Client::flush_snaps(Inode *in, bool all_again)
 
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
 				     cap_epoch_barrier);
-    if (user_id >= 0)
-      m->caller_uid = user_id;
-    if (group_id >= 0)
-      m->caller_gid = group_id;
+    m->caller_uid = capsnap.cap_dirtier_uid;
+    m->caller_gid = capsnap.cap_dirtier_gid;
 
     m->set_client_tid(capsnap.flush_tid);
     m->head.snap_follows = p.first;
@@ -6083,8 +6089,23 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
   }
 
   if (dname == "..") {
-    if (dir->dentries.empty())
-      *target = dir;
+    if (dir->dentries.empty()) {
+      MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
+      filepath path(dir->ino);
+      req->set_filepath(path);
+
+      InodeRef tmptarget;
+      int r = make_request(req, perms, &tmptarget, NULL, rand() % mdsmap->get_num_in_mds());
+
+      if (r == 0) {
+	Inode *tempino = tmptarget.get();
+	_ll_get(tempino);
+	*target = tempino;
+	ldout(cct, 3) << __func__ << " found target " << (*target)->ino << dendl;
+      } else {
+	*target = dir;
+      }
+    }
     else
       *target = dir->get_first_parent()->dir->parent_inode; //dirs can't be hard-linked
     goto done;
@@ -7610,7 +7631,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->head.args.readdir.frag = fg;
   req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
   if (dirp->last_name.length()) {
-    req->path2.set_path(dirp->last_name.c_str());
+    req->path2.set_path(dirp->last_name);
   } else if (dirp->hash_order()) {
     req->head.args.readdir.offset_hash = dirp->offset_high();
   }
@@ -8227,9 +8248,8 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
  * the resulting Inode object in one operation, so that caller
  * can safely assume inode will still be there after return.
  */
-int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
+int Client::_lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
-  Mutex::Locker lock(client_lock);
   ldout(cct, 3) << __func__ << " enter(" << ino << ")" << dendl;
 
   if (unmounting)
@@ -8251,16 +8271,19 @@ int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
   return r;
 }
 
-
+int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
+{
+  Mutex::Locker lock(client_lock);
+  return _lookup_ino(ino, perms, inode);
+}
 
 /**
  * Find the parent inode of `ino` and insert it into
  * our cache.  Conditionally also set `parent` to a referenced
  * Inode* if caller provides non-NULL value.
  */
-int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
+int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
-  Mutex::Locker lock(client_lock);
   ldout(cct, 3) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
   if (unmounting)
@@ -8299,16 +8322,19 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   return r;
 }
 
+int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
+{
+  Mutex::Locker lock(client_lock);
+  return _lookup_parent(ino, perms, parent);
+}
 
 /**
  * Populate the parent dentry for `ino`, provided it is
  * a child of `parent`.
  */
-int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
+int Client::_lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 {
   assert(parent->is_dir());
-
-  Mutex::Locker lock(client_lock);
   ldout(cct, 3) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
   if (unmounting)
@@ -8324,6 +8350,11 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
   return r;
 }
 
+int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+  return _lookup_name(ino, parent, perms);
+}
 
 Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
 {
@@ -8691,6 +8722,8 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
     return -EBADF;
 #endif
   bufferlist bl;
+  /* We can't return bytes written larger than INT_MAX, clamp size to that */
+  size = std::min(size, (loff_t)INT_MAX);
   int r = _read(f, offset, size, &bl);
   ldout(cct, 3) << "read(" << fd << ", " << (void*)buf << ", " << size << ", " << offset << ") = " << r << dendl;
   if (r >= 0) {
@@ -8707,7 +8740,7 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
-int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
+int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
   const md_config_t *conf = cct->_conf;
   Inode *in = f->inode.get();
@@ -9010,7 +9043,9 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
   if (fh->flags & O_PATH)
     return -EBADF;
 #endif
-  int r = _write(fh, offset, size, buf, NULL, 0);
+  /* We can't return bytes written larger than INT_MAX, clamp size to that */
+  size = std::min(size, (loff_t)INT_MAX);
+  int r = _write(fh, offset, size, buf, NULL, false);
   ldout(cct, 3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << dendl;
   return r;
 }
@@ -9022,18 +9057,10 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
-int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
+int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
+				   unsigned iovcnt, int64_t offset, bool write,
+				   bool clamp_to_int)
 {
-    Mutex::Locker lock(client_lock);
-    tout(cct) << fd << std::endl;
-    tout(cct) << offset << std::endl;
-
-    if (unmounting)
-     return -ENOTCONN;
-
-    Fh *fh = get_filehandle(fd);
-    if (!fh)
-        return -EBADF;
 #if defined(__linux__) && defined(O_PATH)
     if (fh->flags & O_PATH)
         return -EBADF;
@@ -9042,14 +9069,23 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     for (unsigned i = 0; i < iovcnt; i++) {
         totallen += iov[i].iov_len;
     }
+
+    /*
+     * Some of the API functions take 64-bit size values, but only return
+     * 32-bit signed integers. Clamp the I/O sizes in those functions so that
+     * we don't do I/Os larger than the values we can return.
+     */
+    if (clamp_to_int) {
+      totallen = std::min(totallen, (loff_t)INT_MAX);
+    }
     if (write) {
-        int w = _write(fh, offset, totallen, NULL, iov, iovcnt);
-        ldout(cct, 3) << "pwritev(" << fd << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
+        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt);
+        ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
         bufferlist bl;
-        int r = _read(fh, offset, totallen, &bl);
-        ldout(cct, 3) << "preadv(" << fd << ", " <<  offset << ") = " << r << dendl;
+        int64_t r = _read(fh, offset, totallen, &bl);
+        ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;
         if (r <= 0)
           return r;
 
@@ -9072,8 +9108,23 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     }
 }
 
-int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
-                  const struct iovec *iov, int iovcnt)
+int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
+{
+    Mutex::Locker lock(client_lock);
+    tout(cct) << fd << std::endl;
+    tout(cct) << offset << std::endl;
+
+    if (unmounting)
+     return -ENOTCONN;
+
+    Fh *fh = get_filehandle(fd);
+    if (!fh)
+        return -EBADF;
+    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true);
+}
+
+int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
+	                const struct iovec *iov, int iovcnt)
 {
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
@@ -9249,7 +9300,7 @@ success:
   logger->tinc(l_c_wrlat, lat);
 
   totalwritten = size;
-  r = (int)totalwritten;
+  r = (int64_t)totalwritten;
 
   // extend file?
   if (totalwritten + offset > in->size) {
@@ -10258,6 +10309,51 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   return r;
 }
 
+int Client::ll_lookup_inode(
+    struct inodeno_t ino,
+    const UserPerm& perms,
+    Inode **inode)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_lookup_inode " << ino  << dendl;
+   
+  // Num1: get inode and *inode
+  int r = _lookup_ino(ino, perms, inode);
+  if (r) {
+    return r;
+  }
+  assert(inode != NULL);
+  assert(*inode != NULL);
+
+  // Num2: Request the parent inode, so that we can look up the name
+  Inode *parent;
+  r = _lookup_parent(*inode, perms, &parent);
+  if (r && r != -EINVAL) {
+    // Unexpected error
+    _ll_forget(*inode, 1);  
+    return r;
+  } else if (r == -EINVAL) {
+    // EINVAL indicates node without parents (root), drop out now
+    // and don't try to look up the non-existent dentry.
+    return 0;
+  }
+  // FIXME: I don't think this works; lookup_parent() returns 0 if the parent
+  // is already in cache
+  assert(parent != NULL);
+
+  // Num3: Finally, get the name (dentry) of the requested inode
+  r = _lookup_name(*inode, parent, perms);
+  if (r) {
+    // Unexpected error
+    _ll_forget(parent, 1);
+    _ll_forget(*inode, 1);
+    return r;
+  }
+
+  _ll_forget(parent, 1);
+  return 0;
+}
+
 int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 		       struct ceph_statx *stx, unsigned want, unsigned flags,
 		       const UserPerm& perms)
@@ -10342,6 +10438,8 @@ void Client::_ll_get(Inode *in)
       assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->get(); // pin dentry
     }
+    if (in->snapid != CEPH_NOSNAP)
+      ll_snap_ref[in->snapid]++;
   }
   in->ll_get();
   ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
@@ -10355,6 +10453,13 @@ int Client::_ll_put(Inode *in, int num)
     if (in->is_dir() && !in->dentries.empty()) {
       assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->put(); // unpin dentry
+    }
+    if (in->snapid != CEPH_NOSNAP) {
+      auto p = ll_snap_ref.find(in->snapid);
+      assert(p != ll_snap_ref.end());
+      assert(p->second > 0);
+      if (--p->second == 0)
+	ll_snap_ref.erase(p);
     }
     put_inode(in);
     return 0;
@@ -10378,9 +10483,8 @@ void Client::_ll_drop_pins()
   }
 }
 
-bool Client::ll_forget(Inode *in, int count)
+bool Client::_ll_forget(Inode *in, int count)
 {
-  Mutex::Locker lock(client_lock);
   inodeno_t ino = _get_inodeno(in);
 
   ldout(cct, 3) << __func__ << " " << ino << " " << count << dendl;
@@ -10408,10 +10512,25 @@ bool Client::ll_forget(Inode *in, int count)
   return last;
 }
 
+bool Client::ll_forget(Inode *in, int count)
+{
+  Mutex::Locker lock(client_lock);
+  return _ll_forget(in, count);
+}
+
 bool Client::ll_put(Inode *in)
 {
   /* ll_forget already takes the lock */
   return ll_forget(in, 1);
+}
+
+int Client::ll_get_snap_ref(snapid_t snap)
+{
+  Mutex::Locker lock(client_lock);
+  auto p = ll_snap_ref.find(snap);
+  if (p != ll_snap_ref.end())
+    return p->second;
+  return 0;
 }
 
 snapid_t Client::ll_get_snapid(Inode *in)
@@ -12639,6 +12758,8 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   if (unmounting)
     return -ENOTCONN;
 
+  /* We can't return bytes written larger than INT_MAX, clamp len to that */
+  len = std::min(len, (loff_t)INT_MAX);
   return _read(fh, off, len, bl);
 }
 
@@ -12779,10 +12900,28 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   if (unmounting)
     return -ENOTCONN;
 
+  /* We can't return bytes written larger than INT_MAX, clamp len to that */
+  len = std::min(len, (loff_t)INT_MAX);
   int r = _write(fh, off, len, data, NULL, 0);
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
   return r;
+}
+
+int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
+{
+  Mutex::Locker lock(client_lock);
+  if (unmounting)
+   return -ENOTCONN;
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
+}
+
+int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
+{
+  Mutex::Locker lock(client_lock);
+  if (unmounting)
+   return -ENOTCONN;
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
 }
 
 int Client::ll_flush(Fh *fh)

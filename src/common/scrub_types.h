@@ -117,6 +117,9 @@ struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
   void set_attr_name_mismatch() {
     errors |= obj_err_t::ATTR_NAME_MISMATCH;
   }
+  void set_snapset_inconsistency() {
+    errors |= obj_err_t::SNAPSET_INCONSISTENCY;
+  }
   void add_shard(const pg_shard_t& pgs, const shard_info_wrapper& shard);
   void set_auth_missing(const hobject_t& hoid,
                         const map<pg_shard_t, ScrubMap*>&,

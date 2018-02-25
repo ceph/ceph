@@ -267,6 +267,7 @@ public:
 bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 {
   MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
+  mon->no_reply(op); // we never reply to beacons
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
   if (!check_caps(op, m->get_fsid())) {
@@ -666,7 +667,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   std::stringstream ss;
   bufferlist rdata;
 
-  std::map<std::string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
@@ -806,7 +807,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
   std::stringstream ss;
   bufferlist rdata;
 
-  std::map<std::string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());

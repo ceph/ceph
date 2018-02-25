@@ -115,7 +115,6 @@ protected:
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
   int op_ret;
-
   int do_aws4_auth_completion();
 
   virtual int init_quota();
@@ -1268,6 +1267,9 @@ protected:
   const char *if_unmod;
   const char *if_match;
   const char *if_nomatch;
+  const char *copy_source = nullptr;
+  const char *md_directive = nullptr;
+
   off_t ofs;
   off_t len;
   off_t end;
@@ -2197,5 +2199,23 @@ public:
   virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
+
+class RGWGetClusterStat : public RGWOp {
+protected:
+  struct rados_cluster_stat_t stats_op;
+public:
+  RGWGetClusterStat() {}
+
+  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+    RGWOp::init(store, s, h);
+  }
+  int verify_permission() override {return 0;}
+  virtual void send_response() = 0;
+  virtual int get_params() = 0;
+  void execute() override;
+  virtual const string name() { return "get_cluster_stat"; }
+};
+
+
 
 #endif /* CEPH_RGW_OP_H */

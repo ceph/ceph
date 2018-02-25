@@ -1809,7 +1809,8 @@ struct req_state {
   string redirect;
 
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> bucket_attrs;
+  real_time bucket_mtime;
+  std::map<std::string, ceph::bufferlist> bucket_attrs;
   bool bucket_exists;
 
   bool has_bad_meta;
@@ -2061,7 +2062,7 @@ struct rgw_obj {
           if (pos < 0) {
             throw buffer::error();
           }
-          key.name = key.name.substr(pos);
+          key.name = key.name.substr(pos + 1);
         }
       }
     } else {

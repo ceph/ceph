@@ -111,7 +111,7 @@ void BitMapAllocator::unreserve(uint64_t unused)
 
 int64_t BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
+  int64_t hint, PExtentVector *extents)
 {
 
   assert(!(alloc_unit % m_block_size));
@@ -131,9 +131,9 @@ int64_t BitMapAllocator::allocate(
 
 int64_t BitMapAllocator::allocate_dis(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-  int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents)
+  int64_t hint, PExtentVector *extents)
 {
-  ExtentList block_list = ExtentList(extents, m_block_size, max_alloc_size);
+  AllocatorExtentList block_list(extents, m_block_size, max_alloc_size);
   int64_t nblks = (want_size + m_block_size - 1) / m_block_size;
   int64_t num = 0;
 

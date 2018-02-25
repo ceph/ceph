@@ -6,9 +6,12 @@ overrides:
     log-whitelist:
       - OSD full dropping all updates
       - OSD near full
+      - pausewr flag
       - failsafe engaged, dropping updates
       - failsafe disengaged, no longer dropping
       - is full \(reached quota
+      - POOL_FULL
+      - POOL_BACKFILLFULL
     conf:
       mon:
         mon osd nearfull ratio: 0.6

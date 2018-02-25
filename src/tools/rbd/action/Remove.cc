@@ -13,6 +13,26 @@ namespace rbd {
 namespace action {
 namespace remove {
 
+namespace {
+
+bool is_auto_delete_snapshot(librbd::Image* image,
+                             const librbd::snap_info_t &snap_info) {
+  librbd::snap_namespace_type_t namespace_type;
+  int r = image->snap_get_namespace_type(snap_info.id, &namespace_type);
+  if (r < 0) {
+    return false;
+  }
+
+  switch (namespace_type) {
+  case RBD_SNAP_NAMESPACE_TYPE_TRASH:
+    return true;
+  default:
+    return false;
+  }
+}
+
+} // anonymous namespace
+
 namespace at = argument_types;
 namespace po = boost::program_options;
 
@@ -62,9 +82,30 @@ int execute(const po::variables_map &vm,
                 vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
     if (r == -ENOTEMPTY) {
-      std::cerr << "rbd: image has snapshots - these must be deleted"
-                << " with 'rbd snap purge' before the image can be removed."
-                << std::endl;
+      librbd::Image image;
+      std::vector<librbd::snap_info_t> snaps;
+      int image_r = utils::open_image(io_ctx, image_name, true, &image);
+      if (image_r >= 0) {
+        image_r = image.snap_list(snaps);
+      }
+      if (image_r >= 0) {
+        snaps.erase(std::remove_if(snaps.begin(), snaps.end(),
+			           [&image](const librbd::snap_info_t& snap) {
+                                     return is_auto_delete_snapshot(&image,
+                                                                    snap);
+                                   }),
+                    snaps.end());
+      }
+
+      if (!snaps.empty()) {
+        std::cerr << "rbd: image has snapshots - these must be deleted"
+                  << " with 'rbd snap purge' before the image can be removed."
+                  << std::endl;
+      } else {
+        std::cerr << "rbd: image has snapshots with linked clones - these must "
+                  << "be deleted or flattened before the image can be removed."
+                  << std::endl;
+      }
     } else if (r == -EBUSY) {
       std::cerr << "rbd: error: image still has watchers"
                 << std::endl
@@ -83,8 +124,8 @@ int execute(const po::variables_map &vm,
         std::string pool_name = "";
         librados::Rados rados(io_ctx);
         librados::IoCtx pool_io_ctx;
-        r = rados.ioctx_create2(group_info.pool, pool_io_ctx);
-        if (r < 0) {
+        image_r = rados.ioctx_create2(group_info.pool, pool_io_ctx);
+        if (image_r < 0) {
           pool_name = "<missing data pool " + stringify(group_info.pool) + ">";
         } else {
           pool_name = pool_io_ctx.get_pool_name();
@@ -101,7 +142,7 @@ int execute(const po::variables_map &vm,
     } else {
       std::cerr << "rbd: delete error: " << cpp_strerror(r) << std::endl;
     }
-    return r ;
+    return r;
   }
   return 0;
 }

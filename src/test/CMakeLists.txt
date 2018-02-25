@@ -7,7 +7,6 @@ add_library(unit-main OBJECT unit.cc)
 set_source_files_properties(unit.cc PROPERTIES
   COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
-add_subdirectory(bench)
 add_subdirectory(cls_hello)
 add_subdirectory(cls_lock)
 add_subdirectory(cls_log)
@@ -413,29 +412,12 @@ if(PERF_LOCAL_FLAGS)
 endif()
 target_link_libraries(ceph_perf_local os global ${UNITTEST_LIBS})
 
-# ceph_xattr_bench
-add_executable(ceph_xattr_bench
-  xattr_bench.cc
-  )
-set_target_properties(ceph_xattr_bench PROPERTIES COMPILE_FLAGS
-  ${UNITTEST_CXX_FLAGS})
-target_link_libraries(ceph_xattr_bench
-  os
-  ceph-common
-  ${UNITTEST_LIBS}
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
-
 install(TARGETS
   ceph_bench_log
   ceph_multi_stress_watch
   ceph_objectstore_bench
   ceph_omapbench
   ceph_perf_local
-  ceph_xattr_bench
   DESTINATION bin)
 
 # ceph_test_filejournal
@@ -526,10 +508,10 @@ add_executable(ceph_test_admin_socket_output
   )
 target_link_libraries(ceph_test_admin_socket_output
   ceph-common)
-if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+if(CXX_STDLIB STREQUAL "libstdc++")
   target_link_libraries(ceph_test_admin_socket_output
     -lstdc++fs)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+elseif(CXX_STDLIB STREQUAL "libc++")
   target_link_libraries(ceph_test_admin_socket_output
     -lc++experimental)
 endif()
@@ -572,7 +554,7 @@ if(WITH_RBD)
   endif(FREEBSD)
 endif(WITH_RBD)
 if(WITH_RADOSGW)
-  add_dependencies(tests radosgw-admin)
+  add_dependencies(tests radosgw radosgw-admin)
 endif(WITH_RADOSGW)
 if(NOT FREEBSD)
   add_dependencies(tests ceph-detect-init)

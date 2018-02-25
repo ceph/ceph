@@ -938,6 +938,8 @@ OPTION(bdev_debug_aio_suicide_timeout, OPT_FLOAT)
 // NVMe driver is loaded while osd is running.
 OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL)
 OPTION(bdev_nvme_retry_count, OPT_INT) // -1 means by default which is 4
+OPTION(bdev_enable_discard, OPT_BOOL)
+OPTION(bdev_async_discard, OPT_BOOL)
 
 OPTION(objectstore_blackhole, OPT_BOOL)
 
@@ -962,6 +964,9 @@ OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT) // how much to reclaim at a time
 OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT) // how often (sec) to balance free space between bluefs and bluestore
+// how often (sec) to dump allocation failure happened during bluefs rebalance
+OPTION(bluestore_bluefs_balance_failure_dump_interval, OPT_FLOAT)
+
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
@@ -1073,6 +1078,7 @@ OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL)
 OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL)
 OPTION(bluestore_shard_finishers, OPT_BOOL)
 OPTION(bluestore_debug_random_read_err, OPT_DOUBLE)
+OPTION(bluestore_debug_inject_bug21040, OPT_BOOL)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)

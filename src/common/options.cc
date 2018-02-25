@@ -1636,6 +1636,10 @@ std::vector<Option> get_global_options() {
     .set_min(2)
     .set_description("Number of striping periods to zero head of MDS journal write position"),
 
+     Option("osd_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
+
     Option("osd_check_max_object_name_len_on_startup", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_description(""),
@@ -3394,6 +3398,14 @@ std::vector<Option> get_global_options() {
     .set_default(-1)
     .set_description(""),
 
+    Option("bdev_enable_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
+    Option("bdev_async_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("bluefs_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description(""),
@@ -3480,6 +3492,11 @@ std::vector<Option> get_global_options() {
     Option("bluestore_bluefs_balance_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description("How frequently (in seconds) to balance free space between BlueFS and BlueStore"),
+
+    Option("bluestore_bluefs_balance_failure_dump_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("How frequently (in seconds) to dump information on "
+      "allocation failure occurred during BlueFS space rebalance"),
 
     Option("bluestore_spdk_mem", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512)
@@ -3926,6 +3943,9 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("bluestore_debug_inject_bug21040", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
     // -----------------------------------------
     // kstore
 
@@ -6002,6 +6022,22 @@ static std::vector<Option> get_rbd_options() {
     .set_default("")
     .set_description("default krbd map options"),
 
+    Option("rbd_default_clone_format", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_enum_allowed({"1", "2", "auto"})
+    .set_default("auto")
+    .set_description("default internal format for handling clones")
+    .set_long_description("This sets the internal format for tracking cloned "
+                          "images. The setting of '1' requires attaching to "
+                          "protected snapshots that cannot be removed until "
+                          "the clone is removed/flattened. The setting of '2' "
+                          "will allow clones to be attached to any snapshot "
+                          "and permits removing in-use parent snapshots but "
+                          "requires Mimic or later clients. The default "
+                          "setting of 'auto' will use the v2 format if the "
+                          "cluster is configured to require mimic or later "
+                          "clients.")
+    .set_safe(),
+
     Option("rbd_journal_order", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_min(12)
     .set_default(24)
@@ -6563,9 +6599,12 @@ std::vector<Option> get_mds_options() {
     .set_default(100)
     .set_description("minimum number of capabilities a client may hold"),
 
-    Option("mds_max_ratio_caps_per_client", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("mds_max_ratio_caps_per_client", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.8)
     .set_description("maximum ratio of current caps that may be recalled during MDS cache pressure"),
+    Option("mds_hack_allow_loading_invalid_metadata", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+     .set_default(0)
+     .set_description("INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk. Allows testing repair tools."),
   });
 }
 

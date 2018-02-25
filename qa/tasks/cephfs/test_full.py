@@ -250,7 +250,7 @@ class FullnessTestCase(CephFSTestCase):
             print "writing some data through which we expect to succeed"
             bytes = 0
             f = os.open("{file_path}", os.O_WRONLY | os.O_CREAT)
-            bytes += os.write(f, 'a' * 4096)
+            bytes += os.write(f, 'a' * 512 * 1024)
             os.fsync(f)
             print "fsync'ed data successfully, will now attempt to fill fs"
 
@@ -260,10 +260,10 @@ class FullnessTestCase(CephFSTestCase):
             # from write
             full = False
 
-            for n in range(0, {fill_mb}):
+            for n in range(0, int({fill_mb} * 0.9)):
                 bytes += os.write(f, 'x' * 1024 * 1024)
-                print "wrote bytes via buffered write, may repeat"
-            print "done writing bytes"
+                print "wrote {{0}} bytes via buffered write, may repeat".format(bytes)
+            print "done writing {{0}} bytes".format(bytes)
 
             # OK, now we should sneak in under the full condition
             # due to the time it takes the OSDs to report to the
@@ -271,13 +271,16 @@ class FullnessTestCase(CephFSTestCase):
             os.fsync(f)
             print "successfully fsync'ed prior to getting full state reported"
 
-            # Now wait for the full flag to get set so that our
-            # next flush IO will fail
-            time.sleep(30)
+            # buffered write, add more dirty data to the buffer
+            print "starting buffered write"
+            try:
+                for n in range(0, int({fill_mb} * 0.2)):
+                    bytes += os.write(f, 'x' * 1024 * 1024)
+                    print "sleeping a bit as we've exceeded 90% of our expected full ratio"
+                    time.sleep({full_wait})
+            except OSError:
+                pass;
 
-            # A buffered IO, should succeed
-            print "starting buffered write we expect to succeed"
-            os.write(f, 'x' * 4096)
             print "wrote, now waiting 30s and then doing a close we expect to fail"
 
             # Wait long enough for a background flush that should fail
@@ -328,7 +331,7 @@ class FullnessTestCase(CephFSTestCase):
             # from write
             full = False
 
-            for n in range(0, {fill_mb} + 1):
+            for n in range(0, int({fill_mb} * 1.1)):
                 try:
                     bytes += os.write(f, 'x' * 1024 * 1024)
                     print "wrote bytes via buffered write, moving on to fsync"
@@ -346,10 +349,10 @@ class FullnessTestCase(CephFSTestCase):
                 else:
                     print "Not full yet after %.2f MB" % (bytes / (1024.0 * 1024.0))
 
-                if n > {fill_mb} * 0.8:
+                if n > {fill_mb} * 0.9:
                     # Be cautious in the last region where we expect to hit
                     # the full condition, so that we don't overshoot too dramatically
-                    print "sleeping a bit as we've exceeded 80% of our expected full ratio"
+                    print "sleeping a bit as we've exceeded 90% of our expected full ratio"
                     time.sleep({full_wait})
 
             if not full:
@@ -401,11 +404,10 @@ class TestClusterFull(FullnessTestCase):
         super(TestClusterFull, self).setUp()
 
         if self.pool_capacity is None:
-            # This is a hack to overcome weird fluctuations in the reported
-            # `max_avail` attribute of pools that sometimes occurs in between
-            # tests (reason as yet unclear, but this dodges the issue)
-            TestClusterFull.pool_capacity = self.fs.get_pool_df(self._data_pool_name())['max_avail']
-            TestClusterFull.fill_mb = int(1.05 * (self.pool_capacity / (1024.0 * 1024.0)))
+            max_avail = self.fs.get_pool_df(self._data_pool_name())['max_avail']
+            full_ratio = float(self.fs.get_config("mon_osd_full_ratio", service_type="mon"))
+            TestClusterFull.pool_capacity = int(max_avail * full_ratio)
+            TestClusterFull.fill_mb = (self.pool_capacity / (1024 * 1024))
 
     def is_full(self):
         return self.fs.is_full()

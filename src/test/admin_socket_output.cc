@@ -76,7 +76,7 @@ bool AdminSocketOutput::init_sockets() {
   std::cout << "Initialising sockets" << std::endl;
   for (const auto &x : fs::directory_iterator(socketdir)) {
     std::cout << x.path() << std::endl;
-    if (fs::path(x.path()).extension() == ".asok") {
+    if (x.path().extension() == ".asok") {
       for (auto &target : targets) {
         if (std::regex_search(x.path().filename().string(),
             std::regex(prefix + target + R"(\..*\.asok)"))) {
@@ -108,7 +108,12 @@ AdminSocketOutput::run_command(AdminSocketClient &client,
   } else {
     command = "{\"prefix\":\"" + raw_command + "\"}";
   }
-  client.do_request(command, &output);
+  std::string err = client.do_request(command, &output);
+  if (!err.empty()) {
+    std::cerr << __func__  << " AdminSocketClient::do_request errored with: "
+              << err << std::endl;
+    ceph_assert(false);
+  }
   return std::make_pair(command, output);
 }
 
@@ -121,7 +126,12 @@ bool AdminSocketOutput::gather_socket_output() {
     std::cout << std::endl
               << "Sending request to " << socket << std::endl
               << std::endl;
-    client.do_request("{\"prefix\":\"help\"}", &response);
+    std::string err = client.do_request("{\"prefix\":\"help\"}", &response);
+    if (!err.empty()) {
+      std::cerr << __func__  << " AdminSocketClient::do_request errored with: "
+                << err << std::endl;
+      return false;
+    }
     std::cout << response << '\n';
 
     JSONParser parser;

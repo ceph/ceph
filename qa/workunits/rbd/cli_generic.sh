@@ -3,7 +3,7 @@
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
-IMGS="testimg1 testimg2 testimg3 testimg4 testimg5 testimg6 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 clone2"
+IMGS="testimg1 testimg2 testimg3 testimg4 testimg5 testimg6 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 test4 clone2"
 
 tiered=0
 if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
@@ -80,22 +80,6 @@ test_others() {
     rbd info testimg5 | grep 'size 256 MB'
     rbd snap ls testimg4 | grep -v 'SNAPID' | wc -l | grep 1
     rbd snap ls testimg4 | grep '.*snap1.*'
-
-    # deep copy clone-image
-    rbd snap rm testimg4@snap1
-    rbd snap rm testimg5@snap1
-    rbd rm testimg4
-    rbd rm testimg5
-    rbd snap protect testimg1@snap1
-    rbd clone testimg1@snap1 testimg4
-    rbd snap create testimg4@snap2
-    rbd deep copy testimg4 testimg5
-    rbd info testimg5 | grep 'size 256 MB'
-    rbd snap ls testimg5 | grep -v 'SNAPID' | wc -l | grep 1
-    rbd snap ls testimg5 | grep '.*snap2.*'
-    rbd flatten testimg4
-    rbd flatten testimg5
-    rbd snap unprotect testimg1@snap1
 
     rbd export testimg1 /tmp/img1.new
     rbd export testimg2 /tmp/img2.new
@@ -269,7 +253,7 @@ test_remove() {
     rbd create --image-format 2 -s 1 test2
     rbd snap create test2@snap
     rbd snap protect test2@snap
-    rbd clone test2@snap clone
+    rbd clone test2@snap clone --rbd-default-clone-format 1
 
     rados -p rbd rm rbd_children
     rbd rm clone
@@ -412,8 +396,8 @@ test_trash() {
     echo "testing trash..."
     remove_images
 
-    rbd create --image-format 2 -s 1 test1
-    rbd create --image-format 2 -s 1 test2
+    rbd create $RBD_CREATE_ARGS -s 1 test1
+    rbd create $RBD_CREATE_ARGS -s 1 test2
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
@@ -450,7 +434,7 @@ test_trash() {
     rbd trash rm $ID 2>&1 | grep 'Deferment time has not expired'
     rbd trash rm --image-id $ID --force
 
-    rbd create --image-format 2 -s 1 test1
+    rbd create $RBD_CREATE_ARGS -s 1 test1
     rbd snap create test1@snap1
     rbd snap protect test1@snap1
     rbd trash mv test1
@@ -485,8 +469,8 @@ test_purge() {
     rbd trash purge
     rbd trash ls | wc -l | grep 0
 
-    rbd create foo -s 1
-    rbd create bar -s 1
+    rbd create $RBD_CREATE_ARGS foo -s 1
+    rbd create $RBD_CREATE_ARGS bar -s 1
 
     rbd trash mv foo --expires-at "10 sec"
     rbd trash mv bar --expires-at "30 sec"
@@ -497,6 +481,63 @@ test_purge() {
 
     LAST_IMG=$(rbd trash ls | grep bar | awk '{print $1;}')
     rbd trash rm $LAST_IMG --force --no-progress | grep -v '.' | wc -l | grep 0
+}
+
+test_deep_copy_clone() {
+    echo "testing deep copy clone..."
+    remove_images
+
+    rbd create testimg1 $RBD_CREATE_ARGS --size 256
+    rbd snap create testimg1 --snap=snap1
+    rbd snap protect testimg1@snap1
+    rbd clone testimg1@snap1 testimg2
+    rbd snap create testimg2@snap2
+    rbd deep copy testimg2 testimg3
+    rbd info testimg3 | grep 'size 256 MB'
+    rbd snap ls testimg3 | grep -v 'SNAPID' | wc -l | grep 1
+    rbd snap ls testimg3 | grep '.*snap2.*'
+    rbd info testimg2 | grep 'features:.*deep-flatten' || rbd snap rm testimg2@snap2
+    rbd info testimg3 | grep 'features:.*deep-flatten' || rbd snap rm testimg3@snap2
+    rbd flatten testimg2
+    rbd flatten testimg3
+    rbd snap unprotect testimg1@snap1
+
+    remove_images
+}
+
+test_clone_v2() {
+    echo "testing clone v2..."
+    remove_images
+
+    rbd create $RBD_CREATE_ARGS -s 1 test1
+    rbd snap create test1@1
+    rbd clone --rbd-default-clone-format=1 test1@1 test2 && exit 1 || true
+    rbd clone --rbd-default-clone-format=2 test1@1 test2
+    rbd clone --rbd-default-clone-format=2 test1@1 test3
+
+    rbd snap protect test1@1
+    rbd clone --rbd-default-clone-format=1 test1@1 test4
+
+    rbd children test1@1 | sort | tr '\n' ' ' | grep -E "test2.*test3.*test4"
+
+    rbd remove test4
+    rbd snap unprotect test1@1
+
+    rbd snap remove test1@1
+    rbd snap list --all test1 | grep -E "trash[ ]*$"
+
+    rbd snap create test1@2
+    rbd rm test1 2>&1 | grep 'image has snapshots'
+
+    rbd snap rm test1@2
+    rbd rm test1 2>&1 | grep 'linked clones'
+
+    rbd rm test3
+    rbd rm test1 2>&1 | grep 'linked clones'
+
+    rbd flatten test2
+    rbd rm test1
+    rbd rm test2
 }
 
 test_pool_image_args
@@ -512,5 +553,7 @@ test_locking
 test_clone
 test_trash
 test_purge
+test_deep_copy_clone
+test_clone_v2
 
 echo OK

@@ -251,9 +251,6 @@ public:
   const spg_t pg_id;
   const coll_t coll;
 
-  // for ordering writes
-  ceph::shared_ptr<ObjectStore::Sequencer> osr;
-
   ObjectStore::CollectionHandle ch;
 
   class RecoveryCtx;
@@ -830,29 +827,8 @@ protected:
 protected:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
-  eversion_t  last_update_applied;
 
-
-  struct C_UpdateLastRollbackInfoTrimmedToApplied : Context {
-    PGRef pg;
-    epoch_t e;
-    eversion_t v;
-    C_UpdateLastRollbackInfoTrimmedToApplied(PG *pg, epoch_t e, eversion_t v)
-      : pg(pg), e(e), v(v) {}
-    bool sync_finish(int r) override {
-      pg->last_rollback_info_trimmed_to_applied = v;
-      return true;
-    }
-    void finish(int) override {
-      pg->lock();
-      if (!pg->pg_has_reset_since(e)) {
-	pg->last_rollback_info_trimmed_to_applied = v;
-      }
-      pg->unlock();
-    }
-  };
-  // entries <= last_rollback_info_trimmed_to_applied have been trimmed,
-  // and the transaction has applied
+  // entries <= last_rollback_info_trimmed_to_applied have been trimmed
   eversion_t  last_rollback_info_trimmed_to_applied;
 
   // primary state
@@ -1507,7 +1483,6 @@ public:
       INACTIVE,
       NEW_CHUNK,
       WAIT_PUSHES,
-      WAIT_LAST_UPDATE,
       BUILD_MAP,
       BUILD_MAP_DONE,
       WAIT_REPLICAS,
@@ -1544,7 +1519,6 @@ public:
         case INACTIVE: ret = "INACTIVE"; break;
         case NEW_CHUNK: ret = "NEW_CHUNK"; break;
         case WAIT_PUSHES: ret = "WAIT_PUSHES"; break;
-        case WAIT_LAST_UPDATE: ret = "WAIT_LAST_UPDATE"; break;
         case BUILD_MAP: ret = "BUILD_MAP"; break;
         case BUILD_MAP_DONE: ret = "BUILD_MAP_DONE"; break;
         case WAIT_REPLICAS: ret = "WAIT_REPLICAS"; break;

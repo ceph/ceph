@@ -32,6 +32,8 @@ class ZabbixSender(object):
         cmd = [self.sender, '-z', self.host, '-p', str(self.port), '-s',
                hostname, '-vv', '-i', '-']
 
+        self.log.debug('Executing: %s', cmd)
+
         proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
         for key, value in data.items():
@@ -170,16 +172,16 @@ class Module(MgrModule):
         data['num_osd_in'] = num_in
 
         osd_fill = list()
-        osd_apply_latency = list()
-        osd_commit_latency = list()
+        osd_apply_latency_ns = list()
+        osd_commit_latency_ns = list()
 
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
             if osd['kb'] == 0:
                 continue
             osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
-            osd_apply_latency.append(osd['perf_stat']['apply_latency_ms'])
-            osd_commit_latency.append(osd['perf_stat']['commit_latency_ms'])
+            osd_apply_latency_ns.append(osd['perf_stat']['apply_latency_ns'])
+            osd_commit_latency_ns.append(osd['perf_stat']['commit_latency_ns'])
 
         try:
             data['osd_max_fill'] = max(osd_fill)
@@ -189,13 +191,13 @@ class Module(MgrModule):
             pass
 
         try:
-            data['osd_latency_apply_max'] = max(osd_apply_latency)
-            data['osd_latency_apply_min'] = min(osd_apply_latency)
-            data['osd_latency_apply_avg'] = avg(osd_apply_latency)
+            data['osd_latency_apply_max'] = max(osd_apply_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_apply_min'] = min(osd_apply_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_apply_avg'] = avg(osd_apply_latency_ns) / 1000000.0 # ns -> ms
 
-            data['osd_latency_commit_max'] = max(osd_commit_latency)
-            data['osd_latency_commit_min'] = min(osd_commit_latency)
-            data['osd_latency_commit_avg'] = avg(osd_commit_latency)
+            data['osd_latency_commit_max'] = max(osd_commit_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_commit_min'] = min(osd_commit_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_commit_avg'] = avg(osd_commit_latency_ns) / 1000000.0 # ns -> ms
         except ValueError:
             pass
 
@@ -218,6 +220,13 @@ class Module(MgrModule):
         if not self.config['zabbix_host']:
             self.log.error('Zabbix server not set, please configure using: '
                            'ceph zabbix config-set zabbix_host <zabbix_host>')
+            self.set_health_checks({
+                'MGR_ZABBIX_NO_SERVER': {
+                    'severity': 'warning',
+                    'summary': 'No Zabbix server not configured',
+                    'detail': ['Configuration value zabbix_host not configured']
+                }
+            })
             return
 
         try:
@@ -231,9 +240,17 @@ class Module(MgrModule):
                                   self.config['zabbix_port'], self.log)
 
             zabbix.send(identifier, data)
+            self.set_health_checks(dict())
             return True
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
+            self.set_health_checks({
+                'MGR_ZABBIX_SEND_FAILED': {
+                    'severity': 'warning',
+                    'summary': 'Failed to send data to Zabbix',
+                    'detail': [str(exc)]
+                }
+            })
 
         return False
 

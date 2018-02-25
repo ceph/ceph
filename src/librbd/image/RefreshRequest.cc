@@ -157,7 +157,7 @@ Context *RefreshRequest<I>::handle_v1_get_snapshots(int *result) {
   for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
     m_snap_infos.push_back({m_snapc.snaps[i],
                             {cls::rbd::UserSnapshotNamespace{}},
-                            snap_names[i], snap_sizes[i], {}});
+                            snap_names[i], snap_sizes[i], {}, 0});
   }
 
   send_v1_get_locks();
@@ -600,7 +600,7 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots_legacy(int *result) {
   for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
     m_snap_infos.push_back({m_snapc.snaps[i],
                             {cls::rbd::UserSnapshotNamespace{}},
-                            snap_names[i], snap_sizes[i], {}});
+                            snap_names[i], snap_sizes[i], {}, 0});
   }
 
   send_v2_get_snap_timestamps();

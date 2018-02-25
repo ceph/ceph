@@ -230,7 +230,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
@@ -422,7 +422,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   string rs;
   int err = -EINVAL;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, get_last_committed());

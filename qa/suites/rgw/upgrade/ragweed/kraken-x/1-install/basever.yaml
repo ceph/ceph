@@ -1,0 +1,9 @@
+meta:
+- desc: install ceph/<base> latest
+tasks:
+- install:
+    branch: kraken
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+- print: "**** done install base branch"
+- ceph:
+- print: "**** done ceph"

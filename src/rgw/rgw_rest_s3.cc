@@ -2097,7 +2097,8 @@ int RGWCopyObj_ObjStore_S3::get_params()
     }
   }
 
-  const char *md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
+  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (md_directive) {
     if (strcasecmp(md_directive, "COPY") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_NONE;
@@ -4117,8 +4118,14 @@ rgw::auth::s3::LDAPEngine::authenticate(
   auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(base64_token));
   return result_t::grant(std::move(apl), completer_factory(boost::none));
-}
+} /* rgw::auth::s3::LDAPEngine::authenticate */
 
+void rgw::auth::s3::LDAPEngine::shutdown() {
+  if (ldh) {
+    delete ldh;
+    ldh = nullptr;
+  }
+}
 
 /* LocalEndgine */
 rgw::auth::Engine::result_t

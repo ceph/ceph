@@ -524,7 +524,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss, ds;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
@@ -1011,7 +1011,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   string rs;
   int err = -EINVAL;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();

@@ -87,7 +87,7 @@ void RecoveryQueue::advance()
 
 void RecoveryQueue::_start(CInode *in)
 {
-  inode_t *pi = in->get_projected_inode();
+  auto pi = in->get_projected_inode();
 
   // blech
   if (pi->client_ranges.size() && !pi->get_max_size()) {
@@ -194,8 +194,8 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
       // of per-inode damage, but it's actually more likely that
       // this indicates something wrong with the MDS (like maybe
       // it has the wrong auth caps?)
-      mds->clog->error() << " OSD read error while recovering size for inode 0x"
-                         << std::hex << in->ino() << std::dec;
+      mds->clog->error() << " OSD read error while recovering size"
+          " for inode " << in->ino();
       mds->damaged();
     }
   }

@@ -29,10 +29,6 @@
 #include "mon/health_check.h"
 #include <sstream>
 
-// FIXME: don't like including this here to get OSDMap::Incremental, maybe
-// PGMapUpdater needs its own header.
-#include "osd/OSDMap.h"
-
 namespace ceph { class Formatter; }
 
 class PGMapDigest {
@@ -457,7 +453,7 @@ inline ostream& operator<<(ostream& out, const PGMapDigest& m) {
 
 int process_pg_map_command(
   const string& prefix,
-  const map<string,cmd_vartype>& cmdmap,
+  const cmdmap_t& cmdmap,
   const PGMap& pg_map,
   const OSDMap& osdmap,
   Formatter *f,

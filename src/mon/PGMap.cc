@@ -38,7 +38,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(num_osd, bl);
   encode(pg_pool_sum, bl, features);
   encode(pg_sum, bl, features);
-  encode(osd_sum, bl);
+  encode(osd_sum, bl, features);
   if (v >= 2) {
     encode(num_pg_by_state, bl);
   } else {
@@ -877,7 +877,7 @@ void PGMapDigest::dump_object_stat_sum(
   if (f) {
     f->dump_int("kb_used", shift_round_up(sum.num_bytes, 10));
     f->dump_int("bytes_used", sum.num_bytes);
-    f->dump_format_unquoted("percent_used", "%.2f", (used*100));
+    f->dump_float("percent_used", used);
     f->dump_unsigned("max_avail", avail / raw_used_rate);
     f->dump_int("objects", sum.num_objects);
     if (verbose) {
@@ -1340,7 +1340,7 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
   ENCODE_START(7, 7, bl);
   encode(version, bl);
   encode(pg_stat, bl);
-  encode(osd_stat, bl);
+  encode(osd_stat, bl, features);
   encode(last_osdmap_epoch, bl);
   encode(last_pg_scan, bl);
   encode(stamp, bl);
@@ -1866,8 +1866,8 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
        i != osd_stat.end();
        ++i) {
     tab << i->first;
-    tab << i->second.os_perf_stat.os_commit_latency;
-    tab << i->second.os_perf_stat.os_apply_latency;
+    tab << i->second.os_perf_stat.os_commit_latency_ns / 1000000ull;
+    tab << i->second.os_perf_stat.os_apply_latency_ns / 1000000ull;
     tab << TextTable::endrow;
   }
   (*ss) << tab;
@@ -2925,7 +2925,7 @@ void PGMap::get_health_checks(
 
 int process_pg_map_command(
   const string& orig_prefix,
-  const map<string,cmd_vartype>& orig_cmdmap,
+  const cmdmap_t& orig_cmdmap,
   const PGMap& pg_map,
   const OSDMap& osdmap,
   Formatter *f,
@@ -2933,7 +2933,7 @@ int process_pg_map_command(
   bufferlist *odata)
 {
   string prefix = orig_prefix;
-  map<string,cmd_vartype> cmdmap = orig_cmdmap;
+  auto cmdmap = orig_cmdmap;
 
   // perhaps these would be better in the parsing, but it's weird
   bool primary = false;

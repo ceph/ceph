@@ -1,0 +1,40 @@
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: stop ceph-osd@2 daemon
+      service:
+        name: ceph-osd@2
+        state: stopped
+
+    - name: destroy osd.2 
+      command: "ceph osd destroy osd.2 --yes-i-really-mean-it"
+
+    - name: zap /dev/sdd1 
+      command: "ceph-volume lvm zap /dev/sdd1 --destroy"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: redeploy osd.2 using /dev/sdd1 
+      command: "ceph-volume lvm create --bluestore --data /dev/sdd1 --osd-id 2"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: stop ceph-osd@0 daemon
+      service:
+        name: ceph-osd@0
+        state: stopped
+
+    - name: destroy osd.0 
+      command: "ceph osd destroy osd.0 --yes-i-really-mean-it"
+
+    - name: zap test_group/data-lv1 
+      command: "ceph-volume lvm zap test_group/data-lv1"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: redeploy osd.0 using test_group/data-lv1 
+      command: "ceph-volume lvm create --bluestore --data test_group/data-lv1 --osd-id 0"
+      environment:
+        CEPH_VOLUME_DEBUG: 1

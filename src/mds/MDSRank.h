@@ -15,6 +15,8 @@
 #ifndef MDS_RANK_H_
 #define MDS_RANK_H_
 
+#include <string_view>
+
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
@@ -175,6 +177,7 @@ class MDSRank {
     Session *get_session(client_t client) {
       return sessionmap.get_session(entity_name_t::CLIENT(client.v));
     }
+    Session *get_session(Message *m);
 
     PerfCounters       *logger, *mlogger;
     OpTracker    op_tracker;
@@ -284,7 +287,7 @@ class MDSRank {
       finished_queue.push_back(c);
       progress_thread.signal();
     }
-    void queue_waiters(list<MDSInternalContextBase*>& ls) {
+    void queue_waiters(std::list<MDSInternalContextBase*>& ls) {
       finished_queue.splice( finished_queue.end(), ls );
       progress_thread.signal();
     }
@@ -414,14 +417,14 @@ class MDSRank {
 
   protected:
     void dump_clientreplay_status(Formatter *f) const;
-    void command_scrub_path(Formatter *f, const string& path, vector<string>& scrubop_vec);
-    void command_tag_path(Formatter *f, const string& path,
-                          const string &tag);
-    void command_flush_path(Formatter *f, const string& path);
+    void command_scrub_path(Formatter *f, std::string_view path, vector<string>& scrubop_vec);
+    void command_tag_path(Formatter *f, std::string_view path,
+                          std::string_view tag);
+    void command_flush_path(Formatter *f, std::string_view path);
     void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);
     void command_export_dir(Formatter *f,
-        const std::string &path, mds_rank_t dest);
+        std::string_view path, mds_rank_t dest);
     bool command_dirfrag_split(
         cmdmap_t cmdmap,
         std::ostream &ss);
@@ -432,7 +435,7 @@ class MDSRank {
         cmdmap_t cmdmap,
         std::ostream &ss,
         Formatter *f);
-    int _command_export_dir(const std::string &path, mds_rank_t dest);
+    int _command_export_dir(std::string_view path, mds_rank_t dest);
     int _command_flush_journal(std::stringstream *ss);
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
@@ -538,7 +541,7 @@ public:
   void init();
   void tick();
   void shutdown();
-  bool handle_asok_command(std::string command, cmdmap_t& cmdmap,
+  bool handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
                            Formatter *f, std::ostream& ss);
   void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
   void handle_osd_map();

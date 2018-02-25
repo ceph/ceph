@@ -12,6 +12,7 @@
 #include "include/utime.h"
 #include <iosfwd>
 #include <string>
+#include <set>
 
 #define RBD_GROUP_REF "rbd_group_ref"
 
@@ -162,6 +163,36 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 WRITE_CLASS_ENCODER(MirrorImageStatus);
 
+struct ChildImageSpec {
+  int64_t pool_id = -1;
+  std::string image_id;
+
+  ChildImageSpec() {}
+  ChildImageSpec(int64_t pool_id, const std::string& image_id)
+    : pool_id(pool_id), image_id(image_id) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ChildImageSpec*> &o);
+
+  inline bool operator==(const ChildImageSpec& rhs) const {
+    return (pool_id == rhs.pool_id &&
+            image_id == rhs.image_id);
+  }
+  inline bool operator<(const ChildImageSpec& rhs) const {
+    if (pool_id != rhs.pool_id) {
+      return pool_id < rhs.pool_id;
+    }
+    return image_id < rhs.image_id;
+  }
+};
+WRITE_CLASS_ENCODER(ChildImageSpec);
+
+typedef std::set<ChildImageSpec> ChildImageSpecs;
+
 struct GroupImageSpec {
   GroupImageSpec() {}
 
@@ -182,7 +213,6 @@ struct GroupImageSpec {
   std::string image_key();
 
 };
-
 WRITE_CLASS_ENCODER(GroupImageSpec);
 
 struct GroupImageStatus {
@@ -229,8 +259,9 @@ struct GroupSpec {
 WRITE_CLASS_ENCODER(GroupSpec);
 
 enum SnapshotNamespaceType {
-  SNAPSHOT_NAMESPACE_TYPE_USER = 0,
-  SNAPSHOT_NAMESPACE_TYPE_GROUP = 1
+  SNAPSHOT_NAMESPACE_TYPE_USER  = 0,
+  SNAPSHOT_NAMESPACE_TYPE_GROUP = 1,
+  SNAPSHOT_NAMESPACE_TYPE_TRASH = 2
 };
 
 struct UserSnapshotNamespace {
@@ -251,10 +282,7 @@ struct UserSnapshotNamespace {
   inline bool operator<(const UserSnapshotNamespace& usn) const {
     return false;
   }
-
 };
-
-std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
 
 struct GroupSnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
@@ -293,10 +321,33 @@ struct GroupSnapshotNamespace {
     }
     return false;
   }
-
 };
 
-std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
+struct TrashSnapshotNamespace {
+  static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
+    SNAPSHOT_NAMESPACE_TYPE_TRASH;
+
+  std::string original_name;
+  SnapshotNamespaceType original_snapshot_namespace_type =
+    SNAPSHOT_NAMESPACE_TYPE_USER;
+
+  TrashSnapshotNamespace() {}
+  TrashSnapshotNamespace(SnapshotNamespaceType original_snapshot_namespace_type,
+                         const std::string& original_name)
+    : original_name(original_name),
+      original_snapshot_namespace_type(original_snapshot_namespace_type) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  inline bool operator==(const TrashSnapshotNamespace& usn) const {
+    return true;
+  }
+  inline bool operator<(const TrashSnapshotNamespace& usn) const {
+    return false;
+  }
+};
 
 struct UnknownSnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
@@ -307,6 +358,7 @@ struct UnknownSnapshotNamespace {
   void encode(bufferlist& bl) const {}
   void decode(bufferlist::iterator& it) {}
   void dump(Formatter *f) const {}
+
   inline bool operator==(const UnknownSnapshotNamespace& gsn) const {
     return true;
   }
@@ -316,14 +368,18 @@ struct UnknownSnapshotNamespace {
   }
 };
 
+std::ostream& operator<<(std::ostream& os, const SnapshotNamespaceType& type);
+std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
 
 typedef boost::variant<UserSnapshotNamespace,
                        GroupSnapshotNamespace,
+                       TrashSnapshotNamespace,
                        UnknownSnapshotNamespace> SnapshotNamespaceVariant;
 
 struct SnapshotNamespace : public SnapshotNamespaceVariant {
-
   SnapshotNamespace() {
   }
 
@@ -355,15 +411,17 @@ struct SnapshotInfo {
   std::string name;
   uint64_t image_size = 0;
   utime_t timestamp;
+  uint32_t child_count = 0;
 
   SnapshotInfo() {
   }
   SnapshotInfo(snapid_t id,
                const cls::rbd::SnapshotNamespace& snapshot_namespace,
                const std::string& name, uint64_t image_size,
-               const utime_t& timestamp)
+               const utime_t& timestamp, uint32_t child_count)
     : id(id), snapshot_namespace(snapshot_namespace),
-      name(name), image_size(image_size), timestamp(timestamp) {
+      name(name), image_size(image_size), timestamp(timestamp),
+      child_count(child_count) {
   }
 
   void encode(bufferlist& bl) const;

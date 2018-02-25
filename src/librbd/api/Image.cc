@@ -13,6 +13,7 @@
 #include "librbd/Utils.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/internal.h"
+#include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -81,8 +82,10 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
   }
 
   pool_image_ids->clear();
-  // search all pools for children depending on this snapshot
+
   librados::Rados rados(ictx->md_ctx);
+
+  // search all pools for clone v1 children depending on this snapshot
   std::list<std::pair<int64_t, std::string> > pools;
   int r = rados.pool_list2(pools);
   if (r < 0) {
@@ -122,10 +125,37 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                                  image_ids);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error reading list of children from pool " << it->second
-      	   << dendl;
+                 << dendl;
       return r;
     }
     pool_image_ids->insert({*it, image_ids});
+  }
+
+  // retrieve clone v2 children attached to this snapshot
+  IoCtx parent_io_ctx;
+  r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
+  assert(r == 0);
+
+  cls::rbd::ChildImageSpecs child_images;
+  r = cls_client::children_list(&parent_io_ctx,
+                                util::header_name(parent_spec.image_id),
+                                parent_spec.snap_id, &child_images);
+  if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
+    lderr(cct) << "error retrieving children: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  for (auto& child_image : child_images) {
+    IoCtx io_ctx;
+    r = rados.ioctx_create2(child_image.pool_id, io_ctx);
+    if (r == -ENOENT) {
+      ldout(cct, 1) << "pool " << child_image.pool_id << " no longer exists"
+                    << dendl;
+      continue;
+    }
+
+    PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name()};
+    (*pool_image_ids)[pool_spec].insert(child_image.image_id);
   }
 
   return 0;
