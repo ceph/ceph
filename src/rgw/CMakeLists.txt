@@ -274,4 +274,3 @@ if(WITH_EMBEDDED)
     target_link_libraries(cephd_rgw ${FCGI_LIBRARY})
   endif()
 endif()
-
