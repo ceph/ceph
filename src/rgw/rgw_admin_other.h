@@ -37,6 +37,8 @@ int handle_opt_usage_show(rgw_user& user_id, const std::string& start_date, cons
 int handle_opt_usage_trim(rgw_user& user_id, const std::string& start_date, const std::string& end_date,
                           bool yes_i_really_mean_it, RGWRados *store);
 
+int handle_opt_usage_clear(bool yes_i_really_mean_it, RGWRados *store);
+
 int handle_opt_olh_get(const std::string& tenant, const std::string& bucket_id, const std::string& bucket_name,
                        const std::string& object, rgw_bucket& bucket, RGWRados *store, Formatter *formatter);
 

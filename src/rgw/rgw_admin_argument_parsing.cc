@@ -126,6 +126,7 @@ void usage()
   cout << "  log rm                     remove log object\n";
   cout << "  usage show                 show usage (by user, date range)\n";
   cout << "  usage trim                 trim usage (by user, date range)\n";
+  cout << "  usage clear                reset all the usage stats for the cluster\n";
   cout << "  gc list                    dump expired garbage collection objects (specify\n";
   cout << "                             --include-all to list all entries, including unexpired)\n";
   cout << "  gc process                 manually process garbage (specify\n";
@@ -454,6 +455,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_USAGE_SHOW;
     if (strcmp(cmd, "trim") == 0)
       return OPT_USAGE_TRIM;
+    if (strcmp(cmd, "clear") == 0)
+      return OPT_USAGE_CLEAR;
   } else if (strcmp(prev_cmd, "caps") == 0) {
     if (strcmp(cmd, "add") == 0)
       return OPT_CAPS_ADD;

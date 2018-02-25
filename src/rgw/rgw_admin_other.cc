@@ -284,6 +284,18 @@ int handle_opt_usage_trim(rgw_user& user_id, const std::string& start_date, cons
   return 0;
 }
 
+int handle_opt_usage_clear(bool yes_i_really_mean_it, RGWRados *store)
+{
+  if (!yes_i_really_mean_it) {
+    cerr << "usage clear would remove *all* users usage data for all time" << std::endl;
+    cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+    return 1;
+  }
+
+  return -RGWUsage::clear(store);
+}
+
+
 int handle_opt_olh_get(const std::string& tenant, const std::string& bucket_id, const std::string& bucket_name,
                        const std::string& object, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
 {

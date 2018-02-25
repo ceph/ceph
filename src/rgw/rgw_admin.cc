@@ -791,6 +791,10 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_USAGE_TRIM) {
     return handle_opt_usage_trim(user_id, start_date, end_date, yes_i_really_mean_it, store);
   }
+  
+  if (opt_cmd == OPT_USAGE_CLEAR) {
+    return handle_opt_usage_clear(yes_i_really_mean_it, store);
+  }
 
   if (opt_cmd == OPT_OLH_GET) {
     return handle_opt_olh_get(tenant, bucket_id, bucket_name, object, bucket, store, formatter);
