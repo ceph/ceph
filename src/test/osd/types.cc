@@ -554,19 +554,19 @@ for (unsigned i = 0; i < 4; ++i) {
 
 TEST(pg_t, get_ancestor)
 {
-  ASSERT_EQ(pg_t(0, 0, -1), pg_t(16, 0, -1).get_ancestor(16));
-  ASSERT_EQ(pg_t(1, 0, -1), pg_t(17, 0, -1).get_ancestor(16));
-  ASSERT_EQ(pg_t(0, 0, -1), pg_t(16, 0, -1).get_ancestor(8));
-  ASSERT_EQ(pg_t(16, 0, -1), pg_t(16, 0, -1).get_ancestor(80));
-  ASSERT_EQ(pg_t(16, 0, -1), pg_t(16, 0, -1).get_ancestor(83));
-  ASSERT_EQ(pg_t(1, 0, -1), pg_t(1321, 0, -1).get_ancestor(123).get_ancestor(8));
-  ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(123).get_ancestor(8));
-  ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(8));
+  ASSERT_EQ(pg_t(0, 0), pg_t(16, 0).get_ancestor(16));
+  ASSERT_EQ(pg_t(1, 0), pg_t(17, 0).get_ancestor(16));
+  ASSERT_EQ(pg_t(0, 0), pg_t(16, 0).get_ancestor(8));
+  ASSERT_EQ(pg_t(16, 0), pg_t(16, 0).get_ancestor(80));
+  ASSERT_EQ(pg_t(16, 0), pg_t(16, 0).get_ancestor(83));
+  ASSERT_EQ(pg_t(1, 0), pg_t(1321, 0).get_ancestor(123).get_ancestor(8));
+  ASSERT_EQ(pg_t(3, 0), pg_t(1323, 0).get_ancestor(123).get_ancestor(8));
+  ASSERT_EQ(pg_t(3, 0), pg_t(1323, 0).get_ancestor(8));
 }
 
 TEST(pg_t, split)
 {
-  pg_t pgid(0, 0, -1);
+  pg_t pgid(0, 0);
   set<pg_t> s;
   bool b;
 
@@ -580,21 +580,21 @@ TEST(pg_t, split)
   b = pgid.is_split(2, 4, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(2, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(2, 0)));
 
   s.clear();
   b = pgid.is_split(2, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(2, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(4, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(6, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(2, 0)));
+  ASSERT_TRUE(s.count(pg_t(4, 0)));
+  ASSERT_TRUE(s.count(pg_t(6, 0)));
 
   s.clear();
   b = pgid.is_split(3, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(4, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(4, 0)));
 
   s.clear();
   b = pgid.is_split(6, 8, NULL);
@@ -603,68 +603,68 @@ TEST(pg_t, split)
   ASSERT_TRUE(!b);
   ASSERT_EQ(0u, s.size());
 
-  pgid = pg_t(1, 0, -1);
+  pgid = pg_t(1, 0);
 
   s.clear();
   b = pgid.is_split(2, 4, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
 
   s.clear();
   b = pgid.is_split(2, 6, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(2u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
 
   s.clear();
   b = pgid.is_split(2, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(4, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
 
   s.clear();
   b = pgid.is_split(3, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(6, 8, &s);
   ASSERT_TRUE(!b);
   ASSERT_EQ(0u, s.size());
 
-  pgid = pg_t(3, 0, -1);
+  pgid = pg_t(3, 0);
 
   s.clear();
   b = pgid.is_split(7, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(7, 12, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(2u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(11, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
+  ASSERT_TRUE(s.count(pg_t(11, 0)));
 
   s.clear();
   b = pgid.is_split(7, 11, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
 }
 

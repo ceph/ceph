@@ -514,7 +514,7 @@ class OSDStub : public TestStub
 	       << " epoch " << pool_epoch << dendl;
 
       for (ps_t ps = 0; ps < pool.get_pg_num(); ++ps) {
-	pg_t pgid(ps, pool_id, -1);
+	pg_t pgid(ps, pool_id);
 	pg_t parent;
 	dout(20) << __func__
 		 << " pgid " << pgid << " parent " << parent << dendl;

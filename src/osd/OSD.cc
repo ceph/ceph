@@ -3964,12 +3964,6 @@ void OSD::load_pgs()
       continue;
     }
 
-    if (pgid.preferred() >= 0) {
-      dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
-      // FIXME: delete it too, eventually
-      continue;
-    }
-
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     epoch_t map_epoch = 0;
     int r = PG::peek_map_epoch(store, pgid, &map_epoch);
@@ -8171,11 +8165,6 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     pg_t on = p->first;
 
-    if (on.preferred() >= 0) {
-      dout(20) << "ignoring localized pg " << on << dendl;
-      continue;
-    }
-
     if (!osdmap->have_pg_pool(on.pool())) {
       dout(20) << "ignoring pg on deleted pool " << on << dendl;
       continue;
@@ -8446,11 +8435,6 @@ void OSD::handle_pg_notify(OpRequestRef op)
   for (auto it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        ++it) {
-    if (it->first.info.pgid.preferred() >= 0) {
-      dout(20) << "ignoring localized pg " << it->first.info.pgid << dendl;
-      continue;
-    }
-
     handle_pg_peering_evt(
       spg_t(it->first.info.pgid.pgid, it->first.to),
       it->first.info.history, it->second,
@@ -8476,11 +8460,6 @@ void OSD::handle_pg_log(OpRequestRef op)
   int from = m->get_source().num();
   if (!require_same_or_newer_map(op, m->get_epoch(), false))
     return;
-
-  if (m->get_pgid().preferred() >= 0) {
-    dout(10) << "ignoring localized pg " << m->get_pgid() << dendl;
-    return;
-  }
 
   op->mark_started();
   handle_pg_peering_evt(
@@ -8511,11 +8490,6 @@ void OSD::handle_pg_info(OpRequestRef op)
   for (auto p = m->pg_list.begin();
        p != m->pg_list.end();
        ++p) {
-    if (p->first.info.pgid.preferred() >= 0) {
-      dout(10) << "ignoring localized pg " << p->first.info.pgid << dendl;
-      continue;
-    }
-
     handle_pg_peering_evt(
       spg_t(p->first.info.pgid.pgid, p->first.to),
       p->first.info.history, p->second, p->first.epoch_sent,
@@ -8542,11 +8516,6 @@ void OSD::handle_pg_trim(OpRequestRef op)
   int from = m->get_source().num();
   if (!require_same_or_newer_map(op, m->epoch, false))
     return;
-
-  if (m->pgid.preferred() >= 0) {
-    dout(10) << "ignoring localized pg " << m->pgid << dendl;
-    return;
-  }
 
   op->mark_started();
 
@@ -8717,11 +8686,6 @@ void OSD::handle_pg_query(OpRequestRef op)
        ++it) {
     spg_t pgid = it->first;
 
-    if (pgid.preferred() >= 0) {
-      dout(10) << "ignoring localized pg " << pgid << dendl;
-      continue;
-    }
-
     if (service.splitting(pgid)) {
       peering_wait_for_split[pgid].push_back(
 	PGPeeringEventRef(
@@ -8817,11 +8781,6 @@ void OSD::handle_pg_remove(OpRequestRef op)
        it != m->pg_list.end();
        ++it) {
     spg_t pgid = *it;
-    if (pgid.preferred() >= 0) {
-      dout(10) << "ignoring localized pg " << pgid << dendl;
-      continue;
-    }
-
     enqueue_peering_evt(
       pgid,
       PGPeeringEventRef(

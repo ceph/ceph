@@ -605,7 +605,7 @@ int main(int argc, const char **argv)
 	   ++p) {
 	const pg_pool_t *pool = osdmap.get_pg_pool(p->first);
 	for (ps_t ps = 0; ps < pool->get_pg_num(); ps++) {
-	  pg_t pgid(ps, p->first, -1);
+	  pg_t pgid(ps, p->first);
 	  for (int i=0; i<100; i++) {
 	    cout << pgid << " attempt " << i << std::endl;
 
