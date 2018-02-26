@@ -258,6 +258,7 @@ private:
 			   expand_stack_t *stack=0,
 			   std::ostream *err=0) const;
   const Option::value_t& _get_val_default(const Option& o) const;
+  Option::value_t _get_val_nometa(const Option& o) const;
 
   int _rm_val(const std::string& key, int level);
 
