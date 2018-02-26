@@ -415,6 +415,22 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
 
+template<typename Func>
+void wait_until_done(ObjectStore::Transaction* txn, Func&& func)
+{
+  bool finished = false;
+  std::condition_variable cond;
+  std::mutex m;
+  txn->register_on_complete(make_lambda_context([&]() {
+    std::unique_lock lock{m};
+    finished = true;
+    cond.notify_one();
+  }));
+  std::move(func)();
+  std::unique_lock lock{m};
+  cond.wait(lock, [&] {return finished;});
+}
+
 int initiate_new_remove_pg(ObjectStore *store, spg_t r_pgid)
 {
   if (!dry_run)
@@ -1164,8 +1180,12 @@ int ObjectStoreTool::get_object(ObjectStore *store,
       return -EFAULT;
     }
   }
-  if (!dry_run)
-    store->queue_transaction(ch, std::move(*t));
+  if (!dry_run) {
+    wait_until_done(t, [&] {
+      store->queue_transaction(ch, std::move(*t));
+      ch->flush();
+    });
+  }
   return 0;
 }
 
@@ -1830,11 +1850,12 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     set<string> remove;
     remove.insert("_remove");
     t.omap_rmkeys(coll, pgid.make_pgmeta_oid(), remove);
-    store->queue_transaction(ch, std::move(t));
+    wait_until_done(&t, [&] {
+      store->queue_transaction(ch, std::move(t));
+      // make sure we flush onreadable items before mapper/driver are destroyed.
+      ch->flush();
+    });
   }
-
-  // make sure we flush onreadable items before mapper/driver are destroyed.
-  ch->flush();
   return 0;
 }
 
@@ -1947,9 +1968,12 @@ int do_remove_object(ObjectStore *store, coll_t coll,
     }
   }
 
-  if (!dry_run)
-    store->queue_transaction(ch, std::move(t));
-
+  if (!dry_run) {
+    wait_until_done(&t, [&] {
+      store->queue_transaction(ch, std::move(t));
+      ch->flush();
+    });
+  }
   return 0;
 }
 
