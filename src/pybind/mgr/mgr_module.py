@@ -231,6 +231,10 @@ class MgrModule(ceph_module.BaseMgrModule):
     PERFCOUNTER_HISTOGRAM = 0x10
     PERFCOUNTER_TYPE_MASK = ~2
 
+    # units supported
+    BYTES = 0
+    NONE = 1
+    
     def __init__(self, module_name, py_modules_ptr, this_ptr):
         self.module_name = module_name
 
@@ -333,6 +337,12 @@ class MgrModule(ceph_module.BaseMgrModule):
         
         return ''
 
+    def _unit_to_str(self, unit):
+        if unit == self.NONE:
+            return "/s"
+        elif unit == self.BYTES:
+            return "B/s"  
+    
     def get_server(self, hostname):
         """
         Called by the plugin to fetch metadata about a particular hostname from
