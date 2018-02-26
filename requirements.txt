@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file requirements.txt setup.py
 #
-ansible==2.4.0.0
+ansible==2.4.3.0
 apache-libcloud==1.5.0
 appdirs==1.4.3            # via os-client-config
 argparse==1.4.0
@@ -21,7 +21,7 @@ cmd2==0.7.0               # via cliff
 configobj==5.0.6
 configparser==3.5.0
 contextlib2==0.5.4        # via raven
-cryptography==1.8.1       # via ansible, paramiko, pyopenssl
+cryptography==2.1.4       # via ansible, paramiko, pyopenssl
 debtcollector==1.13.0     # via oslo.config, oslo.utils, python-keystoneclient, python-neutronclient
 deprecation==1.0          # via openstacksdk
 docopt==0.6.2
@@ -57,7 +57,6 @@ oslo.config==3.24.0       # via python-keystoneclient
 oslo.i18n==3.15.0         # via osc-lib, oslo.config, oslo.utils, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient
 oslo.serialization==2.18.0  # via python-keystoneclient, python-neutronclient, python-novaclient
 oslo.utils==3.25.0        # via osc-lib, oslo.serialization, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient
-packaging==16.8           # via cryptography
 paramiko==2.1.2
 pbr==2.0.0                # via cliff, debtcollector, keystoneauth1, openstacksdk, osc-lib, oslo.i18n, oslo.serialization, oslo.utils, positional, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient, requestsexceptions, stevedore
 pexpect==4.2.1
@@ -71,7 +70,7 @@ py==1.4.33                # via tox
 pyasn1==0.2.3
 pycparser==2.17           # via cffi
 pyopenssl==16.2.0
-pyparsing==2.2.0          # via cliff, cmd2, oslo.utils, packaging
+pyparsing==2.2.0          # via cliff, cmd2, oslo.utils
 python-cinderclient==2.0.1  # via python-openstackclient
 python-dateutil==2.6.0
 python-glanceclient==2.6.0  # via python-openstackclient
