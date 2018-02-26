@@ -684,13 +684,8 @@ int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), inc_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), inc_oid, bl.length());
-  int ret = store->queue_transaction(ch, std::move(t));
-  if (ret) {
-    cerr << "Failed to set inc-osdmap (" << inc_oid << "): " << ret << std::endl;
-  } else {
-    cout << "Wrote inc-osdmap." << inc.epoch << std::endl;
-  }
-  return ret;
+  store->queue_transaction(ch, std::move(t));
+  return 0;
 }
 
 int get_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl)
@@ -732,13 +727,8 @@ int set_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
   ObjectStore::Transaction t;
   t.write(coll_t::meta(), full_oid, 0, bl.length(), bl);
   t.truncate(coll_t::meta(), full_oid, bl.length());
-  int ret = store->queue_transaction(ch, std::move(t));
-  if (ret) {
-    cerr << "Failed to set osdmap (" << full_oid << "): " << ret << std::endl;
-  } else {
-    cout << "Wrote osdmap." << osdmap.get_epoch() << std::endl;
-  }
-  return ret;
+  store->queue_transaction(ch, std::move(t));
+  return 0;
 }
 
 int get_osdmap(ObjectStore *store, epoch_t e, OSDMap &osdmap, bufferlist& bl)
@@ -2319,13 +2309,7 @@ struct do_fix_lost : public action_on_object_t {
       ObjectStore::Transaction t;
       t.setattr(coll, ghobj, OI_ATTR, bl);
       auto ch = store->open_collection(coll);
-      int r = store->queue_transaction(ch, std::move(t));
-      if (r < 0) {
-	cerr << "Error getting fixing attr on : " << make_pair(coll, ghobj)
-	     << ", "
-	     << cpp_strerror(r) << std::endl;
-	return r;
-      }
+      store->queue_transaction(ch, std::move(t));
     }
     return 0;
   }
