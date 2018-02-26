@@ -4002,6 +4002,24 @@ void OSD::load_pgs()
     // read pg state, log
     pg->read_state(store);
 
+    if (pg->dne())  {
+      dout(10) << "load_pgs " << *it << " deleting dne" << dendl;
+      pg->ch = nullptr;
+      service.pg_remove_epoch(pg->pg_id);
+      pg->unlock();
+      {
+	// Delete pg
+	RWLock::WLocker l(pg_map_lock);
+	auto p = pg_map.find(pg->get_pgid());
+	assert(p != pg_map.end() && p->second == pg);
+	dout(20) << __func__ << " removed pg " << pg << " from pg_map" << dendl;
+	pg_map.erase(p);
+	pg->put("PGMap");
+      }
+      recursive_remove_collection(cct, store, pgid, *it);
+      continue;
+    }
+
     service.init_splits_between(pg->pg_id, pg->get_osdmap(), osdmap);
 
     pg->reg_next_scrub();
