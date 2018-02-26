@@ -95,6 +95,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_USER, {404, "NoSuchUser"}},
     { ERR_NO_ROLE_FOUND, {404, "NoSuchEntity"}},
     { ERR_NO_SUCH_SUBUSER, {404, "NoSuchSubUser"}},
+    { ERR_NO_SUCH_ENTITY, {404, "NoSuchEntity"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
@@ -1729,7 +1730,8 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "mdlog",
                                     "datalog",
                                     "opstate",
-                                    "roles"};
+                                    "roles",
+                                    "user-policy"};
 
   for (unsigned int i = 0; i < sizeof(cap_type) / sizeof(char *); ++i) {
     if (tp.compare(cap_type[i]) == 0) {
