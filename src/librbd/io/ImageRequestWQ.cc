@@ -12,6 +12,7 @@
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -25,9 +26,9 @@ namespace io {
 template <typename I>
 struct ImageRequestWQ<I>::C_AcquireLock : public Context {
   ImageRequestWQ *work_queue;
-  ImageRequest<I> *image_request;
+  ImageDispatchSpec<I> *image_request;
 
-  C_AcquireLock(ImageRequestWQ *work_queue, ImageRequest<I> *image_request)
+  C_AcquireLock(ImageRequestWQ *work_queue, ImageDispatchSpec<I> *image_request)
     : work_queue(work_queue), image_request(image_request) {
   }
 
@@ -51,10 +52,10 @@ struct ImageRequestWQ<I>::C_BlockedWrites : public Context {
 template <typename I>
 struct ImageRequestWQ<I>::C_RefreshFinish : public Context {
   ImageRequestWQ *work_queue;
-  ImageRequest<I> *image_request;
+  ImageDispatchSpec<I> *image_request;
 
   C_RefreshFinish(ImageRequestWQ *work_queue,
-                  ImageRequest<I> *image_request)
+                  ImageDispatchSpec<I> *image_request)
     : work_queue(work_queue), image_request(image_request) {
   }
   void finish(int r) override {
@@ -65,7 +66,7 @@ struct ImageRequestWQ<I>::C_RefreshFinish : public Context {
 template <typename I>
 ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
 				  time_t ti, ThreadPool *tp)
-  : ThreadPool::PointerWQ<ImageRequest<I> >(name, ti, 0, tp),
+  : ThreadPool::PointerWQ<ImageDispatchSpec<I> >(name, ti, 0, tp),
     m_image_ctx(*image_ctx),
     m_lock(util::unique_lock_name("ImageRequestWQ<I>::m_lock", this)) {
   CephContext *cct = m_image_ctx.cct;
@@ -254,7 +255,7 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty() ||
       require_lock_on_read()) {
-    queue(ImageRequest<I>::create_read_request(
+    queue(ImageDispatchSpec<I>::create_read_request(
             m_image_ctx, c, {{off, len}}, std::move(read_result), op_flags,
             trace));
   } else {
@@ -293,7 +294,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(ImageRequest<I>::create_write_request(
+    queue(ImageDispatchSpec<I>::create_write_request(
             m_image_ctx, c, {{off, len}}, std::move(bl), op_flags, trace));
   } else {
     c->start_op();
@@ -331,11 +332,11 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(ImageRequest<I>::create_discard_request(
+    queue(ImageDispatchSpec<I>::create_discard_request(
             m_image_ctx, c, off, len, skip_partial_discard, trace));
   } else {
     c->start_op();
-    ImageRequest<I>::aio_discard(&m_image_ctx, c, off, len,
+    ImageRequest<I>::aio_discard(&m_image_ctx, c, {{off, len}},
 				 skip_partial_discard, trace);
     finish_in_flight_io();
   }
@@ -366,9 +367,9 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
-    queue(ImageRequest<I>::create_flush_request(m_image_ctx, c, trace));
+    queue(ImageDispatchSpec<I>::create_flush_request(m_image_ctx, c, trace));
   } else {
-    ImageRequest<I>::aio_flush(&m_image_ctx, c, trace);
+    ImageRequest<I>::aio_flush(&m_image_ctx, c, FLUSH_SOURCE_USER, trace);
     finish_in_flight_io();
   }
   trace.event("finish");
@@ -402,11 +403,11 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(ImageRequest<I>::create_writesame_request(
+    queue(ImageDispatchSpec<I>::create_write_same_request(
             m_image_ctx, c, off, len, std::move(bl), op_flags, trace));
   } else {
     c->start_op();
-    ImageRequest<I>::aio_writesame(&m_image_ctx, c, off, len, std::move(bl),
+    ImageRequest<I>::aio_writesame(&m_image_ctx, c, {{off, len}}, std::move(bl),
 				   op_flags, trace);
     finish_in_flight_io();
   }
@@ -443,7 +444,7 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
-    queue(ImageRequest<I>::create_compare_and_write_request(
+    queue(ImageDispatchSpec<I>::create_compare_and_write_request(
             m_image_ctx, c, {{off, len}}, std::move(cmp_bl), std::move(bl),
             mismatch_off, op_flags, trace));
   } else {
@@ -567,8 +568,8 @@ void ImageRequestWQ<I>::apply_qos_iops_limit(uint64_t limit) {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::handle_iops_throttle_ready(int r,
-                                                   ImageRequest<I> *item) {
+void ImageRequestWQ<I>::handle_iops_throttle_ready(
+    int r, ImageDispatchSpec<I> *item) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 15) << "r=" << r << ", " << "req=" << item << dendl;
 
@@ -582,7 +583,7 @@ void ImageRequestWQ<I>::handle_iops_throttle_ready(int r,
 template <typename I>
 void *ImageRequestWQ<I>::_void_dequeue() {
   CephContext *cct = m_image_ctx.cct;
-  ImageRequest<I> *peek_item = this->front();
+  ImageDispatchSpec<I> *peek_item = this->front();
 
   // no queued IO requests or all IO is blocked/stalled
   if (peek_item == nullptr || m_io_blockers.load() > 0) {
@@ -591,12 +592,12 @@ void *ImageRequestWQ<I>::_void_dequeue() {
 
   if (!peek_item->was_throttled() &&
       iops_throttle->get<
-        ImageRequestWQ<I>, ImageRequest<I>,
+        ImageRequestWQ<I>, ImageDispatchSpec<I>,
         &ImageRequestWQ<I>::handle_iops_throttle_ready>(1, this, peek_item)) {
     ldout(cct, 15) << "throttling IO " << peek_item << dendl;
 
     // dequeue the throttled item and block future IO
-    ThreadPool::PointerWQ<ImageRequest<I> >::_void_dequeue();
+    ThreadPool::PointerWQ<ImageDispatchSpec<I> >::_void_dequeue();
     ++m_io_blockers;
     return nullptr;
   }
@@ -620,8 +621,8 @@ void *ImageRequestWQ<I>::_void_dequeue() {
     }
   }
 
-  ImageRequest<I> *item = reinterpret_cast<ImageRequest<I> *>(
-    ThreadPool::PointerWQ<ImageRequest<I> >::_void_dequeue());
+  auto item = reinterpret_cast<ImageDispatchSpec<I> *>(
+    ThreadPool::PointerWQ<ImageDispatchSpec<I> >::_void_dequeue());
   assert(peek_item == item);
 
   if (lock_required) {
@@ -669,7 +670,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::process(ImageRequest<I> *req) {
+void ImageRequestWQ<I>::process(ImageDispatchSpec<I> *req) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", "
                  << "req=" << req << dendl;
@@ -686,7 +687,7 @@ void ImageRequestWQ<I>::process(ImageRequest<I> *req) {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::finish_queued_io(ImageRequest<I> *req) {
+void ImageRequestWQ<I>::finish_queued_io(ImageDispatchSpec<I> *req) {
   RWLock::RLocker locker(m_lock);
   if (req->is_write_op()) {
     assert(m_queued_writes > 0);
@@ -750,7 +751,8 @@ void ImageRequestWQ<I>::finish_in_flight_io() {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::fail_in_flight_io(int r, ImageRequest<I> *req) {
+void ImageRequestWQ<I>::fail_in_flight_io(
+    int r, ImageDispatchSpec<I> *req) {
   this->process_finish();
   req->fail(r);
   finish_queued_io(req);
@@ -766,7 +768,7 @@ bool ImageRequestWQ<I>::is_lock_required(bool write_op) const {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::queue(ImageRequest<I> *req) {
+void ImageRequestWQ<I>::queue(ImageDispatchSpec<I> *req) {
   assert(m_image_ctx.owner_lock.is_locked());
 
   CephContext *cct = m_image_ctx.cct;
@@ -779,11 +781,12 @@ void ImageRequestWQ<I>::queue(ImageRequest<I> *req) {
     m_queued_reads++;
   }
 
-  ThreadPool::PointerWQ<ImageRequest<I> >::queue(req);
+  ThreadPool::PointerWQ<ImageDispatchSpec<I> >::queue(req);
 }
 
 template <typename I>
-void ImageRequestWQ<I>::handle_acquire_lock(int r, ImageRequest<I> *req) {
+void ImageRequestWQ<I>::handle_acquire_lock(
+    int r, ImageDispatchSpec<I> *req) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "r=" << r << ", " << "req=" << req << dendl;
 
@@ -801,7 +804,8 @@ void ImageRequestWQ<I>::handle_acquire_lock(int r, ImageRequest<I> *req) {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::handle_refreshed(int r, ImageRequest<I> *req) {
+void ImageRequestWQ<I>::handle_refreshed(
+    int r, ImageDispatchSpec<I> *req) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "resuming IO after image refresh: r=" << r << ", "
                 << "req=" << req << dendl;

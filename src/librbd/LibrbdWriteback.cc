@@ -100,6 +100,7 @@ namespace librbd {
     std::string oid;
     uint64_t object_no;
     uint64_t off;
+    uint64_t length;
     bufferlist bl;
     SnapContext snapc;
     uint64_t journal_tid;
@@ -109,12 +110,12 @@ namespace librbd {
 
     C_WriteJournalCommit(ImageCtx *_image_ctx, const std::string &_oid,
                          uint64_t _object_no, uint64_t _off,
-                         const bufferlist &_bl, const SnapContext& _snapc,
+                         bufferlist&& _bl, const SnapContext& _snapc,
                          uint64_t _journal_tid,
 			 const ZTracer::Trace &trace, Context *_req_comp)
       : image_ctx(_image_ctx), oid(_oid), object_no(_object_no), off(_off),
-        bl(_bl), snapc(_snapc), journal_tid(_journal_tid),
-        trace(trace), req_comp(_req_comp) {
+        length(_bl.length()), bl(std::move(_bl)), snapc(_snapc),
+        journal_tid(_journal_tid), trace(trace), req_comp(_req_comp) {
       CephContext *cct = image_ctx->cct;
       ldout(cct, 20) << this << " C_WriteJournalCommit: "
                      << "delaying write until journal tid "
@@ -150,7 +151,7 @@ namespace librbd {
 
       Extents file_extents;
       Striper::extent_to_file(cct, &image_ctx->layout, object_no, off,
-                              bl.length(), file_extents);
+                              length, file_extents);
       for (Extents::iterator it = file_extents.begin();
            it != file_extents.end(); ++it) {
         image_ctx->journal->commit_io_event_extent(journal_tid, it->first,
@@ -167,7 +168,8 @@ namespace librbd {
 
       request_sent = true;
       auto req = new io::ObjectWriteRequest<>(image_ctx, oid, object_no, off,
-                                              bl, snapc, 0, trace, this);
+                                              std::move(bl), snapc, 0, trace,
+                                              this);
       req->send();
     }
   };
@@ -221,12 +223,12 @@ namespace librbd {
     aio_comp->read_result = io::ReadResult{pbl};
     aio_comp->set_request_count(1);
 
-    auto req_comp = new io::ReadResult::C_SparseReadRequest<>(
-      aio_comp, {{0, len}}, false);
+    auto req_comp = new io::ReadResult::C_ObjectReadRequest(
+      aio_comp, off, len, {{0, len}}, false);
     auto req = io::ObjectReadRequest<>::create(m_ictx, oid.name, object_no, off,
                                                len, snapid, op_flags, true,
-                                               trace, req_comp);
-    req_comp->request = req;
+                                               trace, &req_comp->bl,
+                                               &req_comp->extent_map, req_comp);
     req->send();
   }
 
@@ -281,14 +283,16 @@ namespace librbd {
 
     // all IO operations are flushed prior to closing the journal
     assert(journal_tid == 0 || m_ictx->journal != NULL);
+    bufferlist bl_copy(bl);
     if (journal_tid != 0) {
       m_ictx->journal->flush_event(
         journal_tid, new C_WriteJournalCommit(
-	  m_ictx, oid.name, object_no, off, bl, snapc, journal_tid, trace,
-          req_comp));
+          m_ictx, oid.name, object_no, off, std::move(bl_copy), snapc,
+          journal_tid, trace, req_comp));
     } else {
       auto req = new io::ObjectWriteRequest<>(
-	m_ictx, oid.name, object_no, off, bl, snapc, 0, trace, req_comp);
+        m_ictx, oid.name, object_no, off, std::move(bl_copy), snapc, 0, trace,
+        req_comp);
       req->send();
     }
     return ++m_tid;

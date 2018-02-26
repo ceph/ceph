@@ -24,6 +24,12 @@ typedef enum {
   AIO_TYPE_COMPARE_AND_WRITE,
 } aio_type_t;
 
+enum FlushSource {
+  FLUSH_SOURCE_USER,
+  FLUSH_SOURCE_INTERNAL,
+  FLUSH_SOURCE_SHUTDOWN
+};
+
 enum Direction {
   DIRECTION_READ,
   DIRECTION_WRITE,
@@ -37,4 +43,3 @@ typedef std::map<uint64_t, uint64_t> ExtentMap;
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_IO_TYPES_H
-
