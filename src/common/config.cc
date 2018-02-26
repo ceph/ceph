@@ -1033,6 +1033,16 @@ Option::value_t md_config_t::_get_val(
   return _expand_meta(_get_val_default(o), &o, stack, err);
 }
 
+Option::value_t md_config_t::_get_val_nometa(const Option& o) const
+{
+  auto p = values.find(o.name);
+  if (p != values.end() && !p->second.empty()) {
+    // use highest-priority value available (see CONF_*)
+    return p->second.rbegin()->second;
+  }
+  return _get_val_default(o);
+}
+
 const Option::value_t& md_config_t::_get_val_default(const Option& o) const
 {
   bool has_daemon_default = !boost::get<boost::blank>(&o.daemon_value);
@@ -1310,7 +1320,7 @@ int md_config_t::_set_val(
       safe_to_start_threads &&
       observers.count(opt.name) == 0) {
     // accept value if it is not actually a change
-    if (new_value != _get_val(opt)) {
+    if (new_value != _get_val_nometa(opt)) {
       *error_message = string("Configuration option '") + opt.name +
 	"' may not be modified at runtime";
       return -ENOSYS;
