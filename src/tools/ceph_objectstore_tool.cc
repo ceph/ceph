@@ -76,7 +76,7 @@ bool dry_run;
 
 struct action_on_object_t {
   virtual ~action_on_object_t() {}
-  virtual int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) = 0;
+  virtual void call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) = 0;
 };
 
 int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_object_t &action, bool debug)
@@ -120,9 +120,7 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 	  }
 	}
       }
-      r = action.call(store, coll, *obj, oi);
-      if (r < 0)
-	return r;
+      action.call(store, coll, *obj, oi);
     }
   }
   return 0;
@@ -263,13 +261,13 @@ struct lookup_ghobject : public action_on_object_t {
   lookup_ghobject(const string& name, const boost::optional<std::string>& nspace, bool need_snapset = false) : _name(name),
 		  _namespace(nspace), _need_snapset(need_snapset) { }
 
-  int call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) override {
+  void call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) override {
     if (_need_snapset && !ghobj.hobj.has_snapset())
-      return 0;
+      return;
     if ((_name.length() == 0 || ghobj.hobj.oid.name == _name) &&
         (!_namespace || ghobj.hobj.nspace == _namespace))
       _objects.insert(coll, ghobj);
-    return 0;
+    return;
   }
 
   int size() const {
@@ -2294,7 +2292,7 @@ int do_set_omaphdr(ObjectStore *store, coll_t coll,
 }
 
 struct do_fix_lost : public action_on_object_t {
-  int call(ObjectStore *store, coll_t coll,
+  void call(ObjectStore *store, coll_t coll,
 		   ghobject_t &ghobj, object_info_t &oi) override {
     if (oi.is_lost()) {
       cout << coll << "/" << ghobj << " is lost";
@@ -2302,7 +2300,7 @@ struct do_fix_lost : public action_on_object_t {
         cout << ", fixing";
       cout << std::endl;
       if (dry_run)
-        return 0;
+        return;
       oi.clear_flag(object_info_t::FLAG_LOST);
       bufferlist bl;
       encode(oi, bl, -1);  /* fixme: using full features */
@@ -2311,7 +2309,7 @@ struct do_fix_lost : public action_on_object_t {
       auto ch = store->open_collection(coll);
       store->queue_transaction(ch, std::move(t));
     }
-    return 0;
+    return;
   }
 };
 
