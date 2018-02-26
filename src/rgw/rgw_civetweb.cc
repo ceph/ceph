@@ -86,6 +86,12 @@ int RGWCivetWeb::init_env(CephContext *cct)
     }
 
     const boost::string_ref name(header->name);
+
+    if (!header->value) {
+      lderr(cct) << "client supplied invalid headers key:" << name << dendl;
+      continue;
+    }
+
     const auto& value = header->value;
 
     if (boost::algorithm::iequals(name, "content-length")) {
