@@ -161,8 +161,10 @@ void Mgr::init()
   // Start communicating with daemons to learn statistics etc
   int r = server.init(monc->get_global_id(), client_messenger->get_myaddr());
   if (r < 0) {
-    derr << "Initialize server fail"<< dendl;
-    return;
+    derr << "Initialize server fail: " << cpp_strerror(r) << dendl;
+    // This is typically due to a bind() failure, so let's let
+    // systemd restart us.
+    exit(1);
   }
   dout(4) << "Initialized server at " << server.get_myaddr() << dendl;
 
