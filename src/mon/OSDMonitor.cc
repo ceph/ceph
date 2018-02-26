@@ -1414,7 +1414,7 @@ bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
   set<int> checked_osds;
   for (unsigned ps = 0; ps < std::min(8u, pool.get_pg_num()); ++ps) {
     vector<int> up, acting;
-    pg_t pgid(ps, pool_id, -1);
+    pg_t pgid(ps, pool_id);
     osdmap.pg_to_up_acting_osds(pgid, up, acting);
     for (int osd : up) {
       if (checked_osds.find(osd) != checked_osds.end())

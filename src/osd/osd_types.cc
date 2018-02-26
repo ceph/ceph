@@ -412,36 +412,26 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
 
 int pg_t::print(char *o, int maxlen) const
 {
-  if (preferred() >= 0)
-    return snprintf(o, maxlen, "%llu.%xp%d", (unsigned long long)pool(), ps(), preferred());
-  else
-    return snprintf(o, maxlen, "%llu.%x", (unsigned long long)pool(), ps());
+  return snprintf(o, maxlen, "%llu.%x", (unsigned long long)pool(), ps());
 }
 
 bool pg_t::parse(const char *s)
 {
   uint64_t ppool;
   uint32_t pseed;
-  int32_t pref;
-  int r = sscanf(s, "%llu.%xp%d", (long long unsigned *)&ppool, &pseed, &pref);
+  int r = sscanf(s, "%llu.%x", (long long unsigned *)&ppool, &pseed);
   if (r < 2)
     return false;
   m_pool = ppool;
   m_seed = pseed;
-  if (r == 3)
-    m_preferred = pref;
-  else
-    m_preferred = -1;
   return true;
 }
 
 bool spg_t::parse(const char *s)
 {
-  pgid.set_preferred(-1);
   shard = shard_id_t::NO_SHARD;
   uint64_t ppool;
   uint32_t pseed;
-  int32_t pref;
   uint32_t pshard;
   int r = sscanf(s, "%llu.%x", (long long unsigned *)&ppool, &pseed);
   if (r < 2)
@@ -449,17 +439,7 @@ bool spg_t::parse(const char *s)
   pgid.set_pool(ppool);
   pgid.set_ps(pseed);
 
-  const char *p = strchr(s, 'p');
-  if (p) {
-    r = sscanf(p, "p%d", &pref);
-    if (r == 1) {
-      pgid.set_preferred(pref);
-    } else {
-      return false;
-    }
-  }
-
-  p = strchr(s, 's');
+  const char *p = strchr(s, 's');
   if (p) {
     r = sscanf(p, "s%u", &pshard);
     if (r == 1) {
@@ -522,7 +502,7 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
       if ((unsigned)ceph_stable_mod(s, old_pg_num, old_mask) == m_seed) {
 	split = true;
 	if (children)
-	  children->insert(pg_t(s, m_pool, m_preferred));
+	  children->insert(pg_t(s, m_pool));
       }
     }
   }
@@ -534,7 +514,7 @@ bool pg_t::is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *childre
       unsigned o = ceph_stable_mod(x, old_pg_num, old_mask);
       if (o == m_seed) {
 	split = true;
-	children->insert(pg_t(x, m_pool, m_preferred));
+	children->insert(pg_t(x, m_pool));
       }
     }
   }
@@ -593,24 +573,20 @@ void pg_t::dump(Formatter *f) const
 {
   f->dump_unsigned("pool", m_pool);
   f->dump_unsigned("seed", m_seed);
-  f->dump_int("preferred_osd", m_preferred);
 }
 
 void pg_t::generate_test_instances(list<pg_t*>& o)
 {
   o.push_back(new pg_t);
-  o.push_back(new pg_t(1, 2, -1));
-  o.push_back(new pg_t(13123, 3, -1));
-  o.push_back(new pg_t(131223, 4, 23));
+  o.push_back(new pg_t(1, 2));
+  o.push_back(new pg_t(13123, 3));
+  o.push_back(new pg_t(131223, 4));
 }
 
 char *pg_t::calc_name(char *buf, const char *suffix_backwords) const
 {
   while (*suffix_backwords)
     *--buf = *suffix_backwords++;
-
-  if (m_preferred >= 0)
-    *--buf ='p';
 
   buf = ritoa<uint32_t, 16>(m_seed, buf);
 
@@ -2528,7 +2504,7 @@ void pg_stat_t::generate_test_instances(list<pg_stat_t*>& o)
   a.ondisk_log_start = eversion_t(1, 5);
   a.created = 6;
   a.last_epoch_clean = 7;
-  a.parent = pg_t(1, 2, 3);
+  a.parent = pg_t(1, 2);
   a.parent_split_bits = 12;
   a.last_scrub = eversion_t(9, 10);
   a.last_scrub_stamp = utime_t(11, 12);
@@ -2906,7 +2882,7 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   list<pg_history_t*> h;
   pg_history_t::generate_test_instances(h);
   o.back()->history = *h.back();
-  o.back()->pgid = spg_t(pg_t(1, 2, -1), shard_id_t::NO_SHARD);
+  o.back()->pgid = spg_t(pg_t(1, 2), shard_id_t::NO_SHARD);
   o.back()->last_update = eversion_t(3, 4);
   o.back()->last_complete = eversion_t(5, 6);
   o.back()->last_user_version = 2;
@@ -4527,7 +4503,7 @@ void pg_create_t::dump(Formatter *f) const
 void pg_create_t::generate_test_instances(list<pg_create_t*>& o)
 {
   o.push_back(new pg_create_t);
-  o.push_back(new pg_create_t(1, pg_t(3, 4, -1), 2));
+  o.push_back(new pg_create_t(1, pg_t(3, 4), 2));
 }
 
 
