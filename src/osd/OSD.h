@@ -1804,8 +1804,9 @@ protected:
   void note_up_osd(int osd);
   friend class C_OnMapCommit;
 
-  void advance_pg(
-    epoch_t advance_to, PG *pg,
+  bool advance_pg(
+    epoch_t advance_to,
+    PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx);
   void consume_map();
