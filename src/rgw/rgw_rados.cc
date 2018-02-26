@@ -10889,6 +10889,11 @@ int RGWRados::olh_init_modification_impl(const RGWBucketInfo& bucket_info, RGWOb
   }
 
   if (!has_tag) {
+    if (state.exists) {
+      /* guard against racing writes head object from null version to version */
+      op.cmpxattr(RGW_ATTR_ID_TAG, LIBRADOS_CMPXATTR_OP_EQ, state.obj_tag);
+    }
+
     /* obj tag */
     string obj_tag;
     gen_rand_alphanumeric_lower(cct, &obj_tag, 32);
