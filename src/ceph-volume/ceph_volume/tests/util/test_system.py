@@ -166,3 +166,29 @@ class TestIsBinary(object):
     def test_is_not_binary(self, tmpfile):
         binary_path = tmpfile(contents='asd\n\nlkjh0')
         assert system.is_binary(binary_path) is False
+
+
+class TestWhich(object):
+
+    def test_executable_exists_but_is_not_file(self, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: False)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: True)
+        assert system.which('exedir') == 'exedir'
+
+    def test_executable_does_not_exist(self, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: False)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
+        assert system.which('exedir') == 'exedir'
+
+    def test_executable_exists_as_file(self, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: True)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: True)
+        assert system.which('ceph') == '/usr/local/bin/ceph'
+
+    def test_warnings_when_executable_isnt_matched(self, monkeypatch, capsys):
+        monkeypatch.setattr(system.os.path, 'isfile', lambda x: True)
+        monkeypatch.setattr(system.os.path, 'exists', lambda x: False)
+        system.which('exedir')
+        stdout, stderr = capsys.readouterr()
+        assert 'Absolute path not found for executable: exedir' in stdout
+        assert 'Ensure $PATH environment variable contains common executable locations' in stdout
