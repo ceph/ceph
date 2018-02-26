@@ -109,7 +109,7 @@ template<typename I>
 void RemoveRequest<I>::check_exclusive_lock() {
   if (m_image_ctx->operations_disabled) {
     lderr(m_cct) << "image operations disabled due to unsupported op features" << dendl;
-    finish(-EROFS);
+    send_close_image(-EROFS);
     return;
   }
 
