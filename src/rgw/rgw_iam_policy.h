@@ -98,6 +98,11 @@ static constexpr std::uint64_t s3DeleteObjectVersionTagging = 1ULL << 53;
 static constexpr std::uint64_t s3Count = 54;
 static constexpr std::uint64_t s3All = (1ULL << s3Count) - 1;
 
+static constexpr std::uint64_t iamPutUserPolicy = 1ULL << 56;
+static constexpr std::uint64_t iamGetUserPolicy = 1ULL << 57;
+static constexpr std::uint64_t iamDeleteUserPolicy = 1ULL << 58;
+static constexpr std::uint64_t iamListUserPolicies = 1ULL << 59;
+
 namespace {
 inline int op_to_perm(std::uint64_t op) {
   switch (op) {

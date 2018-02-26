@@ -106,7 +106,7 @@ using ceph::crypto::MD5;
 
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
-
+#define RGW_ATTR_USER_POLICY    RGW_ATTR_PREFIX "user-policy"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -219,7 +219,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_ENCRYPTION_ALGORITHM                 2214
 
 #define ERR_BUSY_RESHARDING      2300
-
+#define ERR_NO_SUCH_ENTITY       2301
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif
@@ -501,6 +501,10 @@ enum RGWOpType {
   RGW_OP_PUT_LC,
   RGW_OP_GET_LC,
   RGW_OP_DELETE_LC,
+  RGW_OP_PUT_USER_POLICY,
+  RGW_OP_GET_USER_POLICY,
+  RGW_OP_LIST_USER_POLICIES,
+  RGW_OP_DELETE_USER_POLICY,
   /* rgw specific */
   RGW_OP_ADMIN_SET_METADATA,
   RGW_OP_GET_OBJ_LAYOUT,

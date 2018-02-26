@@ -443,7 +443,10 @@ static const actpair actpairs[] =
  { "s3:PutObjectTagging", s3PutObjectTagging },
  { "s3:PutObjectVersionTagging", s3PutObjectVersionTagging },
  { "s3:PutReplicationConfiguration", s3PutReplicationConfiguration },
- { "s3:RestoreObject", s3RestoreObject }};
+ { "s3:RestoreObject", s3RestoreObject },
+ { "iam:PutUserPolicy", iamPutUserPolicy },
+ { "iam:GetUserPolicy", iamGetUserPolicy },
+ { "iam:DeleteUserPolicy", iamDeleteUserPolicy }};
 
 struct PolicyParser;
 
@@ -799,10 +802,14 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
   } else if ((w->id == TokenID::Action) ||
 	     (w->id == TokenID::NotAction)) {
     is_action = true;
-    for (auto& p : actpairs) {
-      if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
-        is_validaction = true;
-	(w->id == TokenID::Action ? t->action : t->notaction) |= p.bit;
+    if (*s == '*') {
+      is_validaction = true;
+    } else {
+      for (auto& p : actpairs) {
+        if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
+          is_validaction = true;
+    (w->id == TokenID::Action ? t->action : t->notaction) |= p.bit;
+        }
       }
     }
   } else if (w->id == TokenID::Resource || w->id == TokenID::NotResource) {
