@@ -271,7 +271,8 @@ void Replay<I>::shut_down(bool cancel_ops, Context *on_finish) {
   // execute the following outside of lock scope
   if (flush_comp != nullptr) {
     RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-    io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp, {});
+    io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
+                                   io::FLUSH_SOURCE_INTERNAL, {});
   }
   if (on_finish != nullptr) {
     on_finish->complete(0);
@@ -291,7 +292,8 @@ void Replay<I>::flush(Context *on_finish) {
   }
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  io::ImageRequest<I>::aio_flush(&m_image_ctx, aio_comp, {});
+  io::ImageRequest<I>::aio_flush(&m_image_ctx, aio_comp,
+                                 io::FLUSH_SOURCE_INTERNAL, {});
 }
 
 template <typename I>
@@ -348,16 +350,17 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
     return;
   }
 
-  io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, event.offset,
-                                   event.length, event.skip_partial_discard,
-				   {});
+  io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
+                                   {{event.offset, event.length}},
+                                   event.skip_partial_discard, {});
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
     m_lock.Unlock();
 
     if (flush_comp != nullptr) {
-      io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp, {});
+      io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
+                                     io::FLUSH_SOURCE_INTERNAL, {});
     }
   }
 }
@@ -387,7 +390,8 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
     m_lock.Unlock();
 
     if (flush_comp != nullptr) {
-      io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp, {});
+      io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
+                                     io::FLUSH_SOURCE_INTERNAL, {});
     }
   }
 }
@@ -405,7 +409,8 @@ void Replay<I>::handle_event(const journal::AioFlushEvent &event,
   }
 
   if (aio_comp != nullptr) {
-    io::ImageRequest<I>::aio_flush(&m_image_ctx, aio_comp, {});
+    io::ImageRequest<I>::aio_flush(&m_image_ctx, aio_comp,
+                                   io::FLUSH_SOURCE_INTERNAL, {});
   }
   on_ready->complete(0);
 }
@@ -426,15 +431,17 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
     return;
   }
 
-  io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp, event.offset,
-                                     event.length, std::move(data), 0, {});
+  io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp,
+                                     {{event.offset, event.length}},
+                                     std::move(data), 0, {});
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
     m_lock.Unlock();
 
     if (flush_comp != nullptr) {
-      io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp, {});
+      io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
+                                     io::FLUSH_SOURCE_INTERNAL, {});
     }
   }
 }
@@ -462,7 +469,8 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
     auto flush_comp = create_aio_flush_completion(nullptr);
     m_lock.Unlock();
 
-    io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp, {});
+    io::ImageRequest<I>::aio_flush(&m_image_ctx, flush_comp,
+                                   io::FLUSH_SOURCE_INTERNAL, {});
   }
 }
 
