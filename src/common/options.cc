@@ -2746,7 +2746,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_scrub_chunk_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(25)
-    .set_description("Maximum number of object to scrub in a single chunk")
+    .set_description("Maximum number of objects to scrub in a single chunk")
     .add_see_also("osd_scrub_chunk_min"),
 
     Option("osd_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -2777,7 +2777,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("osd_deep_scrub_interval"),
 
     Option("osd_deep_scrub_stride", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(524288)
+    .set_default(512_K)
     .set_description("Number of bytes to read from an object at a time during deep scrub"),
 
     Option("osd_deep_scrub_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
