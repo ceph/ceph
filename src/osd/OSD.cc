@@ -7853,11 +7853,14 @@ void OSD::_finish_splits(set<PGRef>& pgs)
   dispatch_context(rctx, 0, service.get_osdmap());
 };
 
-void OSD::advance_pg(
+bool OSD::advance_pg(
   epoch_t osd_epoch, PG *pg,
   ThreadPool::TPHandle &handle,
   PG::RecoveryCtx *rctx)
 {
+  if (osd_epoch <= pg->get_osdmap_epoch()) {
+    return true;
+  }
   ceph_assert(pg->is_locked());
   OSDMapRef lastmap = pg->get_osdmap();
   ceph_assert(lastmap->get_epoch() < osd_epoch);
@@ -7902,6 +7905,8 @@ void OSD::advance_pg(
   if (!new_pgs.empty()) {
     rctx->transaction->register_on_applied(new C_FinishSplits(this, new_pgs));
   }
+
+  return true;
 }
 
 void OSD::consume_map()
@@ -8994,10 +8999,7 @@ void OSD::dequeue_peering_evt(
       derr << __func__ << " unrecognized pg-less event " << evt->get_desc() << dendl;
       ceph_abort();
     }
-  } else {
-    if (curmap->get_epoch() > pg->get_osdmap_epoch()) {
-      advance_pg(curmap->get_epoch(), pg, handle, &rctx);
-    }
+  } else if (advance_pg(curmap->get_epoch(), pg, handle, &rctx)) {
     pg->do_peering_event(evt, &rctx);
     if (pg->is_deleted()) {
       // do not dispatch rctx; the final _delete_some already did it.
