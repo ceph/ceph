@@ -7,6 +7,7 @@ import json
 import cherrypy
 from mgr_module import CommandResult
 
+from .. import mgr
 from ..tools import ApiController, AuthRequired, BaseController, ViewCache
 
 
@@ -66,7 +67,7 @@ class CephFS(BaseController):
         for mds_name in mds_names:
             result[mds_name] = {}
             for counter in counters:
-                data = self.mgr.get_counter("mds", mds_name, counter)
+                data = mgr.get_counter("mds", mds_name, counter)
                 if data is not None:
                     result[mds_name][counter] = data[counter]
                 else:
@@ -84,7 +85,7 @@ class CephFS(BaseController):
     def _get_mds_names(self, filesystem_id=None):
         names = []
 
-        fsmap = self.mgr.get("fs_map")
+        fsmap = mgr.get("fs_map")
         for fs in fsmap['filesystems']:
             if filesystem_id is not None and fs['id'] != filesystem_id:
                 continue
@@ -97,7 +98,7 @@ class CephFS(BaseController):
         return names
 
     def get_rate(self, daemon_type, daemon_name, stat):
-        data = self.mgr.get_counter(daemon_type, daemon_name, stat)[stat]
+        data = mgr.get_counter(daemon_type, daemon_name, stat)[stat]
 
         if data and len(data) > 1:
             return (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
@@ -108,7 +109,7 @@ class CephFS(BaseController):
     def fs_status(self, fs_id):
         mds_versions = defaultdict(list)
 
-        fsmap = self.mgr.get("fs_map")
+        fsmap = mgr.get("fs_map")
         filesystem = None
         for fs in fsmap['filesystems']:
             if fs['id'] == fs_id:
@@ -163,7 +164,7 @@ class CephFS(BaseController):
                                              info['name'],
                                              "mds_server.handle_client_request")
 
-                metadata = self.mgr.get_metadata('mds', info['name'])
+                metadata = mgr.get_metadata('mds', info['name'])
                 mds_versions[metadata.get('ceph_version', 'unknown')].append(
                     info['name'])
                 rank_table.append(
@@ -212,9 +213,9 @@ class CephFS(BaseController):
                 }
             )
 
-        df = self.mgr.get("df")
+        df = mgr.get("df")
         pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
-        osdmap = self.mgr.get("osd_map")
+        osdmap = mgr.get("osd_map")
         pools = dict([(p['pool'], p) for p in osdmap['pools']])
         metadata_pool_id = mdsmap['metadata_pool']
         data_pool_ids = mdsmap['data_pools']
@@ -232,7 +233,7 @@ class CephFS(BaseController):
 
         standby_table = []
         for standby in fsmap['standbys']:
-            metadata = self.mgr.get_metadata('mds', standby['name'])
+            metadata = mgr.get_metadata('mds', standby['name'])
             mds_versions[metadata.get('ceph_version', 'unknown')].append(
                 standby['name'])
 
@@ -255,7 +256,7 @@ class CephFS(BaseController):
     def _clients(self, fs_id):
         cephfs_clients = self.cephfs_clients.get(fs_id, None)
         if cephfs_clients is None:
-            cephfs_clients = CephFSClients(self.mgr, fs_id)
+            cephfs_clients = CephFSClients(mgr, fs_id)
             self.cephfs_clients[fs_id] = cephfs_clients
 
         try:
@@ -290,7 +291,7 @@ class CephFS(BaseController):
         }
 
     def get_latest(self, daemon_type, daemon_name, stat):
-        data = self.mgr.get_counter(daemon_type, daemon_name, stat)[stat]
+        data = mgr.get_counter(daemon_type, daemon_name, stat)[stat]
         if data:
             return data[-1][1]
         return 0

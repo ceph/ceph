@@ -1,4 +1,9 @@
+# -*- coding: utf-8 -*-
+from __future__ import absolute_import
+
 import cherrypy
+
+from .. import mgr
 from ..tools import ApiController, RESTController, AuthRequired
 
 
@@ -10,7 +15,7 @@ class ClusterConfiguration(RESTController):
         if level is not None:
             assert level in levels
 
-        options = self.mgr.get("config_options")['options']
+        options = mgr.get("config_options")['options']
 
         if service is not None:
             options = [o for o in options if service in o['services']]
@@ -24,7 +29,7 @@ class ClusterConfiguration(RESTController):
         return options
 
     def get(self, name):
-        for option in self.mgr.get('config_options')['options']:
+        for option in mgr.get('config_options')['options']:
             if option['name'] == name:
                 return option
 

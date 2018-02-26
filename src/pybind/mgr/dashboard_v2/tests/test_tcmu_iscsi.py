@@ -2,6 +2,7 @@ from cherrypy.test.helper import CPWebCase
 import cherrypy
 import mock
 
+from .. import mgr
 from ..controllers.auth import Auth
 from ..services import Service
 from ..tools import SessionExpireAtBrowserCloseTool
@@ -50,15 +51,12 @@ class TcmuIscsiControllerTest(ControllerTestCase, CPWebCase):
 
     @classmethod
     def setup_test(cls):
-        mgr_mock = mock.Mock()
-        mgr_mock.list_servers.return_value = mocked_servers
-        mgr_mock.get_metadata.return_value = mocked_metadata
-        mgr_mock.get_daemon_status.return_value = mocked_get_daemon_status
-        mgr_mock.get_counter.return_value = mocked_get_counter
-        mgr_mock.get_rate.return_value = mocked_get_rate
-        mgr_mock.url_prefix = ''
-        Service.mgr = mgr_mock
-        TcmuIscsi.mgr = mgr_mock
+        mgr.list_servers.return_value = mocked_servers
+        mgr.get_metadata.return_value = mocked_metadata
+        mgr.get_daemon_status.return_value = mocked_get_daemon_status
+        mgr.get_counter.return_value = mocked_get_counter
+        mgr.get_rate.return_value = mocked_get_rate
+        mgr.url_prefix = ''
         TcmuIscsi._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
         cherrypy.tree.mount(TcmuIscsi(), "/api/test/tcmu")

@@ -9,6 +9,7 @@ import time
 import cherrypy
 from mgr_module import CommandResult
 
+from .. import mgr
 from ..tools import ApiController, AuthRequired, BaseController, NotificationQueue
 
 
@@ -34,7 +35,7 @@ class Dashboard(BaseController):
 
     def load_buffer(self, buf, channel_name):
         result = CommandResult("")
-        self.mgr.send_command(result, "mon", "", json.dumps({
+        mgr.send_command(result, "mon", "", json.dumps({
             "prefix": "log last",
             "format": "json",
             "channel": channel_name,
@@ -71,14 +72,14 @@ class Dashboard(BaseController):
 
         osd_map = self.osd_map()
 
-        pg_summary = self.mgr.get("pg_summary")
+        pg_summary = mgr.get("pg_summary")
 
         pools = []
 
         pool_stats = defaultdict(lambda: defaultdict(
             lambda: collections.deque(maxlen=10)))
 
-        df = self.mgr.get("df")
+        df = mgr.get("df")
         pool_stats_dict = dict([(p['id'], p['stats']) for p in df['pools']])
         now = time.time()
         for pool_id, stats in pool_stats_dict.items():
@@ -115,33 +116,33 @@ class Dashboard(BaseController):
         return {
             "health": self.health_data(),
             "mon_status": self.mon_status(),
-            "fs_map": self.mgr.get('fs_map'),
+            "fs_map": mgr.get('fs_map'),
             "osd_map": osd_map,
             "clog": list(self.log_buffer),
             "audit_log": list(self.audit_buffer),
             "pools": pools,
-            "mgr_map": self.mgr.get("mgr_map"),
+            "mgr_map": mgr.get("mgr_map"),
             "df": df
         }
 
     def mon_status(self):
-        mon_status_data = self.mgr.get("mon_status")
+        mon_status_data = mgr.get("mon_status")
         return json.loads(mon_status_data['json'])
 
     def osd_map(self):
-        osd_map = self.mgr.get("osd_map")
+        osd_map = mgr.get("osd_map")
 
         assert osd_map is not None
 
-        osd_map['tree'] = self.mgr.get("osd_map_tree")
-        osd_map['crush'] = self.mgr.get("osd_map_crush")
-        osd_map['crush_map_text'] = self.mgr.get("osd_map_crush_map_text")
-        osd_map['osd_metadata'] = self.mgr.get("osd_metadata")
+        osd_map['tree'] = mgr.get("osd_map_tree")
+        osd_map['crush'] = mgr.get("osd_map_crush")
+        osd_map['crush_map_text'] = mgr.get("osd_map_crush_map_text")
+        osd_map['osd_metadata'] = mgr.get("osd_metadata")
 
         return osd_map
 
     def health_data(self):
-        health_data = self.mgr.get("health")
+        health_data = mgr.get("health")
         health = json.loads(health_data['json'])
 
         # Transform the `checks` dict into a list for the convenience

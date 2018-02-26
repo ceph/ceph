@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+from .. import mgr
 from ..services.ceph_service import CephService
 from ..tools import ApiController, AuthRequired, RESTController
 
@@ -52,7 +53,7 @@ class TcmuIscsi(RESTController):
                     pool=metadata['pool_name'],
                     name=metadata['image_name'])
                 perf_key = "{}lock_acquired_time".format(perf_key_prefix)
-                lock_acquired_time = (self.mgr.get_counter(
+                lock_acquired_time = (mgr.get_counter(
                     'tcmu-runner', service_id, perf_key)[perf_key] or
                                       [[0, 0]])[-1][1] / 1000000000
                 if lock_acquired_time > image.get('optimized_since', 0):
@@ -61,9 +62,9 @@ class TcmuIscsi(RESTController):
                     image['stats_history'] = {}
                     for s in ['rd', 'wr', 'rd_bytes', 'wr_bytes']:
                         perf_key = "{}{}".format(perf_key_prefix, s)
-                        image['stats'][s] = self.mgr.get_rate(
+                        image['stats'][s] = mgr.get_rate(
                             'tcmu-runner', service_id, perf_key)
-                        image['stats_history'][s] = self.mgr.get_counter(
+                        image['stats_history'][s] = mgr.get_counter(
                             'tcmu-runner', service_id, perf_key)[perf_key]
             else:
                 daemon['non_optimized_paths'] += 1

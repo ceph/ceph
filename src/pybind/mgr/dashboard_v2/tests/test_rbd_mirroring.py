@@ -4,6 +4,7 @@ import mock
 import cherrypy
 from cherrypy.test.helper import CPWebCase
 
+from .. import mgr
 from ..controllers.auth import Auth
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirror
@@ -59,26 +60,21 @@ class RbdMirroringControllerTest(ControllerTestCase, CPWebCase):
 
     @classmethod
     def setup_test(cls):
-        mgr_mock = mock.Mock()
-        mgr_mock.list_servers.return_value = mock_list_servers
-        mgr_mock.get_metadata.return_value = mock_get_metadata
-        mgr_mock.get_daemon_status.return_value = mock_get_daemon_status
-        mgr_mock.get.side_effect = lambda key: {
+        mgr.list_servers.return_value = mock_list_servers
+        mgr.get_metadata.return_value = mock_get_metadata
+        mgr.get_daemon_status.return_value = mock_get_daemon_status
+        mgr.get.side_effect = lambda key: {
             'osd_map': mock_osd_map,
             'health': {'json': '{"status": 1}'},
             'fs_map': {'filesystems': []},
 
         }[key]
-        mgr_mock.url_prefix = ''
-        mgr_mock.get_mgr_id.return_value = 0
-        mgr_mock.have_mon_connection.return_value = True
+        mgr.url_prefix = ''
+        mgr.get_mgr_id.return_value = 0
+        mgr.have_mon_connection.return_value = True
 
-        Service.mgr = mgr_mock
-
-        RbdMirror.mgr = mgr_mock
         RbdMirror._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
-        Summary.mgr = mgr_mock
         Summary._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
         cherrypy.tree.mount(RbdMirror(), '/api/test/rbdmirror')

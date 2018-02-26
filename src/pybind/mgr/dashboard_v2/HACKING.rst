@@ -315,21 +315,21 @@ Now only authenticated users will be able to "ping" your controller.
 How to access the manager module instance from a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each controller class derived from ``BaseController``has a class property that
-points to the manager module global instance. The property is named ``mgr``.
-There is another class property called ``logger`` to easily add log messages.
+We provide the manager module instance as a global variable that can be
+imported in any module. We also provide a logger instance in the same way.
 
 Example::
 
   import cherrypy
+  from .. import logger, mgr
   from ..tools import ApiController, RESTController
 
 
   @ApiController('servers')
   class Servers(RESTController):
     def list(self):
-      self.logger.debug('Listing available servers')
-      return {'servers': self.mgr.list_servers()}
+      logger.debug('Listing available servers')
+      return {'servers': mgr.list_servers()}
 
 
 How to write a unit test for a controller?
@@ -435,13 +435,14 @@ Consider the following example that implements a controller that retrieves the
 list of RBD images of the ``rbd`` pool::
 
   import rbd
+  from .. import mgr
   from ..tools import ApiController, RESTController
 
 
   @ApiController('rbdimages')
   class RbdImages(RESTController):
       def __init__(self):
-          self.ioctx = self.mgr.rados.open_ioctx('rbd')
+          self.ioctx = mgr.rados.open_ioctx('rbd')
           self.rbd = rbd.RBD()
 
       def list(self):

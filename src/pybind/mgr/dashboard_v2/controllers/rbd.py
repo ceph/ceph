@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import rbd
 
+from .. import mgr
 from ..tools import ApiController, AuthRequired, RESTController, ViewCache
 
 
@@ -38,7 +39,7 @@ class Rbd(RESTController):
 
     @ViewCache()
     def _rbd_list(self, pool_name):
-        ioctx = self.mgr.rados.open_ioctx(pool_name)
+        ioctx = mgr.rados.open_ioctx(pool_name)
         self.rbd = rbd.RBD()
         names = self.rbd.list(ioctx)
         result = []

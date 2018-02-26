@@ -4,15 +4,16 @@ from __future__ import absolute_import
 import json
 
 from mgr_module import CommandResult
+
+from .. import logger, mgr
 from ..tools import ApiController, AuthRequired, RESTController
-from .. import logger
 
 
 @ApiController('osd')
 @AuthRequired()
 class Osd(RESTController):
     def get_counter(self, daemon_name, stat):
-        return self.mgr.get_counter('osd', daemon_name, stat)[stat]
+        return mgr.get_counter('osd', daemon_name, stat)[stat]
 
     def get_rate(self, daemon_name, stat):
         data = self.get_counter(daemon_name, stat)
@@ -31,10 +32,10 @@ class Osd(RESTController):
     def list(self):
         osds = self.get_osd_map()
         # Extending by osd stats information
-        for s in self.mgr.get('osd_stats')['osd_stats']:
+        for s in mgr.get('osd_stats')['osd_stats']:
             osds[str(s['osd'])].update({'osd_stats': s})
         # Extending by osd node information
-        nodes = self.mgr.get('osd_map_tree')['nodes']
+        nodes = mgr.get('osd_map_tree')['nodes']
         osd_tree = [(str(o['id']), o) for o in nodes if o['id'] >= 0]
         for o in osd_tree:
             osds[o[0]].update({'tree': o[1]})
@@ -61,18 +62,18 @@ class Osd(RESTController):
 
     def get_osd_map(self):
         osds = {}
-        for osd in self.mgr.get('osd_map')['osds']:
+        for osd in mgr.get('osd_map')['osds']:
             osd['id'] = osd['osd']
             osds[str(osd['id'])] = osd
         return osds
 
     def get(self, svc_id):
         result = CommandResult('')
-        self.mgr.send_command(result, 'osd', svc_id,
-                              json.dumps({
-                                  'prefix': 'perf histogram dump',
-                              }),
-                              '')
+        mgr.send_command(result, 'osd', svc_id,
+                         json.dumps({
+                             'prefix': 'perf histogram dump',
+                         }),
+                         '')
         r, outb, outs = result.wait()
         if r != 0:
             histogram = None
@@ -83,6 +84,6 @@ class Osd(RESTController):
             histogram = json.loads(outb)
         return {
             'osd_map': self.get_osd_map()[svc_id],
-            'osd_metadata': self.mgr.get_metadata('osd', svc_id),
+            'osd_metadata': mgr.get_metadata('osd', svc_id),
             'histogram': histogram,
         }

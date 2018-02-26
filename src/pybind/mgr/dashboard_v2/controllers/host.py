@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+from .. import mgr
 from ..tools import ApiController, AuthRequired, RESTController
 
 
@@ -8,4 +9,4 @@ from ..tools import ApiController, AuthRequired, RESTController
 @AuthRequired()
 class Host(RESTController):
     def list(self):
-        return self.mgr.list_servers()
+        return mgr.list_servers()
