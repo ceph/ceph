@@ -1563,7 +1563,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       goto replace;
     }
 
-    ldout(async_msgr->cct, 0) << __func__ << " accept connect_seq " << connect.connect_seq
+    ldout(async_msgr->cct, 1) << __func__ << " accept connect_seq " << connect.connect_seq
                               << " vs existing csq=" << existing->connect_seq << " existing_state="
                               << get_state_name(existing->state) << dendl;
 
