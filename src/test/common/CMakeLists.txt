@@ -233,6 +233,12 @@ add_executable(unittest_perf_histogram
 add_ceph_unittest(unittest_perf_histogram)
 target_link_libraries(unittest_perf_histogram ceph-common)
 
+# unittest_seq
+add_executable(unittest_seq
+  test_seq.cc
+  )
+add_ceph_unittest(unittest_seq)
+
 # unittest_global_doublefree
 if(WITH_CEPHFS)
   add_executable(unittest_global_doublefree
