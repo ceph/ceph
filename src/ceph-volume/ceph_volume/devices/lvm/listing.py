@@ -119,11 +119,18 @@ class List(object):
         """
         Generate a report for a single device. This can be either a logical
         volume in the form of vg/lv or a device with an absolute path like
-        /dev/sda1
+        /dev/sda1 or /dev/sda
         """
         lvs = api.Volumes()
         report = {}
         lv = api.get_lv_from_argument(device)
+
+        # check if there was a pv created with the
+        # name of device
+        pv = api.get_pv(pv_name=device)
+        if pv and not lv:
+            lv = api.get_lv(vg_name=pv.vg_name)
+
         if lv:
             try:
                 _id = lv.tags['ceph.osd_id']
