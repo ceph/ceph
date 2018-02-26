@@ -2,13 +2,14 @@
 from __future__ import absolute_import
 
 from . import Service
+from .. import mgr
 
 
 class CephService(Service):
     @classmethod
     def get_service_map(cls, service_name):
         service_map = {}
-        for server in cls.mgr.list_servers():
+        for server in mgr.list_servers():
             for service in server['services']:
                 if service['type'] == service_name:
                     if server['hostname'] not in service_map:
@@ -17,8 +18,8 @@ class CephService(Service):
                             'services': []
                         }
                     inst_id = service['id']
-                    metadata = cls.mgr.get_metadata(service_name, inst_id)
-                    status = cls.mgr.get_daemon_status(service_name, inst_id)
+                    metadata = mgr.get_metadata(service_name, inst_id)
+                    status = mgr.get_daemon_status(service_name, inst_id)
                     service_map[server['hostname']]['services'].append({
                         'id': inst_id,
                         'type': service_name,
@@ -35,13 +36,13 @@ class CephService(Service):
 
     @classmethod
     def get_service(cls, service_name, service_id):
-        for server in cls.mgr.list_servers():
+        for server in mgr.list_servers():
             for service in server['services']:
                 if service['type'] == service_name:
                     inst_id = service['id']
                     if inst_id == service_id:
-                        metadata = cls.mgr.get_metadata(service_name, inst_id)
-                        status = cls.mgr.get_daemon_status(service_name, inst_id)
+                        metadata = mgr.get_metadata(service_name, inst_id)
+                        status = mgr.get_daemon_status(service_name, inst_id)
                         return {
                             'id': inst_id,
                             'type': service_name,
@@ -53,7 +54,7 @@ class CephService(Service):
 
     @classmethod
     def get_pool_list(cls, application=None):
-        osd_map = cls.mgr.get('osd_map')
+        osd_map = mgr.get('osd_map')
         if not application:
             return osd_map['pools']
         return [pool for pool in osd_map['pools']

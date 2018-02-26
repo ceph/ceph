@@ -9,13 +9,13 @@ from functools import partial
 import cherrypy
 import rbd
 
+from .. import logger, mgr
 from ..services.ceph_service import CephService
 from ..tools import ApiController, AuthRequired, BaseController, ViewCache
-from .. import logger
 
 
 @ViewCache()
-def get_daemons_and_pools(mgr):  # pylint: disable=R0915
+def get_daemons_and_pools():  # pylint: disable=R0915
     def get_daemons():
         daemons = []
         for hostname, server in CephService.get_service_map('rbd-mirror').items():
@@ -170,7 +170,7 @@ class RbdMirror(BaseController):
         data = {}
         logger.debug("Constructing IOCtx %s", pool_name)
         try:
-            ioctx = self.mgr.rados.open_ioctx(pool_name)
+            ioctx = mgr.rados.open_ioctx(pool_name)
         except TypeError:
             logger.exception("Failed to open pool %s", pool_name)
             return None
@@ -247,7 +247,7 @@ class RbdMirror(BaseController):
             return value
 
         pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
-        _, data = get_daemons_and_pools(self.mgr)
+        _, data = get_daemons_and_pools()
         if isinstance(data, Exception):
             logger.exception("Failed to get rbd-mirror daemons list")
             raise type(data)(str(data))

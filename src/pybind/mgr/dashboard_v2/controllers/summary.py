@@ -5,10 +5,10 @@ import json
 
 import cherrypy
 
+from .. import logger, mgr
 from ..controllers.rbd_mirroring import get_daemons_and_pools
 from ..tools import AuthRequired, ApiController, BaseController
 from ..services.ceph_service import CephService
-from .. import logger
 
 
 @ApiController('summary')
@@ -19,11 +19,11 @@ class Summary(BaseController):
         return sorted(pool_names)
 
     def _health_status(self):
-        health_data = self.mgr.get("health")
+        health_data = mgr.get("health")
         return json.loads(health_data["json"])['status']
 
     def _filesystems(self):
-        fsmap = self.mgr.get("fs_map")
+        fsmap = mgr.get("fs_map")
         return [
             {
                 "id": f['id'],
@@ -33,7 +33,7 @@ class Summary(BaseController):
         ]
 
     def _rbd_mirroring(self):
-        _, data = get_daemons_and_pools(self.mgr)
+        _, data = get_daemons_and_pools()
 
         if isinstance(data, Exception):
             logger.exception("Failed to get rbd-mirror daemons and pools")
@@ -64,6 +64,6 @@ class Summary(BaseController):
             'health_status': self._health_status(),
             'filesystems': self._filesystems(),
             'rbd_mirroring': self._rbd_mirroring(),
-            'mgr_id': self.mgr.get_mgr_id(),
-            'have_mon_connection': self.mgr.have_mon_connection()
+            'mgr_id': mgr.get_mgr_id(),
+            'have_mon_connection': mgr.have_mon_connection()
         }

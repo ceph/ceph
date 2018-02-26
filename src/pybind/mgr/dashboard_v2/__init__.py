@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=wrong-import-position,global-statement,protected-access
 """
 openATTIC module
 """
@@ -10,16 +11,31 @@ import os
 if 'UNITTEST' not in os.environ:
     class _LoggerProxy(object):
         def __init__(self):
-            self.logger = None
+            self._logger = None
 
         def __getattr__(self, item):
-            if self.logger is None:
-                raise AttributeError("Logging not initialized")
-            return getattr(self.logger, item)
+            if self._logger is None:
+                raise AttributeError("logger not initialized")
+            return getattr(self._logger, item)
 
+    class _ModuleProxy(object):
+        def __init__(self):
+            self._mgr = None
+
+        def init(self, module_inst):
+            global logger
+            self._mgr = module_inst
+            logger._logger = self._mgr._logger
+
+        def __getattr__(self, item):
+            if self._mgr is None:
+                raise AttributeError("global manager module instance not initialized")
+            return getattr(self._mgr, item)
+
+    mgr = _ModuleProxy()
     logger = _LoggerProxy()
-    # pylint: disable=wildcard-import, wrong-import-position
-    from .module import *  # NOQA
+
+    from .module import Module, StandbyModule
 else:
     import logging
     logging.basicConfig(level=logging.DEBUG)
@@ -33,3 +49,5 @@ else:
     import sys
     import mock
     sys.modules['ceph_module'] = mock.Mock()
+
+    mgr = mock.Mock()

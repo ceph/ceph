@@ -5,6 +5,7 @@ import json
 
 import cherrypy
 
+from .. import mgr
 from ..tools import ApiController, AuthRequired, BaseController
 
 
@@ -18,13 +19,13 @@ class Monitor(BaseController):
 
         counters = ['mon.num_sessions']
 
-        mon_status_json = self.mgr.get("mon_status")
+        mon_status_json = mgr.get("mon_status")
         mon_status = json.loads(mon_status_json['json'])
 
         for mon in mon_status["monmap"]["mons"]:
             mon["stats"] = {}
             for counter in counters:
-                data = self.mgr.get_counter("mon", mon["name"], counter)
+                data = mgr.get_counter("mon", mon["name"], counter)
                 if data is not None:
                     mon["stats"][counter.split(".")[1]] = data[counter]
                 else:
