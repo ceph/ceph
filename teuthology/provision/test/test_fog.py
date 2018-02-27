@@ -252,7 +252,7 @@ class TestFOG(object):
 
     @mark.parametrize(
         'tries',
-        [3, 45],
+        [3, 61],
     )
     def test_wait_for_deploy_task(self, tries):
         wait_results = [True for i in range(tries)] + [False]
@@ -262,7 +262,7 @@ class TestFOG(object):
             deploy_task_active=DEFAULT,
         ) as local_mocks:
             local_mocks['deploy_task_active'].side_effect = wait_results
-            if tries >= 40:
+            if tries >= 60:
                 with raises(MaxWhileTries):
                     obj.wait_for_deploy_task(9)
                 return
