@@ -42,8 +42,8 @@ bool ObjectDispatch<I>::read(
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   auto req = new ObjectReadRequest<I>(m_image_ctx, oid, object_no, object_off,
                                       object_len, snap_id, op_flags,
-                                      false, parent_trace, read_data,
-                                      extent_map, on_dispatched);
+                                      parent_trace, read_data, extent_map,
+                                      on_dispatched);
   req->send();
   return true;
 }
