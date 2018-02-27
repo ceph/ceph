@@ -46,6 +46,8 @@ static const std::string RBD_DIFF_BANNER_V2 ("rbd diff v2\n");
 #define RBD_DIFF_ZERO		'z'
 #define RBD_DIFF_END		'e'
 
+#define RBD_SNAP_PROTECTION_STATUS     'p'
+
 #define RBD_EXPORT_IMAGE_ORDER		'O'
 #define RBD_EXPORT_IMAGE_FEATURES	'T'
 #define RBD_EXPORT_IMAGE_STRIPE_UNIT	'U'

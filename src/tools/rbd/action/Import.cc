@@ -184,6 +184,21 @@ static int do_image_snap_to(ImportDiffContext *idiffctx, std::string *tosnap)
   return 0;
 }
 
+static int get_snap_protection_status(ImportDiffContext *idiffctx, bool *is_protected)
+{
+  int r;
+  char buf[sizeof(__u8)];
+  r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
+  if (r < 0) {
+    return r;
+  }
+
+  *is_protected = (buf[0] != 0);
+  idiffctx->update_progress();
+
+  return 0;
+}
+
 static int do_image_resize(ImportDiffContext *idiffctx)
 {
   int r;
@@ -371,6 +386,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
 
   // begin image import
   std::string tosnap;
+  bool is_protected = false;
   ImportDiffContext idiffctx(&image, fd, size, no_progress);
   while (r == 0) {
     __u8 tag;
@@ -385,6 +401,8 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
       r = do_image_snap_from(&idiffctx);
     } else if (tag == RBD_DIFF_TO_SNAP) {
       r = do_image_snap_to(&idiffctx, &tosnap);
+    } else if (tag == RBD_SNAP_PROTECTION_STATUS) {
+      r = get_snap_protection_status(&idiffctx, &is_protected);
     } else if (tag == RBD_DIFF_IMAGE_SIZE) {
       r = do_image_resize(&idiffctx);
     } else if (tag == RBD_DIFF_WRITE || tag == RBD_DIFF_ZERO) {
@@ -399,7 +417,10 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
   int temp_r = idiffctx.throttle.wait_for_ret();
   r = (r < 0) ? r : temp_r; // preserve original error
   if (r == 0 && tosnap.length()) {
-    idiffctx.image->snap_create(tosnap.c_str());
+    r = idiffctx.image->snap_create(tosnap.c_str());
+    if (r == 0 && is_protected) {
+      r = idiffctx.image->snap_protect(tosnap.c_str());
+    } 
   }
 
   idiffctx.finish(r);
