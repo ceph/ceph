@@ -339,6 +339,7 @@ struct NotifyMessage {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
   void dump(Formatter *f) const;
+  NotifyOp get_notify_op() const;
 
   static void generate_test_instances(std::list<NotifyMessage *> &o);
 };
