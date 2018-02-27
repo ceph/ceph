@@ -211,13 +211,13 @@ function TEST_recovery_sizeup() {
     ceph osd out osd.$primary osd.$otherosd
     ceph osd pool set test size 4
     ceph osd unset norecover
-    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    # Get new primary
+    primary=$(get_primary $poolname obj1)
+
+    ceph tell osd.${primary} debug kick_recovery_wq 0
     sleep 2
 
     wait_for_clean || return 1
-
-    # Get new primary
-    primary=$(get_primary $poolname obj1)
 
     local degraded=$(expr $objects \* 2)
     local misplaced=$(expr $objects \* 2)
