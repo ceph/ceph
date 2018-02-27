@@ -22,17 +22,6 @@ static const std::string ALL_NAME("all");
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-static bool is_not_user_snap_namespace(librbd::Image* image,
-				       const librbd::snap_info_t &snap_info)
-{
-  librbd::snap_namespace_type_t namespace_type;
-  int r = image->snap_get_namespace_type(snap_info.id, &namespace_type);
-  if (r < 0) {
-    return false;
-  }
-  return namespace_type != RBD_SNAP_NAMESPACE_TYPE_USER;
-}
-
 int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::Rados& rados)
 {
   std::vector<librbd::snap_info_t> snaps;
@@ -47,9 +36,9 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
 
   if (!all_snaps) {
     snaps.erase(remove_if(snaps.begin(),
-			  snaps.end(),
-			  boost::bind(is_not_user_snap_namespace, &image, _1)),
-		snaps.end());
+                          snaps.end(),
+                          boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
+                snaps.end());
   }
 
   if (f) {
