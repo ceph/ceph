@@ -632,6 +632,34 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
 }
 
 template <typename I>
+int Group<I>::rename(librados::IoCtx& io_ctx, const char *src_name,
+                     const char *dest_name)
+{
+  CephContext *cct((CephContext *)io_ctx.cct());
+  ldout(cct, 20) << "group_rename " << &io_ctx << " " << src_name
+                 << " -> " << dest_name << dendl;
+
+  std::string group_id;
+  int r = cls_client::dir_get_id(&io_ctx, RBD_GROUP_DIRECTORY,
+                                 std::string(src_name), &group_id);
+  if (r < 0) {
+    if (r != -ENOENT)
+      lderr(cct) << "error getting id of group" << dendl;
+    return r;
+  }
+
+  r = cls_client::group_dir_rename(&io_ctx, RBD_GROUP_DIRECTORY,
+                                   src_name, dest_name, group_id);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "error renaming group from directory" << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+
+template <typename I>
 int Group<I>::image_get_group(I *ictx, group_info_t *group_info)
 {
   int r = ictx->state->refresh_if_required();
