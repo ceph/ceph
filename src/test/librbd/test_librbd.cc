@@ -834,7 +834,8 @@ TEST_F(TestLibRBD, TestCreateLsDelete)
   std::string name = get_temp_image_name();
   std::string name2 = get_temp_image_name();
   uint64_t size = 2 << 20;
-  
+
+  ASSERT_EQ(0, test_ls(ioctx, 0));
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(1, test_ls(ioctx, 1, name.c_str()));
   ASSERT_EQ(0, create_image(ioctx, name2.c_str(), size, &order));
