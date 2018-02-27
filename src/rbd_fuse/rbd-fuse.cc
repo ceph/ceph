@@ -816,7 +816,14 @@ static int rbdfs_opt_proc(void *data, const char *arg, int key,
 			free(rbd_options.ceph_config);
 			rbd_options.ceph_config = NULL;
 		}
-		rbd_options.ceph_config = strdup(arg+2);
+
+		char *ceph_conf = realpath(arg + 2, ceph_conf);
+		if (access(ceph_conf, R_OK) != 0) {
+			printf("Can't access the provided ceph.conf.");
+			exit(1);
+		}
+
+		rbd_options.ceph_config = ceph_conf;
 		return 0;
 	}
 
