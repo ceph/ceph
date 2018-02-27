@@ -1,3 +1,4 @@
+lib/systemd/system/ceph-mon*
 usr/bin/ceph-mon
 usr/bin/ceph-monstore-tool
 usr/bin/ceph-rest-api

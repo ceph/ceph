@@ -1,3 +1,5 @@
+set(CMAKE_INSTALL_SYSTEMD_SERVICEDIR "${CMAKE_INSTALL_LIBEXECDIR}/systemd/system"
+  CACHE PATH "Location for systemd service files")
 install(FILES
   ceph.target
   ceph-fuse.target
@@ -17,4 +19,4 @@ install(FILES
   ceph-disk@.service
   ceph-volume@.service
   rbdmap.service
-  DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/systemd/system)
+  DESTINATION ${CMAKE_INSTALL_SYSTEMD_SERVICEDIR})
