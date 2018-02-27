@@ -117,13 +117,20 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_FREEZINGTREE)) out << "|freezingtree";
   if (dir.state_test(CDir::STATE_FROZENTREE)) out << "|frozentree";
   if (dir.state_test(CDir::STATE_AUXSUBTREE)) out << "|auxsubtree";
-  //if (dir.state_test(CDir::STATE_FROZENTREELEAF)) out << "|frozentreeleaf";
   if (dir.state_test(CDir::STATE_FROZENDIR)) out << "|frozendir";
   if (dir.state_test(CDir::STATE_FREEZINGDIR)) out << "|freezingdir";
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
   if (dir.state_test(CDir::STATE_BADFRAG)) out << "|badfrag";
   if (dir.state_test(CDir::STATE_FRAGMENTING)) out << "|fragmenting";
+  if (dir.state_test(CDir::STATE_CREATING)) out << "|creating";
+  if (dir.state_test(CDir::STATE_COMMITTING)) out << "|committing";
+  if (dir.state_test(CDir::STATE_FETCHING)) out << "|fetching";
+  if (dir.state_test(CDir::STATE_EXPORTING)) out << "|exporting";
+  if (dir.state_test(CDir::STATE_IMPORTING)) out << "|importing";
+  if (dir.state_test(CDir::STATE_STICKY)) out << "|sticky";
+  if (dir.state_test(CDir::STATE_DNPINNEDFRAG)) out << "|dnpinnedfrag";
+  if (dir.state_test(CDir::STATE_ASSIMRSTAT)) out << "|assimrstat";
 
   // fragstat
   out << " " << dir.fnode.fragstat;
@@ -306,6 +313,7 @@ CDentry *CDir::lookup(std::string_view name, snapid_t snap)
 }
 
 CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
+  dout(20) << __func__ << " (" << last << ", '" << name << "')" << dendl;
   auto p = items.find(dentry_key_t(last, name, inode->hash_dentry_name(name)));
   if (p == items.end())
     return NULL;
