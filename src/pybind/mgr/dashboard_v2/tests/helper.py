@@ -7,6 +7,7 @@ import subprocess
 import sys
 import unittest
 
+import pytest
 import requests
 
 
@@ -22,6 +23,8 @@ def authenticate(func):
 class ControllerTestCase(unittest.TestCase):
     DASHBOARD_HOST = os.environ.get('DASHBOARD_V2_HOST', "localhost")
     DASHBOARD_PORT = os.environ.get('DASHBOARD_V2_PORT', 8080)
+
+    pytestmark = pytest.mark.skip
 
     def __init__(self, *args, **kwargs):
         self.dashboard_host = kwargs.pop('dashboard_host') \
