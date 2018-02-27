@@ -4,7 +4,6 @@ import mock
 
 from .. import mgr
 from ..controllers.auth import Auth
-from ..services import Service
 from ..tools import SessionExpireAtBrowserCloseTool
 from ..controllers.tcmu_iscsi import TcmuIscsi
 from .helper import ControllerTestCase
