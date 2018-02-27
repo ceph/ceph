@@ -18,16 +18,25 @@ The porting of the existing openATTIC functionality will be done in stages. The
 work is done by the openATTIC team and is currently tracked in the `openATTIC
 JIRA <https://tracker.openattic.org/browse/OP-3039>`_.
 
-Unit Testing
-____________
+Unit Testing and Linting
+________________________
 
-To run the unit tests that reside in :emphasis:`tests/*` do::
+We included a tox configuration file that will run the unit tests under
+python2 and python3, as well as, linting tools to guarantee the uniformity of
+code.
 
-  UNITTEST=true py.test --cov=. tests/
+To run tox, run the following command in the root directory (where ``tox.ini``
+is located) do::
 
+  tox
 
-These tests depend on the following python libraries:
- * pytest
- * pytest-cov
- * mock
+If you just want to run a single tox environement, for instance only run the
+linting tools, do::
+
+  tox -e lint
+
+Also don't forget to install tox before running it. To install tox in your
+system do::
+
+  pip install tox
 
