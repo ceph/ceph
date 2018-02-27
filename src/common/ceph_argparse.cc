@@ -521,22 +521,24 @@ CephInitParameters ceph_argparse_early_args
 
 static void generic_usage(bool is_server)
 {
-  cout << "\
-  --conf/-c FILE    read configuration from the given configuration file\n\
-  --id/-i ID        set ID portion of my name\n\
-  --name/-n TYPE.ID set name\n\
-  --cluster NAME    set cluster name (default: ceph)\n\
-  --setuser USER    set uid to user or uid (and gid to user's gid)\n\
-  --setgroup GROUP  set gid to group or gid\n\
-  --version         show version and quit\n\
-" << std::endl;
+  cout <<
+    "  --conf/-c FILE    read configuration from the given configuration file" << std::endl <<
+    (is_server ?
+    "  --id/-i ID        set ID portion of my name" :
+    "  --id ID           set ID portion of my name") << std::endl <<
+    "  --name/-n TYPE.ID set name" << std::endl <<
+    "  --cluster NAME    set cluster name (default: ceph)" << std::endl <<
+    "  --setuser USER    set uid to user or uid (and gid to user's gid)" << std::endl <<
+    "  --setgroup GROUP  set gid to group or gid" << std::endl <<
+    "  --version         show version and quit" << std::endl
+    << std::endl;
 
   if (is_server) {
-    cout << "\
-  -d                run in foreground, log to stderr.\n\
-  -f                run in foreground, log to usual location.\n";
-    cout << "\
-  --debug_ms N      set message debug level (e.g. 1)\n";
+    cout <<
+      "  -d                run in foreground, log to stderr" << std::endl <<
+      "  -f                run in foreground, log to usual location" << std::endl <<
+      std::endl <<
+      "  --debug_ms N      set message debug level (e.g. 1)" << std::endl;
   }
 
   cout.flush();
