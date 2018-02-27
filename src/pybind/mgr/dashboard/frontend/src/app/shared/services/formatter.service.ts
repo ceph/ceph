@@ -48,4 +48,21 @@ export class FormatterService {
 
     return truncatedFloat === '' ? '-' : (truncatedFloat + units[unit]);
   }
+
+  parseFloat (value, outputSize, defaultInputSize = 'm') {
+    let units = ['b', 'k', 'm', 'g', 't', 'p', 'e', 'z', 'y'];
+    if (outputSize) {
+      units = units.slice(units.indexOf(outputSize));
+    }
+    if (/^[\d.]+$/.test(value)) {
+      value += defaultInputSize;
+    }
+    value = value && value.toLowerCase().replace(/\s/g, '');
+    const rgx = new RegExp('^([\\d.]+)([' + units.join('') + ']?)(i?)(b?)$');
+    if (!rgx.test(value)) {
+      return null;
+    }
+    const matched = rgx.exec(value);
+    return parseFloat(matched[1]) * Math.pow(1024, units.indexOf(matched[2]));
+  }
 }
