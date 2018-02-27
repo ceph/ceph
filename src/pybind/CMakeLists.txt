@@ -77,4 +77,5 @@ if(WITH_MGR)
     ${CMAKE_CURRENT_SOURCE_DIR}/mgr
     DESTINATION ${CMAKE_INSTALL_PKGLIBDIR}
     REGEX ".*/\\.gitignore" EXCLUDE)
+  add_subdirectory(mgr)
 endif(WITH_MGR)
