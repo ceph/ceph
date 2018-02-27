@@ -64,7 +64,7 @@ bool RenameRequest<I>::should_complete(int r) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
                 << "r=" << r << dendl;
-  r = filter_state_return_code(r);
+  r = filter_return_code(r);
   if (r < 0) {
     if (r == -EEXIST) {
       ldout(cct, 1) << "image already exists" << dendl;
@@ -100,7 +100,7 @@ bool RenameRequest<I>::should_complete(int r) {
 }
 
 template <typename I>
-int RenameRequest<I>::filter_state_return_code(int r) {
+int RenameRequest<I>::filter_return_code(int r) const {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
