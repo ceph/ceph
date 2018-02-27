@@ -607,22 +607,24 @@ void librados::ObjectReadOperation::cache_evict()
 
 void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj, 
 						  const IoCtx& tgt_ioctx,
-						  uint64_t tgt_version)
+						  uint64_t tgt_version,
+						  int flag)
 {
   ::ObjectOperation *o = &impl->o;
   o->set_redirect(object_t(tgt_obj), tgt_ioctx.io_ctx_impl->snap_seq,
-			  tgt_ioctx.io_ctx_impl->oloc, tgt_version);
+			  tgt_ioctx.io_ctx_impl->oloc, tgt_version, flag);
 }
 
 void librados::ObjectWriteOperation::set_chunk(uint64_t src_offset,
 					       uint64_t src_length,
 					       const IoCtx& tgt_ioctx,
 					       string tgt_oid,
-					       uint64_t tgt_offset)
+					       uint64_t tgt_offset,
+					       int flag)
 {
   ::ObjectOperation *o = &impl->o;
   o->set_chunk(src_offset, src_length, 
-	       tgt_ioctx.io_ctx_impl->oloc, object_t(tgt_oid), tgt_offset);
+	       tgt_ioctx.io_ctx_impl->oloc, object_t(tgt_oid), tgt_offset, flag);
 }
 
 void librados::ObjectWriteOperation::tier_promote()

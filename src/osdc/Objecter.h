@@ -1134,22 +1134,24 @@ struct ObjectOperation {
    * Extensible tier
    */
   void set_redirect(object_t tgt, snapid_t snapid, object_locator_t tgt_oloc, 
-		    version_t tgt_version) {
+		    version_t tgt_version, int flag) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_REDIRECT);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = tgt_version;
     encode(tgt, osd_op.indata);
     encode(tgt_oloc, osd_op.indata);
+    set_last_op_flags(flag);
   }
 
   void set_chunk(uint64_t src_offset, uint64_t src_length, object_locator_t tgt_oloc,
-		 object_t tgt_oid, uint64_t tgt_offset) {
+		 object_t tgt_oid, uint64_t tgt_offset, int flag) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_CHUNK);
     encode(src_offset, osd_op.indata);
     encode(src_length, osd_op.indata);
     encode(tgt_oloc, osd_op.indata);
     encode(tgt_oid, osd_op.indata);
     encode(tgt_offset, osd_op.indata);
+    set_last_op_flags(flag);
   }
 
   void tier_promote() {
