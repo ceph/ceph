@@ -2420,8 +2420,10 @@ extern "C" int rbd_list(rados_ioctx_t p, char *names, size_t *size)
     return -ERANGE;
   }
 
-  if (!names) 
+  if (names == NULL) {
+    tracepoint(librbd, list_exit, -EINVAL, *size);
     return -EINVAL;
+  }
 
   for (int i = 0; i < (int)cpp_names.size(); i++) {
     const char* name = cpp_names[i].c_str();
@@ -4525,8 +4527,10 @@ extern "C" int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
     return -ERANGE;
   }
 
-  if (!names)
+  if (names == NULL) {
+    tracepoint(librbd, group_list_exit, -EINVAL);
     return -EINVAL;
+  }
 
   names[expected_size] = '\0';
   for (int i = 0; i < (int)cpp_names.size(); i++) {
@@ -4872,6 +4876,7 @@ extern "C" int rbd_watchers_list(rbd_image_t image,
   tracepoint(librbd, list_watchers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
   int r = librbd::list_watchers(ictx, watcher_list);
   if (r < 0) {
+    tracepoint(librbd, list_watchers_exit, r, 0);
     return r;
   }
 
