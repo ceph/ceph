@@ -413,6 +413,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_group_create(rados_ioctx_t p, const char *name)
     int rbd_group_remove(rados_ioctx_t p, const char *name)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
+    int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                 size_t group_info_size)
     int rbd_group_image_add(rados_ioctx_t group_p, const char *group_name,
@@ -1409,6 +1410,32 @@ class RBD(object):
                     if name]
         finally:
             free(c_names)
+
+    def group_rename(self, ioctx, src, dest):
+        """
+        Rename an RBD group.
+
+        :param ioctx: determines which RADOS pool the group is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param src: the current name of the group
+        :type src: str
+        :param dest: the new name of the group
+        :type dest: str
+        :raises: :class:`ObjectExists`
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        src = cstr(src, 'src')
+        dest = cstr(dest, 'dest')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_src = src
+            char *_dest = dest
+        with nogil:
+            ret = rbd_group_rename(_ioctx, _src, _dest)
+        if ret != 0:
+            raise make_ex(ret, 'error renaming group')
 
 cdef class MirrorPeerIterator(object):
     """

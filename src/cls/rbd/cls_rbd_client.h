@@ -446,12 +446,15 @@ namespace librbd {
 
     // Consistency groups functions
     int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
-		    const std::string &start, uint64_t max_return,
-		    map<string, string> *groups);
+                       const std::string &start, uint64_t max_return,
+                       map<string, string> *groups);
     int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
-	           const std::string &name, const std::string &id);
+                      const std::string &name, const std::string &id);
+    int group_dir_rename(librados::IoCtx *ioctx, const std::string &oid,
+                         const std::string &src, const std::string &dest,
+                         const std::string &id);
     int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
-		      const std::string &name, const std::string &id);
+                         const std::string &name, const std::string &id);
     int group_image_remove(librados::IoCtx *ioctx, const std::string &oid,
 			   const cls::rbd::GroupImageSpec &spec);
     int group_image_list(librados::IoCtx *ioctx, const std::string &oid,
