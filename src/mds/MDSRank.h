@@ -138,6 +138,14 @@ class MDSRank {
     // a separate lock here in future potentially.
     Mutex &mds_lock;
 
+    mono_time get_starttime() const {
+      return starttime;
+    }
+    chrono::duration<double> get_uptime() const {
+      mono_time now = mono_clock::now();
+      return chrono::duration<double>(now-starttime);
+    }
+
     class CephContext *cct;
 
     bool is_daemon_stopping() const;
@@ -510,6 +518,9 @@ class MDSRank {
 
     /* Update MDSMap export_targets for this rank. Called on ::tick(). */
     void update_targets(utime_t now);
+
+private:
+    mono_time starttime = mono_clock::zero();
 };
 
 /* This expects to be given a reference which it is responsible for.
