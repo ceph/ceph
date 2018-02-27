@@ -58,11 +58,12 @@ OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
 
 FS_METADATA = ('data_pools', 'id', 'metadata_pool', 'name')
 
-MDS_METADATA = ('id', 'fs', 'public_addr', 'rank')
+MDS_METADATA = ('id', 'fs', 'hostname', 'public_addr', 'rank', 'ceph_version')
 
-MON_METADATA = ('id', 'public_addr', 'rank')
+MON_METADATA = ('id', 'hostname', 'public_addr', 'rank', 'ceph_version')
 
-OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
+OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'hostname', 'public_addr',
+                'ceph_version')
 
 OSD_STATUS = ['weight', 'up', 'in']
 
@@ -326,6 +327,7 @@ class Module(MgrModule):
 
     def get_fs(self):
         fs_map = self.get('fs_map')
+        servers = self.get_service_list()
         active_daemons = []
         for fs in fs_map['filesystems']:
             # collect fs metadata
@@ -336,16 +338,24 @@ class Module(MgrModule):
                                  fs['mdsmap']['metadata_pool'],
                                  fs['mdsmap']['fs_name']))
             for gid, daemon in fs['mdsmap']['info'].items():
+                id_ = daemon['name']
+                host_version = servers.get((id_, 'mds'), ('',''))
                 self.metrics.append('mds_metadata', 1,
-                                    (daemon['name'], fs['id'], daemon['addr'], daemon['rank']))
+                                    (id_, fs['id'], host_version[0],
+                                     daemon['addr'], daemon['rank'],
+                                     host_version[1]))
 
     def get_quorum_status(self):
         mon_status = json.loads(self.get('mon_status')['json'])
+        servers = self.get_service_list()
         for mon in mon_status['monmap']['mons']:
             rank = mon['rank']
             id_ = mon['name']
+            host_version = servers.get((id_, 'mon'), ('',''))
             self.metrics.append('mon_metadata', 1,
-                                (id_, mon['public_addr'].split(':')[0], rank))
+                                (id_, host_version[0],
+                                 mon['public_addr'].split(':')[0], rank,
+                                 host_version[1]))
             in_quorum = int(rank in mon_status['quorum'])
             self.metrics.append('mon_quorum_status', in_quorum,
                                 ('mon_{}'.format(id_),))
@@ -385,16 +395,27 @@ class Module(MgrModule):
                 self.metrics.append('osd_{}'.format(stat), val,
                                     ('osd.{}'.format(id_),))
 
+    def get_service_list(self):
+        ret = {}
+        for server in self.list_servers():
+            version = server.get('ceph_version', '')
+            host = server.get('hostname', '')
+            for service in server.get('services', []):
+                ret.update({(service['id'], service['type']): (host, version)})
+        return ret
+
     def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')
         osd_flags = osd_map['flags'].split(',')
         for flag in OSD_FLAGS:
             self.metrics.set('osd_flag_{}'.format(flag),
                 int(flag in osd_flags))
+
         osd_devices = self.get('osd_map_crush')['devices']
+        servers = self.get_service_list()
         for osd in osd_map['osds']:
             # id can be used to link osd metrics and metadata
-            id_ = osd['osd']
+            id_ = str(osd['osd'])
             # collect osd metadata
             p_addr = osd['public_addr'].split(':')[0]
             c_addr = osd['cluster_addr'].split(':')[0]
@@ -404,8 +425,12 @@ class Module(MgrModule):
                     " and metadata records for this osd".format(id_)
                 )
                 continue
-            dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
-            self.metrics.append('osd_metadata', 1, (c_addr, dev_class.get('class',''), id_, p_addr))
+            dev_class = next((osd for osd in osd_devices if str(osd['id']) == id_))
+            host_version = servers.get((id_, 'osd'), ('',''))
+            self.metrics.append('osd_metadata', 1, (c_addr,
+                                                    dev_class.get('class',''),
+                                                    id_, host_version[0],
+                                                    p_addr, host_version[1]))
 
             # collect osd status
             for state in OSD_STATUS:
@@ -414,7 +439,7 @@ class Module(MgrModule):
                                     ('osd.{}'.format(id_),))
 
             # collect disk occupation metadata
-            osd_metadata = self.get_metadata("osd", str(id_))
+            osd_metadata = self.get_metadata("osd", id_)
             if osd_metadata is None:
                 continue
             dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
