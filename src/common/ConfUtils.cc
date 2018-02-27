@@ -390,8 +390,47 @@ load_from_buffer(const char *buf, size_t sz, std::deque<std::string> *errors,
 /*
  * A simple state-machine based parser.
  * This probably could/should be rewritten with something like boost::spirit
- * or yacc if the grammar ever gets more complex.
- */
+   * @verbatim
+   *
+   *     <start>
+   *        |
+   *        v
+   *     ACCEPT_INIT 
+   *        |\ 
+   *        | \ 
+   *        |  -------------------------------\-------------\
+   *        v                                 |             |
+   *     ACCEPT_KEY                           v             |
+   *        |                        ACCEPT_SECTION_NAME    |
+   *        |                                 |             |
+   *        |                                 |             |
+   *        |                                 v             |
+   *        |                        ACCEPT_COMMENT_START   |
+   *        v                                 |             |
+   *     ACCEPT_VAL_START--------------------\|             |
+   *        |\                                |             |
+   *        | \                               |             |
+   *        |  -------------------------\     |             |
+   *        v                           |     |             |
+   * /--->ACCEPT_QUOTED_VAL             |     |             |
+   * |      |                           v     |             |
+   * |      |             ACCEPT_UNQUOTED_VAL |             |
+   * |      |                           |     |             |
+   * |      |                           |     |             |
+   * |      v                           |     |             |
+   * |   ACCEPT_QUOTE_COMMENT_START     |     |             |
+   * |_____/|                           |     |             |
+   *        |                           |     |             |
+   *        |                           |     |             |
+   *        v                           /     /             |
+   *     ACCEPT_COMMENT_TEXT <------------------------------/
+   *        | 
+   *        |
+   *        v
+   *     <finish>
+   *
+   * @endverbatim
+   */
 ConfLine* ConfFile::
 process_line(int line_no, const char *line, std::deque<std::string> *errors)
 {
@@ -403,12 +442,15 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
     ACCEPT_UNQUOTED_VAL,
     ACCEPT_QUOTED_VAL,
     ACCEPT_COMMENT_START,
+    ACCEPT_QUOTE_COMMENT_START,
     ACCEPT_COMMENT_TEXT,
   };
   const char *l = line;
   acceptor_state_t state = ACCEPT_INIT;
   string key, val, newsection, comment;
   bool escaping = false;
+  bool quote_matched = false;
+  string str_mark;
   while (true) {
     char c = *l++;
     switch (state) {
@@ -550,7 +592,16 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  return NULL;
 	}
 	else if ((c == '"') && (!escaping)) {
-	  state = ACCEPT_COMMENT_START;
+	  quote_matched = !quote_matched;
+	  if (quote_matched) {
+	    // following char could be part of val, or comment
+	    // can be determined in ACCEPT_QUOTE_COMMENT_START
+	    state = ACCEPT_QUOTE_COMMENT_START;
+	    str_mark.clear();
+	    str_mark += c;
+	  } else {
+	    val += c;
+	  }
 	}
 	else if ((c == '\\') && (!escaping)) {
 	  escaping = true;
@@ -562,6 +613,7 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	}
 	break;
       case ACCEPT_COMMENT_START:
+      case ACCEPT_QUOTE_COMMENT_START:
 	if (c == '\0') {
 	  return new ConfLine(key, val, newsection, comment, line_no);
 	}
@@ -569,14 +621,22 @@ process_line(int line_no, const char *line, std::deque<std::string> *errors)
 	  state = ACCEPT_COMMENT_TEXT;
 	}
 	else if (isspace(c)) {
-	  // ignore whitespace
+	  if (state == ACCEPT_QUOTE_COMMENT_START)
+	    str_mark += c;
 	}
 	else {
-	  ostringstream oss;
-	  oss << "unexpected character at char " << (l - line) << " of line "
-	      << line_no;
-	  errors->push_back(oss.str());
-	  return NULL;
+	  if (state == ACCEPT_QUOTE_COMMENT_START) {
+	    str_mark += c;
+	    val += str_mark;
+	    state = ACCEPT_QUOTED_VAL;
+	  }
+	  else {
+	    ostringstream oss;
+	    oss << "unexpected character at char " << (l - line) << " of line "
+		<< line_no;
+	    errors->push_back(oss.str());
+	    return NULL;
+	  }
 	}
 	break;
       case ACCEPT_COMMENT_TEXT:
