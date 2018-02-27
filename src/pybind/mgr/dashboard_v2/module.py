@@ -12,19 +12,18 @@ from cherrypy import tools
 from auth import Auth
 from mgr_module import MgrModule
 
+
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
 def os_exit_noop(*args):
     pass
 
+
 os._exit = os_exit_noop
 
-"""
-openATTIC CherryPy Module
-"""
-class Module(MgrModule):
 
+class Module(MgrModule):
     """
-    Hello.
+    dashboard module entrypoint
     """
 
     COMMANDS = [
@@ -46,11 +45,13 @@ class Module(MgrModule):
         if server_addr is None:
             raise RuntimeError(
                 'no server_addr configured; '
-                'try "ceph config-key put mgr/{}/{}/server_addr <ip>"'.format(
-                self.module_name, self.get_mgr_id()))
-        self.log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
+                'try "ceph config-key put mgr/{}/{}/server_addr <ip>"'
+                .format(self.module_name, self.get_mgr_id()))
+        self.log.info("server_addr: %s server_port: %s" % (server_addr,
+                                                           server_port))
 
-        cherrypy.config.update({'server.socket_host': server_addr,
+        cherrypy.config.update({
+                                'server.socket_host': server_addr,
                                 'server.socket_port': int(server_port),
                                })
         auth = Auth(self)
