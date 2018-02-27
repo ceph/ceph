@@ -65,7 +65,6 @@ void init_ssl(){
 
 namespace rgw {
 namespace curl {
-std::once_flag curl_init_flag;
 
 static void check_curl()
 {
@@ -80,15 +79,17 @@ void init_ssl() {
   ::openssl::init_ssl();
 }
 
-bool fe_inits_ssl(const fe_map_t& m, long& curl_global_flags){
-  for (const auto& kv: m){
-    if (kv.first == "civetweb" || kv.first == "beast"){
-      std::string cert;
-      kv.second->get_val("ssl_certificate","", &cert);
-      if (!cert.empty()){
-	/* TODO this flag is no op for curl > 7.57 */
-	curl_global_flags &= ~CURL_GLOBAL_SSL;
-	return true;
+bool fe_inits_ssl(boost::optional <const fe_map_t&> m, long& curl_global_flags){
+  if (m) {
+    for (const auto& kv: *m){
+      if (kv.first == "civetweb" || kv.first == "beast"){
+        std::string cert;
+        kv.second->get_val("ssl_certificate","", &cert);
+        if (!cert.empty()){
+         /* TODO this flag is no op for curl > 7.57 */
+          curl_global_flags &= ~CURL_GLOBAL_SSL;
+          return true;
+        }
       }
     }
   }
@@ -96,7 +97,9 @@ bool fe_inits_ssl(const fe_map_t& m, long& curl_global_flags){
 }
 #endif // WITH_CURL_OPENSSL
 
-void setup_curl(const fe_map_t& m) {
+std::once_flag curl_init_flag;
+
+void setup_curl(boost::optional<const fe_map_t&> m) {
   check_curl();
 
   long curl_global_flags = CURL_GLOBAL_ALL;
