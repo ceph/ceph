@@ -367,7 +367,8 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
 
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked() || !writes_empty()) {
-    queue(ImageDispatchSpec<I>::create_flush_request(m_image_ctx, c, trace));
+    queue(ImageDispatchSpec<I>::create_flush_request(
+            m_image_ctx, c, FLUSH_SOURCE_USER, trace));
   } else {
     ImageRequest<I>::aio_flush(&m_image_ctx, c, FLUSH_SOURCE_USER, trace);
     finish_in_flight_io();
