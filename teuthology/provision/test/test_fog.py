@@ -285,13 +285,13 @@ class TestFOG(object):
 
     @mark.parametrize(
         'tries',
-        [1, 51],
+        [1, 101],
     )
     def test_wait_for_ready(self, tries):
         connect_results = [MaxWhileTries for i in range(tries)] + [True]
         obj = self.klass('name.fqdn', 'type', '1.0')
         self.mocks['m_Remote_connect'].side_effect = connect_results
-        if tries >= 50:
+        if tries >= 100:
             with raises(MaxWhileTries):
                 obj._wait_for_ready()
             return

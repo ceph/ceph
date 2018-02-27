@@ -257,7 +257,7 @@ class FOG(object):
 
     def _wait_for_ready(self):
         """ Attempt to connect to the machine via SSH """
-        with safe_while(sleep=6, tries=50) as proceed:
+        with safe_while(sleep=6, tries=100) as proceed:
             while proceed():
                 try:
                     self.remote.connect()
