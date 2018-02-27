@@ -1,0 +1,12 @@
+.coverage
+htmlcov
+.tox
+coverage.xml
+junit.xml
+
+# IDE
+.vscode
+.idea
+
+# virtualenv
+venv
