@@ -1099,5 +1099,16 @@ bool check_if_image_spec_present(const po::variables_map &vm,
   return false;
 }
 
+bool is_not_user_snap_namespace(librbd::Image* image,
+                                const librbd::snap_info_t &snap_info)
+{
+  librbd::snap_namespace_type_t namespace_type;
+  int r = image->snap_get_namespace_type(snap_info.id, &namespace_type);
+  if (r < 0) {
+    return false;
+  }
+  return namespace_type != RBD_SNAP_NAMESPACE_TYPE_USER;
+}
+
 } // namespace utils
 } // namespace rbd
