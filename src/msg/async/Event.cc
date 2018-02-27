@@ -357,7 +357,7 @@ int EventCenter::process_time_events()
   return processed;
 }
 
-int EventCenter::process_events(int timeout_microseconds,  ceph::timespan *working_dur)
+int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *working_dur)
 {
   struct timeval tv;
   int numevents;

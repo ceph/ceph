@@ -203,7 +203,7 @@ class EventCenter {
   uint64_t create_time_event(uint64_t milliseconds, EventCallbackRef ctxt);
   void delete_file_event(int fd, int mask);
   void delete_time_event(uint64_t id);
-  int process_events(int timeout_microseconds, ceph::timespan *working_dur = nullptr);
+  int process_events(unsigned timeout_microseconds, ceph::timespan *working_dur = nullptr);
   void wakeup();
 
   // Used by external thread
