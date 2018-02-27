@@ -47,6 +47,15 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
   SafeTimer    timer;
 
+
+  mono_time get_starttime() const {
+    return starttime;
+  }
+  chrono::duration<double> get_uptime() const {
+    mono_time now = mono_clock::now();
+    return chrono::duration<double>(now-starttime);
+  }
+
  protected:
   Beacon  beacon;
 
@@ -154,6 +163,9 @@ protected:
   void handle_command(class MCommand *m);
   void handle_mds_map(class MMDSMap *m);
   void _handle_mds_map(MDSMap *oldmap);
+
+private:
+    mono_time starttime = mono_clock::zero();
 };
 
 
