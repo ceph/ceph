@@ -87,7 +87,7 @@ rfc3986==0.4.1            # via oslo.config
 simplejson==3.10.0        # via osc-lib, python-cinderclient, python-neutronclient, python-novaclient
 six==1.10.0
 stevedore==1.21.0         # via cliff, keystoneauth1, openstacksdk, osc-lib, oslo.config, python-keystoneclient
-tox==2.7.0
+tox==2.9.1
 unicodecsv==0.14.1        # via cliff
 virtualenv==15.1.0        # via tox
 warlock==1.2.0            # via python-glanceclient
