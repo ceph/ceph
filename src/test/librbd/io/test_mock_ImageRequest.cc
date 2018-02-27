@@ -32,6 +32,8 @@ struct MockTestJournal : public MockJournal {
     return append_io_event_mock(event_entry, requests, offset, length,
                                 flush_entry, filter_ret_val);
   }
+
+  MOCK_METHOD2(commit_io_event, void(uint64_t, int));
 };
 
 struct MockTestImageCtx : public MockImageCtx {
