@@ -8,7 +8,6 @@ from .. import mgr
 from ..controllers.auth import Auth
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirror
-from ..services import Service
 from ..tools import SessionExpireAtBrowserCloseTool
 from .helper import ControllerTestCase
 
