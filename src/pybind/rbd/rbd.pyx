@@ -3653,7 +3653,6 @@ cdef class GroupImageIterator(object):
                                            &self.num_images)
 
             if ret >= 0:
-                self.num_images = ret
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing images for group %s' % (group.name,), group_errno_to_exception)
@@ -3703,7 +3702,7 @@ cdef class GroupSnapIterator(object):
                                           sizeof(rbd_group_snap_info_t),
                                           &self.num_snaps)
 
-            if ret == 0:
+            if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing snapshots for group %s' % (group.name,), group_errno_to_exception)

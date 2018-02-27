@@ -4532,7 +4532,6 @@ extern "C" int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
     return -EINVAL;
   }
 
-  names[expected_size] = '\0';
   for (int i = 0; i < (int)cpp_names.size(); i++) {
     const char* name = cpp_names[i].c_str();
     tracepoint(librbd, group_list_entry, name);
@@ -4671,7 +4670,7 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
     group_image_status_cpp_to_c(cpp_images[i], &images[i]);
   }
 
-  r = cpp_images.size();
+  r = *image_size = cpp_images.size();
   tracepoint(librbd, group_image_list_exit, r);
   return r;
 }
@@ -4800,9 +4799,9 @@ extern "C" int rbd_group_snap_list(rados_ioctx_t group_p,
     group_snap_info_cpp_to_c(cpp_snaps[i], &snaps[i]);
   }
 
-  *snaps_size = cpp_snaps.size();
-  tracepoint(librbd, group_snap_list_exit, 0);
-  return 0;
+  r = *snaps_size = cpp_snaps.size();
+  tracepoint(librbd, group_snap_list_exit, r);
+  return r;
 }
 
 extern "C" int rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
