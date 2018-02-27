@@ -9311,9 +9311,15 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 void MDCache::request_kill(MDRequestRef& mdr)
 {
   // rollback slave requests is tricky. just let the request proceed.
-  if (mdr->done_locking && mdr->has_more() &&
+  if (mdr->has_more() &&
       (!mdr->more()->witnessed.empty() || !mdr->more()->waiting_on_slave.empty())) {
-    dout(10) << "request_kill " << *mdr << " -- already started slave requests, no-op" << dendl;
+    if (!mdr->done_locking) {
+      assert(mdr->more()->witnessed.empty());
+      mdr->aborted = true;
+      dout(10) << "request_kill " << *mdr << " -- waiting for slave reply, delaying" << dendl;
+    } else {
+      dout(10) << "request_kill " << *mdr << " -- already started slave prep, no-op" << dendl;
+    }
 
     assert(mdr->used_prealloc_ino == 0);
     assert(mdr->prealloc_inos.empty());
