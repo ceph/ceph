@@ -10,6 +10,9 @@ map is ``active + clean``.
 *Creating*
   Ceph is still creating the placement group.
 
+*Activating*
+  The placement group is peered but not yet active.
+
 *Active*
   Ceph will process requests to the placement group.
 
@@ -41,20 +44,33 @@ map is ``active + clean``.
 *Forced-Recovery*
   High recovery priority of that PG is enforced by user.
 
-*Backfill*
+*Recovery-wait*
+  The placement group is waiting in line to start recover.
+
+*Recovery-toofull*
+  A recovery operation is waiting because the destination OSD is over its
+  full ratio.
+
+*Recovery-unfound*
+  Recovery stopped due to unfound objects.
+
+*Backfilling*
   Ceph is scanning and synchronizing the entire contents of a placement group
   instead of inferring what contents need to be synchronized from the logs of
-  recent operations. *Backfill* is a special case of recovery.
+  recent operations. Backfill is a special case of recovery.
 
 *Forced-Backfill*
   High backfill priority of that PG is enforced by user.
 
-*Wait-backfill*
+*Backfill-wait*
   The placement group is waiting in line to start backfill.
 
 *Backfill-toofull*
   A backfill operation is waiting because the destination OSD is over its
   full ratio.
+
+*Backfill-unfound*
+  Backfill stopped due to unfound objects.
 
 *Incomplete*
   Ceph detects that a placement group is missing information about
@@ -78,3 +94,12 @@ map is ``active + clean``.
   The placement group has peered, but cannot serve client IO due to not having
   enough copies to reach the pool's configured min_size parameter.  Recovery
   may occur in this state, so the pg may heal up to min_size eventually.
+
+*Snaptrim*
+  Trimming snaps.
+
+*Snaptrim-wait*
+  Queued to trim snaps.
+
+*Snaptrim-error*
+  Error stopped trimming snaps.
