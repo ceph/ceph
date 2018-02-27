@@ -283,7 +283,7 @@ Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
 %if 0%{?suse_version}
-Recommends:    ntp-daemon
+Recommends:    chrony
 %endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
