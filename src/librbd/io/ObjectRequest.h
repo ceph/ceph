@@ -98,20 +98,19 @@ public:
   static ObjectReadRequest* create(ImageCtxT *ictx, const std::string &oid,
                                    uint64_t objectno, uint64_t offset,
                                    uint64_t len, librados::snap_t snap_id,
-                                   int op_flags, bool cache_initiated,
+                                   int op_flags,
                                    const ZTracer::Trace &parent_trace,
                                    ceph::bufferlist* read_data,
                                    ExtentMap* extent_map, Context *completion) {
     return new ObjectReadRequest(ictx, oid, objectno, offset, len,
-                                 snap_id, op_flags, cache_initiated,
-                                 parent_trace, read_data, extent_map,
-                                 completion);
+                                 snap_id, op_flags, parent_trace, read_data,
+                                 extent_map, completion);
   }
 
   ObjectReadRequest(ImageCtxT *ictx, const std::string &oid,
                     uint64_t objectno, uint64_t offset, uint64_t len,
                     librados::snap_t snap_id, int op_flags,
-                    bool cache_initiated, const ZTracer::Trace &parent_trace,
+                    const ZTracer::Trace &parent_trace,
                     ceph::bufferlist* read_data, ExtentMap* extent_map,
                     Context *completion);
 
@@ -125,16 +124,11 @@ private:
   /**
    * @verbatim
    *
-   *           <start>
-   *              |
-   *              |
-   *    /--------/ \--------\
-   *    |                   |
-   *    | (cache            | (cache
-   *    v  disabled)        v  enabled)
-   * READ_OBJECT      READ_CACHE
-   *    |                   |
-   *    |/------------------/
+   * <start>
+   *    |
+   *    |
+   *    v
+   * READ_OBJECT
    *    |
    *    v (skip if not needed)
    * READ_PARENT
@@ -149,13 +143,9 @@ private:
    */
 
   int m_op_flags;
-  bool m_cache_initiated;
 
   ceph::bufferlist* m_read_data;
   ExtentMap* m_extent_map;
-
-  void read_cache();
-  void handle_read_cache(int r);
 
   void read_object();
   void handle_read_object(int r);

@@ -327,8 +327,8 @@ TEST_F(TestMockIoObjectRequest, Read) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0,
-    false, {}, &bl, &extent_map, &ctx);
+    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
+    &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -358,8 +358,8 @@ TEST_F(TestMockIoObjectRequest, SparseReadThreshold) {
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
     &mock_image_ctx, ictx->get_object_name(0), 0, 0,
-    ictx->sparse_read_threshold_bytes, CEPH_NOSNAP, 0, false, {},
-    &bl, &extent_map, &ctx);
+    ictx->sparse_read_threshold_bytes, CEPH_NOSNAP, 0, {}, &bl, &extent_map,
+    &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -386,8 +386,8 @@ TEST_F(TestMockIoObjectRequest, ReadError) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0,
-    false, {}, &bl, &extent_map, &ctx);
+    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
+    &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -435,8 +435,8 @@ TEST_F(TestMockIoObjectRequest, ParentRead) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0,
-    false, {}, &bl, &extent_map, &ctx);
+    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
+    &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -484,8 +484,8 @@ TEST_F(TestMockIoObjectRequest, ParentReadError) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0,
-    false,  {}, &bl, &extent_map, &ctx);
+    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
+    &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -538,8 +538,8 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
   ExtentMap extent_map;
   C_SaferCond ctx;
   auto req = MockObjectReadRequest::create(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0,
-    false, {}, &bl, &extent_map, &ctx);
+    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, CEPH_NOSNAP, 0, {},
+    &bl, &extent_map, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
