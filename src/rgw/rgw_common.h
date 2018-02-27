@@ -2376,4 +2376,7 @@ extern bool match_policy(boost::string_view pattern, boost::string_view input,
 extern string camelcase_dash_http_attr(const string& orig);
 extern string lowercase_dash_http_attr(const string& orig);
 
+void rgw_setup_saved_curl_handles();
+void rgw_release_all_curl_handles();
+
 #endif

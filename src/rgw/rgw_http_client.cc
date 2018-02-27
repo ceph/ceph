@@ -79,6 +79,135 @@ struct rgw_http_req_data : public RefCountedObject {
   }
 };
 
+struct RGWCurlHandle {
+  int uses;
+  mono_time lastuse;
+  CURL* h;
+
+  RGWCurlHandle(CURL* h) : uses(0), h(h) {};
+  CURL* operator*() {
+    return this->h;
+  }
+};
+
+#define MAXIDLE 5
+class RGWCurlHandles : public Thread {
+public:
+  Mutex cleaner_lock;
+  std::vector<RGWCurlHandle*>saved_curl;
+  int cleaner_shutdown;
+  Cond cleaner_cond;
+
+  RGWCurlHandles() :
+    cleaner_lock{"RGWCurlHandles::cleaner_lock"},
+    cleaner_shutdown{0} {
+  }
+
+  RGWCurlHandle* get_curl_handle();
+  void release_curl_handle_now(RGWCurlHandle* curl);
+  void release_curl_handle(RGWCurlHandle* curl);
+  void flush_curl_handles();
+  void* entry();
+  void stop();
+};
+
+RGWCurlHandle* RGWCurlHandles::get_curl_handle() {
+  RGWCurlHandle* curl = 0;
+  CURL* h;
+  {
+    Mutex::Locker lock(cleaner_lock);
+    if (!saved_curl.empty()) {
+      curl = *saved_curl.begin();
+      saved_curl.erase(saved_curl.begin());
+    }
+  }
+  if (curl) {
+  } else if ((h = curl_easy_init())) {
+    curl = new RGWCurlHandle{h};
+  } else {
+    // curl = 0;
+  }
+  return curl;
+}
+
+void RGWCurlHandles::release_curl_handle_now(RGWCurlHandle* curl)
+{
+  curl_easy_cleanup(**curl);
+  delete curl;
+}
+
+void RGWCurlHandles::release_curl_handle(RGWCurlHandle* curl)
+{
+  if (cleaner_shutdown) {
+    release_curl_handle_now(curl);
+  } else {
+    curl_easy_reset(**curl);
+    Mutex::Locker lock(cleaner_lock);
+    curl->lastuse = mono_clock::now();
+    saved_curl.insert(saved_curl.begin(), 1, curl);
+  }
+}
+
+void* RGWCurlHandles::entry()
+{
+  RGWCurlHandle* curl;
+  Mutex::Locker lock(cleaner_lock);
+
+  for (;;) {
+    if (cleaner_shutdown) {
+      if (saved_curl.empty())
+        break;
+    } else {
+      utime_t release = ceph_clock_now() + utime_t(MAXIDLE,0);
+      cleaner_cond.WaitUntil(cleaner_lock, release);
+    }
+    mono_time now = mono_clock::now();
+    while (!saved_curl.empty()) {
+      auto cend = saved_curl.end();
+      --cend;
+      curl = *cend;
+      if (!cleaner_shutdown && now - curl->lastuse < std::chrono::seconds(MAXIDLE))
+        break;
+      saved_curl.erase(cend);
+      release_curl_handle_now(curl);
+    }
+  }
+  return nullptr;
+}
+
+void RGWCurlHandles::stop()
+{
+  Mutex::Locker lock(cleaner_lock);
+  cleaner_shutdown = 1;
+  cleaner_cond.Signal();
+}
+
+void RGWCurlHandles::flush_curl_handles()
+{
+  stop();
+  join();
+  if (!saved_curl.empty()) {
+    dout(0) << "ERROR: " << __func__ << " failed final cleanup" << dendl;
+  }
+  saved_curl.shrink_to_fit();
+}
+
+static RGWCurlHandles *handles;
+// XXX make this part of the token cache?  (but that's swift-only;
+//	and this especially needs to integrates with s3...)
+
+void rgw_setup_saved_curl_handles()
+{
+  handles = new RGWCurlHandles();
+  handles->create("rgw_curl");
+}
+
+void rgw_release_all_curl_handles()
+{
+  handles->flush_curl_handles();
+  delete handles;
+}
+
 /*
  * the simple set of callbacks will be called on RGWHTTPClient::process()
  */
@@ -253,7 +382,8 @@ int RGWHTTPClient::process(const char *method, const char *url)
   last_method = (method ? method : "");
   last_url = (url ? url : "");
 
-  curl_handle = curl_easy_init();
+  auto ca = handles->get_curl_handle();
+  curl_handle = **ca;
 
   dout(20) << "sending request to " << url << dendl;
 
@@ -291,7 +421,7 @@ int RGWHTTPClient::process(const char *method, const char *url)
     ret = -EINVAL;
   }
   curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_status);
-  curl_easy_cleanup(curl_handle);
+  handles->release_curl_handle(ca);
   curl_slist_free_all(h);
 
   return ret;
