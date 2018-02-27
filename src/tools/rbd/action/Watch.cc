@@ -5,6 +5,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/rbd_types.h"
+#include "librbd/WatchNotifyTypes.h"
 #include "common/errno.h"
 #include <iostream>
 #include <boost/program_options.hpp>
@@ -30,9 +31,23 @@ public:
                              uint64_t cookie,
                              uint64_t notifier_id,
                              bufferlist& bl) override {
+    using namespace librbd::watch_notify;
+    NotifyMessage notify_message;
+    if (bl.length() == 0) {
+      notify_message = NotifyMessage(HeaderUpdatePayload());
+    } else {
+      try {
+        bufferlist::iterator iter = bl.begin();
+        notify_message.decode(iter);
+      } catch (const buffer::error &err) {
+        std::cerr << "rbd: failed to decode image notification" << std::endl;
+      }
+    }
+   
     std::cout << m_image_name << " received notification: notify_id="
               << notify_id << ", cookie=" << cookie << ", notifier_id="
-              << notifier_id << ", bl.length=" << bl.length() << std::endl;
+              << notifier_id << ", bl.length=" << bl.length() << ", notify_op=" 
+              << notify_message.get_notify_op()  << std::endl;
     bufferlist reply;
     m_io_ctx.notify_ack(m_header_oid, notify_id, cookie, reply);
   }
