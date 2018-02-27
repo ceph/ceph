@@ -605,8 +605,7 @@ protected:
       bufferlist &bl,
       int pos,
       const std::set<snapid_t> *snaps,
-      bool *force_dirty,
-      std::list<CInode*> *undef_inodes);
+      bool *force_dirty);
 
   /**
    * Mark this fragment as BADFRAG (common part of go_bad and go_bad_dentry)
