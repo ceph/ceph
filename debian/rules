@@ -6,7 +6,8 @@ export DESTDIR=$(CURDIR)/debian/tmp
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
 extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF
-extraopts += -DWITH_CEPHFS_JAVA=ON -DWITH_SYSTEMD=ON
+extraopts += -DWITH_CEPHFS_JAVA=ON
+extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
@@ -82,17 +83,6 @@ override_dh_installinit:
 	install -m0644 etc/default/ceph debian/ceph-common/etc/default/
 	install -d -m0755 debian/ceph-common/usr/lib/tmpfiles.d
 	install -m 0644 -D systemd/ceph.tmpfiles.d debian/ceph-common/usr/lib/tmpfiles.d/ceph.conf
-
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-disk@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-volume@.service
-
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-fuse/lib/systemd/system/ceph-fuse@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mgr/lib/systemd/system/ceph-mgr@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/rbd-mirror/lib/systemd/system/ceph-rbd-mirror@.service
 
 	dh_installinit -p ceph-base --name ceph --no-start
 	dh_installinit -p radosgw --no-start
