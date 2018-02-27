@@ -597,10 +597,6 @@ void ImageDiscardRequest<I>::update_stats(size_t length) {
 template <typename I>
 void ImageFlushRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
-  if (m_flush_source == FLUSH_SOURCE_USER) {
-    // flag cache for writeback mode if configured
-    image_ctx.user_flushed();
-  }
 
   bool journaling = false;
   {
@@ -635,6 +631,13 @@ void ImageFlushRequest<I>::send_request() {
         });
     }
   }
+
+  // ensure all object dispatch layers have flushed
+  auto object_dispatch_spec = ObjectDispatchSpec::create_flush(
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, m_flush_source, this->m_trace, ctx);
+  ctx = new FunctionContext([object_dispatch_spec](int r) {
+      object_dispatch_spec->send(0);
+    });
 
   // ensure all in-flight IOs are settled if non-user flush request
   image_ctx.flush_async_operations(ctx);
