@@ -143,9 +143,9 @@ static int decode_policy(CephContext *cct,
     ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
     return -EIO;
   }
-  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
-    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
+  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldout(cct, 15) << __func__ << " Read AccessControlPolicy";
+    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
     s3policy->to_xml(*_dout);
     *_dout << dendl;
   }
@@ -1020,7 +1020,7 @@ int RGWOp::read_bucket_cors()
     ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
     return -EIO;
   }
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     RGWCORSConfiguration_S3 *s3cors = static_cast<RGWCORSConfiguration_S3 *>(&bucket_cors);
     ldout(s->cct, 15) << "Read RGWCORSConfiguration";
     s3cors->to_xml(*_dout);
@@ -4906,7 +4906,7 @@ void RGWPutACLs::execute()
     }
   }
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldout(s->cct, 15) << "Old AccessControlPolicy";
     policy->to_xml(*_dout);
     *_dout << dendl;
@@ -4916,7 +4916,7 @@ void RGWPutACLs::execute()
   if (op_ret < 0)
     return;
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldout(s->cct, 15) << "New AccessControlPolicy:";
     new_policy.to_xml(*_dout);
     *_dout << dendl;
@@ -5019,7 +5019,7 @@ void RGWPutLC::execute()
   if (op_ret < 0)
     return;
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldout(s->cct, 15) << "New LifecycleConfiguration:";
     new_config.to_xml(*_dout);
     *_dout << dendl;

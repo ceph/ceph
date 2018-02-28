@@ -1417,7 +1417,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
   all_info[pg_whoami] = info;
 
-  if (cct->_conf->subsys.should_gather(dout_subsys, 10)) {
+  if (cct->_conf->subsys.should_gather<dout_subsys, 10>()) {
     for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
          p != all_info.end();
          ++p) {

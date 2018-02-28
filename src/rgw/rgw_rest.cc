@@ -1439,7 +1439,7 @@ int RGWPostObj_ObjStore::get_params()
     return -EINVAL;
   }
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     ldout(s->cct, 20) << "request content_type_str="
 		      << req_content_type_str << dendl;
     ldout(s->cct, 20) << "request content_type params:" << dendl;

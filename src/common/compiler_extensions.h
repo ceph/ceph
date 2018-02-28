@@ -22,9 +22,15 @@
 #ifdef __GNUC__
 // GCC
 #define WARN_UNUSED_RESULT __attribute__((warn_unused_result))
+
+#define HINT_COLD_CODE __attribute__((cold))
+#define HINT_NO_INLINE __attribute__((noinline))
 #else
 // some other compiler - just make it a no-op
 #define WARN_UNUSED_RESULT
+
+#define HINT_COLD_CODE
+#define HINT_NO_INLINE
 #endif
 
 #endif

@@ -7133,7 +7133,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  goto fail;
 	}
 	tracepoint(osd, do_osd_op_pre_omapsetvals, soid.oid.name.c_str(), soid.snap.val);
-	if (cct->_conf->subsys.should_gather(dout_subsys, 20)) {
+	if (cct->_conf->subsys.should_gather<dout_subsys, 20>()) {
 	  dout(20) << "setting vals: " << dendl;
 	  map<string,bufferlist> to_set;
 	  bufferlist::iterator pt = to_set_bl.begin();
