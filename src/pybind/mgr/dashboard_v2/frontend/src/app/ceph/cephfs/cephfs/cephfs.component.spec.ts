@@ -6,6 +6,7 @@ import { BsDropdownModule, ProgressbarModule } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 
 import { SharedModule } from '../../../shared/shared.module';
+import { CephfsChartComponent } from '../cephfs-chart/cephfs-chart.component';
 import { CephfsService } from '../cephfs.service';
 import { CephfsComponent } from './cephfs.component';
 
@@ -36,7 +37,7 @@ describe('CephfsComponent', () => {
           BsDropdownModule.forRoot(),
           ProgressbarModule.forRoot()
         ],
-        declarations: [CephfsComponent],
+        declarations: [CephfsComponent, CephfsChartComponent],
         providers: [
           { provide: CephfsService, useValue: fakeFilesystemService }
         ]

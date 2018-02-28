@@ -6,6 +6,7 @@ import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
+import { CephfsChartComponent } from './cephfs-chart/cephfs-chart.component';
 import { CephfsService } from './cephfs.service';
 import { CephfsComponent } from './cephfs/cephfs.component';
 import { ClientsComponent } from './clients/clients.component';
@@ -18,7 +19,7 @@ import { ClientsComponent } from './clients/clients.component';
     ChartsModule,
     ProgressbarModule.forRoot()
   ],
-  declarations: [CephfsComponent, ClientsComponent],
+  declarations: [CephfsComponent, ClientsComponent, CephfsChartComponent],
   providers: [CephfsService]
 })
 export class CephfsModule {}
