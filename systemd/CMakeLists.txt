@@ -1,6 +1,6 @@
 set(CMAKE_INSTALL_SYSTEMD_SERVICEDIR "${CMAKE_INSTALL_LIBEXECDIR}/systemd/system"
   CACHE PATH "Location for systemd service files")
-set(CEPH_SYSTEMD_ENV_DIR "/etc/sysconf"
+set(CEPH_SYSTEMD_ENV_DIR "/etc/sysconfig"
   CACHE PATH "Location for systemd service environmental variable settings files")
 set(SYSTEMD_ENV_FILE "${CEPH_SYSTEMD_ENV_DIR}/ceph")
 foreach(service
