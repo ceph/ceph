@@ -508,12 +508,12 @@ void ManagedLock<I>::handle_acquire_lock(int r) {
 
   m_work_queue->queue(new FunctionContext([this, r](int ret) {
     post_acquire_lock_handler(r, create_context_callback<
-        ManagedLock<I>, &ManagedLock<I>::handle_post_acquire_lock>(this));
+        ManagedLock<I>, &ManagedLock<I>::handle_post_acquired_lock>(this));
   }));
 }
 
 template <typename I>
-void ManagedLock<I>::handle_post_acquire_lock(int r) {
+void ManagedLock<I>::handle_post_acquired_lock(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
