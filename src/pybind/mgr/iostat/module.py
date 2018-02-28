@@ -5,8 +5,8 @@ from mgr_module import MgrModule
 class Module(MgrModule):
     COMMANDS = [
         {
-            "cmd": "mgr iostat",
-            "desc": "Get IO rates v3",
+            "cmd": "iostat",
+            "desc": "Get IO rates",
             "perm": "r",
             "poll": "true"
         }
@@ -22,7 +22,7 @@ class Module(MgrModule):
         wr = 0
         ops = 0
 
-        if command['prefix'] == 'mgr iostat':
+        if command['prefix'] == 'iostat':
             r = self.get('io_rate')
 
             stamp_delta = float(r['pg_stats_delta']['stamp_delta'])
