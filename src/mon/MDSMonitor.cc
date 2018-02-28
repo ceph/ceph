@@ -76,7 +76,7 @@ template<> bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
 
 // my methods
 
-template <int dblV = 7>
+template <int dblV>
 void MDSMonitor::print_map(FSMap &m)
 {
   dout(dblV) << "print_map\n";
