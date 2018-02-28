@@ -336,7 +336,7 @@ Journal<I>::Journal(I &image_ctx)
 
   auto thread_pool_singleton =
     &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      "librbd::journal::thread_pool", cct);
+      "librbd::journal::thread_pool", false, cct);
   m_work_queue = new ContextWQ("librbd::journal::work_queue",
                                cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
                                thread_pool_singleton);

@@ -1178,7 +1178,7 @@ struct C_InvalidateCache : public Context {
                                           ContextWQ **op_work_queue) {
     auto thread_pool_singleton =
       &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-	"librbd::thread_pool", cct);
+	"librbd::thread_pool", false, cct);
     *thread_pool = thread_pool_singleton;
     *op_work_queue = thread_pool_singleton->op_work_queue;
   }
@@ -1187,7 +1187,7 @@ struct C_InvalidateCache : public Context {
                                     Mutex **timer_lock) {
     auto safe_timer_singleton =
       &cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
-	"librbd::journal::safe_timer", cct);
+	"librbd::journal::safe_timer", false, cct);
     *timer = safe_timer_singleton;
     *timer_lock = &safe_timer_singleton->lock;
   }
