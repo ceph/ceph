@@ -1,4 +1,5 @@
+@import '../../../../styles/chart-tooltip.scss';
+
 .chart-container {
-  position: relative;
-  margin: auto;
+  position: static !important;
 }
