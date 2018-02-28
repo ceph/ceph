@@ -1080,16 +1080,6 @@ def main():
         print('error handling command target: {0}'.format(e), file=sys.stderr)
         return 1
 
-    # ceph iostat
-    if len(childargs) > 0 and childargs[0] == 'iostat':
-        def call_iostat():
-            while 1:
-                subprocess.call([sys.argv[0], 'mgr', 'iostat'])
-                sleep(1)
-
-        run_in_thread(call_iostat)
-        return 1
-
     # Repulsive hack to handle tell: lop off 'tell' and target
     # and validate the rest of the command.  'target' is already
     # determined in our callers, so it's ok to remove it here.
