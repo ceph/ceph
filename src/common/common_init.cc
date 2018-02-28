@@ -51,6 +51,12 @@ CephContext *common_preinit(const CephInitParameters &iparams,
     conf->set_val_default("keyring", "$osd_data/keyring");
   }
 
+  if ((flags & CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS)) {
+    // make this unique despite multiple instances by the same name.
+    conf->set_val_default("admin_socket",
+			  "$run_dir/$cluster-$name.$pid.$cctid.asok");
+  }
+
   if (code_env == CODE_ENVIRONMENT_LIBRARY ||
       code_env == CODE_ENVIRONMENT_UTILITY_NODOUT) {
     conf->set_val_default("log_to_stderr", "false");
