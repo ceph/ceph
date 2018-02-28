@@ -63,81 +63,86 @@ class MgrCluster(CephCluster):
 class MgrTestCase(CephTestCase):
     MGRS_REQUIRED = 1
 
-    def setUp(self):
-        super(MgrTestCase, self).setUp()
-
-        # The test runner should have populated this
-        assert self.mgr_cluster is not None
-
-        if len(self.mgr_cluster.mgr_ids) < self.MGRS_REQUIRED:
-            raise case.SkipTest("Only have {0} manager daemons, "
-                                "{1} are required".format(
-                len(self.mgr_cluster.mgr_ids), self.MGRS_REQUIRED))
-
+    @classmethod
+    def setup_mgrs(cls):
         # Stop all the daemons
-        for daemon in self.mgr_cluster.mgr_daemons.values():
+        for daemon in cls.mgr_cluster.mgr_daemons.values():
             daemon.stop()
 
-        for mgr_id in self.mgr_cluster.mgr_ids:
-            self.mgr_cluster.mgr_fail(mgr_id)
+        for mgr_id in cls.mgr_cluster.mgr_ids:
+            cls.mgr_cluster.mgr_fail(mgr_id)
 
         # Unload all non-default plugins
-        loaded = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+        loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
                    "mgr", "module", "ls"))['enabled_modules']
         unload_modules = set(loaded) - {"status", "restful"}
 
         for m in unload_modules:
-            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            cls.mgr_cluster.mon_manager.raw_cluster_cmd(
                 "mgr", "module", "disable", m)
 
         # Start all the daemons
-        for daemon in self.mgr_cluster.mgr_daemons.values():
+        for daemon in cls.mgr_cluster.mgr_daemons.values():
             daemon.restart()
 
         # Wait for an active to come up
-        self.wait_until_true(lambda: self.mgr_cluster.get_active_id() != "",
+        cls.wait_until_true(lambda: cls.mgr_cluster.get_active_id() != "",
                              timeout=20)
 
-        expect_standbys = set(self.mgr_cluster.mgr_ids) \
-                          - {self.mgr_cluster.get_active_id()}
-        self.wait_until_true(
-            lambda: set(self.mgr_cluster.get_standby_ids()) == expect_standbys,
+        expect_standbys = set(cls.mgr_cluster.mgr_ids) \
+                          - {cls.mgr_cluster.get_active_id()}
+        cls.wait_until_true(
+            lambda: set(cls.mgr_cluster.get_standby_ids()) == expect_standbys,
             timeout=20)
 
-    def _load_module(self, module_name):
-        loaded = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+    @classmethod
+    def setUpClass(cls):
+        # The test runner should have populated this
+        assert cls.mgr_cluster is not None
+
+        if len(cls.mgr_cluster.mgr_ids) < cls.MGRS_REQUIRED:
+            raise case.SkipTest("Only have {0} manager daemons, "
+                                "{1} are required".format(
+                len(cls.mgr_cluster.mgr_ids), cls.MGRS_REQUIRED))
+
+        cls.setup_mgrs()
+
+    @classmethod
+    def _load_module(cls, module_name):
+        loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
                    "mgr", "module", "ls"))['enabled_modules']
         if module_name in loaded:
             # The enable command is idempotent, but our wait for a restart
             # isn't, so let's return now if it's already loaded
             return
 
-        initial_gid = self.mgr_cluster.get_mgr_map()['active_gid']
-        self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable",
+        initial_gid = cls.mgr_cluster.get_mgr_map()['active_gid']
+        cls.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable",
                                          module_name)
 
         # Wait for the module to load
         def has_restarted():
-            mgr_map = self.mgr_cluster.get_mgr_map()
+            mgr_map = cls.mgr_cluster.get_mgr_map()
             done = mgr_map['active_gid'] != initial_gid and mgr_map['available']
             if done:
                 log.info("Restarted after module load (new active {0}/{1})".format(
                     mgr_map['active_name'] , mgr_map['active_gid']))
             return done
-        self.wait_until_true(has_restarted, timeout=30)
+        cls.wait_until_true(has_restarted, timeout=30)
 
 
-    def _get_uri(self, service_name):
+    @classmethod
+    def _get_uri(cls, service_name):
         # Little dict hack so that I can assign into this from
         # the get_or_none function
         mgr_map = {'x': None}
 
         def _get_or_none():
-            mgr_map['x'] = self.mgr_cluster.get_mgr_map()
+            mgr_map['x'] = cls.mgr_cluster.get_mgr_map()
             result = mgr_map['x']['services'].get(service_name, None)
             return result
 
-        self.wait_until_true(lambda: _get_or_none() is not None, 30)
+        cls.wait_until_true(lambda: _get_or_none() is not None, 30)
 
         uri = mgr_map['x']['services'][service_name]
 
@@ -147,8 +152,8 @@ class MgrTestCase(CephTestCase):
 
         return uri
 
-
-    def _assign_ports(self, module_name, config_name, min_port=7789):
+    @classmethod
+    def _assign_ports(cls, module_name, config_name, min_port=7789):
         """
         To avoid the need to run lots of hosts in teuthology tests to
         get different URLs per mgr, we will hand out different ports
@@ -160,27 +165,27 @@ class MgrTestCase(CephTestCase):
         # Start handing out ports well above Ceph's range.
         assign_port = min_port
 
-        for mgr_id in self.mgr_cluster.mgr_ids:
-            self.mgr_cluster.mgr_stop(mgr_id)
-            self.mgr_cluster.mgr_fail(mgr_id)
+        for mgr_id in cls.mgr_cluster.mgr_ids:
+            cls.mgr_cluster.mgr_stop(mgr_id)
+            cls.mgr_cluster.mgr_fail(mgr_id)
 
-        for mgr_id in self.mgr_cluster.mgr_ids:
+        for mgr_id in cls.mgr_cluster.mgr_ids:
             log.info("Using port {0} for {1} on mgr.{2}".format(
                 assign_port, module_name, mgr_id
             ))
-            self.mgr_cluster.set_module_localized_conf(module_name, mgr_id,
-                                                       config_name,
-                                                       str(assign_port))
+            cls.mgr_cluster.set_module_localized_conf(module_name, mgr_id,
+                                                      config_name,
+                                                      str(assign_port))
             assign_port += 1
 
-        for mgr_id in self.mgr_cluster.mgr_ids:
-            self.mgr_cluster.mgr_restart(mgr_id)
+        for mgr_id in cls.mgr_cluster.mgr_ids:
+            cls.mgr_cluster.mgr_restart(mgr_id)
 
         def is_available():
-            mgr_map = self.mgr_cluster.get_mgr_map()
+            mgr_map = cls.mgr_cluster.get_mgr_map()
             done = mgr_map['available']
             if done:
                 log.info("Available after assign ports (new active {0}/{1})".format(
                     mgr_map['active_name'] , mgr_map['active_gid']))
             return done
-        self.wait_until_true(is_available, timeout=30)
+        cls.wait_until_true(is_available, timeout=30)
