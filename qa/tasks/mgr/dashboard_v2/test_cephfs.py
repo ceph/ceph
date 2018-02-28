@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import ControllerTestCase, authenticate
+from .helper import DashboardTestCase, authenticate
 
 
-class CephfsTest(ControllerTestCase):
+class CephfsTest(DashboardTestCase):
+    CEPHFS = True
+
     @authenticate
     def test_cephfs_clients(self):
-        data = self._get("/api/cephfs/clients/1")
+        fs_id = self.fs.get_namespace_id()
+        data = self._get("/api/cephfs/clients/{}".format(fs_id))
         self.assertStatus(200)
 
         self.assertIn('status', data)
@@ -15,7 +18,8 @@ class CephfsTest(ControllerTestCase):
 
     @authenticate
     def test_cephfs_data(self):
-        data = self._get("/api/cephfs/data/1/")
+        fs_id = self.fs.get_namespace_id()
+        data = self._get("/api/cephfs/data/{}/".format(fs_id))
         self.assertStatus(200)
 
         self.assertIn('cephfs', data)
@@ -27,7 +31,8 @@ class CephfsTest(ControllerTestCase):
 
     @authenticate
     def test_cephfs_mds_counters(self):
-        data = self._get("/api/cephfs/mds_counters/1")
+        fs_id = self.fs.get_namespace_id()
+        data = self._get("/api/cephfs/mds_counters/{}".format(fs_id))
         self.assertStatus(200)
 
         self.assertIsInstance(data, dict)

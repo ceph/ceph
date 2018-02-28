@@ -2,13 +2,14 @@
 
 from __future__ import absolute_import
 
-from .helper import ControllerTestCase, authenticate
+from .helper import DashboardTestCase, authenticate
 
 
-class RbdTest(ControllerTestCase):
+class RbdTest(DashboardTestCase):
 
     @classmethod
     def setUpClass(cls):
+        super(RbdTest, cls).setUpClass()
         cls._ceph_cmd(['osd', 'pool', 'create', 'rbd', '100', '100'])
         cls._ceph_cmd(['osd', 'pool', 'application', 'enable', 'rbd', 'rbd'])
         cls._rbd_cmd(['create', '--size=1G', 'img1'])
@@ -16,7 +17,8 @@ class RbdTest(ControllerTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls._ceph_cmd(['osd', 'pool', 'delete', 'rbd', '--yes-i-really-really-mean-it'])
+        super(RbdTest, cls).tearDownClass()
+        cls._ceph_cmd(['osd', 'pool', 'delete', 'rbd', 'rbd', '--yes-i-really-really-mean-it'])
 
     @authenticate
     def test_list(self):

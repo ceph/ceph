@@ -1,9 +1,9 @@
 from __future__ import absolute_import
 
-from .helper import ControllerTestCase, authenticate
+from .helper import DashboardTestCase, authenticate
 
 
-class ClusterConfigurationTest(ControllerTestCase):
+class ClusterConfigurationTest(DashboardTestCase):
     @authenticate
     def test_list(self):
         data = self._get('/api/cluster_conf')

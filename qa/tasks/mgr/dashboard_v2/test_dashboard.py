@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import ControllerTestCase, authenticate
+from .helper import DashboardTestCase, authenticate
 
 
-class DashboardTest(ControllerTestCase):
+class DashboardTest(DashboardTestCase):
+    CEPHFS = True
 
     @authenticate
     def test_health(self):
@@ -27,5 +28,11 @@ class DashboardTest(ControllerTestCase):
         self.assertIsNotNone(data['clog'])
         self.assertIsNotNone(data['audit_log'])
         self.assertIsNotNone(data['pools'])
+
+        cluster_pools = self.ceph_cluster.mon_manager.list_pools()
+        self.assertEqual(len(cluster_pools), len(data['pools']))
+        for pool in data['pools']:
+            self.assertIn(pool['pool_name'], cluster_pools)
+
         self.assertIsNotNone(data['mgr_map'])
         self.assertIsNotNone(data['df'])

@@ -4,11 +4,10 @@ from __future__ import absolute_import
 
 import time
 
-from .helper import ControllerTestCase
-from ..tools import Session
+from .helper import DashboardTestCase
 
 
-class AuthTest(ControllerTestCase):
+class AuthTest(DashboardTestCase):
     def setUp(self):
         self.reset_session()
         self._ceph_cmd(['dashboard', 'set-session-expire', '2'])
@@ -31,9 +30,9 @@ class AuthTest(ControllerTestCase):
             'password': 'admin',
             'stay_signed_in': True})
         self.assertStatus(201)
-        self.assertIn(Session.NAME, self.cookies())
+        self.assertIn('session_id', self.cookies())
         for cookie in self.cookies():
-            if cookie.name == Session.NAME:
+            if cookie.name == 'session_id':
                 self.assertIsNotNone(cookie.expires)
 
     def test_login_not_stay_signed_in(self):
@@ -42,9 +41,9 @@ class AuthTest(ControllerTestCase):
             'password': 'admin',
             'stay_signed_in': False})
         self.assertStatus(201)
-        self.assertIn(Session.NAME, self.cookies())
+        self.assertIn('session_id', self.cookies())
         for cookie in self.cookies():
-            if cookie.name == Session.NAME:
+            if cookie.name == 'session_id':
                 self.assertIsNone(cookie.expires)
 
     def test_login_invalid(self):
