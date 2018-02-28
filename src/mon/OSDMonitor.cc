@@ -1237,6 +1237,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
+  // clean inappropriate pg_upmap/pg_upmap_items (if any)
+  osdmap.maybe_remove_pg_upmaps(cct, osdmap, &pending_inc);
+
   // features for osdmap and its incremental
   uint64_t features = mon->get_quorum_con_features();
 

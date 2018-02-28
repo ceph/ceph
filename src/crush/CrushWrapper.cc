@@ -768,6 +768,25 @@ int CrushWrapper::get_children(int id, list<int> *children) const
   return b->size;
 }
 
+int CrushWrapper::get_rule_failure_domain(int rule_id)
+{
+  crush_rule *rule = get_rule(rule_id);
+  if (IS_ERR(rule)) {
+    return -ENOENT;
+  }
+  int type = 0; // default to osd-level
+  for (unsigned s = 0; s < rule->len; ++s) {
+    if ((rule->steps[s].op == CRUSH_RULE_CHOOSE_FIRSTN ||
+         rule->steps[s].op == CRUSH_RULE_CHOOSE_INDEP ||
+         rule->steps[s].op == CRUSH_RULE_CHOOSELEAF_FIRSTN ||
+         rule->steps[s].op == CRUSH_RULE_CHOOSELEAF_INDEP) &&
+         rule->steps[s].arg2 > type) {
+      type = rule->steps[s].arg2;
+    }
+  }
+  return type;
+}
+
 int CrushWrapper::_get_leaves(int id, list<int> *leaves) const
 {
   assert(leaves);
