@@ -218,6 +218,12 @@ namespace rgw {
     /* XXX for now, use "";  could be a legit hostname, or, in future,
      * perhaps a tenant (Yehuda) */
     rgw_env.set("HTTP_HOST", "");
+    rgw_env.set("REQUEST_METHOD", "");
+    rgw_env.set("REQUEST_URI", "");
+    rgw_env.set("HTTP_VERSION", "");
+    rgw_env.set("SCRIPT_URI", "");
+    rgw_env.set("SERVER_PORT", "");
+    rgw_env.set("REMOTE_ADDR", "");
 
     /* XXX and -then- bloat up req_state with string copies from it */
     struct req_state rstate(req->cct, &rgw_env, req->get_user());
