@@ -6,6 +6,7 @@ from textwrap import dedent
 from ceph_volume import decorators
 from ceph_volume.util import disk
 from ceph_volume.api import lvm as api
+from ceph_volume.exceptions import MultipleLVsError
 
 logger = logging.getLogger(__name__)
 
@@ -119,11 +120,22 @@ class List(object):
         """
         Generate a report for a single device. This can be either a logical
         volume in the form of vg/lv or a device with an absolute path like
-        /dev/sda1
+        /dev/sda1 or /dev/sda
         """
         lvs = api.Volumes()
         report = {}
         lv = api.get_lv_from_argument(device)
+
+        # check if there was a pv created with the
+        # name of device
+        pv = api.get_pv(pv_name=device)
+        if pv and not lv:
+            try:
+                lv = api.get_lv(vg_name=pv.vg_name)
+            except MultipleLVsError:
+                lvs.filter(vg_name=pv.vg_name)
+                return self.full_report(lvs=lvs)
+
         if lv:
             try:
                 _id = lv.tags['ceph.osd_id']
@@ -158,12 +170,13 @@ class List(object):
                     )
         return report
 
-    def full_report(self):
+    def full_report(self, lvs=None):
         """
         Generate a report for all the logical volumes and associated devices
         that have been previously prepared by Ceph
         """
-        lvs = api.Volumes()
+        if lvs is None:
+            lvs = api.Volumes()
         report = {}
         for lv in lvs:
             try:
