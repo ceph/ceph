@@ -2,10 +2,10 @@
 
 from __future__ import absolute_import
 
-from .helper import ControllerTestCase, authenticate
+from .helper import DashboardTestCase, authenticate
 
 
-class OsdTest(ControllerTestCase):
+class OsdTest(DashboardTestCase):
 
     def assert_in_and_not_none(self, data, properties):
         for prop in properties:

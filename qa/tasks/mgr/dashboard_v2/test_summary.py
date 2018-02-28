@@ -1,7 +1,10 @@
-from dashboard_v2.tests.helper import ControllerTestCase, authenticate
+from __future__ import absolute_import
+
+from .helper import DashboardTestCase, authenticate
 
 
-class SummaryTest(ControllerTestCase):
+class SummaryTest(DashboardTestCase):
+    CEPHFS = True
 
     @authenticate
     def test_summary(self):

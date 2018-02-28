@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import ControllerTestCase, authenticate
+from .helper import DashboardTestCase, authenticate
 
 
-class MonitorTest(ControllerTestCase):
+class MonitorTest(DashboardTestCase):
     @authenticate
     def test_monitor_default(self):
         data = self._get("/api/monitor")

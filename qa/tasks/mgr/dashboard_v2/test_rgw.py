@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import ControllerTestCase, authenticate
+from .helper import DashboardTestCase, authenticate
 
 
-class RgwControllerTest(ControllerTestCase):
+class RgwControllerTest(DashboardTestCase):
 
     @authenticate
     def test_rgw_daemon_list(self):
