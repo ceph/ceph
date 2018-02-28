@@ -3709,7 +3709,7 @@ std::vector<Option> get_global_options() {
     .set_description("Preallocated buffer for inline shards"),
 
     Option("bluestore_cache_trim_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.2)
+    .set_default(.05)
     .set_description("How frequently we trim the bluestore cache"),
 
     Option("bluestore_cache_trim_max_skip_pinned", Option::TYPE_UINT, Option::LEVEL_DEV)
