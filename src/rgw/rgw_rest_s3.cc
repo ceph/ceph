@@ -1550,7 +1550,7 @@ int RGWPostObj_ObjStore_S3::get_params()
     if (r < 0)
       return r;
 
-    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       ldout(s->cct, 20) << "read part header -- part.name="
                         << part.name << dendl;
 
@@ -2345,7 +2345,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
     in_data.append(data, len);
   }
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldout(s->cct, 15) << "CORSConfiguration";
     cors_config->to_xml(*_dout);
     *_dout << dendl;

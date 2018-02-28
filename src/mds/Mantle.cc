@@ -31,7 +31,7 @@
     if ((dout_context)->_conf->subsys.should_gather(ceph_subsys_mds_balancer, lvl)) {\
       subsys = ceph_subsys_mds_balancer;\
     }\
-    dout_impl(dout_context, subsys, lvl) dout_prefix
+    dout_impl(dout_context, ceph::dout::need_dynamic(subsys), lvl) dout_prefix
 
 #define mantle_dendl dendl; } while (0)
 
@@ -40,7 +40,8 @@ static int dout_wrapper(lua_State *L)
 {
   int level = luaL_checkinteger(L, 1);
   lua_concat(L, lua_gettop(L)-1);
-  mantle_dout(level) << lua_tostring(L, 2) << mantle_dendl;
+  mantle_dout(ceph::dout::need_dynamic(level)) << lua_tostring(L, 2)
+					       << mantle_dendl;
   return 0;
 }
 

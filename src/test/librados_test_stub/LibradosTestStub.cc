@@ -1351,7 +1351,7 @@ int cls_log(int level, const char *format, ...) {
     int n = vsnprintf(buf, size, format, ap);
     va_end(ap);
     if ((n > -1 && n < size) || size > 8196) {
-      dout(level) << buf << dendl;
+      dout(ceph::dout::need_dynamic(level)) << buf << dendl;
       return n;
     }
     size *= 2;

@@ -78,8 +78,6 @@ md_config_t::md_config_t(bool is_daemon)
   : cluster(""),
   lock("md_config_t", true, false)
 {
-  init_subsys();
-
   // Load the compile-time list of Option into
   // a map so that we can resolve keys quickly.
   for (const auto &i : ceph_options) {
@@ -174,17 +172,6 @@ void md_config_t::validate_schema()
       ceph_abort();
     }
   }
-}
-
-void md_config_t::init_subsys()
-{
-#define SUBSYS(name, log, gather) \
-  subsys.add(ceph_subsys_##name, STRINGIFY(name), log, gather);
-#define DEFAULT_SUBSYS(log, gather) \
-  subsys.add(ceph_subsys_, "none", log, gather);
-#include "common/subsys.h"
-#undef SUBSYS
-#undef DEFAULT_SUBSYS
 }
 
 md_config_t::~md_config_t()
@@ -338,8 +325,13 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
       int log, gather;
       int r = sscanf(val.c_str(), "%d/%d", &log, &gather);
       if (r >= 1) {
-	if (r < 2)
+	if (r < 2) {
 	  gather = log;
+	}
+        if (log < 0 || gather < 0) {
+          cerr << "ERROR for " << as_option << "."
+	       << "log nor gather levels cannot be negative!";
+        }
 	//	cout << "config subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
 	subsys.set_log_level(o, log);
 	subsys.set_gather_level(o, gather);
@@ -830,7 +822,7 @@ int md_config_t::set_val(const std::string &key, const char *val,
   // subsystems?
   if (strncmp(k.c_str(), "debug_", 6) == 0) {
     for (size_t o = 0; o < subsys.get_num(); o++) {
-      std::string as_option = "debug_" + subsys.get_name(o);
+      std::string as_option = std::string("debug_") + subsys.get_name(o);
       if (k == as_option) {
 	int log, gather;
 	int r = sscanf(v.c_str(), "%d/%d", &log, &gather);
@@ -956,7 +948,7 @@ int md_config_t::_get_val(const std::string &key, char **buf, int len) const
   string k(ConfFile::normalize_key_name(key));
   // subsys?
   for (size_t o = 0; o < subsys.get_num(); o++) {
-    std::string as_option = "debug_" + subsys.get_name(o);
+    std::string as_option = std::string("debug_") + subsys.get_name(o);
     if (k == as_option) {
       if (len == -1) {
 	*buf = (char*)malloc(20);
@@ -984,7 +976,7 @@ void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
     }
   }
   for (size_t i = 0; i < subsys.get_num(); ++i) {
-    keys->push_back("debug_" + subsys.get_name(i));
+    keys->push_back(std::string("debug_") + subsys.get_name(i));
   }
 }
 

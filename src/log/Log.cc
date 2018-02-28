@@ -407,10 +407,8 @@ void Log::dump_recent()
 
   char buf[4096];
   _log_message("--- logging levels ---", true);
-  for (vector<Subsystem>::iterator p = m_subs->m_subsys.begin();
-       p != m_subs->m_subsys.end();
-       ++p) {
-    snprintf(buf, sizeof(buf), "  %2d/%2d %s", p->log_level, p->gather_level, p->name.c_str());
+  for (const auto& p : m_subs->m_subsys) {
+    snprintf(buf, sizeof(buf), "  %2d/%2d %s", p.log_level, p.gather_level, p.name);
     _log_message(buf, true);
   }
 

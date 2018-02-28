@@ -2025,7 +2025,7 @@ int RGWFormPost::get_params()
       return ret;
     }
 
-    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       ldout(s->cct, 20) << "read part header -- part.name="
                         << part.name << dendl;
 

@@ -5575,7 +5575,7 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
     ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
     return -EIO;
   }
-  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
     ldout(cct, 15) << __func__ << " Read AccessControlPolicy";
     s3policy->to_xml(*_dout);
@@ -9315,7 +9315,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
       return -EIO;
     }
     ldout(cct, 10) << "manifest: total_size = " << s->manifest.get_obj_size() << dendl;
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20) && s->manifest.has_explicit_objs()) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>() && \
+	s->manifest.has_explicit_objs()) {
       RGWObjManifest::obj_iterator mi;
       for (mi = s->manifest.obj_begin(); mi != s->manifest.obj_end(); ++mi) {
         ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(this) << dendl;
@@ -9876,7 +9877,7 @@ int RGWRados::Object::Read::prepare()
   }
   if (params.attrs) {
     *params.attrs = astate->attrset;
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
         ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
       }
@@ -9980,7 +9981,7 @@ int RGWRados::stat_system_obj(RGWObjectCtx& obj_ctx,
 
   if (attrs) {
     *attrs = astate->attrset;
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       map<string, bufferlist>::iterator iter;
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
         ldout(cct, 20) << "Read xattr: " << iter->first << dendl;

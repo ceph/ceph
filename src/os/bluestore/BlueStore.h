@@ -469,7 +469,8 @@ public:
       return sb_map.empty();
     }
 
-    void dump(CephContext *cct, int lvl);
+    template <int LogLevelV>
+    void dump(CephContext *cct);
   };
 
 //#define CACHE_BLOB_BL  // not sure if this is a win yet or not... :/
@@ -1336,7 +1337,8 @@ public:
     void clear();
     bool empty();
 
-    void dump(CephContext *cct, int lvl);
+    template <int LogLevelV>
+    void dump(CephContext *cct);
 
     /// return true if f true for any item
     bool map_any(std::function<bool(OnodeRef)> f);
@@ -2011,9 +2013,9 @@ private:
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
 
-  void _dump_onode(const OnodeRef& o, int log_level=30);
-  void _dump_extent_map(ExtentMap& em, int log_level=30);
-  void _dump_transaction(Transaction *t, int log_level = 30);
+  template <int LogLevelV = 30> void _dump_onode(const OnodeRef& o);
+  template <int LogLevelV = 30> void _dump_extent_map(ExtentMap& em);
+  template <int LogLevelV = 30> void _dump_transaction(Transaction *t);
 
   TransContext *_txc_create(Collection *c, OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
