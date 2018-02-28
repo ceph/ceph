@@ -425,12 +425,27 @@ class Module(MgrModule):
                     " and metadata records for this osd".format(id_)
                 )
                 continue
-            dev_class = next((osd for osd in osd_devices if str(osd['id']) == id_))
+
+            dev_class = None
+            for osd_device in osd_devices:
+                if osd_device['id'] == id_:
+                    dev_class = osd_device.get('class', '')
+                    break
+
+            if dev_class is None:
+                self.log.info(
+                    "OSD {0} is missing from CRUSH map, skipping output".format(
+                        id_))
+                continue
+
             host_version = servers.get((id_, 'osd'), ('',''))
-            self.metrics.append('osd_metadata', 1, (c_addr,
-                                                    dev_class.get('class',''),
-                                                    id_, host_version[0],
-                                                    p_addr, host_version[1]))
+
+            self.metrics['osd_metadata'].set(1, (
+                c_addr,
+                dev_class,
+                id_, host_version[0],
+                p_addr, host_version[1]
+            ))
 
             # collect osd status
             for state in OSD_STATUS:
