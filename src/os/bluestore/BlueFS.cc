@@ -2448,7 +2448,10 @@ int BlueFS::unlink(const string& dirname, const string& filename)
 
 bool BlueFS::wal_is_rotational()
 {
-  if (!bdev[BDEV_WAL] || bdev[BDEV_WAL]->is_rotational())
-    return true;
-  return false;
+  if (bdev[BDEV_WAL]) {
+    return bdev[BDEV_WAL]->is_rotational();
+  } else if (bdev[BDEV_DB]) {
+    return bdev[BDEV_DB]->is_rotational();
+  }
+  return bdev[BDEV_SLOW]->is_rotational();
 }
