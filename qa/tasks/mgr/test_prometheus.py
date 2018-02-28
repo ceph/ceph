@@ -12,6 +12,9 @@ log = logging.getLogger(__name__)
 class TestPrometheus(MgrTestCase):
     MGRS_REQUIRED = 3
 
+    def setUp(self):
+        self.setup_mgrs()
+
     def test_standby(self):
         self._assign_ports("prometheus", "server_port")
         self._load_module("prometheus")
