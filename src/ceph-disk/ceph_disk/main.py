@@ -473,6 +473,23 @@ def _get_command_executable(arguments):
     return arguments
 
 
+def reset_python_path(func):
+    name = 'PYTHONPATH'
+
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        old = None
+        if name in os.environ:
+            old = os.environ[name]
+            del os.environ[name]
+        ret = func(*args, **kwargs)
+        if old is not None:
+            os.environ[name] = old
+        return ret
+    return wrapper
+
+
+@reset_python_path
 def command(arguments, **kwargs):
     """
     Safely execute a ``subprocess.Popen`` call making sure that the
@@ -500,6 +517,7 @@ def command(arguments, **kwargs):
     return _bytes2str(out), _bytes2str(err), process.returncode
 
 
+@reset_python_path
 def command_with_stdin(arguments, stdin):
     LOG.info("Running command with stdin: " + " ".join(arguments))
     process = subprocess.Popen(
@@ -524,6 +542,7 @@ def _bytes2str(string):
     return string.decode('utf-8') if isinstance(string, bytes) else string
 
 
+@reset_python_path
 def command_init(arguments, **kwargs):
     """
     Safely execute a non-blocking ``subprocess.Popen`` call
@@ -558,6 +577,7 @@ def command_wait(process):
     return _bytes2str(out), _bytes2str(err), process.returncode
 
 
+@reset_python_path
 def command_check_call(arguments, exit=False):
     """
     Safely execute a ``subprocess.check_call`` call making sure that the
