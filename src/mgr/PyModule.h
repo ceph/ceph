@@ -30,6 +30,7 @@ public:
   std::string cmdstring;
   std::string helpstring;
   std::string perm;
+  bool polling;
 
   // Call the ActivePyModule of this name to handle the command
   std::string module_name;

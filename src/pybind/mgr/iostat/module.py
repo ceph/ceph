@@ -6,8 +6,9 @@ class Module(MgrModule):
     COMMANDS = [
         {
             "cmd": "mgr iostat",
-            "desc": "Get IO rates",
-            "perm": "r"
+            "desc": "Get IO rates v3",
+            "perm": "r",
+            "poll": "true"
         }
     ]
 
