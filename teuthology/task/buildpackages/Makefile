@@ -39,7 +39,7 @@ flock-${PKG_REPO}:
 	sleep 30
 	set -ex ; \
 	ip=$(call get_ip,${PKG_REPO}) ; \
-	for delay in 60 60 60 2 2 2; do if ssh -o 'ConnectTimeout=3' $$ip bash -c '"grep -q READYTORUN /var/log/cloud-init*.log"' ; then break ; else echo "ssh status code $$?" ; sleep $$delay ; fi ; done ; \
+	for delay in 60 60 60 60 2 2 2; do sleep $$delay ; if ssh -o 'ConnectTimeout=3' $$ip bash -c '"grep -q READYTORUN /var/log/cloud-init*.log"' ; then break ; else echo "ssh status code $$?" ; fi ; done ; \
 	ssh $$ip sudo apt-get update ; \
 	ssh $$ip sudo apt-get install -y nginx rsync && \
 	ssh $$ip sudo chown -R ubuntu /usr/share/nginx/html && \
@@ -72,7 +72,7 @@ ${SELFNAME}-ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEP
 	done ; \
 	ip=$(call get_ip,$@) ; \
 	test -n "$$ip" || exit ; \
-	for delay in 60 60 60 2 2 2 ; do if ssh -o 'ConnectTimeout=3' $$ip bash -c '"grep -q READYTORUN /var/log/cloud-init*.log"' ; then break ; else echo "ssh status code $$?" ; sleep $$delay ; fi ; done ; \
+	for delay in 60 60 60 60 2 2 2 ; do sleep $$delay ; if ssh -o 'ConnectTimeout=3' $$ip bash -c '"grep -q READYTORUN /var/log/cloud-init*.log"' ; then break ; else echo "ssh status code $$?" ; fi ; done ; \
 	scp make-${CEPH_PKG_TYPE}.sh common.sh ubuntu@$$ip: ; \
 	packages_repository=$(call get_ip,${<F}) ; \
 	timeout $(TIMEOUT_BUILD) ssh -tt -A ubuntu@$$ip bash ./make-${CEPH_PKG_TYPE}.sh $$packages_repository ${CEPH_DIST} ${CEPH_GIT_URL} ${CEPH_SHA1} ${CEPH_FLAVOR} ${CEPH_ARCH} ${BUILDPACKAGES_CANONICAL_TAGS}
