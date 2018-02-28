@@ -205,11 +205,11 @@ void MDSDaemon::set_up_admin_socket()
   assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
-				     "show slowest recent ops");
+				     "show recent ops");
   assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
 				     asok_hook,
-				     "show slowest recent ops, sorted by op duration");
+				     "show recent ops, sorted by op duration");
   assert(r == 0);
   r = admin_socket->register_command("scrub_path",
 				     "scrub_path name=path,type=CephString "
