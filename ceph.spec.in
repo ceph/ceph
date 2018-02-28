@@ -906,6 +906,7 @@ cmake .. \
     -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=ON \
+    -DWITH_MGR_DASHBOARD_V2_FRONTEND=OFF \
 %if %{with python2}
     -DWITH_PYTHON2=ON \
 %else
