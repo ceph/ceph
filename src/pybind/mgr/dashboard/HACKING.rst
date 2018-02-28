@@ -120,6 +120,25 @@ Example:
     import { Credentials } from '../../../shared/models/credentials.model';
     import { HostService } from './services/host.service';
 
+Frontend components
+~~~~~~~~~~~~~~~~~~~
+
+There are several components that can be reused on different pages.
+This components are declared on the components module:
+`src/pybind/mgr/dashboard/frontend/src/app/shared/components`.
+
+Helper
+......
+
+This component should be used to provide additional information to the user.
+
+Example:
+
+.. code:: html
+
+    <cd-helper>
+      Some <strong>helper</strong> html text
+    </cd-helper>
 
 Backend Development
 -------------------
