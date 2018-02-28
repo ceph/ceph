@@ -57,12 +57,6 @@ function get_state() {
         jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
-function delete_pool() {
-    local poolname=$1
-
-    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
-}
-
 function rados_put() {
     local dir=$1
     local poolname=$2

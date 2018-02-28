@@ -80,9 +80,8 @@ function create_erasure_coded_pool() {
     wait_for_clean || return 1
 }
 
-function delete_pool() {
+function delete_erasure_coded_pool() {
     local poolname=$1
-
     ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
     ceph osd erasure-code-profile rm myprofile
 }
@@ -260,7 +259,7 @@ function TEST_rados_get_subread_eio_shard_0() {
     # inject eio on primary OSD (0) and replica OSD (1)
     local shard_id=0
     rados_put_get_data eio $dir $shard_id || return 1
-    delete_pool $poolname
+    delete_erasure_pool $poolname
 }
 
 function TEST_rados_get_subread_eio_shard_1() {
@@ -272,7 +271,7 @@ function TEST_rados_get_subread_eio_shard_1() {
     # inject eio into replicas OSD (1) and OSD (2)
     local shard_id=1
     rados_put_get_data eio $dir $shard_id || return 1
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 # We don't remove the object from the primary because
@@ -287,7 +286,7 @@ function TEST_rados_get_subread_missing() {
     # inject remove into replicas OSD (1) and OSD (2)
     local shard_id=1
     rados_put_get_data remove $dir $shard_id || return 1
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 #
@@ -309,7 +308,7 @@ function TEST_rados_get_bad_size_shard_0() {
     rados_get_data_bad_size $dir $shard_id 10 || return 1
     rados_get_data_bad_size $dir $shard_id 0 || return 1
     rados_get_data_bad_size $dir $shard_id 256 add || return 1
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 function TEST_rados_get_bad_size_shard_1() {
@@ -323,7 +322,7 @@ function TEST_rados_get_bad_size_shard_1() {
     rados_get_data_bad_size $dir $shard_id 10 || return 1
     rados_get_data_bad_size $dir $shard_id 0 || return 1
     rados_get_data_bad_size $dir $shard_id 256 add || return 1
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 function TEST_rados_get_with_subreadall_eio_shard_0() {
@@ -337,7 +336,7 @@ function TEST_rados_get_with_subreadall_eio_shard_0() {
     # inject eio on primary OSD (0)
     rados_put_get_data eio $dir $shard_id recovery || return 1
 
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 function TEST_rados_get_with_subreadall_eio_shard_1() {
@@ -351,7 +350,7 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     # inject eio on replica OSD (1)
     rados_put_get_data eio $dir $shard_id recovery || return 1
 
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 # Test recovery the first k copies aren't all available
@@ -377,7 +376,7 @@ function TEST_ec_recovery_errors() {
     # Cluster should recover this object
     wait_for_clean || return 1
 
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 # Test backfill with unfound object
@@ -455,7 +454,7 @@ function TEST_ec_backfill_unfound() {
 
     rm -f ${dir}/ORIGINAL ${dir}/CHECK
 
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 # Test recovery with unfound object
@@ -531,7 +530,7 @@ function TEST_ec_recovery_unfound() {
 
     rm -f ${dir}/ORIGINAL ${dir}/CHECK
 
-    delete_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 main test-erasure-eio "$@"
