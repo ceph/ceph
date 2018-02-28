@@ -250,8 +250,26 @@ void DPDKStack::spawn_worker(unsigned i, std::function<void ()> &&func)
   // if dpdk::eal::init already called by NVMEDevice, we will select 1..n
   // cores
   assert(rte_lcore_count() >= i + 1);
+  auto coremask_arg = cct->_conf->get_val<std::string>("ms_dpdk_coremask");
+  int first_slave_coreid = -1;
+  try {
+    auto core_value = stoull(coremask_arg, nullptr, 16);
+    first_slave_coreid = ffsll(core_value) + 1;
+  } catch (const std::logic_error& e) {
+    lderr(cct) << __func__ << " invalid ms_spdk_coremask: "
+	 << coremask_arg << dendl;
+    ceph_abort();
+  }
+
+  if (first_slave_coreid == 1)
+  {
+    lderr(cct) << __func__ << " invalid ms_spdk_coremask: "
+	 << at least one core is needed << dendl;
+    ceph_abort();
+  }
+  ldout(cct, 5)  << __func__ << " coremask:" << cct->_conf->ms_dpdk_coremask << " first_slave_coreid = " << first_slave_coreid << dendl;
   dpdk::eal::execute_on_master([&]() {
-    r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&funcs[i]), i+1);
+    r = rte_eal_remote_launch(dpdk_thread_adaptor, static_cast<void*>(&funcs[i]), first_slave_coreid + i);
     if (r < 0) {
       lderr(cct) << __func__ << " remote launch failed, r=" << r << dendl;
       ceph_abort();
