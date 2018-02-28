@@ -1881,15 +1881,7 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
     if (!keyfile.empty()) {
       bufferlist keybl;
       string err;
-      if (keyfile == "-") {
-	static_assert(1024 * 1024 >
-		      (sizeof(CryptoKey) - sizeof(bufferptr) +
-		       sizeof(__u16) + 16 /* AES_KEY_LEN */ + 3 - 1) / 3. * 4.,
-		      "1MB should be enough for a base64 encoded CryptoKey");
-	r = keybl.read_fd(STDIN_FILENO, 1024 * 1024);
-      } else {
-	r = keybl.read_file(keyfile.c_str(), &err);
-      }
+      r = keybl.read_file(keyfile.c_str(), &err);
       if (r < 0) {
 	derr << __func__ << " failed to read keyfile " << keyfile << ": "
 	     << err << ": " << cpp_strerror(r) << dendl;
