@@ -94,7 +94,7 @@ class EventCenter {
 
   struct AssociatedCenters {
     EventCenter *centers[MAX_EVENTCENTER];
-    AssociatedCenters(CephContext *c) {
+    AssociatedCenters() {
       memset(centers, 0, MAX_EVENTCENTER * sizeof(EventCenter*));
     }
   };

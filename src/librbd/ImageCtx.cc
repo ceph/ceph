@@ -1176,18 +1176,18 @@ struct C_InvalidateCache : public Context {
   void ImageCtx::get_thread_pool_instance(CephContext *cct,
                                           ThreadPool **thread_pool,
                                           ContextWQ **op_work_queue) {
-    ThreadPoolSingleton *thread_pool_singleton;
-    cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      thread_pool_singleton, "librbd::thread_pool");
+    auto thread_pool_singleton =
+      &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+	"librbd::thread_pool", cct);
     *thread_pool = thread_pool_singleton;
     *op_work_queue = thread_pool_singleton->op_work_queue;
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,
                                     Mutex **timer_lock) {
-    SafeTimerSingleton *safe_timer_singleton;
-    cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
-      safe_timer_singleton, "librbd::journal::safe_timer");
+    auto safe_timer_singleton =
+      &cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
+	"librbd::journal::safe_timer", cct);
     *timer = safe_timer_singleton;
     *timer_lock = &safe_timer_singleton->lock;
   }
