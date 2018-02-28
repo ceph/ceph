@@ -123,7 +123,7 @@ if(WITH_PMEM)
   ExternalProject_Add(nvml_ext
     DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
     GIT_REPOSITORY "https://github.com/ceph/nvml.git"
-    GIT_TAG "dd5b62dbc2cbbe048087dea"
+    GIT_TAG "dd622819dd4ee97d3920f913c70be"
     SOURCE_DIR ${CMAKE_BINARY_DIR}/src/nvml
     CONFIGURE_COMMAND ""
     BUILD_COMMAND $(MAKE)
