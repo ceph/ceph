@@ -5,7 +5,7 @@ After=network-online.target local-fs.target
 Wants=network-online.target local-fs.target
 
 [Service]
-EnvironmentFile=-/etc/sysconfig/ceph
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=RBDMAPFILE=/etc/ceph/rbdmap
 Type=oneshot
 RemainAfterExit=yes

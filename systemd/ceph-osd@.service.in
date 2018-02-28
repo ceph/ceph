@@ -7,7 +7,7 @@ PartOf=ceph-osd.target
 [Service]
 LimitNOFILE=1048576
 LimitNPROC=1048576
-EnvironmentFile=-/etc/sysconfig/ceph
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecStartPre=/usr/lib/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
