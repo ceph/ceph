@@ -4233,6 +4233,10 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       handle_timecheck(op);
       break;
 
+    case MSG_MON_HEALTH:
+      dout(5) << __func__ << " dropping deprecated message: "
+	      << *op->get_req() << dendl;
+      break;
     case MSG_MON_HEALTH_CHECKS:
       op->set_type_service();
       paxos_service[PAXOS_HEALTH]->dispatch(op);
