@@ -10,5 +10,5 @@ users:
     groups: users
 runcmd:
  - ( MYHOME=/home/ubuntu ; mkdir $MYHOME/.ssh ; chmod 700 $MYHOME/.ssh ; cp /home/sles/.ssh/authorized_keys $MYHOME/.ssh ; chown -R ubuntu.users $MYHOME/.ssh )
- - zypper --non-interactive install --no-recommends python wget git ntp rsyslog lsb-release
+ - zypper --non-interactive install --no-recommends wget git-core rsyslog lsb-release
 final_message: "READYTORUN"
