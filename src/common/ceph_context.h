@@ -143,6 +143,7 @@ public:
 
   template<typename T, typename... Args>
   T& lookup_or_create_singleton_object(std::string_view name,
+				       bool drop_on_fork,
 				       Args&&... args) {
     static_assert(sizeof(T) <= largest_singleton,
 		  "Please increase largest singleton.");
@@ -151,6 +152,9 @@ public:
 
     auto i = associated_objs.find(std::make_pair(name, type));
     if (i == associated_objs.cend()) {
+      if (drop_on_fork) {
+	associated_objs_drop_on_fork.insert(std::string(name));
+      }
       i = associated_objs.emplace_hint(
 	i,
 	std::piecewise_construct,
@@ -211,17 +215,8 @@ public:
     _fork_watchers.push_back(w);
   }
 
-  void notify_pre_fork() {
-    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
-    for (auto &&t : _fork_watchers)
-      t->handle_pre_fork();
-  }
-
-  void notify_post_fork() {
-    ceph::spin_unlock(&_fork_watchers_lock);
-    for (auto &&t : _fork_watchers)
-      t->handle_post_fork();
-  }
+  void notify_pre_fork();
+  void notify_post_fork();
 
 private:
 
@@ -277,6 +272,7 @@ private:
   std::map<std::pair<std::string, std::type_index>,
 	   ceph::immobile_any<largest_singleton>,
 	   associated_objs_cmp> associated_objs;
+  std::set<std::string> associated_objs_drop_on_fork;
 
   ceph::spinlock _fork_watchers_lock;
   std::vector<ForkWatcher*> _fork_watchers;
