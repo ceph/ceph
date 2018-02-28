@@ -1096,7 +1096,9 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_pg_sub(removed_pg, s->second);
       pg_stat.erase(s);
     }
-    deleted_pools.insert(removed_pg.pool());
+    if (removed_pg.ps() == 0) {
+      deleted_pools.insert(removed_pg.pool());
+    }
   }
 
   for (auto p = inc.get_osd_stat_rm().begin();
@@ -3299,7 +3301,8 @@ void PGMapUpdater::check_osd_map(
     }
   }
 
-  // new pgs (split or new pool)?
+  // new (split or new pool) or merged pgs?
+  map<int64_t,unsigned> new_pg_num;
   for (auto& p : osdmap.get_pools()) {
     int64_t poolid = p.first;
     const pg_pool_t& pi = p.second;
@@ -3308,9 +3311,10 @@ void PGMapUpdater::check_osd_map(
     if (q != pgmap.num_pg_by_pool.end())
       my_pg_num = q->second;
     unsigned pg_num = pi.get_pg_num();
-    if (my_pg_num != pg_num) {
+    new_pg_num[poolid] = pg_num;
+    if (my_pg_num < pg_num) {
       ldout(cct,10) << __func__ << " pool " << poolid << " pg_num " << pg_num
-		    << " != my pg_num " << my_pg_num << dendl;
+		    << " > my pg_num " << my_pg_num << dendl;
       for (unsigned ps = my_pg_num; ps < pg_num; ++ps) {
 	pg_t pgid(ps, poolid);
 	if (pending_inc->pg_stat_updates.count(pgid) == 0) {
@@ -3329,6 +3333,29 @@ void PGMapUpdater::check_osd_map(
 	  stats.last_clean_scrub_stamp = osdmap.get_modified();
 	}
       }
+    } else if (my_pg_num > pg_num) {
+      ldout(cct,10) << __func__ << " pool " << poolid << " pg_num " << pg_num
+		    << " < my pg_num " << my_pg_num << dendl;
+      for (unsigned i = pg_num; i < my_pg_num; ++i) {
+	pg_t pgid(i, poolid);
+	ldout(cct,20) << __func__ << " removing merged " << pgid << dendl;
+	if (pgmap.pg_stat.count(pgid)) {
+	  pending_inc->pg_remove.insert(pgid);
+	}
+	pending_inc->pg_stat_updates.erase(pgid);
+      }
+    }
+  }
+  auto i = pending_inc->pg_stat_updates.begin();
+  while (i != pending_inc->pg_stat_updates.end()) {
+    auto j = new_pg_num.find(i->first.pool());
+    if (j == new_pg_num.end() ||
+	i->first.ps() >= j->second) {
+      ldout(cct,20) << __func__ << " removing pending update to old "
+		    << i->first << dendl;
+      i = pending_inc->pg_stat_updates.erase(i);
+    } else {
+      ++i;
     }
   }
 }
