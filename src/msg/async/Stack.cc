@@ -120,7 +120,6 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
     w->center.init(InitEventNumber, i, type);
     workers.push_back(w);
   }
-  cct->register_fork_watcher(this);
 }
 
 void NetworkStack::start()
