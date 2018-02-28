@@ -644,7 +644,6 @@ class Thrasher:
         Increase the size of the pool
         """
         pool = self.ceph_manager.get_pool()
-        orig_pg_num = self.ceph_manager.get_pool_pg_num(pool)
         self.log("Growing pool %s" % (pool,))
         if self.ceph_manager.expand_pool(pool,
                                          self.config.get('pool_grow_by', 10),
