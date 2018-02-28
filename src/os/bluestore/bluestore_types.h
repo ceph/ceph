@@ -732,8 +732,6 @@ public:
 
   template<class F>
   int map(uint64_t x_off, uint64_t x_len, F&& f) const {
-    static_assert(std::is_invocable_r_v<int, F, uint64_t, uint64_t>);
-
     auto p = extents.begin();
     assert(p != extents.end());
     while (x_off >= p->length) {
@@ -757,8 +755,6 @@ public:
   void map_bl(uint64_t x_off,
 	      bufferlist& bl,
 	      F&& f) const {
-    static_assert(std::is_invocable_v<F, uint64_t, bufferlist&>);
-
     auto p = extents.begin();
     assert(p != extents.end());
     while (x_off >= p->length) {
