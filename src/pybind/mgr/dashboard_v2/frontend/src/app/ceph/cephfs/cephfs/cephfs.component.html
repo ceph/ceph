@@ -48,15 +48,9 @@
 </div>
 
 <div class="row"
-     *ngFor="let mdsCounter of objectValues(mdsCounters)">
+     *ngFor="let mdsCounter of objectValues(mdsCounters); trackBy: trackByFn">
   <div class="cold-md-12">
-    <div class="chart-container">
-      <canvas baseChart
-              [datasets]="mdsCounter.datasets"
-              [options]="mdsCounter.options"
-              [chartType]="mdsCounter.chartType">
-      </canvas>
-    </div>
+    <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
   </div>
 </div>
 
