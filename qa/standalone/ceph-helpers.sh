@@ -509,6 +509,11 @@ function create_pool() {
     sleep 1
 }
 
+function delete_pool() {
+    local poolname=$1
+    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
+}
+
 #######################################################################
 
 function run_mgr() {
