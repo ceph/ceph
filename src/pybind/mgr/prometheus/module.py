@@ -335,6 +335,8 @@ class Module(MgrModule):
                     ('osd.{}'.format(id_),))
 
             osd_metadata = self.get_metadata("osd", str(id_))
+            if osd_metadata is None:
+                continue
             dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
             osd_dev_node = None
             for dev_key in dev_keys:
