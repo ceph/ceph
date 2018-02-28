@@ -212,12 +212,11 @@ private:
     if (m_work_queue != nullptr) {
       return;
     }
-    ThreadPoolSingleton *thread_pool_singleton;
-    m_cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      thread_pool_singleton, "librbd::ImageUpdateWatchers::thread_pool");
+    auto& thread_pool = m_cct->lookup_or_create_singleton_object<
+      ThreadPoolSingleton>("librbd::ImageUpdateWatchers::thread_pool", m_cct);
     m_work_queue = new ContextWQ("librbd::ImageUpdateWatchers::op_work_queue",
 				 m_cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
-				 thread_pool_singleton);
+				 &thread_pool);
   }
 
   void destroy_work_queue() {
