@@ -58,6 +58,8 @@ OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
 
 OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
 
+SERVER_METADATA = ('hostname', 'version', 'services')
+
 OSD_STATUS = ['weight', 'up', 'in']
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
@@ -164,6 +166,12 @@ class Module(MgrModule):
             'osd_metadata',
             'OSD Metadata',
             OSD_METADATA
+        )
+        metrics['server_metadata'] = Metric(
+            'untyped',
+            'server_metadata',
+            'Server Metadata',
+            SERVER_METADATA
         )
 
         # The reason for having this separate to OSD_METADATA is
@@ -362,12 +370,25 @@ class Module(MgrModule):
             name = pool['pool_name']
             self.metrics['pool_metadata'].set(1, (id_, name))
 
+    def get_server_metadata(self):
+        for server in self._ceph_get_server(None):
+            services = "+".join(set(map(
+                lambda x: x['type'],
+                server['services']
+            )))
+            self.metrics['server_metadata'].set(1, (
+                server['hostname'],
+                server['ceph_version'].replace("ceph version ", "").split(" ")[0],
+                services
+            ))
+
     def collect(self):
         self.get_health()
         self.get_df()
         self.get_osd_stats()
         self.get_quorum_status()
         self.get_metadata_and_osd_status()
+        self.get_server_metadata()
         self.get_pg_status()
 
         for daemon, counters in self.get_all_perf_counters().iteritems():
