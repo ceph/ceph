@@ -243,14 +243,11 @@ public:
                                   parent_trace, on_finish);
   }
 
-  void send(uint64_t journal_tid /* removed in future commit */);
+  void send();
   void fail(int r);
 
 private:
   template <typename> friend class ObjectDispatcher;
-
-  // TODO removed in future commmit
-  struct SetJournalTid;
 
   ObjectDispatchSpec(ObjectDispatcherInterface* object_dispatcher,
                      ObjectDispatchLayer object_dispatch_layer,

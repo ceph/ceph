@@ -17,7 +17,7 @@ void ObjectDispatchSpec::C_Dispatcher::complete(int r) {
 
   switch (object_dispatch_spec->dispatch_result) {
   case DISPATCH_RESULT_CONTINUE:
-    object_dispatch_spec->send(0);
+    object_dispatch_spec->send();
     break;
   case DISPATCH_RESULT_COMPLETE:
     finish(r);
@@ -33,27 +33,7 @@ void ObjectDispatchSpec::C_Dispatcher::finish(int r) {
   delete object_dispatch_spec;
 }
 
-struct ObjectDispatchSpec::SetJournalTid : public boost::static_visitor<void> {
-  uint64_t journal_tid;
-
-  SetJournalTid(uint64_t journal_tid) : journal_tid(journal_tid) {
-  }
-
-  template <typename T>
-  void operator()(T& t) const {
-  }
-
-  void operator()(WriteRequestBase& write_request_base) const {
-    write_request_base.journal_tid = journal_tid;
-  }
-};
-
-void ObjectDispatchSpec::send(uint64_t journal_tid) {
-  // TODO removed in future commit
-  if (journal_tid != 0) {
-    boost::apply_visitor(SetJournalTid{journal_tid}, request);
-  }
-
+void ObjectDispatchSpec::send() {
   object_dispatcher->send(this);
 }
 

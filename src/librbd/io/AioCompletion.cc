@@ -80,12 +80,6 @@ void AioCompletion::complete() {
     break;
   }
 
-  // inform the journal that the op has successfully committed
-  if (journal_tid != 0) {
-    assert(ictx->journal != NULL);
-    ictx->journal->commit_io_event(journal_tid, rval);
-  }
-
   state = AIO_STATE_CALLBACK;
   if (complete_cb) {
     lock.Unlock();
@@ -178,12 +172,6 @@ void AioCompletion::complete_request(ssize_t r)
     complete();
   }
   put_unlock();
-}
-
-void AioCompletion::associate_journal_event(uint64_t tid) {
-  Mutex::Locker l(lock);
-  assert(state == AIO_STATE_PENDING);
-  journal_tid = tid;
 }
 
 bool AioCompletion::is_complete() {

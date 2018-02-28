@@ -46,11 +46,10 @@ public:
   void inject_into_journal(librbd::ImageCtx *ictx, T event) {
     C_SaferCond ctx;
     librbd::journal::EventEntry event_entry(event);
-    librbd::Journal<>::IOObjectRequests requests;
     {
       RWLock::RLocker owner_locker(ictx->owner_lock);
-      uint64_t tid = ictx->journal->append_io_event(std::move(event_entry),
-                                                    requests, 0, 0, true, 0);
+      uint64_t tid = ictx->journal->append_io_event(std::move(event_entry),0, 0,
+                                                    true, 0);
       ictx->journal->wait_event(tid, &ctx);
     }
     ASSERT_EQ(0, ctx.wait());

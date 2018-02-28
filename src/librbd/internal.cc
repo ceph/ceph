@@ -2366,7 +2366,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
             ictx, io::OBJECT_DISPATCH_LAYER_NONE, q->oid.name, q->objectno,
             q->offset, q->length, snap_id, 0, {}, &req_comp->read_data,
             &req_comp->extent_map, req_comp);
-          req->send(0);
+          req->send();
 	}
       }
       ictx->perfcounter->inc(l_librbd_readahead);
