@@ -588,7 +588,18 @@ int md_config_t::parse_argv(std::vector<const char*>& args, int level)
       set_val_or_die("public_addr", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyfile", "-K", (char*)NULL)) {
-      set_val_or_die("keyfile", val.c_str());
+      bufferlist bl;
+      string err;
+      int r;
+      if (val == "-") {
+	r = bl.read_fd(STDIN_FILENO, 1024);
+      } else {
+	r = bl.read_file(val.c_str(), &err);
+      }
+      if (r >= 0) {
+	string k(bl.c_str(), bl.length());
+	set_val_or_die("key", k.c_str());
+      }
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyring", "-k", (char*)NULL)) {
       set_val_or_die("keyring", val.c_str());

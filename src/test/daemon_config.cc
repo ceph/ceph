@@ -128,7 +128,7 @@ TEST(DaemonConfig, ArgV) {
 
   int ret;
   const char *argv[] = { "foo", "--log-graylog-port", "22",
-			 "--keyfile", "/tmp/my-keyfile", NULL };
+			 "--key", "my-key", NULL };
   size_t argc = (sizeof(argv) / sizeof(argv[0])) - 1;
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -138,9 +138,9 @@ TEST(DaemonConfig, ArgV) {
   char buf[128];
   char *tmp = buf;
   memset(buf, 0, sizeof(buf));
-  ret = g_ceph_context->_conf->get_val("keyfile", &tmp, sizeof(buf));
+  ret = g_ceph_context->_conf->get_val("key", &tmp, sizeof(buf));
   ASSERT_EQ(0, ret);
-  ASSERT_EQ(string("/tmp/my-keyfile"), string(buf));
+  ASSERT_EQ(string("my-key"), string(buf));
 
   memset(buf, 0, sizeof(buf));
   ret = g_ceph_context->_conf->get_val("log_graylog_port", &tmp, sizeof(buf));
