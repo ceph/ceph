@@ -9,6 +9,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def which(executable):
+    """
+    Proxy function to ceph_volume.util.system.which because the ``system``
+    module does import ``process``
+    """
+    from ceph_volume.util import system
+    return system.which(executable)
+
+
 def log_output(descriptor, message, terminal_logging, logfile_logging):
     """
     log output to both the logger and the terminal if terminal_logging is
@@ -102,6 +111,8 @@ def run(command, **kw):
     stop_on_error = kw.pop('stop_on_error', True)
     command_msg = obfuscate(command, kw.pop('obfuscate', None))
     fail_msg = kw.pop('fail_msg', None)
+    executable = which(command.pop(0))
+    command.insert(0, executable)
     logger.info(command_msg)
     terminal.write(command_msg)
     terminal_logging = kw.pop('terminal_logging', True)
@@ -166,6 +177,8 @@ def call(command, **kw):
     terminal_verbose = kw.pop('terminal_verbose', False)
     logfile_verbose = kw.pop('logfile_verbose', True)
     show_command = kw.pop('show_command', False)
+    executable = which(command.pop(0))
+    command.insert(0, executable)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
     logger.info(command_msg)
