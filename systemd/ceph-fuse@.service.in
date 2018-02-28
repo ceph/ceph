@@ -6,7 +6,7 @@ Conflicts=umount.target
 PartOf=ceph-fuse.target
 
 [Service]
-EnvironmentFile=-/etc/sysconfig/ceph
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-fuse -f --cluster ${CLUSTER} %I
 TasksMax=infinity

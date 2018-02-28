@@ -7,7 +7,7 @@ PartOf=ceph-mgr.target
 [Service]
 LimitNOFILE=1048576
 LimitNPROC=1048576
-EnvironmentFile=-/etc/sysconfig/ceph
+EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=CLUSTER=ceph
 
 ExecStart=/usr/bin/ceph-mgr -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
