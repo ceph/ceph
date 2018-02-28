@@ -1410,6 +1410,7 @@ function test_mon_osd()
   # require-min-compat-client
   expect_false ceph osd set-require-min-compat-client dumpling  # firefly tunables
   ceph osd set-require-min-compat-client luminous
+  ceph osd get-require-min-compat-client | grep luminous
   ceph osd dump | grep 'require_min_compat_client luminous'
 
   #
