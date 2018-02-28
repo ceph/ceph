@@ -149,7 +149,7 @@ namespace librbd {
     auto req = io::ObjectDispatchSpec::create_read(
       m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, oid.name, object_no, off, len,
       snapid, op_flags, trace, &req_comp->bl, &req_comp->extent_map, req_comp);
-    req->send(0);
+    req->send();
   }
 
   bool LibrbdWriteback::may_copy_on_write(const object_t& oid, uint64_t read_off, uint64_t read_len, snapid_t snapid)
@@ -210,7 +210,7 @@ namespace librbd {
     req->object_dispatch_flags = (
       io::OBJECT_DISPATCH_FLAG_FLUSH |
       io::OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR);
-    req->send(0);
+    req->send();
 
     return ++m_tid;
   }

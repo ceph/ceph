@@ -716,7 +716,6 @@ void Journal<I>::flush_commit_position(Context *on_finish) {
 template <typename I>
 uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
                                         const bufferlist &bl,
-                                        const IOObjectRequests &requests,
                                         bool flush_entry) {
   assert(m_max_append_size > journal::AioWriteEvent::get_fixed_size());
   uint64_t max_write_data_size =
@@ -743,26 +742,24 @@ uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
     bytes_remaining -= event_length;
   } while (bytes_remaining > 0);
 
-  return append_io_events(journal::EVENT_TYPE_AIO_WRITE, bufferlists, requests,
-                          offset, length, flush_entry, 0);
+  return append_io_events(journal::EVENT_TYPE_AIO_WRITE, bufferlists, offset,
+                          length, flush_entry, 0);
 }
 
 template <typename I>
 uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
-                                     const IOObjectRequests &requests,
                                      uint64_t offset, size_t length,
                                      bool flush_entry, int filter_ret_val) {
   bufferlist bl;
   event_entry.timestamp = ceph_clock_now();
   encode(event_entry, bl);
-  return append_io_events(event_entry.get_event_type(), {bl}, requests, offset,
-                          length, flush_entry, filter_ret_val);
+  return append_io_events(event_entry.get_event_type(), {bl}, offset, length,
+                          flush_entry, filter_ret_val);
 }
 
 template <typename I>
 uint64_t Journal<I>::append_io_events(journal::EventType event_type,
                                       const Bufferlists &bufferlists,
-                                      const IOObjectRequests &requests,
                                       uint64_t offset, size_t length,
                                       bool flush_entry, int filter_ret_val) {
   assert(!bufferlists.empty());
@@ -784,13 +781,12 @@ uint64_t Journal<I>::append_io_events(journal::EventType event_type,
 
   {
     Mutex::Locker event_locker(m_event_lock);
-    m_events[tid] = Event(futures, requests, offset, length, filter_ret_val);
+    m_events[tid] = Event(futures, offset, length, filter_ret_val);
   }
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": "
                  << "event=" << event_type << ", "
-                 << "new_reqs=" << requests.size() << ", "
                  << "offset=" << offset << ", "
                  << "length=" << length << ", "
                  << "flush=" << flush_entry << ", tid=" << tid << dendl;
@@ -1450,7 +1446,6 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
                << "failed to commit IO event: "  << cpp_strerror(r) << dendl;
   }
 
-  IOObjectRequests aio_object_requests;
   Contexts on_safe_contexts;
   {
     Mutex::Locker event_locker(m_event_lock);
@@ -1458,7 +1453,6 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
     assert(it != m_events.end());
 
     Event &event = it->second;
-    aio_object_requests.swap(event.aio_object_requests);
     on_safe_contexts.swap(event.on_safe_contexts);
 
     if (r < 0 || event.committed_io) {
@@ -1479,16 +1473,6 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
 
   ldout(cct, 20) << this << " " << __func__ << ": "
                  << "completing tid=" << tid << dendl;
-  for (auto it = aio_object_requests.begin(); it != aio_object_requests.end();
-       ++it) {
-    if (r < 0) {
-      // don't send aio requests if the journal fails -- bubble error up
-      (*it)->fail(r);
-    } else {
-      // send any waiting aio requests now that journal entry is safe
-      (*it)->send(tid);
-    }
-  }
 
   // alert the cache about the journal event status
   for (Contexts::iterator it = on_safe_contexts.begin();

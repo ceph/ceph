@@ -7,7 +7,6 @@
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/cache/MockImageCache.h"
 #include "librbd/io/ImageRequest.h"
-#include "librbd/io/ObjectRequest.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 
 namespace librbd {
@@ -16,21 +15,16 @@ namespace {
 struct MockTestImageCtx;
 
 struct MockTestJournal : public MockJournal {
-  typedef std::list<io::ObjectDispatchSpec*> ObjectRequests;
-
-  MOCK_METHOD5(append_write_event, uint64_t(uint64_t, size_t,
-                                            const bufferlist &,
-                                            const ObjectRequests &, bool));
-  MOCK_METHOD6(append_io_event_mock, uint64_t(const journal::EventEntry&,
-                                              const ObjectRequests &,
+  MOCK_METHOD4(append_write_event, uint64_t(uint64_t, size_t,
+                                            const bufferlist &, bool));
+  MOCK_METHOD5(append_io_event_mock, uint64_t(const journal::EventEntry&,
                                               uint64_t, size_t, bool, int));
   uint64_t append_io_event(journal::EventEntry &&event_entry,
-                           const ObjectRequests &requests,
                            uint64_t offset, size_t length,
                            bool flush_entry, int filter_ret_val) {
     // googlemock doesn't support move semantics
-    return append_io_event_mock(event_entry, requests, offset, length,
-                                flush_entry, filter_ret_val);
+    return append_io_event_mock(event_entry, offset, length, flush_entry,
+                                filter_ret_val);
   }
 
   MOCK_METHOD2(commit_io_event, void(uint64_t, int));

@@ -213,7 +213,7 @@ void ImageReadRequest<I>::send_request() {
         &image_ctx, OBJECT_DISPATCH_LAYER_NONE, extent.oid.name,
         extent.objectno, extent.offset, extent.length, snap_id, m_op_flags,
         this->m_trace, &req_comp->bl, &req_comp->extent_map, req_comp);
-      req->send(0);
+      req->send();
     }
   }
 
@@ -318,7 +318,7 @@ void AbstractImageWriteRequest<I>::send_object_requests(
 
     // if journaling, stash the request for later; otherwise send
     if (request != NULL) {
-      request->send(0);
+      request->send();
     }
   }
 }
@@ -347,7 +347,7 @@ uint64_t ImageWriteRequest<I>::append_journal_event(bool synchronous) {
     buffer_offset += extent.second;
 
     tid = image_ctx.journal->append_write_event(extent.first, extent.second,
-                                                sub_bl, {}, synchronous);
+                                                sub_bl, synchronous);
   }
 
   return tid;
@@ -399,8 +399,8 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(bool synchronous) {
                                extent.second,
                                this->m_skip_partial_discard));
     tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                             {}, extent.first,
-                                             extent.second, synchronous, 0);
+                                             extent.first, extent.second,
+                                             synchronous, 0);
   }
 
   return tid;
@@ -481,8 +481,7 @@ void ImageFlushRequest<I>::send_request() {
   if (journaling) {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = image_ctx.journal->append_io_event(
-      journal::EventEntry(journal::AioFlushEvent()),
-      ObjectRequests(), 0, 0, false, 0);
+      journal::EventEntry(journal::AioFlushEvent()), 0, 0, false, 0);
 
     ctx = new FunctionContext(
       [&image_ctx, journal_tid, ctx](int r) {
@@ -499,7 +498,7 @@ void ImageFlushRequest<I>::send_request() {
       &image_ctx, OBJECT_DISPATCH_LAYER_NONE, m_flush_source, this->m_trace,
       ctx);
     ctx = new FunctionContext([object_dispatch_spec](int r) {
-        object_dispatch_spec->send(0);
+        object_dispatch_spec->send();
       });
   }
 
@@ -533,8 +532,8 @@ uint64_t ImageWriteSameRequest<I>::append_journal_event(bool synchronous) {
                                                                extent.second,
                                                                m_data_bl));
     tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                             {}, extent.first,
-                                             extent.second, synchronous, 0);
+                                             extent.first, extent.second,
+                                             synchronous, 0);
   }
 
   return tid;
@@ -600,8 +599,8 @@ uint64_t ImageCompareAndWriteRequest<I>::append_journal_event(
     journal::AioCompareAndWriteEvent(extent.first, extent.second, m_cmp_bl,
                                      m_bl));
   tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                           {}, extent.first,
-                                           extent.second, synchronous, -EILSEQ);
+                                           extent.first, extent.second,
+                                           synchronous, -EILSEQ);
 
   return tid;
 }

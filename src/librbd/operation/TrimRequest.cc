@@ -50,7 +50,7 @@ public:
       &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, oid, m_object_no, 0,
       image_ctx.layout.object_size, m_snapc,
       io::OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, 0, {}, this);
-    object_dispatch_spec->send(0);
+    object_dispatch_spec->send();
     return 0;
   }
 private:
@@ -349,7 +349,7 @@ void TrimRequest<I>::send_clean_boundary() {
     auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
       &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, p->oid.name, p->objectno,
       p->offset, p->length, snapc, 0, 0, {}, req_comp);
-    object_dispatch_spec->send(0);
+    object_dispatch_spec->send();
   }
   completion->finish_adding_requests();
 }
