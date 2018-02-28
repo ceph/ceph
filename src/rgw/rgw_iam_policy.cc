@@ -803,6 +803,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
       if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
         is_validaction = true;
 	(w->id == TokenID::Action ? t->action : t->notaction) |= p.bit;
+        break;
       }
     }
   } else if (w->id == TokenID::Resource || w->id == TokenID::NotResource) {
