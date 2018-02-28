@@ -728,6 +728,13 @@ public:
   int get_children(int id, list<int> *children);
 
   /**
+    * get failure-domain type of a specific crush rule
+    * @param rule_id crush rule id
+    * @return type of failure-domain or a negative errno on error.
+    */
+  int get_rule_failure_domain(int rule_id);
+
+  /**
     * enumerate leaves(devices) of given node
     *
     * @param name parent bucket name
