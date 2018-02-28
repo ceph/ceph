@@ -1,5 +1,7 @@
-import { Component, OnChanges, OnInit, SimpleChanges } from '@angular/core';
+import { Component, ElementRef, OnChanges, OnInit, SimpleChanges, ViewChild } from '@angular/core';
 import { Input } from '@angular/core';
+
+import { ChartTooltip } from '../../../shared/models/chart-tooltip';
 
 @Component({
   selector: 'cd-sparkline',
@@ -7,6 +9,9 @@ import { Input } from '@angular/core';
   styleUrls: ['./sparkline.component.scss']
 })
 export class SparklineComponent implements OnInit, OnChanges {
+  @ViewChild('sparkCanvas') chartCanvasRef: ElementRef;
+  @ViewChild('sparkTooltip') chartTooltipRef: ElementRef;
+
   @Input() data: any;
   @Input()
   style = {
@@ -40,7 +45,10 @@ export class SparklineComponent implements OnInit, OnChanges {
       }
     },
     tooltips: {
-      enabled: true
+      enabled: false,
+      mode: 'index',
+      intersect: false,
+      custom: undefined
     },
     scales: {
       yAxes: [
@@ -66,7 +74,31 @@ export class SparklineComponent implements OnInit, OnChanges {
 
   constructor() {}
 
-  ngOnInit() {}
+  ngOnInit() {
+    const getStyleTop = (tooltip, positionY) => {
+      return (tooltip.caretY - tooltip.height - tooltip.yPadding - 5) + 'px';
+    };
+
+    const getStyleLeft = (tooltip, positionX) => {
+      return positionX + tooltip.caretX + 'px';
+    };
+
+    const chartTooltip = new ChartTooltip(
+      this.chartCanvasRef,
+      this.chartTooltipRef,
+      getStyleLeft,
+      getStyleTop
+    );
+
+    chartTooltip.customColors = {
+      backgroundColor: this.colors[0].pointBackgroundColor,
+      borderColor: this.colors[0].pointBorderColor
+    };
+
+    this.options.tooltips.custom = tooltip => {
+      chartTooltip.customTooltips(tooltip);
+    };
+  }
 
   ngOnChanges(changes: SimpleChanges) {
     this.datasets[0].data = changes['data'].currentValue;
