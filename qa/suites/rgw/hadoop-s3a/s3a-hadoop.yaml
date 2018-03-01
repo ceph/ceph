@@ -1,7 +1,7 @@
 machine_type: ovh
 openstack:
 - volumes: # attached to each instance
-    count: 3 
+    count: 3
     size: 20 # GB
 overrides:
     ceph_ansible:
@@ -22,11 +22,14 @@ overrides:
         ceph_origin: repository
         ceph_repository: dev
 roles:
-- [mon.a, osd.0, osd.1, osd.2, rgw.0]
+- [mon.a, osd.0, osd.1, osd.2]
 - [osd.3, osd.4, osd.5]
 - [osd.6, osd.7, osd.8]
-- [mgr.x]
+- [mon.b, mgr.x, rgw.0]
+
 tasks:
 - ssh-keys:
 - ceph-ansible:
+- dnsmasq:
+    rgw.0: [s3.ceph.com]
 - s3a-hadoop:

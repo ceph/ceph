@@ -20,6 +20,7 @@ def task(ctx, config):
            bucket-name: 's3atest' (default)
            access-key: 'anykey' (uses a default value)
            secret-key: 'secretkey' ( uses a default value)
+           dnsmasq-name: 's3.ceph.com'
     """
     if config is None:
         config = {}
@@ -39,6 +40,7 @@ def task(ctx, config):
     hadoop_ver = config.get('hadoop-version', '2.7.3')
     bucket_name = config.get('bucket-name', 's3atest')
     access_key = config.get('access-key', 'EGAQRD2ULOIFKFSKCT4F')
+    dnsmasq_name = config.get('dnsmasq-name', 's3.ceph.com')
     secret_key = config.get(
         'secret-key',
         'zi816w1vZKfaSM85Cl0BxXTwSLyN7zB4RbTswrGb')
@@ -76,9 +78,7 @@ def task(ctx, config):
             run.Raw(hadoop_rel)
         ]
     )
-    dnsmasq_name = 's3.ceph.com'
     configure_s3a(rgw_node, dnsmasq_name, access_key, secret_key, bucket_name, testdir)
-    setup_dnsmasq(rgw_node, dnsmasq_name)
     fix_rgw_config(rgw_node, dnsmasq_name)
     setup_user_bucket(rgw_node, dnsmasq_name, access_key, secret_key, bucket_name, testdir)
     if hadoop_ver.startswith('2.8'):
@@ -94,10 +94,6 @@ def task(ctx, config):
         log.info("Done s3a testing, Cleaning up")
         for fil in ['apache*', 'hadoop*', 'venv*', 'create*']:
             rgw_node.run(args=['rm', run.Raw('-rf'), run.Raw('{tdir}/{file}'.format(tdir=testdir, file=fil))])
-        # restart and let NM restore original config
-        rgw_node.run(args=['sudo', 'systemctl', 'stop', 'dnsmasq'])
-        rgw_node.run(args=['sudo', 'systemctl', 'restart', 'network.service'], check_status=False)
-        rgw_node.run(args=['sudo', 'systemctl', 'status', 'network.service'], check_status=False)
 
 
 def install_prereq(client):
@@ -118,37 +114,6 @@ def install_prereq(client):
                     'dnsmasq'
                     ]
                 )
-
-
-def setup_dnsmasq(client, name):
-    """
-    Setup simple dnsmasq name eg: s3.ceph.com
-    Local RGW host can then be used with whatever name has been setup with.
-    """
-    resolv_conf = "nameserver 127.0.0.1\n"
-    dnsmasq_template = """address=/{name}/{ip_address}
-server=8.8.8.8
-server=8.8.4.4
-""".format(name=name, ip_address=client.ip_address)
-    dnsmasq_config_path = '/etc/dnsmasq.d/ceph'
-    # point resolv.conf to local dnsmasq
-    misc.sudo_write_file(
-        remote=client,
-        path='/etc/resolv.conf',
-        data=resolv_conf,
-    )
-    misc.sudo_write_file(
-        remote=client,
-        path=dnsmasq_config_path,
-        data=dnsmasq_template,
-    )
-    client.run(args=['cat', dnsmasq_config_path])
-    # restart dnsmasq
-    client.run(args=['sudo', 'systemctl', 'restart', 'dnsmasq'])
-    client.run(args=['sudo', 'systemctl', 'status', 'dnsmasq'])
-    time.sleep(5)
-    # verify dns name is set
-    client.run(args=['ping', '-c', '4', name])
 
 
 def fix_rgw_config(client, name):
