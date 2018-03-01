@@ -8,6 +8,7 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { SharedModule } from '../../shared/shared.module';
 import { DashboardService } from './dashboard.service';
 import { DashboardComponent } from './dashboard/dashboard.component';
+import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
 import { LogColorPipe } from './log-color.pipe';
 import { MdsSummaryPipe } from './mds-summary.pipe';
@@ -28,7 +29,8 @@ import { PgStatusPipe } from './pg-status.pipe';
     MgrSummaryPipe,
     PgStatusPipe,
     MdsSummaryPipe,
-    PgStatusStylePipe
+    PgStatusStylePipe,
+    HealthPieComponent
   ],
   providers: [DashboardService]
 })
