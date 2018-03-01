@@ -190,6 +190,12 @@ template <typename I>
 void ObjectCopyRequest<I>::handle_read_object(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
+  if (r == -ENOENT && m_read_whole_object) {
+    ldout(m_cct, 5) << "object missing when forced to read whole object"
+                    << dendl;
+    r = 0;
+  }
+
   if (r == -ENOENT) {
     m_retry_snap_set = m_snap_set;
     m_retry_missing_read = true;
@@ -478,7 +484,16 @@ void ObjectCopyRequest<I>::compute_read_ops() {
     librados::snap_t clone_end_snap_id;
     calc_snap_set_diff(m_cct, m_snap_set, start_src_snap_id,
                        end_src_snap_id, &diff, &end_size, &exists,
-                       &clone_end_snap_id);
+                       &clone_end_snap_id, &m_read_whole_object);
+
+    if (m_read_whole_object) {
+      ldout(m_cct, 1) << "need to read full object" << dendl;
+      diff.insert(0, m_src_image_ctx->layout.object_size);
+      exists = true;
+      end_size = m_src_image_ctx->layout.object_size;
+      clone_end_snap_id = end_src_snap_id;
+    }
+
     if (!exists) {
       end_size = 0;
     }
