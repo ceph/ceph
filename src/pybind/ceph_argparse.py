@@ -1049,7 +1049,7 @@ def validate_command(sigdict, args, verbose=False):
             print("bestcmds_sorted: ", file=sys.stderr)
             pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
 
-        e = None
+        ex = None
         # for everything in bestcmds, look for a true match
         for cmdsig in bestcmds_sorted:
             for cmd in cmdsig.values():
@@ -1063,6 +1063,7 @@ def validate_command(sigdict, args, verbose=False):
                     # the right command yet
                     pass
                 except ArgumentMissing as e:
+                    ex = e
                     if len(bestcmds) == 1:
                         found = cmd
                     break
@@ -1075,12 +1076,13 @@ def validate_command(sigdict, args, verbose=False):
                         print('Not enough args supplied for ',
                               concise_sig(sig), file=sys.stderr)
                 except ArgumentError as e:
+                    ex = e
                     # Solid mismatch on an arg (type, range, etc.)
                     # Stop now, because we have the right command but
                     # some other input is invalid
                     found = cmd
                     break
-            if found or e:
+            if found or ex:
                 break
 
         if found:
