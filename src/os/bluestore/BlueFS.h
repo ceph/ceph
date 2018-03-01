@@ -282,6 +282,7 @@ private:
   vector<Allocator*> alloc;                   ///< allocators for bdevs
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
+  BlockDevice::discard_t discard_mode;
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
   BlueFSDeviceExpander* slow_dev_expander = nullptr;

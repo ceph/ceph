@@ -131,6 +131,12 @@ public:
 class BlockDevice {
 public:
   CephContext* cct;
+
+  typedef enum {
+    DISCARD_NONE,
+    DISCARD_SYNC,
+    DISCARD_ASYNC,
+  } discard_t;
   typedef void (*aio_callback_t)(void *handle, void *aio);
 private:
   ceph::mutex ioc_reap_lock = ceph::make_mutex("BlockDevice::ioc_reap_lock");

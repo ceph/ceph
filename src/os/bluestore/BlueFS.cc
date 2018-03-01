@@ -51,6 +51,12 @@ BlueFS::BlueFS(CephContext* cct)
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
+  if (cct->_conf->bluefs_bdev_discard == "sync")
+    discard_mode = BlockDevice::DISCARD_SYNC;
+  else if (cct->_conf->bluefs_bdev_discard == "async")
+    discard_mode = BlockDevice::DISCARD_ASYNC;
+  else
+    discard_mode = BlockDevice::DISCARD_NONE;
 }
 
 BlueFS::~BlueFS()
@@ -1980,11 +1986,11 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<ceph::mutex>& l,
     if (!to_release[i].empty()) {
       /* OK, now we have the guarantee alloc[i] won't be null. */
       int r = 0;
-      if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
+      if (discard_mode == BlockDevice::DISCARD_ASYNC) {
 	r = bdev[i]->queue_discard(to_release[i]);
 	if (r == 0)
 	  continue;
-      } else if (cct->_conf->bdev_enable_discard) {
+      } else if (discard_mode == BlockDevice::DISCARD_SYNC) {
 	for (auto p = to_release[i].begin(); p != to_release[i].end(); ++p) {
 	  bdev[i]->discard(p.get_start(), p.get_len());
 	}

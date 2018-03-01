@@ -3889,6 +3889,13 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+
+  if (cct->_conf->bluestore_bdev_discard == "sync")
+    discard_mode = BlockDevice::DISCARD_SYNC;
+  else if (cct->_conf->bluestore_bdev_discard == "async")
+    discard_mode = BlockDevice::DISCARD_ASYNC;
+  else
+    discard_mode = BlockDevice::DISCARD_NONE;
 }
 
 BlueStore::BlueStore(CephContext *cct,
@@ -3911,6 +3918,13 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+
+  if (cct->_conf->bluestore_bdev_discard == "sync")
+    discard_mode = BlockDevice::DISCARD_SYNC;
+  else if (cct->_conf->bluestore_bdev_discard == "async")
+    discard_mode = BlockDevice::DISCARD_ASYNC;
+  else
+    discard_mode = BlockDevice::DISCARD_NONE;
 }
 
 BlueStore::~BlueStore()
@@ -9982,14 +9996,14 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   // it's expected we're called with lazy_release_lock already taken!
   if (likely(!cct->_conf->bluestore_debug_no_reuse_blocks)) {
     int r = 0;
-    if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
+    if (discard_mode == BlockDevice::DISCARD_ASYNC) {
       r = bdev->queue_discard(txc->released);
       if (r == 0) {
 	dout(10) << __func__ << "(queued) " << txc << " " << std::hex
 		 << txc->released << std::dec << dendl;
 	goto out;
       }
-    } else if (cct->_conf->bdev_enable_discard) {
+    } else if (discard_mode == BlockDevice::DISCARD_SYNC) {
       for (auto p = txc->released.begin(); p != txc->released.end(); ++p) {
 	  bdev->discard(p.get_start(), p.get_len());
       }
