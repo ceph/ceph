@@ -27,7 +27,9 @@
               </div>
               <div class="media-body">
                 <span class="media-heading"
-                      i18n="ceph monitors"><a routerLink="/monitor/">Monitors</a></span>
+                      i18n="ceph monitors">
+                  <a routerLink="/monitor/">Monitors</a>
+                </span>
                 <span class="media-text">{{ contentData.mon_status | monSummary }}</span>
               </div>
             </div>
@@ -41,7 +43,9 @@
               </div>
               <div class="media-body">
                 <span class="media-heading"
-                      i18n="ceph OSDs"><a routerLink="/osd/">OSDs</a></span>
+                      i18n="ceph OSDs">
+                  <a routerLink="/osd/">OSDs</a>
+                </span>
                 <span class="media-text">{{ contentData.osd_map | osdSummary }}</span>
               </div>
             </div>
@@ -94,31 +98,15 @@
                 <span style="font-size: 45px;">{{ contentData.df.stats.total_objects | dimless }}</span>
               </td>
               <td>
-                <div class="center-block pie"
-                     *ngIf="rawUsage.dataset">
-                  <canvas baseChart
-                          id="raw_usage_chart"
-                          [datasets]="rawUsage.dataset"
-                          [chartType]="rawUsage.chartType"
-                          [options]="rawUsage.options"
-                          [labels]="rawUsage.labels"
-                          [colors]="rawUsage.colors"
-                          width="120"
-                          height="120"></canvas>
+                <div class="center-block pie">
+                  <cd-health-pie [data]="contentData"
+                                 (prepareFn)="prepareRawUsage($event[0], $event[1])"></cd-health-pie>
                 </div>
               </td>
               <td>
-                <div class="center-block pie"
-                     *ngIf="poolUsage.dataset">
-                  <canvas baseChart
-                          id="pool_usage_chart"
-                          [datasets]="poolUsage.dataset"
-                          [chartType]="poolUsage.chartType"
-                          [options]="poolUsage.options"
-                          [labels]="poolUsage.labels"
-                          [colors]="poolUsage.colors"
-                          width="120"
-                          height="120"></canvas>
+                <div class="center-block pie">
+                  <cd-health-pie [data]="contentData"
+                                 (prepareFn)="preparePoolUsage($event[0], $event[1])"></cd-health-pie>
                 </div>
               </td>
             </tr>
