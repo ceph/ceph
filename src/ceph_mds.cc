@@ -64,7 +64,6 @@ static void usage()
   generic_server_usage();
 }
 
-
 static int parse_rank(const char *opt_name, const std::string &val)
 {
   std::string err;
@@ -77,10 +76,7 @@ static int parse_rank(const char *opt_name, const std::string &val)
   return ret;
 }
 
-
-
-MDSDaemon *mds = NULL;
-
+MDSDaemon *mds = nullptr;
 
 static void handle_mds_signal(int signum)
 {
@@ -100,28 +96,30 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args,
+  auto cct = global_init(nullptr, args,
 			 CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
 			 0, "mds_data");
   ceph_heap_profiler_init();
 
   std::string val, action;
-  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+  auto i = args.begin();
+  auto end = args.end();
+  for (auto i= args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     }
-    else if (ceph_argparse_flag(args, i, "--help", "-h", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--help", "-h", (char*)nullptr)) {
       // exit(1) will be called in the usage()
       usage();
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)nullptr)) {
       int r = parse_rank("hot-standby", val);
       dout(0) << "requesting standby_replay for mds." << r << dendl;
       char rb[32];
       snprintf(rb, sizeof(rb), "%d", r);
       g_conf->set_val("mds_standby_for_rank", rb);
       g_conf->set_val("mds_standby_replay", "true");
-      g_conf->apply_changes(NULL);
+      g_conf->apply_changes(nullptr);
     }
     else {
       derr << "Error: can't understand argument: " << *i << "\n" << dendl;
@@ -145,8 +143,11 @@ int main(int argc, const char **argv)
   }
 
   auto nonce = ceph::util::generate_random_number<uint64_t>();
+  auto ms_public_type = g_conf->get_val<std::string>("ms_public_type");
+  auto ms_type = g_conf->get_val<std::string>("ms_type");
 
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  std::string public_msgr_type =
+    ms_public_type.empty() ? ms_type : ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
 				      entity_name_t::MDS(-1), "mds",
 				      nonce, Messenger::HAS_MANY_CONNECTIONS);
@@ -168,7 +169,8 @@ int main(int argc, const char **argv)
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
                    Messenger::Policy::stateful_server(0));
 
-  int r = msgr->bind(g_conf->public_addr);
+  auto public_addr = g_conf->get_val<entity_addr_t>("public_addr");
+  int r = msgr->bind(public_addr);
   if (r < 0)
     exit(1);
 
@@ -203,8 +205,11 @@ int main(int argc, const char **argv)
   register_async_signal_handler_oneshot(SIGINT, handle_mds_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mds_signal);
 
-  if (g_conf->inject_early_sigterm)
-    kill(getpid(), SIGTERM);
+  {
+    auto inject_early_sigterm = g_conf->get_val<bool>("inject_early_sigterm");
+    if (inject_early_sigterm)
+      kill(getpid(), SIGTERM);
+  }
 
   msgr->wait();
 
@@ -225,7 +230,9 @@ int main(int argc, const char **argv)
   // detection, etc.).  don't bother if it was a suicide.
   if (mds->is_clean_shutdown()) {
     delete mds;
+    mds = nullptr;
     delete msgr;
+    msgr = nullptr;
   }
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
@@ -237,4 +244,3 @@ int main(int argc, const char **argv)
 
   return 0;
 }
-
