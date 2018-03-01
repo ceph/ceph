@@ -1917,6 +1917,7 @@ bool ECBackend::try_reads_to_commit()
   ObjectStore::Transaction empty;
   bool should_write_local = false;
   ECSubWrite local_write_op;
+  set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
   for (set<pg_shard_t>::const_iterator i =
 	 get_parent()->get_acting_recovery_backfill_shards().begin();
        i != get_parent()->get_acting_recovery_backfill_shards().end();
@@ -1928,7 +1929,7 @@ bool ECBackend::try_reads_to_commit()
     assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
     const pg_stat_t &stats =
-      should_send ?
+      (should_send || !backfill_shards.count(*i)) ?
       get_info().stats :
       parent->get_shard_info().find(*i)->second.stats;
 
