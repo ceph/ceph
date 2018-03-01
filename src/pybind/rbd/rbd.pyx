@@ -185,7 +185,7 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef struct rbd_group_image_info_t:
         char *name
-        uint64_t pool
+        int64_t pool
         rbd_group_image_state_t state
 
     ctypedef enum rbd_group_snap_state_t:
@@ -3653,7 +3653,6 @@ cdef class GroupImageIterator(object):
                                            &self.num_images)
 
             if ret >= 0:
-                self.num_images = ret
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing images for group %s' % (group.name,), group_errno_to_exception)
@@ -3703,7 +3702,7 @@ cdef class GroupSnapIterator(object):
                                           sizeof(rbd_group_snap_info_t),
                                           &self.num_snaps)
 
-            if ret == 0:
+            if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing snapshots for group %s' % (group.name,), group_errno_to_exception)
