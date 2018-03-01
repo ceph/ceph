@@ -480,6 +480,23 @@ TEST_F(TestMockImageRemoveRequest, NotExistsV2) {
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
+TEST_F(TestMockImageRemoveRequest, OperationsDisabled) {
+  m_mock_imctx->operations_disabled = true;
+
+  InSequence seq;
+  expect_state_open(*m_mock_imctx, 0);
+  expect_state_close(*m_mock_imctx);
+
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
+  ContextWQ op_work_queue;
+  MockRemoveRequest *req = MockRemoveRequest::create(
+    m_ioctx, m_image_name, "", true, false, no_op, &op_work_queue, &ctx);
+  req->send();
+
+  ASSERT_EQ(-EROFS, ctx.wait());
+}
+
 TEST_F(TestMockImageRemoveRequest, Snapshots) {
   m_mock_imctx->snap_info = {
     {123, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, {}, {}, {}, {}, {}}}};
