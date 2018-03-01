@@ -3,6 +3,7 @@
 
 #include "SyncPointCreateRequest.h"
 #include "include/uuid.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "journal/Journaler.h"
 #include "librbd/ImageCtx.h"
