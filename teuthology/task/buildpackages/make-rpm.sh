@@ -143,7 +143,6 @@ function build_package() {
     (
         cd ${buildarea}/SPECS
         ccache=$(echo /usr/lib*/ccache)
-        # Build RPMs
         if [ "$suse" = true ]; then
           sed -i \
                  -e '0,/%package/s//%debug_package\n\n&/' \
@@ -153,7 +152,11 @@ function build_package() {
                  ceph.spec
         fi
         buildarea=`readlink -fn ${releasedir}`   ### rpm wants absolute path
-        PATH=$ccache:$PATH rpmbuild -ba --define "_unpackaged_files_terminate_build 0" --define "_topdir ${buildarea}" ceph.spec
+        PATH=$ccache:$PATH rpmbuild -ba --nosignature \
+          --define '_srcdefattr (-,root,root)' \
+          --define "_unpackaged_files_terminate_build 0" \
+          --define "_topdir ${buildarea}" \
+          ceph.spec
     )
 }
 
