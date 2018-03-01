@@ -382,7 +382,7 @@ void NotifyMessage::dump(Formatter *f) const {
 }
 
 NotifyOp NotifyMessage::get_notify_op() const {
-  apply_visitor(GetNotifyOpVisitor(), payload);
+  return apply_visitor(GetNotifyOpVisitor(), payload);
 }
 
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
