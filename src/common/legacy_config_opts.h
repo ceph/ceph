@@ -119,7 +119,7 @@ OPTION(ms_public_type, OPT_STR)   // messenger backend
 OPTION(ms_cluster_type, OPT_STR)   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL)
 OPTION(ms_tcp_rcvbuf, OPT_INT)
-OPTION(ms_tcp_prefetch_max_size, OPT_INT) // max prefetch size, we limit this to avoid extra memcpy
+OPTION(ms_tcp_prefetch_max_size, OPT_U32) // max prefetch size, we limit this to avoid extra memcpy
 OPTION(ms_initial_backoff, OPT_DOUBLE)
 OPTION(ms_max_backoff, OPT_DOUBLE)
 OPTION(ms_crc_data, OPT_BOOL)
