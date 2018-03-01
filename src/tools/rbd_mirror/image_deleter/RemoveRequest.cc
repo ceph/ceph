@@ -3,7 +3,7 @@
 
 #include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
 #include "include/assert.h"
-#include "common/dout.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"

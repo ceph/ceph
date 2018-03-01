@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd_mirror/image_deleter/SnapshotPurgeRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"

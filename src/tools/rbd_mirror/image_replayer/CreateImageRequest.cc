@@ -4,6 +4,7 @@
 #include "CreateImageRequest.h"
 #include "CloseImageRequest.h"
 #include "OpenImageRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"

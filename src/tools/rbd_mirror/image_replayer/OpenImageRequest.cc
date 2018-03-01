@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "OpenImageRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
