@@ -156,10 +156,23 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
       encode(tag, bl);
       std::string to(endsnapname);
       if (export_format == 2) {
-	len = to.length() + 4;
-	encode(len, bl);
+        len = to.length() + 4;
+        encode(len, bl);
       }
       encode(to, bl);
+    }
+
+    if (endsnapname && export_format == 2) {
+      tag = RBD_SNAP_PROTECTION_STATUS;
+      encode(tag, bl);
+      bool is_protected = false;
+      r = image.snap_is_protected(endsnapname, &is_protected);
+      if (r < 0) {
+        return r;
+      }
+      len = 8;
+      encode(len, bl);
+      encode(is_protected, bl);
     }
 
     tag = RBD_DIFF_IMAGE_SIZE;
