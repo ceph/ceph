@@ -259,7 +259,7 @@ function TEST_rados_get_subread_eio_shard_0() {
     # inject eio on primary OSD (0) and replica OSD (1)
     local shard_id=0
     rados_put_get_data eio $dir $shard_id || return 1
-    delete_erasure_pool $poolname
+    delete_erasure_coded_pool $poolname
 }
 
 function TEST_rados_get_subread_eio_shard_1() {
