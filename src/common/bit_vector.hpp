@@ -11,10 +11,13 @@
 #ifndef BIT_VECTOR_HPP
 #define BIT_VECTOR_HPP
 
+#include <utility>
+
 #include "common/Formatter.h"
+
+#include "include/random.h"
 #include "include/assert.h"
 #include "include/encoding.h"
-#include <utility>
 
 namespace ceph {
 
@@ -502,8 +505,14 @@ void BitVector<_b>::generate_test_instances(std::list<BitVector *> &o) {
   const uint64_t size = 1024;
 
   b->resize(size);
+
+  // The test code depends on the RNG generating the same numbers each
+  // time the program is run-- thus, we must seed with the same value
+  // each time we generate these:
+  ceph::util::random_number_generator<int> rng(42);
+
   for (uint64_t i = 0; i < size; ++i) {
-    (*b)[i] = rand() % radix;
+   (*b)[i] = rng() % radix;
   }
   o.push_back(b);
 }

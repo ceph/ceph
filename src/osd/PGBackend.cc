@@ -15,18 +15,23 @@
  *
  */
 
-
-#include "common/errno.h"
-#include "common/scrub_types.h"
-#include "ReplicatedBackend.h"
-#include "ScrubStore.h"
+#include "OSD.h"
+#include "PGLog.h"
+#include "OSDMap.h"
 #include "ECBackend.h"
 #include "PGBackend.h"
-#include "OSD.h"
-#include "erasure-code/ErasureCodePlugin.h"
-#include "OSDMap.h"
-#include "PGLog.h"
+#include "ScrubStore.h"
+#include "ReplicatedBackend.h"
+
+#include "include/util.h"
+#include "include/random.h"
+
+#include "common/errno.h"
 #include "common/LogClient.h"
+#include "common/scrub_types.h"
+
+#include "erasure-code/ErasureCodePlugin.h"
+
 #include "messages/MOSDPGRecoveryDelete.h"
 #include "messages/MOSDPGRecoveryDeleteReply.h"
 
@@ -1042,7 +1047,8 @@ void PGBackend::be_compare_scrubmaps(
       }
       if (auth_object.digest_present && auth_object.omap_digest_present &&
 	  cct->_conf->osd_debug_scrub_chance_rewrite_digest &&
-	  (((unsigned)rand() % 100) >
+	  (ceph::util::generate_random_number<
+		decltype(cct->_conf->osd_debug_scrub_chance_rewrite_digest)>(100 - 1) >
 	   cct->_conf->osd_debug_scrub_chance_rewrite_digest)) {
 	dout(20) << __func__ << " randomly updating digest on " << *k << dendl;
 	update = MAYBE;

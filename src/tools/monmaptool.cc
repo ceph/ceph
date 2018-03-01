@@ -13,11 +13,14 @@
  */
 #include <string>
 
+#include "include/random.h"
+#include "include/str_list.h"
+
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
 
 #include "global/global_init.h"
-#include "include/str_list.h"
+
 #include "mon/MonMap.h"
 
 
@@ -308,7 +311,7 @@ int main(int argc, const char **argv)
     monmap.epoch = 0;
     monmap.created = ceph_clock_now();
     monmap.last_changed = monmap.created;
-    srand(getpid() + time(0));
+
     if (g_conf->get_val<uuid_d>("fsid").is_zero()) {
       monmap.generate_fsid();
       cout << me << ": generated fsid " << monmap.fsid << std::endl;

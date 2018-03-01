@@ -1,10 +1,11 @@
+#include <vector>
+#include <iostream>
 
+#include "include/random.h"
 
 #include "../crush/BinaryTree.h"
-using namespace crush;
 
-#include <iostream>
-#include <vector>
+using namespace crush;
 using namespace std;
 
 int main() 
@@ -22,13 +23,13 @@ int main()
   cout << t << endl;
 
   for (int k=0; k<10000; k++) {
-    if (rand() % 2) {
+    if (ceph::util::generate_random_number(1)) {
       cout << "adding" << endl;
       nodes.push_back( t.add_node(1) );
     } else {
       if (!nodes.empty()) {
         //for (int i=0; i<nodes.size(); i++) {
-        int p = rand() % nodes.size();
+        int p = ceph::util::generate_random_number(nodes.size() - 1);
         int n = nodes[p];
         assert (t.exists(n));
         cout << "removing " << n << endl;

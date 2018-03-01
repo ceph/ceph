@@ -141,6 +141,7 @@
 
 #include "common/cmdparse.h"
 #include "include/str_list.h"
+#include "include/random.h"
 #include "include/util.h"
 
 #include "include/assert.h"
@@ -167,6 +168,12 @@
 
 
 const double OSD::OSD_TICK_INTERVAL = 1.0;
+
+namespace {
+
+constexpr auto rand_max_double = static_cast<double>(RAND_MAX);
+
+} // namespace
 
 static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
   return *_dout << "osd." << whoami << " " << epoch << " ";
@@ -4629,7 +4636,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	    break;
 	  }
 	} else if (cct->_conf->osd_debug_drop_ping_probability >
-	           ((((double)(rand()%100))/100.0))) {
+               (ceph::util::generate_random_number(100.0d - 1.0d) / 100.0d)) {
 	  heartbeat_drop =
 	    debug_heartbeat_drops_remaining.insert(std::make_pair(from,
 	                     cct->_conf->osd_debug_drop_ping_duration)).first;
@@ -4751,7 +4758,9 @@ void OSD::heartbeat_entry()
   while (!heartbeat_stop) {
     heartbeat();
 
-    double wait = .5 + ((float)(rand() % 10)/10.0) * (float)cct->_conf->osd_heartbeat_interval;
+    double wait = .5 + 
+                  ceph::util::generate_random_number(10.0f - 1.0f) * 
+                  static_cast<float>(cct->_conf->osd_heartbeat_interval);
     utime_t w;
     w.set_from_double(wait);
     dout(30) << "heartbeat_entry sleeping for " << wait << dendl;
@@ -6138,8 +6147,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       char nm[30];
       unsigned offset = 0;
       if (onum && osize) {
-	snprintf(nm, sizeof(nm), "disk_bw_test_%d", (int)(rand() % onum));
-	offset = rand() % (osize / bsize) * bsize;
+	snprintf(nm, sizeof(nm), "disk_bw_test_%d", static_cast<int>(ceph::util::generate_random_number(onum)));
+	offset = ceph::util::generate_random_number(((osize / bsize) * bsize) - 1);
       } else {
 	snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
       }
@@ -6829,8 +6838,9 @@ void OSD::handle_scrub(MOSDScrub *m)
 
 bool OSD::scrub_random_backoff()
 {
-  bool coin_flip = (rand() / (double)RAND_MAX >=
-		    cct->_conf->osd_scrub_backoff_ratio);
+  bool coin_flip = (ceph::util::generate_random_number(rand_max_double) / rand_max_double) 
+                   >= cct->_conf->osd_scrub_backoff_ratio;
+
   if (!coin_flip) {
     dout(20) << "scrub_random_backoff lost coin flip, randomly backing off" << dendl;
     return true;
@@ -6855,7 +6865,9 @@ OSDService::ScrubJob::ScrubJob(CephContext* cct,
       pool_scrub_max_interval : cct->_conf->osd_scrub_max_interval;
 
     sched_time += scrub_min_interval;
-    double r = rand() / (double)RAND_MAX;
+
+    double r = ceph::util::generate_random_number(rand_max_double) / rand_max_double;
+
     sched_time +=
       scrub_min_interval * cct->_conf->osd_scrub_interval_randomize_ratio * r;
     if (scrub_max_interval == 0) {
@@ -7359,7 +7371,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       bool injected_failure = false;
       if (cct->_conf->osd_inject_bad_map_crc_probability > 0 &&
-	  (rand() % 10000) < cct->_conf->osd_inject_bad_map_crc_probability*10000.0) {
+         ceph::util::generate_random_number(10000.0 - 1.0) < cct->_conf->osd_inject_bad_map_crc_probability*10000.0) {
 	derr << __func__ << " injecting map crc failure" << dendl;
 	injected_failure = true;
       }

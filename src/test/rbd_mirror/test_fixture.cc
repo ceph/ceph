@@ -3,6 +3,7 @@
 
 #include "cls/rbd/cls_rbd_types.h"
 #include "test/rbd_mirror/test_fixture.h"
+#include "include/random.h"
 #include "include/stringify.h"
 #include "include/rbd/librbd.hpp"
 #include "librbd/ImageCtx.h"
@@ -59,13 +60,6 @@ void TestFixture::TearDownTestCase() {
 }
 
 void TestFixture::SetUp() {
-  static bool seeded = false;
-  if (!seeded) {
-    seeded = true;
-    int seed = getpid();
-    cout << "seed " << seed << std::endl;
-    srand(seed);
-  }
 
   ASSERT_EQ(0, _rados->ioctx_create(_local_pool_name.c_str(), m_local_io_ctx));
   ASSERT_EQ(0, _rados->ioctx_create(_remote_pool_name.c_str(), m_remote_io_ctx));

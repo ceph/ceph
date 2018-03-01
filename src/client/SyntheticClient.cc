@@ -23,7 +23,7 @@
 #include "osdc/Objecter.h"
 #include "osdc/Filer.h"
 
-
+#include "include/random.h"
 #include "include/filepath.h"
 #include "common/perf_counters.h"
 
@@ -413,8 +413,8 @@ int SyntheticClient::run()
         int iarg1 = iargs.front();
         iargs.pop_front();
         if (run_me()) {
-          srand(time(0) + getpid() + client->whoami.v);
-          sleep(rand() % iarg1);
+          ceph::util::randomize_rng();
+          sleep(ceph::util::generate_random_number(iarg1 - 1));
         }
 	did_run_me();
       }
@@ -824,7 +824,7 @@ int SyntheticClient::run()
         int count = iargs.front();  iargs.pop_front();
         if (run_me()) {
           for (int i=0; i<count; i++) {
-            int fd = client->open("test", (rand()%2) ?
+            int fd = client->open("test", ceph::util::generate_random_number(1) ?
 				  (O_WRONLY|O_CREAT) : O_RDONLY,
 				  perms);
             if (fd > 0) client->close(fd);
@@ -959,7 +959,7 @@ int SyntheticClient::join_thread()
 
 bool roll_die(float p) 
 {
-  float r = (float)(rand() % 100000) / 100000.0;
+  float r = static_cast<float>(ceph::util::generate_random_number(100000 - 1) / 100000.0);
   if (r < p) 
     return true;
   else 
@@ -2351,10 +2351,10 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
     if (time_to_stop()) break;
     
     // read or write?
-    bool write = (rand() % 100) < wrpc;
+    bool write = ceph::util::generate_random_number(100 - 1) < wrpc;
 
     // choose object
-    double r = drand48(); // [0..1)
+    double r = ceph::util::generate_random_number<double>(0.0, 1.0);
     long o;
     if (write) {
       o = (long)trunc(pow(r, wskew) * (double)nobj);  // exponentially skew towards 0
@@ -2425,12 +2425,9 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
 
     bool read=false;
 
-    time_t seconds;
-    time( &seconds);
-    srand(seconds);
+    ceph::util::randomize_rng();
 
-    // use rand instead ??
-    double x = drand48();
+    double x = ceph::util::generate_random_number<double>();
 
     // cleanup before call 'new'
     if (buf != NULL) {
@@ -2447,7 +2444,7 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
     }
     
     if (read) {
-        offset=(rand())%(chunks+1);
+        offset= ceph::util::generate_random_number(chunks);
         dout(2) << "reading block " << offset << "/" << chunks << dendl;
 
         int r = client->read(fd, buf, rdsize, offset*rdsize);
@@ -2462,7 +2459,7 @@ int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is 
       // 64 bits : client id
       // = 128 bits (16 bytes)
 
-      offset=(rand())%(chunks+1);
+      offset= ceph::util::generate_random_number(chunks);
       uint64_t *p = (uint64_t*)buf;
       while ((char*)p < buf + rdsize) {
 	*p = offset*rdsize + (char*)p - buf;      
@@ -2509,9 +2506,7 @@ int normdist(int min, int max, int stdev) /* specifies input values */
   /* min: Minimum value; max: Maximum value; stdev: degree of deviation */
   
   //int min, max, stdev; {
-  time_t seconds;
-  time( &seconds);
-  srand(seconds);
+  ceph::util::randomize_rng();
   
   int range, iterate, result;
   /* declare range, iterate and result as integers, to avoid the need for
@@ -2531,7 +2526,7 @@ int normdist(int min, int max, int stdev) /* specifies input values */
   for (int c = iterate; c != 0; c--) /* loop through iterations */
     {
       //  result += (uniform (1, 100) * stdev) / 100; /* calculate and
-      result += ( (rand()%100 + 1)  * stdev) / 100;
+      result += (ceph::util::generate_random_number(100) * stdev) / 100;
       // printf("result=%d\n", result );
     }
   printf("\n final result=%d\n", result );
@@ -2554,12 +2549,8 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
     
     bool read=false;
     
-    time_t seconds;
-    time( &seconds);
-    srand(seconds);
-    
     // use rand instead ??
-    double x = drand48();
+    double x = ceph::util::generate_random_number<double>(0.0, 1.0);
     
     // cleanup before call 'new'
     if (buf != NULL) {
@@ -2591,10 +2582,10 @@ int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size 
 	// 64 bits : client id
 	// = 128 bits (16 bytes)
 	
-	int count = rand()%10;
+	int count = ceph::util::generate_random_number(10 - 1);
 	
 	for ( int j=0;j<count; j++ ) {
-	  offset=(rand())%(chunks+1);
+	  offset=ceph::util::generate_random_number(chunks);
 	  uint64_t *p = (uint64_t*)buf;
 	  while ((char*)p < buf + rdsize) {
 	    *p = offset*rdsize + (char*)p - buf;      
@@ -2712,29 +2703,6 @@ int SyntheticClient::random_walk(int num_req)
     
     if (op == CEPH_MDS_OP_SYMLINK) {
     }
-    /*
-    if (op == CEPH_MDS_OP_CHMOD) {
-      if (contents.empty())
-        op = CEPH_MDS_OP_READDIR;
-      else
-        r = client->chmod(get_random_sub(), rand() & 0755, perms);
-    }
-    
-    if (op == CEPH_MDS_OP_CHOWN) {
-      if (contents.empty())         r = client->chown(cwd.c_str(), rand(), rand(), perms);
-      else
-        r = client->chown(get_random_sub(), rand(), rand(), perms);
-    }
-     
-    if (op == CEPH_MDS_OP_UTIME) {
-      struct utimbuf b;
-      memset(&b, 1, sizeof(b));
-      if (contents.empty()) 
-        r = client->utime(cwd.c_str(), &b, perms);
-      else
-        r = client->utime(get_random_sub(), &b, perms);
-    }
-    */
     if (op == CEPH_MDS_OP_LINK) {
     }
     
@@ -2847,7 +2815,7 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
   // create dirs
   for (int i=0; i<n; i++) {
     // pick a dir
-    int k = rand() % dirs.size();
+    int k = ceph::util::generate_random_number(dirs.size() - 1);
     string parent = dirs[k];
     
     // pick a name
@@ -2931,12 +2899,12 @@ void SyntheticClient::foo()
   }
   if (1) {
     // open some files
-    srand(0);
+    ceph::util::randomize_rng();
     for (int i=0; i<20; i++) {
-      int s = 5;
-      int a = rand() % s;
-      int b = rand() % s;
-      int c = rand() % s;
+      constexpr int s = 4;
+      int a = ceph::util::generate_random_number(s);
+      int b = ceph::util::generate_random_number(s);
+      int c = ceph::util::generate_random_number(s);
       char src[80];
       snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
       //int fd = 
@@ -2946,51 +2914,31 @@ void SyntheticClient::foo()
     return;
   }
 
-  if (0) {
-    // rename fun
-    for (int i=0; i<100; i++) {
-      int s = 5;
-      int a = rand() % s;
-      int b = rand() % s;
-      int c = rand() % s;
-      int d = rand() % s;
-      int e = rand() % s;
-      int f = rand() % s;
-      char src[80];
-      char dst[80];
-      snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
-      snprintf(dst, sizeof(dst), "syn.0.0/dir.%d/dir.%d/file.%d", d, e, f);
-      client->rename(src, dst, perms);
-    }
-    return;
-  }
-
-  if (1) {
     // link fun
-    srand(0);
+    ceph::util::randomize_rng();
     for (int i=0; i<100; i++) {
-      int s = 5;
-      int a = rand() % s;
-      int b = rand() % s;
-      int c = rand() % s;
-      int d = rand() % s;
-      int e = rand() % s;
-      int f = rand() % s;
+      constexpr int s = 4;
+      int a = ceph::util::generate_random_number(s);
+      int b = ceph::util::generate_random_number(s);
+      int c = ceph::util::generate_random_number(s);
+      int d = ceph::util::generate_random_number(s);
+      int e = ceph::util::generate_random_number(s);
+      int f = ceph::util::generate_random_number(s);
       char src[80];
       char dst[80];
       snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
       snprintf(dst, sizeof(dst), "syn.0.0/dir.%d/dir.%d/newlink.%d", d, e, f);
       client->link(src, dst, perms);
-    }
-    srand(0);
+
+    ceph::util::randomize_rng();
     for (int i=0; i<100; i++) {
-      int s = 5;
-      int a = rand() % s;
-      int b = rand() % s;
-      int c = rand() % s;
-      int d = rand() % s;
-      int e = rand() % s;
-      int f = rand() % s;
+      constexpr int s = 4;
+      int a = ceph::util::generate_random_number(s);
+      int b = ceph::util::generate_random_number(s);
+      int c = ceph::util::generate_random_number(s);
+      int d = ceph::util::generate_random_number(s);
+      int e = ceph::util::generate_random_number(s);
+      int f = ceph::util::generate_random_number(s);
       char src[80];
       char dst[80];
       snprintf(src, sizeof(src), "syn.0.0/dir.%d/dir.%d/file.%d", a, b, c);
@@ -3070,19 +3018,19 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 
   UserPerm perms = client->pick_my_perms();
 
-  srand(0);
+  ceph::util::randomize_rng();
   if (1) {
     bool renames = true; // thrash renames too?
     for (int k=0; k<n; k++) {
       
-      if (renames && rand() % 10 == 0) {
+      if (renames && ceph::util::generate_random_number(10 - 1) == 0) {
 	// rename some directories.  whee!
-	int dep = (rand() % depth) + 1;
+	int dep = ceph::util::generate_random_number(1, depth);
 	string src = basedir;
 	{
 	  char t[80];
 	  for (int d=0; d<dep; d++) {
-	    int a = rand() % dirs;
+	    int a = ceph::util::generate_random_number(dirs - 1);
 	    snprintf(t, sizeof(t), "/dir.%d", a);
 	    src += t;
 	  }
@@ -3091,7 +3039,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 	{
 	  char t[80];
 	  for (int d=0; d<dep; d++) {
-	    int a = rand() % dirs;
+	    int a = ceph::util::generate_random_number(dirs - 1);
 	    snprintf(t, sizeof(t), "/dir.%d", a);
 	    dst += t;
 	  }
@@ -3109,11 +3057,11 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       {
 	char t[80];
 	for (int d=0; d<depth; d++) {
-	  int a = rand() % dirs;
+	  int a = ceph::util::generate_random_number(dirs - 1);
 	  snprintf(t, sizeof(t), "/dir.%d", a);
 	  src += t;
 	}
-	int a = rand() % files;
+	int a = ceph::util::generate_random_number(files - 1);
 	snprintf(t, sizeof(t), "/file.%d", a);
 	src += t;
       }
@@ -3121,16 +3069,16 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       {
 	char t[80];
 	for (int d=0; d<depth; d++) {
-	  int a = rand() % dirs;
+	  int a = ceph::util::generate_random_number(dirs - 1);
 	  snprintf(t, sizeof(t), "/dir.%d", a);
 	  dst += t;
 	}
-	int a = rand() % files;
+	int a = ceph::util::generate_random_number(files - 1);
 	snprintf(t, sizeof(t), "/file.%d", a);
 	dst += t;
       }
       
-      int o = rand() % 4;
+      int o = ceph::util::generate_random_number(4);
       switch (o) {
       case 0: 
 	client->mknod(src.c_str(), 0755, perms);
@@ -3161,21 +3109,21 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
       string file = basedir;
       
       if (depth) {
-	int d = rand() % (depth+1);
+	int d = ceph::util::generate_random_number(depth);
 	for (int k=0; k<d; k++) {
-	  snprintf(f, sizeof(f), "/dir.%d", rand() % dirs);
+	  snprintf(f, sizeof(f), "/dir.%d", ceph::util::generate_random_number(dirs - 1));
 	  file += f;
 	}
       }
-      snprintf(f, sizeof(f), "/file.%d", rand() % files);
+      snprintf(f, sizeof(f), "/file.%d", ceph::util::generate_random_number(files));
       file += f;
       
       // pick a dir for our link
       string ln = basedir;
       if (depth) {
-	int d = rand() % (depth+1);
+	int d = ceph::util::generate_random_number(depth);
 	for (int k=0; k<d; k++) {
-	  snprintf(f, sizeof(f), "/dir.%d", rand() % dirs);
+	  snprintf(f, sizeof(f), "/dir.%d", ceph::util::generate_random_number(dirs - 1));
 	  ln += f;
 	}
       }

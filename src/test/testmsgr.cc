@@ -12,24 +12,31 @@
  * 
  */
 
-#include <sys/stat.h>
 #include <iostream>
 #include <string>
-using namespace std;
 
-#include "common/config.h"
+#include <sys/stat.h>
 
 #include "mon/MonMap.h"
 #include "mon/MonClient.h"
+
 #include "msg/Messenger.h"
+
 #include "messages/MPing.h"
 
+#include "common/config.h"
 #include "common/Timer.h"
-#include "global/global_init.h"
 #include "common/ceph_argparse.h"
 
-#include <sys/types.h>
+#include "include/util.h"
+#include "include/random.h"
+
+#include "global/global_init.h"
+
 #include <fcntl.h>
+#include <sys/types.h>
+
+using namespace std;
 
 #define dout_subsys ceph_subsys_ms
 
@@ -121,11 +128,11 @@ int main(int argc, const char **argv, const char *envp[]) {
       cond.Wait(test_lock);
     }
 
-    int t = rand() % mc.get_num_mon();
+    int t = ceph::util::generate_random_number(mc.get_num_mon() - 1);
     if (t == whoami)
       continue;
     
-    if (rand() % 10 == 0) {
+    if (ceph::util::generate_random_number(10 - 1) == 0) {
       //cerr << "mark_down " << t << std::endl;
       dout(0) << "mark_down " << t << dendl;
       messenger->mark_down(mc.get_mon_addr(t));

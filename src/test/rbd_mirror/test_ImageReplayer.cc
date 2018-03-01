@@ -14,6 +14,8 @@
  *
  */
 
+#include "include/util.h"
+#include "include/random.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/stringify.h"
@@ -354,7 +356,7 @@ public:
 
   void generate_test_data() {
     for (int i = 0; i < TEST_IO_SIZE; ++i) {
-      m_test_data[i] = (char) (rand() % (126 - 33) + 33);
+      m_test_data[i] = (char) (ceph::util::generate_random_number(126 - 32) + 33);
     }
     m_test_data[TEST_IO_SIZE] = '\0';
   }

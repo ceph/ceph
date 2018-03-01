@@ -1,11 +1,17 @@
-#include <sys/stat.h>
 #include <iostream>
 #include <string>
+
+#include <sys/stat.h>
+
 using namespace std;
 
+#include "include/util.h"
+#include "include/random.h"
+
 #include "common/config.h"
-#include "messages/MPing.h"
 #include "common/Mutex.h"
+
+#include "messages/MPing.h"
 
 #include "msg/MPIMessenger.h"
 
@@ -36,7 +42,7 @@ int main(int argc, char **argv) {
   for (int i=0; i<10000; i++) {
     
     // ping random nodes
-    int d = rand() % world;
+    int d = ceph::util::generate_random_number(world - 1);
     if (d != myrank) {
       //cout << "sending " << i << " to " << d << endl;
       p->messenger->send_message(new MPing(), d);

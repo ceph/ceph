@@ -32,6 +32,9 @@
 #include "common/config.h"
 #include "erasure-code/ErasureCodePlugin.h"
 
+#include "include/util.h"
+#include "include/random.h"
+
 namespace po = boost::program_options;
 using namespace std;
 
@@ -171,7 +174,7 @@ int ErasureCodeNonRegression::run_create()
   unsigned payload_chunk_size = 37;
   string payload;
   for (unsigned j = 0; j < payload_chunk_size; ++j)
-    payload.push_back('a' + (rand() % 26));
+    payload.push_back('a' + ceph::util::generate_random_number(26 - 1));
   bufferlist in;
   for (unsigned j = 0; j < stripe_width; j += payload_chunk_size)
     in.append(payload);

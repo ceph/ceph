@@ -12,29 +12,32 @@
  *
  */
 
-#include "include/int_types.h"
-#include "include/types.h"
+#include <cerrno>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <iostream>
 
-#include <unistd.h>
 #include <fcntl.h>
-#include <errno.h>
-#include <stdlib.h>
+#include <unistd.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+
+#include "include/int_types.h"
+#include "include/types.h"
+
 #include "include/compat.h"
 #include "include/linux_fiemap.h"
 #include "include/color.h"
 #include "include/buffer.h"
 #include "include/assert.h"
+#include "include/random.h"
 
 #ifndef __CYGWIN__
 #include "os/fs/btrfs_ioctl.h"
 #endif
-
-#include <iostream>
-#include <fstream>
-#include <sstream>
 
 #include "BtrfsFileStoreBackend.h"
 
@@ -433,7 +436,8 @@ int BtrfsFileStoreBackend::rollback_to(const string& name)
   int ret = ::ioctl(get_basedir_fd(), BTRFS_IOC_SNAP_DESTROY, &vol_args);
   if (ret && errno != ENOENT) {
     dout(0) << "rollback_to: error removing old current subvol: " << cpp_strerror(ret) << dendl;
-    snprintf(s, sizeof(s), "%s/current.remove.me.%d", get_basedir_path().c_str(), rand());
+    snprintf(s, sizeof(s), "%s/current.remove.me.%d", 
+             get_basedir_path().c_str(), ceph::util::generate_random_number());
     if (::rename(get_current_path().c_str(), s)) {
       ret = -errno;
       dout(0) << "rollback_to: error renaming old current subvol: "

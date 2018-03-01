@@ -10,6 +10,8 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/object_map/RefreshRequest.h"
 #include "librbd/object_map/LockRequest.h"
+#include "include/util.h"
+#include "include/random.h"
 
 namespace librbd {
 
@@ -138,7 +140,7 @@ public:
       mock_image_ctx.layout, mock_image_ctx.image_ctx->size);
     object_map->resize(num_objs);
     for (uint64_t i = 0; i < num_objs; ++i) {
-      (*object_map)[i] = rand() % 3;
+      (*object_map)[i] = ceph::util::generate_random_number(2);
     }
   }
 };

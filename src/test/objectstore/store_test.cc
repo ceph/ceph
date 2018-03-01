@@ -91,7 +91,7 @@ int queue_transaction(
   T &store,
   ObjectStore::CollectionHandle ch,
   ObjectStore::Transaction &&t) {
-  if (rand() % 2) {
+  if (ceph::util::generate_random_number(1)) {
     ObjectStore::Transaction t2;
     t2.append(t);
     return store->queue_transaction(ch, std::move(t2));
@@ -1835,7 +1835,7 @@ TEST_P(StoreTest, ManySmallWrite) {
   }
   for (int i=0; i<100; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % 1024)*4096, 4096, bl, 0);
+    t.write(cid, b, ceph::util::generate_random_number(1024 - 1)*4096, 4096, bl, 0);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -2173,21 +2173,21 @@ TEST_P(StoreTest, ManyBigWrite) {
   // aligned
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % 256)*4*1048576, 4*1048576, bl, 0);
+    t.write(cid, b, ceph::util::generate_random_number(256 - 1)*4*1048576, 4*1048576, bl, 0);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
   // unaligned
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.write(cid, b, (rand() % (256*4096))*1024, 4*1048576, bl, 0);
+    t.write(cid, b, ceph::util::generate_random_number((256*4096) - 1)*1024, 4*1048576, bl, 0);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
   // do some zeros
   for (int i=0; i<10; ++i) {
     ObjectStore::Transaction t;
-    t.zero(cid, b, (rand() % (256*4096))*1024, 16*1048576);
+    t.zero(cid, b, ceph::util::generate_random_number((256*4096) - 1)*1024, 16*1048576);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
@@ -2636,7 +2636,7 @@ TEST_P(StoreTest, MultipoolListTest) {
       string name("object_");
       name += stringify(i);
       ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)));
-      if (rand() & 1)
+      if (ceph::util::generate_random_number() & 1)
 	hoid.hobj.pool = -2 - poolid;
       else
 	hoid.hobj.pool = poolid;
@@ -3414,7 +3414,7 @@ public:
     ++seq;
     return ghobject_t(
       hobject_t(
-	name, string(), rand() & 2 ? CEPH_NOSNAP : rand(),
+	name, string(), ceph::util::generate_random_number() & 2 ? CEPH_NOSNAP : ceph::util::generate_random_number(),
 	(((seq / 1024) % 2) * 0xF00 ) +
 	(seq & 0xFF),
 	poolid, ""));
@@ -3547,7 +3547,7 @@ public:
     bufferptr bp(size);
     for (unsigned int i = 0; i < size - 1; i++) {
       // severely limit entropy so we can compress...
-      bp[i] = alphanum[rand() % 10]; //(sizeof(alphanum) - 1)];
+      bp[i] = alphanum[ceph::util::generate_random_number(10 - 1)]; //(sizeof(alphanum) - 1)];
     }
     bp[size - 1] = '\0';
 

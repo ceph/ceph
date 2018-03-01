@@ -77,7 +77,7 @@ int CrushTester::get_maximum_affected_by_rule(int ruleno)
    * get the smallest number of buckets available of any type as this is our upper bound on
    * the number of replicas we can place
   */
-  int max_affected = max( crush.get_max_buckets(), crush.get_max_devices() );
+  int max_affected = std::max( crush.get_max_buckets(), crush.get_max_devices() );
 
   for(std::vector<int>::iterator it = affected_types.begin(); it != affected_types.end(); ++it){
     if (max_devices_of_type[*it] > 0 && max_devices_of_type[*it] < max_affected )

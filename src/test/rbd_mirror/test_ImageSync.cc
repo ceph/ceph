@@ -2,6 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "test/rbd_mirror/test_fixture.h"
+#include "include/util.h"
+#include "include/random.h"
 #include "include/stringify.h"
 #include "include/rbd/librbd.hpp"
 #include "journal/Journaler.h"
@@ -30,10 +32,10 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size)
 {
   max_size = std::min(image_ctx->size, max_size);
   for (int i=0; i<num_ops; i++) {
-    uint64_t off = rand() % (image_ctx->size - max_size + 1);
-    uint64_t len = 1 + rand() % max_size;
+    uint64_t off = ceph::util::generate_random_number(image_ctx->size - max_size);
+    uint64_t len = ceph::util::generate_random_number(static_cast<size_t>(1), max_size - 1);
 
-    if (rand() % 4 == 0) {
+    if (ceph::util::generate_random_number(3) == 0) {
       ASSERT_EQ((int)len, image_ctx->io_work_queue->discard(off, len, image_ctx->skip_partial_discard));
     } else {
       bufferlist bl;
@@ -244,7 +246,7 @@ TEST_F(TestImageSync, SnapshotStress) {
     scribble(m_remote_image_ctx, 10, 102400);
 
     librbd::NoOpProgressContext no_op_progress_ctx;
-    uint64_t size = 1 + rand() % m_image_size;
+    uint64_t size = ceph::util::generate_random_number(1, m_image_size - 1);
     ASSERT_EQ(0, m_remote_image_ctx->operations->resize(size, true,
                                                         no_op_progress_ctx));
     ASSERT_EQ(0, m_remote_image_ctx->state->refresh());

@@ -25,6 +25,11 @@
 #include "common/Finisher.h"
 #include "common/config.h"
 
+#include "auth/AuthClientHandler.h"
+#include "auth/RotatingKeyRing.h"
+
+#include "include/util.h"
+#include "include/random.h"
 
 class MMonMap;
 class MMonGetVersionReply;
@@ -152,6 +157,9 @@ private:
 
   std::unique_ptr<MonConnection> active_con;
   std::map<entity_addr_t, MonConnection> pending_cons;
+
+  string cur_mon;
+  ConnectionRef cur_con;
 
   EntityName entity_name;
 

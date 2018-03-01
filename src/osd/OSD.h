@@ -15,37 +15,45 @@
 #ifndef CEPH_OSD_H
 #define CEPH_OSD_H
 
+#include <map>
+#include <atomic>
+#include <memory>
+
 #include "PG.h"
+#include "OSDCap.h" 
+#include "Session.h"
+#include "OpRequest.h"
 
-#include "msg/Dispatcher.h"
+#include "include/memory.h"
+#include "include/random.h"
+#include "include/CompatSet.h"
+#include "include/unordered_map.h"
 
+#include "common/Timer.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
-#include "common/Timer.h"
 #include "common/WorkQueue.h"
-#include "common/AsyncReserver.h"
+#include "common/EventTrace.h"
 #include "common/ceph_context.h"
 #include "common/config_cacher.h"
 #include "common/zipkin_trace.h"
+#include "common/AsyncReserver.h"
+#include "common/shared_cache.hpp"
+#include "common/simple_cache.hpp"
+#include "common/PrioritizedQueue.h"
+#include "common/sharedptr_registry.hpp"
+#include "common/WeightedPriorityQueue.h"
+
+#include "msg/Dispatcher.h"
 
 #include "mgr/MgrClient.h"
 
 #include "os/ObjectStore.h"
-#include "OSDCap.h" 
  
 #include "auth/KeyRing.h"
-#include "osd/ClassHandler.h"
-
-#include "include/CompatSet.h"
-
-#include "OpRequest.h"
-#include "Session.h"
 
 #include "osd/OpQueueItem.h"
 
-#include <atomic>
-#include <map>
-#include <memory>
 #include "include/memory.h"
 
 #include "include/unordered_map.h"
@@ -55,10 +63,14 @@
 #include "common/sharedptr_registry.hpp"
 #include "common/WeightedPriorityQueue.h"
 #include "common/PrioritizedQueue.h"
+
+#include "osd/ClassHandler.h"
 #include "osd/mClockOpClassQueue.h"
 #include "osd/mClockClientQueue.h"
+
 #include "messages/MOSDOp.h"
-#include "common/EventTrace.h"
+
+using namespace std;
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -707,7 +719,7 @@ public:
   bool promote_throttle() {
     // NOTE: lockless!  we rely on the probability being a single word.
     promote_counter.attempt();
-    if ((unsigned)rand() % 1000 > promote_probability_millis)
+    if (static_cast<unsigned>(ceph::util::generate_random_number(1000 - 1)) > promote_probability_millis)
       return true;  // yes throttle (no promote)
     if (promote_max_objects &&
 	promote_counter.objects > promote_max_objects)
@@ -2143,8 +2155,8 @@ private:
 					 io_queue::weightedpriority,
 					 io_queue::mclock_opclass,
 					 io_queue::mclock_client };
-      srand(time(NULL));
-      unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
+      constexpr int range = sizeof(index_lookup) / sizeof(index_lookup[0]);
+      int which = ceph::util::generate_random_number(range - 1);
       return index_lookup[which];
     } else if (cct->_conf->osd_op_queue == "prioritized") {
       return io_queue::prioritized;
@@ -2160,8 +2172,7 @@ private:
 
   unsigned int get_io_prio_cut() const {
     if (cct->_conf->osd_op_queue_cut_off == "debug_random") {
-      srand(time(NULL));
-      return (rand() % 2 < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
+      return (ceph::util::generate_random_number(1) < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
     } else if (cct->_conf->osd_op_queue_cut_off == "high") {
       return CEPH_MSG_PRIO_HIGH;
     } else {

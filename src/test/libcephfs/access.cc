@@ -12,28 +12,35 @@
  *
  */
 
+#include <vector>
+#include <cerrno>
+#include <iostream>
+
+#include <fcntl.h>
+#include <dirent.h>
+#include <unistd.h>
+
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/xattr.h>
+#include <sys/uio.h>
+
 #include "gtest/gtest.h"
+
 #include "common/ceph_argparse.h"
+
+#include "include/random.h"
 #include "include/buffer.h"
 #include "include/stringify.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/rados/librados.h"
-#include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <dirent.h>
-#include <sys/xattr.h>
-#include <sys/uio.h>
-#include <iostream>
-#include <vector>
+#include "include/util.h"
+
 #include "json_spirit/json_spirit.h"
 
 #ifdef __linux__
 #include <limits.h>
 #endif
-
 
 rados_t cluster;
 
@@ -72,12 +79,12 @@ int do_mon_command(string s, string *key)
 
 string get_unique_dir()
 {
-  return string("/ceph_test_libcephfs_access.") + stringify(rand());
+  return string("/ceph_test_libcephfs_access.") + stringify(ceph::util::generate_random_number());
 }
 
 TEST(AccessTest, Foo) {
   string dir = get_unique_dir();
-  string user = "libcephfs_foo_test." + stringify(rand());
+  string user = "libcephfs_foo_test." + stringify(ceph::util::generate_random_number());
   // admin mount to set up test
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
@@ -111,7 +118,7 @@ TEST(AccessTest, Foo) {
 TEST(AccessTest, Path) {
   string good = get_unique_dir();
   string bad = get_unique_dir();
-  string user = "libcephfs_path_test." + stringify(rand());
+  string user = "libcephfs_path_test." + stringify(ceph::util::generate_random_number());
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
@@ -197,7 +204,7 @@ TEST(AccessTest, Path) {
 TEST(AccessTest, ReadOnly) {
   string dir = get_unique_dir();
   string dir2 = get_unique_dir();
-  string user = "libcephfs_readonly_test." + stringify(rand());
+  string user = "libcephfs_readonly_test." + stringify(ceph::util::generate_random_number());
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
@@ -240,7 +247,7 @@ TEST(AccessTest, ReadOnly) {
 
 TEST(AccessTest, User) {
   string dir = get_unique_dir();
-  string user = "libcephfs_user_test." + stringify(rand());
+  string user = "libcephfs_user_test." + stringify(ceph::util::generate_random_number());
 
   // admin mount to set up test
   struct ceph_mount_info *admin;
@@ -366,8 +373,6 @@ int main(int argc, char **argv)
     exit(1);
 
   ::testing::InitGoogleTest(&argc, argv);
-
-  srand(getpid());
 
   r = rados_create(&cluster, NULL);
   if (r < 0)

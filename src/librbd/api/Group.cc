@@ -12,6 +12,8 @@
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
 
+#include "include/random.h"
+
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::api::Group: " << __func__ << ": "
@@ -50,7 +52,7 @@ string generate_uuid(librados::IoCtx& io_ctx)
   Rados rados(io_ctx);
   uint64_t bid = rados.get_instance_id();
 
-  uint32_t extra = rand() % 0xFFFFFFFF;
+  uint32_t extra = ceph::util::generate_random_number(0xFFFFFFFF);
   ostringstream bid_ss;
   bid_ss << std::hex << bid << std::hex << extra;
   return bid_ss.str();

@@ -12,27 +12,34 @@
 *
 */
 
+#include <map>
+#include <ctime>
+#include <cstdio>
+#include <cerrno>
+#include <string>
+#include <vector>
+#include <sstream>
+#include <cstdarg>
+#include <cstdlib>
+
+#include <unistd.h>
+
+#include <sys/types.h>
+
+#include <pthread.h>
+#include <semaphore.h>
+
 #include "cross_process_sem.h"
+
+#include "include/util.h"
+#include "include/random.h"
 #include "include/rados/librados.h"
 #include "include/stringify.h"
+
 #include "st_rados_create_pool.h"
 #include "st_rados_list_objects.h"
 #include "systest_runnable.h"
 #include "systest_settings.h"
-
-#include <errno.h>
-#include <map>
-#include <pthread.h>
-#include <semaphore.h>
-#include <sstream>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string>
-#include <time.h>
-#include <vector>
-#include <sys/types.h>
-#include <unistd.h>
 
 using std::ostringstream;
 using std::string;
@@ -86,7 +93,7 @@ public:
     while (true) {
       if (to_delete.empty())
 	break;
-      int r = rand() % to_delete.size();
+      int r = ceph::util::generate_random_number(to_delete.size() - 1);
       std::map <int, std::string>::iterator d = to_delete.begin();
       for (int i = 0; i < r; ++i)
 	++d;
@@ -171,7 +178,7 @@ public:
     while (true) {
       if (to_add.empty())
 	break;
-      int r = rand() % to_add.size();
+      int r = ceph::util::generate_random_number(to_add.size() - 1);
       std::map <int, std::string>::iterator d = to_add.begin();
       for (int i = 0; i < r; ++i)
 	++d;

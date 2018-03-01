@@ -20,6 +20,8 @@
 #include "messages/MMonElection.h"
 
 #include "common/config.h"
+#include "include/random.h"
+
 #include "include/assert.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -89,7 +91,7 @@ void Elector::start()
   } else {
     // do a trivial db write just to ensure it is writeable.
     auto t(std::make_shared<MonitorDBStore::Transaction>());
-    t->put(Monitor::MONITOR_NAME, "election_writeable_test", rand());
+    t->put(Monitor::MONITOR_NAME, "election_writeable_test", ceph::util::generate_random_number());
     int r = mon->store->apply_transaction(t);
     assert(r >= 0);
   }

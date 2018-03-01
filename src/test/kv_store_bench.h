@@ -26,6 +26,8 @@
 #include <cfloat>
 #include <iostream>
 
+#include "include/random.h"
+
 using namespace std;
 using ceph::bufferlist;
 
@@ -121,6 +123,7 @@ protected:
   Cond op_avail;//signaled when an op completes
   int ops_in_flight;//number of operations currently in progress
   Mutex ops_in_flight_lock;
+  ceph::util::random_number_generator<int> rng;
   //these are used for cleanup and setup purposes - they are NOT passed to kvs!
   librados::Rados rados;
   string rados_id;

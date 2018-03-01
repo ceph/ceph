@@ -17,12 +17,11 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "include/buffer.h"
+#include "include/random.h"
 
 #define dout_subsys ceph_subsys_auth
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx: "
-
-
 
 void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uint64_t server_challenge, 
 		  uint64_t client_challenge, uint64_t *key, std::string &error)
@@ -296,7 +295,8 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
 {
   CephXAuthorizer *a = new CephXAuthorizer(cct);
   a->session_key = session_key;
-  a->nonce = ((uint64_t)rand() << 32) + rand();
+  a->nonce = ceph::util::generate_random_number() + 
+              (static_cast<uint64_t>(ceph::util::generate_random_number()) << 32);
 
   __u8 authorizer_v = 1;
   encode(authorizer_v, a->bl);

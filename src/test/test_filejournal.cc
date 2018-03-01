@@ -1,18 +1,25 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include <gtest/gtest.h>
-#include <stdlib.h>
-#include <limits.h>
+
+#include <cstdlib>
+#include <climits>
+
+#include "global/global_init.h"
 
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
-#include "global/global_init.h"
 #include "common/config.h"
 #include "common/Finisher.h"
-#include "os/filestore/FileJournal.h"
-#include "include/Context.h"
 #include "common/Mutex.h"
 #include "common/safe_io.h"
+
+#include "include/util.h"
+#include "include/random.h"
+#include "include/Context.h"
+
+#include "os/filestore/FileJournal.h"
 #include "os/filestore/JournalingObjectStore.h"
+
+#include <gtest/gtest.h>
 
 Finisher *finisher;
 Cond sync_cond;
@@ -94,8 +101,7 @@ int main(int argc, char **argv) {
     }
   }
   if ( path[0] == '\0') {
-    srand(getpid() + time(0));
-    snprintf(path, sizeof(path), "/var/tmp/ceph_test_filejournal.tmp.%d", rand());
+    snprintf(path, sizeof(path), "/var/tmp/ceph_test_filejournal.tmp.%d", ceph::util::generate_random_number());
   }
   cout << "path " << path << std::endl;
 

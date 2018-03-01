@@ -35,6 +35,8 @@
 #include "osdc/Objecter.h"
 
 #include "common/config.h"
+
+#include "include/random.h"
 #include "include/assert.h"
 #include "include/compat.h"
 

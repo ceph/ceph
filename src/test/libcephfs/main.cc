@@ -14,6 +14,8 @@
  */
 
 #include "gtest/gtest.h"
+
+#include "include/random.h"
 #include "include/cephfs/libcephfs.h"
 
 static int update_root_mode()
@@ -42,8 +44,6 @@ int main(int argc, char **argv)
     exit(1);
 
   ::testing::InitGoogleTest(&argc, argv);
-
-  srand(getpid());
 
   return RUN_ALL_TESTS();
 }

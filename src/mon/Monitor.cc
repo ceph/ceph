@@ -18,10 +18,14 @@
 #include <signal.h>
 #include <limits.h>
 #include <cstring>
+
 #include <boost/scope_exit.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "Monitor.h"
+
+#include "include/random.h"
+
 #include "common/version.h"
 
 #include "osd/OSDMap.h"
@@ -66,6 +70,7 @@
 #include "include/color.h"
 #include "include/ceph_fs.h"
 #include "include/str_list.h"
+#include "include/random.h"
 
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
@@ -5129,7 +5134,7 @@ bool Monitor::_scrub(ScrubResult *r,
       continue;
 
     if (cct->_conf->mon_scrub_inject_missing_keys > 0.0 &&
-        (rand() % 10000 < cct->_conf->mon_scrub_inject_missing_keys*10000.0)) {
+        (ceph::util::generate_random_number(10000 - 1) < cct->_conf->mon_scrub_inject_missing_keys*10000.0)) {
       dout(10) << __func__ << " inject missing key, skipping (" << k << ")"
                << dendl;
       continue;
@@ -5149,7 +5154,7 @@ bool Monitor::_scrub(ScrubResult *r,
     r->prefix_crc[k.first] = bl.crc32c(r->prefix_crc[k.first]);
 
     if (cct->_conf->mon_scrub_inject_crc_mismatch > 0.0 &&
-        (rand() % 10000 < cct->_conf->mon_scrub_inject_crc_mismatch*10000.0)) {
+        (ceph::util::generate_random_number(10000 - 1) < cct->_conf->mon_scrub_inject_crc_mismatch*10000.0)) {
       dout(10) << __func__ << " inject failure at (" << k << ")" << dendl;
       r->prefix_crc[k.first] += 1;
     }

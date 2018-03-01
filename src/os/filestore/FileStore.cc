@@ -12,27 +12,28 @@
  * Foundation.  See file COPYING.
  *
  */
-#include "include/compat.h"
-#include "include/int_types.h"
-#include "boost/tuple/tuple.hpp"
 
+
+#include <map>
+#include <cerrno>
+#include <cstdlib>
+#include <fstream>
+#include <sstream>
+#include <iostream>
+
+#include <fcntl.h>
 #include <unistd.h>
-#include <stdlib.h>
+#include <dirent.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
 #include <sys/file.h>
-#include <errno.h>
-#include <dirent.h>
 #include <sys/ioctl.h>
 
 #if defined(__linux__)
 #include <linux/fs.h>
 #include <linux/falloc.h>
 #endif
-
-#include <iostream>
-#include <map>
 
 #include "include/linux_fiemap.h"
 
@@ -44,9 +45,9 @@
 #include <sys/mount.h>
 #endif
 
-
-#include <fstream>
-#include <sstream>
+#include "include/compat.h"
+#include "include/int_types.h"
+#include "boost/tuple/tuple.hpp"
 
 #include "FileStore.h"
 #include "GenericFileStoreBackend.h"
@@ -76,6 +77,8 @@
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
 
+#include "include/util.h"
+#include "include/random.h"
 #include "include/assert.h"
 
 #include "common/config.h"
@@ -1226,7 +1229,7 @@ int FileStore::_detect_fs()
 
   // test xattrs
   char fn[PATH_MAX];
-  int x = rand();
+  int x = ceph::util::generate_random_number();
   int y = x+1;
   snprintf(fn, sizeof(fn), "%s/xattr_test", basedir.c_str());
   int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC, 0700);

@@ -5,13 +5,15 @@
  * Thin C++ wrapper around libuuid.
  */
 
-#include "encoding.h"
 #include <ostream>
 
 #include <boost/uuid/uuid.hpp>
-#include <boost/uuid/uuid_generators.hpp>
 #include <boost/uuid/uuid_io.hpp>
+#include <boost/uuid/uuid_generators.hpp>
 #include <boost/random/random_device.hpp>
+
+#include "random.h"
+#include "encoding.h"
 
 struct uuid_d {
   boost::uuids::uuid uuid;
@@ -26,8 +28,8 @@ struct uuid_d {
   }
 
   void generate_random() {
-    boost::random::random_device rng("/dev/urandom");
-    boost::uuids::basic_random_generator<boost::random::random_device> gen(&rng);
+    thread_local ceph::util::random_number_generator<int> rng;
+    boost::uuids::basic_random_generator gen(rng.random_device());
     uuid = gen();
   }
   

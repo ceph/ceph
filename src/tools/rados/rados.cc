@@ -760,10 +760,10 @@ void LoadGen::gen_op(LoadGenOp *op)
   obj_info& info = objs[i];
   op->oid = info.name;
 
-  size_t len = generate_random_number(min_op_len, max_op_len);
+  size_t len = generate_random_number(min_op_len, max_op_len - 1);
   if (len > info.len)
     len = info.len;
-  size_t off = generate_random_number<size_t>(0, info.len);
+  size_t off = generate_random_number<size_t>(0, info.len - 1);
 
   if (off + len > info.len)
     off = info.len - len;

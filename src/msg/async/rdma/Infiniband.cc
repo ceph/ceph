@@ -14,12 +14,16 @@
  *
  */
 
-#include "Infiniband.h"
-#include "common/errno.h"
-#include "common/debug.h"
-#include "RDMAStack.h"
 #include <sys/time.h>
 #include <sys/resource.h>
+
+#include "Infiniband.h"
+#include "RDMAStack.h"
+
+#include "include/random.h"
+
+#include "common/errno.h"
+#include "common/debug.h"
 
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
@@ -1055,19 +1059,19 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
   ssize_t r = ::read(sd, &msg, sizeof(msg));
   // Drop incoming qpt
   if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
+    if (ceph::util::generate_random_number(cct->_conf->ms_inject_socket_failures - 1) == 0) {
       ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
       return -EINVAL;
     }
   }
   if (r < 0) {
     r = -errno;
-    lderr(cct) << __func__ << " got error " << r << ": "
-               << cpp_strerror(r) << dendl;
+    lderr(cct) << __func__ << " got error " << errno << ": "
+               << cpp_strerror(errno) << dendl;
   } else if (r == 0) { // valid disconnect message of length 0
     ldout(cct, 10) << __func__ << " got disconnect message " << dendl;
   } else if ((size_t)r != sizeof(msg)) { // invalid message
-    ldout(cct, 1) << __func__ << " got bad length (" << r << ") " << dendl;
+    ldout(cct, 1) << __func__ << " got bad length (" << r << "): " << cpp_strerror(errno) << dendl;
     r = -EINVAL;
   } else { // valid message
     sscanf(msg, "%hu:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
@@ -1075,43 +1079,6 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
     ldout(cct, 5) << __func__ << " recevd: " << im.lid << ", " << im.qpn << ", " << im.psn << ", " << im.peer_qpn << ", " << gid  << dendl;
   }
   return r;
-}
-
-int Infiniband::send_msg(CephContext *cct, int sd, IBSYNMsg& im)
-{
-  int retry = 0;
-  ssize_t r;
-
-  char msg[TCP_MSG_LEN];
-  char gid[33];
-retry:
-  gid_to_wire_gid(&(im.gid), gid);
-  sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.qpn, im.psn, im.peer_qpn, gid);
-  ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.qpn << ", " << im.psn
-                 << ", " << im.peer_qpn << ", "  << gid  << dendl;
-  r = ::write(sd, msg, sizeof(msg));
-  // Drop incoming qpt
-  if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-      ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
-      return -EINVAL;
-    }
-  }
-
-  if ((size_t)r != sizeof(msg)) {
-    // FIXME need to handle EAGAIN instead of retry
-    if (r < 0 && (errno == EINTR || errno == EAGAIN) && retry < 3) {
-      retry++;
-      goto retry;
-    }
-    if (r < 0)
-      lderr(cct) << __func__ << " send returned error " << errno << ": "
-                 << cpp_strerror(errno) << dendl;
-    else
-      lderr(cct) << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << dendl;
-    return -errno;
-  }
-  return 0;
 }
 
 void Infiniband::wire_gid_to_gid(const char *wgid, union ibv_gid *gid)
@@ -1131,6 +1098,44 @@ void Infiniband::gid_to_wire_gid(const union ibv_gid *gid, char wgid[])
 {
   for (int i = 0; i < 4; ++i)
     sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(gid->raw + i * 4)));
+}
+
+
+int Infiniband::send_msg(CephContext *cct, int sd, IBSYNMsg& im)
+{
+  int retry = 0;
+  ssize_t r;
+
+  char msg[TCP_MSG_LEN];
+  char gid[33];
+retry:
+  gid_to_wire_gid(&(im.gid), gid);
+  sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.qpn, im.psn, im.peer_qpn, gid);
+  ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.qpn << ", " << im.psn
+                 << ", " << im.peer_qpn << ", "  << gid  << dendl;
+  r = ::write(sd, msg, sizeof(msg));
+  // Drop incoming qpt
+  if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
+    if (ceph::util::generate_random_number(cct->_conf->ms_inject_socket_failures - 1) == 0) {
+      ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
+      return -EINVAL;
+    }
+  }
+
+  if ((size_t)r != sizeof(msg)) {
+    // FIXME need to handle EAGAIN instead of retry
+    if (r < 0 && (errno == EINTR || errno == EAGAIN) && retry < 3) {
+      retry++;
+      goto retry;
+    }
+    if (r < 0)
+      lderr(cct) << __func__ << " send returned error " << errno << ": "
+                 << cpp_strerror(errno) << dendl;
+    else
+      lderr(cct) << __func__ << " send got bad length (" << r << ") " << cpp_strerror(errno) << dendl;
+    return -errno;
+  }
+  return 0;
 }
 
 Infiniband::QueuePair::~QueuePair()

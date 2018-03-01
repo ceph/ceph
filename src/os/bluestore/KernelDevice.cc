@@ -12,11 +12,15 @@
  *
  */
 
+#include <cstdlib>
+
+#include <fcntl.h>
 #include <unistd.h>
-#include <stdlib.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <fcntl.h>
+
+#include "include/random.h"
 
 #include "KernelDevice.h"
 #include "include/types.h"
@@ -636,7 +640,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
 	  << std::dec << " buffered" << dendl;
   if (cct->_conf->bdev_inject_crash &&
-      rand() % cct->_conf->bdev_inject_crash == 0) {
+      ceph::util::generate_random_number(cct->_conf->bdev_inject_crash - 1) == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
 	 << off << "~" << len << std::dec << dendl;
     ++injecting_crash;
@@ -721,7 +725,7 @@ int KernelDevice::aio_write(
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     if (cct->_conf->bdev_inject_crash &&
-	rand() % cct->_conf->bdev_inject_crash == 0) {
+	    ceph::util::generate_random_number(cct->_conf->bdev_inject_crash - 1) == 0) {
       derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
 	   << off << "~" << len << std::dec
 	   << dendl;

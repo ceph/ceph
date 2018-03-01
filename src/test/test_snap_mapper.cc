@@ -1,13 +1,20 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include "include/memory.h"
+
 #include <map>
 #include <set>
-#include <boost/scoped_ptr.hpp>
-#include <sys/types.h>
 #include <cstdlib>
 
+#include <boost/scoped_ptr.hpp>
+
+#include <sys/types.h>
+
+#include "include/util.h"
+#include "include/memory.h"
 #include "include/buffer.h"
+#include "include/random.h"
+
 #include "common/map_cacher.hpp"
+
 #include "osd/SnapMapper.h"
 
 #include "gtest/gtest.h"
@@ -19,7 +26,7 @@ typename T::iterator rand_choose(T &cont) {
   if (cont.size() == 0) {
     return cont.end();
   }
-  int index = rand() % cont.size();
+  int index = ceph::util::generate_random_number(cont.size() - 1);
   typename T::iterator retval = cont.begin();
 
   for (; index > 0; --index) ++retval;
@@ -30,7 +37,7 @@ string random_string(size_t size)
 {
   string name;
   for (size_t j = 0; j < size; ++j) {
-    name.push_back('a' + (rand() % 26));
+    name.push_back('a' + ceph::util::generate_random_number(26 - 1));
   }
   return name;
 }
@@ -125,8 +132,8 @@ private:
 	for (list<Op>::iterator i = ops.begin();
 	     i != ops.end();
 	     ops.erase(i++)) {
-	  if (!(rand()%3))
-	    usleep(1+(rand() % 5000));
+	  if (!ceph::util::generate_random_number(2))
+	    usleep(ceph::util::generate_random_number(1, 5000));
 	  Mutex::Locker l(parent->lock);
 	  (*i)->operate(&(parent->store));
 	}
@@ -279,7 +286,7 @@ public:
   }
   void random_bl(size_t size, bufferlist *bl) {
     for (size_t i = 0; i < size; ++i) {
-      bl->append(rand());
+      bl->append(ceph::util::generate_random_number());
     }
   }
   void do_set() {
@@ -418,7 +425,7 @@ TEST_F(MapCacherTest, Random)
     if (!(i % 50)) {
       std::cout << "On iteration " << i << std::endl;
     }
-    switch (rand() % 4) {
+    switch (ceph::util::generate_random_number(3)) {
     case 0:
       get();
       break;
@@ -457,11 +464,11 @@ public:
 
   hobject_t random_hobject() {
     return hobject_t(
-      random_string(1+(rand() % 16)),
-      random_string(1+(rand() % 16)),
-      snapid_t(rand() % 1000),
-      (rand() & ((~0)<<bits)) | (mask & ~((~0)<<bits)),
-      0, random_string(rand() % 16));
+      random_string(ceph::util::generate_random_number(1, 16)),
+      random_string(ceph::util::generate_random_number(1, 16)),
+      snapid_t(ceph::util::generate_random_number(1000 - 1)),
+      (ceph::util::generate_random_number() & ((~0)<<bits)) | (mask & ~((~0)<<bits)),
+      0, random_string(ceph::util::generate_random_number(15)));
   }
 
   void choose_random_snaps(int num, set<snapid_t> *snaps) {
@@ -487,7 +494,7 @@ public:
     } while (hobject_to_snap.count(obj));
 
     set<snapid_t> &snaps = hobject_to_snap[obj];
-    choose_random_snaps(1 + (rand() % 20), &snaps);
+    choose_random_snaps(ceph::util::generate_random_number(1, 19), &snaps);
     for (set<snapid_t>::iterator i = snaps.begin();
 	 i != snaps.end();
 	 ++i) {
@@ -512,7 +519,7 @@ public:
 
     vector<hobject_t> hoids;
     while (mapper->get_next_objects_to_trim(
-	     snap->first, rand() % 5 + 1, &hoids) == 0) {
+	     snap->first, ceph::util::generate_random_number(1, 4), &hoids) == 0) {
       for (auto &&hoid: hoids) {
 	assert(!hoid.is_max());
 	assert(hobjects.count(hoid));
@@ -621,7 +628,7 @@ protected:
     for (int i = 0; i < 5000; ++i) {
       if (!(i % 50))
 	std::cout << i << std::endl;
-      switch (rand() % 5) {
+      switch (ceph::util::generate_random_number(4)) {
       case 0:
 	get_tester().create_snap();
 	break;

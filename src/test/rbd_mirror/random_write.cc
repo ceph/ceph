@@ -1,16 +1,21 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <string>
+#include <vector>
+
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/Cond.h"
+
+#include "include/util.h"
+#include "include/random.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+
 #include "global/global_init.h"
-#include <string>
-#include <vector>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -95,11 +100,9 @@ void rbd_bencher_completion(void *vc, void *pc) {
 }
 
 void write_image(librbd::Image &image) {
-  srand(time(NULL) % (unsigned long) -1);
-
   uint64_t max_io_bytes = MAX_IO_SIZE * 1024;
   bufferptr bp(max_io_bytes);
-  memset(bp.c_str(), rand() & 0xff, bp.length());
+  memset(bp.c_str(), ceph::util::generate_random_number() & 0xff, bp.length());
   bufferlist bl;
   bl.push_back(bp);
 
@@ -113,7 +116,7 @@ void write_image(librbd::Image &image) {
 
   // disturb all thread's offset, used by seq write
   for (i = 0; i < NUM_THREADS; i++) {
-    start_pos = (rand() % (size / max_io_bytes)) * max_io_bytes;
+    start_pos = ceph::util::generate_random_number((size / max_io_bytes) - 1) * max_io_bytes;
     thread_offset.push_back(start_pos);
   }
 
@@ -125,12 +128,12 @@ void write_image(librbd::Image &image) {
     for (uint32_t i = 0; i < NUM_THREADS; ++i) {
       // mostly small writes with a small chance of large writes
       uint32_t io_modulo = MIN_IO_SIZE + 1;
-      if (rand() % 30 == 0) {
+      if (ceph::util::generate_random_number(30 - 1) == 0) {
         io_modulo += MAX_IO_SIZE;
       }
 
-      uint32_t io_size = (((rand() % io_modulo) + MIN_IO_SIZE) * 1024);
-      thread_offset[i] = (rand() % (size / io_size)) * io_size;
+      uint32_t io_size = ((ceph::util::generate_random_number(io_modulo - 1) + MIN_IO_SIZE) * 1024);
+      thread_offset[i] = ceph::util::generate_random_number((size / io_size) - 1) * io_size;
       if (!b.start_write(NUM_THREADS, thread_offset[i], io_size, bl,
                          LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
         break;

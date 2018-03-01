@@ -94,6 +94,8 @@
 
 #include "include/assert.h"
 #include "include/stat.h"
+#include "include/util.h"
+#include "include/random.h"
 
 #include "include/cephfs/ceph_statx.h"
 
@@ -8235,8 +8237,9 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
   req->set_filepath2(path2);
 
   int r = make_request(req, perms, NULL, NULL,
-		       rand() % mdsmap->get_num_in_mds());
+                       ceph::util::generate_random_number(mdsmap->get_num_in_mds()));
   ldout(cct, 3) << __func__ << " exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
+
   return r;
 }
 
@@ -8259,7 +8262,8 @@ int Client::_lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
   filepath path(ino);
   req->set_filepath(path);
 
-  int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
+  int r = make_request(req, perms, NULL, NULL, ceph::util::generate_random_number(mdsmap->get_num_in_mds()));
+
   if (r == 0 && inode != NULL) {
     vinodeno_t vino(ino, CEPH_NOSNAP);
     unordered_map<vinodeno_t,Inode*>::iterator p = inode_map.find(vino);
@@ -8307,7 +8311,9 @@ int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   req->set_filepath(path);
 
   InodeRef target;
-  int r = make_request(req, perms, &target, NULL, rand() % mdsmap->get_num_in_mds());
+
+  int r = make_request(req, perms, &target, NULL, ceph::util::generate_random_number(mdsmap->get_num_in_mds()));
+
   // Give caller a reference to the parent ino if they provided a pointer.
   if (parent != NULL) {
     if (r == 0) {
@@ -8345,8 +8351,9 @@ int Client::_lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
   req->set_filepath(filepath(ino->ino));
   req->set_inode(ino);
 
-  int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
+  int r = make_request(req, perms, NULL, NULL, ceph::util::generate_random_number(mdsmap->get_num_in_mds()));
   ldout(cct, 3) << __func__ << " exit(" << ino->ino << ") = " << r << dendl;
+
   return r;
 }
 
@@ -13929,7 +13936,7 @@ mds_rank_t Client::_get_random_up_mds() const
   if (up.empty())
     return MDS_RANK_NONE;
   std::set<mds_rank_t>::const_iterator p = up.begin();
-  for (int n = rand() % up.size(); n; n--)
+  for (int n = ceph::util::generate_random_number(up.size()); n; n--)
     ++p;
   return *p;
 }
