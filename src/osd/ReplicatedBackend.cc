@@ -591,7 +591,7 @@ int ReplicatedBackend::be_deep_scrub(
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
   bool skip_data_digest = store->has_builtin_csum() &&
-    g_conf->get_val<bool>("osd_skip_data_digest");
+    g_conf->osd_skip_data_digest;
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
@@ -698,10 +698,10 @@ int ReplicatedBackend::be_deep_scrub(
     }
   }
 
-  if (pos.omap_keys > cct->_conf->get_val<uint64_t>(
-	"osd_deep_scrub_large_omap_object_key_threshold") ||
-      pos.omap_bytes > cct->_conf->get_val<uint64_t>(
-	"osd_deep_scrub_large_omap_object_value_sum_threshold")) {
+  if (pos.omap_keys > cct->_conf->
+	osd_deep_scrub_large_omap_object_key_threshold ||
+      pos.omap_bytes > cct->_conf->
+	osd_deep_scrub_large_omap_object_value_sum_threshold) {
     dout(25) << __func__ << " " << poid
 	     << " large omap object detected. Object has " << pos.omap_keys
 	     << " keys and size " << pos.omap_bytes << " bytes" << dendl;
