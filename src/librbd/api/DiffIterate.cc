@@ -131,17 +131,22 @@ private:
     uint64_t end_size;
     bool end_exists;
     librados::snap_t clone_end_snap_id;
+    bool whole_object;
     calc_snap_set_diff(cct, m_snap_set, m_diff_context.from_snap_id,
                        m_diff_context.end_snap_id, &diff, &end_size,
-                       &end_exists, &clone_end_snap_id);
+                       &end_exists, &clone_end_snap_id, &whole_object);
+    if (whole_object) {
+      ldout(cct, 1) << "object " << m_oid << ": need to provide full object"
+                    << dendl;
+    }
     ldout(cct, 20) << "  diff " << diff << " end_exists=" << end_exists
                    << dendl;
-    if (diff.empty()) {
+    if (diff.empty() && !whole_object) {
       if (m_diff_context.from_snap_id == 0 && !end_exists) {
         compute_parent_overlap(diffs);
       }
       return;
-    } else if (m_diff_context.whole_object) {
+    } else if (m_diff_context.whole_object || whole_object) {
       // provide the full object extents to the callback
       for (vector<ObjectExtent>::iterator q = m_object_extents.begin();
            q != m_object_extents.end(); ++q) {

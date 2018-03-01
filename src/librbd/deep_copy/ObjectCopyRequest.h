@@ -142,6 +142,7 @@ private:
   int m_snap_ret = 0;
   bool m_retry_missing_read = false;
   librados::snap_set_t m_retry_snap_set;
+  bool m_read_whole_object = false;
 
   std::map<WriteReadSnapIds, CopyOps> m_read_ops;
   std::list<WriteReadSnapIds> m_read_snaps;
