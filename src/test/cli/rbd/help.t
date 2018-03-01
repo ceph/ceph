@@ -93,7 +93,7 @@
       snap limit set                      Limit the number of snapshots.
       snap list (snap ls)                 Dump list of image snapshots.
       snap protect                        Prevent a snapshot from being deleted.
-      snap purge                          Delete all snapshots.
+      snap purge                          Delete all unprotected snapshots.
       snap remove (snap rm)               Delete a snapshot.
       snap rename                         Rename a snapshot.
       snap rollback (snap revert)         Rollback image to snapshot.
@@ -1480,7 +1480,7 @@
                         [--image-id <image-id>] [--no-progress] 
                         <image-spec> 
   
-  Delete all snapshots.
+  Delete all unprotected snapshots.
   
   Positional arguments
     <image-spec>         image specification
