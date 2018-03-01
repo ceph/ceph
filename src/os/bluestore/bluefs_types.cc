@@ -51,6 +51,7 @@ void bluefs_super_t::decode(bufferlist::iterator& p)
   decode(block_size, p);
   decode(log_fnode, p);
   DECODE_FINISH(p);
+  log_fnode.recalc_allocated();
 }
 
 void bluefs_super_t::dump(Formatter *f) const
