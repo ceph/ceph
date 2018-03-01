@@ -4154,6 +4154,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("bitmap")
+    .set_enum_allowed({"bitmap", "stupid"})
     .set_description(""),
 
     Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
