@@ -147,6 +147,24 @@ int main(int argc, const char **argv)
       "MDS names may not start with a numeric digit." << dendl;
   }
 
+  if (global_init_prefork(g_ceph_context) >= 0) {
+    std::string err;
+    int r = forker.prefork(err);
+    if (r < 0) {
+      cerr << err << std::endl;
+      return r;
+    }
+    if (forker.is_parent()) {
+      if (forker.parent_wait(err) != 0) {
+        return -ENXIO;
+      }
+      return 0;
+    }
+    global_init_postfork_start(g_ceph_context);
+  }
+  common_init_finish(g_ceph_context);
+  global_init_chdir(g_ceph_context);
+
   auto nonce = ceph::util::generate_random_number<uint64_t>();
 
   std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
@@ -154,7 +172,7 @@ int main(int argc, const char **argv)
 				      entity_name_t::MDS(-1), "mds",
 				      nonce, Messenger::HAS_MANY_CONNECTIONS);
   if (!msgr)
-    exit(1);
+    forker.exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
   cout << "starting " << g_conf->name << " at " << msgr->get_myaddr()
@@ -173,11 +191,8 @@ int main(int argc, const char **argv)
 
   int r = msgr->bind(g_conf->public_addr);
   if (r < 0)
-    exit(1);
+    forker.exit(1);
 
-  global_init_daemonize(g_ceph_context);
-  common_init_finish(g_ceph_context);
-  
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
@@ -185,7 +200,7 @@ int main(int argc, const char **argv)
   // get monmap
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
-    return -1;
+    forker.exit(1);
   global_init_chdir(g_ceph_context);
 
   msgr->start();
@@ -196,6 +211,11 @@ int main(int argc, const char **argv)
   // in case we have to respawn...
   mds->orig_argc = argc;
   mds->orig_argv = argv;
+
+  if (g_conf->daemonize) {
+    global_init_postfork_finish(g_ceph_context);
+    forker.daemonize();
+  }
 
   r = mds->init();
   if (r < 0) {
