@@ -1049,39 +1049,43 @@ def validate_command(sigdict, args, verbose=False):
             print("bestcmds_sorted: ", file=sys.stderr)
             pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
 
-        e = None
-        # for everything in bestcmds, look for a true match
-        for cmdsig in bestcmds_sorted:
-            for cmd in cmdsig.values():
-                sig = cmd['sig']
-                try:
-                    valid_dict = validate(args, sig, flags=cmd.get('flags', 0))
-                    found = cmd
-                    break
-                except ArgumentPrefix:
-                    # ignore prefix mismatches; we just haven't found
-                    # the right command yet
-                    pass
-                except ArgumentMissing as e:
-                    if len(bestcmds) == 1:
+        bestcmds_count = len(bestcmds_sorted)
+        if (bestcmds_count > 1) and len(args) < cmdsiglen(bestcmds_sorted[0]):
+            pass
+        else:
+            e = None
+            # for everything in bestcmds, look for a true match
+            for cmdsig in bestcmds_sorted:
+                for cmd in cmdsig.values():
+                    sig = cmd['sig']
+                    try:
+                        valid_dict = validate(args, sig, flags=cmd.get('flags', 0))
                         found = cmd
+                        break
+                    except ArgumentPrefix:
+                        # ignore prefix mismatches; we just haven't found
+                        # the right command yet
+                        pass
+                    except ArgumentMissing as e:
+                        if len(bestcmds) == 1:
+                            found = cmd
+                        break
+                    except ArgumentTooFew:
+                        # It looked like this matched the beginning, but it
+                        # didn't have enough args supplied.  If we're out of
+                        # cmdsigs we'll fall out unfound; if we're not, maybe
+                        # the next one matches completely.  Whine, but pass.
+                        if verbose:
+                            print('Not enough args supplied for ',
+                                  concise_sig(sig), file=sys.stderr)
+                    except ArgumentError as e:
+                        # Solid mismatch on an arg (type, range, etc.)
+                        # Stop now, because we have the right command but
+                        # some other input is invalid
+                        found = cmd
+                        break
+                if found or e:
                     break
-                except ArgumentTooFew:
-                    # It looked like this matched the beginning, but it
-                    # didn't have enough args supplied.  If we're out of
-                    # cmdsigs we'll fall out unfound; if we're not, maybe
-                    # the next one matches completely.  Whine, but pass.
-                    if verbose:
-                        print('Not enough args supplied for ',
-                              concise_sig(sig), file=sys.stderr)
-                except ArgumentError as e:
-                    # Solid mismatch on an arg (type, range, etc.)
-                    # Stop now, because we have the right command but
-                    # some other input is invalid
-                    found = cmd
-                    break
-            if found or e:
-                break
 
         if found:
             if not valid_dict:
