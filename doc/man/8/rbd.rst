@@ -510,7 +510,7 @@ Commands
   This requires image format 2.
 
 :command:`snap purge` *image-spec*
-  Remove all snapshots from an image.
+  Remove all unprotected snapshots from an image.
 
 :command:`snap rename` *src-snap-spec* *dest-snap-spec*
   Rename a snapshot. Note: rename across pools and images is not supported.
