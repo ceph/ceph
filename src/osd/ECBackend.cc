@@ -2356,6 +2356,10 @@ int ECBackend::be_deep_scrub(
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
+  if (sleeptime != utime_t()) {
+    lgeneric_derr(cct) << __func__ << " sleeping for " << sleeptime << dendl;
+    sleeptime.sleep();
+  }
 
   if (pos.data_pos == 0) {
     pos.data_hash = bufferhash(-1);
