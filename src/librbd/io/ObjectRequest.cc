@@ -337,7 +337,7 @@ void ObjectReadRequest<I>::copyup() {
 
   ldout(image_ctx->cct, 20) << dendl;
 
-  Mutex::Locker copyup_locker(image_ctx->copyup_list_lock);
+  image_ctx->copyup_list_lock.Lock();
   auto it = image_ctx->copyup_list.find(this->m_object_no);
   if (it == image_ctx->copyup_list.end()) {
     // create and kick off a CopyupRequest
@@ -346,7 +346,10 @@ void ObjectReadRequest<I>::copyup() {
       this->m_trace);
 
     image_ctx->copyup_list[this->m_object_no] = new_req;
+    image_ctx->copyup_list_lock.Unlock();
     new_req->send();
+  } else {
+    image_ctx->copyup_list_lock.Unlock();
   }
 
   image_ctx->parent_lock.put_read();
