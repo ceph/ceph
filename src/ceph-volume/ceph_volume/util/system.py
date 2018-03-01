@@ -5,10 +5,11 @@ import pwd
 import platform
 import tempfile
 import uuid
-from ceph_volume import process
+from ceph_volume import process, terminal
 from . import as_string
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 # TODO: get these out of here and into a common area for others to consume
 if platform.system() == 'FreeBSD':
@@ -28,6 +29,28 @@ else:
 
 def generate_uuid():
     return str(uuid.uuid4())
+
+
+def which(executable):
+    """find the location of an executable"""
+    locations = (
+        '/usr/local/bin',
+        '/bin',
+        '/usr/bin',
+        '/usr/local/sbin',
+        '/usr/sbin',
+        '/sbin',
+    )
+
+    for location in locations:
+        executable_path = os.path.join(location, executable)
+        if os.path.exists(executable_path) and os.path.isfile(executable_path):
+            return executable_path
+    mlogger.warning('Absolute path not found for executable: %s', executable)
+    mlogger.warning('Ensure $PATH environment variable contains common executable locations')
+    # fallback to just returning the argument as-is, to prevent a hard fail,
+    # and hoping that the system might have the executable somewhere custom
+    return executable
 
 
 def get_ceph_user_ids():
