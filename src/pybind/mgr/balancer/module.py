@@ -271,6 +271,21 @@ class Module(MgrModule):
             }
             return (0, json.dumps(s, indent=4), '')
         elif command['prefix'] == 'balancer mode':
+            if command['mode'] == 'upmap':
+                # try to automatically enable required upmap features
+                self.log.debug('sending "ceph osd set-require-min-compat-client luminous"')
+                result = CommandResult('')
+                self.send_command(result, 'mon', '', json.dumps({
+                    'prefix': 'osd set-require-min-compat-client',
+                    'format': 'json',
+                    'version': 'luminous'
+                }), '')
+                r, outb, outs = result.wait()
+                if r:
+                    self.log.error('"ceph osd set-require-min-compat-client luminous"' \
+                                   ': r = %d, detail =%s' % (r, outs))
+                    return (r, '', 'Unable to enable "upmap" mode, ' \
+                                   '"ceph osd set-require-min-compat-client luminous" failed')
             self.set_config('mode', command['mode'])
             return (0, '', '')
         elif command['prefix'] == 'balancer on':
