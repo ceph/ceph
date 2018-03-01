@@ -84,7 +84,7 @@ more data migration than should be necessary, so it is not optimal.
    This requires you do identify which device to wipe based on what you saw
    mounted above. BE CAREFUL! ::
 
-     ceph-volume create --bluestore --data $DEVICE --osd-id $ID
+     ceph-volume lvm create --bluestore --data $DEVICE --osd-id $ID
 
 #. Repeat.
 
