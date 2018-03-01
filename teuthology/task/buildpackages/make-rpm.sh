@@ -145,11 +145,10 @@ function build_package() {
         ccache=$(echo /usr/lib*/ccache)
         # Build RPMs
         if [ "$suse" = true ]; then
-          sed -i -e '0,/%package/s//%debug_package\n&/' \
-                 -e 's/%{epoch}://g' \
-                 -e '/^Epoch:/d' \
-                 -e 's/%bcond_with ceph_test_package/%bcond_without ceph_test_package/' \
-                 -e "s/^Source0:.*$/Source0: $CEPH_TARBALL/" \
+          sed -i \
+                 -e '0,/%package/s//%debug_package\n\n&/' \
+                 -e 's/%bcond_with ceph_test_package/%bcond_without ceph_test_package/g' \
+                 -e '0,/^Release:/s/.<B_CNT>//' \
                  -e '/^Source9/d' \
                  ceph.spec
         fi
