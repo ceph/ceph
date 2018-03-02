@@ -55,13 +55,13 @@ Usage::
 Optional Arguments:
 
 * [-h, --help]  show the help message and exit
-* [--bluestore] filestore objectstore (not yet implemented)
-* [--filestore] filestore objectstore (current default)
+* [--bluestore] bluestore objectstore (default)
+* [--filestore] filestore objectstore
 
 
 **prepare**
-Prepares a logical volume to be used as an OSD and journal using a ``filestore`` setup
-(``bluestore`` support is planned). It will not create or modify the logical volumes
+Prepares a logical volume to be used as an OSD and journal using a ``filestore``
+or ``bluestore`` (default) setup. It will not create or modify the logical volumes
 except for adding extra metadata.
 
 Usage::
