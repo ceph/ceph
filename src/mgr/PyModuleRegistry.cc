@@ -37,7 +37,7 @@ std::string PyModuleRegistry::config_prefix;
 
 
 
-int PyModuleRegistry::init()
+void PyModuleRegistry::init()
 {
   Mutex::Locker locker(lock);
 
@@ -98,8 +98,6 @@ int PyModuleRegistry::init()
     clog->error() << "Failed to load ceph-mgr modules: " << joinify(
         failed_modules.begin(), failed_modules.end(), std::string(", "));
   }
-
-  return 0;
 }
 
 bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
