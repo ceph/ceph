@@ -349,7 +349,7 @@ activate):
    For example::
 
 	ssh node1
-	sudo ceph-volume prepare --data /dev/hdd1
+	sudo ceph-volume lvm prepare --data /dev/hdd1
 
    Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
    activation. These can be obtained by listing OSDs in the current server::
@@ -388,7 +388,7 @@ activate):
    For example::
 
 	ssh node1
-	sudo ceph-volume prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
+	sudo ceph-volume lvm prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
 
    Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
    activation. These can be obtained by listing OSDs in the current server::
