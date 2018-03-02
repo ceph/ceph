@@ -988,6 +988,10 @@ public:
    */
   uint64_t get_up_osd_features() const;
 
+  void maybe_remove_pg_upmaps(CephContext *cct,
+                              const OSDMap& osdmap,
+                              Incremental *pending_inc);
+
   int apply_incremental(const Incremental &inc);
 
   /// try to re-use/reference addrs in oldmap from newmap
@@ -1066,6 +1070,15 @@ public:
     const pg_pool_t *p = get_pg_pool(pgid.pool());
     assert(p);
     return p->get_size();
+  }
+
+  int get_pg_pool_crush_rule(pg_t pgid) const {
+    if (!pg_exists(pgid)) {
+      return -ENOENT;
+    }
+    const pg_pool_t *p = get_pg_pool(pgid.pool());
+    assert(p);
+    return p->get_crush_rule();
   }
 
 private:

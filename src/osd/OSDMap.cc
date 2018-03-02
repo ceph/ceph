@@ -1614,6 +1614,112 @@ void OSDMap::clean_temps(CephContext *cct,
   }
 }
 
+void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
+                                    const OSDMap& osdmap,
+                                    Incremental *pending_inc)
+{
+  ldout(cct, 10) << __func__ << dendl;
+  OSDMap tmpmap;
+  tmpmap.deepish_copy_from(osdmap);
+  tmpmap.apply_incremental(*pending_inc);
+
+  for (auto& p : tmpmap.pg_upmap) {
+    ldout(cct, 10) << __func__ << " pg_upmap entry "
+                   << "[" << p.first << ":" << p.second << "]"
+                   << dendl;
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(p.first);
+    if (crush_rule < 0) {
+      lderr(cct) << __func__ << " unable to load crush-rule of pg "
+                 << p.first << dendl;
+      continue;
+    }
+    auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
+    if (type < 0) {
+      lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
+                 << p.first << dendl;
+      continue;
+    }
+    ldout(cct, 10) << __func__ << " pg " << p.first
+                   << " crush-rule-id " << crush_rule
+                   << " failure-domain-type " << type
+                   << dendl;
+    vector<int> raw;
+    int primary;
+    tmpmap.pg_to_raw_up(p.first, &raw, &primary);
+    set<int> parents;
+    bool collide = false;
+    for (auto osd : raw) {
+      auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+      auto r = parents.insert(parent);
+      if (!r.second) {
+        collide = true;
+        break;
+      }
+    }
+    if (collide) {
+      ldout(cct, 10) << __func__ << " removing invalid pg_upmap "
+                     << "[" << p.first << ":" << p.second << "]"
+                     << ", final mapping result will be: " << raw
+                     << dendl;
+      auto it = pending_inc->new_pg_upmap.find(p.first);
+      if (it != pending_inc->new_pg_upmap.end()) {
+        pending_inc->new_pg_upmap.erase(it);
+      }
+      if (osdmap.pg_upmap.count(p.first)) {
+        pending_inc->old_pg_upmap.insert(p.first);
+      }
+    }
+  }
+  for (auto& p : tmpmap.pg_upmap_items) {
+    ldout(cct, 10) << __func__ << " pg_upmap_items entry "
+                   << "[" << p.first << ":" << p.second << "]"
+                   << dendl;
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(p.first);
+    if (crush_rule < 0) {
+      lderr(cct) << __func__ << " unable to load crush-rule of pg "
+                 << p.first << dendl;
+      continue;
+    }
+    auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
+    if (type < 0) {
+      lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
+                 << p.first << dendl;
+      continue;
+    }
+    ldout(cct, 10) << __func__ << " pg " << p.first
+                   << " crush_rule_id " << crush_rule
+                   << " failure_domain_type " << type
+                   << dendl;
+    vector<int> raw;
+    int primary;
+    tmpmap.pg_to_raw_up(p.first, &raw, &primary);
+    set<int> parents;
+    bool collide = false;
+    for (auto osd : raw) {
+      auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+      auto r = parents.insert(parent);
+      if (!r.second) {
+        collide = true;
+        break;
+      }
+    }
+    if (collide) {
+      ldout(cct, 10) << __func__ << " removing invalid pg_upmap_items "
+                     << "[" << p.first << ":" << p.second << "]"
+                     << ", final mapping result will be: " << raw
+                     << dendl;
+      // This is overkilling, but simpler..
+      auto it = pending_inc->new_pg_upmap_items.find(p.first);
+      if (it != pending_inc->new_pg_upmap_items.end()) {
+        pending_inc->new_pg_upmap_items.erase(it);
+      }
+      if (osdmap.pg_upmap_items.count(p.first)) {
+        pending_inc->old_pg_upmap_items.insert(p.first);
+      }
+    }
+  }
+}
+
 int OSDMap::apply_incremental(const Incremental &inc)
 {
   new_blacklist_entries = false;
