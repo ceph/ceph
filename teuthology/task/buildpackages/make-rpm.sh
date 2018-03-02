@@ -135,6 +135,8 @@ function build_package() {
     mkdir -p ${buildarea}/BUILD
     CEPH_TARBALL=( ceph-*.tar.bz2 )
     CEPH_TARBALL_BASE=$(echo $CEPH_TARBALL | sed -e 's/.tar.bz2$//')
+    CEPH_VERSION=$(echo $CEPH_TARBALL_BASE | cut -d - -f 2-2)
+    CEPH_RELEASE=$(echo $CEPH_TARBALL_BASE | cut -d - -f 3- | tr - .)
     cp -a $CEPH_TARBALL ${buildarea}/SOURCES/.
     cp -a rpm/*.patch ${buildarea}/SOURCES || true
     (
@@ -144,9 +146,10 @@ function build_package() {
           sed -i \
                  -e '0,/%package/s//%debug_package\n\n&/' \
                  -e 's/%bcond_with ceph_test_package/%bcond_without ceph_test_package/g' \
-                 -e '0,/^Release:/s/.<B_CNT>//' \
+                 -e "s/^Version:.*/Version: $CEPH_VERSION/g" \
+                 -e "s/^Release:.*/Release: $CEPH_RELEASE/g" \
+                 -e "s/^Source0:.*/Source0: $CEPH_TARBALL/g" \
                  -e '/^Source9/d' \
-                 -e "0,/^Source0:/s/Source0:.*/Source0: $CEPH_TARBALL/" \
                  -e "s/^%autosetup -p1.*/%autosetup -p1 -n $CEPH_TARBALL_BASE/g" \
                  ceph.spec
         fi
