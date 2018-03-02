@@ -21,6 +21,21 @@ struct Option {
     TYPE_UUID,
   };
 
+  enum unit_t : uint8_t {
+    NONE,
+    BYTES,
+    SEC,
+  };
+
+  const char *unit_to_str(unit_t u) const {
+    switch(u) {
+    case NONE: return "none";
+    case BYTES: return "bytes";
+    case SEC: return "sec";
+    default: return "unknown";
+    }    
+  }
+  
   const char *type_to_str(type_t t) const {
     switch (t) {
     case TYPE_UINT: return "uint64_t";
@@ -93,6 +108,8 @@ struct Option {
   value_t min, max;
   std::vector<const char*> enum_allowed;
 
+  unit_t unit;
+  
   bool safe;
 
   /**
@@ -236,6 +253,12 @@ struct Option {
   Option& set_enum_allowed(const std::initializer_list<const char*>& allowed)
   {
     enum_allowed.insert(enum_allowed.end(), allowed);
+    return *this;
+  }
+
+  Option& set_unit(const unit_t u)
+  {
+    unit = u;
     return *this;
   }
 
