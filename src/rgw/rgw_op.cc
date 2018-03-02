@@ -3505,7 +3505,7 @@ void RGWPutObj::execute()
       op_ret = -ENOENT;
       goto done;
     }
-    lst = astate->size - 1;
+    lst = astate->accounted_size - 1;
   } else {
     lst = copy_source_range_lst;
   }
