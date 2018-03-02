@@ -805,7 +805,7 @@ void BlueStore::Cache::trim(
   target_buffer = min(target_bytes - target_meta, target_buffer);
 
   if (current <= target_bytes) {
-    dout(10) << __func__
+    dout(30) << __func__
 	     << " shard target " << pretty_si_t(target_bytes)
 	     << " meta/data ratios " << target_meta_ratio
 	     << " + " << target_data_ratio << " ("
@@ -834,7 +834,7 @@ void BlueStore::Cache::trim(
   uint64_t max_meta = current_meta - free_meta;
   uint64_t max_onodes = max_meta / bytes_per_onode;
 
-  dout(10) << __func__
+  dout(20) << __func__
 	   << " shard target " << pretty_si_t(target_bytes)
 	   << " ratio " << target_meta_ratio << " ("
 	   << pretty_si_t(target_meta) << " + "
