@@ -60,6 +60,7 @@ set(rgw_a_srcs
   rgw_frontend.cc
   rgw_gc.cc
   rgw_http_client.cc
+  rgw_http_client_curl.cc
   rgw_json_enc.cc
   rgw_keystone.cc
   rgw_ldap.cc
@@ -189,6 +190,10 @@ add_dependencies(radosgw cls_rgw cls_lock cls_refcount
   cls_log cls_statelog cls_timeindex
   cls_version cls_replica_log cls_user)
 install(TARGETS radosgw DESTINATION bin)
+
+if (WITH_CURL_OPENSSL)
+  target_link_libraries(radosgw ${OPENSSL_LIBRARIES})
+endif (WITH_CURL_OPENSSL)
 
 set(radosgw_admin_srcs
   rgw_admin.cc
