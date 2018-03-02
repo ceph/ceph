@@ -1864,6 +1864,7 @@ struct req_state : DoutPrefixProvider {
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
+  vector<rgw::IAM::Policy> iam_user_policies;
 
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
@@ -2271,17 +2272,31 @@ extern std::string rgw_to_asctime(const utime_t& t);
 
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
+rgw::IAM::Effect eval_user_policies(const vector<rgw::IAM::Policy>& user_policies,
+                          const rgw::IAM::Environment& env,
+                          boost::optional<const rgw::auth::Identity&> id,
+                          const uint64_t op,
+                          const rgw::IAM::ARN& arn);
 bool verify_user_permission(struct req_state * const s,
                             RGWAccessControlPolicy * const user_acl,
-                            const int perm);
+                            const vector<rgw::IAM::Policy>& user_policies,
+                            const rgw::IAM::ARN& res,
+                            const uint64_t op);
+bool verify_user_permission_no_policy(struct req_state * const s,
+                                      RGWAccessControlPolicy * const user_acl,
+                                      const int perm);
 bool verify_user_permission(struct req_state * const s,
-                            const int perm);
+                            const rgw::IAM::ARN& res,
+                            const uint64_t op);
+bool verify_user_permission_no_policy(struct req_state * const s,
+                                      int perm);
 bool verify_bucket_permission(
   struct req_state * const s,
   const rgw_bucket& bucket,
   RGWAccessControlPolicy * const user_acl,
   RGWAccessControlPolicy * const bucket_acl,
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const vector<rgw::IAM::Policy>& user_policies,
   const uint64_t op);
 bool verify_bucket_permission(struct req_state * const s, const uint64_t op);
 bool verify_bucket_permission_no_policy(
@@ -2300,6 +2315,7 @@ extern bool verify_object_permission(
   RGWAccessControlPolicy * const bucket_acl,
   RGWAccessControlPolicy * const object_acl,
   const boost::optional<rgw::IAM::Policy>& bucket_policy,
+  const vector<rgw::IAM::Policy>& user_policies,
   const uint64_t op);
 extern bool verify_object_permission(struct req_state *s, uint64_t op);
 extern bool verify_object_permission_no_policy(
