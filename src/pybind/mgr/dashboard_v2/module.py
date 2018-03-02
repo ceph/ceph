@@ -11,7 +11,12 @@ try:
     from urlparse import urljoin
 except ImportError:
     from urllib.parse import urljoin
-import cherrypy
+try:
+    import cherrypy
+except ImportError:
+    # To be picked up and reported by .can_run()
+    cherrypy = None
+
 from mgr_module import MgrModule, MgrStandbyModule
 import rados
 
@@ -96,6 +101,21 @@ class Module(MgrModule):
         mgr.init(self)
         self._url_prefix = ''
 
+    @classmethod
+    def can_run(cls):
+        if cherrypy is None:
+            return False, "Missing dependency: cherrypy"
+
+        if not os.path.exists(cls.get_frontend_path()):
+            return False, "Frontend assets not found: incomplete build?"
+
+        return True, ""
+
+    @classmethod
+    def get_frontend_path(cls):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(current_dir, 'frontend/dist')
+
     def configure_cherrypy(self):
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '8080')
@@ -125,12 +145,10 @@ class Module(MgrModule):
         }
         cherrypy.config.update(config)
 
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        fe_dir = os.path.join(current_dir, 'frontend/dist')
         config = {
             '/': {
                 'tools.staticdir.on': True,
-                'tools.staticdir.dir': fe_dir,
+                'tools.staticdir.dir': self.get_frontend_path(),
                 'tools.staticdir.index': 'index.html'
             }
         }
