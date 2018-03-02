@@ -66,10 +66,10 @@ running, too. To see if all OSDs are running, execute::
 
 	ceph osd stat
 
-The result should tell you the map epoch (eNNNN), the total number of OSDs (x),
-how many are ``up`` (y) and how many are ``in`` (z). ::
+The result should tell you the total number of OSDs (x),
+how many are ``up`` (y), how many are ``in`` (z) and the map epoch (eNNNN). ::
 
-	eNNNN: x osds: y up, z in
+	x osds: y up, z in; epoch: eNNNN
 
 If the number of OSDs that are ``in`` the cluster is more than the number of
 OSDs that are ``up``, execute the following command to identify the ``ceph-osd``
@@ -79,14 +79,12 @@ daemons that are not running::
 
 :: 
 
-	dumped osdmap tree epoch 1
-	# id	weight	type name	up/down	reweight
-	-1	2	pool openstack
-	-3	2		rack dell-2950-rack-A
-	-2	2			host dell-2950-A1
-	0	1				osd.0	up	1	
-	1	1				osd.1	down	1
-
+	#ID CLASS WEIGHT  TYPE NAME             STATUS REWEIGHT PRI-AFF
+	 -1       2.00000 pool openstack
+	 -3       2.00000 rack dell-2950-rack-A
+	 -2       2.00000 host dell-2950-A1
+	  0   ssd 1.00000      osd.0                up  1.00000 1.00000
+	  1   ssd 1.00000      osd.1              down  1.00000 1.00000
 
 .. tip:: The ability to search through a well-designed CRUSH hierarchy may help
    you troubleshoot your cluster by identifying the physcial locations faster.
@@ -142,7 +140,7 @@ The result should tell you the osdmap epoch (eNNN), the placement group number
 ({pg-num}),  the OSDs in the Up Set (up[]), and the OSDs in the acting set
 (acting[]). ::
 
-	osdmap eNNN pg {pg-num} -> up [0,1,2] acting [0,1,2]
+	osdmap eNNN pg {raw-pg-num} ({pg-num}) -> up [0,1,2] acting [0,1,2]
 
 .. note:: If the Up Set and Acting Set do not match, this may be an indicator
    that the cluster rebalancing itself or of a potential problem with 
@@ -207,16 +205,16 @@ placement groups, execute::
 
 	ceph pg stat
 
-The result should tell you the placement group map version (vNNNNNN), the total
-number of placement groups (x), and how many placement groups are in a
-particular state such as ``active+clean`` (y). ::
+The result should tell you the total number of placement groups (x), how many
+placement groups are in a particular state such as ``active+clean`` (y) and the
+amount of data stored (z). ::
 
-	vNNNNNN: x pgs: y active+clean; z bytes data, aa MB used, bb GB / cc GB avail
+	x pgs: y active+clean; z bytes data, aa MB used, bb GB / cc GB avail
 
 .. note:: It is common for Ceph to report multiple states for placement groups.
 
-In addition to the placement group states, Ceph will also echo back the amount
-of data used (aa), the amount of storage capacity remaining (bb), and the total
+In addition to the placement group states, Ceph will also echo back the amount of
+storage capacity used (aa), the amount of storage capacity remaining (bb), and the total
 storage capacity for the placement group. These numbers can be important in a
 few cases: 
 
@@ -571,7 +569,7 @@ calculates how to map the object to a `placement group`_, and then calculates
 how to assign the placement group to an OSD dynamically. To find the object
 location, all you need is the object name and the pool name. For example:: 
 
-	ceph osd map {poolname} {object-name}
+	ceph osd map {poolname} {object-name} [namespace]
 
 .. topic:: Exercise: Locate an Object
 
@@ -593,7 +591,7 @@ location, all you need is the object name and the pool name. For example::
    
 	Ceph should output the object's location. For example:: 
    
-		osdmap e537 pool 'data' (0) object 'test-object-1' -> pg 0.d1743484 (0.4) -> up [1,0] acting [1,0]
+		osdmap e537 pool 'data' (0) object 'test-object-1' -> pg 0.d1743484 (0.4) -> up ([1,0], p0) acting ([1,0], p0)
    
 	To remove the test object, simply delete it using the ``rados rm`` command.
 	For example:: 
