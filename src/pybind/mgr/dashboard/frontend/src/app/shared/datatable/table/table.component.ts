@@ -3,6 +3,7 @@ import {
   Component,
   EventEmitter,
   Input,
+  NgZone,
   OnChanges,
   OnDestroy,
   OnInit,
@@ -113,7 +114,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // table columns after the browser window has been resized.
   private currentWidth: number;
 
-  constructor() {}
+  constructor(private ngZone: NgZone) {}
 
   ngOnInit() {
     this._addTemplates();
@@ -136,12 +137,17 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       return c;
     });
     this.tableColumns = this.columns.filter(c => !c.isHidden);
-    if (this.autoReload) { // Also if nothing is bound to fetchData nothing will be triggered
+    if (this.autoReload) {
+      // Also if nothing is bound to fetchData nothing will be triggered
       // Force showing the loading indicator because it has been set to False in
       // useData() when this method was triggered by ngOnChanges().
       this.loadingIndicator = true;
-      this.subscriber = Observable.timer(0, this.autoReload).subscribe(x => {
-        return this.reloadData();
+      this.ngZone.runOutsideAngular(() => {
+        this.subscriber = Observable.timer(0, this.autoReload).subscribe(x => {
+          this.ngZone.run(() => {
+            return this.reloadData();
+          });
+        });
       });
     }
   }
