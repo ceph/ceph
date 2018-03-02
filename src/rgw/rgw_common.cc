@@ -308,14 +308,13 @@ req_state::~req_state() {
   delete formatter;
 }
 
-bool search_err(rgw_http_errors& errs, int err_no, bool is_website_redirect, int& http_ret, string& code)
+bool search_err(rgw_http_errors& errs, int err_no, int& http_ret, string& code)
 {
   auto r = errs.find(err_no);
   if (r != errs.end()) {
-    if (! is_website_redirect)
-      http_ret = r->second.first;
-     code = r->second.second;
-     return true;
+    http_ret = r->second.first;
+    code = r->second.second;
+    return true;
   }
   return false;
 }
@@ -328,17 +327,14 @@ void set_req_state_err(struct rgw_err& err,	/* out */
     err_no = -err_no;
 
   err.ret = -err_no;
-  bool is_website_redirect = false;
 
   if (prot_flags & RGW_REST_SWIFT) {
-    if (search_err(rgw_http_swift_errors, err_no, is_website_redirect, err.http_ret, err.err_code))
+    if (search_err(rgw_http_swift_errors, err_no, err.http_ret, err.err_code))
       return;
   }
 
   //Default to searching in s3 errors
-  is_website_redirect |= (prot_flags & RGW_REST_WEBSITE)
-		&& err_no == ERR_WEBSITE_REDIRECT && err.is_clear();
-  if (search_err(rgw_http_s3_errors, err_no, is_website_redirect, err.http_ret, err.err_code))
+  if (search_err(rgw_http_s3_errors, err_no, err.http_ret, err.err_code))
       return;
   dout(0) << "WARNING: set_req_state_err err_no=" << err_no
 	<< " resorting to 500" << dendl;
