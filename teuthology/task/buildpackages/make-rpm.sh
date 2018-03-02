@@ -117,10 +117,6 @@ function build_package() {
         make dist-bzip2
     else
         # kraken and above
-        if [ "$suse" = true ]; then
-            sed -i -e 's/^%autosetup -p1$/%autosetup -p1 -n @TARBALL_BASENAME@/' \
-                ceph.spec.in
-        fi
         ./make-dist
     fi
     # Set up build area
@@ -138,6 +134,7 @@ function build_package() {
     mkdir -p ${buildarea}/RPMS
     mkdir -p ${buildarea}/BUILD
     CEPH_TARBALL=( ceph-*.tar.bz2 )
+    CEPH_TARBALL_BASE=$(echo $CEPH_TARBALL | sed -e 's/.tar.bz2$//')
     cp -a $CEPH_TARBALL ${buildarea}/SOURCES/.
     cp -a rpm/*.patch ${buildarea}/SOURCES || true
     (
@@ -149,8 +146,11 @@ function build_package() {
                  -e 's/%bcond_with ceph_test_package/%bcond_without ceph_test_package/g' \
                  -e '0,/^Release:/s/.<B_CNT>//' \
                  -e '/^Source9/d' \
+                 -e "0,/^Source0:/s/Source0:.*/Source0: $CEPH_TARBALL/" \
+                 -e "s/^%autosetup -p1.*/%autosetup -p1 -n $CEPH_TARBALL_BASE/g" \
                  ceph.spec
         fi
+        cat ceph.spec
         buildarea=`readlink -fn ${releasedir}`   ### rpm wants absolute path
         PATH=$ccache:$PATH rpmbuild -ba --nosignature \
           --define '_srcdefattr (-,root,root)' \
