@@ -123,6 +123,9 @@
 /* Define to 1 if you have the `syncfs' function. */
 #cmakedefine HAVE_SYNCFS 1
 
+/* define if radosgw has openssl support */
+#cmakedefine WITH_CURL_OPENSSL
+
 /* Define to 1 if you have the `pwritev' function. */
 #cmakedefine HAVE_PWRITEV 1
 
