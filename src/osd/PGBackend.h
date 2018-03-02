@@ -96,6 +96,8 @@ struct inconsistent_obj_wrapper;
        const hobject_t oid) = 0;
 
      virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
+     virtual void primary_failed(const hobject_t &soid) = 0;
+     virtual bool primary_error(const hobject_t& soid, eversion_t v) = 0;
      
      virtual void finish_degraded_object(const hobject_t& oid) = 0;
      virtual void cancel_pull(const hobject_t &soid) = 0;
@@ -104,6 +106,15 @@ struct inconsistent_obj_wrapper;
        const hobject_t &oid,
        eversion_t v
        ) = 0;
+
+     /**
+      * Called when a read on the primary fails when pushing
+      */
+     virtual void on_primary_error(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
+
 
      /**
       * Bless a context
@@ -303,7 +314,7 @@ struct inconsistent_obj_wrapper;
     * @param missing [in] set of info, missing pairs for queried nodes
     * @param overlaps [in] mapping of object to file offset overlaps
     */
-   virtual void recover_object(
+   virtual int recover_object(
      const hobject_t &hoid, ///< [in] object to recover
      eversion_t v,          ///< [in] version to recover
      ObjectContextRef head,  ///< [in] context of the head/snapdir object

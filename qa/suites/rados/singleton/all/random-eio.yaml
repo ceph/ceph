@@ -1,0 +1,39 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - missing primary copy of
+    - objects unfound and apparently lost
+- full_sequential:
+  - exec:
+      client.0:
+        - sudo ceph tell osd.1 injectargs -- --filestore_debug_random_read_err=0.33
+        - sudo ceph tell osd.1 injectargs -- --bluestore_debug_random_read_err=0.33
+        - sudo ceph osd pool create test 16 16
+        - sudo ceph osd pool set test size 3
+        - sudo ceph pg  dump pgs --format=json-pretty
+  - radosbench:
+      clients: [client.0]
+      time: 360
+      type: rand
+      objectsize: 1048576
+      pool: test
+      create_pool: false
+  - exec:
+      client.0:
+        - sudo ceph tell osd.1 injectargs -- --filestore_debug_random_read_err=0.0
+        - sudo ceph tell osd.1 injectargs -- --bluestore_debug_random_read_err=0.0

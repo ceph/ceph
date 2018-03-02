@@ -2955,12 +2955,11 @@ bool FileStore::exists(const coll_t& _cid, const ghobject_t& oid)
 }
 
 int FileStore::stat(
-  const coll_t& _cid, const ghobject_t& oid, struct stat *st, bool allow_eio)
+  const coll_t& _cid, const ghobject_t& oid, struct stat *st)
 {
   tracepoint(objectstore, stat_enter, _cid.c_str());
   const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
   int r = lfn_stat(cid, oid, st);
-  assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
   if (r < 0) {
     dout(10) << "stat " << cid << "/" << oid
 	     << " = " << r << dendl;
@@ -2984,8 +2983,7 @@ int FileStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   int got;
   tracepoint(objectstore, read_enter, _cid.c_str(), offset, len);
@@ -3021,10 +3019,6 @@ int FileStore::read(
   if (got < 0) {
     dout(10) << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
     lfn_close(fd);
-    if (!(allow_eio || !m_filestore_fail_eio || got != -EIO)) {
-      derr << "FileStore::read(" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
-      assert(0 == "eio on pread");
-    }
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
@@ -3054,6 +3048,10 @@ int FileStore::read(
 	   << got << "/" << len << dendl;
   if (g_conf->filestore_debug_inject_read_err &&
       debug_data_eio(oid)) {
+    return -EIO;
+  } else if (g_conf->filestore_debug_random_read_err &&
+    (rand() % (int)(g_conf->filestore_debug_random_read_err * 100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
     return -EIO;
   } else {
     tracepoint(objectstore, read_exit, got);
@@ -4903,8 +4901,7 @@ int FileStore::omap_get(const coll_t& _c, const ghobject_t &hoid,
 int FileStore::omap_get_header(
   const coll_t& _c,
   const ghobject_t &hoid,
-  bufferlist *bl,
-  bool allow_eio)
+  bufferlist *bl)
 {
   tracepoint(objectstore, omap_get_header_enter, _c.c_str());
   const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
@@ -4922,7 +4919,6 @@ int FileStore::omap_get_header(
   }
   r = object_map->get_header(hoid, bl);
   if (r < 0 && r != -ENOENT) {
-    assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
     return r;
   }
   tracepoint(objectstore, omap_get_header_exit, 0);

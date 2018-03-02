@@ -276,20 +276,18 @@ bool MemStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 int MemStore::stat(
     const coll_t& cid,
     const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio)
+    struct stat *st)
 {
   CollectionHandle c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  return stat(c, oid, st, allow_eio);
+  return stat(c, oid, st);
 }
 
 int MemStore::stat(
   CollectionHandle &c_,
   const ghobject_t& oid,
-  struct stat *st,
-  bool allow_eio)
+  struct stat *st)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
@@ -311,13 +309,12 @@ int MemStore::read(
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags,
-    bool allow_eio)
+    uint32_t op_flags)
 {
   CollectionHandle c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  return read(c, oid, offset, len, bl, op_flags, allow_eio);
+  return read(c, oid, offset, len, bl, op_flags);
 }
 
 int MemStore::read(
@@ -326,8 +323,7 @@ int MemStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << " "
@@ -509,8 +505,7 @@ int MemStore::omap_get(
 int MemStore::omap_get_header(
     const coll_t& cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio ///< [in] don't assert on eio
+    bufferlist *header       ///< [out] omap header
     )
 {
   dout(10) << __func__ << " " << cid << " " << oid << dendl;

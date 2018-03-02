@@ -2026,20 +2026,17 @@ public:
    * @param cid collection for object
    * @param oid oid of object
    * @param st output information for the object
-   * @param allow_eio if false, assert on -EIO operation failure
    * @returns 0 on success, negative error code on failure.
    */
   virtual int stat(
     const coll_t& cid,
     const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false) = 0; // struct stat?
+    struct stat *st) = 0; // struct stat?
   virtual int stat(
     CollectionHandle &c,
     const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false) {
-    return stat(c->get_cid(), oid, st, allow_eio);
+    struct stat *st) {
+    return stat(c->get_cid(), oid, st);
   }
 
   /**
@@ -2054,7 +2051,6 @@ public:
    * @param len number of bytes to be read
    * @param bl output bufferlist
    * @param op_flags is CEPH_OSD_OP_FLAG_*
-   * @param allow_eio if false, assert on -EIO operation failure
    * @returns number of bytes read on success, or negative error code on failure.
    */
    virtual int read(
@@ -2063,17 +2059,15 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) = 0;
+    uint32_t op_flags = 0) = 0;
    virtual int read(
      CollectionHandle &c,
      const ghobject_t& oid,
      uint64_t offset,
      size_t len,
      bufferlist& bl,
-     uint32_t op_flags = 0,
-     bool allow_eio = false) {
-     return read(c->get_cid(), oid, offset, len, bl, op_flags, allow_eio);
+     uint32_t op_flags = 0) {
+     return read(c->get_cid(), oid, offset, len, bl, op_flags);
    }
 
   /**
@@ -2318,16 +2312,14 @@ public:
   virtual int omap_get_header(
     const coll_t& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio = false ///< [in] don't assert on eio
+    bufferlist *header       ///< [out] omap header
     ) = 0;
   virtual int omap_get_header(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio = false ///< [in] don't assert on eio
+    bufferlist *header       ///< [out] omap header
     ) {
-    return omap_get_header(c->get_cid(), oid, header, allow_eio);
+    return omap_get_header(c->get_cid(), oid, header);
   }
 
   /// Get keys defined on oid

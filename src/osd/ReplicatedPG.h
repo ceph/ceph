@@ -281,7 +281,10 @@ public:
     const hobject_t &oid,
     const object_stat_sum_t &stat_diff);
   void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) override;
+  void primary_failed(const hobject_t &soid) override;
+  bool primary_error(const hobject_t& soid, eversion_t v) override;
   void cancel_pull(const hobject_t &soid);
+  void on_primary_error(const hobject_t &oid, eversion_t v) override;
   void backfill_add_missing(const hobject_t &oid, eversion_t v) override;
 
   template <typename T>
@@ -1293,7 +1296,7 @@ protected:
     ThreadPool::TPHandle &handle ///< [in] tp handle
     );
 
-  void prep_backfill_object_push(
+  int prep_backfill_object_push(
     hobject_t oid, eversion_t v, ObjectContextRef obc,
     vector<pg_shard_t> peers,
     PGBackend::RecoveryHandle *h);
@@ -1753,6 +1756,8 @@ public:
 
   void block_write_on_full_cache(
     const hobject_t& oid, OpRequestRef op);
+  void block_for_clean(
+    const hobject_t& oid, OpRequestRef op);
   void block_write_on_snap_rollback(
     const hobject_t& oid, ObjectContextRef obc, OpRequestRef op);
   void block_write_on_degraded_snap(const hobject_t& oid, OpRequestRef op);
@@ -1784,6 +1789,7 @@ public:
   void on_flushed();
   void on_removal(ObjectStore::Transaction *t);
   void on_shutdown();
+  int rep_repair_primary_object(const hobject_t& soid, OpRequestRef op);
 
   // attr cache handling
   void replace_cached_attrs(

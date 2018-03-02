@@ -586,6 +586,9 @@ OPTION(osd_backfill_full_ratio, OPT_FLOAT, 0.85)
 // Seconds to wait before retrying refused backfills
 OPTION(osd_backfill_retry_interval, OPT_DOUBLE, 10.0)
 
+// Seconds to wait before retrying refused recovery
+OPTION(osd_recovery_retry_interval, OPT_DOUBLE, 30.0)
+
 // max agent flush ops
 OPTION(osd_agent_max_ops, OPT_INT, 4)
 OPTION(osd_agent_max_low_ops, OPT_INT, 2)
@@ -814,6 +817,7 @@ OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE, 0)
 OPTION(osd_debug_inject_copyfrom_error, OPT_BOOL, false)  // inject failure during copyfrom completion
 OPTION(osd_debug_randomize_hobject_sort_order, OPT_BOOL, false)
 OPTION(osd_enxio_on_misdirected_op, OPT_BOOL, false)
+OPTION(osd_debug_random_push_read_error, OPT_DOUBLE, 0)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL, false)
 OPTION(osd_enable_op_tracker, OPT_BOOL, true) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32, 32) // The number of shards for holding the ops
@@ -996,6 +1000,7 @@ OPTION(bluestore_debug_freelist, OPT_BOOL, false)
 OPTION(bluestore_debug_prefill, OPT_FLOAT, 0)
 OPTION(bluestore_debug_prefragment_max, OPT_INT, 1048576)
 OPTION(bluestore_inject_wal_apply_delay, OPT_FLOAT, 0)
+OPTION(bluestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(kstore_max_ops, OPT_U64, 512)
 OPTION(kstore_max_bytes, OPT_U64, 64*1024*1024)
@@ -1038,6 +1043,7 @@ OPTION(filestore_index_retry_probability, OPT_DOUBLE, 0)
 
 // Allow object read error injection
 OPTION(filestore_debug_inject_read_err, OPT_BOOL, false)
+OPTION(filestore_debug_random_read_err, OPT_DOUBLE, 0)
 
 OPTION(filestore_debug_omap_check, OPT_BOOL, 0) // Expensive debugging check on sync
 OPTION(filestore_omap_header_cache_size, OPT_INT, 1024)

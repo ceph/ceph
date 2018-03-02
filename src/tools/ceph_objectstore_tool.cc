@@ -580,7 +580,7 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
 
   //Handle omap information
   bufferlist hdrbuf;
-  ret = store->omap_get_header(cid, obj, &hdrbuf, true);
+  ret = store->omap_get_header(cid, obj, &hdrbuf);
   if (ret < 0) {
     cerr << "omap_get_header: " << cpp_strerror(ret) << std::endl;
     return ret;
@@ -1725,7 +1725,7 @@ int do_get_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   bufferlist hdrbl;
 
-  int r = store->omap_get_header(coll, ghobj, &hdrbl, true);
+  int r = store->omap_get_header(coll, ghobj, &hdrbl);
   if (r < 0) {
     cerr << "omap_get_header: " << cpp_strerror(r) << std::endl;
     return r;
@@ -1849,7 +1849,7 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
     }
   }
   struct stat st;
-  int sr =  store->stat(coll, ghobj, &st, true);
+  int sr =  store->stat(coll, ghobj, &st);
   if (sr < 0) {
     r = sr;
     cerr << "Error stat on : " << make_pair(coll, ghobj) << ", "
@@ -1905,7 +1905,7 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
     return r;
   }
   struct stat st;
-  r =  store->stat(coll, ghobj, &st, true);
+  r =  store->stat(coll, ghobj, &st);
   if (r < 0) {
     cerr << "Error stat on : " << make_pair(coll, ghobj) << ", "
          << cpp_strerror(r) << std::endl;
@@ -1917,7 +1917,7 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
   bool is_snap = ghobj.hobj.is_snap();
   if (is_snap) {
     head.hobj = head.hobj.get_head();
-    r = get_snapset(store, coll, head, ss, true);
+    r = get_snapset(store, coll, head, ss);
     if (r < 0 && r != -ENOENT) {
       // Requested get_snapset() silent, so if not -ENOENT show error
       cerr << "Error getting snapset on : " << make_pair(coll, head) << ", "

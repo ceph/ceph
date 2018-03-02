@@ -1446,8 +1446,7 @@ bool KStore::exists(const coll_t& cid, const ghobject_t& oid)
 int KStore::stat(
     const coll_t& cid,
     const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio)
+    struct stat *st)
 {
   dout(10) << __func__ << " " << cid << " " << oid << dendl;
   CollectionRef c = _get_collection(cid);
@@ -1470,8 +1469,7 @@ int KStore::read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   dout(15) << __func__ << " " << cid << " " << oid
 	   << " " << offset << "~" << length
@@ -1951,8 +1949,7 @@ int KStore::omap_get(
 int KStore::omap_get_header(
   const coll_t& cid,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
-  bufferlist *header,      ///< [out] omap header
-  bool allow_eio ///< [in] don't assert on eio
+  bufferlist *header       ///< [out] omap header
   )
 {
   dout(15) << __func__ << " " << cid << " oid " << oid << dendl;

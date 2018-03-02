@@ -229,14 +229,14 @@ OSDService::OSDService(OSD *osd) :
   peer_map_epoch_lock("OSDService::peer_map_epoch_lock"),
   sched_scrub_lock("OSDService::sched_scrub_lock"), scrubs_pending(0),
   scrubs_active(0),
-  agent_lock("OSD::agent_lock"),
+  agent_lock("OSDService::agent_lock"),
   agent_valid_iterator(false),
   agent_ops(0),
   flush_mode_high_count(0),
   agent_active(true),
   agent_thread(this),
   agent_stop_flag(false),
-  agent_timer_lock("OSD::agent_timer_lock"),
+  agent_timer_lock("OSDService::agent_timer_lock"),
   agent_timer(osd->client_messenger->cct, agent_timer_lock),
   promote_probability_millis(1000),
   last_recalibrate(ceph_clock_now(NULL)),
@@ -244,11 +244,11 @@ OSDService::OSDService(OSD *osd) :
   promote_max_bytes(0),
   objecter(new Objecter(osd->client_messenger->cct, osd->objecter_messenger, osd->monc, NULL, 0, 0)),
   objecter_finisher(osd->client_messenger->cct),
-  watch_lock("OSD::watch_lock"),
+  watch_lock("OSDService::watch_lock"),
   watch_timer(osd->client_messenger->cct, watch_lock),
   next_notif_id(0),
-  backfill_request_lock("OSD::backfill_request_lock"),
-  backfill_request_timer(cct, backfill_request_lock, false),
+  recovery_request_lock("OSDService::recovery_request_lock"),
+  recovery_request_timer(cct, recovery_request_lock, false),
   last_tid(0),
   reserver_finisher(cct),
   local_reserver(&reserver_finisher, cct->_conf->osd_max_backfills,
@@ -264,12 +264,12 @@ OSDService::OSDService(OSD *osd) :
     osd->client_messenger->cct, scrub_sleep_lock, false /* relax locking */),
   snap_reserver(&reserver_finisher,
 		cct->_conf->osd_max_trimming_pgs),
-  map_cache_lock("OSDService::map_lock"),
+  map_cache_lock("OSDService::map_cache_lock"),
   map_cache(cct, cct->_conf->osd_map_cache_size),
   map_bl_cache(cct->_conf->osd_map_cache_size),
   map_bl_inc_cache(cct->_conf->osd_map_cache_size),
   in_progress_split_lock("OSDService::in_progress_split_lock"),
-  stat_lock("OSD::stat_lock"),
+  stat_lock("OSDService::stat_lock"),
   full_status_lock("OSDService::full_status_lock"),
   cur_state(NONE),
   last_msg(0),
@@ -489,8 +489,8 @@ void OSDService::shutdown()
   objecter_finisher.stop();
 
   {
-    Mutex::Locker l(backfill_request_lock);
-    backfill_request_timer.shutdown();
+    Mutex::Locker l(recovery_request_lock);
+    recovery_request_timer.shutdown();
   }
 
   {
@@ -2032,7 +2032,7 @@ int OSD::init()
 
   tick_timer.init();
   tick_timer_without_osd_lock.init();
-  service.backfill_request_timer.init();
+  service.recovery_request_timer.init();
 
   // mount.
   dout(2) << "mounting " << dev_path << " "
@@ -2611,6 +2611,7 @@ void OSD::create_recoverystate_perf()
   rs_perf.add_time_avg(rs_incomplete_latency, "incomplete_latency", "Incomplete recovery state latency");
   rs_perf.add_time_avg(rs_getmissing_latency, "getmissing_latency", "Getmissing recovery state latency");
   rs_perf.add_time_avg(rs_waitupthru_latency, "waitupthru_latency", "Waitupthru recovery state latency");
+  rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
 
   recoverystate_perf = rs_perf.create_perf_counters();
   cct->get_perfcounters_collection()->add(recoverystate_perf);
@@ -8454,7 +8455,27 @@ void OSD::do_recovery(PG *pg, ThreadPool::TPHandle &handle)
     if (!more && pg->have_unfound()) {
       pg->discover_all_missing(*rctx.query_map);
       if (rctx.query_map->empty()) {
-	dout(10) << "do_recovery  no luck, giving up on this pg for now" << dendl;
+	string action;
+        if (pg->state_test(PG_STATE_BACKFILL)) {
+	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
+	    osdmap->get_epoch(),
+	    osdmap->get_epoch(),
+	    PG::CancelBackfill()));
+	  pg->queue_peering_event(evt);
+	  action = "in backfill";
+        } else if (pg->state_test(PG_STATE_RECOVERING)) {
+	  auto evt = PG::CephPeeringEvtRef(new PG::CephPeeringEvt(
+	    osdmap->get_epoch(),
+	    osdmap->get_epoch(),
+	    PG::CancelRecovery()));
+	  pg->queue_peering_event(evt);
+	  action = "in recovery";
+	} else {
+	  action = "already out of recovery/backfill";
+	}
+	dout(10) << __func__ << ": no luck, giving up on this pg for now (" << action << ")" << dendl;
+      } else {
+	dout(10) << __func__ << ": no luck, giving up on this pg for now (queue_recovery)" << dendl;
 	recovery_wq.lock();
 	recovery_wq._dequeue(pg);
 	recovery_wq.unlock();

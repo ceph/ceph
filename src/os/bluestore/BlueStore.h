@@ -687,29 +687,25 @@ public:
   int stat(
     const coll_t& cid,
     const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false) override;
+    struct stat *st);
   int stat(
     CollectionHandle &c,
     const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false) override;
+    struct stat *st);
   int read(
     const coll_t& cid,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    uint32_t op_flags = 0) override;
   int read(
     CollectionHandle &c,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) override;
+    uint32_t op_flags = 0) override;
   int _do_read(
     OnodeRef o,
     uint64_t offset,
@@ -764,15 +760,13 @@ public:
   int omap_get_header(
     const coll_t& cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio = false ///< [in] don't assert on eio
-    ) override;
+    bufferlist *header       ///< [out] omap header
+    );
   int omap_get_header(
     CollectionHandle &c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio = false ///< [in] don't assert on eio
-    ) override;
+    bufferlist *header       ///< [out] omap header
+    );
 
   /// Get keys defined on oid
   int omap_get_keys(

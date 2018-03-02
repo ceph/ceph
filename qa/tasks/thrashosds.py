@@ -122,6 +122,9 @@ def task(ctx, config):
         'thrashosds task only accepts a dict for configuration'
     # add default value for sighup_delay
     config['sighup_delay'] = config.get('sighup_delay', 0.1)
+    # add default value for random_eio
+    config['random_eio'] = config.get('random_eio', 0.0)
+
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('thrashosds', {}))
     cluster = config.get('cluster', 'ceph')

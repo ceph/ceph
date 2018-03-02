@@ -432,8 +432,7 @@ public:
   int stat(
     const coll_t& cid,
     const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false); // struct stat?
+    struct stat *st); // struct stat?
   using ObjectStore::read;
   int read(
     const coll_t& cid,
@@ -441,8 +440,7 @@ public:
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false);
+    uint32_t op_flags = 0);
   int _do_read(
     OnodeRef o,
     uint64_t offset,
@@ -479,8 +477,7 @@ public:
   int omap_get_header(
     const coll_t& cid,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio = false ///< [in] don't assert on eio
+    bufferlist *header       ///< [out] omap header
     );
 
   using ObjectStore::omap_get_keys;
