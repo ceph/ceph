@@ -218,12 +218,12 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   assert(got != 0);
   if (got < (int64_t)want) {
     alloc[id]->unreserve(want - std::max<int64_t>(0, got));
-  }
-  if (got < 0) {
-    derr << __func__ << " failed to allocate space to return to bluestore"
-	 << dendl;
-    alloc[id]->dump();
-    return got;
+    if (got < 0) {
+      derr << __func__ << " failed to allocate space to return to bluestore"
+	<< dendl;
+      alloc[id]->dump();
+      return got;
+    }
   }
 
   for (auto& p : *extents) {
@@ -235,8 +235,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   r = _flush_and_sync_log(l);
   assert(r == 0);
 
-  if (logger)
-    logger->inc(l_bluefs_reclaim_bytes, got);
+  logger->inc(l_bluefs_reclaim_bytes, got);
   dout(1) << __func__ << " bdev " << id << " want 0x" << std::hex << want
 	  << " got " << *extents << dendl;
   return 0;
