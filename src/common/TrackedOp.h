@@ -23,6 +23,7 @@
 
 class TrackedOp;
 class OpHistory;
+class OpTracker;
 
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 
@@ -203,28 +204,8 @@ public:
   void get() {
     ++nref;
   }
-  void put() {
-    if (--nref == 0) {
-      switch (state.load()) {
-      case STATE_UNTRACKED:
-	_unregistered();
-	delete this;
-	break;
 
-      case STATE_LIVE:
-	mark_event("done");
-	tracker->unregister_inflight_op(this);
-	break;
-
-      case STATE_HISTORY:
-	delete this;
-	break;
-
-      default:
-	ceph_abort();
-      }
-    }
-  }
+  void put();
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
@@ -270,12 +251,7 @@ public:
 
   void dump(utime_t now, Formatter *f) const;
 
-  void tracking_start() {
-    if (tracker->register_inflight_op(this)) {
-      events.emplace_back(initiated_at, "initiated");
-      state = STATE_LIVE;
-    }
-  }
+  void tracking_start();
 
   // ref counting via intrusive_ptr, with special behavior on final
   // put for historical op tracking
@@ -385,5 +361,46 @@ public:
     return retval;
   }
 };
+
+/* Defining the methods outside the TrackedOp to avoid circular
+ * dependency with OpTracker while preserving their inlineability.
+ * The `inline` marking allows to bypass the ODR rule:
+ *
+ *   "3.2/3 Every program shall contain exactly one definition
+ *   of every non-inline function or object that is used in that
+ *   program"
+ *
+ * See: https://stackoverflow.com/questions/7833941/putting- \
+        function-definitions-in-header-files#comment9553758_7834555
+ */
+inline void TrackedOp::tracking_start() {
+  if (tracker->register_inflight_op(this)) {
+    events.emplace_back(initiated_at, "initiated");
+    state = STATE_LIVE;
+  }
+}
+
+inline void TrackedOp::put() {
+  if (--nref == 0) {
+    switch (state.load()) {
+    case STATE_UNTRACKED:
+      _unregistered();
+      delete this;
+      break;
+
+    case STATE_LIVE:
+      mark_event("done");
+      tracker->unregister_inflight_op(this);
+      break;
+
+    case STATE_HISTORY:
+      delete this;
+      break;
+
+    default:
+      ceph_abort();
+    }
+  }
+}
 
 #endif
