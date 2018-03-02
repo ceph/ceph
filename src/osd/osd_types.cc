@@ -1965,11 +1965,12 @@ void object_stat_sum_t::dump(Formatter *f) const
   f->dump_int("num_objects_pinned", num_objects_pinned);
   f->dump_int("num_legacy_snapsets", num_legacy_snapsets);
   f->dump_int("num_large_omap_objects", num_large_omap_objects);
+  f->dump_int("num_objects_manifest", num_objects_manifest);
 }
 
 void object_stat_sum_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(17, 14, bl);
+  ENCODE_START(18, 14, bl);
 #if defined(CEPH_LITTLE_ENDIAN)
   bl.append((char *)(&num_bytes), sizeof(object_stat_sum_t));
 #else
@@ -2009,6 +2010,7 @@ void object_stat_sum_t::encode(bufferlist& bl) const
   encode(num_objects_missing, bl);
   encode(num_legacy_snapsets, bl);
   encode(num_large_omap_objects, bl);
+  encode(num_objects_manifest, bl);
 #endif
   ENCODE_FINISH(bl);
 }
@@ -2016,9 +2018,9 @@ void object_stat_sum_t::encode(bufferlist& bl) const
 void object_stat_sum_t::decode(bufferlist::iterator& bl)
 {
   bool decode_finish = false;
-  DECODE_START(17, bl);  // make sure to also update fast decode below
+  DECODE_START(18, bl);  // make sure to also update fast decode below
 #if defined(CEPH_LITTLE_ENDIAN)
-  if (struct_v >= 17) {  // this must match newest decode version
+  if (struct_v >= 18) {  // this must match newest decode version
     bl.copy(sizeof(object_stat_sum_t), (char*)(&num_bytes));
     decode_finish = true;
   }
@@ -2066,6 +2068,9 @@ void object_stat_sum_t::decode(bufferlist::iterator& bl)
     if (struct_v >= 17) {
       decode(num_large_omap_objects, bl);
     }
+    if (struct_v >= 18) {
+      decode(num_objects_manifest, bl);
+    }
   }
   DECODE_FINISH(bl);
 }
@@ -2106,6 +2111,7 @@ void object_stat_sum_t::generate_test_instances(list<object_stat_sum_t*>& o)
   a.num_evict_mode_full = 0;
   a.num_objects_pinned = 20;
   a.num_large_omap_objects = 5;
+  a.num_objects_manifest = 2;
   o.push_back(new object_stat_sum_t(a));
 }
 
@@ -2147,6 +2153,7 @@ void object_stat_sum_t::add(const object_stat_sum_t& o)
   num_objects_pinned += o.num_objects_pinned;
   num_legacy_snapsets += o.num_legacy_snapsets;
   num_large_omap_objects += o.num_large_omap_objects;
+  num_objects_manifest += o.num_objects_manifest;
 }
 
 void object_stat_sum_t::sub(const object_stat_sum_t& o)
@@ -2187,6 +2194,7 @@ void object_stat_sum_t::sub(const object_stat_sum_t& o)
   num_objects_pinned -= o.num_objects_pinned;
   num_legacy_snapsets -= o.num_legacy_snapsets;
   num_large_omap_objects -= o.num_large_omap_objects;
+  num_objects_manifest -= o.num_objects_manifest;
 }
 
 bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
@@ -2227,7 +2235,8 @@ bool operator==(const object_stat_sum_t& l, const object_stat_sum_t& r)
     l.num_evict_mode_full == r.num_evict_mode_full &&
     l.num_objects_pinned == r.num_objects_pinned &&
     l.num_legacy_snapsets == r.num_legacy_snapsets &&
-    l.num_large_omap_objects == r.num_large_omap_objects;
+    l.num_large_omap_objects == r.num_large_omap_objects &&
+    l.num_objects_manifest == r.num_objects_manifest;
 }
 
 // -- object_stat_collection_t --
@@ -2324,6 +2333,7 @@ void pg_stat_t::dump(Formatter *f) const
   f->dump_bool("hitset_stats_invalid", hitset_stats_invalid);
   f->dump_bool("hitset_bytes_stats_invalid", hitset_bytes_stats_invalid);
   f->dump_bool("pin_stats_invalid", pin_stats_invalid);
+  f->dump_bool("manifest_stats_invalid", manifest_stats_invalid);
   f->dump_unsigned("snaptrimq_len", snaptrimq_len);
   stats.dump(f);
   f->open_array_section("up");
@@ -2370,7 +2380,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(24, 22, bl);
+  ENCODE_START(25, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -2415,6 +2425,7 @@ void pg_stat_t::encode(bufferlist &bl) const
   __u32 top_state = (state >> 32);
   encode(top_state, bl);
   encode(purged_snaps, bl);
+  encode(manifest_stats_invalid, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2422,7 +2433,7 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(24, bl);
+  DECODE_START(25, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -2478,6 +2489,12 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
       decode(purged_snaps, bl);
     } else {
       state = old_state;
+    }
+    if (struct_v >= 25) {
+      decode(tmp, bl);
+      manifest_stats_invalid = tmp;
+    } else {
+      manifest_stats_invalid = true;
     }
   }
   DECODE_FINISH(bl);
@@ -2575,6 +2592,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.up_primary == r.up_primary &&
     l.acting_primary == r.acting_primary &&
     l.pin_stats_invalid == r.pin_stats_invalid &&
+    l.manifest_stats_invalid == r.manifest_stats_invalid &&
     l.purged_snaps == r.purged_snaps &&
     l.snaptrimq_len == r.snaptrimq_len;
 }
