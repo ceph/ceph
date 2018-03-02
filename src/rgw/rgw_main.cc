@@ -1,10 +1,5 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
-
-extern "C" {
-#include <curl/curl.h>
-}
-
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -40,6 +35,7 @@ extern "C" {
 #include "rgw_request.h"
 #include "rgw_process.h"
 #include "rgw_frontend.h"
+#include "rgw_http_client_curl.h"
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
@@ -114,17 +110,6 @@ static void godown_alarm(int signum)
   _exit(0);
 }
 
-#ifdef HAVE_CURL_MULTI_WAIT
-static void check_curl()
-{
-}
-#else
-static void check_curl()
-{
-  derr << "WARNING: libcurl doesn't support curl_multi_wait()" << dendl;
-  derr << "WARNING: cross zone / region transfer performance may be affected" << dendl;
-}
-#endif
 
 class C_InitTimeout : public Context {
 public:
@@ -270,8 +255,6 @@ int main(int argc, const char **argv)
     g_conf->set_val_or_die("rgw_zonegroup", g_conf->rgw_region.c_str());
   }
 
-  check_curl();
-
   if (g_conf->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
@@ -297,10 +280,9 @@ int main(int argc, const char **argv)
   }
 
   rgw_init_resolver();
-  
-  curl_global_init(CURL_GLOBAL_ALL);
+  rgw::curl::setup_curl(fe_map);
   rgw_setup_saved_curl_handles();
-  
+
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
 #endif
@@ -574,7 +556,7 @@ int main(int argc, const char **argv)
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
   rgw_release_all_curl_handles();
-  curl_global_cleanup();
+  rgw::curl::cleanup_curl();
 
   rgw_perf_stop(g_ceph_context);
 
