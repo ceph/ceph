@@ -37,6 +37,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
+#include "rgw_http_client_curl.h"
 
 using namespace std;
 
@@ -2744,6 +2745,7 @@ int main(int argc, char **argv)
 
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
+  rgw::curl::setup_curl(boost::none);
 
   StoreDestructor store_destructor(store);
 
@@ -6402,5 +6404,6 @@ next:
     }
   }
 
+  rgw::curl::cleanup_curl();
   return 0;
 }

@@ -308,6 +308,7 @@ if (WITH_RADOSGW)
   find_package(OpenSSL)
   if (OPENSSL_FOUND)
     if (NOT NO_CURL_SSL_LINK)
+      message(STATUS "libcurl is linked with openssl: explicitly setting locks")
       set(WITH_CURL_OPENSSL ON)
     endif() # CURL_SSL_LINK
     execute_process(
