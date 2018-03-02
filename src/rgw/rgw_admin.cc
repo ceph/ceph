@@ -3015,6 +3015,15 @@ int main(int argc, const char **argv)
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
 
+  struct curl_handle_init {
+    curl_handle_init() {
+      rgw_setup_saved_curl_handles();
+    }
+    ~curl_handle_init() {
+      rgw_release_all_curl_handles();
+    }
+  } curl_cleanup;
+
   StoreDestructor store_destructor(store);
 
   if (raw_storage_op) {
