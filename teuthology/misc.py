@@ -531,9 +531,8 @@ def write_file(remote, path, data):
     """
     remote.run(
         args=[
-            'python',
-            '-c',
-            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+            'cat',
+            run.Raw('>'),
             path,
         ],
         stdin=data,
@@ -561,10 +560,9 @@ def sudo_write_file(remote, path, data, perms=None, owner=None):
     remote.run(
         args=[
             'sudo',
-            'python',
+            'sh',
             '-c',
-            'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-            path,
+            'cat > ' + path,
         ] + owner_args + permargs,
         stdin=data,
     )
