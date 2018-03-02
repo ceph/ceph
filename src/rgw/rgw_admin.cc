@@ -44,7 +44,7 @@
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
 #include "rgw_reshard.h"
-
+#include "rgw_http_client_curl.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -3014,6 +3014,7 @@ int main(int argc, const char **argv)
 
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
+  rgw::curl::setup_curl(boost::none);
 
   StoreDestructor store_destructor(store);
 
@@ -7246,5 +7247,6 @@ next:
     }
   }
 
+  rgw::curl::cleanup_curl();
   return 0;
 }
