@@ -86,7 +86,7 @@ public:
    */
   bool handle_mgr_map(const MgrMap &mgr_map_);
 
-  int init();
+  void init();
 
   void active_start(
                 PyModuleConfig &config_,
