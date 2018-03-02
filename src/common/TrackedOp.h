@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include "common/histogram.h"
+#include "common/containers.h"
 #include "msg/Message.h"
 #include "common/RWLock.h"
 
@@ -267,13 +268,22 @@ public:
 };
 
 
-struct ShardedTrackingData;
 class OpTracker {
+  struct ShardedTrackingData {
+    mutable Mutex ops_in_flight_lock_sharded;
+    TrackedOp::tracked_op_list_t ops_in_flight_sharded;
+    explicit ShardedTrackingData(string lock_name):
+      ops_in_flight_lock_sharded(lock_name.c_str()) {
+    }
+  };
+
   friend class OpHistory;
   std::atomic<int64_t> seq = { 0 };
-  vector<ShardedTrackingData*> sharded_in_flight_list;
+  // preallocate space for 32 shards because of the default
+  // value for osd_num_op_tracker_shard
+  ceph::containers::tiny_vector<
+    ShardedTrackingData, 32> sharded_in_flight_list;
   OpHistory history;
-  uint32_t num_optracker_shards;
   float complaint_time;
   int log_threshold;
   std::atomic<bool> tracking_enabled;
