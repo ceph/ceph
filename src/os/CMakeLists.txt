@@ -138,7 +138,8 @@ if(WITH_PMEM)
   add_library(pmem STATIC IMPORTED GLOBAL)
   add_dependencies(pmem nvml_ext)
   set_target_properties(pmem PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a")
+    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a"
+    INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
   target_link_libraries(os pmem)
   target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
 endif(WITH_PMEM)
