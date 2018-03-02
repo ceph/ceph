@@ -155,6 +155,10 @@ target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
 
+if (WITH_CURL_OPENSSL)
+  target_link_libraries(rgw_a ${OPENSSL_LIBRARIES})
+endif (WITH_CURL_OPENSSL)
+
 set(radosgw_srcs
   rgw_loadgen_process.cc
   rgw_civetweb.cc
@@ -188,10 +192,6 @@ add_dependencies(radosgw cls_rgw cls_lock cls_refcount
   cls_log cls_statelog cls_timeindex
   cls_version cls_replica_log cls_user)
 install(TARGETS radosgw DESTINATION bin)
-
-if (WITH_CURL_OPENSSL)
-  target_link_libraries(radosgw ${OPENSSL_LIBRARIES})
-endif (WITH_CURL_OPENSSL)
 
 set(radosgw_admin_srcs
   rgw_admin.cc
