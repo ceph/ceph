@@ -199,16 +199,9 @@ install -pm 644 %{SOURCE0} .
 rm -rf %{buildroot}
 #install -Dpm 644 %{SOURCE0} \
 #    %{buildroot}/%{_sysconfdir}/pki/rpm-gpg/RPM-GPG-KEY-CEPH
-%if 0%{defined suse_version}
-install -dm 755 %{buildroot}/%{_sysconfdir}/zypp
-install -dm 755 %{buildroot}/%{_sysconfdir}/zypp/repos.d
-install -pm 644 %{SOURCE0} \
-    %{buildroot}/%{_sysconfdir}/zypp/repos.d
-%else
 install -dm 755 %{buildroot}/%{_sysconfdir}/yum.repos.d
 install -pm 644 %{SOURCE0} \
     %{buildroot}/%{_sysconfdir}/yum.repos.d
-%endif
 
 %clean
 #rm -rf %{buildroot}
@@ -220,11 +213,7 @@ install -pm 644 %{SOURCE0} \
 %files
 %defattr(-,root,root,-)
 #%doc GPL
-%if 0%{defined suse_version}
-/etc/zypp/repos.d/*
-%else
 /etc/yum.repos.d/*
-%endif
 #/etc/pki/rpm-gpg/*
 
 %changelog
