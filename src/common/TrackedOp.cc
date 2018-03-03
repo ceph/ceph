@@ -295,26 +295,28 @@ bool OpTracker::register_inflight_op(TrackedOp *i)
   return true;
 }
 
-void OpTracker::unregister_inflight_op(TrackedOp *i)
+void OpTracker::unregister_inflight_op(TrackedOpRef&& i)
 {
+  const auto ri = i.get();
   // caller checks;
-  assert(i->state);
+  assert(ri->state);
 
-  uint32_t shard_index = i->seq & (sharded_in_flight_list.size() - 1);
+  uint32_t shard_index = ri->seq & (sharded_in_flight_list.size() - 1);
   ShardedTrackingData& sdata = sharded_in_flight_list[shard_index];
   {
     Mutex::Locker locker(sdata.ops_in_flight_lock_sharded);
-    auto p = sdata.ops_in_flight_sharded.iterator_to(*i);
+    auto p = sdata.ops_in_flight_sharded.iterator_to(*ri);
     sdata.ops_in_flight_sharded.erase(p);
   }
-  i->_unregistered();
+  ri->_unregistered();
 
   if (!tracking_enabled)
-    delete i;
+    delete ri;
   else {
-    i->state = TrackedOp::STATE_HISTORY;
+    ri->state.store(TrackedOp::STATE_HISTORY,
+		    std::memory_order_release);
     const utime_t now = ceph_clock_now();
-    history.insert(now, i);
+    history.insert(now, std::move(i));
   }
 }
 
