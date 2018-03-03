@@ -10,5 +10,6 @@ users:
     groups: users
 runcmd:
  - ( MYHOME=/home/ubuntu ; mkdir $MYHOME/.ssh ; chmod 700 $MYHOME/.ssh ; cp /root/.ssh/authorized_keys $MYHOME/.ssh ; chown -R ubuntu.users $MYHOME/.ssh )
- - zypper --non-interactive install --no-recommends wget git-core rsyslog lsb-release
+ - zypper --non-interactive --no-gpg-checks rm gettext-runtime-mini grub2 grub2-branding-openSUSE grub2-i386-pc grub2-snapper-plugin grub2-systemd-sleep-plugin
+ - zypper --non-interactive --no-gpg-checks install --no-recommends wget git-core rsyslog lsb-release make gcc gcc-c++ grub2 rpm-build
 final_message: "READYTORUN"
