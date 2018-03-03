@@ -25,6 +25,7 @@ class RGWMongoose : public RGWStreamIO
   bool has_content_length;
   bool explicit_keepalive;
   bool explicit_conn_close;
+  bool got_eof_on_read;
 
 public:
   void init_env(CephContext *cct);

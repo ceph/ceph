@@ -32,7 +32,8 @@ int RGWMongoose::write_data(const char *buf, int len)
 RGWMongoose::RGWMongoose(mg_connection *_conn)
   : conn(_conn), status_num(0), header_done(false),
     sent_header(false), has_content_length(false),
-    explicit_keepalive(false), explicit_conn_close(false)
+    explicit_keepalive(false), explicit_conn_close(false),
+    got_eof_on_read(false)
 {
     sockaddr *lsa = mg_get_local_addr(conn);
     switch(lsa->sa_family) {
@@ -49,8 +50,17 @@ RGWMongoose::RGWMongoose(mg_connection *_conn)
 
 int RGWMongoose::read_data(char *buf, int len)
 {
-  const int ret = mg_read(conn, buf, len);
-  return (ret >= 0) ? ret : -EIO;
+  if (got_eof_on_read) return 0;
+  int c, ret;
+  for (c = 0; c < len; c += ret) {
+    ret = mg_read(conn, buf+c, len-c);
+    if (ret < 0) return -EIO;
+    if (!ret) {
+      got_eof_on_read = true;
+      break;
+    }
+  }
+  return c;
 }
 
 void RGWMongoose::flush()
