@@ -34,7 +34,7 @@ class OpHistoryServiceThread : public Thread
     utime_t time;
     TrackedOpRef op;
 
-    queue_item_t(utime_t time, TrackedOpRef op)
+    queue_item_t(utime_t time, TrackedOpRef&& op)
       : time(std::move(time)),
         op(std::move(op)) {
     }
@@ -53,7 +53,7 @@ public:
   ~OpHistoryServiceThread();
 
   void break_thread();
-  void insert_op(const utime_t& now, TrackedOpRef op) {
+  void insert_op(const utime_t& now, TrackedOpRef&& op) {
     auto item = new queue_item_t(now, std::move(op));
     queue_spinlock.lock();
     _external_queue.push_back(*item);
@@ -90,12 +90,12 @@ public:
     assert(duration.empty());
     assert(slow_op.empty());
   }
-  void insert(const utime_t& now, TrackedOpRef op)
+  void insert(const utime_t& now, TrackedOpRef&& op)
   {
     if (shutdown)
       return;
 
-    opsvc.insert_op(now, op);
+    opsvc.insert_op(now, std::move(op));
   }
 
   void _insert_delayed(const utime_t& now, TrackedOpRef op);
