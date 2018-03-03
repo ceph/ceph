@@ -314,7 +314,7 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   else {
     i->state = TrackedOp::STATE_HISTORY;
     const utime_t now = ceph_clock_now();
-    history.insert(now, TrackedOpRef(i));
+    history.insert(now, i);
   }
 }
 
