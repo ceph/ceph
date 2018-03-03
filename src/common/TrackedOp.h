@@ -30,20 +30,33 @@ typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 
 class OpHistoryServiceThread : public Thread
 {
-private:
-  list<pair<utime_t, TrackedOpRef>> _external_queue;
+  struct queue_item_t : public boost::intrusive::list_base_hook<> {
+    utime_t time;
+    TrackedOpRef op;
+
+    queue_item_t(utime_t time, TrackedOpRef op)
+      : time(std::move(time)),
+        op(std::move(op)) {
+    }
+  };
+  typedef boost::intrusive::list<queue_item_t> queue_t;
+
+  queue_t _external_queue;
   OpHistory* _ophistory;
   mutable ceph::spinlock queue_spinlock;
   bool _break_thread;
+
 public:
   explicit OpHistoryServiceThread(OpHistory* parent)
     : _ophistory(parent),
       _break_thread(false) { }
+  ~OpHistoryServiceThread();
 
   void break_thread();
   void insert_op(const utime_t& now, TrackedOpRef op) {
+    auto item = new queue_item_t(now, std::move(op));
     queue_spinlock.lock();
-    _external_queue.emplace_back(now, op);
+    _external_queue.push_back(*item);
     queue_spinlock.unlock();
   }
 

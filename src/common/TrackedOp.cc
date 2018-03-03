@@ -24,14 +24,13 @@ static ostream& _prefix(std::ostream* _dout)
 
 void OpHistoryServiceThread::break_thread() {
   queue_spinlock.lock();
-  _external_queue.clear();
   _break_thread = true;
   queue_spinlock.unlock();
 }
 
 void* OpHistoryServiceThread::entry() {
   int sleep_time = 1000;
-  list<pair<utime_t, TrackedOpRef>> internal_queue;
+  queue_t internal_queue;
   while (1) {
     queue_spinlock.lock();
     if (_break_thread) {
@@ -50,12 +49,24 @@ void* OpHistoryServiceThread::entry() {
     }
 
     while (!internal_queue.empty()) {
-      pair<utime_t, TrackedOpRef> op = internal_queue.front();
-      _ophistory->_insert_delayed(op.first, op.second);
+      queue_item_t& item = internal_queue.front();
+      _ophistory->_insert_delayed(item.time, item.op);
       internal_queue.pop_front();
+      delete &item;
     }
   }
   return nullptr;
+}
+
+OpHistoryServiceThread::~OpHistoryServiceThread() {
+  if (!_external_queue.empty()) {
+    assert(_break_thread);
+  }
+
+  while (!_external_queue.empty()) {
+    delete &_external_queue.back();
+    _external_queue.pop_back();
+  }
 }
 
 
