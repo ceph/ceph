@@ -217,11 +217,11 @@ install -pm 644 %{SOURCE0} \
 #/etc/pki/rpm-gpg/*
 
 %changelog
-* Tue Mar 10 2013 Gary Lowell <glowell@inktank.com> - 1-0
+* Tue Mar 12 2013 Gary Lowell <glowell@inktank.com> - 1-0
 - Handle both yum and zypper
 - Use URL to ceph git repo for key
 - remove config attribute from repo file
-* Tue Aug 27 2012 Gary Lowell <glowell@inktank.com> - 1-0
+* Tue Aug 28 2012 Gary Lowell <glowell@inktank.com> - 1-0
 - Initial Package
 EOF
 
