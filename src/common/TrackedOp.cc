@@ -190,6 +190,7 @@ OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
   log_threshold(0),
   tracking_enabled(tracking),
   cct(cct_) {
+  assert(ISP2(num_shards));
 }
 
 OpTracker::~OpTracker() {
@@ -284,7 +285,7 @@ bool OpTracker::register_inflight_op(TrackedOp *i)
     return false;
 
   uint64_t current_seq = ++seq;
-  uint32_t shard_index = current_seq % sharded_in_flight_list.size();
+  uint32_t shard_index = current_seq & (sharded_in_flight_list.size() - 1);
   ShardedTrackingData& sdata = sharded_in_flight_list[shard_index];
   {
     Mutex::Locker locker(sdata.ops_in_flight_lock_sharded);
@@ -299,7 +300,7 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   // caller checks;
   assert(i->state);
 
-  uint32_t shard_index = i->seq % sharded_in_flight_list.size();
+  uint32_t shard_index = i->seq & (sharded_in_flight_list.size() - 1);
   ShardedTrackingData& sdata = sharded_in_flight_list[shard_index];
   {
     Mutex::Locker locker(sdata.ops_in_flight_lock_sharded);
