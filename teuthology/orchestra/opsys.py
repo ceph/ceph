@@ -40,6 +40,7 @@ DISTRO_CODENAME_MAP = {
         "20": "heisenbug",
     },
     "opensuse": {
+        "15.0": "leap",
         "42.2": "leap",
         "42.3": "leap",
     },
@@ -58,8 +59,8 @@ DEFAULT_OS_VERSION = dict(
     ubuntu="18.04",
     fedora="25",
     centos="7.6",
-    opensuse="42.1",
-    sle="12.3",
+    opensuse="15.0",
+    sle="15.0",
     rhel="7.6",
     debian='8.0'
 )
