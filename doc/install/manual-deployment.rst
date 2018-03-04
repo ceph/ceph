@@ -230,8 +230,8 @@ The procedure is as follows:
 	auth service required = cephx
 	auth client required = cephx
 	osd journal size = 1024
-	osd pool default size = 2
-	osd pool default min size = 1
+	osd pool default size = 3
+	osd pool default min size = 2
 	osd pool default pg num = 333
 	osd pool default pgp num = 333
 	osd crush chooseleaf type = 1
@@ -311,36 +311,90 @@ a Ceph Node.
 Short Form
 ----------
 
-Ceph provides the ``ceph-disk`` utility, which can prepare a disk, partition or
-directory for use with Ceph. The ``ceph-disk`` utility creates the OSD ID by
-incrementing the index. Additionally, ``ceph-disk`` will add the new OSD to the
-CRUSH map under the host for you. Execute ``ceph-disk -h`` for CLI details.
-The ``ceph-disk`` utility automates the steps of the `Long Form`_ below. To
+Ceph provides the ``ceph-volume`` utility, which can prepare a logical volume, disk, or partition
+for use with Ceph. The ``ceph-volume`` utility creates the OSD ID by
+incrementing the index. Additionally, ``ceph-volume`` will add the new OSD to the
+CRUSH map under the host for you. Execute ``ceph-volume -h`` for CLI details.
+The ``ceph-volume`` utility automates the steps of the `Long Form`_ below. To
 create the first two OSDs with the short form procedure, execute the following
 on  ``node2`` and ``node3``:
 
-
-#. Prepare the OSD. ::
+bluestore
+^^^^^^^^^
+#. Create the OSD. ::
 
 	ssh {node-name}
-	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} {data-path} [{journal-path}]
+	sudo ceph-volume lvm create --data {data-path}
 
    For example::
 
 	ssh node1
-	sudo ceph-disk prepare --cluster ceph --cluster-uuid a7f64266-0894-4f1e-a635-d0aeaca0e993 --fs-type ext4 /dev/hdd1
+	sudo ceph-volume lvm create --data /dev/hdd1
 
+Alternatively, the creation process can be split in two phases (prepare, and
+activate):
 
-#. Activate the OSD::
+#. Prepare the OSD. ::
 
-	sudo ceph-disk activate {data-path} [--activate-key {path}]
+	ssh {node-name}
+	sudo ceph-volume lvm prepare --data {data-path} {data-path}
 
    For example::
 
-	sudo ceph-disk activate /dev/hdd1
+	ssh node1
+	sudo ceph-volume lvm prepare --data /dev/hdd1
 
-   **Note:** Use the ``--activate-key`` argument if you do not have a copy
-   of ``/var/lib/ceph/bootstrap-osd/{cluster}.keyring`` on the Ceph Node.
+   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
+   activation. These can be obtained by listing OSDs in the current server::
+
+    sudo ceph-volume lvm list
+
+#. Activate the OSD::
+
+	sudo ceph-volume lvm activate {ID} {FSID}
+
+   For example::
+
+	sudo ceph-volume lvm activate 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
+
+
+filestore
+^^^^^^^^^
+#. Create the OSD. ::
+
+	ssh {node-name}
+	sudo ceph-volume lvm create --filestore --data {data-path} --journal {journal-path}
+
+   For example::
+
+	ssh node1
+	sudo ceph-volume lvm create --filestore --data /dev/hdd1 --journal /dev/hdd2
+
+Alternatively, the creation process can be split in two phases (prepare, and
+activate):
+
+#. Prepare the OSD. ::
+
+	ssh {node-name}
+	sudo ceph-volume lvm prepare --filestore --data {data-path} --journal {journal-path}
+
+   For example::
+
+	ssh node1
+	sudo ceph-volume lvm prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
+
+   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
+   activation. These can be obtained by listing OSDs in the current server::
+
+    sudo ceph-volume lvm list
+
+#. Activate the OSD::
+
+	sudo ceph-volume lvm activate --filestore {ID} {FSID}
+
+   For example::
+
+	sudo ceph-volume lvm activate --filestore 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
 
 
 Long Form

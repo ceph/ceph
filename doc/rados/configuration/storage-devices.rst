@@ -60,7 +60,7 @@ last ten years.  Key BlueStore features include:
   and for erasure coded pools (which rely on cloning to implement
   efficient two-phase commits).
 
-For more information, see :doc:`bluestore-config-ref`.
+For more information, see :doc:`bluestore-config-ref` and :doc:`/rados/operations/bluestore-migration`.
 
 FileStore
 ---------
