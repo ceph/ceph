@@ -16,8 +16,10 @@ users:
     groups: users
 runcmd:
  - ( MYHOME=/home/{username} ; mkdir $MYHOME/.ssh ; chmod 700 $MYHOME/.ssh ; cp /root/.ssh/authorized_keys $MYHOME/.ssh ; chown -R {username}.users $MYHOME/.ssh )
- - zypper --non-interactive --no-gpg-checks refresh
+ - zypper --non-interactive addrepo https://download.opensuse.org/repositories/filesystems:/ceph:/mimic/openSUSE_Leap_15.0/filesystems:ceph:mimic.repo
+ - zypper --non-interactive --gpg-auto-import-keys refresh
  - zypper --non-interactive remove librados2 librbd1 multipath-tools-rbd qemu-block-rbd
  - zypper --non-interactive install --no-recommends wget git-core rsyslog lsb-release make gcc gcc-c++ salt-master salt-minion salt-api
  - sed -i -e "s/^#master:.*$/master:\ $(curl --silent http://169.254.169.254/2009-04-04/meta-data/hostname | sed -e 's/[\.-].*//')$(eval printf "%03d%03d%03d%03d.{lab_domain}" $(echo "{nameserver}" | tr . ' '))/" /etc/salt/minion
+ - sleep 30
 final_message: "{up}, after $UPTIME seconds"
