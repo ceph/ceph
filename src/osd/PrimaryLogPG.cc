@@ -502,6 +502,7 @@ void PrimaryLogPG::on_peer_recover(
   publish_stats_to_osd();
   // done!
   peer_missing[peer].got(soid, recovery_info.version);
+  missing_loc.add_location(soid, peer);
 }
 
 void PrimaryLogPG::begin_peer_recover(
