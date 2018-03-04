@@ -151,6 +151,7 @@ int execute_remove(const po::variables_map &vm,
     return r;
   }
 
+  io_ctx.set_osdmap_full_try();
   librbd::RBD rbd;
 
   utils::ProgressContext pc("Removing image", vm[at::NO_PROGRESS].as<bool>());
@@ -377,6 +378,7 @@ int execute_purge (const po::variables_map &vm,
     return r;
   }
 
+  io_ctx.set_osdmap_full_try();
   librbd::RBD rbd;
   
   std::vector<librbd::trash_image_info_t> trash_entries;
