@@ -167,7 +167,7 @@ class DeepSea(Task):
             '--non-interactive',
             'install',
             '--no-recommends',
-            run.Raw('$(rpmspec --requires -q -v DeepSea/deepsea.spec.in | grep manual | awk \'{print $2}\')')
+            run.Raw('$(rpmspec --requires -q DeepSea/deepsea.spec.in 2>/dev/null)')
             ])
         self.setup_salt()
 
