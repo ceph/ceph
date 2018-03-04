@@ -10436,6 +10436,8 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     osd->logger->inc(l_osd_object_ctx_cache_hit);
     dout(10) << __func__ << ": found obc in cache: " << obc
 	     << dendl;
+    lgeneric_subdout(cct,cachetrace,10) << "CACHE osd_obc get_hit " << soid
+					<< dendl;
   } else {
     dout(10) << __func__ << ": obc NOT found in cache: " << soid << dendl;
     // check disk
@@ -10451,6 +10453,8 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 	  dout(10) << __func__ << ": no obc for soid "
 		   << soid << " and !can_create"
 		   << dendl;
+	  lgeneric_subdout(cct,cachetrace,10) << "CACHE osd_obc get_dne " << soid
+					      << dendl;
 	  return ObjectContextRef();   // -ENOENT!
 	}
 
@@ -10463,6 +10467,8 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 	  soid, true, 0, false);
         assert(ssc);
 	obc = create_object_context(oi, ssc);
+	lgeneric_subdout(cct,cachetrace,10) << "CACHE osd_obc add " << soid
+					    << dendl;
 	dout(10) << __func__ << ": " << obc << " " << soid
 		 << " " << obc->rwstate
 		 << " oi: " << obc->obs.oi
@@ -10508,11 +10514,14 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 
     dout(10) << __func__ << ": creating obc from disk: " << obc
 	     << dendl;
+    lgeneric_subdout(cct,cachetrace,10) << "CACHE osd_obc get_miss " << soid
+					<< dendl;
   }
 
   // XXX: Caller doesn't expect this
   if (obc->ssc == NULL) {
-    derr << __func__ << ": obc->ssc not available, not returning context" << dendl;
+    derr << __func__ << ": obc->ssc not available, not returning context"
+	 << dendl;
     return ObjectContextRef();   // -ENOENT!
   }
 
