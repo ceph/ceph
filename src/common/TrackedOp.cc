@@ -23,22 +23,21 @@ static ostream& _prefix(std::ostream* _dout)
 }
 
 void OpHistoryServiceThread::break_thread() {
-  queue_spinlock.lock();
+  ceph::spin::trying_guard<std::mutex> sl(queue_lock);
   _break_thread = true;
-  queue_spinlock.unlock();
 }
 
 void* OpHistoryServiceThread::entry() {
   int sleep_time = 1000;
   queue_t internal_queue;
   while (1) {
-    queue_spinlock.lock();
-    if (_break_thread) {
-      queue_spinlock.unlock();
-      break;
+    {
+      ceph::spin::trying_guard<std::mutex> sl(queue_lock);
+      if (_break_thread) {
+        break;
+      }
+      internal_queue.swap(_external_queue);
     }
-    internal_queue.swap(_external_queue);
-    queue_spinlock.unlock();
     if (internal_queue.empty()) {
       usleep(sleep_time);
       if (sleep_time < 128000) {
