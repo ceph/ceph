@@ -45,6 +45,9 @@ ceph:
   - libcephfs-devel
   - librados2
   - librbd1
-  - python-ceph
   - rbd-fuse
   - ceph-debuginfo
+  - python3-rados
+  - python3-rbd
+  - python3-cephfs
+  - python3-rgw
