@@ -33,6 +33,7 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn)
   : conn(conn),
     explicit_keepalive(false),
     explicit_conn_close(false),
+    got_eof_on_read(false),
     txbuf(*this)
 {
     sockaddr *lsa = mg_get_local_addr(conn);
@@ -50,11 +51,21 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn)
 
 size_t RGWCivetWeb::read_data(char *buf, size_t len)
 {
-  const int ret = mg_read(conn, buf, len);
-  if (ret < 0) {
-    throw rgw::io::Exception(EIO, std::system_category());
+  int c, ret;
+  if (got_eof_on_read) {
+    return 0;
   }
-  return ret;
+  for (c = 0; c < len; c += ret) {
+    ret = mg_read(conn, buf, len);
+    if (ret < 0) {
+      throw rgw::io::Exception(EIO, std::system_category());
+    }
+    if (!ret) {
+      got_eof_on_read = true;
+      break;
+    }
+  }
+  return c;
 }
 
 void RGWCivetWeb::flush()

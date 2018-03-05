@@ -19,6 +19,7 @@ class RGWCivetWeb : public rgw::io::RestfulClient,
 
   bool explicit_keepalive;
   bool explicit_conn_close;
+  bool got_eof_on_read;
 
   rgw::io::StaticOutputBufferer<> txbuf;
 
