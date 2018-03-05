@@ -4385,6 +4385,10 @@ std::vector<Option> get_global_options() {
     .set_default(0.0)
     .set_description("inject crc verification errors into bluestore device reads"),
 
+    Option("bluestore_debug_no_per_pool_stats", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+    
     // -----------------------------------------
     // kstore
 
