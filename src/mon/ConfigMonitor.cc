@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/algorithm/string/predicate.hpp>
+
 #include "mon/Monitor.h"
 #include "mon/ConfigMonitor.h"
 #include "mon/OSDMonitor.h"
@@ -438,6 +440,40 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     } else {
       pending[key] = boost::none;
     }
+    goto update;
+  } else if (prefix == "config reset") {
+    int64_t num;
+    if (!cmd_getval(g_ceph_context, cmdmap, "num", num)) {
+      err = -EINVAL;
+      ss << "must specify what to revert to";
+      goto reply;
+    }
+    if (num < 0 ||
+	(num > 0 && num > (int64_t)version)) {
+      err = -EINVAL;
+      ss << "must specify a valid version to revert to";
+      goto reply;
+    }
+    if (num == (int64_t)version) {
+      err = 0;
+      goto reply;
+    }
+    assert(num > 0);
+    assert((version_t)num < version);
+    for (int64_t v = version; v > num; --v) {
+      ConfigChangeSet ch;
+      load_changeset(v, &ch);
+      for (auto& i : ch.diff) {
+	if (i.second.first) {
+	  bufferlist bl;
+	  bl.append(*i.second.first);
+	  pending[i.first] = bl;
+	} else if (i.second.second) {
+	  pending[i.first] = boost::none;
+	}
+      }
+    }
+    pending_description = string("reset to ") + stringify(num);
     goto update;
   } else if (prefix == "config assimilate-conf") {
     ConfFile cf;
