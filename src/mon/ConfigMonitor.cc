@@ -308,6 +308,28 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	f->flush(odata);
       }
     }
+  } else if (prefix == "config log") {
+    int64_t num = 10;
+    cmd_getval(g_ceph_context, cmdmap, "num", num);
+    ostringstream ds;
+    if (f) {
+      f->open_array_section("changesets");
+    }
+    for (version_t v = version; v > version - std::min(version, (version_t)num); --v) {
+      ConfigChangeSet ch;
+      load_changeset(v, &ch);
+      if (f) {
+	f->dump_object("changeset", ch);
+      } else {
+	ch.print(ds);
+      }
+    }
+    if (f) {
+      f->close_section();
+      f->flush(odata);
+    } else {
+      odata.append(ds.str());
+    }
   } else {
     return false;
   }

@@ -25,6 +25,7 @@ public:
   void init() override;
 
   void load_config();
+  void load_changeset(version_t v, ConfigChangeSet *ch);
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
