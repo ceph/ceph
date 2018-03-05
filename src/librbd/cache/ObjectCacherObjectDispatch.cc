@@ -215,12 +215,19 @@ bool ObjectCacherObjectDispatch<I>::discard(
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
 
-  ObjectExtents object_extents;
-  object_extents.emplace_back(oid, object_no, object_off, object_len, 0);
+  // discard the cache state after changes are committed to disk
+  auto ctx = *on_finish;
+  *on_finish = new FunctionContext(
+    [this, oid, object_no, object_off, object_len, ctx](int r) {
+      ObjectExtents object_extents;
+      object_extents.emplace_back(oid, object_no, object_off, object_len, 0);
 
-  m_cache_lock.Lock();
-  m_object_cacher->discard_set(m_object_set, object_extents);
-  m_cache_lock.Unlock();
+      m_cache_lock.Lock();
+      m_object_cacher->discard_set(m_object_set, object_extents);
+      m_cache_lock.Unlock();
+
+      ctx->complete(r);
+    });
 
   // pass-through the discard request since ObjectCacher won't
   // writeback discards.
