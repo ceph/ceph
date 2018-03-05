@@ -144,11 +144,14 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     list<pair<string,Section*>> sections = {
       make_pair("global", &config_map.global)
     };
-    for (auto& i : config_map.by_type) {
-      sections.push_back(make_pair(i.first, &i.second));
-      auto j = config_map.by_id.lower_bound(i.first);
+    for (string type : { "mon", "mgr", "osd", "mds", "client" }) {
+      auto i = config_map.by_type.find(type);
+      if (i != config_map.by_type.end()) {
+	sections.push_back(make_pair(i->first, &i->second));
+      }
+      auto j = config_map.by_id.lower_bound(type);
       while (j != config_map.by_id.end() &&
-	     j->first.find(i.first) == 0) {
+	     j->first.find(type) == 0) {
 	sections.push_back(make_pair(j->first, &j->second));
 	++j;
       }
