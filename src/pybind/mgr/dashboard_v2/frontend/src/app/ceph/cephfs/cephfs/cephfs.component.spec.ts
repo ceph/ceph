@@ -2,7 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
-import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
+import { BsDropdownModule, ProgressbarModule } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 
 import { SharedModule } from '../../../shared/shared.module';
@@ -29,7 +29,13 @@ describe('CephfsComponent', () => {
   beforeEach(
     async(() => {
       TestBed.configureTestingModule({
-        imports: [SharedModule, ChartsModule, RouterTestingModule, ProgressbarModule.forRoot()],
+        imports: [
+          SharedModule,
+          ChartsModule,
+          RouterTestingModule,
+          BsDropdownModule.forRoot(),
+          ProgressbarModule.forRoot()
+        ],
         declarations: [CephfsComponent],
         providers: [
           { provide: CephfsService, useValue: fakeFilesystemService }

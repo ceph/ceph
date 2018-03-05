@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { AlertModule, TabsModule } from 'ngx-bootstrap';
+import { AlertModule, BsDropdownModule, TabsModule } from 'ngx-bootstrap';
 
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { SharedModule } from '../../../shared/shared.module';
@@ -16,6 +16,7 @@ describe('PoolDetailComponent', () => {
     TestBed.configureTestingModule({
       imports: [
         SharedModule,
+        BsDropdownModule.forRoot(),
         TabsModule.forRoot(),
         AlertModule.forRoot(),
         ComponentsModule,
