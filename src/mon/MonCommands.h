@@ -1117,3 +1117,7 @@ COMMAND("config help " \
 COMMAND("config assimilate-conf",
 	"Assimilate options from a conf, and return a new, minimal conf file",
 	"config", "rw", "cli,rest")
+COMMAND("config log name=num,type=CephInt,req=False",
+	"Show recent history of config changes",
+	"config", "r", "cli,rest")
+
