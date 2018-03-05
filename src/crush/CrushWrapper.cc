@@ -3095,7 +3095,7 @@ int CrushWrapper::_choose_type_stack(
   ldout(cct, 10) << __func__ << " cumulative_fanout " << cumulative_fanout
 		 << dendl;
 
-  // identify underful targets for each intermediate level.
+  // identify underfull targets for each intermediate level.
   // this serves two purposes:
   //   1. we can tell when we are selecting a bucket that does not have any underfull
   //      devices beneath it.  that means that if the current input includes an overfull
@@ -3195,6 +3195,7 @@ int CrushWrapper::_choose_type_stack(
 	    for (auto osd : leaves[pos]) {
 	      if (overfull.count(osd)) {
 		any_overfull = true;
+               break;
 	      }
 	    }
 	    if (any_overfull) {
