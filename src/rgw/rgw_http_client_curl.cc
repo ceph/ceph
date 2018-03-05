@@ -110,9 +110,11 @@ void setup_curl(boost::optional<const fe_map_t&> m) {
   #endif
 
   std::call_once(curl_init_flag, curl_global_init, curl_global_flags);
+  rgw_setup_saved_curl_handles();
 }
 
 void cleanup_curl() {
+  rgw_release_all_curl_handles();
   curl_global_cleanup();
 }
 
