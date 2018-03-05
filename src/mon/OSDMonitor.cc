@@ -7964,7 +7964,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     do {
       // osd crush move <name> <loc1> [<loc2> ...]
       string name;
-      string args;
       vector<string> argvec;
       cmd_getval(cct, cmdmap, "name", name);
       cmd_getval(cct, cmdmap, "args", argvec);
