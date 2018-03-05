@@ -54,7 +54,22 @@ struct bluefs_fnode_t {
       allocated += p.length;
   }
 
-  DENC(bluefs_fnode_t, v, p) {
+  DENC_HELPERS
+  void bound_encode(size_t& p) const {
+    _denc_friend(*this, p);
+  }
+  void encode(bufferlist::contiguous_appender& p) const {
+    DENC_DUMP_PRE(bluefs_fnode_t);
+    _denc_friend(*this, p);
+    DENC_DUMP_POST(bluefs_fnode_t);
+  }
+  void decode(buffer::ptr::iterator& p) {
+    _denc_friend(*this, p);
+    recalc_allocated();
+  }
+  template<typename T, typename P>
+  friend std::enable_if_t<std::is_same_v<bluefs_fnode_t, std::remove_const_t<T>>>
+  _denc_friend(T& v, P& p) {
     DENC_START(1, 1, p);
     denc_varint(v.ino, p);
     denc_varint(v.size, p);
