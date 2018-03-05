@@ -506,6 +506,24 @@ reply:
   return false;
 
 update:
+  // see if there is an actual change
+  auto p = pending.begin();
+  while (p != pending.end()) {
+    auto q = current.find(p->first);
+    if (p->second && q != current.end() && *p->second == q->second) {
+      // set to same value
+      p = pending.erase(p);
+    } else if (!p->second && q == current.end()) {
+      // erasing non-existent value
+      p = pending.erase(p);
+    } else {
+      ++p;
+    }
+  }
+  if (pending.empty()) {
+    err = 0;
+    goto reply;
+  }
   force_immediate_propose();  // faster response
   wait_for_finished_proposal(
     op,
