@@ -283,7 +283,7 @@ private:
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
   BlockDevice::discard_t discard_mode;
-  BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
+  BlockDevice::discard_callback_t discard_cb[3]; //discard callbacks for each dev
 
   BlueFSDeviceExpander* slow_dev_expander = nullptr;
 
@@ -477,7 +477,7 @@ public:
 		     PExtentVector *extents);
 
   // handler for discard event
-  void handle_discard(unsigned dev, interval_set<uint64_t>& to_release);
+  void handle_discard(BlockDevice::discard_t mode, unsigned dev, interval_set<uint64_t>& to_discard);
 
   void flush(FileWriter *h) {
     std::lock_guard l(lock);

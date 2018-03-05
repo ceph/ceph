@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/file.h>
+#include <chrono>
 
 #include "KernelDevice.h"
 #include "include/types.h"
@@ -37,13 +38,16 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
-KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
+KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, discard_callback_t d_cb, void *d_cbpriv,
+			  discard_t discard_mode, int discard_delay)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
     aio_stop(false),
+    discard_mode(discard_mode),
+    discard_delay(discard_delay),
     discard_started(false),
     discard_stop(false),
     aio_thread(this),
@@ -588,18 +592,25 @@ void KernelDevice::_discard_thread()
 	break;
       dout(20) << __func__ << " sleep" << dendl;
       discard_cond.notify_all(); // for the thread trying to drain...
-      discard_cond.wait(l);
+      if (discard_mode == DISCARD_PERIODIC) {
+        discard_cond.wait_for(l, std::chrono::seconds(discard_delay));
+        if (discard_stop)
+          break;
+        discard_callback(BlockDevice::DISCARD_PERIODIC,
+			discard_callback_priv, static_cast<void*>(&discard_finishing));
+        discard_finishing.clear();
+      } else {
+        discard_cond.wait(l);
+      }
       dout(20) << __func__ << " wake" << dendl;
     } else {
       discard_finishing.swap(discard_queued);
       discard_running = true;
       l.unlock();
       dout(20) << __func__ << " finishing" << dendl;
-      for (auto p = discard_finishing.begin();p != discard_finishing.end(); ++p) {
-	discard(p.get_start(), p.get_len());
-      }
-
-      discard_callback(discard_callback_priv, static_cast<void*>(&discard_finishing));
+      if (discard_mode == DISCARD_ASYNC)
+        discard_callback(BlockDevice::DISCARD_ASYNC,
+			discard_callback_priv, static_cast<void*>(&discard_finishing));
       discard_finishing.clear();
       l.lock();
       discard_running = false;

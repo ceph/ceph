@@ -4205,7 +4205,15 @@ std::vector<Option> get_global_options() {
     
     Option("bluefs_bdev_discard", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("none")
-    .set_enum_allowed({"none", "sync", "async"})
+    .set_enum_allowed({"none", "sync", "async", "periodic"})
+    .set_description(""),
+
+    Option("bluefs_bdev_periodic_discard_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_description(""),
+
+    Option("bluefs_bdev_periodic_discard_free_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.5)
     .set_description(""),
 
     Option("bluestore_spdk_mem", Option::TYPE_SIZE, Option::LEVEL_DEV)
@@ -4641,7 +4649,15 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_bdev_discard", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("none")
-    .set_enum_allowed({"none", "sync", "async"})
+    .set_enum_allowed({"none", "sync", "async", "periodic"})
+    .set_description(""),
+
+    Option("bluestore_bdev_periodic_discard_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_description(""),
+
+    Option("bluestore_bdev_periodic_discard_free_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.5)
     .set_description(""),
 
     Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_DEV)

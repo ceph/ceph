@@ -266,13 +266,18 @@ void StupidAllocator::release(
   }
 }
 
-int64_t StupidAllocator::allocate_for_discard(float ratio, interval_set<uint64_t>& to_discard)
+int64_t StupidAllocator::allocate_for_discard(float free_ratio, interval_set<uint64_t>& to_discard)
 {
   int64_t want;
   int64_t allocated = 0;
+  float cur_clean_ratio;
   std::lock_guard l(lock);
+  cur_clean_ratio = (float) (num_free - to_discard_set.size()) / num_free;
 
-  want = (int64_t) to_discard_set.size() * ratio;
+  if (cur_clean_ratio >= free_ratio)
+    want = to_discard_set.size();
+  else
+    want = (int64_t) to_discard_set.size() * free_ratio;
 
   for (auto p = to_discard_set.begin();
       p != to_discard_set.end() && allocated < want;

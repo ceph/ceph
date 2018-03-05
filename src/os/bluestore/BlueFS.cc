@@ -24,22 +24,22 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileReaderBuffer,
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileReader, bluefs_file_reader, bluefs);
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueFS::FileLock, bluefs_file_lock, bluefs);
 
-static void wal_discard_cb(void *priv, void* priv2) {
+static void wal_discard_cb(BlockDevice::discard_t discard_mode, void *priv, void* priv2) {
   BlueFS *bluefs = static_cast<BlueFS*>(priv);
   interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
-  bluefs->handle_discard(BlueFS::BDEV_WAL, *tmp);
+  bluefs->handle_discard(discard_mode, BlueFS::BDEV_WAL, *tmp);
 }
 
-static void db_discard_cb(void *priv, void* priv2) {
+static void db_discard_cb(BlockDevice::discard_t discard_mode, void *priv, void* priv2) {
   BlueFS *bluefs = static_cast<BlueFS*>(priv);
   interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
-  bluefs->handle_discard(BlueFS::BDEV_DB, *tmp);
+  bluefs->handle_discard(discard_mode, BlueFS::BDEV_DB, *tmp);
 }
 
-static void slow_discard_cb(void *priv, void* priv2) {
+static void slow_discard_cb(BlockDevice::discard_t discard_mode, void *priv, void* priv2) {
   BlueFS *bluefs = static_cast<BlueFS*>(priv);
   interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
-  bluefs->handle_discard(BlueFS::BDEV_SLOW, *tmp);
+  bluefs->handle_discard(discard_mode, BlueFS::BDEV_SLOW, *tmp);
 }
 
 BlueFS::BlueFS(CephContext* cct)
@@ -172,7 +172,8 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   ceph_assert(id < bdev.size());
   ceph_assert(bdev[id] == NULL);
   BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL,
-				       discard_cb[id], static_cast<void*>(this));
+				       discard_cb[id], static_cast<void*>(this),
+				       discard_mode, cct->_conf->bluefs_bdev_periodic_discard_timeout);
   if (shared_with_bluestore) {
     b->set_no_exclusive_lock();
   }
@@ -261,11 +262,22 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   return 0;
 }
 
-void BlueFS::handle_discard(unsigned id, interval_set<uint64_t>& to_release)
+void BlueFS::handle_discard(BlockDevice::discard_t mode, unsigned id, interval_set<uint64_t>& to_discard)
 {
-  dout(10) << __func__ << " bdev " << id << dendl;
+  dout(10) << __func__ << " bdev " << id << " discard mode " << mode << dendl;
   ceph_assert(alloc[id]);
-  alloc[id]->release(to_release);
+
+  if (mode == BlockDevice::DISCARD_ASYNC) {
+    for (auto p = to_discard.begin();p != to_discard.end(); ++p)
+      bdev[id]->discard(p.get_start(), p.get_len());
+    alloc[id]->release(to_discard);
+  } else if (mode == BlockDevice::DISCARD_PERIODIC) {
+    float free_ratio = cct->_conf->bluefs_bdev_periodic_discard_free_ratio;
+    alloc[id]->allocate_for_discard(free_ratio, to_discard);
+    for (auto p = to_discard.begin();p != to_discard.end(); ++p)
+      bdev[id]->discard(p.get_start(), p.get_len());
+    alloc[id]->release_for_discarded(to_discard);
+  }
 }
 
 uint64_t BlueFS::get_used()

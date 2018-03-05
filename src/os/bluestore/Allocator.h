@@ -43,7 +43,7 @@ public:
   virtual void release(const interval_set<uint64_t>& release_set) = 0;
   void release(const PExtentVector& release_set);
 
-  virtual int64_t allocate_for_discard(float ratio, interval_set<uint64_t>& to_discard) { return 0; }
+  virtual int64_t allocate_for_discard(float free_ratio, interval_set<uint64_t>& to_discard) { return 0; }
   virtual void release_for_discarded(interval_set<uint64_t>& discarded) { }
 
   virtual void dump() = 0;

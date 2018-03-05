@@ -54,7 +54,7 @@ public:
   void release(
     const interval_set<uint64_t>& release_set) override;
 
-  int64_t allocate_for_discard(float ratio, interval_set<uint64_t>& to_discard) override;
+  int64_t allocate_for_discard(float free_ratio, interval_set<uint64_t>& to_discard) override;
   void release_for_discarded(interval_set<uint64_t>& discarded) override;
 
   uint64_t get_free() override;
