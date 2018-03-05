@@ -1120,4 +1120,7 @@ COMMAND("config assimilate-conf",
 COMMAND("config log name=num,type=CephInt,req=False",
 	"Show recent history of config changes",
 	"config", "r", "cli,rest")
-
+COMMAND("config reset" \
+	" name=num,type=CephInt",
+	"Revert configuration to previous state",
+	"config", "rw", "cli,rest")
