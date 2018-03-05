@@ -22,6 +22,7 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon,
 }
 
 const string KEY_PREFIX("config/");
+const string HISTORY_PREFIX("config-history/");
 
 ConfigMonitor::ConfigMonitor(Monitor *m, Paxos *p, const string& service_name)
   : PaxosService(m, p, service_name) {
@@ -54,6 +55,7 @@ void ConfigMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
   pending.clear();
+  pending_description.clear();
 }
 
 void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -63,11 +65,28 @@ void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // TODO: record changed sections (osd, mds.foo, rack:bar, ...)
 
+  string history = HISTORY_PREFIX + stringify(version+1) + "/";
+  {
+    bufferlist metabl;
+    ::encode(ceph_clock_now(), metabl);
+    ::encode(pending_description, metabl);
+    t->put(CONFIG_PREFIX, history, metabl);
+  }
   for (auto& p : pending) {
     string key = KEY_PREFIX + p.first;
+    auto q = current.find(p.first);
+    if (q != current.end()) {
+      if (p.second && *p.second == q->second) {
+	continue;
+      }
+      t->put(CONFIG_PREFIX, history + "-" + p.first, q->second);
+    } else if (!p.second) {
+      continue;
+    }
     if (p.second) {
       dout(20) << __func__ << " set " << key << dendl;
       t->put(CONFIG_PREFIX, key, *p.second);
+      t->put(CONFIG_PREFIX, history + "+" + p.first, *p.second);
     } else {
       dout(20) << __func__ << " rm " << key << dendl;
       t->erase(CONFIG_PREFIX, key);
@@ -518,10 +537,13 @@ void ConfigMonitor::load_config()
   KeyValueDB::Iterator it = mon->store->get_iterator(CONFIG_PREFIX);
   it->lower_bound(KEY_PREFIX);
   config_map.clear();
+  current.clear();
   while (it->valid() &&
 	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
     string key = it->key().substr(KEY_PREFIX.size());
     string value = it->value().to_str();
+
+    current[key] = it->value();
 
     auto last_slash = key.rfind('/');
     string name;
