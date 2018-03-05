@@ -42,7 +42,8 @@
     <!-- refresh button -->
     <div class="widget-toolbar tc_refreshBtn">
       <a (click)="refreshBtn()">
-        <i class="fa fa-lg fa-refresh"></i>
+        <i class="fa fa-lg fa-refresh"
+           [class.fa-spin]="updating || loadingIndicator"></i>
       </a>
     </div>
     <!-- end refresh button -->
