@@ -1,13 +1,12 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { BsDropdownModule, TabsModule } from 'ngx-bootstrap';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { TabsModule } from 'ngx-bootstrap/tabs';
 import { Observable } from 'rxjs/Observable';
 
 import { RbdMirroringService } from '../../../shared/services/rbd-mirroring.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { BlockModule } from '../block.module';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
 import { MirroringComponent } from './mirroring.component';
 
@@ -29,6 +28,7 @@ describe('MirroringComponent', () => {
         declarations: [MirroringComponent, MirrorHealthColorPipe],
         imports: [
           SharedModule,
+          BsDropdownModule.forRoot(),
           TabsModule.forRoot(),
           ProgressbarModule.forRoot(),
           HttpClientTestingModule
