@@ -12,8 +12,12 @@ import {
   Type,
   ViewChild
 } from '@angular/core';
-
-import { DatatableComponent, SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
+import {
+  DatatableComponent,
+  SortDirection,
+  SortPropDir,
+  TableColumnProp
+} from '@swimlane/ngx-datatable';
 
 import * as _ from 'lodash';
 import 'rxjs/add/observable/timer';
@@ -43,7 +47,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // Each item -> { prop: 'attribute name', dir: 'asc'||'desc'}
   @Input() sorts?: SortPropDir[];
   // Method used for setting column widths.
-  @Input() columnMode ?= 'force';
+  @Input() columnMode ?= 'flex';
   // Name of the component e.g. 'TableDetailsComponent'
   @Input() detailsComponent?: string;
   // Display the tool header, including reload button, pagination and search fields?
@@ -85,6 +89,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    */
   selection = new CdTableSelection();
 
+  tableColumns: CdTableColumn[];
   cellTemplates: {
     [key: string]: TemplateRef<any>
   } = {};
@@ -109,26 +114,28 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   ngOnInit() {
     this._addTemplates();
-    this.columns.map((column) => {
-      if (column.cellTransformation) {
-        column.cellTemplate = this.cellTemplates[column.cellTransformation];
+    if (!this.sorts) {
+      this.identifier = this.columns.some(c => c.prop === this.identifier) ?
+        this.identifier :
+        this.columns[0].prop + '';
+      this.sorts = this.createSortingDefinition(this.identifier);
+    }
+    this.columns.map(c => {
+      if (c.cellTransformation) {
+        c.cellTemplate = this.cellTemplates[c.cellTransformation];
       }
-      return column;
+      if (!c.flexGrow) {
+        c.flexGrow = c.prop + '' === this.identifier ? 1 : 2;
+      }
+      if (!c.resizeable) {
+        c.resizeable = false;
+      }
+      return c;
     });
     if (this.detailsComponent) {
       this.selectionType = 'multi';
     }
-    if (!this.sorts) {
-      const sortProp = this.columns.some((c) => c.prop === this.identifier) ?
-        this.identifier :
-        this.columns[0].prop;
-      this.sorts = [
-        {
-          prop: sortProp,
-          dir: SortDirection.asc
-        }
-      ];
-    }
+    this.tableColumns = this.columns.filter(c => !c.isHidden);
     if (this.autoReload) { // Also if nothing is bound to fetchData nothing will be triggered
       // Force showing the loading indicator because it has been set to False in
       // useData() when this method was triggered by ngOnChanges().
@@ -220,6 +227,35 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     } else {
       this.detailTemplate.viewContainerRef.clear();
     }
+  }
+
+  toggleColumn($event: any) {
+    const prop: TableColumnProp = $event.target.name;
+    const hide = !$event.target.checked;
+    if (hide && this.tableColumns.length === 1) {
+      $event.target.checked = true;
+      return;
+    }
+    _.find(this.columns, (c: CdTableColumn) => c.prop === prop).isHidden = hide;
+    this.updateColumns();
+  }
+
+  updateColumns () {
+    this.tableColumns = this.columns.filter(c => !c.isHidden);
+    const sortProp = this.table.sorts[0].prop;
+    if (!_.find(this.tableColumns, (c: CdTableColumn) => c.prop === sortProp)) {
+      this.table.onColumnSort({sorts: this.createSortingDefinition(this.tableColumns[0].prop)});
+    }
+    this.table.recalculate();
+  }
+
+  createSortingDefinition (prop: TableColumnProp): SortPropDir[] {
+    return [
+      {
+        prop: prop,
+        dir: SortDirection.asc
+      }
+    ];
   }
 
   updateDetailView() {
