@@ -1624,6 +1624,11 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
                  << p.first << dendl;
       continue;
+    } else if (type == 0) {
+      ldout(cct, 10) << __func__ << " failure-domain of pg " << p.first
+                     << " is osd-level, skipping"
+                     << dendl;
+      continue;
     }
     ldout(cct, 10) << __func__ << " pg " << p.first
                    << " crush-rule-id " << crush_rule
@@ -1633,16 +1638,24 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     int primary;
     tmpmap.pg_to_raw_up(p.first, &raw, &primary);
     set<int> parents;
+    bool error = false;
     bool collide = false;
     for (auto osd : raw) {
       auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+      if (parent >= 0) {
+        lderr(cct) << __func__ << " unable to get parent of raw osd." << osd
+                   << ", pg " << p.first
+                   << dendl;
+        error = true;
+        break;
+      }
       auto r = parents.insert(parent);
       if (!r.second) {
         collide = true;
         break;
       }
     }
-    if (collide) {
+    if (!error && collide) {
       ldout(cct, 10) << __func__ << " removing invalid pg_upmap "
                      << "[" << p.first << ":" << p.second << "]"
                      << ", final mapping result will be: " << raw
@@ -1671,6 +1684,11 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
                  << p.first << dendl;
       continue;
+    } else if (type == 0) {
+      ldout(cct, 10) << __func__ << " failure-domain of pg " << p.first
+                     << " is osd-level, skipping"
+                     << dendl;
+      continue;
     }
     ldout(cct, 10) << __func__ << " pg " << p.first
                    << " crush_rule_id " << crush_rule
@@ -1680,16 +1698,24 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     int primary;
     tmpmap.pg_to_raw_up(p.first, &raw, &primary);
     set<int> parents;
+    bool error = false;
     bool collide = false;
     for (auto osd : raw) {
       auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+      if (parent >= 0) {
+        lderr(cct) << __func__ << " unable to get parent of raw osd." << osd
+                   << ", pg " << p.first
+                   << dendl;
+        error = true;
+        break;
+      }
       auto r = parents.insert(parent);
       if (!r.second) {
         collide = true;
         break;
       }
     }
-    if (collide) {
+    if (!error && collide) {
       ldout(cct, 10) << __func__ << " removing invalid pg_upmap_items "
                      << "[" << p.first << ":" << p.second << "]"
                      << ", final mapping result will be: " << raw
