@@ -1259,19 +1259,15 @@ void BlueFS::_compact_log_sync()
   mempool::bluefs::vector<bluefs_extent_t> old_extents;
   uint64_t old_allocated = 0;
   log_file->fnode.swap_extents(old_extents, old_allocated);
-  while (log_file->fnode.get_allocated() < need) {
-    int r = _allocate(log_file->fnode.prefer_bdev,
-		      need - log_file->fnode.get_allocated(),
-		      &log_file->fnode);
-    assert(r == 0);
-  }
+  int r = _allocate(log_file->fnode.prefer_bdev, need, &log_file->fnode);
+  assert(r == 0);
 
   _close_writer(log_writer);
 
   log_file->fnode.size = bl.length();
   log_writer = _create_writer(log_file);
   log_writer->append(bl);
-  int r = _flush(log_writer, true);
+  r = _flush(log_writer, true);
   assert(r == 0);
 #ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
@@ -1341,15 +1337,11 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 
   // 1. allocate new log space and jump to it.
   old_log_jump_to = log_file->fnode.get_allocated();
-  uint64_t need = old_log_jump_to + cct->_conf->bluefs_max_log_runway;
   dout(10) << __func__ << " old_log_jump_to 0x" << std::hex << old_log_jump_to
-           << " need 0x" << need << std::dec << dendl;
-  while (log_file->fnode.get_allocated() < need) {
-    int r = _allocate(log_file->fnode.prefer_bdev,
-		      cct->_conf->bluefs_max_log_runway,
-		      &log_file->fnode);
-    assert(r == 0);
-  }
+           << " need 0x" << (old_log_jump_to + cct->_conf->bluefs_max_log_runway) << std::dec << dendl;
+  int r = _allocate(log_file->fnode.prefer_bdev,
+		    cct->_conf->bluefs_max_log_runway, &log_file->fnode);
+  assert(r == 0);
   dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
 
   // update the log file change and log a jump to the offset where we want to
@@ -1380,7 +1372,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 	   << std::dec << dendl;
 
   // allocate
-  int r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
+  r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
                     &new_log->fnode);
   assert(r == 0);
   new_log_writer = _create_writer(new_log);
