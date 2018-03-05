@@ -725,7 +725,7 @@ function test_mon_misc()
   ceph time-sync-status
 
   ceph node ls
-  for t in mon osd mds ; do
+  for t in mon osd mds mgr ; do
       ceph node ls $t
   done
 
