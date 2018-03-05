@@ -136,7 +136,7 @@ def start_rgw(ctx, config, clients):
             )
 
     # XXX: add_daemon() doesn't let us wait until radosgw finishes startup
-    for client in config.keys():
+    for client in clients:
         endpoint = ctx.rgw.role_endpoints[client]
         url = endpoint.url()
         log.info('Polling {client} until it starts accepting connections on {url}'.format(client=client, url=url))
@@ -145,7 +145,7 @@ def start_rgw(ctx, config, clients):
     try:
         yield
     finally:
-        for client in config.iterkeys():
+        for client in clients:
             cluster_name, daemon_type, client_id = teuthology.split_role(client)
             client_with_id = daemon_type + '.' + client_id
             client_with_cluster = cluster_name + '.' + client_with_id
