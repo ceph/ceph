@@ -630,6 +630,36 @@ void ConfigMonitor::load_config()
   }
 }
 
+void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
+{
+  ch->version = v;
+  string prefix = HISTORY_PREFIX + stringify(v) + "/";
+  KeyValueDB::Iterator it = mon->store->get_iterator(CONFIG_PREFIX);
+  it->lower_bound(prefix);
+  while (it->valid() && it->key().find(prefix) == 0) {
+    if (it->key() == prefix) {
+      bufferlist bl = it->value();
+      auto p = bl.begin();
+      try {
+	decode(ch->stamp, p);
+	decode(ch->name, p);
+      }
+      catch (buffer::error& e) {
+	derr << __func__ << " failure decoding changeset " << v << dendl;
+      }
+    } else {
+      char op = it->key()[prefix.length()];
+      string key = it->key().substr(prefix.length() + 1);
+      if (op == '-') {
+	ch->diff[key].first = it->value().to_str();
+      } else if (op == '+') {
+	ch->diff[key].second = it->value().to_str();
+      }
+    }
+    it->next();
+  }
+}
+
 bool ConfigMonitor::refresh_config(MonSession *s)
 {
   const OSDMap& osdmap = mon->osdmon()->osdmap;
