@@ -51,14 +51,7 @@ BlueFS::BlueFS(CephContext* cct)
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
-  if (cct->_conf->bluefs_bdev_discard == "sync")
-    discard_mode = BlockDevice::DISCARD_SYNC;
-  else if (cct->_conf->bluefs_bdev_discard == "async")
-    discard_mode = BlockDevice::DISCARD_ASYNC;
-  else if (cct->_conf->bluefs_bdev_discard == "periodic")
-    discard_mode = BlockDevice::DISCARD_PERIODIC;
-  else
-    discard_mode = BlockDevice::DISCARD_NONE;
+  discard_mode = BlockDevice::get_discard_t(cct->_conf->bluefs_bdev_discard);
 }
 
 BlueFS::~BlueFS()

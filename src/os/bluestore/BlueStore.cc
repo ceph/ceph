@@ -3900,15 +3900,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
-
-  if (cct->_conf->bluestore_bdev_discard == "sync")
-    discard_mode = BlockDevice::DISCARD_SYNC;
-  else if (cct->_conf->bluestore_bdev_discard == "async")
-    discard_mode = BlockDevice::DISCARD_ASYNC;
-  else if (cct->_conf->bluestore_bdev_discard == "periodic")
-    discard_mode = BlockDevice::DISCARD_PERIODIC;
-  else
-    discard_mode = BlockDevice::DISCARD_NONE;
+  discard_mode = BlockDevice::get_discard_t(cct->_conf->bluestore_bdev_discard);
 }
 
 BlueStore::BlueStore(CephContext *cct,
@@ -3931,15 +3923,7 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
-
-  if (cct->_conf->bluestore_bdev_discard == "sync")
-    discard_mode = BlockDevice::DISCARD_SYNC;
-  else if (cct->_conf->bluestore_bdev_discard == "async")
-    discard_mode = BlockDevice::DISCARD_ASYNC;
-  else if (cct->_conf->bluestore_bdev_discard == "periodic")
-    discard_mode = BlockDevice::DISCARD_PERIODIC;
-  else
-    discard_mode = BlockDevice::DISCARD_NONE;
+  discard_mode = BlockDevice::get_discard_t(cct->_conf->bluestore_bdev_discard);
 }
 
 BlueStore::~BlueStore()

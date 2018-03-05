@@ -138,6 +138,20 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
   return NULL;
 }
 
+BlockDevice::discard_t BlockDevice::get_discard_t(string str_discard_mode)
+{
+  discard_t ret = BlockDevice::DISCARD_NONE;
+
+  if (str_discard_mode == "sync")
+    ret = BlockDevice::DISCARD_SYNC;
+  else if (str_discard_mode == "async")
+    ret = BlockDevice::DISCARD_ASYNC;
+  else if (str_discard_mode == "periodic")
+    ret = BlockDevice::DISCARD_PERIODIC;
+
+  return ret;
+}
+
 void BlockDevice::queue_reap_ioc(IOContext *ioc)
 {
   std::lock_guard l(ioc_reap_lock);

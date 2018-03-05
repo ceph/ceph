@@ -168,6 +168,9 @@ public:
   static BlockDevice *create(
     CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv, discard_callback_t d_cb, void *d_cbpriv,
     discard_t discard_mode, int discard_delay);
+
+  static discard_t get_discard_t(string str_discard_mode);
+
   virtual bool supported_bdev_label() { return true; }
   virtual bool is_rotational() { return rotational; }
 
