@@ -18,12 +18,15 @@ class StupidAllocator : public Allocator {
   ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
   int64_t num_free;     ///< total bytes in freelist
+  bool periodic_discard;
 
   typedef mempool::bluestore_alloc::pool_allocator<
     pair<const uint64_t,uint64_t>> allocator_t;
   typedef btree::btree_map<uint64_t,uint64_t,std::less<uint64_t>,allocator_t> interval_set_map_t;
   typedef interval_set<uint64_t,interval_set_map_t> interval_set_t;
   std::vector<interval_set_t> free;  ///< leading-edge copy
+  interval_set<uint64_t> in_flight_discard_set;
+  interval_set<uint64_t> to_discard_set;
 
   uint64_t last_alloc;
 
@@ -34,8 +37,10 @@ class StupidAllocator : public Allocator {
     interval_set_t::iterator p,
     uint64_t alloc_unit);
 
+  bool _disjoint_with_discarding(interval_set_t::iterator p) const;
+
 public:
-  StupidAllocator(CephContext* cct);
+  StupidAllocator(CephContext* cct, bool periodic_discard);
   ~StupidAllocator() override;
 
   int64_t allocate(
@@ -48,6 +53,9 @@ public:
 
   void release(
     const interval_set<uint64_t>& release_set) override;
+
+  int64_t allocate_for_discard(float ratio, interval_set<uint64_t>& to_discard) override;
+  void release_for_discarded(interval_set<uint64_t>& discarded) override;
 
   uint64_t get_free() override;
   double get_fragmentation(uint64_t alloc_unit) override;

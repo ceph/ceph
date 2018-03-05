@@ -55,6 +55,8 @@ BlueFS::BlueFS(CephContext* cct)
     discard_mode = BlockDevice::DISCARD_SYNC;
   else if (cct->_conf->bluefs_bdev_discard == "async")
     discard_mode = BlockDevice::DISCARD_ASYNC;
+  else if (cct->_conf->bluefs_bdev_discard == "periodic")
+    discard_mode = BlockDevice::DISCARD_PERIODIC;
   else
     discard_mode = BlockDevice::DISCARD_NONE;
 }
@@ -419,7 +421,8 @@ void BlueFS::_init_alloc()
     ceph_assert(bdev[id]->get_size());
     alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				  bdev[id]->get_size(),
-				  cct->_conf->bluefs_alloc_size);
+				  cct->_conf->bluefs_alloc_size,
+				  discard_mode == BlockDevice::DISCARD_PERIODIC);
     interval_set<uint64_t>& p = block_all[id];
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
       alloc[id]->init_add_free(q.get_start(), q.get_len());

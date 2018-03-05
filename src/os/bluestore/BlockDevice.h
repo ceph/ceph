@@ -136,6 +136,7 @@ public:
     DISCARD_NONE,
     DISCARD_SYNC,
     DISCARD_ASYNC,
+    DISCARD_PERIODIC,
   } discard_t;
   typedef void (*aio_callback_t)(void *handle, void *aio);
 private:

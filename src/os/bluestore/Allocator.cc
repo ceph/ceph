@@ -9,10 +9,10 @@
 #define dout_subsys ceph_subsys_bluestore
 
 Allocator *Allocator::create(CephContext* cct, string type,
-                             int64_t size, int64_t block_size)
+                             int64_t size, int64_t block_size, bool periodic_discard)
 {
   if (type == "stupid") {
-    return new StupidAllocator(cct);
+    return new StupidAllocator(cct, periodic_discard);
   } else if (type == "bitmap") {
     return new BitmapAllocator(cct, size, block_size);
   }
