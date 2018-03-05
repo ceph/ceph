@@ -139,7 +139,8 @@ protected:
 
   void send_request() override;
 
-  virtual int prune_object_extents(ObjectExtents &object_extents) {
+  virtual int validate_object_extents(
+      const ObjectExtents &object_extents) const {
     return 0;
   }
 
@@ -218,8 +219,6 @@ protected:
   const char *get_request_type() const override {
     return "aio_discard";
   }
-
-  int prune_object_extents(ObjectExtents &object_extents) override;
 
   void send_image_cache_request() override;
 
@@ -335,7 +334,9 @@ protected:
     return "aio_compare_and_write";
   }
 
-  int prune_object_extents(ObjectExtents &object_extents) override;
+  int validate_object_extents(
+      const ObjectExtents &object_extents) const override;
+
 private:
   bufferlist m_cmp_bl;
   bufferlist m_bl;

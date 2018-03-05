@@ -64,14 +64,12 @@ ObjectRequest<I>::create_discard(I *ictx, const std::string &oid,
                                  uint64_t object_no, uint64_t object_off,
                                  uint64_t object_len,
                                  const ::SnapContext &snapc,
-                                 bool disable_clone_remove,
-                                 bool update_object_map,
+                                 int discard_flags,
                                  const ZTracer::Trace &parent_trace,
                                  Context *completion) {
   return new ObjectDiscardRequest<I>(ictx, oid, object_no, object_off,
-                                     object_len, snapc, disable_clone_remove,
-                                     update_object_map, parent_trace,
-                                     completion);
+                                     object_len, snapc, discard_flags,
+                                     parent_trace, completion);
 }
 
 template <typename I>
@@ -622,6 +620,21 @@ void ObjectWriteRequest<I>::add_write_ops(librados::ObjectWriteOperation *wr) {
     wr->write(this->m_object_off, m_write_data);
   }
   wr->set_op_flags2(m_op_flags);
+}
+
+template <typename I>
+void ObjectDiscardRequest<I>::send() {
+  I *image_ctx = this->m_ictx;
+  auto cct = image_ctx->cct;
+  if ((m_discard_flags & OBJECT_DISCARD_FLAG_SKIP_PARTIAL) != 0 &&
+      this->m_object_off + this->m_object_len < image_ctx->layout.object_size) {
+    ldout(cct, 20) << "oid " << this->m_oid << " " << this->m_object_off << "~"
+		   << this->m_object_len << ": skip partial discard" << dendl;
+    this->async_finish(0);
+    return;
+  }
+
+  AbstractObjectWriteRequest<I>::send();
 }
 
 template <typename I>

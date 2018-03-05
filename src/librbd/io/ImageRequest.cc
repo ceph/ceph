@@ -276,7 +276,7 @@ void AbstractImageWriteRequest<I>::send_request() {
                   image_ctx.journal->is_journal_appending());
   }
 
-  int ret = prune_object_extents(object_extents);
+  int ret = validate_object_extents(object_extents);
   if (ret < 0) {
     aio_comp->fail(ret);
     return;
@@ -407,28 +407,6 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(bool synchronous) {
 }
 
 template <typename I>
-int ImageDiscardRequest<I>::prune_object_extents(ObjectExtents &object_extents) {
-  I &image_ctx = this->m_image_ctx;
-  CephContext *cct = image_ctx.cct;
-  if (!this->m_skip_partial_discard) {
-    return 0;
-  }
-
-  for (auto p = object_extents.begin(); p != object_extents.end(); ) {
-    if (p->offset + p->length < image_ctx.layout.object_size) {
-      ldout(cct, 20) << "oid " << p->oid << " " << p->offset << "~"
-		     << p->length << " from " << p->buffer_extents
-		     << ": skip partial discard" << dendl;
-      p = object_extents.erase(p);
-    } else {
-      ++p;
-    }
-  }
-
-  return 0;
-}
-
-template <typename I>
 void ImageDiscardRequest<I>::send_image_cache_request() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.image_cache != nullptr);
@@ -447,11 +425,14 @@ ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     uint64_t journal_tid, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
+  int discard_flags = OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE;
+  if (m_skip_partial_discard) {
+    discard_flags |=  OBJECT_DISCARD_FLAG_SKIP_PARTIAL;
+  }
   auto req = ObjectDispatchSpec::create_discard(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
     object_extent.objectno, object_extent.offset, object_extent.length, snapc,
-    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, journal_tid,
-    this->m_trace, on_finish);
+    discard_flags, journal_tid, this->m_trace, on_finish);
   return req;
 }
 
@@ -663,7 +644,8 @@ void ImageCompareAndWriteRequest<I>::update_stats(size_t length) {
 }
 
 template <typename I>
-int ImageCompareAndWriteRequest<I>::prune_object_extents(ObjectExtents &object_extents) {
+int ImageCompareAndWriteRequest<I>::validate_object_extents(
+    const ObjectExtents &object_extents) const {
   if (object_extents.size() > 1)
     return -EINVAL;
 

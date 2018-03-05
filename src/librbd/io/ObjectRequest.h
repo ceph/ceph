@@ -40,8 +40,8 @@ public:
   static ObjectRequest* create_discard(
       ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
       uint64_t object_off, uint64_t object_len, const ::SnapContext &snapc,
-      bool disable_clone_remove, bool update_object_map,
-      const ZTracer::Trace &parent_trace, Context *completion);
+      int discard_flags, const ZTracer::Trace &parent_trace,
+      Context *completion);
   static ObjectRequest* create_write_same(
       ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
       uint64_t object_off, uint64_t object_len, ceph::bufferlist&& data,
@@ -294,14 +294,15 @@ public:
   ObjectDiscardRequest(ImageCtxT *ictx, const std::string &oid,
                        uint64_t object_no, uint64_t object_off,
                        uint64_t object_len, const ::SnapContext &snapc,
-                       bool disable_clone_remove, bool update_object_map,
-                       const ZTracer::Trace &parent_trace, Context *completion)
+                       int discard_flags, const ZTracer::Trace &parent_trace,
+                       Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
                                             object_len, snapc, "discard",
                                             parent_trace, completion),
-      m_update_object_map(update_object_map) {
+      m_discard_flags(discard_flags) {
     if (this->m_full_object) {
-      if (disable_clone_remove && this->has_parent()) {
+      if ((m_discard_flags & OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE) != 0 &&
+          this->has_parent()) {
         // need to hide the parent object instead of child object
         m_discard_action = DISCARD_ACTION_REMOVE_TRUNCATE;
         this->m_object_len = 0;
@@ -337,12 +338,15 @@ public:
     return OBJECT_EXISTS;
   }
 
+  void send() override;
+
 protected:
   bool is_no_op_for_nonexistent_object() const override {
     return (!this->has_parent());
   }
   bool is_object_map_update_enabled() const override {
-    return m_update_object_map;
+    return (
+      (m_discard_flags & OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE) == 0);
   }
   bool is_non_existent_post_write_object_map_state() const override {
     return (m_discard_action == DISCARD_ACTION_REMOVE);
@@ -379,7 +383,7 @@ private:
   };
 
   DiscardAction m_discard_action;
-  bool m_update_object_map;
+  int m_discard_flags;
 
 };
 

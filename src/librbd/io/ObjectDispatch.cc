@@ -58,16 +58,10 @@ bool ObjectDispatch<I>::discard(
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << oid << " " << object_off << "~" << object_len << dendl;
 
-  bool disable_clone_remove = (
-    (discard_flags & OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE) != 0);
-  bool update_object_map = (
-    (discard_flags & OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE) == 0);
-
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   auto req = new ObjectDiscardRequest<I>(m_image_ctx, oid, object_no,
                                          object_off, object_len, snapc,
-                                         disable_clone_remove,
-                                         update_object_map, parent_trace,
+                                         discard_flags, parent_trace,
                                          on_dispatched);
   req->send();
   return true;
