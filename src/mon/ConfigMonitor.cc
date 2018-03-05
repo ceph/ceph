@@ -47,6 +47,7 @@ void ConfigMonitor::update_from_paxos(bool *need_bootstrap)
   version = get_last_committed();
   dout(10) << __func__ << " " << version << dendl;
   load_config();
+  check_all_subs();
 }
 
 void ConfigMonitor::create_pending()
@@ -509,7 +510,6 @@ void ConfigMonitor::tick()
 
 void ConfigMonitor::on_active()
 {
-  check_all_subs();
 }
 
 void ConfigMonitor::load_config()
