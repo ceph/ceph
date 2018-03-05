@@ -36,10 +36,13 @@ suse=false
 [[ $codename =~ sle ]] && suse=true
 
 if [ "$suse" = true ] ; then
-    sudo zypper --non-interactive --no-gpg-checks refresh
-    sudo zypper --non-interactive install --no-recommends git
+    for delay in 60 60 60 60 ; do
+        sudo zypper --non-interactive --no-gpg-checks refresh && break
+        sleep $delay
+    done
+    sudo zypper --non-interactive install --no-recommends git createrepo
 else
-    sudo yum install -y git
+    sudo yum install -y git createrepo
 fi
 
 export BUILDPACKAGES_CANONICAL_TAGS=$canonical_tags
@@ -255,13 +258,6 @@ function build_rpm_repo() {
     local buildarea=$1
     local gitbuilder_host=$2
     local base=$3
-
-    if [ "$suse" = true ] ; then
-        sudo zypper --non-interactive --no-gpg-checks refresh
-        sudo zypper --non-interactive install --no-recommends createrepo
-    else
-        sudo yum install -y createrepo
-    fi
 
     for dir in ${buildarea}/SRPMS ${buildarea}/RPMS/*
     do
