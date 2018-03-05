@@ -494,10 +494,11 @@ int MonClient::authenticate(double timeout)
   until += timeout;
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
+  authenticate_err = 0;
   while (!active_con && !authenticate_err) {
     if (timeout > 0.0) {
       int r = auth_cond.WaitUntil(monc_lock, until);
-      if (r == ETIMEDOUT) {
+      if (r == ETIMEDOUT && !active_con) {
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -r;
       }
