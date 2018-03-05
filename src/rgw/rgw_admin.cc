@@ -3014,7 +3014,15 @@ int main(int argc, const char **argv)
 
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
-  rgw::curl::setup_curl(boost::none);
+
+  struct rgw_curl_setup {
+    rgw_curl_setup() {
+      rgw::curl::setup_curl(boost::none);
+    }
+    ~rgw_curl_setup() {
+      rgw::curl::cleanup_curl();
+    }
+  } curl_cleanup;
 
   StoreDestructor store_destructor(store);
 
@@ -7247,6 +7255,5 @@ next:
     }
   }
 
-  rgw::curl::cleanup_curl();
   return 0;
 }
