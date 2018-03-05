@@ -1,5 +1,5 @@
 overrides:
   deepsea:
     exec:
-    - suites/basic/health-rgw.sh --cli
+    - suites/basic/health-rgw.sh --mini || true
     - sleep 10000000

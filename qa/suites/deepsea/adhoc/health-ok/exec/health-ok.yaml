@@ -1,5 +1,5 @@
 overrides:
   deepsea:
     exec:
-    - suites/basic/health-mds.sh --cli
+    - suites/basic/health-ok.sh --mini || true
     - sleep 10000000

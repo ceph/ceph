@@ -1,0 +1,5 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/basic/health-mds.sh --mini || true
+    - sleep 10000000

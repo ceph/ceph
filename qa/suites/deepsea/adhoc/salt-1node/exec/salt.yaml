@@ -1,5 +1,4 @@
 overrides:
   deepsea:
     exec:
-    - suites/basic/health-rgw.sh --cli --ssl
     - sleep 10000000

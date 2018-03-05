@@ -1,0 +1,5 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/basic/health-ok.sh --dashboard --mini || true
+    - sleep 10000000
