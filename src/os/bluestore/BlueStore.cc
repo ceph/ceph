@@ -7648,7 +7648,8 @@ int BlueStore::statfs(struct store_statfs_t *buf)
 int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
 {
   dout(20) << __func__ << " pool " << pool_id<< dendl;
-  if (!per_pool_stat_collection) {
+  if (!per_pool_stat_collection ||
+      cct->_conf->bluestore_debug_no_per_pool_stats) {
     dout(20) << __func__ << " not supported in a legacy mode " << dendl;
     return -ENOTSUP;
   }
