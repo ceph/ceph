@@ -15,6 +15,9 @@ class ConfigMonitor : public PaxosService
   version_t version = 0;
   ConfigMap config_map;
   map<string,boost::optional<bufferlist>> pending;
+  string pending_description;
+
+  map<string,bufferlist> current;
 
 public:
   ConfigMonitor(Monitor *m, Paxos *p, const string& service_name);
