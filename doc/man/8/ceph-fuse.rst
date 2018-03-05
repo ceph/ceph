@@ -34,7 +34,7 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 
 .. option:: -d
 
-   Detach from console and daemonize after startup.
+   Run in foreground, send all log otuput to stderr and enable FUSE debugging (-o debug).
 
 .. option:: -c ceph.conf, --conf=ceph.conf
 
