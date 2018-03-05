@@ -31,7 +31,9 @@ class MappingState:
         self.pg_stat = {
             i['pgid']: i['stat_sum'] for i in pg_dump.get('pg_stats', [])
         }
-        self.poolids = [p['pool'] for p in self.osdmap_dump.get('pools', [])]
+        osd_poolids = [p['pool'] for p in self.osdmap_dump.get('pools', [])]
+        pg_poolids = [p['poolid'] for p in pg_dump.get('pool_stats', [])]
+        self.poolids = set(osd_poolids) & set(pg_poolids)
         self.pg_up = {}
         self.pg_up_by_poolid = {}
         for poolid in self.poolids:
@@ -407,6 +409,9 @@ class Module(MgrModule):
         pool_info = {}
         for p in ms.osdmap_dump.get('pools',[]):
             if len(pools) and p['pool_name'] not in pools:
+                continue
+            # skip dead or not-yet-ready pools too
+            if p['pool'] not in ms.poolids:
                 continue
             pe.pool_name[p['pool']] = p['pool_name']
             pe.pool_id[p['pool_name']] = p['pool']
