@@ -2954,12 +2954,18 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
 
     if (!by_user && key.compare(end_key) >= 0) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+      if (truncated) {
+	*truncated = false;
+      }
       key_iter = key;
       return 0;
     }
 
     if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+      if (truncated) {
+	*truncated = false;
+      }
       key_iter = key;
       return 0;
     }
@@ -3076,7 +3082,7 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
   if (ret < 0)
     return ret;
 
-  if (!more && iter.empty())
+  if (!more)
     return -ENODATA;
 
   return 0;
