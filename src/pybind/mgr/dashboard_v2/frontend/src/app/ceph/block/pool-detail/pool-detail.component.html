@@ -1,0 +1,18 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li i18n
+        class="breadcrumb-item">Block</li>
+    <li i18n
+        class="breadcrumb-item">Pools</li>
+    <li class="breadcrumb-item active"
+        aria-current="page">{{ name }}</li>
+  </ol>
+</nav>
+
+<cd-view-cache [status]="viewCacheStatus"></cd-view-cache>
+
+<cd-table [data]="images"
+          columnMode="flex"
+          [columns]="columns"
+          (fetchData)="loadImages()">
+</cd-table>

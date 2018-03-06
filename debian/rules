@@ -5,7 +5,7 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF
+extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF -DWITH_MGR_DASHBOARD_V2_FRONTEND=OFF
 extraopts += -DWITH_CEPHFS_JAVA=ON
 extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
