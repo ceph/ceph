@@ -169,6 +169,7 @@ class DaemonStateIndex
   void insert(DaemonStatePtr dm);
   bool exists(const DaemonKey &key) const;
   DaemonStatePtr get(const DaemonKey &key);
+  void rm(const DaemonKey &key);
 
   // Note that these return by value rather than reference to avoid
   // callers needing to stay in lock while using result.  Callers must
