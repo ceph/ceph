@@ -4259,6 +4259,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
 
     if (f) {
+      f->open_object_section("pool");
+      f->dump_string("pool", poolstr);
+      f->dump_int("pool_id", pool);
       for(choices_set_t::const_iterator it = selected_choices.begin();
 	  it != selected_choices.end(); ++it) {
 	choices_map_t::const_iterator i;
@@ -4268,12 +4271,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           }
         }
         assert(i != ALL_CHOICES.end());
-        bool pool_opt = pool_opts_t::is_opt_name(i->first);
-        if (!pool_opt) {
-          f->open_object_section("pool");
-          f->dump_string("pool", poolstr);
-          f->dump_int("pool_id", pool);
-        }
 	switch(*it) {
 	  case PG_NUM:
 	    f->dump_int("pg_num", p->get_pg_num());
@@ -4404,9 +4401,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MIN_BLOCK:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
-              f->open_object_section("pool");
-              f->dump_string("pool", poolstr);
-              f->dump_int("pool_id", pool);
               if(*it == CSUM_TYPE) {
                 int val;
                 p->opts.get(pool_opts_t::CSUM_TYPE, &val);
@@ -4414,17 +4408,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
               } else {
                 p->opts.dump(i->first, f.get());
               }
-              f->close_section();
-              f->flush(rdata);
-            }
+	    }
             break;
 	}
-        if (!pool_opt) {
-	  f->close_section();
-	  f->flush(rdata);
-        }
       }
-
+      f->close_section();
+      f->flush(rdata);
     } else /* !f */ {
       for(choices_set_t::const_iterator it = selected_choices.begin();
 	  it != selected_choices.end(); ++it) {
