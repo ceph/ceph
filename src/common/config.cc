@@ -987,7 +987,8 @@ void md_config_t::get_config_bl(
 int md_config_t::get_val(const std::string &key, char **buf, int len) const
 {
   Mutex::Locker l(lock);
-  return _get_val_cstr(key, buf, len);
+  string k(ConfFile::normalize_key_name(key));
+  return _get_val_cstr(k, buf, len);
 }
 
 int md_config_t::get_val(
@@ -1000,7 +1001,8 @@ int md_config_t::get_val(
 Option::value_t md_config_t::get_val_generic(const std::string &key) const
 {
   Mutex::Locker l(lock);
-  return _get_val(key);
+  string k(ConfFile::normalize_key_name(key));
+  return _get_val(k);
 }
 
 Option::value_t md_config_t::_get_val(
