@@ -57,6 +57,25 @@
 * The -f option of the rados tool now means "--format" instead of "--force",
   for consistency with the ceph tool.
 
->= 12.2.3
+
+>= 13.0.2
 ---------
+
+The ceph-rest-api command-line tool (obsoleted by the MGR "restful" module and
+deprecated since v12.2.5) has been dropped.
+
+There is a MGR module called "restful" which provides similar functionality
+via a "pass through" method. See http://docs.ceph.com/docs/master/mgr/restful
+for details.
+
+
+>= 12.2.5
+---------
+
+The ceph-rest-api command-line tool included in the ceph-mon package has been
+obsoleted by the MGR "restful" module. The ceph-rest-api tool is hereby
+declared deprecated and will be dropped in Mimic.
+
+The MGR "restful" module provides similar functionality via a "pass through"
+method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
 

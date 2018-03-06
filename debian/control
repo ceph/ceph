@@ -51,7 +51,6 @@ Build-Depends: bc,
                python (>= 2.7),
                python-all-dev,
                python-cherrypy3,
-               python-jinja2,
                python-nose,
                python-pecan,
                python-bcrypt,
@@ -174,6 +173,7 @@ Package: ceph-mgr
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          python-cherrypy3,
+         python-jinja2,
          python-openssl,
          python-pecan,
          python-bcrypt,
@@ -207,7 +207,6 @@ Description: debugging symbols for ceph-mgr
 Package: ceph-mon
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         python-flask,
          ${misc:Depends},
          ${shlibs:Depends},
 Recommends: ceph-common,
