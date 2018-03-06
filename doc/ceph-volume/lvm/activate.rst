@@ -67,7 +67,7 @@ ensure that the correct device is linked.
 
 Existing OSDs
 -------------
-For exsiting OSDs that have been deployed with different tooling, the only way
+For existing OSDs that have been deployed with different tooling, the only way
 to port them over to the new mechanism is to prepare them again (losing data).
 See :ref:`ceph-volume-lvm-existing-osds` for details on how to proceed.
 
