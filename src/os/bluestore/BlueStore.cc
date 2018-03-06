@@ -6666,6 +6666,7 @@ int BlueStore::_fsck(bool deep, bool repair)
   // structs
   statfs(&actual_statfs);
   expected_statfs.total = actual_statfs.total;
+  expected_statfs.internally_reserved = actual_statfs.internally_reserved;
   expected_statfs.available = actual_statfs.available;
   expected_statfs.internal_metadata = actual_statfs.internal_metadata;
   expected_statfs.omap_allocated = actual_statfs.omap_allocated;
@@ -7591,7 +7592,7 @@ int BlueStore::get_devices(set<string> *ls)
   return 0;
 }
 
-int BlueStore::statfs(struct store_statfs_t *buf)
+void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
 {
   buf->reset();
 
@@ -7600,11 +7601,14 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   uint64_t bfree = alloc->get_free();
 
   if (bluefs) {
+    int64_t bluefs_total = bluefs->get_total(bluefs_shared_bdev);
+    int64_t bluefs_free = bluefs->get_free(bluefs_shared_bdev);
     // part of our shared device is "free" according to BlueFS, but we
     // can't touch bluestore_bluefs_min of it.
     int64_t shared_available = std::min(
-      bluefs->get_free(bluefs_shared_bdev),
-      bluefs->get_total(bluefs_shared_bdev) - cct->_conf->bluestore_bluefs_min);
+      bluefs_free,
+      int64_t(bluefs_total - cct->_conf->bluestore_bluefs_min));
+    buf->internally_reserved = bluefs_total - shared_available;
     if (shared_available > 0) {
       bfree += shared_available;
     }
@@ -7616,15 +7620,6 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     buf->internal_metadata =
       std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
       - buf->omap_allocated;
-  }
-
-  {
-    std::lock_guard l(vstatfs_lock);
-    buf->allocated = vstatfs.allocated();
-    buf->data_stored = vstatfs.stored();
-    buf->data_compressed = vstatfs.compressed();
-    buf->data_compressed_original = vstatfs.compressed_original();
-    buf->data_compressed_allocated = vstatfs.compressed_allocated();
   }
 
   uint64_t thin_total, thin_avail;
@@ -7640,6 +7635,19 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     buf->total += bdev->get_size();
   }
   buf->available = bfree;
+}
+
+int BlueStore::statfs(struct store_statfs_t *buf)
+{
+  _get_statfs_overall(buf);
+  {
+    std::lock_guard l(vstatfs_lock);
+    buf->allocated = vstatfs.allocated();
+    buf->data_stored = vstatfs.stored();
+    buf->data_compressed = vstatfs.compressed();
+    buf->data_compressed_original = vstatfs.compressed_original();
+    buf->data_compressed_allocated = vstatfs.compressed_allocated();
+  }
 
   dout(20) << __func__ << " " << *buf << dendl;
   return 0;
