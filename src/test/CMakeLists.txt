@@ -59,7 +59,7 @@ if(WITH_RBD)
   add_subdirectory(rbd_mirror)
 endif(WITH_RBD)
 add_subdirectory(system)
-if(WITH_FIO)
+if(WITH_FIO OR WITH_SYSTEM_FIO)
   add_subdirectory(fio)
 endif()
 

@@ -499,10 +499,16 @@ option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 
-option(WITH_FIO "Support for fio engines" OFF)
-if(WITH_FIO)
+# fio
+option(WITH_FIO "build with fio plugin enabled" OFF)
+option(WITH_SYSTEM_FIO "require and build with system fio" OFF)
+if(WITH_SYSTEM_FIO)
   find_package(fio REQUIRED)
-endif(WITH_FIO)
+elseif(WITH_FIO)
+  set(FIO_INCLUDE_DIR ${CMAKE_BINARY_DIR}/src/fio)
+  include(BuildFIO)
+  build_fio()
+endif()
 
 if(LINUX)
   add_definitions(-D__linux__)
