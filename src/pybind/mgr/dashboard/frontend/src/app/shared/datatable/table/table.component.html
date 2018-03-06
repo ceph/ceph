@@ -114,6 +114,13 @@
   <a [routerLink]="[row.cdLink]">{{ value }}</a>
 </ng-template>
 
+<ng-template #checkIconTpl
+             let-value="value">
+  <i class="fa fa-check fa-fw"
+     [hidden]="!value"></i>
+</ng-template>
+
+
 <ng-template #perSecondTpl
              let-row="row"
              let-value="value">

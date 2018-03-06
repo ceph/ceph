@@ -1,27 +1,27 @@
 import { HttpClientModule } from '@angular/common/http';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { BsDropdownModule } from 'ngx-bootstrap';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { SharedModule } from '../../../shared/shared.module';
-import { PerformanceCounterModule } from '../../performance-counter/performance-counter.module';
-import { RgwDaemonDetailsComponent } from '../rgw-daemon-details/rgw-daemon-details.component';
-import { RgwDaemonListComponent } from './rgw-daemon-list.component';
+import { RgwUserDetailsComponent } from '../rgw-user-details/rgw-user-details.component';
+import { RgwUserListComponent } from './rgw-user-list.component';
 
-describe('RgwDaemonListComponent', () => {
-  let component: RgwDaemonListComponent;
-  let fixture: ComponentFixture<RgwDaemonListComponent>;
+describe('RgwUserListComponent', () => {
+  let component: RgwUserListComponent;
+  let fixture: ComponentFixture<RgwUserListComponent>;
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
       declarations: [
-        RgwDaemonListComponent,
-        RgwDaemonDetailsComponent
+        RgwUserListComponent,
+        RgwUserDetailsComponent
       ],
       imports: [
         HttpClientModule,
+        BsDropdownModule.forRoot(),
         TabsModule.forRoot(),
-        PerformanceCounterModule,
         SharedModule
       ]
     })
@@ -29,7 +29,7 @@ describe('RgwDaemonListComponent', () => {
   }));
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(RgwDaemonListComponent);
+    fixture = TestBed.createComponent(RgwUserListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

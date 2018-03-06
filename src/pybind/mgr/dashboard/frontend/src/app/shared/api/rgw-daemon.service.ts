@@ -9,18 +9,10 @@ export class RgwDaemonService {
   constructor(private http: HttpClient) { }
 
   list() {
-    return this.http.get(this.url)
-      .toPromise()
-      .then((resp: any) => {
-        return resp;
-      });
+    return this.http.get(this.url);
   }
 
   get(id: string) {
-    return this.http.get(`${this.url}/${id}`)
-      .toPromise()
-      .then((resp: any) => {
-        return resp;
-      });
+    return this.http.get(`${this.url}/${id}`);
   }
 }

@@ -4,17 +4,17 @@
         class="breadcrumb-item">Object Gateway</li>
     <li i18n
         class="breadcrumb-item active"
-        aria-current="page">Daemons</li>
+        aria-current="page">Users</li>
   </ol>
 </nav>
-
-<cd-table [data]="daemons"
+<cd-table [data]="users"
           [columns]="columns"
           columnMode="flex"
           selectionType="single"
           (updateSelection)="updateSelection($event)"
-          (fetchData)="getDaemonList()">
-  <cd-rgw-daemon-details cdTableDetail
-                         [selection]="selection">
-  </cd-rgw-daemon-details>
+          identifier="user_id"
+          (fetchData)="getUserList()">
+  <cd-rgw-user-details cdTableDetail
+                       [selection]="selection">
+  </cd-rgw-user-details>
 </cd-table>

@@ -4,17 +4,18 @@
         class="breadcrumb-item">Object Gateway</li>
     <li i18n
         class="breadcrumb-item active"
-        aria-current="page">Daemons</li>
+        aria-current="page">Buckets</li>
   </ol>
 </nav>
-
-<cd-table [data]="daemons"
+<cd-table [data]="buckets"
           [columns]="columns"
           columnMode="flex"
           selectionType="single"
           (updateSelection)="updateSelection($event)"
-          (fetchData)="getDaemonList()">
-  <cd-rgw-daemon-details cdTableDetail
+          identifier="bucket"
+          (fetchData)="getBucketList()"
+          #table>
+  <cd-rgw-bucket-details cdTableDetail
                          [selection]="selection">
-  </cd-rgw-daemon-details>
+  </cd-rgw-bucket-details>
 </cd-table>
