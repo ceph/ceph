@@ -844,7 +844,7 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
 
     echo Populating config ...
-    cat <<EOF | $CEPH_BIN/ceph config assimilate-conf -i -
+    cat <<EOF | $CEPH_BIN/ceph -c ceph.conf config assimilate-conf -i -
 [global]
 osd_pool_default_size = $OSD_POOL_DEFAULT_SIZE
 osd_pool_default_min_size = 1
@@ -872,7 +872,7 @@ EOF
 
     if [ "$debug" -ne 0 ]; then
 	echo Setting debug configs ...
-	cat <<EOF | $CEPH_BIN/ceph config assimilate-conf -i -
+	cat <<EOF | $CEPH_BIN/ceph -c ceph.conf config assimilate-conf -i -
 [mgr]
 debug_ms = 1
 debug_mgr = 20
