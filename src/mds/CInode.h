@@ -210,8 +210,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int DUMP_STATE =            (1 << 3);
   static const int DUMP_CAPS =             (1 << 4);
   static const int DUMP_PATH =             (1 << 5);
+  static const int DUMP_DIRFRAGS =         (1 << 6);
   static const int DUMP_ALL =              (-1);
-  static const int DUMP_DEFAULT = DUMP_ALL & (~DUMP_PATH);
+  static const int DUMP_DEFAULT = DUMP_ALL & (~DUMP_PATH) & (~DUMP_DIRFRAGS);
 
   // -- state --
   static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
@@ -533,7 +534,7 @@ public:
   }
   bool get_dirfrags_under(frag_t fg, std::list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);
-  void get_dirfrags(std::list<CDir*>& ls);
+  void get_dirfrags(std::list<CDir*>& ls) const;
   void get_nested_dirfrags(std::list<CDir*>& ls);
   void get_subtree_dirfrags(std::list<CDir*>& ls);
   CDir *get_or_open_dirfrag(MDCache *mdcache, frag_t fg);

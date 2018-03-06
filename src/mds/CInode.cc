@@ -601,7 +601,7 @@ CDir *CInode::get_approx_dirfrag(frag_t fg)
   return NULL;
 }	
 
-void CInode::get_dirfrags(std::list<CDir*>& ls) 
+void CInode::get_dirfrags(std::list<CDir*>& ls) const
 {
   // all dirfrags
   for (const auto &p : dirfrags) {
@@ -4355,6 +4355,19 @@ void CInode::dump(Formatter *f, int flags) const
       f->open_object_section("mds_cap_wanted");
       f->dump_int("rank", p.first);
       f->dump_string("cap", ccap_string(p.second));
+      f->close_section();
+    }
+    f->close_section();
+  }
+
+  if (flags & DUMP_DIRFRAGS) {
+    f->open_array_section("dirfrags");
+    list<CDir*> dfs;
+    get_dirfrags(dfs);
+    for(const auto &dir: dfs) {
+      f->open_object_section("dir");
+      dir->dump(f, CDir::DUMP_DEFAULT | CDir::DUMP_ITEMS);
+      dir->check_rstats();
       f->close_section();
     }
     f->close_section();
