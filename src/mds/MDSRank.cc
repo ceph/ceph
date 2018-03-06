@@ -1861,22 +1861,22 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
              command == "ops") {
     if (!op_tracker.dump_ops_in_flight(f)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+	  please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_blocked_ops") {
     if (!op_tracker.dump_ops_in_flight(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+	Please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_historic_ops") {
     if (!op_tracker.dump_historic_ops(f)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+	  please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_historic_ops_by_duration") {
     if (!op_tracker.dump_historic_ops(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+	  please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "osdmap barrier") {
     int64_t target_epoch = 0;
