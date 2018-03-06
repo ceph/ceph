@@ -1,6 +1,9 @@
-import { Component, Input, OnChanges, OnInit } from '@angular/core';
+import { Component, ElementRef, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
+import * as moment from 'moment';
+
+import { ChartTooltip } from '../../../shared/models/chart-tooltip';
 
 @Component({
   selector: 'cd-cephfs-chart',
@@ -8,6 +11,9 @@ import * as _ from 'lodash';
   styleUrls: ['./cephfs-chart.component.scss']
 })
 export class CephfsChartComponent implements OnChanges, OnInit {
+  @ViewChild('chartCanvas') chartCanvas: ElementRef;
+  @ViewChild('chartTooltip') chartTooltip: ElementRef;
+
   @Input() mdsCounter: any;
 
   lhsCounter = 'mds.inodes';
@@ -21,6 +27,27 @@ export class CephfsChartComponent implements OnChanges, OnInit {
     if (_.isUndefined(this.mdsCounter)) {
       return;
     }
+
+    const getTitle = title => {
+      return moment(title).format('LTS');
+    };
+
+    const getStyleTop = tooltip => {
+      return tooltip.caretY - tooltip.height - 15 + 'px';
+    };
+
+    const getStyleLeft = tooltip => {
+      return tooltip.caretX + 'px';
+    };
+
+    const chartTooltip = new ChartTooltip(
+      this.chartCanvas,
+      this.chartTooltip,
+      getStyleLeft,
+      getStyleTop
+    );
+    chartTooltip.getTitle = getTitle;
+    chartTooltip.checkOffset = true;
 
     const lhsData = this.convert_timeseries(this.mdsCounter[this.lhsCounter]);
     const rhsData = this.delta_timeseries(this.mdsCounter[this.rhsCounter]);
@@ -72,6 +99,15 @@ export class CephfsChartComponent implements OnChanges, OnInit {
               min: 0
             }
           ]
+        },
+        tooltips: {
+          enabled: false,
+          mode: 'index',
+          intersect: false,
+          position: 'nearest',
+          custom: tooltip => {
+            chartTooltip.customTooltips(tooltip);
+          }
         }
       },
       chartType: 'line'
