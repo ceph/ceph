@@ -12,9 +12,9 @@ import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.p
 })
 export class RgwDaemonListComponent {
 
-  columns: Array<CdTableColumn> = [];
-  daemons: Array<object> = [];
-  selection = new CdTableSelection();
+  columns: CdTableColumn[] = [];
+  daemons: object[] = [];
+  selection: CdTableSelection = new CdTableSelection();
 
   constructor(private rgwDaemonService: RgwDaemonService,
               cephShortVersionPipe: CephShortVersionPipe) {
@@ -40,7 +40,7 @@ export class RgwDaemonListComponent {
 
   getDaemonList() {
     this.rgwDaemonService.list()
-      .then((resp) => {
+      .subscribe((resp: object[]) => {
         this.daemons = resp;
       });
   }

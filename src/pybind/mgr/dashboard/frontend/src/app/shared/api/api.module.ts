@@ -11,7 +11,9 @@ import { OsdService } from './osd.service';
 import { PoolService } from './pool.service';
 import { RbdMirroringService } from './rbd-mirroring.service';
 import { RbdService } from './rbd.service';
+import { RgwBucketService } from './rgw-bucket.service';
 import { RgwDaemonService } from './rgw-daemon.service';
+import { RgwUserService } from './rgw-user.service';
 import { TablePerformanceCounterService } from './table-performance-counter.service';
 import { TcmuIscsiService } from './tcmu-iscsi.service';
 
@@ -29,7 +31,9 @@ import { TcmuIscsiService } from './tcmu-iscsi.service';
     PoolService,
     RbdService,
     RbdMirroringService,
+    RgwBucketService,
     RgwDaemonService,
+    RgwUserService,
     TablePerformanceCounterService,
     TcmuIscsiService
   ]
