@@ -83,6 +83,7 @@ private:
 
 
 /* A pre-packaged spinlock type modelling BasicLockable: */
+template <std::size_t MaxTriesV = 32>
 class spinlock final
 {
   // Not using atomic_flag anymore because it doesn't
@@ -99,8 +100,8 @@ public:
   void unlock() noexcept;
 };
 
-// Free functions:
-inline void spinlock::lock()
+template <std::size_t MaxTriesV>
+inline void spinlock<MaxTriesV>::lock()
 {
   bool expected = false;
   if (likely(locked.compare_exchange_weak(expected, true,
@@ -119,7 +120,7 @@ inline void spinlock::lock()
     do {
       emit_pause();
 
-      if if (++tries == 32) {
+      if constexpr (MaxTriesV) if (++tries == MaxTriesV) {
         // Oops, things went really bad. There was no state change
         // for many iterations. This could happen when lock holder
         // gets stuck because of e.g. being preempted. Most likely
@@ -141,7 +142,8 @@ inline void spinlock::lock()
                                          std::memory_order_relaxed));
 }
 
-inline void spinlock::unlock() noexcept
+template <std::size_t MaxTriesV>
+inline void spinlock<MaxTriesV>::unlock() noexcept
 {
   locked.store(false, std::memory_order_release);
 }
@@ -151,6 +153,6 @@ inline void spinlock::unlock() noexcept
 
 
 namespace ceph {
-  using ceph::spin::spinlock;
+  using spinlock = ceph::spin::spinlock<32>;
 } // namespace ceph
 #endif
