@@ -66,4 +66,5 @@ if(WITH_MGR)
   install(DIRECTORY
     ${CMAKE_CURRENT_SOURCE_DIR}/mgr
     DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
+  add_subdirectory(mgr)
 endif(WITH_MGR)

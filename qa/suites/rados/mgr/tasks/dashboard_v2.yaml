@@ -1,0 +1,33 @@
+
+tasks:
+  - install:
+  - ceph:
+      # tests may leave mgrs broken, so don't try and call into them
+      # to invoke e.g. pg dump during teardown.
+      wait-for-scrub: false
+      log-whitelist:
+        - overall HEALTH_
+        - \(MGR_DOWN\)
+        - \(PG_
+        - replacing it with standby
+        - No standby daemons available
+        - \(FS_DEGRADED\)
+        - \(MDS_FAILED\)
+        - \(MDS_DEGRADED\)
+        - \(FS_WITH_FAILED_MDS\)
+        - \(MDS_DAMAGE\)
+  - rgw: [client.0]
+  - cephfs_test_runner:
+      modules:
+        - tasks.mgr.test_dashboard_v2
+        - tasks.mgr.dashboard_v2.test_auth
+        - tasks.mgr.dashboard_v2.test_cephfs
+        - tasks.mgr.dashboard_v2.test_cluster_configuration
+        - tasks.mgr.dashboard_v2.test_dashboard
+        - tasks.mgr.dashboard_v2.test_host
+        - tasks.mgr.dashboard_v2.test_monitor
+        - tasks.mgr.dashboard_v2.test_osd
+        - tasks.mgr.dashboard_v2.test_perf_counters
+        - tasks.mgr.dashboard_v2.test_summary
+        - tasks.mgr.dashboard_v2.test_rgw
+        - tasks.mgr.dashboard_v2.test_rbd
