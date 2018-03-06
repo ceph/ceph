@@ -191,7 +191,7 @@ void EventCenter::set_owner()
   if (!global_centers) {
     global_centers = &cct->lookup_or_create_singleton_object<
       EventCenter::AssociatedCenters>(
-	"AsyncMessenger::EventCenter::global_center::" + type);
+	"AsyncMessenger::EventCenter::global_center::" + type, true);
     assert(global_centers);
     global_centers->centers[idx] = this;
     if (driver->need_wakeup()) {
