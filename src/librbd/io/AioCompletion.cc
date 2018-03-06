@@ -103,9 +103,7 @@ void AioCompletion::complete() {
   }
 
   if (ictx != nullptr && event_notify && ictx->event_socket.is_valid()) {
-    ictx->completed_reqs_lock.Lock();
-    ictx->completed_reqs.push_back(&m_xlist_item);
-    ictx->completed_reqs_lock.Unlock();
+    ictx->completed_reqs.push(this);
     ictx->event_socket.notify();
   }
   state = AIO_STATE_COMPLETE;

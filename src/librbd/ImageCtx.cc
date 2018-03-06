@@ -110,7 +110,6 @@ public:
       timestamp_lock(util::unique_lock_name("librbd::ImageCtx::timestamp_lock", this)),
       async_ops_lock(util::unique_lock_name("librbd::ImageCtx::async_ops_lock", this)),
       copyup_list_lock(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
-      completed_reqs_lock(util::unique_lock_name("librbd::ImageCtx::completed_reqs_lock", this)),
       extra_read_flags(0),
       old_format(false),
       order(0), size(0), features(0),
@@ -123,6 +122,7 @@ public:
       operations(new Operations<>(*this)),
       exclusive_lock(nullptr), object_map(nullptr),
       io_work_queue(nullptr), op_work_queue(nullptr),
+      completed_reqs(32),
       asok_hook(nullptr),
       trace_endpoint("librbd")
   {
@@ -710,13 +710,6 @@ public:
     }
 
     on_finish->complete(0);
-  }
-
-  void ImageCtx::clear_pending_completions() {
-    Mutex::Locker l(completed_reqs_lock);
-    ldout(cct, 10) << "clear pending AioCompletion: count="
-                   << completed_reqs.size() << dendl;
-    completed_reqs.clear();
   }
 
   void ImageCtx::apply_metadata(const std::map<std::string, bufferlist> &meta,
