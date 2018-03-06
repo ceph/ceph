@@ -40,6 +40,7 @@ librgw_la_SOURCES = \
 	rgw/rgw_frontend.cc \
 	rgw/rgw_gc.cc \
 	rgw/rgw_http_client.cc \
+	rgw/rgw_http_client_curl.cc \
 	rgw/rgw_json_enc.cc \
 	rgw/rgw_keystone.cc \
 	rgw/rgw_loadgen.cc \
@@ -219,6 +220,7 @@ noinst_HEADERS += \
 	rgw/rgw_os_lib.h \
 	rgw/rgw_orphan.h \
 	rgw/rgw_http_client.h \
+	rgw/rgw_http_client_curl.h \
 	rgw/rgw_swift.h \
 	rgw/rgw_swift_auth.h \
 	rgw/rgw_quota.h \
