@@ -296,6 +296,7 @@ void usage()
   cout << "                             (NOTE: required to delete a non-empty bucket)\n";
   cout << "   --sync-stats              option to 'user stats', update user stats with current\n";
   cout << "                             stats reported by user's buckets indexes\n";
+  cout << "   --sync-detail             option to 'bucket sync status', display lagging objcets\n";
   cout << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
   cout << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
@@ -2493,6 +2494,7 @@ int main(int argc, const char **argv)
   int include_all = false;
 
   int sync_stats = false;
+  int sync_detail = false;
   int bypass_gc = false;
   int warnings_only = false;
   int inconsistent_index = false;
@@ -2729,6 +2731,8 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &sync_detail, NULL, "--sync-detail", (char*)NULL)) {
+     // do noting
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &extra_info, NULL, "--extra-info", (char*)NULL)) {
@@ -6645,16 +6649,42 @@ next:
       cerr << "ERROR: sync.init() returned ret=" << ret << std::endl;
       return -ret;
     }
+
     ret = sync.read_sync_status();
     if (ret < 0) {
       cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
       return -ret;
     }
 
-    map<int, rgw_bucket_shard_sync_info>& sync_status = sync.get_sync_status();
+    if (!sync_detail) {
+      map<int, rgw_bucket_shard_sync_info>& sync_status = sync.get_sync_status();
 
-    encode_json("sync_status", sync_status, formatter);
-    formatter->flush(cout);
+      encode_json("sync_status", sync_status, formatter);
+      formatter->flush(cout);
+    } else {
+      if (max_entries < 0 ) {
+        max_entries = 50; //listing 100 lagging objects of each bucket shard is enough
+      }
+      
+      ret = sync.read_sync_status_detail(max_entries);
+      if (ret < 0) {
+        cerr << "ERROR: sync.read_sync_status_detail() returned ret=" << ret << std::endl;
+        return -ret;
+      }
+
+      map<int, set<rgw_obj_key>>& lagging_objects = sync.get_lagging_objects();
+
+      formatter->open_array_section("sync_detail");
+      for (const auto& entry : lagging_objects) {
+        formatter->open_object_section("bucket_shard_info");
+        formatter->dump_int("shard-id", entry.first);
+        encode_json("lagging_objects", entry.second, formatter);
+        formatter->close_section();//bs
+        formatter->flush(cout);
+      }
+      formatter->close_section();//sync_detail
+      formatter->flush(cout);
+    }
   }
 
  if (opt_cmd == OPT_BUCKET_SYNC_RUN) {
