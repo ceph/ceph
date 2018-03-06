@@ -35,14 +35,18 @@ suse=false
 [[ $codename =~ suse ]] && suse=true
 [[ $codename =~ sle ]] && suse=true
 
+CREATEREPO=createrepo
 if [ "$suse" = true ] ; then
+    source /etc/os-release
+    majorvers=$(echo $VERSION_ID | cut -d \. -f 1-1)
+    test $majorvers -ge 15 && CREATEREPO=createrepo_c
     for delay in 60 60 60 60 ; do
         sudo zypper --non-interactive --no-gpg-checks refresh && break
         sleep $delay
     done
-    sudo zypper --non-interactive install --no-recommends git createrepo
+    sudo zypper --non-interactive install --no-recommends git $CREATEREPO
 else
-    sudo yum install -y git createrepo
+    sudo yum install -y git $CREATEREPO
 fi
 
 export BUILDPACKAGES_CANONICAL_TAGS=$canonical_tags
@@ -261,7 +265,7 @@ function build_rpm_repo() {
 
     for dir in ${buildarea}/SRPMS ${buildarea}/RPMS/*
     do
-        createrepo ${dir}
+        $CREATEREPO ${dir}
     done
 
     local sha1_dir=${buildarea}/../$codename/$base/sha1/$sha1
