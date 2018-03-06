@@ -4248,6 +4248,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	goto reply;
       }
 
+      if (pool_opts_t::is_opt_name(var) &&
+	  !p->opts.is_set(pool_opts_t::get_opt_desc(var).key)) {
+	ss << "option '" << var << "' is not set on pool '" << poolstr << "'";
+	r = -ENOENT;
+	goto reply;
+      }
+
       selected_choices.insert(selected);
     }
 
