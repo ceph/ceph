@@ -341,9 +341,9 @@ int main(int argc, char** argv) {
 
 /*
  * Local Variables:
- * compile-command: "cd ../.. ; make -j4 ceph_erasure_code_benchmark &&
+ * compile-command: "cd ../../../build ; make -j4 ceph_erasure_code_benchmark &&
  *   valgrind --tool=memcheck --leak-check=full \
- *      ./ceph_erasure_code_benchmark \
+ *      ./bin/ceph_erasure_code_benchmark \
  *      --plugin jerasure \
  *      --parameter directory=lib \
  *      --parameter technique=reed_sol_van \
