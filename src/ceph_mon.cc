@@ -197,7 +197,6 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
   // We need to specify some default values that may be overridden by the
   // user, that are specific to the monitor.  The options we are overriding
@@ -214,12 +213,13 @@ int main(int argc, const char **argv)
   //  leveldb_block_size        = 64*1024       = 65536     // 64KB
   //  leveldb_compression       = false
   //  leveldb_log               = ""
-  vector<const char*> def_args;
-  def_args.push_back("--leveldb-write-buffer-size=33554432");
-  def_args.push_back("--leveldb-cache-size=536870912");
-  def_args.push_back("--leveldb-block-size=65536");
-  def_args.push_back("--leveldb-compression=false");
-  def_args.push_back("--leveldb-log=");
+  map<string,string> defaults = {
+    { "leveldb_write_buffer_size", "33554432" },
+    { "leveldb_cache_size", "536870912" },
+    { "leveldb_block_size", "65536" },
+    { "leveldb_compression", "false"},
+    { "leveldb_log", "" }
+  };
 
   int flags = 0;
   {
@@ -241,7 +241,10 @@ int main(int argc, const char **argv)
     }
   }
 
-  auto cct = global_init(&def_args, args,
+  // don't try to get config from mon cluster during startup
+  flags |= CINIT_FLAG_NO_MON_CONFIG;
+
+  auto cct = global_init(&defaults, args,
 			 CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON,
 			 flags, "mon_data");
   ceph_heap_profiler_init();

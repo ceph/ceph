@@ -1881,15 +1881,7 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
     if (!keyfile.empty()) {
       bufferlist keybl;
       string err;
-      if (keyfile == "-") {
-	static_assert(1024 * 1024 >
-		      (sizeof(CryptoKey) - sizeof(bufferptr) +
-		       sizeof(__u16) + 16 /* AES_KEY_LEN */ + 3 - 1) / 3. * 4.,
-		      "1MB should be enough for a base64 encoded CryptoKey");
-	r = keybl.read_fd(STDIN_FILENO, 1024 * 1024);
-      } else {
-	r = keybl.read_file(keyfile.c_str(), &err);
-      }
+      r = keybl.read_file(keyfile.c_str(), &err);
       if (r < 0) {
 	derr << __func__ << " failed to read keyfile " << keyfile << ": "
 	     << err << ": " << cpp_strerror(r) << dendl;
@@ -5828,6 +5820,14 @@ COMMAND("config set " \
 	"name=key,type=CephString name=value,type=CephString",
 	"Set a configuration option at runtime (not persistent)",
 	"osd", "rw", "cli,rest")
+COMMAND("config get " \
+	"name=key,type=CephString",
+	"Get a configuration option at runtime",
+	"osd", "r", "cli,rest")
+COMMAND("config unset " \
+	"name=key,type=CephString",
+	"Unset a configuration option at runtime (not persistent)",
+	"osd", "rw", "cli,rest")
 COMMAND("cluster_log " \
 	"name=level,type=CephChoices,strings=error,warning,info,debug " \
 	"name=message,type=CephString,n=N",
@@ -5951,7 +5951,28 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "key", key);
     cmd_getval(cct, cmdmap, "value", val);
     osd_lock.Unlock();
-    r = cct->_conf->set_val(key, val, true, &ss);
+    r = cct->_conf->set_val(key, val, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
+    osd_lock.Lock();
+  }
+  else if (prefix == "config get") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    osd_lock.Unlock();
+    std::string val;
+    r = cct->_conf->get_val(key, &val);
+    if (r == 0) {
+      ds << val;
+    }
+    osd_lock.Lock();
+  }
+  else if (prefix == "config unset") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    osd_lock.Unlock();
+    r = cct->_conf->rm_val(key);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }

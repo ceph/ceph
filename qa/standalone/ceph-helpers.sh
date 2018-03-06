@@ -39,11 +39,6 @@ else
 fi
 
 EXTRA_OPTS=""
-if [ -n "$CEPH_LIB" ]; then
-    EXTRA_OPTS+=" --erasure-code-dir $CEPH_LIB"
-    EXTRA_OPTS+=" --plugin-dir $CEPH_LIB"
-    EXTRA_OPTS+=" --osd-class-dir $CEPH_LIB"
-fi
 
 #! @file ceph-helpers.sh
 #  @brief Toolbox to manage Ceph cluster dedicated to testing

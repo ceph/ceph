@@ -132,7 +132,11 @@ COMMAND("service dump",
 COMMAND("service status",
         "dump service state", "service", "r", "cli,rest")
 
-COMMAND("config set " \
-	"name=key,type=CephString name=value,type=CephString",
-	"Set a configuration option at runtime (not persistent)",
-	"mgr", "rw", "cli,rest")
+COMMAND("config show " \
+	"name=who,type=CephString name=key,type=CephString,req=False",
+	"Show running configuration",
+	"mgr", "r", "cli,rest")
+COMMAND("config show-with-defaults " \
+	"name=who,type=CephString",
+	"Show running configuration (including compiled-in defaults)",
+	"mgr", "r", "cli,rest")

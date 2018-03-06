@@ -15,11 +15,14 @@
 #include <random>
 
 #include "include/scope_guard.h"
+#include "include/stringify.h"
 
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
+#include "messages/MConfig.h"
+#include "messages/MGetConfig.h"
 #include "messages/MAuth.h"
 #include "messages/MLogAck.h"
 #include "messages/MAuthReply.h"
@@ -90,67 +93,83 @@ int MonClient::get_monmap()
   return 0;
 }
 
-int MonClient::get_monmap_privately()
+int MonClient::get_monmap_and_config()
 {
   ldout(cct, 10) << __func__ << dendl;
-  Mutex::Locker l(monc_lock);
+  assert(!messenger);
 
-  bool temp_msgr = false;
-  Messenger* smessenger = NULL;
-  if (!messenger) {
-    messenger = smessenger = Messenger::create_client_messenger(cct, "temp_mon_client");
-    if (NULL == messenger) {
-        return -1;
-    }
-    messenger->add_dispatcher_head(this);
-    smessenger->start();
-    temp_msgr = true;
+  int tries = 10;
+
+  utime_t interval;
+  interval.set_from_double(cct->_conf->mon_client_hunt_interval);
+
+  cct->init_crypto();
+
+  int r = build_initial_monmap();
+  if (r < 0) {
+    lderr(cct) << __func__ << " cannot identify monitors to contact" << dendl;
+    goto out;
   }
 
-  int attempt = 10;
+  messenger = Messenger::create_client_messenger(
+    cct, "temp_mon_client");
+  assert(messenger);
+  messenger->add_dispatcher_head(this);
+  messenger->start();
 
-  ldout(cct, 10) << "have " << monmap.epoch << " fsid " << monmap.fsid << dendl;
-
-  std::random_device rd;
-  std::mt19937 rng(rd());
-  assert(monmap.size() > 0);
-  std::uniform_int_distribution<unsigned> ranks(0, monmap.size() - 1);
-  while (monmap.fsid.is_zero()) {
-    auto rank = ranks(rng);
-    auto& pending_con = _add_conn(rank, 0);
-    auto con = pending_con.get_con();
-    ldout(cct, 10) << "querying mon." << monmap.get_name(rank) << " "
-		   << con->get_peer_addr() << dendl;
-    con->send_message(new MMonGetMap);
-
-    if (--attempt == 0)
+  while (tries-- > 0) {
+    r = init();
+    if (r < 0) {
+      goto out_msgr;
+    }
+    r = authenticate(cct->_conf->client_mount_timeout);
+    if (r == -ETIMEDOUT) {
+      shutdown();
+      continue;
+    }
+    if (r < 0) {
+      goto out_shutdown;
+    }
+    if (!monmap.persistent_features.contains_all(
+	  ceph::features::mon::FEATURE_MIMIC)) {
+      ldout(cct,10) << __func__ << " pre-mimic monitor, no config to fetch"
+		    << dendl;
+      r = 0;
       break;
-
-    utime_t interval;
-    interval.set_from_double(cct->_conf->mon_client_hunt_interval);
-    map_cond.WaitInterval(monc_lock, interval);
-
-    if (monmap.fsid.is_zero() && con) {
-      con->mark_down();  // nope, clean that connection up
     }
+    {
+      Mutex::Locker l(monc_lock);
+      while (!got_config && r == 0) {
+	ldout(cct,20) << __func__ << " waiting for config" << dendl;
+	r = map_cond.WaitInterval(monc_lock, interval);
+      }
+      if (got_config) {
+	ldout(cct,10) << __func__ << " success" << dendl;
+	r = 0;
+	break;
+      }
+    }
+    lderr(cct) << __func__ << " failed to get config" << dendl;
+    shutdown();
+    continue;
   }
 
-  if (temp_msgr) {
-    pending_cons.clear();
-    monc_lock.Unlock();
-    messenger->shutdown();
-    if (smessenger)
-      smessenger->wait();
-    delete messenger;
-    messenger = 0;
-    monc_lock.Lock();
+out_shutdown:
+  shutdown();
+
+out_msgr:
+  messenger->shutdown();
+  messenger->wait();
+  delete messenger;
+  messenger = nullptr;
+
+  if (!monmap.fsid.is_zero()) {
+    cct->_conf->set_val("fsid", stringify(monmap.fsid));
   }
 
-  pending_cons.clear();
-
-  if (!monmap.fsid.is_zero())
-    return 0;
-  return -1;
+out:
+  cct->shutdown_crypto();
+  return r;
 }
 
 
@@ -244,6 +263,7 @@ bool MonClient::ms_dispatch(Message *m)
   case CEPH_MSG_MON_GET_VERSION_REPLY:
   case MSG_MON_COMMAND_ACK:
   case MSG_LOGACK:
+  case MSG_CONFIG:
     break;
   default:
     return false;
@@ -299,6 +319,9 @@ bool MonClient::ms_dispatch(Message *m)
       m->put();
     }
     break;
+  case MSG_CONFIG:
+    handle_config(static_cast<MConfig*>(m));
+    break;
   }
   return true;
 }
@@ -347,6 +370,15 @@ void MonClient::handle_monmap(MMonMap *m)
 
   map_cond.Signal();
   want_monmap = false;
+}
+
+void MonClient::handle_config(MConfig *m)
+{
+  ldout(cct,10) << __func__ << " " << *m << dendl;
+  cct->_conf->set_mon_vals(cct, m->config);
+  m->put();
+  got_config = true;
+  map_cond.Signal();
 }
 
 // ----------------------
@@ -436,6 +468,7 @@ void MonClient::shutdown()
   if (initialized) {
     finisher.wait_for_empty();
     finisher.stop();
+    initialized = false;
   }
   monc_lock.Lock();
   timer.shutdown();
@@ -453,6 +486,7 @@ int MonClient::authenticate(double timeout)
   }
 
   _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
+  _sub_want("config", 0, 0);
   if (!_opened())
     _reopen_session();
 
@@ -460,10 +494,11 @@ int MonClient::authenticate(double timeout)
   until += timeout;
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
+  authenticate_err = 0;
   while (!active_con && !authenticate_err) {
     if (timeout > 0.0) {
       int r = auth_cond.WaitUntil(monc_lock, until);
-      if (r == ETIMEDOUT) {
+      if (r == ETIMEDOUT && !active_con) {
 	ldout(cct, 0) << "authenticate timed out after " << timeout << dendl;
 	authenticate_err = -r;
       }

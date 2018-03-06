@@ -106,12 +106,34 @@ class DaemonState
   std::map<std::string, std::string> service_status;
   utime_t last_service_beacon;
 
+  // running config
+  std::map<std::string,std::map<int32_t,std::string>> config;
+
+  // mon config values we failed to set
+  std::map<std::string,std::string> ignored_mon_config;
+
+  // compiled-in config defaults (rarely used, so we leave them encoded!)
+  bufferlist config_defaults_bl;
+  std::map<std::string,std::string> config_defaults;
+
   // The perf counters received in MMgrReport messages
   DaemonPerfCounters perf_counters;
 
   DaemonState(PerfCounterTypes &types_)
     : perf_counters(types_)
   {
+  }
+
+  const std::map<std::string,std::string>& get_config_defaults() {
+    if (config_defaults.empty() &&
+	config_defaults_bl.length()) {
+      auto p = config_defaults_bl.begin();
+      try {
+	decode(config_defaults, p);
+      } catch (buffer::error e) {
+      }
+    }
+    return config_defaults;
   }
 };
 

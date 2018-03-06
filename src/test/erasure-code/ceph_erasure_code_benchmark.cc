@@ -71,7 +71,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     vm);
   po::notify(vm);
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   vector<string> ceph_option_strings = po::collect_unrecognized(
     parsed.options, po::include_positional);
   ceph_options.reserve(ceph_option_strings.size());
@@ -82,7 +82,7 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   }
 
   cct = global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
+    NULL, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
@@ -345,7 +345,7 @@ int main(int argc, char** argv) {
  *   valgrind --tool=memcheck --leak-check=full \
  *      ./ceph_erasure_code_benchmark \
  *      --plugin jerasure \
- *      --parameter directory=.libs \
+ *      --parameter directory=lib \
  *      --parameter technique=reed_sol_van \
  *      --parameter k=2 \
  *      --parameter m=2 \

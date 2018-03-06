@@ -12,9 +12,9 @@
   $ echo 'mon_host=$public_network' >> $TESTDIR/ceph.conf
   $ echo 'public_network=$mon_host' >> $TESTDIR/ceph.conf
   $ ceph-conf --show-config-value mon_host -c $TESTDIR/ceph.conf
-  variable expansion loop at public_network=$mon_host
-  expansion stack: 
-  mon_host=$public_network
+  variable expansion loop at mon_host=$public_network
+  expansion stack:
   public_network=$mon_host
+  mon_host=$public_network
   $mon_host
   $ rm $TESTDIR/ceph.conf

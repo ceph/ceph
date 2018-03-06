@@ -31,7 +31,8 @@
 #define PAXOS_MGR        5
 #define PAXOS_MGRSTAT    6
 #define PAXOS_HEALTH     7
-#define PAXOS_NUM        8
+#define PAXOS_CONFIG     8
+#define PAXOS_NUM        9
 
 inline const char *get_paxos_name(int p) {
   switch (p) {
@@ -43,11 +44,14 @@ inline const char *get_paxos_name(int p) {
   case PAXOS_MGR: return "mgr";
   case PAXOS_MGRSTAT: return "mgrstat";
   case PAXOS_HEALTH: return "health";
+  case PAXOS_CONFIG: return "config";
   default: ceph_abort(); return 0;
   }
 }
 
 #define CEPH_MON_ONDISK_MAGIC "ceph mon volume v012"
+
+extern const string CONFIG_PREFIX;
 
 // map of entity_type -> features -> count
 struct FeatureMap {

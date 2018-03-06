@@ -684,6 +684,18 @@ map<string, string> CrushWrapper::get_full_location(int id) const
   return full_location;
 }
 
+int CrushWrapper::get_full_location(const string& name,
+				    map<string,string> *ploc)
+{
+  build_rmaps();
+  auto p = name_rmap.find(name);
+  if (p == name_rmap.end()) {
+    return -ENOENT;
+  }
+  *ploc = get_full_location(p->second);
+  return 0;
+}
+
 int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> >& path) const
 {
   if (!item_exists(id))

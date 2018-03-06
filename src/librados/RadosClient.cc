@@ -237,8 +237,6 @@ int librados::RadosClient::ping_monitor(const string mon_id, string *result)
 
 int librados::RadosClient::connect()
 {
-  common_init_finish(cct);
-
   int err;
 
   // already connected?
@@ -247,6 +245,15 @@ int librados::RadosClient::connect()
   if (state == CONNECTED)
     return -EISCONN;
   state = CONNECTING;
+
+  {
+    MonClient mc_bootstrap(cct);
+    err = mc_bootstrap.get_monmap_and_config();
+    if (err < 0)
+      return err;
+  }
+
+  common_init_finish(cct);
 
   // get monmap
   err = monclient.build_initial_monmap();

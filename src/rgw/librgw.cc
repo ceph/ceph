@@ -465,12 +465,13 @@ namespace rgw {
     int r = 0;
 
     /* alternative default for module */
-    vector<const char *> def_args;
-    def_args.push_back("--debug-rgw=1/5");
-    def_args.push_back("--keyring=$rgw_data/keyring");
-    def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
+    map<string,string> defaults = {
+      { "debug_rgw", "1/5" },
+      { "keyring", "$rgw_data/keyring" },
+      { "log_file", "/var/log/radosgw/$cluster-$name.log" }
+    };
 
-    cct = global_init(&def_args, args,
+    cct = global_init(&defaults, args,
 		      CEPH_ENTITY_TYPE_CLIENT,
 		      CODE_ENVIRONMENT_DAEMON,
 		      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
@@ -688,7 +689,6 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
       for (const auto& elt : spl_args) {
 	args.push_back(elt.c_str());
       }
-      env_to_vec(args);
       rc = rgwlib.init(args);
     }
   }

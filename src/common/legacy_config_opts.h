@@ -568,8 +568,6 @@ OPTION(osd_max_write_size, OPT_INT)
 OPTION(osd_max_pgls, OPT_U64) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64) // client data allowed in-memory (in bytes)
 OPTION(osd_client_message_cap, OPT_U64)              // num client messages allowed in-memory
-OPTION(osd_pg_bits, OPT_INT)  // bits per osd
-OPTION(osd_pgp_bits, OPT_INT)  // bits per osd
 OPTION(osd_crush_update_weight_set, OPT_BOOL) // update weight set while updating weights
 OPTION(osd_crush_chooseleaf_type, OPT_INT) // 1 = host
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL) // try to use gmt for hitset archive names if all osds in cluster support it.
@@ -839,8 +837,6 @@ OPTION(kinetic_hmac_key, OPT_STR) // kinetic key to authenticate with
 OPTION(kinetic_use_ssl, OPT_BOOL) // whether to secure kinetic traffic with TLS
 
 
-OPTION(rocksdb_separate_wal_dir, OPT_BOOL) // use $path.wal for wal
-SAFE_OPTION(rocksdb_db_paths, OPT_STR)   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_U64)  // rocksdb cache size (unless set by bluestore/etc)
 OPTION(rocksdb_cache_row_ratio, OPT_FLOAT)   // ratio of cache for row (vs block)
