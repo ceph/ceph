@@ -1,0 +1,228 @@
+<nav class="navbar navbar-default navbar-openattic">
+  <!-- Brand and toggle get grouped for better mobile display -->
+
+  <div class="navbar-header tc_logo_component">
+    <a class="navbar-brand"
+       href="#">
+      <img src="assets/Ceph_Logo_Standard_RGB_White_120411_fa.png"
+           alt="Ceph">
+    </a>
+
+    <button type="button"
+            class="navbar-toggle collapsed"
+            data-toggle="collapse"
+            data-target="#bs-example-navbar-collapse-1">
+      <span i18n
+            class="sr-only">Toggle navigation
+      </span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+  </div>
+
+  <!-- Collect the nav links, forms, and other content for toggling -->
+  <div class="collapse navbar-collapse"
+       id="bs-example-navbar-collapse-1">
+    <ul class="nav navbar-nav navbar-primary">
+
+      <!-- Dashboard -->
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_dashboard">
+        <a i18n
+           routerLink="/dashboard">
+          <i class="fa fa-heartbeat fa-fw"
+             [ngStyle]="summaryData?.health_status | healthColor"></i>
+          <span>Dashboard</span>
+        </a>
+      </li>
+
+      <!-- Cluster -->
+      <li dropdown
+          routerLinkActive="active"
+          class="dropdown tc_menuitem tc_menuitem_cluster">
+        <a dropdownToggle
+           class="dropdown-toggle"
+           data-toggle="dropdown">
+          <ng-container i18n>Cluster</ng-container>
+          <span class="caret"></span>
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_hosts">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/hosts">Hosts
+            </a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_cluster_monitor">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/monitor/"> Monitors
+            </a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_hosts">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/osd">OSDs
+            </a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_configuration">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/configuration">Configuration Doc.
+            </a>
+          </li>
+        </ul>
+      </li>
+
+      <!-- Block -->
+      <li dropdown
+          routerLinkActive="active"
+          class="dropdown tc_menuitem tc_menuitem_block">
+        <a dropdownToggle
+           class="dropdown-toggle"
+           data-toggle="dropdown"
+           [ngStyle]="blockHealthColor()">
+          <ng-container i18n>Block</ng-container>
+          <span class="caret"></span>
+        </a>
+
+        <ul class="dropdown-menu">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_block_mirroring">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/mirroring/"> Mirroring
+              <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
+                     class="label label-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
+              <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
+                     class="label label-danger">{{ summaryData?.rbd_mirroring?.errors }}</small>
+            </a>
+          </li>
+
+          <li routerLinkActive="active">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/block/iscsi">iSCSI</a>
+          </li>
+
+          <li class="dropdown-submenu">
+            <a class="dropdown-toggle"
+               data-toggle="dropdown">Pools</a>
+            <ul *dropdownMenu
+                class="dropdown-menu">
+              <li routerLinkActive="active"
+                  class="tc_submenuitem tc_submenuitem_pools"
+                  *ngFor="let rbdPool of rbdPools">
+                <a i18n
+                   class="dropdown-item"
+                   routerLink="/block/pool/{{ rbdPool }}">{{ rbdPool }}
+                </a>
+              </li>
+              <li class="tc_submenuitem tc_submenuitem_cephfs_nofs"
+                  *ngIf="rbdPools.length === 0">
+                <a class="dropdown-item disabled"
+                   i18n>There are no pools</a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+
+      <!-- Filesystem -->
+      <li dropdown
+          routerLinkActive="active"
+          class="dropdown tc_menuitem tc_menuitem_cephs">
+        <a dropdownToggle
+           class="dropdown-toggle"
+           data-toggle="dropdown">
+          <ng-container i18n>Filesystems</ng-container>
+          <span class="caret"></span>
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_cephfs_fs"
+              *ngFor="let fs of summaryData?.filesystems">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/cephfs/{{fs.id}}">{{ fs.name }}
+            </a>
+          </li>
+          <li class="tc_submenuitem tc_submenuitem_cephfs_nofs"
+              *ngIf="summaryData.filesystems.length === 0">
+            <span i18n>There are no filesystems</span>
+          </li>
+        </ul>
+      </li>
+      <!--
+  <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_ceph_osds">
+        <a i18n
+           routerLink="/cephOsds">OSDs
+        </a>
+      </li>
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_ceph_pools">
+        <a i18n
+           routerLink="/cephPools">Pools
+        </a>
+      </li>
+      -->
+
+      <!-- Object Gateway -->
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_rgw">
+        <a i18n
+           routerLink="/rgw">Object Gateway
+        </a>
+      </li>
+
+      <!--<li class="dropdown tc_menuitem tc_menuitem_ceph_rgw">
+        <a href=""
+           class="dropdown-toggle"
+           data-toggle="dropdown">
+          <ng-container i18n>Object Gateway</ng-container>
+          <span class="caret"></span>
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_rgw_users">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/rgw-users">Users
+            </a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_rgw_buckets">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/rgw-buckets">Buckets
+            </a>
+          </li>
+        </ul>
+      </li>
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_submenuitem_settings">
+        <a i18n
+           routerLink="/settings">Settings
+        </a>
+      </li> -->
+    </ul>
+    <!-- /.navbar-primary -->
+
+    <ul class="nav navbar-nav navbar-utility">
+      <li class="tc_logout">
+        <cd-logout class="oa-navbar"></cd-logout>
+      </li>
+    </ul>
+    <!-- /.navbar-utility -->
+  </div>
+  <!-- /.navbar-collapse -->
+</nav>

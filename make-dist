@@ -61,6 +61,15 @@ download_boost() {
     rm -rf src/boost
 }
 
+build_dashboard_frontend() {
+  CURR_DIR=`pwd`
+  cd src/pybind/mgr/dashboard_v2/frontend
+  npm install
+  npm run build -- --prod
+  cd $CURR_DIR
+  tar cf dashboard_frontend.tar $outfile/src/pybind/mgr/dashboard_v2/frontend/dist
+}
+
 # clean out old cruft...
 echo "cleanup..."
 rm -f $outfile*
@@ -113,9 +122,11 @@ download_boost $boost_version b2dfbd6c717be4a7bb2d88018eaccf75 \
                https://dl.bintray.com/boostorg/release/$boost_version/source \
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa
+build_dashboard_frontend
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
 tar --concatenate -f $outfile.all.tar $outfile.boost.tar
 tar --concatenate -f $outfile.all.tar $outfile.tar
+tar --concatenate -f $outfile.all.tar dashboard_frontend.tar
 mv $outfile.all.tar $outfile.tar
 rm $outfile
 rm -f $outfile.version.tar

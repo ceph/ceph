@@ -1,0 +1,73 @@
+<div class="login">
+  <div class="row full-height vertical-align">
+    <div class="col-sm-6 hidden-xs">
+      <img src="assets/Ceph_Logo_Stacked_RGB_White_120411_fa_256x256.png"
+           alt="Ceph"
+           class="pull-right">
+    </div>
+    <div class="col-xs-10 col-sm-4 col-lg-3 col-xs-offset-1 col-sm-offset-0 col-md-offset-0 col-lg-offset-0">
+      <h1 i18n="The welcome message on the login page">Welcome to Ceph!</h1>
+      <form name="loginForm"
+            (ngSubmit)="login()"
+            #loginForm="ngForm"
+            novalidate>
+
+        <!-- Username -->
+        <div class="form-group has-feedback"
+             [ngClass]="{'has-error': (loginForm.submitted || username.dirty) && username.invalid}">
+          <input name="username"
+                 [(ngModel)]="model.username"
+                 #username="ngModel"
+                 type="text"
+                 placeholder="Enter your username..."
+                 class="form-control"
+                 required
+                 autofocus>
+          <div class="help-block"
+               *ngIf="(loginForm.submitted || username.dirty) && username.invalid">Username is required</div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group has-feedback"
+             [ngClass]="{'has-error': (loginForm.submitted || password.dirty) && password.invalid}">
+          <div class="input-group">
+            <input id="password"
+                   name="password"
+                   [(ngModel)]="model.password"
+                   #password="ngModel"
+                   type="password"
+                   placeholder="Enter your password..."
+                   class="form-control"
+                   required>
+            <span class="input-group-btn">
+              <button type="button"
+                      class="btn btn-default btn-password"
+                      cdPasswordButton="password">
+              </button>
+            </span>
+          </div>
+          <div class="help-block"
+               *ngIf="(loginForm.submitted || password.dirty) && password.invalid">Password is required
+          </div>
+        </div>
+
+        <!-- Stay signed in -->
+        <div class="checkbox checkbox-primary">
+          <input id="stay_signed_in"
+                 name="stay_signed_in"
+                 type="checkbox"
+                 [(ngModel)]="model.stay_signed_in">
+          <label for="stay_signed_in"
+                 i18n="A checkbox on the login page to do not expire session on browser close">
+            Keep me logged in
+          </label>
+        </div>
+
+        <input type="submit"
+               class="btn btn-openattic btn-block"
+               [disabled]="loginForm.invalid"
+               value="Login">
+      </form>
+    </div>
+  </div>
+</div>

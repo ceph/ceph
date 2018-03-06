@@ -1,0 +1,72 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li i18n
+        class="breadcrumb-item">Cluster</li>
+    <li i18n
+        class="breadcrumb-item active"
+        aria-current="page">Monitors</li>
+  </ol>
+</nav>
+
+<div class="row">
+  <div class="col-md-4">
+    <fieldset>
+      <legend i18n>Status</legend>
+      <table class="table table-striped"
+             *ngIf="mon_status">
+        <tr>
+          <td i18n
+              class="bold">Cluster ID</td>
+          <td>{{ mon_status.monmap.fsid }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">monmap modified</td>
+          <td>{{ mon_status.monmap.modified }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">monmap epoch</td>
+          <td>{{ mon_status.monmap.epoch }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">quorum con</td>
+          <td>{{ mon_status.features.quorum_con }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">quorum mon</td>
+          <td>{{ mon_status.features.quorum_mon }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">required con</td>
+          <td>{{ mon_status.features.required_con }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold">required mon</td>
+          <td>{{ mon_status.features.required_mon }}</td>
+        </tr>
+      </table>
+    </fieldset>
+  </div>
+
+  <div class="col-md-8">
+    <fieldset>
+      <legend i18n
+              class="in-quorum">In Quorum</legend>
+      <cd-table [data]="inQuorum.data"
+                [columns]="inQuorum.columns">
+      </cd-table>
+
+      <legend i18n
+              class="in-quorum">Not In Quorum</legend>
+      <cd-table [data]="notInQuorum.data"
+                (fetchData)="refresh()"
+                [columns]="notInQuorum.columns">
+      </cd-table>
+    </fieldset>
+  </div>
+</div>

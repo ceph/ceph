@@ -221,12 +221,23 @@ BuildRequires:	python3-Cython
 BuildRequires:	python%{_python_buildid}-cherrypy
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-werkzeug
+BuildRequires:	python%{_python_buildid}-tox
+BuildRequires:	python%{_python_buildid}-coverage
+%if 0%{?fedora}
+BuildRequires:	python%{_python_buildid}-bcrypt
+%endif
+%if 0%{?rhel}
+BuildRequires:	py-bcrypt
+%endif
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python%{_python_buildid}-CherryPy
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-numpy-devel
+BuildRequires:	python%{_python_buildid}-bcrypt
+BuildRequires:	python%{_python_buildid}-tox
+BuildRequires:	python%{_python_buildid}-coverage
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
@@ -358,6 +369,12 @@ Requires:       python%{_python_buildid}-jinja2
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-werkzeug
 Requires:       pyOpenSSL%{_python_buildid}
+%if 0%{?fedora}
+Requires:	python%{_python_buildid}-bcrypt
+%endif
+%if 0%{?rhel}
+Requires:	py-bcrypt
+%endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
@@ -365,6 +382,7 @@ Requires:       python%{_python_buildid}-Jinja2
 Requires:       python%{_python_buildid}-Werkzeug
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-pyOpenSSL
+Requires:       python%{_python_buildid}-bcrypt
 Recommends:     python%{_python_buildid}-influxdb
 %endif
 %description mgr
@@ -888,6 +906,7 @@ cmake .. \
     -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=ON \
+    -DWITH_MGR_DASHBOARD_V2_FRONTEND=OFF \
 %if %{with python2}
     -DWITH_PYTHON2=ON \
 %else
