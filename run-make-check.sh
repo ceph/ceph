@@ -69,7 +69,7 @@ function run() {
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
 
-    $DRY_RUN ./do_cmake.sh $@ || return 1
+    $DRY_RUN ./do_cmake.sh -DWITH_FIO=ON $@ || return 1
     $DRY_RUN cd build
     $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
     # prevent OSD EMFILE death on tests, make sure large than 1024
