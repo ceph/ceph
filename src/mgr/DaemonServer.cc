@@ -357,39 +357,50 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   if (daemon_state.exists(key)) {
     daemon = daemon_state.get(key);
   }
+  if (m->service_daemon && !daemon) {
+    dout(4) << "constructing new DaemonState for " << key << dendl;
+    daemon = std::make_shared<DaemonState>(daemon_state.types);
+    daemon->key = key;
+    daemon->service_daemon = true;
+    if (m->daemon_metadata.count("hostname")) {
+      daemon->hostname = m->daemon_metadata["hostname"];
+    }
+    daemon_state.insert(daemon);
+  }
   if (daemon) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
     Mutex::Locker l(daemon->lock);
     daemon->perf_counters.clear();
-  }
 
-  if (m->service_daemon) {
-    if (!daemon) {
-      dout(4) << "constructing new DaemonState for " << key << dendl;
-      daemon = std::make_shared<DaemonState>(daemon_state.types);
-      daemon->key = key;
-      if (m->daemon_metadata.count("hostname")) {
-        daemon->hostname = m->daemon_metadata["hostname"];
+    if (m->service_daemon) {
+      daemon->metadata = m->daemon_metadata;
+      daemon->service_status = m->daemon_status;
+
+      utime_t now = ceph_clock_now();
+      auto d = pending_service_map.get_daemon(m->service_name,
+					      m->daemon_name);
+      if (d->gid != (uint64_t)m->get_source().num()) {
+	dout(10) << "registering " << key << " in pending_service_map" << dendl;
+	d->gid = m->get_source().num();
+	d->addr = m->get_source_addr();
+	d->start_epoch = pending_service_map.epoch;
+	d->start_stamp = now;
+	d->metadata = m->daemon_metadata;
+	pending_service_map_dirty = pending_service_map.epoch;
       }
-      daemon_state.insert(daemon);
     }
-    Mutex::Locker l(daemon->lock);
-    daemon->service_daemon = true;
-    daemon->metadata = m->daemon_metadata;
-    daemon->service_status = m->daemon_status;
 
-    utime_t now = ceph_clock_now();
-    auto d = pending_service_map.get_daemon(m->service_name,
-					    m->daemon_name);
-    if (d->gid != (uint64_t)m->get_source().num()) {
-      dout(10) << "registering " << key << " in pending_service_map" << dendl;
-      d->gid = m->get_source().num();
-      d->addr = m->get_source_addr();
-      d->start_epoch = pending_service_map.epoch;
-      d->start_stamp = now;
-      d->metadata = m->daemon_metadata;
-      pending_service_map_dirty = pending_service_map.epoch;
+    auto p = m->config_bl.begin();
+    if (p != m->config_bl.end()) {
+      decode(daemon->config, p);
+      decode(daemon->ignored_mon_config, p);
+      dout(20) << " got config " << daemon->config
+	       << " ignored " << daemon->ignored_mon_config << dendl;
     }
+    daemon->config_defaults_bl = m->config_defaults_bl;
+    daemon->config_defaults.clear();
+    dout(20) << " got config_defaults_bl " << daemon->config_defaults_bl.length()
+	     << " bytes" << dendl;
   }
 
   if (m->get_connection()->get_peer_type() != entity_name_t::TYPE_CLIENT &&
@@ -492,6 +503,14 @@ bool DaemonServer::handle_report(MMgrReport *m)
     Mutex::Locker l(daemon->lock);
     auto &daemon_counters = daemon->perf_counters;
     daemon_counters.update(m);
+
+    auto p = m->config_bl.begin();
+    if (p != m->config_bl.end()) {
+      decode(daemon->config, p);
+      decode(daemon->ignored_mon_config, p);
+      dout(20) << " got config " << daemon->config
+	       << " ignored " << daemon->ignored_mon_config << dendl;
+    }
 
     if (daemon->service_daemon) {
       utime_t now = ceph_clock_now();
@@ -803,7 +822,7 @@ bool DaemonServer::handle_command(MCommand *m)
     std::string val;
     cmd_getval(cct, cmdctx->cmdmap, "key", key);
     cmd_getval(cct, cmdctx->cmdmap, "value", val);
-    r = cct->_conf->set_val(key, val, true, &ss);
+    r = cct->_conf->set_val(key, val, &ss);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }
@@ -1330,7 +1349,177 @@ bool DaemonServer::handle_command(MCommand *m)
     ss << std::endl;
     cmdctx->reply(r, ss);
     return true;
+  } else if (prefix == "config show" ||
+	     prefix == "config show-with-defaults") {
+    string who;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
+    int r = 0;
+    auto dot = who.find('.');
+    DaemonKey key;
+    key.first = who.substr(0, dot);
+    key.second = who.substr(dot + 1);
+    DaemonStatePtr daemon = daemon_state.get(key);
+    string name;
+    if (!daemon) {
+      ss << "no config state for daemon " << who;
+      r = -ENOENT;
+    } else if (cmd_getval(g_ceph_context, cmdctx->cmdmap, "key", name)) {
+      auto p = daemon->config.find(name);
+      if (p != daemon->config.end() &&
+	  !p->second.empty()) {
+	cmdctx->odata.append(p->second.rbegin()->second + "\n");
+      } else {
+	auto& defaults = daemon->get_config_defaults();
+	auto q = defaults.find(name);
+	if (q != defaults.end()) {
+	  cmdctx->odata.append(q->second + "\n");
+	} else {
+	  r = -ENOENT;
+	}
+      }
+    } else if (daemon->config_defaults_bl.length() > 0) {
+      Mutex::Locker l(daemon->lock);
+      TextTable tbl;
+      if (f) {
+	f->open_array_section("config");
+      } else {
+	tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("OVERRIDES", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("IGNORES", TextTable::LEFT, TextTable::LEFT);
+      }
+      if (prefix == "config show") {
+	// show
+	for (auto& i : daemon->config) {
+	  dout(20) << " " << i.first << " -> " << i.second << dendl;
+	  if (i.second.empty()) {
+	    continue;
+	  }
+	  if (f) {
+	    f->open_object_section("value");
+	    f->dump_string("name", i.first);
+	    f->dump_string("value", i.second.rbegin()->second);
+	    f->dump_string("source", ceph_conf_level_name(
+			     i.second.rbegin()->first));
+	    if (i.second.size() > 1) {
+	      f->open_array_section("overrides");
+	      auto j = i.second.rend();
+	      for (--j; j != i.second.rbegin(); --j) {
+		f->open_object_section("value");
+		f->dump_string("source", ceph_conf_level_name(j->first));
+		f->dump_string("value", j->second);
+		f->close_section();
+	      }
+	      f->close_section();
+	    }
+	    if (daemon->ignored_mon_config.count(i.first)) {
+	      f->dump_string("ignores", "mon");
+	    }
+	    f->close_section();
+	  } else {
+	    tbl << i.first;
+	    tbl << i.second.rbegin()->second;
+	    tbl << ceph_conf_level_name(i.second.rbegin()->first);
+	    if (i.second.size() > 1) {
+	      list<string> ov;
+	      auto j = i.second.rend();
+	      for (--j; j != i.second.rbegin(); --j) {
+		if (j->second == i.second.rbegin()->second) {
+		  ov.push_front(string("(") + ceph_conf_level_name(j->first) +
+				string(")"));
+		} else {
+		  ov.push_front(ceph_conf_level_name(j->first));
+		}
+	      }
+	      tbl << ov;
+	    } else {
+	      tbl << "";
+	    }
+	    tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
+	    tbl << TextTable::endrow;
+	  }
+	}
+      } else {
+	// show-with-defaults
+	auto& defaults = daemon->get_config_defaults();
+	for (auto& i : defaults) {
+	  if (f) {
+	    f->open_object_section("value");
+	    f->dump_string("name", i.first);
+	  } else {
+	    tbl << i.first;
+	  }
+	  auto j = daemon->config.find(i.first);
+	  if (j != daemon->config.end() && !j->second.empty()) {
+	    // have config
+	    if (f) {
+	      f->dump_string("value", j->second.rbegin()->second);
+	      f->dump_string("source", ceph_conf_level_name(
+			       j->second.rbegin()->first));
+	      if (j->second.size() > 1) {
+		f->open_array_section("overrides");
+		auto k = j->second.rend();
+		for (--k; k != j->second.rbegin(); --k) {
+		  f->open_object_section("value");
+		  f->dump_string("source", ceph_conf_level_name(k->first));
+		  f->dump_string("value", k->second);
+		  f->close_section();
+		}
+		f->close_section();
+	      }
+	      if (daemon->ignored_mon_config.count(i.first)) {
+		f->dump_string("ignores", "mon");
+	      }
+	      f->close_section();
+	    } else {
+	      tbl << j->second.rbegin()->second;
+	      tbl << ceph_conf_level_name(j->second.rbegin()->first);
+	      if (j->second.size() > 1) {
+		list<string> ov;
+		auto k = j->second.rend();
+		for (--k; k != j->second.rbegin(); --k) {
+		  if (k->second == j->second.rbegin()->second) {
+		    ov.push_front(string("(") + ceph_conf_level_name(k->first) +
+				  string(")"));
+		  } else {
+		    ov.push_front(ceph_conf_level_name(k->first));
+		  }
+		}
+		tbl << ov;
+	      } else {
+		tbl << "";
+	      }
+	      tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
+	      tbl << TextTable::endrow;
+	    }
+	  } else {
+	    // only have default
+	    if (f) {
+	      f->dump_string("value", i.second);
+	      f->dump_string("source", ceph_conf_level_name(CONF_DEFAULT));
+	      f->close_section();
+	    } else {
+	      tbl << i.second;
+	      tbl << ceph_conf_level_name(CONF_DEFAULT);
+	      tbl << "";
+	      tbl << "";
+	      tbl << TextTable::endrow;
+	    }
+	  }
+	}
+      }
+      if (f) {
+	f->close_section();
+	f->flush(cmdctx->odata);
+      } else {
+	cmdctx->odata.append(stringify(tbl));
+      }
+    }
+    cmdctx->reply(r, ss);
+    return true;
   } else {
+    // fall back to feeding command to PGMap
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	    return process_pg_map_command(prefix, cmdctx->cmdmap, pg_map, osdmap,
@@ -1579,6 +1768,34 @@ void DaemonServer::got_service_map()
   }
 }
 
+void DaemonServer::got_mgr_map()
+{
+  Mutex::Locker l(lock);
+  set<std::string> have;
+  cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
+      if (mgrmap.active_name.size()) {
+	DaemonKey key("mgr", mgrmap.active_name);
+	have.insert(mgrmap.active_name);
+	if (!daemon_state.exists(key)) {
+	  auto daemon = std::make_shared<DaemonState>(daemon_state.types);
+	  daemon->key = key;
+	  daemon_state.insert(daemon);
+	  dout(10) << "added missing " << key << dendl;
+	}
+      }
+      for (auto& i : mgrmap.standbys) {
+	DaemonKey key("mgr", i.second.name);
+	have.insert(i.second.name);
+	if (!daemon_state.exists(key)) {
+	  auto daemon = std::make_shared<DaemonState>(daemon_state.types);
+	  daemon->key = key;
+	  daemon_state.insert(daemon);
+	  dout(10) << "added missing " << key << dendl;
+	}
+      }
+    });
+  daemon_state.cull("mgr", have);
+}
 
 const char** DaemonServer::get_tracked_conf_keys() const
 {

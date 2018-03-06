@@ -827,7 +827,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
@@ -836,8 +836,9 @@ int main(int argc, char **argv) {
   }
 
   auto cct = global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_MON,
-    CODE_ENVIRONMENT_UTILITY, 0);
+    NULL, ceph_options, CEPH_ENTITY_TYPE_MON,
+    CODE_ENVIRONMENT_UTILITY,
+    CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   g_conf = g_ceph_context->_conf;

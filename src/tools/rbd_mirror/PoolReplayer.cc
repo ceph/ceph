@@ -422,7 +422,6 @@ int PoolReplayer::init_rados(const std::string &cluster_name,
 
   // librados::Rados::conf_parse_env
   std::vector<const char*> args;
-  env_to_vec(args, nullptr);
   r = cct->_conf->parse_argv(args);
   if (r < 0) {
     derr << "could not parse environment for " << description << ":"
@@ -430,6 +429,7 @@ int PoolReplayer::init_rados(const std::string &cluster_name,
     cct->put();
     return r;
   }
+  cct->_conf->parse_env();
 
   if (!m_args.empty()) {
     // librados::Rados::conf_parse_argv

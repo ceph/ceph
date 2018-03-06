@@ -422,24 +422,16 @@ prepare_conf() {
 
 [global]
         fsid = $(uuidgen)
-        osd pg bits = 3
-        osd pgp bits = 5  ; (invalid, but ceph should cope!)
-        osd pool default size = $OSD_POOL_DEFAULT_SIZE
-        osd crush chooseleaf type = 0
-        osd pool default min size = 1
         osd failsafe full ratio = .99
+        mon osd full ratio = .99
         mon osd nearfull ratio = .99
         mon osd backfillfull ratio = .99
-        mon osd reporter subtree level = osd
-        mon osd full ratio = .99
-        mon data avail warn = 2
-        mon data avail crit = 1
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
-        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+	osd_crush_chooseleaf_type = 0
 $extra_conf
 EOF
 	if [ "$lockdep" -eq 1 ] ; then
@@ -447,13 +439,7 @@ EOF
         lockdep = true
 EOF
 	fi
-	if [ "$cephx" -eq 1 ] ; then
-		wconf <<EOF
-        auth cluster required = cephx
-        auth service required = cephx
-        auth client required = cephx
-EOF
-	else
+	if [ "$cephx" -ne 1 ] ; then
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none
@@ -479,10 +465,6 @@ $extra_conf
 
 [mds]
 $DAEMONOPTS
-$CMDSDEBUG
-        mds debug frag = true
-        mds debug auth pins = true
-        mds debug subtrees = true
         mds data = $CEPH_DEV_DIR/mds.\$id
         mds root ino uid = `id -u`
         mds root ino gid = `id -g`
@@ -490,10 +472,7 @@ $extra_conf
 [mgr]
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
-        mon reweight min pgs per osd = 4
-        mon pg warn min per osd = 3
 $DAEMONOPTS
-$CMGRDEBUG
 $extra_conf
 [osd]
 $DAEMONOPTS
@@ -505,16 +484,13 @@ $DAEMONOPTS
         osd class dir = $OBJCLASS_PATH
         osd class load list = *
         osd class default list = *
-        osd scrub load threshold = 2000.0
-        osd debug op order = true
-        osd debug misdirected ops = true
+
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20
         filestore wbthrottle xfs inodes hard limit = 30
         filestore wbthrottle btrfs ios start flusher = 10
         filestore wbthrottle btrfs ios hard limit = 20
         filestore wbthrottle btrfs inodes hard limit = 30
-        osd copyfrom max chunk = 524288
         bluestore fsck on mount = true
         bluestore block create = true
 	bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
@@ -523,18 +499,11 @@ $DAEMONOPTS
 	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true
-$COSDDEBUG
         osd objectstore = $objectstore
 $COSDSHORT
 $extra_conf
 [mon]
         mgr initial modules = restful status dashboard balancer
-        mon pg warn min per osd = 3
-        mon osd allow primary affinity = true
-        mon reweight min pgs per osd = 4
-        mon osd prime pg temp = true
-        crushtool = $CEPH_BIN/crushtool
-        mon allow pool delete = true
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
@@ -641,9 +610,10 @@ EOF
 
             local uuid=`uuidgen`
             echo "add osd$osd $uuid"
-            ceph_adm osd create $uuid
-            ceph_adm osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
 	    OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
+	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > dev/osd$osd/new.json
+            ceph_adm osd new $uuid -i dev/osd$osd/new.json
+	    rm dev/osd$osd/new.json
             $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
@@ -795,12 +765,6 @@ if [ "$debug" -eq 0 ]; then
     CMONDEBUG='
         debug mon = 10
         debug ms = 1'
-    COSDDEBUG='
-        debug ms = 1'
-    CMDSDEBUG='
-        debug ms = 1'
-    CMGRDEBUG='
-        debug ms = 1'
 else
     echo "** going verbose **"
     CMONDEBUG='
@@ -809,34 +773,6 @@ else
         debug auth = 20
 	debug mgrc = 20
         debug ms = 1'
-    COSDDEBUG='
-        debug ms = 1
-        debug osd = 25
-        debug objecter = 20
-        debug monc = 20
-        debug mgrc = 20
-        debug journal = 20
-        debug filestore = 20
-        debug bluestore = 30
-        debug bluefs = 20
-        debug rocksdb = 10
-        debug bdev = 20
-        debug reserver = 10
-        debug objclass = 20'
-    CMDSDEBUG='
-        debug ms = 1
-        debug mds = 20
-        debug auth = 20
-        debug monc = 20
-        debug mgrc = 20
-        mds debug scatterstat = true
-        mds verify scatter = true
-        mds log max segments = 2'
-    CMGRDEBUG='
-        debug ms = 1
-        debug monc = 20
-	debug mon = 20
-        debug mgr = 20'
 fi
 
 if [ -n "$MON_ADDR" ]; then
@@ -906,6 +842,67 @@ fi
 
 if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
+
+    echo Populating config ...
+    cat <<EOF | $CEPH_BIN/ceph -c ceph.conf config assimilate-conf -i -
+[global]
+osd_pool_default_size = $OSD_POOL_DEFAULT_SIZE
+osd_pool_default_min_size = 1
+mon_pg_warn_min_per_osd = 3
+
+[mon]
+mon_osd_reporter_subtree_level = osd
+mon_data_avail_warn = 2
+mon_data_avail_crit = 1
+osd_pool_default_erasure_code_profile = 'plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd'
+mon_allow_pool_delete = true
+
+[osd]
+osd_scrub_load_threshold = 2000
+osd_debug_op_order = true
+osd_debug_misdirected_ops = true
+osd_copyfrom_max_chunk = 524288
+
+[mds]
+mds_debug_frag = true
+mds_debug_auth_pins = true
+mds_debug_subtrees = true
+
+EOF
+
+    if [ "$debug" -ne 0 ]; then
+	echo Setting debug configs ...
+	cat <<EOF | $CEPH_BIN/ceph -c ceph.conf config assimilate-conf -i -
+[mgr]
+debug_ms = 1
+debug_mgr = 20
+debug_monc = 20
+debug_mon = 20
+
+[osd]
+debug_ms = 1
+debug_osd = 25
+debug_objecter = 20
+debug_monc = 20
+debug_mgrc = 20
+debug_journal = 20
+debug_filestore = 20
+debug_bluestore = 20
+debug_bluefs = 20
+debug_rocksdb = 20
+debug_bdev = 20
+debug_reserver = 10
+debug_objclass = 20
+
+[mds]
+debug_ms = 1
+debug_mds = 20
+debug_monc = 20
+debug_mgrc = 20
+mds_debug_scatterstat = true
+mds_verify_scatter = true
+EOF
+    fi
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then

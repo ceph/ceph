@@ -403,7 +403,7 @@ TEST(ErasureCodeLrc, layers_init)
     ErasureCodeProfile profile;
 
     const char* env = getenv("CEPH_LIB");
-    string directory(env ? env : ".libs");
+    string directory(env ? env : "lib");
     string description_string = 
       "[ " 
       "  [ \"_cDDD_cDD_\", \"directory=" + directory + "\" ]," 

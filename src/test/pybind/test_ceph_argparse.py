@@ -71,6 +71,12 @@ class TestArgparse:
                                                     'string',
                                                     'toomany']))
 
+    def check_0_or_1_string_arg(self, prefix, command):
+        self.assert_valid_command([prefix, command, 'string'])
+        self.assert_valid_command([prefix, command])
+        assert_equal({}, validate_command(sigdict, [prefix, command, 'string',
+                                                    'toomany']))
+
     def check_1_or_more_string_args(self, prefix, command):
         assert_equal({}, validate_command(sigdict, [prefix,
                                                     command]))
@@ -1154,7 +1160,7 @@ class TestConfigKey(TestArgparse):
         self.check_1_string_arg('config-key', 'exists')
 
     def test_dump(self):
-        self.check_no_arg('config-key', 'dump')
+        self.check_0_or_1_string_arg('config-key', 'dump')
 
     def test_list(self):
         self.check_no_arg('config-key', 'list')

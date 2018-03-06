@@ -136,6 +136,7 @@ public:
   bool handle_command(MCommand *m);
   void send_report();
   void got_service_map();
+  void got_mgr_map();
 
   void _send_configure(ConnectionRef c);
 

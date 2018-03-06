@@ -339,39 +339,35 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   }
 
   opt.create_if_missing = create_if_missing;
-  if (g_conf->rocksdb_separate_wal_dir) {
+  if (kv_options.count("separate_wal_dir")) {
     opt.wal_dir = path + ".wal";
   }
 
   // Since ceph::for_each_substr doesn't return a value and
   // std::stoull does throw, we may as well just catch everything here.
   try {
-    g_conf->with_val<std::string>(
-      "rocksdb_db_paths", [&opt, this](const std::string& paths) {
-	ceph::for_each_substr(
-	  paths, "; \t",
-	  [&paths, &opt, this](auto s) {
-	    size_t pos = s.find(',');
-	    if (pos == std::string::npos) {
-	      derr << __func__ << " invalid db path item " << s << " in "
-		   << paths << dendl;
-	      throw std::system_error(std::make_error_code(
-					std::errc::invalid_argument));
-	    }
-	    // And we have to use string because RocksDB doesn't know any better.
-	    auto path = string(s.substr(0, pos));
-	    auto size = std::stoull(string(s.substr(pos + 1)));
-	    if (!size) {
-	      derr << __func__ << " invalid db path item " << s << " in "
-		   << g_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
-	      throw std::system_error(std::make_error_code(
-					std::errc::invalid_argument));
-	    }
-	    opt.db_paths.push_back(rocksdb::DbPath(path, size));
-	    dout(10) << __func__ << " db_path " << path << " size " << size
-		     << dendl;
-	  });
-      });
+    if (kv_options.count("db_paths")) {
+      list<string> paths;
+      get_str_list(kv_options["db_paths"], "; \t", paths);
+      for (auto& p : paths) {
+	size_t pos = p.find(',');
+	if (pos == std::string::npos) {
+	  derr << __func__ << " invalid db path item " << p << " in "
+	       << kv_options["db_paths"] << dendl;
+	  return -EINVAL;
+	}
+	string path = p.substr(0, pos);
+	string size_str = p.substr(pos + 1);
+	uint64_t size = atoll(size_str.c_str());
+	if (!size) {
+	  derr << __func__ << " invalid db path item " << p << " in "
+	       << kv_options["db_paths"] << dendl;
+	  return -EINVAL;
+	}
+	opt.db_paths.push_back(rocksdb::DbPath(path, size));
+	dout(10) << __func__ << " db_path " << path << " size " << size << dendl;
+      }
+    }
   } catch (const std::system_error& e) {
     return -e.code().value();
   }

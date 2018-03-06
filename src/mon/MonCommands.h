@@ -202,10 +202,7 @@ COMMAND_WITH_FLAG("injectargs " \
 	     "name=injected_args,type=CephString,n=N",			\
 	     "inject config arguments into monitor", "mon", "rw", "cli,rest",
 	     FLAG(NOFORWARD))
-COMMAND("config set " \
-	"name=key,type=CephString name=value,type=CephString",
-	"Set a configuration option at runtime (not persistent)",
-	"mon", "rw", "cli,rest")
+
 COMMAND("status", "show cluster status", "mon", "r", "cli,rest")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster health", "mon", "r", "cli,rest")
@@ -1058,7 +1055,8 @@ COMMAND("config-key exists " \
 COMMAND_WITH_FLAG("config-key list ", "list keys", "config-key", "r", "cli,rest",
 		  FLAG(DEPRECATED))
 COMMAND("config-key ls ", "list keys", "config-key", "r", "cli,rest")
-COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest")
+COMMAND("config-key dump " \
+	"name=key,type=CephString,req=false", "dump keys and values (with optional prefix)", "config-key", "r", "cli,rest")
 
 
 /*
@@ -1091,3 +1089,31 @@ COMMAND("mgr count-metadata name=property,type=CephString",
 COMMAND("mgr versions", \
 	"check running versions of ceph-mgr daemons",
 	"mgr", "r", "cli,rest")
+
+// ConfigMonitor
+COMMAND("config set" \
+	" name=who,type=CephString" \
+	" name=name,type=CephString" \
+	" name=value,type=CephString", \
+	"Set a configuration option for one or more entities",
+	"config", "rw", "cli,rest")
+COMMAND("config rm"						\
+	" name=who,type=CephString" \
+	" name=name,type=CephString",
+	"Clear a configuration option for one or more entities",
+	"config", "rw", "cli,rest")
+COMMAND("config get " \
+	"name=who,type=CephString " \
+	"name=key,type=CephString,req=False",
+	"Show configuration option(s) for an entity",
+	"config", "r", "cli,rest")
+COMMAND("config dump",
+	"Show all configuration option(s)",
+	"mon", "r", "cli,rest")
+COMMAND("config help " \
+	"name=key,type=CephString",
+	"Describe a configuration option",
+	"config", "r", "cli,rest")
+COMMAND("config assimilate-conf",
+	"Assimilate options from a conf, and return a new, minimal conf file",
+	"config", "rw", "cli,rest")

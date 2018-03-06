@@ -81,7 +81,7 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     vm);
   po::notify(vm);
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   vector<string> ceph_option_strings = po::collect_unrecognized(
     parsed.options, po::include_positional);
   ceph_options.reserve(ceph_option_strings.size());
@@ -91,14 +91,11 @@ int ErasureCodeNonRegression::setup(int argc, char** argv) {
     ceph_options.push_back(i->c_str());
   }
 
-  cct = global_init(&def_args, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
+  cct = global_init(NULL, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
 		    CODE_ENVIRONMENT_UTILITY,
-		    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+		    CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
-  const char* env = getenv("CEPH_LIB");
-  std::string libs_dir(env ? env : ".libs");
-  g_conf->set_val_or_die("erasure_code_dir", libs_dir, false);
 
   if (vm.count("help")) {
     cout << desc << std::endl;

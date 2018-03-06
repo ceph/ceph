@@ -110,16 +110,17 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
-  vector<const char*> def_args;
-  // We want to enable leveldb's log, while allowing users to override this
-  // option, therefore we will pass it as a default argument to global_init().
-  def_args.push_back("--leveldb-log=");
-
-  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_OSD,
-			 CODE_ENVIRONMENT_DAEMON,
-			 0, "osd_data");
+  map<string,string> defaults = {
+    // We want to enable leveldb's log, while allowing users to override this
+    // option, therefore we will pass it as a default argument to global_init().
+    { "leveldb_log", "" }
+  };
+  auto cct = global_init(
+    &defaults,
+    args, CEPH_ENTITY_TYPE_OSD,
+    CODE_ENVIRONMENT_DAEMON,
+    0, "osd_data");
   ceph_heap_profiler_init();
 
   Preforker forker;
@@ -271,7 +272,6 @@ int main(int argc, const char **argv)
       bl.read_fd(fd, 64);
       if (bl.length()) {
 	store_type = string(bl.c_str(), bl.length() - 1);  // drop \n
-	g_conf->set_val("osd_objectstore", store_type);
 	dout(5) << "object store type is " << store_type << dendl;
       }
       ::close(fd);
@@ -326,18 +326,14 @@ int main(int argc, const char **argv)
   }
   if (mkfs) {
     common_init_finish(g_ceph_context);
-    MonClient mc(g_ceph_context);
-    if (mc.build_initial_monmap() < 0)
-      return -1;
-    if (mc.get_monmap_privately() < 0)
-      return -1;
 
-    if (mc.monmap.fsid.is_zero()) {
+    if (g_conf->get_val<uuid_d>("fsid").is_zero()) {
       derr << "must specify cluster fsid" << dendl;
       forker.exit(-EINVAL);
     }
 
-    int err = OSD::mkfs(g_ceph_context, store, data_path, mc.monmap.fsid,
+    int err = OSD::mkfs(g_ceph_context, store, data_path,
+			g_conf->get_val<uuid_d>("fsid"),
                         whoami);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "
@@ -345,7 +341,9 @@ int main(int argc, const char **argv)
       forker.exit(1);
     }
     dout(0) << "created object store " << data_path
-	    << " for osd." << whoami << " fsid " << mc.monmap.fsid << dendl;
+	    << " for osd." << whoami
+	    << " fsid " << g_conf->get_val<uuid_d>("fsid")
+	    << dendl;
   }
   if (mkfs || mkkey) {
     forker.exit(0);

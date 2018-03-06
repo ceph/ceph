@@ -206,32 +206,35 @@ function ceph_watch_wait()
 
 function test_mon_injectargs()
 {
-  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'false'"
-  ! grep "the.dump" $TMPFILE || return 1
-  ceph tell osd.0 injectargs '--osd_enable_op_tracker --osd_op_history_duration 500' >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '500'"
-  ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'false'"
-  ceph tell osd.0 injectargs -- --osd_enable_op_tracker >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'true'"
-  ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600' >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '600'"
-  expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
-                 ceph tell osd.0 injectargs -- '--osd_op_history_duration'
+  ceph tell osd.0 injectargs --no-osd_enable_op_tracker
+  ceph tell osd.0 config get osd_enable_op_tracker | grep false
+  ceph tell osd.0 injectargs '--osd_enable_op_tracker --osd_op_history_duration 500'
+  ceph tell osd.0 config get osd_enable_op_tracker | grep true
+  ceph tell osd.0 config get osd_op_history_duration | grep 500
+  ceph tell osd.0 injectargs --no-osd_enable_op_tracker
+  ceph tell osd.0 config get osd_enable_op_tracker | grep false
+  ceph tell osd.0 injectargs -- --osd_enable_op_tracker
+  ceph tell osd.0 config get osd_enable_op_tracker | grep true
+  ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600'
+  ceph tell osd.0 config get osd_enable_op_tracker | grep true
+  ceph tell osd.0 config get osd_op_history_duration | grep 600
 
-  ceph tell osd.0 injectargs -- '--osd_deep_scrub_interval 2419200' >& $TMPFILE || return 1
-  check_response "osd_deep_scrub_interval = '2419200.000000' (not observed, change may require restart)"
+  ceph tell osd.0 injectargs -- '--osd_deep_scrub_interval 2419200'
+  ceph tell osd.0 config get osd_deep_scrub_interval | grep 2419200
 
-  ceph tell osd.0 injectargs -- '--mon_probe_timeout 2' >& $TMPFILE || return 1
-  check_response "mon_probe_timeout = '2.000000' (not observed, change may require restart)"
+  ceph tell osd.0 injectargs -- '--mon_probe_timeout 2'
+  ceph tell osd.0 config get mon_probe_timeout | grep 2
 
-  ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
-  check_response "mon_lease = '6.000000' (not observed, change may require restart)"
+  ceph tell osd.0 injectargs -- '--mon-lease 6'
+  ceph tell osd.0 config get mon_lease | grep 6
 
   # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
   expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1 >& $TMPFILE || return 1
   check_response "Error EINVAL: Parse error setting osd_scrub_auto_repair_num_errors to '-1' using injectargs"
+
+  expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
+                 ceph tell osd.0 injectargs -- '--osd_op_history_duration'
+
 }
 
 function test_mon_injectargs_SI()
@@ -679,7 +682,9 @@ function test_mon_caps()
   ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
   ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
 
-  rados lspools --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  # pass --no-mon-config since we are looking for the permission denied error
+  rados lspools --no-mon-config --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  cat $TMPFILE
   check_response "Permission denied"
 
   rm -rf $TEMP_DIR/ceph.client.bug.keyring
@@ -689,7 +694,7 @@ function test_mon_caps()
   ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
   ceph-authtool -n client.bug --cap mon '' $TEMP_DIR/ceph.client.bug.keyring
   ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
-  rados lspools --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  rados lspools --no-mon-config --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
   check_response "Permission denied"  
 }
 

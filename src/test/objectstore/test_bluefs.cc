@@ -570,15 +570,15 @@ TEST(BlueFS, test_replay) {
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
 
-  vector<const char *> def_args;
-  def_args.push_back("--debug-bluefs=1/20");
-  def_args.push_back("--debug-bdev=1/20");
+  map<string,string> defaults = {
+    { "debug_bluefs", "1/20" },
+    { "debug_bdev", "1/20" }
+  };
 
-  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
-			 0);
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->set_val(
     "enable_experimental_unrecoverable_data_corrupting_features",

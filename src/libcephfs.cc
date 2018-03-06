@@ -77,6 +77,13 @@ public:
 
     int ret;
 
+    {
+      MonClient mc_bootstrap(cct);
+      ret = mc_bootstrap.get_monmap_and_config();
+      if (ret < 0)
+	return ret;
+    }
+
     //monmap
     monclient = new MonClient(cct);
     ret = -CEPHFS_ERROR_MON_MAP_BUILD; //defined in libcephfs.h;
@@ -202,11 +209,7 @@ public:
   int conf_parse_env(const char *name)
   {
     md_config_t *conf = cct->_conf;
-    vector<const char*> args;
-    env_to_vec(args, name);
-    int ret = conf->parse_argv(args);
-    if (ret)
-      return ret;
+    conf->parse_env(name);
     conf->apply_changes(nullptr);
     return 0;
   }
