@@ -105,7 +105,7 @@ NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(fa
 {
   assert(cct->_conf->ms_async_op_threads > 0);
 
-  const uint64_t InitEventNumber = 5000;
+  const int InitEventNumber = 5000;
   num_workers = cct->_conf->ms_async_op_threads;
   if (num_workers >= EventCenter::MAX_EVENTCENTER) {
     ldout(cct, 0) << __func__ << " max thread limit is "
