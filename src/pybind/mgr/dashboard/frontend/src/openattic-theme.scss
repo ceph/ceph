@@ -5,7 +5,7 @@
   Buttons
   Dropdown
   Grid
-  Modal
+  Modal Table (Task Queue)
   Navbar
   Navs
   Notifications
@@ -250,40 +250,6 @@ button.btn.btn-label>i.fa {
   padding-right: 30px;
 }
 
-/* Modal */
-.modal-dialog {
-  margin: 30px auto !important;
-}
-.modal .modal-content .openattic-modal-header,
-.modal .modal-content .openattic-modal-content,
-.modal .modal-content .openattic-modal-footer {
-  padding: 10px 20px;
-}
-.modal .modal-content .openattic-modal-header {
-  border-bottom: 1px solid #cccccc;
-  border-radius: 5px 5px 0 0;
-  background-color: #f5f5f5;
-}
-.modal .modal-content .openattic-modal-content {
-  padding: 20px 20px 10px 20px;
-  overflow-x: auto;
-  max-height: 70vh;
-}
-.modal .modal-content .openattic-modal-content p {
-  margin-bottom: 10px;
-}
-.modal .modal-content .openattic-modal-content legend {
-  font-size: 1.833em;
-}
-.modal .modal-content .openattic-modal-footer {
-  border-top: 1px solid #cccccc;
-  border-radius: 0 0 5px 5px;
-  background-color: #f5f5f5;
-}
-.modal .modal-content .openattic-modal-header span {
-  display: block;
-  font-size: 16px; /* Same as .panel-title */
-}
 
 /* Modal Table (Task Queue) */
 table.task-queue-table thead {
