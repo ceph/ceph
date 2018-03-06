@@ -239,6 +239,7 @@
                                (NOTE: required to delete a non-empty bucket)
      --sync-stats              option to 'user stats', update user stats with current
                                stats reported by user's buckets indexes
+     --sync-detail             option to 'bucket sync status', display lagging objcets
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
