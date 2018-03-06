@@ -1,0 +1,5 @@
+<cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
+<div class="container-fluid"
+     [ngClass]="{'full-height':isLoginActive()}">
+  <router-outlet></router-outlet>
+</div>

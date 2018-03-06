@@ -1,0 +1,245 @@
+@import '../../../../defaults';
+
+.dataTables_wrapper {
+  margin-bottom: 25px;
+  .separator {
+    height: 30px;
+    border-left: 1px solid rgba(0,0,0,.09);
+    padding-left: 5px;
+    margin-left: 5px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .widget-toolbar {
+    display: inline-block;
+    float: right;
+    width: auto;
+    height: 30px;
+    line-height: 28px;
+    position: relative;
+    border-left: 1px solid rgba(0,0,0,.09);
+    cursor: pointer;
+    padding: 0 8px;
+    text-align: center;
+  }
+  .dropdown-menu {
+    white-space: nowrap;
+    & > li {
+      cursor: pointer;
+      & > label {
+        width: 100%;
+        margin-bottom: 0;
+        padding-left: 20px;
+        padding-right: 20px;
+        cursor: pointer;
+        &:hover {
+          background-color: #f5f5f5;
+        }
+        & > input {
+          cursor: pointer;
+        }
+      }
+    }
+  }
+  th.oadatatablecheckbox {
+    width: 16px;
+  }
+  .dataTables_length>input {
+    line-height: 25px;
+    text-align: right;
+  }
+}
+.dataTables_header {
+  background-color: #f6f6f6;
+  border: 1px solid #d1d1d1;
+  border-bottom: none;
+  padding: 5px;
+  position: relative;
+  .oadatatableactions {
+    display: inline-block;
+  }
+  .form-group {
+    padding-left: 8px;
+  }
+  .input-group {
+    float: right;
+    border-left: 1px solid rgba(0,0,0,.09);
+    padding-left: 8px;
+    width: 40%;
+    max-width: 350px;
+    .form-control {
+      height: 30px;
+    }
+    .clear-input {
+      height: 30px;
+      i {
+        vertical-align: text-top;
+      }
+    }
+  }
+  .input-group.dataTables_paginate {
+    width: 8%;
+    min-width: 85px;
+  }
+}
+
+::ng-deep .oadatatable {
+  border: $border-color;
+  margin-bottom: 0;
+  max-width: none!important;
+  .progress-linear {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: 5px;
+    padding: 0;
+    margin: 0;
+    .container {
+      background-color: $oa-color-light-blue;
+      .bar {
+        left: 0;
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        overflow: hidden;
+        background-color: $oa-color-light-blue;
+      }
+      .bar:before{
+        display: block;
+        position: absolute;
+        content: "";
+        left: -200px;
+        width: 200px;
+        height: 100%;
+        background-color: $oa-color-blue;
+        animation: progress-loading 3s linear infinite;
+      }
+    }
+  }
+  .datatable-header {
+    background-clip: padding-box;
+    background-color: #f9f9f9;
+    background-image: -webkit-linear-gradient(top,#fafafa 0,#ededed 100%);
+    background-image: -o-linear-gradient(top,#fafafa 0,#ededed 100%);
+    background-image: linear-gradient(to bottom,#fafafa 0,#ededed 100%);
+    background-repeat: repeat-x;
+    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#fffafafa', endColorstr='#ffededed', GradientType=0);
+    .sort-asc, .sort-desc {
+      color: $oa-color-blue;
+    }
+    .datatable-header-cell{
+      @include table-cell;
+      text-align: left;
+      font-weight: bold;
+      .datatable-header-cell-label {
+        &:after {
+          font-family: FontAwesome;
+          font-weight: 400;
+          height: 9px;
+          left: 10px;
+          line-height: 12px;
+          position: relative;
+          vertical-align: baseline;
+          width: 12px;
+        }
+      }
+      &.sortable {
+        .datatable-header-cell-label:after {
+          content: " \f0dc";
+        }
+        &.sort-active {
+          &.sort-asc .datatable-header-cell-label:after {
+            content: " \f160";
+          }
+          &.sort-desc .datatable-header-cell-label:after {
+            content: " \f161";
+          }
+        }
+      }
+      &:first-child {
+        border-left: none;
+      }
+    }
+  }
+  .datatable-body {
+    .empty-row {
+      background-color: $warning-background-color;
+      text-align: center;
+      font-weight: bold;
+      font-style: italic;
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }
+    .datatable-body-row {
+      &.clickable:hover .datatable-row-group {
+        background-color: #eee;
+        transition-property: background;
+        transition-duration: .3s;
+        transition-timing-function: linear;
+      }
+      &.datatable-row-even {
+        background-color: #ffffff;
+      }
+      &.datatable-row-odd {
+        background-color: #f6f6f6;
+      }
+      &.active, &.active:hover {
+        background-color: $bg-color-light-blue;
+      }
+      .datatable-body-cell{
+        @include table-cell;
+        &:first-child {
+          border-left: none;
+        }
+        .datatable-body-cell-label {
+          display: block;
+        }
+      }
+    }
+  }
+  .datatable-footer {
+    .selected-count, .page-count {
+      font-style: italic;
+      padding-left: 5px;
+    }
+    .datatable-pager .pager {
+      margin-right: 5px;
+      .pages {
+        & > a, & > span {
+          display: inline-block;
+          padding: 5px 10px;
+          margin-bottom: 5px;
+          border: none;
+        }
+        a:hover {
+          background-color: $oa-color-light-blue;
+        }
+        &.active > a {
+          background-color: $bg-color-light-blue;
+        }
+      }
+    }
+  }
+}
+
+@keyframes progress-loading {
+    from {
+      left: -200px;
+      width: 15%;
+    }
+    50% {
+      width: 30%;
+    }
+    70% {
+      width: 70%;
+    }
+    80% {
+      left: 50%;
+    }
+    95% {
+      left: 120%;
+    }
+    to {
+      left: 100%;
+    }
+}

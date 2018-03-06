@@ -1,0 +1,7 @@
+[run]
+omit = tests/*
+       */python*/*
+       ceph_module_mock.py
+       __init__.py
+       */mgr_module.py
+
