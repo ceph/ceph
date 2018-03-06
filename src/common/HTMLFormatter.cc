@@ -57,6 +57,9 @@ void HTMLFormatter::set_status(int status, const char* status_name)
 {
   m_status = status;
   if (status_name) {
+    if (m_status_name) {
+      free((void*)m_status_name);
+    }
     m_status_name = strdup(status_name);
   }
 };
