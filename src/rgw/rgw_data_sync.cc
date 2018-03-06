@@ -2358,6 +2358,168 @@ public:
   }
 };
 
+class RGWReadLaggingObjectsCoroutine : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  RGWRados *store;
+
+  const rgw_bucket_shard& bs;
+  rgw_bucket_shard_sync_info *status;
+  
+  set<rgw_obj_key>& lagging_objects;
+
+  string oid;
+
+  rgw_obj_key list_marker;
+  bucket_list_result list_result;
+  list<bucket_list_entry>::iterator iter;
+
+  string inc_marker;
+  list<rgw_bi_log_entry> list_bilog_result;
+  list<rgw_bi_log_entry>::iterator bilog_iter;
+  rgw_bi_log_entry *entry{nullptr};
+  rgw_obj_key key;
+
+  ceph::real_time sync_modify_time;
+  string cur_id;
+
+  map<pair<string, string>, pair<real_time, RGWModifyOp> > squash_map;
+  const string& zone_id;
+
+  int max_entries;
+  int count;
+public:
+  RGWReadLaggingObjectsCoroutine(RGWDataSyncEnv *_sync_env, 
+                                 const rgw_bucket_shard &_bs,
+                                 rgw_bucket_shard_sync_info *_status,
+                                 set<rgw_obj_key>& _lagging_objects,
+                                 const int _max_entries)
+  : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+  store(sync_env->store), bs(_bs),
+  status(_status), lagging_objects(_lagging_objects),
+  oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)),
+  zone_id(sync_env->store->get_zone().id), max_entries(_max_entries)
+  {}
+
+  int operate() override;
+};
+
+int RGWReadLaggingObjectsCoroutine::operate()
+{
+  reenter(this){
+    //list objects
+    
+    count = 0;
+
+    if (status->state == rgw_bucket_shard_sync_info::StateFullSync || status->state == rgw_bucket_shard_sync_info::StateInit) {
+      list_marker = status->full_marker.position;
+      do {
+        yield call(new RGWListBucketShardCR(sync_env, bs, list_marker, &list_result));
+
+        if (retcode < 0 && retcode != -ENOENT) {
+          ldout(sync_env->cct, 0) << "failed to read list bucket shard with" 
+            << cpp_strerror(retcode) << dendl;
+          return set_cr_error(retcode);
+        }
+
+        iter = list_result.entries.begin();
+        count += list_result.entries.size();
+
+        for (; iter != list_result.entries.end(); ++iter) {
+          lagging_objects.insert(iter->key);
+          list_marker = iter->key;
+        }
+      }while(list_result.is_truncated && count < max_entries);
+    }
+
+    if (status->state == rgw_bucket_shard_sync_info::StateIncrementalSync) {
+      inc_marker = status->inc_marker.position;
+      do {
+        yield call(new RGWListBucketIndexLogCR(sync_env, bs, inc_marker, &list_bilog_result));
+
+        if (retcode < 0 && retcode != ENOENT) {
+          ldout(sync_env->cct, 0) << "failed to read list bilog with" 
+            << cpp_strerror(retcode) << dendl;
+          return set_cr_error(retcode);
+        }
+
+        squash_map.clear();
+        for (auto& e : list_bilog_result) {
+          if (e.op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP && (sync_modify_time < e.timestamp)) {
+            sync_modify_time = e.timestamp;
+            continue;
+          }
+          if (e.op == RGWModifyOp::CLS_RGW_OP_RESYNC && (sync_modify_time < e.timestamp)) {
+            sync_modify_time = e.timestamp;
+            continue;
+          }
+          if (e.state != CLS_RGW_STATE_COMPLETE) {
+            continue;
+          }
+          if (e.zones_trace.find(zone_id) != e.zones_trace.end()) {
+            continue;
+          }
+          auto& squash_entry = squash_map[make_pair(e.object, e.instance)];
+          if (squash_entry.first <= e.timestamp) {
+            squash_entry = make_pair<>(e.timestamp, e.op);
+          }
+        }
+
+        bilog_iter = list_bilog_result.begin();
+        for(; bilog_iter != list_bilog_result.end(); ++bilog_iter) {
+          entry = &(*bilog_iter);
+          {
+            ssize_t p = entry->id.find('#');  /*entries might have explicit shard info in them, e.g., 6#00000000004.94.3*/
+            if (p < 0) {
+              cur_id = entry->id;
+            } else {
+              cur_id = entry->id.substr(p + 1);
+            }
+          }
+          inc_marker = cur_id;
+
+					if (entry->op == RGWModifyOp::CLS_RGW_OP_SYNCSTOP || entry->op == RGWModifyOp::CLS_RGW_OP_RESYNC) {
+						continue;
+					}
+
+					if (!key.set(rgw_obj_index_key{entry->object, entry->instance})) {
+						continue;
+					}
+
+					if (!key.ns.empty()) {
+						continue;
+					}
+
+					if (entry->op == CLS_RGW_OP_CANCEL) {
+						continue;
+					}
+
+					if (entry->state != CLS_RGW_STATE_COMPLETE) {
+						continue;
+					}
+
+					if (entry->zones_trace.find(zone_id) != entry->zones_trace.end()) {
+						continue;
+					}
+
+					if (make_pair<>(entry->timestamp, entry->op) != squash_map[make_pair(entry->object, entry->instance)]) {
+						continue;
+					}
+          lagging_objects.insert(key);
+				}
+      }while(!list_bilog_result.empty());
+    }
+
+    return set_cr_done();
+  }
+
+  return 0;
+}
+
+RGWCoroutine *RGWRemoteBucketLog::read_lagging_objects_cr(rgw_bucket_shard_sync_info *sync_status, set<rgw_obj_key>& lagging_objects, const int max_entries)
+{
+  return new RGWReadLaggingObjectsCoroutine(&sync_env, bs, sync_status, lagging_objects, max_entries);
+}
+
 template <class T, class K>
 class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
@@ -3149,6 +3311,28 @@ int RGWBucketSyncStatusManager::read_sync_status()
   int ret = cr_mgr.run(stacks);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read sync status for "
+        << bucket_str{bucket} << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWBucketSyncStatusManager::read_sync_status_detail(const int max_entries)
+{
+  list<RGWCoroutinesStack *> stacks;
+
+  for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
+    RGWCoroutinesStack *stack = new RGWCoroutinesStack(store->ctx(), &cr_mgr);
+    RGWRemoteBucketLog *l = iter->second;
+    stack->call(l->read_lagging_objects_cr(&sync_status[iter->first], lagging_objects[iter->first], max_entries));
+
+    stacks.push_back(stack);
+  }
+
+  int ret = cr_mgr.run(stacks);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read detail sync status for "
         << bucket_str{bucket} << dendl;
     return ret;
   }

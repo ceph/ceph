@@ -484,6 +484,7 @@ public:
   void finish();
 
   RGWCoroutine *read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status);
+  RGWCoroutine *read_lagging_objects_cr(rgw_bucket_shard_sync_info *sync_status, set<rgw_obj_key>& lagging_objects, const int max_entries);
   RGWCoroutine *init_sync_status_cr();
   RGWCoroutine *run_sync_cr();
 
@@ -510,6 +511,7 @@ class RGWBucketSyncStatusManager {
   string source_shard_status_oid_prefix;
 
   map<int, rgw_bucket_shard_sync_info> sync_status;
+  map<int, set<rgw_obj_key>> lagging_objects;
   rgw_raw_obj status_obj;
 
   int num_shards;
@@ -528,11 +530,13 @@ public:
   int init();
 
   map<int, rgw_bucket_shard_sync_info>& get_sync_status() { return sync_status; }
+  map<int, set<rgw_obj_key>>& get_lagging_objects() { return lagging_objects; }
   int init_sync_status();
 
   static string status_oid(const string& source_zone, const rgw_bucket_shard& bs);
 
   int read_sync_status();
+  int read_sync_status_detail(const int max_entries);
   int run();
 };
 
