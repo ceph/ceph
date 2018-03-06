@@ -1,0 +1,14 @@
+@mixin hf {
+  border-bottom: 1px solid #cccccc;
+  background-color: #f5f5f5;
+}
+
+.modal-header {
+  @include hf;
+  border-radius: 5px 5px 0 0;
+}
+
+.modal-footer {
+  @include hf;
+  border-radius: 0 0 5px 5px;
+}
