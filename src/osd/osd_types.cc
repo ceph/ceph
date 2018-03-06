@@ -344,12 +344,9 @@ void osd_stat_t::dump(Formatter *f) const
   f->dump_unsigned("up_from", up_from);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("num_pgs", num_pgs);
-  f->dump_unsigned("kb", kb);
-  f->dump_unsigned("kb_used", kb_used);
-  f->dump_unsigned("kb_used_data", kb_used_data);
-  f->dump_unsigned("kb_used_omap", kb_used_omap);
-  f->dump_unsigned("kb_used_meta", kb_used_meta);
-  f->dump_unsigned("kb_avail", kb_avail);
+  f->open_object_section("statfs");
+  statfs.dump(f);
+  f->close_section();
   f->open_array_section("hb_peers");
   for (auto p : hb_peers)
     f->dump_int("osd", p);
@@ -366,10 +363,17 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(8, 2, bl);
+  ENCODE_START(9, 2, bl);
+
+  //////// for compatibility ////////
+  int64_t kb = statfs.kb();
+  int64_t kb_used = statfs.kb_used_raw();
+  int64_t kb_avail = statfs.kb_avail();
   encode(kb, bl);
   encode(kb_used, bl);
   encode(kb_avail, bl);
+  ///////////////////////////////////
+
   encode(snap_trim_queue_len, bl);
   encode(num_snap_trimming, bl);
   encode(hb_peers, bl);
@@ -379,15 +383,25 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(up_from, bl);
   encode(seq, bl);
   encode(num_pgs, bl);
+
+  //////// for compatibility ////////
+  int64_t kb_used_data = statfs.kb_used_data();
+  int64_t kb_used_omap = statfs.kb_used_omap();
+  int64_t kb_used_meta = statfs.kb_used_internal_metadata();
   encode(kb_used_data, bl);
   encode(kb_used_omap, bl);
   encode(kb_used_meta, bl);
+  encode(statfs, bl);
+  ///////////////////////////////////
+
   ENCODE_FINISH(bl);
 }
 
 void osd_stat_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
+  int64_t kb, kb_used,kb_avail;
+  int64_t kb_used_data, kb_used_omap, kb_used_meta;
+  DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -416,6 +430,24 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
     kb_used_omap = 0;
     kb_used_meta = 0;
   }
+  if (struct_v >= 9) {
+    decode(statfs, bl);
+  } else {
+    statfs.reset();
+    statfs.total = kb << 10;
+    statfs.available = kb_avail << 10;
+    assert(statfs.total >= statfs.available);
+    statfs.internally_reserved = statfs.total - statfs.available;
+    kb_used <<= 10;
+    if ((int64_t)statfs.internally_reserved > kb_used) {
+      statfs.internally_reserved -= kb_used;
+    } else {
+      statfs.internally_reserved = 0;
+    }
+    statfs.allocated = kb_used_data << 10;
+    statfs.omap_allocated = kb_used_omap << 10;
+    statfs.internal_metadata = kb_used_meta << 10;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -424,12 +456,9 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.push_back(new osd_stat_t);
 
   o.push_back(new osd_stat_t);
-  o.back()->kb = 9;
-  o.back()->kb_used = 6;
-  o.back()->kb_used_data = 3;
-  o.back()->kb_used_omap = 2;
-  o.back()->kb_used_meta = 1;
-  o.back()->kb_avail = 3;
+  list<store_statfs_t*> ll;
+  store_statfs_t::generate_test_instances(ll);
+  o.back()->statfs = *ll.back();
   o.back()->hb_peers.push_back(7);
   o.back()->snap_trim_queue_len = 8;
   o.back()->num_snap_trimming = 99;

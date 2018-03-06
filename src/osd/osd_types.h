@@ -921,95 +921,6 @@ struct objectstore_perf_stat_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 
-/** osd_stat
- * aggregate stats for an osd
- */
-struct osd_stat_t {
-  int64_t kb = 0;            ///< total device size
-  int64_t kb_used = 0;       ///< total used
-  int64_t kb_used_data = 0;  ///< total used by object data
-  int64_t kb_used_omap = 0;  ///< total used by omap data
-  int64_t kb_used_meta = 0;  ///< total used by internal metadata
-  int64_t kb_avail = 0;      ///< total available/free
-
-  vector<int> hb_peers;
-  int32_t snap_trim_queue_len = 0, num_snap_trimming = 0;
-
-  pow2_hist_t op_queue_age_hist;
-
-  objectstore_perf_stat_t os_perf_stat;
-
-  epoch_t up_from = 0;
-  uint64_t seq = 0;
-
-  uint32_t num_pgs = 0;
-
-  void add(const osd_stat_t& o) {
-    kb += o.kb;
-    kb_used += o.kb_used;
-    kb_used_data += o.kb_used_data;
-    kb_used_omap += o.kb_used_omap;
-    kb_used_meta += o.kb_used_meta;
-    kb_avail += o.kb_avail;
-    snap_trim_queue_len += o.snap_trim_queue_len;
-    num_snap_trimming += o.num_snap_trimming;
-    op_queue_age_hist.add(o.op_queue_age_hist);
-    os_perf_stat.add(o.os_perf_stat);
-    num_pgs += o.num_pgs;
-  }
-  void sub(const osd_stat_t& o) {
-    kb -= o.kb;
-    kb_used -= o.kb_used;
-    kb_used_data -= o.kb_used_data;
-    kb_used_omap -= o.kb_used_omap;
-    kb_used_meta -= o.kb_used_meta;
-    kb_avail -= o.kb_avail;
-    snap_trim_queue_len -= o.snap_trim_queue_len;
-    num_snap_trimming -= o.num_snap_trimming;
-    op_queue_age_hist.sub(o.op_queue_age_hist);
-    os_perf_stat.sub(o.os_perf_stat);
-    num_pgs -= o.num_pgs;
-  }
-
-  void dump(Formatter *f) const;
-  void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator &bl);
-  static void generate_test_instances(std::list<osd_stat_t*>& o);
-};
-WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
-
-inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
-  return l.kb == r.kb &&
-    l.kb_used == r.kb_used &&
-    l.kb_used_data == r.kb_used_data &&
-    l.kb_used_omap == r.kb_used_omap &&
-    l.kb_used_meta == r.kb_used_meta &&
-    l.kb_avail == r.kb_avail &&
-    l.snap_trim_queue_len == r.snap_trim_queue_len &&
-    l.num_snap_trimming == r.num_snap_trimming &&
-    l.hb_peers == r.hb_peers &&
-    l.op_queue_age_hist == r.op_queue_age_hist &&
-    l.os_perf_stat == r.os_perf_stat &&
-    l.num_pgs == r.num_pgs;
-}
-inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
-  return !(l == r);
-}
-
-inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat("
-	     << byte_u_t(s.kb_used << 10) << " used ("
-	     << byte_u_t(s.kb_used_data << 10) << " data, "
-	     << byte_u_t(s.kb_used_omap << 10) << " omap, "
-	     << byte_u_t(s.kb_used_meta << 10) << " meta), "
-	     << byte_u_t(s.kb_avail << 10) << " avail, "
-	     << byte_u_t(s.kb << 10) << " total, "
-	     << "peers " << s.hb_peers
-	     << " op hist " << s.op_queue_age_hist.h
-	     << ")";
-}
-
-
 /*
  * pg states
  */
@@ -2228,6 +2139,38 @@ struct store_statfs_t
   bool is_zero() const {
     return *this == store_statfs_t();
   }
+
+  uint64_t get_used() const {
+    return total - available - internally_reserved;
+  }
+
+  // this accumulates both actually used and statfs's internally_reserved
+  uint64_t get_used_raw() const {
+    return total - available;
+  }
+
+  // helpers to ease legacy code porting
+  uint64_t kb_avail() const {
+    return available >> 10;
+  }
+  uint64_t kb() const {
+    return total >> 10;
+  }
+  uint64_t kb_used_raw() const {
+    return get_used_raw() >> 10;
+  }
+
+  uint64_t kb_used_data() const {
+    return allocated >> 10;
+  }
+  uint64_t kb_used_omap() const {
+    return omap_allocated >> 10;
+  }
+
+  uint64_t kb_used_internal_metadata() const {
+    return internal_metadata >> 10;
+  }
+
   void add(const store_statfs_t& o) {
     total += o.total;
     available += o.available;
@@ -2272,6 +2215,69 @@ struct store_statfs_t
 WRITE_CLASS_DENC(store_statfs_t)
 
 ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
+
+/** osd_stat
+ * aggregate stats for an osd
+ */
+struct osd_stat_t {
+  store_statfs_t statfs;
+  vector<int> hb_peers;
+  int32_t snap_trim_queue_len, num_snap_trimming;
+
+  pow2_hist_t op_queue_age_hist;
+
+  objectstore_perf_stat_t os_perf_stat;
+
+  epoch_t up_from = 0;
+  uint64_t seq = 0;
+
+  uint32_t num_pgs = 0;
+
+  osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0) {}
+
+  void add(const osd_stat_t& o) {
+    statfs.add(o.statfs);
+    snap_trim_queue_len += o.snap_trim_queue_len;
+    num_snap_trimming += o.num_snap_trimming;
+    op_queue_age_hist.add(o.op_queue_age_hist);
+    os_perf_stat.add(o.os_perf_stat);
+    num_pgs += o.num_pgs;
+  }
+  void sub(const osd_stat_t& o) {
+    statfs.sub(o.statfs);
+    snap_trim_queue_len -= o.snap_trim_queue_len;
+    num_snap_trimming -= o.num_snap_trimming;
+    op_queue_age_hist.sub(o.op_queue_age_hist);
+    os_perf_stat.sub(o.os_perf_stat);
+    num_pgs -= o.num_pgs;
+  }
+
+  void dump(Formatter *f) const;
+  void encode(bufferlist &bl, uint64_t features) const;
+  void decode(bufferlist::const_iterator &bl);
+  static void generate_test_instances(std::list<osd_stat_t*>& o);
+};
+WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
+
+inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
+  return l.statfs == r.statfs &&
+    l.snap_trim_queue_len == r.snap_trim_queue_len &&
+    l.num_snap_trimming == r.num_snap_trimming &&
+    l.hb_peers == r.hb_peers &&
+    l.op_queue_age_hist == r.op_queue_age_hist &&
+    l.os_perf_stat == r.os_perf_stat &&
+    l.num_pgs == r.num_pgs;
+}
+inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
+  return !(l == r);
+}
+
+inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
+  return out << "osd_stat(" << s.statfs << ", "
+	     << "peers " << s.hb_peers
+	     << " op hist " << s.op_queue_age_hist.h
+	     << ")";
+}
 
 /*
  * summation over an entire pool
