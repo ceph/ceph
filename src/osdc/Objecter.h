@@ -1719,6 +1719,8 @@ public:
 
     OSDSession *session;
 
+    Objecter *objecter;
+    int ctx_budget;
     ceph_tid_t register_tid;
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
@@ -1733,22 +1735,24 @@ public:
       watch_pending_async.pop_front();
     }
 
-    LingerOp() : linger_id(0),
-		 target(object_t(), object_locator_t(), 0),
-		 snap(CEPH_NOSNAP), poutbl(NULL), pobjver(NULL),
-		 is_watch(false), last_error(0),
-		 register_gen(0),
-		 registered(false),
-		 canceled(false),
-		 on_reg_commit(NULL),
-		 on_notify_finish(NULL),
-		 notify_result_bl(NULL),
-		 notify_id(0),
-		 watch_context(NULL),
-		 session(NULL),
-		 register_tid(0),
-		 ping_tid(0),
-		 map_dne_bound(0) {}
+    LingerOp(Objecter *o) : linger_id(0),
+			    target(object_t(), object_locator_t(), 0),
+			    snap(CEPH_NOSNAP), poutbl(NULL), pobjver(NULL),
+			    is_watch(false), last_error(0),
+			    register_gen(0),
+			    registered(false),
+			    canceled(false),
+			    on_reg_commit(NULL),
+			    on_notify_finish(NULL),
+			    notify_result_bl(NULL),
+			    notify_id(0),
+			    watch_context(NULL),
+			    session(NULL),
+			    objecter(o),
+			    ctx_budget(-1),
+			    register_tid(0),
+			    ping_tid(0),
+			    map_dne_bound(0) {}
 
     const LingerOp &operator=(const LingerOp& r) = delete;
     LingerOp(const LingerOp& o) = delete;
@@ -1989,20 +1993,22 @@ private:
    * and returned whenever an op is removed from the map
    * If throttle_op needs to throttle it will unlock client_lock.
    */
-  int calc_op_budget(Op *op);
+  int calc_op_budget(const vector<OSDOp>& ops);
   void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
   int _take_op_budget(Op *op, shunique_lock& sul) {
     assert(sul && sul.mutex() == &rwlock);
-    int op_budget = calc_op_budget(op);
+    int op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
       _throttle_op(op, sul, op_budget);
-    } else {
+    } else { // update take_linger_budget to match this!
       op_throttle_bytes.take(op_budget);
       op_throttle_ops.take(1);
     }
     op->budgeted = true;
     return op_budget;
   }
+  int take_linger_budget(LingerOp *info);
+  friend class WatchContext; // to invoke put_up_budget_bytes
   void put_op_budget_bytes(int op_budget) {
     assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
@@ -2010,7 +2016,7 @@ private:
   }
   void put_op_budget(Op *op) {
     assert(op->budgeted);
-    int op_budget = calc_op_budget(op);
+    int op_budget = calc_op_budget(op->ops);
     put_op_budget_bytes(op_budget);
   }
   void put_nlist_context_budget(NListContext *list_context);
