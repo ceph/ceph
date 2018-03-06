@@ -1,29 +1,34 @@
 dashboard plugin
 ================
 
-Dashboard plugin visualizes the statistics of the cluster using a web server
-hosted by ``ceph-mgr``. The dashboard currently provides insight into the
-following aspects of your Ceph cluster:
+The dashboard plugin is a web application that visualizes information and
+statistics about the Ceph cluster using a web server hosted by ``ceph-mgr``.
 
-* **Overall cluster health**: The overall cluster status, storage utilization
-  (e.g. number of objects, raw capacity, usage per pool), a list of pools and
-  their status and usage statistics, access to the cluster log file.
-* **Hosts**: A list of all hosts associated to the cluster, which services
-  are running and which version of Ceph is installed.
-* **Performance counters**: Display detailed statistics for each running service.
-* **Monitors**: List of all MONs, their quorum status, open sessions.
-* **Configuration Reference**: List all available configuration options, their
-  description and default values.
-* **OSDs**: A list of all OSDs, their status and usage statistics as well as
+The dashboard currently provides insight into the following aspects of your
+cluster:
+
+* **Overall cluster health**: Displays the overall cluster status, storage
+  utilization (e.g. number of objects, raw capacity, usage per pool), a list of
+  pools and their status and usage statistics, access to the cluster log file.
+* **Hosts**: Provides a list of all hosts associated to the cluster, which
+  services are running and which version of Ceph is installed.
+* **Performance counters**: Displays detailed service-specific statistics for
+  each running service.
+* **Monitors**: Lists all MONs, their quorum status, open sessions.
+* **Configuration Reference**: Lists all available configuration options,
+  their description and default values.
+* **OSDs**: Lists all OSDs, their status and usage statistics as well as
   detailed information like attributes (OSD map), metadata, performance counters
   and usage histograms for read/write operations.
-* **iSCSI**: List all hosts that run the TCMU runner service, list of all images
-  and their performance characteristics (read/write ops, traffic).
-* **RBD**: List of all RBD images and their properties (size, objects, features)
-  in a given pool. 
-* **CephFS**: List all active filesystem clients and associated pools, including
-  their usage statistics.
-* **Object Gateway**: List of all active object gateways and their performance
+* **iSCSI**: Lists all hosts that run the TCMU runner service, displaying all
+  images and their performance characteristics (read/write ops, traffic).
+* **RBD**: Lists all RBD images and their properties (size, objects, features)
+  in a given pool.
+* **RBD mirroring**: Lists all active sync daemons and their status, pools and
+  RBD images including their synchronization state.
+* **CephFS**: Lists all active filesystem clients and associated pools,
+  including their usage statistics.
+* **Object Gateway**: Lists all active object gateways and their performance
   counters.
 
 Enabling
