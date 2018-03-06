@@ -38,7 +38,7 @@ volume setups, since encryption will happen once the LV is created.
 Workflow
 --------
 When setting up the OSD, a secret key will be created, that will be passed
-along to the monitor in JSON format as stdin to prevent the key from being
+along to the monitor in JSON format as ``stdin`` to prevent the key from being
 captured in the logs.
 
 The JSON payload looks something like::
