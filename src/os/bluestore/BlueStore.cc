@@ -3888,24 +3888,6 @@ int BlueStore::_set_cache_sizes()
   cache_meta_ratio = cct->_conf->bluestore_cache_meta_ratio;
   cache_kv_ratio = cct->_conf->bluestore_cache_kv_ratio;
 
-  double cache_kv_max = cct->_conf->bluestore_cache_kv_max;
-  double cache_kv_max_ratio = 0;
-
-  // if cache_kv_max is negative, disable it
-  if (cache_size > 0 && cache_kv_max >= 0) {
-    cache_kv_max_ratio = (double) cache_kv_max / (double) cache_size;
-    if (cache_kv_max_ratio < 1.0 && cache_kv_max_ratio < cache_kv_ratio) {
-      dout(1) << __func__ << " max " << cache_kv_max_ratio
-            << " < ratio " << cache_kv_ratio
-            << dendl;
-      cache_meta_ratio = cache_meta_ratio + cache_kv_ratio - cache_kv_max_ratio;
-      cache_kv_ratio = cache_kv_max_ratio;
-    }
-  }  
-
-  cache_data_ratio =
-    (double)1.0 - (double)cache_meta_ratio - (double)cache_kv_ratio;
-
   if (cache_meta_ratio < 0 || cache_meta_ratio > 1.0) {
     derr << __func__ << " bluestore_cache_meta_ratio (" << cache_meta_ratio
 	 << ") must be in range [0,1.0]" << dendl;
@@ -3923,6 +3905,26 @@ int BlueStore::_set_cache_sizes()
 	 << dendl;
     return -EINVAL;
   }
+
+  double cache_kv_min = cct->_conf->bluestore_cache_kv_min;
+  double cache_kv_min_ratio = 0;
+
+  // if cache_kv_min is negative, disable it
+  if (cache_size > 0 && cache_kv_min >= 0) {
+    cache_kv_min_ratio = std::min((double)cache_kv_min / (double)cache_size,
+				  (double)1.0);
+    if (cache_kv_min_ratio > cache_kv_ratio) {
+      dout(1) << __func__ << " kv_min_ratio " << cache_kv_min_ratio
+            << " > kv_ratio " << cache_kv_ratio << dendl;
+      cache_kv_ratio = cache_kv_min_ratio;
+      cache_meta_ratio = std::min((double)cache_meta_ratio,
+				  (double)1.0 - cache_kv_ratio);
+    }
+  }
+
+  cache_data_ratio =
+    (double)1.0 - (double)cache_meta_ratio - (double)cache_kv_ratio;
+
   if (cache_data_ratio < 0) {
     // deal with floating point imprecision
     cache_data_ratio = 0;
