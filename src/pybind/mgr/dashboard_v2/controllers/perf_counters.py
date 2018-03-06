@@ -34,7 +34,7 @@ class PerfCounter(RESTController):
             if mgr._stattype_to_str(value['type']) == 'counter':
                 counter['value'] = self._get_rate(
                     self._service_type, service_id, key)
-                counter['unit'] = '/s'
+                counter['unit'] = mgr._unit_to_str(value['units'])
             else:
                 counter['value'] = self._get_latest(
                     self._service_type, service_id, key)
