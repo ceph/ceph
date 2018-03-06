@@ -1,6 +1,7 @@
 import { Component } from '@angular/core';
 
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { RgwDaemonService } from '../services/rgw-daemon.service';
 
@@ -45,7 +46,7 @@ export class RgwDaemonListComponent {
       });
   }
 
-  beforeShowDetails(selected: Array<object>) {
-    return selected.length === 1;
+  beforeShowDetails(selection: CdTableSelection) {
+    return selection.hasSingleSelection;
   }
 }
