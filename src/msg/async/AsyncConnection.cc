@@ -2299,15 +2299,21 @@ void AsyncConnection::handle_ack(uint64_t seq)
 {
   ldout(async_msgr->cct, 15) << __func__ << " got ack seq " << seq << dendl;
   // trim sent list
-  std::lock_guard<std::mutex> l(write_lock);
-  while (!sent.empty() && sent.front()->get_seq() <= seq) {
+  static const int max_pending = 128;
+  int i = 0;
+  Message *pending[max_pending];
+  write_lock.lock();
+  while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
     Message* m = sent.front();
     sent.pop_front();
+    pending[i++] = m;
     ldout(async_msgr->cct, 10) << __func__ << " got ack seq "
                                << seq << " >= " << m->get_seq() << " on "
                                << m << " " << *m << dendl;
-    m->put();
   }
+  write_lock.unlock();
+  for (int k = 0; k < i; k++)
+    pending[k]->put();
 }
 
 void AsyncConnection::DelayedDelivery::do_request(uint64_t id)
