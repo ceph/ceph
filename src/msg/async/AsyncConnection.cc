@@ -1914,7 +1914,6 @@ int AsyncConnection::send_message(Message *m)
     return 0;
   }
 
-  last_active = ceph::coarse_mono_clock::now();
   // we don't want to consider local message here, it's too lightweight which
   // may disturb users
   logger->inc(l_msgr_send_messages);
@@ -2176,6 +2175,7 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   FUNCTRACE(async_msgr->cct);
   assert(center->in_thread());
   m->set_seq(++out_seq);
+  last_active = ceph::coarse_mono_clock::now();
 
   if (msgr->crcflags & MSG_CRC_HEADER)
     m->calc_header_crc();
