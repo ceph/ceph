@@ -10004,14 +10004,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     }
   }
 
-  ctx->op_t->add_obc(ctx->obc);
-  if (ctx->clone_obc) {
-    ctx->op_t->add_obc(ctx->clone_obc);
-  }
-  if (ctx->head_obc) {
-    ctx->op_t->add_obc(ctx->head_obc);
-  }
-
   Context *on_all_commit = new C_OSD_RepopCommit(this, repop);
   if (!(ctx->log.empty())) {
     assert(ctx->at_version >= projected_last_update);
