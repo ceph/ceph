@@ -35,9 +35,7 @@ describe('RgwDaemonDetailsComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwDaemonDetailsComponent);
     component = fixture.componentInstance;
-
     component.selection = new CdTableSelection();
-
     fixture.detectChanges();
   });
 

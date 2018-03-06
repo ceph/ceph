@@ -36,6 +36,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @ViewChild('tableCellBoldTpl') tableCellBoldTpl: TemplateRef<any>;
   @ViewChild('sparklineTpl') sparklineTpl: TemplateRef<any>;
   @ViewChild('routerLinkTpl') routerLinkTpl: TemplateRef<any>;
+  @ViewChild('checkIconTpl') checkIconTpl: TemplateRef<any>;
   @ViewChild('perSecondTpl') perSecondTpl: TemplateRef<any>;
   @ViewChild('executingTpl') executingTpl: TemplateRef<any>;
 
@@ -188,6 +189,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   _addTemplates() {
     this.cellTemplates.bold = this.tableCellBoldTpl;
+    this.cellTemplates.checkIcon = this.checkIconTpl;
     this.cellTemplates.sparkline = this.sparklineTpl;
     this.cellTemplates.routerLink = this.routerLinkTpl;
     this.cellTemplates.perSecond = this.perSecondTpl;
