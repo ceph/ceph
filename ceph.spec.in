@@ -344,13 +344,6 @@ Summary:	Ceph Monitor Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-# For ceph-rest-api
-%if 0%{?fedora} || 0%{?rhel}
-Requires:      python%{_python_buildid}-flask
-%endif
-%if 0%{?suse_version}
-Requires:      python%{_python_buildid}-Flask
-%endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -1338,16 +1331,8 @@ fi
 
 %files mon
 %{_bindir}/ceph-mon
-%{_bindir}/ceph-rest-api
 %{_bindir}/ceph-monstore-tool
 %{_mandir}/man8/ceph-mon.8*
-%{_mandir}/man8/ceph-rest-api.8*
-%if 0%{with python2}
-%{python_sitelib}/ceph_rest_api.py*
-%else
-%{python3_sitelib}/ceph_rest_api.py
-%{python3_sitelib}/__pycache__/ceph_rest_api.cpython*.py*
-%endif
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mon.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
