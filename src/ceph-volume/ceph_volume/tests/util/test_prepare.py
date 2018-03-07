@@ -116,6 +116,31 @@ class TestFormatDevice(object):
         assert expected == fake_run.calls[0]['args'][0]
 
 
+mkfs_filestore_flags = [
+    'ceph-osd',
+    '--cluster',
+    '--osd-objectstore', 'filestore',
+    '--mkfs',
+    '-i',
+    '--monmap',
+    '--keyfile', '-', # goes through stdin
+    '--osd-data',
+    '--osd-journal',
+    '--osd-uuid',
+    '--setuser', 'ceph',
+    '--setgroup', 'ceph'
+]
+
+
+class TestOsdMkfsFilestore(object):
+
+    @pytest.mark.parametrize('flag', mkfs_filestore_flags)
+    def test_keyring_is_used(self, fake_call, monkeypatch, flag):
+        monkeypatch.setattr(system, 'chown', lambda path: True)
+        prepare.osd_mkfs_filestore(1, 'asdf', keyring='secret')
+        assert flag in fake_call.calls[0]['args'][0]
+
+
 class TestOsdMkfsBluestore(object):
 
     def test_keyring_is_added(self, fake_call, monkeypatch):
