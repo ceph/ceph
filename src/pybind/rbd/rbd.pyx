@@ -80,7 +80,7 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_IMAGE_OPTION_STRIPE_COUNT "RBD_IMAGE_OPTION_STRIPE_COUNT"
         _RBD_IMAGE_OPTION_DATA_POOL "RBD_IMAGE_OPTION_DATA_POOL"
 
-        RBD_MAX_BLOCK_NAME_SIZE
+        RBD_MAX_BLOCK_NAME_PREFIX_LENGTH
         RBD_MAX_IMAGE_NAME_SIZE
 
     ctypedef void* rados_ioctx_t
@@ -93,7 +93,7 @@ cdef extern from "rbd/librbd.h" nogil:
         uint64_t obj_size
         uint64_t num_objs
         int order
-        char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE]
+        char block_name_prefix[RBD_MAX_BLOCK_NAME_PREFIX_LENGTH]
         uint64_t parent_pool
         char parent_name[RBD_MAX_IMAGE_NAME_SIZE]
 

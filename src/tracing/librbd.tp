@@ -2307,7 +2307,7 @@ TRACEPOINT_EVENT(librbd, stat_exit,
         ctf_integer(uint64_t, obj_size, info->obj_size)
         ctf_integer(uint64_t, num_objs, info->num_objs)
         ctf_integer(int, order, info->order)
-        ctf_array_text(char, block_name_prefix, info->block_name_prefix, RBD_MAX_BLOCK_NAME_SIZE)
+        ctf_array_text(char, block_name_prefix, info->block_name_prefix, RBD_MAX_BLOCK_NAME_PREFIX_LENGTH)
         ctf_integer(int64_t, parent_pool, info->parent_pool)
         ctf_array_text(char, parent_name, info->parent_name, RBD_MAX_IMAGE_NAME_SIZE)
     )
