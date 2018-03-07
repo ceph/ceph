@@ -20,6 +20,7 @@ import 'rxjs/add/observable/timer';
 import { Observable } from 'rxjs/Observable';
 
 import { CdTableColumn } from '../../models/cd-table-column';
+import { CdTableSelection } from '../../models/cd-table-selection';
 import { TableDetailsDirective } from '../table-details.directive';
 
 @Component({
@@ -79,13 +80,17 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    */
   @Output() fetchData = new EventEmitter();
 
+  /**
+   * Use this variable to access the selected row(s).
+   */
+  selection = new CdTableSelection();
+
   cellTemplates: {
     [key: string]: TemplateRef<any>
   } = {};
   selectionType: string = undefined;
   search = '';
   rows = [];
-  selected = [];
   loadingIndicator = true;
   paginationClasses = {
     pagerLeftArrow: 'i fa fa-angle-double-left',
@@ -201,9 +206,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.updating = false;
   }
 
+  onSelect() {
+    this.selection.update();
+    this.toggleExpandRow();
+  }
+
   toggleExpandRow() {
-    if (this.selected.length > 0) {
-      this.table.rowDetail.toggleExpandRow(this.selected[0]);
+    if (this.selection.hasSelection) {
+      this.table.rowDetail.toggleExpandRow(this.selection.first());
     } else {
       this.detailTemplate.viewContainerRef.clear();
     }
@@ -214,7 +224,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       return;
     }
     if (_.isFunction(this.beforeShowDetails)) {
-      if (!this.beforeShowDetails(this.selected)) {
+      if (!this.beforeShowDetails(this.selection)) {
         return;
       }
     }
@@ -224,7 +234,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     const cmpRef = this.detailTemplate.viewContainerRef.createComponent(
       this.componentFactoryResolver.resolveComponentFactory(factoryClass)
     );
-    cmpRef.instance.selected = this.selected;
+    cmpRef.instance.selected = this.selection.selected;
   }
 
   updateFilter(event?) {
