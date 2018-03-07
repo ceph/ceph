@@ -9419,6 +9419,9 @@ void OSDShard::identify_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids)
       auto *slot = i.second.get();
       if (slot->pg || slot->waiting_for_split) {
 	osd->service.identify_split_children(osdmap, as_of_osdmap, pgid, pgids);
+      } else {
+	dout(20) << __func__ << " slot " << pgid
+		 << " has no pg and !waiting_for_split" << dendl;
       }
     }
   }
