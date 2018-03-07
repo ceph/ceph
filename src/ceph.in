@@ -27,6 +27,9 @@ import subprocess
 import time
 import platform
 
+reload(sys)
+sys.setdefaultencoding('utf8')
+
 try:
     input = raw_input
 except NameError:
