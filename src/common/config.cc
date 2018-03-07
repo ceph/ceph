@@ -396,8 +396,7 @@ void md_config_t::config_options(Formatter *f)
   Mutex::Locker l(lock);
   f->open_array_section("options");
   for (const auto& i: schema) {
-    const Option &opt = i.second;
-    opt.dump(f);
+    f->dump_object("option", i.second);
   }
   f->close_section();
 }
