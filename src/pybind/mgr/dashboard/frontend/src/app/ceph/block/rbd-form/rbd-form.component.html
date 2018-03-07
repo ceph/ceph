@@ -1,0 +1,325 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">Block</li>
+    <li class="breadcrumb-item">Pools</li>
+    <li class="breadcrumb-item">
+      <a routerLink="/block/pool/{{ pool }}">{{ pool }}</a></li>
+    <li class="breadcrumb-item active">Add image</li>
+  </ol>
+</nav>
+
+<div class="col-sm-12 col-lg-6">
+  <form name="rbdForm"
+        class="form-horizontal"
+        (ngSubmit)="submit()"
+        #formDir="ngForm"
+        [formGroup]="rbdForm"
+        novalidate>
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title">Add RBD image</h3>
+      </div>
+      <div class="panel-body">
+
+        <!-- Name -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.name.dirty) && rbdForm.controls.name.invalid}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">Name
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Name..."
+                   id="name"
+                   name="name"
+                   formControlName="name"
+                   autofocus>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || rbdForm.controls.name.dirty) && rbdForm.controls.name.hasError('required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+        <!-- Use a ded icated pool -->
+        <div class="form-group">
+          <div class="col-sm-offset-3 col-sm-9">
+            <div class="checkbox checkbox-primary">
+              <input type="checkbox"
+                     id="useDataPool"
+                     name="useDataPool"
+                     formControlName="useDataPool">
+              <label i18n
+                     for="useDataPool">Use a dedicated data pool</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pool -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.pool.dirty) && rbdForm.controls.pool.invalid}">
+          <label class="control-label col-sm-3"
+                 for="pool"
+                 *ngIf="!rbdForm.value.useDataPool">
+            Pool
+            <span class="required"></span>
+            <cd-helper html="Main pool where the RBD is located and all data is stored.">
+            </cd-helper>
+          </label>
+          <label class="control-label col-sm-3"
+                 for="pool"
+                 *ngIf="rbdForm.value.useDataPool">
+            Meta pool
+            <span class="required"></span>
+            <cd-helper html="Main pool where the RBD is located and the meta-data is stored.">
+            </cd-helper>
+          </label>
+          <div class="col-sm-9">
+            <select id="pool"
+                    name="pool"
+                    class="form-control"
+                    formControlName="pool"
+                    required>
+              <option *ngIf="pools === null"
+                      [ngValue]="null">Loading...
+              </option>
+              <option *ngIf="pools !== null && pools.length === 0"
+                      [ngValue]="null">-- No pools available --
+              </option>
+              <option *ngIf="pools !== null && pools.length > 0"
+                      [ngValue]="null">-- Select a pool --
+              </option>
+              <option *ngFor="let pool of pools"
+                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            </select>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || rbdForm.controls.pool.dirty) && rbdForm.controls.pool.hasError('required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+        <!-- Data Pool -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.dataPool.dirty) && rbdForm.controls.dataPool.invalid}"
+             *ngIf="rbdForm.value.useDataPool">
+          <label class="control-label col-sm-3"
+                 for="dataPool">
+            Data pool
+            <span class="required"></span>
+            <cd-helper html="Dedicated pool that stores the object-data of the RBD.">
+            </cd-helper>
+          </label>
+          <div class="col-sm-9">
+            <select id="dataPool"
+                    name="dataPool"
+                    class="form-control"
+                    formControlName="dataPool">
+              <option *ngIf="dataPools === null"
+                      [ngValue]="null">Loading...
+              </option>
+              <option *ngIf="dataPools !== null && dataPools.length === 0"
+                      [ngValue]="null">-- No pools available --
+              </option>
+              <option *ngIf="dataPools !== null && dataPools.length > 0"
+                      [ngValue]="null">-- Select a pool --
+              </option>
+              <option *ngFor="let dataPool of dataPools"
+                      [value]="dataPool.pool_name">{{ dataPool.pool_name }}</option>
+            </select>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || rbdForm.controls.dataPool.dirty) && rbdForm.controls.dataPool.hasError('required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+        <!-- Size -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.size.dirty) && rbdForm.controls.size.invalid}">
+          <label translate
+                 class="control-label col-sm-3"
+                 for="size">Size
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+            <input id="size"
+                   name="size"
+                   class="form-control"
+                   type="text"
+                   formControlName="size"
+                   placeholder="e.g., 10GB"
+                   cdDimlessBinary>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || rbdForm.controls.size.dirty) && rbdForm.controls.size.hasError('required')">
+              This field is required.
+            </span>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || rbdForm.controls.size.dirty) && rbdForm.controls.size.hasError('invalidSizeObject')">
+              You have to increase the size in order to have at least 1 object in your RBD.
+            </span>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || rbdForm.controls.size.dirty) && rbdForm.controls.size.hasError('invalidSizeObjectStriping')">
+              You have to increase the size in order to use striping.
+            </span>
+          </div>
+        </div>
+
+        <!-- Object Size -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.obj_size.dirty) && rbdForm.controls.obj_size.invalid}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="size">Object size
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+            <input id="obj_size"
+                   class="form-control"
+                   type="text"
+                   name="obj_size"
+                   formControlName="obj_size"
+                   placeholder="4 KiB up to 32 MiB"
+                   cdDimlessBinary
+                   minBytes="4096"
+                   maxBytes="33554432"
+                   roundPower="2"
+                   defaultUnit="k"
+                   required>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || rbdForm.controls.obj_size.dirty) && rbdForm.controls.obj_size.hasError('required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+        <!-- Features -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || featuresFormGroups.dirty) && featuresFormGroups.invalid}"
+             formGroupName="features">
+          <label class="col-sm-3 control-label"
+                 for="features">
+            Features
+          </label>
+          <div class="col-sm-9">
+            <div class="checkbox checkbox-primary">
+              <input type="checkbox"
+                     id="default-features"
+                     name="default-features"
+                     formControlName="defaultFeatures">
+              <label i18n
+                     for="default-features">Use default features</label>
+            </div>
+            <div *ngIf="!featuresFormGroups.value.defaultFeatures">
+              <br>
+              <div class="checkbox checkbox-primary"
+                   *ngFor="let feature of featuresList">
+                <input type="checkbox"
+                       id="{{ feature.key }}"
+                       name="{{ feature.key }}"
+                       formControlName="{{ feature.key }}">
+                <label for="{{ feature.key }}">{{ feature.desc }}</label>
+                <cd-helper *ngIf="feature.helperHtml"
+                           html="{{ feature.helperHtml }}">
+                </cd-helper>
+              </div>
+              <span i18n
+                    class="help-block"
+                    *ngIf="(formDir.submitted || featuresFormGroups.dirty) && featuresFormGroups.hasError('noFeatureSelected')">At least one feature has to be selected</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Stripping -->
+        <div *ngIf="featuresFormGroups.value.striping">
+          <h2 i18n
+              class="page-header">Striping</h2>
+          <div class="form-group"
+               [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.stripingUnit.dirty) && rbdForm.controls.stripingUnit.invalid}">
+            <label translate
+                   class="control-label col-sm-4"
+                   for="stripingUnit">
+              Striping unit
+              <span class="required"></span>
+            </label>
+            <div class="col-sm-8">
+              <input id="stripingUnit"
+                     name="stripingUnit"
+                     formControlName="stripingUnit"
+                     class="form-control"
+                     type="text"
+                     placeholder="4 KiB up to 32 MiB"
+                     cdDimlessBinary
+                     minBytes="4096"
+                     maxBytes="33554432"
+                     roundPower="2"
+                     defaultUnit="k">
+              <span i18n
+                    class="help-block"
+                    *ngIf="(formDir.submitted || rbdForm.controls.stripingUnit.dirty) && rbdForm.controls.stripingUnit.hasError('required')">
+                This field is required!
+              </span>
+              <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || rbdForm.controls.stripingUnit.dirty) && rbdForm.controls.stripingUnit.hasError('invalidStripingUnit')">
+              Stripe unit is not a factor of the object size.
+            </span>
+            </div>
+          </div>
+          <div class="form-group"
+               [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.stripingCount.dirty) && rbdForm.controls.stripingCount.invalid}">
+            <label translate
+                   class="control-label col-sm-4"
+                   for="stripingCount">
+              Striping count
+              <span class="required"></span>
+            </label>
+            <div class="col-sm-8">
+              <input id="stripingCount"
+                     name="stripingCount"
+                     formControlName="stripingCount"
+                     class="form-control"
+                     type="number">
+              <span i18n
+                    class="help-block"
+                    *ngIf="(formDir.submitted || rbdForm.controls.stripingCount.dirty) && rbdForm.controls.stripingCount.hasError('required')">
+                This field is required!
+              </span>
+              <span i18n
+                    class="help-block"
+                    *ngIf="(formDir.submitted || rbdForm.controls.stripingCount.dirty) && rbdForm.controls.stripingCount.hasError('min')">
+                The striping count has to be a value higher than 1.
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="panel-footer">
+        <div class="button-group text-right">
+          <button i18n
+                  type="submit"
+                  class="btn btn-sm btn-primary">
+            Create image
+          </button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  routerLink="/block/pool/{{ pool }}">
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

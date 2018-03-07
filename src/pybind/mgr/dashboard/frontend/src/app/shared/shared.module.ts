@@ -11,7 +11,7 @@ import { AuthStorageService } from './services/auth-storage.service';
 import { AuthService } from './services/auth.service';
 import { FormatterService } from './services/formatter.service';
 import { HostService } from './services/host.service';
-import { PoolService } from './services/pool.service';
+import { RbdService } from './services/rbd.service';
 import { ServicesModule } from './services/services.module';
 
 @NgModule({
@@ -38,7 +38,7 @@ import { ServicesModule } from './services/services.module';
     AuthService,
     AuthStorageService,
     AuthGuardService,
-    PoolService,
+    RbdService,
     FormatterService,
     HostService
   ],

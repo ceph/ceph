@@ -6,7 +6,7 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { PoolService } from '../../../shared/services/pool.service';
+import { RbdService } from '../../../shared/services/rbd.service';
 
 @Component({
   selector: 'cd-pool-detail',
@@ -24,7 +24,7 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
 
   constructor(
     private route: ActivatedRoute,
-    private poolService: PoolService,
+    private rbdService: RbdService,
     dimlessBinaryPipe: DimlessBinaryPipe,
     dimlessPipe: DimlessPipe
   ) {
@@ -81,7 +81,7 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
   }
 
   loadImages() {
-    this.poolService.rbdPoolImages(this.name).then(
+    this.rbdService.getPoolImages(this.name).then(
       resp => {
         this.viewCacheStatus = resp.status;
         this.images = resp.value;
