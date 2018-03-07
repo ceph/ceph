@@ -64,9 +64,10 @@ TEST(pgmap, dump_object_stat_sum_0)
   sum.num_rd_kb = 123;
   sum.num_wr = 101;
   sum.num_wr_kb = 321;    
+  pool_stat.num_store_stats = 3;
   store_statfs_t &statfs = pool_stat.store_stats;
-  statfs.data_stored = 42 * 1024 * 1024 - 5;
-  statfs.allocated = 42 * 1024 * 1024 * 2;
+  statfs.data_stored = 40 * 1024 * 1024;
+  statfs.allocated = 41 * 1024 * 1024 * 2;
   statfs.data_compressed_allocated = 4334;
   statfs.data_compressed_original = 1213;
 
