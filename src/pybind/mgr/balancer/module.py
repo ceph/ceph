@@ -541,7 +541,7 @@ class Module(MgrModule):
                 'objects': objects,
                 'bytes': bytes,
             }
-        for root, m in pe.total_by_root.iteritems():
+        for root in pe.total_by_root.iterkeys():
             pe.count_by_root[root] = {
                 'pgs': {
                     k: float(v)
