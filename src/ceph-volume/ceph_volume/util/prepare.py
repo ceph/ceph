@@ -298,7 +298,7 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     process.call(command, stdin=keyring, show_command=True)
 
 
-def osd_mkfs_filestore(osd_id, fsid):
+def osd_mkfs_filestore(osd_id, fsid, keyring):
     """
     Create the files for the OSD to function. A normal call will look like:
 
@@ -318,7 +318,7 @@ def osd_mkfs_filestore(osd_id, fsid):
     system.chown(journal)
     system.chown(path)
 
-    process.run([
+    command = [
         'ceph-osd',
         '--cluster', conf.cluster,
         # undocumented flag, sets the `type` file to contain 'filestore'
@@ -326,9 +326,11 @@ def osd_mkfs_filestore(osd_id, fsid):
         '--mkfs',
         '-i', osd_id,
         '--monmap', monmap,
+        '--keyfile', '-', # goes through stdin
         '--osd-data', path,
         '--osd-journal', journal,
         '--osd-uuid', fsid,
         '--setuser', 'ceph',
         '--setgroup', 'ceph'
-    ])
+    ]
+    process.call(command, stdin=keyring, terminal_verbose=True, show_command=True)
