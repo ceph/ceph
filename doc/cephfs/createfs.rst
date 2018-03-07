@@ -58,6 +58,10 @@ choose which to use when mounting.
 .. _Mount CephFS: ../../cephfs/kernel
 .. _Mount CephFS as FUSE: ../../cephfs/fuse
 
+If you have created more than one filesystem, and a client does not
+specify a filesystem when mounting, you can control which filesystem
+they will see by using the `ceph fs set-default` command.
+
 Using Erasure Coded pools with CephFS
 =====================================
 
