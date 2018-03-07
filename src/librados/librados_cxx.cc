@@ -2483,10 +2483,10 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
     auto& pstat = p->second;
     store_statfs_t &statfs = pstat.store_stats;
     uint64_t allocated_bytes = pstat.get_allocated_bytes();
-    // again, raw_used_rate is unknown hence using num_store_stats that
-    // will produce results similar to get_allocated_bytes() for legacy mode
-    // and stored / num_store_stats for the new collection mode
-    uint64_t user_bytes = pstat.get_user_bytes(pstat.num_store_stats);
+    // FIXME: raw_used_rate is unknown hence use 1.0 here
+    // meaning we keep net amount aggregated over all replicas
+    // Not a big deal so far since this field isn't exposed
+    uint64_t user_bytes = pstat.get_user_bytes(1.0);
 
     object_stat_sum_t *sum = &p->second.stats.sum;
     pv.num_kb = shift_round_up(allocated_bytes, 10);
