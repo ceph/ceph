@@ -963,10 +963,10 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
 
   ::pool_stat_t& r = rawresult[pool_name];
   uint64_t allocated_bytes = r.get_allocated_bytes();
-  // again, raw_used_rate is unknown hence using num_store_stats that
-  // will produce results similar to get_allocated_bytes(1.0) for legacy mode
-  // and stored / num_store_stats for the new collection mode
-  uint64_t user_bytes = r.get_user_bytes(r.num_store_stats);
+  // FIXME: raw_used_rate is unknown hence use 1.0 here
+  // meaning we keep net amount aggregated over all replicas
+  // Not a big deal so far since this field isn't exposed
+  uint64_t user_bytes = r.get_user_bytes(1.0);
 
   stats->num_kb = shift_round_up(allocated_bytes, 10);
   stats->num_bytes = allocated_bytes;
