@@ -436,8 +436,11 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
     statfs.reset();
     statfs.total = kb << 10;
     statfs.available = kb_avail << 10;
-    assert(statfs.total >= statfs.available);
-    statfs.internally_reserved = statfs.total - statfs.available;
+    // actually it's totally unexpected to have ststfs.total < statfs.available
+    // here but unfortunately legacy generate_test_instances produced such a
+    // case hence inserting some handling rather than assert
+    statfs.internally_reserved =
+      statfs.total > statfs.available ? statfs.total - statfs.available : 0;
     kb_used <<= 10;
     if ((int64_t)statfs.internally_reserved > kb_used) {
       statfs.internally_reserved -= kb_used;
