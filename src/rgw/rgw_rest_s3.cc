@@ -3445,6 +3445,17 @@ bool RGWHandler_REST_S3Website::web_dir() const {
   return state->exists;
 }
 
+int RGWHandler_REST_S3Website::init(RGWRados *store, req_state *s,
+                                    rgw::io::BasicClient* cio)
+{
+  // save the original object name before retarget() replaces it with the
+  // result of get_effective_key(). the error_handler() needs the original
+  // object name for redirect handling
+  original_object_name = s->object.name;
+
+  return RGWHandler_REST_S3::init(store, s, cio);
+}
+
 int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   *new_op = op;
   ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
@@ -3594,16 +3605,16 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
 
   RGWBWRoutingRule rrule;
   bool should_redirect =
-    s->bucket_info.website_conf.should_redirect(s->object.name, http_error_code,
-						&rrule);
+    s->bucket_info.website_conf.should_redirect(original_object_name,
+                                                http_error_code, &rrule);
 
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
     const string& protocol =
       (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
     int redirect_code = 0;
-    rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect,
-		    &redirect_code);
+    rrule.apply_rule(protocol, hostname, original_object_name,
+                     &s->redirect, &redirect_code);
     // Apply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
