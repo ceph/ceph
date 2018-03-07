@@ -9,10 +9,16 @@ add_custom_target(mgr-dashboard_v2-test-venv
 add_dependencies(tests mgr-dashboard_v2-test-venv)
 
 if(WITH_MGR_DASHBOARD_V2_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
+  find_program(NPM_BIN
+    NAMES npm
+    HINTS $ENV{NPM_ROOT}/bin)
+  if(NOT NPM_BIN)
+    message(FATAL_ERROR "WITH_MGR_DASHBOARD_V2_FRONTEND not npm not found")
+  endif()
 
 add_custom_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard_v2/frontend/node_modules"
-  COMMAND npm install
+  COMMAND ${NPM_BIN} install
   DEPENDS frontend/package.json
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard_v2/frontend
   COMMENT "dashboard_v2 frontend dependencies are being installed"
@@ -42,9 +48,9 @@ file(
   frontend/src/*/*/*/*/*/*.html)
 
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(npm_command npm run build -- --prod)
+  set(npm_command ${NPM_BIN} run build -- --prod)
 else()
-  set(npm_command npm run build)
+  set(npm_command ${NPM_BIN} run build)
 endif()
 
 add_custom_command(
