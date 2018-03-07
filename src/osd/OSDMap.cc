@@ -4491,6 +4491,32 @@ void print_osd_utilization(const OSDMap& osdmap,
     out << tbl << d.summary() << "\n";
   }
 }
+uint64_t OSDMap::get_warn_flags() const
+{
+    uint64_t warn_flags =
+      CEPH_OSDMAP_NEARFULL |
+      CEPH_OSDMAP_FULL |
+      CEPH_OSDMAP_PAUSERD |
+      CEPH_OSDMAP_PAUSEWR |
+      CEPH_OSDMAP_PAUSEREC |
+      CEPH_OSDMAP_NOUP |
+      CEPH_OSDMAP_NODOWN |
+      CEPH_OSDMAP_NOIN |
+      CEPH_OSDMAP_NOOUT |
+      CEPH_OSDMAP_NOBACKFILL |
+      CEPH_OSDMAP_NORECOVER |
+      CEPH_OSDMAP_NOTIERAGENT |
+      CEPH_OSDMAP_NOSNAPTRIM |
+      CEPH_OSDMAP_NOREBALANCE;
+
+    if (g_conf->get_val<bool>("mon_warn_on_noscrub"))
+      warn_flags |= CEPH_OSDMAP_NOSCRUB;
+
+    if (g_conf->get_val<bool>("mon_warn_on_nodeep_scrub"))
+      warn_flags |= CEPH_OSDMAP_NODEEP_SCRUB;
+
+    return warn_flags;
+}
 
 void OSDMap::check_health(health_check_map_t *checks) const
 {
@@ -4719,23 +4745,8 @@ void OSDMap::check_health(health_check_map_t *checks) const
   // OSDMAP_FLAGS
   {
     // warn about flags
-    uint64_t warn_flags =
-      CEPH_OSDMAP_NEARFULL |
-      CEPH_OSDMAP_FULL |
-      CEPH_OSDMAP_PAUSERD |
-      CEPH_OSDMAP_PAUSEWR |
-      CEPH_OSDMAP_PAUSEREC |
-      CEPH_OSDMAP_NOUP |
-      CEPH_OSDMAP_NODOWN |
-      CEPH_OSDMAP_NOIN |
-      CEPH_OSDMAP_NOOUT |
-      CEPH_OSDMAP_NOBACKFILL |
-      CEPH_OSDMAP_NORECOVER |
-      CEPH_OSDMAP_NOSCRUB |
-      CEPH_OSDMAP_NODEEP_SCRUB |
-      CEPH_OSDMAP_NOTIERAGENT |
-      CEPH_OSDMAP_NOSNAPTRIM |
-      CEPH_OSDMAP_NOREBALANCE;
+    uint64_t warn_flags = get_warn_flags();
+      
     if (test_flag(warn_flags)) {
       ostringstream ss;
       ss << get_flag_string(get_flags() & warn_flags)

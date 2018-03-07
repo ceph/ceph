@@ -1363,6 +1363,7 @@ public:
 
 private:
   void print_osd_line(int cur, ostream *out, Formatter *f) const;
+  uint64_t get_warn_flags() const;
 public:
   void print(ostream& out) const;
   void print_pools(ostream& out) const;

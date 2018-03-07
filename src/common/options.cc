@@ -1160,6 +1160,14 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enable POOL_APP_NOT_ENABLED health check"),
 
+    Option("mon_warn_on_noscrub", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("Enable noscrub health check warn"),
+
+    Option("mon_warn_on_nodeep_scrub", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .set_description("Enable nodeep-scrub health check warn"),
+
     Option("mon_max_snap_prune_per_epoch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_description("Max number of pruned snaps we will process in a single OSDMap epoch"),
