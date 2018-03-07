@@ -3411,7 +3411,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->tid = 0;
     m->get_redirect().combine_with_locator(op->target.target_oloc,
 					   op->target.target_oid.name);
-    op->target.flags |= CEPH_OSD_FLAG_REDIRECTED;
+    op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED | CEPH_OSD_FLAG_IGNORE_OVERLAY);
     _op_submit(op, sul, NULL);
     m->put();
     return;
