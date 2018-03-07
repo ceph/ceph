@@ -141,6 +141,15 @@ class Eval:
         num = max(len(target), 1)
         r = {}
         for t in ('pgs', 'objects', 'bytes'):
+            if total[t] == 0:
+                r[t] = {
+                    'avg': 0,
+                    'stddev': 0,
+                    'sum_weight': 0,
+                    'score': 0,
+                }
+                continue
+
             avg = float(total[t]) / float(num)
             dev = 0.0
 
