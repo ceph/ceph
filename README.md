@@ -2,7 +2,6 @@
 
 Please see http://ceph.com/ for current info.
 
-
 ## Contributing Code
 
 Most of Ceph is licensed under the LGPL version 2.1.  Some
