@@ -323,17 +323,6 @@ void Option::dump(Formatter *f) const
 
 std::string Option::to_str(const Option::value_t& v)
 {
-  if (boost::get<boost::blank>(&v)) {
-    return string();
-  }
-  if (const bool *flag = boost::get<const bool>(&v)) {
-    return *flag ? "true" : "false";
-  }
-  if (const double *dp = boost::get<const double>(&v)) {
-    ostringstream oss;
-    oss << std::fixed << *dp;
-    return oss.str();
-  }
   return stringify(v);
 }
 
