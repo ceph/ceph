@@ -1,21 +1,16 @@
 export class CdTableSelection {
   selected: any[] = [];
-  hasMultiSelection: boolean;
-  hasSingleSelection: boolean;
-  hasSelection: boolean;
 
-  constructor() {
-    this.update();
+  get hasSelection(): boolean {
+    return this.selected.length > 0;
   }
 
-  /**
-   * Recalculate the variables based on the current number
-   * of selected rows.
-   */
-  update() {
-    this.hasSelection = this.selected.length > 0;
-    this.hasSingleSelection = this.selected.length === 1;
-    this.hasMultiSelection = this.selected.length > 1;
+  get hasSingleSelection(): boolean {
+    return this.selected.length === 1;
+  }
+
+  get hasMultiSelection(): boolean {
+    return this.selected.length > 1;
   }
 
   first() {

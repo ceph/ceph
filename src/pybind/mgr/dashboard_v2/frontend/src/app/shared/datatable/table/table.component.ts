@@ -210,7 +210,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   onSelect() {
-    this.selection.update();
     this.toggleExpandRow();
   }
 
