@@ -69,7 +69,7 @@ private:
 
 template <typename I>
 PoolWatcher<I>::PoolWatcher(Threads<I> *threads, librados::IoCtx &remote_io_ctx,
-                            Listener &listener)
+                            pool_watcher::Listener &listener)
   : m_threads(threads), m_remote_io_ctx(remote_io_ctx), m_listener(listener),
     m_lock(librbd::util::unique_lock_name("rbd::mirror::PoolWatcher", this)) {
   m_mirroring_watcher = new MirroringWatcher(m_remote_io_ctx,

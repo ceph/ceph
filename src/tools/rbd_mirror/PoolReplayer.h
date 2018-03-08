@@ -15,6 +15,7 @@
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
+#include "tools/rbd_mirror/pool_watcher/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
 
 #include <set>
@@ -98,7 +99,7 @@ private:
    * @endverbatim
    */
 
-  struct PoolWatcherListener : public PoolWatcher<>::Listener {
+  struct PoolWatcherListener : public pool_watcher::Listener {
     PoolReplayer *pool_replayer;
     bool local;
 
