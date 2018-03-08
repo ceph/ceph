@@ -15,6 +15,7 @@
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
+#include "tools/rbd_mirror/image_map/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
@@ -32,6 +33,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+template <typename> class ImageMap;
 template <typename> class InstanceReplayer;
 template <typename> class InstanceWatcher;
 template <typename> class ServiceDaemon;
@@ -81,6 +83,9 @@ private:
    *    .                                 |
    *    .                                 |
    *    v (leader acquired)               |
+   * INIT_IMAGE_MAP             SHUT_DOWN_IMAGE_MAP
+   *    |                                 ^
+   *    v                                 |
    * INIT_LOCAL_POOL_WATCHER    WAIT_FOR_NOTIFICATIONS
    *    |                                 ^
    *    v                                 |
@@ -118,6 +123,36 @@ private:
     }
   };
 
+  struct ImageMapListener : public image_map::Listener {
+    PoolReplayer *pool_replayer;
+
+    ImageMapListener(PoolReplayer *pool_replayer)
+      : pool_replayer(pool_replayer) {
+    }
+
+    void acquire_image(const std::string &global_image_id,
+                       const std::string &instance_id,
+                       Context* on_finish) override {
+      pool_replayer->handle_acquire_image(global_image_id, instance_id,
+                                          on_finish);
+    }
+
+    void release_image(const std::string &global_image_id,
+                       const std::string &instance_id,
+                       Context* on_finish) override {
+      pool_replayer->handle_release_image(global_image_id, instance_id,
+                                          on_finish);
+    }
+
+    void remove_image(const std::string &mirror_uuid,
+                      const std::string &global_image_id,
+                      const std::string &instance_id,
+                      Context* on_finish) override {
+      pool_replayer->handle_remove_image(mirror_uuid, global_image_id,
+                                         instance_id, on_finish);
+    }
+  };
+
   void handle_update(const std::string &mirror_uuid,
                      ImageIds &&added_image_ids,
                      ImageIds &&removed_image_ids);
@@ -130,6 +165,9 @@ private:
   void handle_post_acquire_leader(Context *on_finish);
   void handle_pre_release_leader(Context *on_finish);
 
+  void init_image_map(Context *on_finish);
+  void handle_init_image_map(int r, Context *on_finish);
+
   void init_local_pool_watcher(Context *on_finish);
   void handle_init_local_pool_watcher(int r, Context *on_finish);
 
@@ -137,6 +175,7 @@ private:
   void handle_init_remote_pool_watcher(int r, Context *on_finish);
 
   void init_image_deleter(Context* on_finish);
+  void handle_init_image_deleter(int r, Context* on_finish);
 
   void shut_down_image_deleter(Context* on_finish);
   void handle_shut_down_image_deleter(int r, Context* on_finish);
@@ -147,7 +186,21 @@ private:
   void wait_for_update_ops(Context *on_finish);
   void handle_wait_for_update_ops(int r, Context *on_finish);
 
+  void shut_down_image_map(Context *on_finish);
+  void handle_shut_down_image_map(int r, Context *on_finish);
+
   void handle_update_leader(const std::string &leader_instance_id);
+
+  void handle_acquire_image(const std::string &global_image_id,
+                            const std::string &instance_id,
+                            Context* on_finish);
+  void handle_release_image(const std::string &global_image_id,
+                            const std::string &instance_id,
+                            Context* on_finish);
+  void handle_remove_image(const std::string &mirror_uuid,
+                           const std::string &global_image_id,
+                           const std::string &instance_id,
+                           Context* on_finish);
 
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT>* m_service_daemon;
@@ -175,6 +228,9 @@ private:
 
   std::unique_ptr<InstanceReplayer<ImageCtxT>> m_instance_replayer;
   std::unique_ptr<ImageDeleter<ImageCtxT>> m_image_deleter;
+
+  ImageMapListener m_image_map_listener;
+  std::unique_ptr<ImageMap<librbd::ImageCtx>> m_image_map;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook = nullptr;
