@@ -136,7 +136,7 @@ int DataScan::main(const std::vector<const char*> &args)
   // Parse args
   // ==========
   if (args.size() < 1) {
-    usage();
+    cerr << "missing position argument" << std::endl;
     return -EINVAL;
   }
 
@@ -248,7 +248,6 @@ int DataScan::main(const std::vector<const char*> &args)
       command == "cleanup") {
     if (data_pool_name.empty()) {
       std::cerr << "Data pool not specified" << std::endl;
-      usage();
       return -EINVAL;
     }
 

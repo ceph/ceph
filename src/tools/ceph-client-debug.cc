@@ -84,6 +84,14 @@ int main(int argc, const char **argv)
   // Argument handling
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
@@ -94,7 +102,8 @@ int main(int argc, const char **argv)
 
   // Expect exactly one positional argument (inode number)
   if (args.size() != 1) {
-    usage();
+    cerr << "missing position argument (inode number)" << std::endl;
+    exit(1);
   }
   char const *inode_str = args[0];
   inodeno_t inode = strtoll(inode_str, NULL, 0);
