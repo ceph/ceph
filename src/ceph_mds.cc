@@ -73,7 +73,7 @@ static int parse_rank(const char *opt_name, const std::string &val)
   if (!err.empty()) {
     derr << "error parsing " << opt_name << ": failed to parse rank. "
 	 << "It must be an int." << "\n" << dendl;
-    usage();
+    exit(1);
   }
   return ret;
 }
@@ -99,6 +99,14 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args,
 			 CEPH_ENTITY_TYPE_MDS, CODE_ENVIRONMENT_DAEMON,
@@ -109,10 +117,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    }
-    else if (ceph_argparse_flag(args, i, "--help", "-h", (char*)NULL)) {
-      // exit(1) will be called in the usage()
-      usage();
     }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
       int r = parse_rank("hot-standby", val);
