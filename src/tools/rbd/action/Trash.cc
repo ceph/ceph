@@ -421,7 +421,7 @@ int execute_purge (const po::variables_map &vm,
     for(uint8_t i = 0; i < arr.size(); ++i) {
       if(arr[i].get_obj()["name"] == pool_name) {
         json_spirit::mObject stats =  arr[i].get_obj()["stats"].get_obj();
-        pool_percent_used = stats["percent_used"].get_real() / 100;
+        pool_percent_used = stats["percent_used"].get_real();
         if(pool_percent_used <= threshold) {
           std::cout << "rbd: pool usage is lower than or equal to "
                     << (threshold*100)
