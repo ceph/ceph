@@ -6533,23 +6533,13 @@ void PG::_delete_some()
     {
       ObjectStore::Transaction t;
       PGRef pgref(this);
+      PGLog::clear_info_log(info.pgid, &t);
+      t.remove_collection(coll);
       t.register_on_commit(new ContainerContext<PGRef>(pgref));
       t.register_on_applied(new ContainerContext<PGRef>(pgref));
       osd->store->queue_transaction(ch, std::move(t));
     }
     ch->flush();
-
-    ObjectStore::Transaction t;
-    PGLog::clear_info_log(info.pgid, &t);
-    t.remove_collection(coll);
-    PGRef pgref(this);
-    // keep pg ref around until txn completes to avoid any issues
-    // with Sequencer lifecycle (seen w/ filestore).
-    t.register_on_commit(new ContainerContext<PGRef>(pgref));
-    t.register_on_applied(new ContainerContext<PGRef>(pgref));
-    int r = osd->store->queue_transaction(
-      osd->meta_ch, std::move(t));
-    assert(r == 0);
 
     osd->finish_pg_delete(this, pool.info.get_pg_num());
     deleted = true;
