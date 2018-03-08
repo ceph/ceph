@@ -27,7 +27,7 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
-                                Listener *listener)
+                                leader_watcher::Listener *listener)
   : Watcher(io_ctx, threads->work_queue, RBD_MIRROR_LEADER),
     m_threads(threads), m_listener(listener),
     m_lock("rbd::mirror::LeaderWatcher " + io_ctx.get_pool_name()),
