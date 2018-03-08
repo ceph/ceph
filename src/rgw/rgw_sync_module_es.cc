@@ -306,6 +306,11 @@ struct es_obj_metadata {
       } else if (name == "x-amz-tagging") {
         auto tags_bl = val.begin();
         decode(obj_tags, tags_bl);
+      } else if (name == "compression") {
+        RGWCompressionInfo cs_info;
+        auto vals_bl = val.begin();
+        decode(cs_info, vals_bl);
+        out_attrs[name] = cs_info.compression_type;
       } else {
         if (name != "pg_ver" &&
             name != "source_zone" &&
