@@ -932,7 +932,7 @@ void MgrMonitor::on_shutdown()
 }
 
 int MgrMonitor::load_metadata(const string& name, std::map<string, string>& m,
-			      ostream *err)
+			      ostream *err) const
 {
   bufferlist bl;
   int r = mon->store->get(MGR_METADATA_PREFIX, name, bl);
@@ -985,6 +985,28 @@ int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
     f->dump_string(p.first.c_str(), p.second);
   }
   return 0;
+}
+
+void MgrMonitor::print_nodes(Formatter *f) const
+{
+  assert(f);
+
+  std::map<string, list<string> > mgrs; // hostname => mgr
+  auto ls = map.get_all_names();
+  for (auto& name : ls) {
+    std::map<string,string> meta;
+    if (load_metadata(name, meta, nullptr)) {
+      continue;
+    }
+    auto hostname = meta.find("hostname");
+    if (hostname == meta.end()) {
+      // not likely though
+      continue;
+    }
+    mgrs[hostname->second].push_back(name);
+  }
+
+  dump_services(f, mgrs, "mgr");
 }
 
 const std::vector<MonCommand> &MgrMonitor::get_command_descs() const

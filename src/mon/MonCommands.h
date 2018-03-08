@@ -239,7 +239,7 @@ COMMAND_WITH_FLAG("version", "show mon daemon version", "mon", "r", "cli,rest",
                   FLAG(NOFORWARD))
 
 COMMAND("node ls " \
-	"name=type,type=CephChoices,strings=all|osd|mon|mds,req=false",
+	"name=type,type=CephChoices,strings=all|osd|mon|mds|mgr,req=false",
 	"list all nodes in cluster [type]", "mon", "r", "cli,rest")
 /*
  * Monitor-specific commands under module 'mon'
