@@ -309,7 +309,7 @@ struct es_obj_metadata {
       } else if (name == "compression") {
         RGWCompressionInfo cs_info;
         auto vals_bl = val.begin();
-        decode(cs_info, vals_bl);
+        ::decode(cs_info, vals_bl);
         out_attrs[name] = cs_info.compression_type;
       } else {
         if (name != "pg_ver" &&
