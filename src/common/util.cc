@@ -303,6 +303,21 @@ void dump_services(Formatter* f, const map<string, list<int> >& services, const 
   f->close_section();
 }
 
+void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type)
+{
+  assert(f);
+
+  f->open_object_section(type);
+  for (const auto& host : services) {
+    f->open_array_section(host.first.c_str());
+    const auto& hosted = host.second;
+    for (const auto& s : hosted) {
+      f->dump_string(type, s);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
 
 // If non-printable characters found then convert bufferlist to
 // base64 encoded string indicating whether it did.
