@@ -24,7 +24,7 @@ if 'COVERAGE_ENABLED' in os.environ:
 from . import logger, mgr
 from .controllers.auth import Auth
 from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool, \
-                   NotificationQueue
+                   NotificationQueue, RequestLoggingTool
 from .settings import options_command_list, handle_option_command
 
 
@@ -113,13 +113,15 @@ class Module(MgrModule):
         # Initialize custom handlers.
         cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
         cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
+        cherrypy.tools.request_logging = RequestLoggingTool()
 
         # Apply the 'global' CherryPy configuration.
         config = {
             'engine.autoreload.on': False,
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
-            'error_page.default': json_error_page
+            'error_page.default': json_error_page,
+            'tools.request_logging.on': True
         }
         cherrypy.config.update(config)
 
