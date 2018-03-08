@@ -25,6 +25,7 @@ import { Observable } from 'rxjs/Observable';
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
 import { CdTableSelection } from '../../models/cd-table-selection';
+import { CdUserConfig } from '../../models/cd-user-config';
 
 @Component({
   selector: 'cd-table',
@@ -76,6 +77,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // If `true` selected item details will be updated on table refresh
   @Input() updateSelectionOnRefresh = true;
 
+  @Input() autoSave = true;
+
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
    *
@@ -115,7 +118,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     pagerPrevious: 'i fa fa-angle-left',
     pagerNext: 'i fa fa-angle-right'
   };
-  private subscriber;
+  userConfig: CdUserConfig = {};
+  tableName: string;
+  localStorage = window.localStorage;
+  private saveSubscriber;
+  private reloadSubscriber;
   private updating = false;
 
   // Internal variable to check if it is necessary to recalculate the
@@ -139,7 +146,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         this.identifier = this.columns[0].prop + '';
       }
     }
-    this.columns.map(c => {
+    this.initUserConfig();
+    this.columns.forEach(c => {
       if (c.cellTransformation) {
         c.cellTemplate = this.cellTemplates[c.cellTransformation];
       }
@@ -149,9 +157,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       if (!c.resizeable) {
         c.resizeable = false;
       }
-      return c;
     });
-    this.tableColumns = this.columns.filter(c => !c.isHidden);
+    this.filterHiddenColumns();
     // Load the data table content every N ms or at least once.
     // Force showing the loading indicator if there are subscribers to the fetchData
     // event. This is necessary because it has been set to False in useData() when
@@ -161,7 +168,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
     if (_.isInteger(this.autoReload) && (this.autoReload > 0)) {
       this.ngZone.runOutsideAngular(() => {
-        this.subscriber = Observable.timer(0, this.autoReload).subscribe(x => {
+        this.reloadSubscriber = Observable.timer(0, this.autoReload).subscribe(x => {
           this.ngZone.run(() => {
             return this.reloadData();
           });
@@ -172,9 +179,87 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
   }
 
+  initUserConfig () {
+    if (this.autoSave) {
+      this.tableName = this._calculateUniqueTableName(this.columns);
+      this._loadUserConfig();
+      this._initUserConfigAutoSave();
+    }
+    if (!this.userConfig.limit) {
+      this.userConfig.limit = this.limit;
+    }
+    if (!this.userConfig.sorts) {
+      this.userConfig.sorts = this.sorts;
+    }
+    if (!this.userConfig.columns) {
+      this.updateUserColumns();
+    } else {
+      this.columns.forEach((c, i) => {
+        c.isHidden = this.userConfig.columns[i].isHidden;
+      });
+    }
+  }
+
+  _calculateUniqueTableName (columns) {
+    const stringToNumber = (s) => {
+      if (!_.isString(s)) {
+        return 0;
+      }
+      let result = 0;
+      for (let i = 0; i < s.length; i++) {
+        result += s.charCodeAt(i) * i;
+      }
+      return result;
+    };
+    return columns.reduce((result, value, index) =>
+      ((stringToNumber(value.prop) + stringToNumber(value.name)) * (index + 1)) + result,
+      0).toString();
+  }
+
+  _loadUserConfig () {
+    const loaded = this.localStorage.getItem(this.tableName);
+    if (loaded) {
+      this.userConfig = JSON.parse(loaded);
+    }
+  }
+
+  _initUserConfigAutoSave() {
+    const source = Observable.create(this._initUserConfigProxy.bind(this));
+    this.saveSubscriber = source.subscribe(this._saveUserConfig.bind(this));
+  }
+
+  _initUserConfigProxy (observer) {
+    this.userConfig = new Proxy(this.userConfig, {
+      set(config, prop, value) {
+        config[prop] = value;
+        observer.next(config);
+        return true;
+      }
+    });
+  }
+
+  _saveUserConfig (config) {
+    this.localStorage.setItem(this.tableName, JSON.stringify(config));
+  }
+
+  updateUserColumns () {
+    this.userConfig.columns = this.columns.map(c => ({
+      prop: c.prop,
+      name: c.name,
+      isHidden: !!c.isHidden
+    }));
+  }
+
+  filterHiddenColumns () {
+    this.tableColumns = this.columns.filter(c => !c.isHidden);
+  }
+
   ngOnDestroy() {
-    if (this.subscriber) {
-      this.subscriber.unsubscribe();
+    if (this.reloadSubscriber) {
+      this.reloadSubscriber.unsubscribe();
+    }
+    if (this.saveSubscriber) {
+      this.saveSubscriber.unsubscribe();
     }
   }
 
@@ -206,7 +291,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   setLimit(e) {
     const value = parseInt(e.target.value, 10);
     if (value > 0) {
-      this.limit = value;
+      this.userConfig.limit = value;
     }
   }
 
@@ -282,10 +367,12 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   updateColumns () {
-    this.tableColumns = this.columns.filter(c => !c.isHidden);
-    const sortProp = this.table.sorts[0].prop;
+    this.updateUserColumns();
+    this.filterHiddenColumns();
+    const sortProp = this.userConfig.sorts[0].prop;
     if (!_.find(this.tableColumns, (c: CdTableColumn) => c.prop === sortProp)) {
-      this.table.onColumnSort({sorts: this.createSortingDefinition(this.tableColumns[0].prop)});
+      this.userConfig.sorts = this.createSortingDefinition(this.tableColumns[0].prop);
+      this.table.onColumnSort({sorts: this.userConfig.sorts});
     }
     this.table.recalculate();
   }
@@ -297,6 +384,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         dir: SortDirection.asc
       }
     ];
+  }
+
+  changeSorting ({sorts}) {
+    this.userConfig.sorts = sorts;
   }
 
   updateFilter(event?: any) {
