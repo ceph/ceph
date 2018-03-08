@@ -969,12 +969,14 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
   ASSERT_EQ(0, rbd.open(m_ioctx, image, m_image_name.c_str(), NULL));
   ASSERT_EQ(0, image.snap_create("one"));
   ASSERT_EQ(0, image.snap_protect("one"));
+  uint64_t features;
+  ASSERT_EQ(0, image.features(&features));
   image.close();
 
   std::string clone_name = get_temp_image_name();
   int order = 0;
   ASSERT_EQ(0, rbd.clone(m_ioctx, m_image_name.c_str(), "one", m_ioctx,
-                         clone_name.c_str(), RBD_FEATURE_LAYERING, &order));
+                         clone_name.c_str(), features, &order));
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(clone_name, &ictx));
@@ -997,6 +999,7 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
   expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
   expect_object_may_exist(mock_image_ctx, 0, true);
+  expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, false, 0);
   expect_truncate(mock_image_ctx, 0, 0);
 
   C_SaferCond ctx;
