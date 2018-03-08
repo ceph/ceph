@@ -1,4 +1,4 @@
-<tabset>
+<tabset *ngIf="selection.hasSingleSelection">
   <tab i18n-heading
        heading="Details">
     <cd-table-key-value [data]="metadata"

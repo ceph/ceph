@@ -90,12 +90,11 @@
                  [loadingIndicator]="loadingIndicator"
                  [rowIdentity]="rowIdentity()"
                  [rowHeight]="'auto'">
-    <!-- Row Detail Template -->
-    <ngx-datatable-row-detail (toggle)="updateDetailView()">
-    </ngx-datatable-row-detail>
   </ngx-datatable>
 </div>
-<ng-template cdTableDetails></ng-template>
+
+<!-- Table Details -->
+<ng-content select="[cdTableDetail]"></ng-content>
 
 <!-- cell templates that can be accessed from outside -->
 <ng-template #tableCellBoldTpl

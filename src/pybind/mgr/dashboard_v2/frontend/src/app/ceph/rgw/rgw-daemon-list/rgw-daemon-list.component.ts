@@ -14,8 +14,7 @@ export class RgwDaemonListComponent {
 
   columns: Array<CdTableColumn> = [];
   daemons: Array<object> = [];
-
-  detailsComponent = 'RgwDaemonDetailsComponent';
+  selection = new CdTableSelection();
 
   constructor(private rgwDaemonService: RgwDaemonService,
               cephShortVersionPipe: CephShortVersionPipe) {
@@ -46,7 +45,7 @@ export class RgwDaemonListComponent {
       });
   }
 
-  beforeShowDetails(selection: CdTableSelection) {
-    return selection.hasSingleSelection;
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 }
