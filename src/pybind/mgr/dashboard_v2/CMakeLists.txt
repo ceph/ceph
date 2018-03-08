@@ -11,7 +11,7 @@ add_dependencies(tests mgr-dashboard_v2-test-venv)
 if(WITH_MGR_DASHBOARD_V2_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
   find_program(NPM_BIN
     NAMES npm
-    HINTS $ENV{NPM_ROOT}/bin)
+    HINTS $ENV{NPM_ROOT}/bin /usr/local/bin)
   if(NOT NPM_BIN)
     message(FATAL_ERROR "WITH_MGR_DASHBOARD_V2_FRONTEND not npm not found")
   endif()
