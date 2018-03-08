@@ -145,7 +145,11 @@ static RGWRESTMgr *set_logging(RGWRESTMgr *mgr)
 static RGWRESTMgr *rest_filter(RGWRados *store, int dialect, RGWRESTMgr *orig)
 {
   RGWSyncModuleInstanceRef sync_module = store->get_sync_module();
-  return sync_module->get_rest_filter(dialect, orig);
+  if (sync_module) {
+    return sync_module->get_rest_filter(dialect, orig);
+  } else {
+    return orig;
+  }
 }
 
 /*
