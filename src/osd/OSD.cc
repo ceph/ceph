@@ -2329,10 +2329,10 @@ will start to track new ops received afterwards.";
     store->get_devices(&devnames);
     f->open_object_section("list_devices");
     for (auto dev : devnames) {
-      f->dump_string("device", "/dev/" + dev);
       if (dev.find("dm-") == 0) {
 	continue;
       }
+      f->dump_string("device", "/dev/" + dev);
     }
     f->close_section();
   } else {
