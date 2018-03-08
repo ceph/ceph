@@ -641,7 +641,7 @@ class NotificationQueue(threading.Thread):
             cls._cond.notify()
 
     @classmethod
-    def notify_listeners(cls, events):
+    def _notify_listeners(cls, events):
         for ev in events:
             notify_type, notify_value = ev
             with cls._lock:
@@ -660,11 +660,11 @@ class NotificationQueue(threading.Thread):
                     private_buffer.append(self._queue.popleft())
             except IndexError:
                 pass
-            self.notify_listeners(private_buffer)
+            self._notify_listeners(private_buffer)
             with self._cond:
                 self._cond.wait(1.0)
         # flush remaining events
         logger.debug("NQ: flush remaining events: %s", len(self._queue))
-        self.notify_listeners(self._queue)
+        self._notify_listeners(self._queue)
         self._queue.clear()
         logger.debug("notification queue finished")
