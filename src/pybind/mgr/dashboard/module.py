@@ -28,7 +28,7 @@ if 'COVERAGE_ENABLED' in os.environ:
 from . import logger, mgr
 from .controllers.auth import Auth
 from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool, \
-                   NotificationQueue, RequestLoggingTool
+                   NotificationQueue, RequestLoggingTool, TaskManager
 from .settings import options_command_list, handle_option_command
 
 
@@ -151,6 +151,7 @@ class Module(MgrModule):
 
         cherrypy.engine.start()
         NotificationQueue.start_queue()
+        TaskManager.init()
         logger.info('Waiting for engine...')
         cherrypy.engine.block()
         if 'COVERAGE_ENABLED' in os.environ:
