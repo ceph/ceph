@@ -378,6 +378,8 @@ include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 # needed for source files that friend unit tests (e.g., using FRIEND_TEST)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
 
+add_subdirectory(common)
+
 set(xio_common_srcs)
 if(HAVE_XIO)
   list(APPEND xio_common_srcs
