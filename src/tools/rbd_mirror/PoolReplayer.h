@@ -40,10 +40,11 @@ template <typename> struct Threads;
 /**
  * Controls mirroring for a single remote cluster.
  */
+template <typename ImageCtxT = librbd::ImageCtx>
 class PoolReplayer {
 public:
-  PoolReplayer(Threads<librbd::ImageCtx> *threads,
-               ServiceDaemon<librbd::ImageCtx>* service_daemon,
+  PoolReplayer(Threads<ImageCtxT> *threads,
+               ServiceDaemon<ImageCtxT>* service_daemon,
 	       int64_t local_pool_id, const peer_t &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
@@ -148,8 +149,8 @@ private:
 
   void handle_update_leader(const std::string &leader_instance_id);
 
-  Threads<librbd::ImageCtx> *m_threads;
-  ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
+  Threads<ImageCtxT> *m_threads;
+  ServiceDaemon<ImageCtxT>* m_service_daemon;
   int64_t m_local_pool_id = -1;
   peer_t m_peer;
   std::vector<const char*> m_args;
@@ -167,13 +168,13 @@ private:
   librados::IoCtx m_remote_io_ctx;
 
   PoolWatcherListener m_local_pool_watcher_listener;
-  std::unique_ptr<PoolWatcher<> > m_local_pool_watcher;
+  std::unique_ptr<PoolWatcher<ImageCtxT>> m_local_pool_watcher;
 
   PoolWatcherListener m_remote_pool_watcher_listener;
-  std::unique_ptr<PoolWatcher<> > m_remote_pool_watcher;
+  std::unique_ptr<PoolWatcher<ImageCtxT>> m_remote_pool_watcher;
 
-  std::unique_ptr<InstanceReplayer<librbd::ImageCtx>> m_instance_replayer;
-  std::unique_ptr<ImageDeleter<>> m_image_deleter;
+  std::unique_ptr<InstanceReplayer<ImageCtxT>> m_instance_replayer;
+  std::unique_ptr<ImageDeleter<ImageCtxT>> m_image_deleter;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook = nullptr;
@@ -216,12 +217,14 @@ private:
     PoolReplayer *m_pool_replayer;
   } m_leader_listener;
 
-  std::unique_ptr<LeaderWatcher<> > m_leader_watcher;
-  std::unique_ptr<InstanceWatcher<librbd::ImageCtx> > m_instance_watcher;
+  std::unique_ptr<LeaderWatcher<ImageCtxT>> m_leader_watcher;
+  std::unique_ptr<InstanceWatcher<ImageCtxT>> m_instance_watcher;
   AsyncOpTracker m_update_op_tracker;
 };
 
 } // namespace mirror
 } // namespace rbd
+
+extern template class rbd::mirror::PoolReplayer<librbd::ImageCtx>;
 
 #endif // CEPH_RBD_MIRROR_POOL_REPLAYER_H
