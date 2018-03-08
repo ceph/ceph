@@ -18,6 +18,11 @@
 
 namespace ceph::async {
 
+PerfCountersRef counters(const char *name)
+{
+  return throttle_counters::build(g_ceph_context, name);
+}
+
 // return a lambda that can be used as a callback to capture its error code
 auto capture(std::optional<boost::system::error_code>& opt_ec)
 {
@@ -27,7 +32,7 @@ auto capture(std::optional<boost::system::error_code>& opt_ec)
 TEST(AsyncThrottle, AsyncGet)
 {
   boost::asio::io_context context;
-  Throttle throttle(context.get_executor(), 1);
+  Throttle throttle(context.get_executor(), 1, counters("t"));
 
   std::optional<boost::system::error_code> ec1, ec2, ec3;
   throttle.async_get(1, capture(ec1));
@@ -57,6 +62,18 @@ TEST(AsyncThrottle, AsyncGet)
   EXPECT_EQ(boost::system::errc::success, *ec2);
   ASSERT_TRUE(ec3);
   EXPECT_EQ(boost::system::errc::success, *ec3);
+
+  auto counters = throttle.get_counters();
+  EXPECT_EQ(1, counters->get(throttle_counters::l_val));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_pending));
+  EXPECT_EQ(3, counters->get(throttle_counters::l_get));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_get_sum));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_put));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_put_sum));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_wait));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_wait_sum));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_cancel));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_cancel_sum));
 }
 
 TEST(AsyncThrottle, AsyncGetMany)
@@ -70,7 +87,7 @@ TEST(AsyncThrottle, AsyncGetMany)
   size_t processed = 0;
 
   boost::asio::io_context context;
-  Throttle throttle(context.get_executor(), max_concurrent);
+  Throttle throttle(context.get_executor(), max_concurrent, counters("t"));
 
   for (size_t i = 0; i < total; i++) {
     throttle.async_get(1, [&] (boost::system::error_code ec) {
@@ -84,12 +101,24 @@ TEST(AsyncThrottle, AsyncGetMany)
   EXPECT_TRUE(context.stopped());
 
   EXPECT_EQ(total, processed);
+
+  auto counters = throttle.get_counters();
+  EXPECT_EQ(0, counters->get(throttle_counters::l_val));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_pending));
+  EXPECT_EQ(total, counters->get(throttle_counters::l_get));
+  EXPECT_EQ(total, counters->get(throttle_counters::l_get_sum));
+  EXPECT_EQ(total, counters->get(throttle_counters::l_put));
+  EXPECT_EQ(total, counters->get(throttle_counters::l_put_sum));
+  EXPECT_EQ(total-max_concurrent, counters->get(throttle_counters::l_wait));
+  EXPECT_EQ(total-max_concurrent, counters->get(throttle_counters::l_wait_sum));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_cancel));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_cancel_sum));
 }
 
 TEST(AsyncThrottle, AsyncSetMaximum)
 {
   boost::asio::io_context context;
-  Throttle throttle(context.get_executor(), 0);
+  Throttle throttle(context.get_executor(), 0, counters("t"));
 
   std::optional<boost::system::error_code> ec1, ec2, ec3;
   throttle.async_get(1, capture(ec1));
@@ -134,12 +163,25 @@ TEST(AsyncThrottle, AsyncSetMaximum)
   ASSERT_TRUE(ecmax2);
   EXPECT_EQ(boost::system::errc::success, *ecmax2);
   EXPECT_FALSE(ec3);
+
+  auto counters = throttle.get_counters();
+  EXPECT_EQ(0, counters->get(throttle_counters::l_val));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_max));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_pending));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_get));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_get_sum));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_put));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_put_sum));
+  EXPECT_EQ(3, counters->get(throttle_counters::l_wait));
+  EXPECT_EQ(3, counters->get(throttle_counters::l_wait_sum));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_cancel));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_cancel_sum));
 }
 
 TEST(AsyncThrottle, Cancel)
 {
   boost::asio::io_context context;
-  Throttle throttle(context.get_executor(), 1);
+  Throttle throttle(context.get_executor(), 1, counters("t"));
 
   std::optional<boost::system::error_code> ec1, ec2, ec3;
   throttle.async_get(1, capture(ec1));
@@ -180,6 +222,18 @@ TEST(AsyncThrottle, Cancel)
   EXPECT_EQ(boost::system::errc::operation_canceled, *ec3);
   ASSERT_TRUE(ecmax);
   EXPECT_EQ(boost::system::errc::operation_canceled, *ecmax);
+
+  auto counters = throttle.get_counters();
+  EXPECT_EQ(1, counters->get(throttle_counters::l_val));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_pending));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_get));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_get_sum));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_put));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_put_sum));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_wait));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_wait_sum));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_cancel));
+  EXPECT_EQ(2, counters->get(throttle_counters::l_cancel_sum));
 }
 
 TEST(AsyncThrottle, CancelOnDestruct)
@@ -187,7 +241,7 @@ TEST(AsyncThrottle, CancelOnDestruct)
   boost::asio::io_context context;
   std::optional<boost::system::error_code> ec;
   {
-    Throttle throttle(context.get_executor(), 0);
+    Throttle throttle(context.get_executor(), 0, counters("t"));
     throttle.async_get(1, capture(ec));
   }
   EXPECT_FALSE(ec);
@@ -209,7 +263,7 @@ auto bind_capture(const Executor& ex, Args& ...args)
 TEST(AsyncThrottle, CrossExecutor)
 {
   boost::asio::io_context throttle_context;
-  Throttle throttle(throttle_context.get_executor(), 1);
+  Throttle throttle(throttle_context.get_executor(), 1, counters("t"));
 
   // create a separate execution context to use for all callbacks to test that
   // pending requests maintain executor work guards on both executors
@@ -264,6 +318,18 @@ TEST(AsyncThrottle, CrossExecutor)
 
   ASSERT_TRUE(ecmax);
   EXPECT_EQ(boost::system::errc::success, *ecmax);
+
+  auto counters = throttle.get_counters();
+  EXPECT_EQ(0, counters->get(throttle_counters::l_val));
+  EXPECT_EQ(0, counters->get(throttle_counters::l_pending));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_get));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_get_sum));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_put));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_put_sum));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_wait));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_wait_sum));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_cancel));
+  EXPECT_EQ(1, counters->get(throttle_counters::l_cancel_sum));
 }
 
 } // namespace ceph::async

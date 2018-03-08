@@ -18,6 +18,7 @@
 #include <mutex>
 #include <boost/intrusive/list.hpp>
 #include "completion.h"
+#include "common/perf_counters.h"
 
 namespace ceph::async {
 
@@ -28,7 +29,7 @@ namespace ceph::async {
  *
  *   // process a list of jobs, running up to 10 jobs in parallel
  *   boost::asio::io_context context;
- *   ceph::async::Throttle throttle(context.get_executor(), 10);
+ *   ceph::async::Throttle throttle(context.get_executor(), 10, {});
  *
  *   for (auto& job : jobs) {
  *     // request a throttle unit for this job
@@ -45,12 +46,35 @@ template <typename Executor1>
 class Throttle;
 
 
+namespace throttle_counters {
+
+enum {
+  l_first = 711262,
+  l_val,
+  l_max,
+  l_pending,
+  l_get,
+  l_get_sum,
+  l_put,
+  l_put_sum,
+  l_wait,
+  l_wait_sum,
+  l_cancel,
+  l_cancel_sum,
+  l_latency,
+  l_last,
+};
+
+PerfCountersRef build(CephContext *cct, const std::string& name);
+
+} // namespace throttle_counters
+
 namespace detail {
 
 // Throttle base contains everything that doesn't depend on the Executor type
 class BaseThrottle {
  public:
-  BaseThrottle(size_t maximum);
+  BaseThrottle(size_t maximum, PerfCountersRef&& counters);
   ~BaseThrottle();
 
   /// returns a number of previously-granted throttle units, then attempts to
@@ -67,6 +91,8 @@ class BaseThrottle {
   /// their completion handlers with operation_aborted
   void cancel();
 
+  PerfCounters* get_counters() const { return counters.get(); }
+
  protected:
   template <typename Executor1, typename Handler>
   void start_get(const Executor1& ex1, size_t count, Handler&& handler);
@@ -79,9 +105,14 @@ class BaseThrottle {
   size_t value = 0; //< amount of outstanding throttle
   size_t maximum; //< maximum amount of throttle
 
+  PerfCountersRef counters;
+  using Clock = ceph::mono_clock;
+
   struct GetRequest : public boost::intrusive::list_base_hook<> {
     const size_t count; //< number of throttle units requested
-    explicit GetRequest(size_t count) noexcept : count(count) {}
+    const Clock::time_point started;
+    GetRequest(size_t count, Clock::time_point started) noexcept
+      : count(count), started(started) {}
   };
   using GetCompletion = Completion<void(boost::system::error_code),
                                    AsBase<GetRequest>>;
@@ -102,6 +133,14 @@ class BaseThrottle {
   /// throws, any remaining completions are freed
   template <typename Func> // Func(unique_ptr<GetCompletion>&&)
   static void safe_for_each(GetCompletionList&& requests, const Func& func);
+
+  // hooks for perf counters
+  void on_set_maximum();
+  void on_get(size_t count);
+  void on_wait(size_t count, Clock::time_point *started);
+  void on_put(size_t count);
+  void on_granted(const GetCompletionList& requests);
+  void on_canceled(const GetCompletionList& requests);
 };
 
 template <typename Executor1, typename Handler>
@@ -113,14 +152,19 @@ void BaseThrottle::start_get(const Executor1& ex1, size_t count,
   // if the throttle is available, grant it
   if (get_requests.empty() && value + count <= maximum) {
     value += count;
+    on_get(count);
 
     auto ex2 = boost::asio::get_associated_executor(handler, ex1);
     auto alloc2 = boost::asio::get_associated_allocator(handler);
     auto b = bind_handler(std::move(handler), boost::system::error_code{});
     ex2.post(std::move(b), alloc2);
   } else {
+    auto started = Clock::time_point{};
+    on_wait(count, &started);
+
     // create a Request and add it to the pending list
-    auto request = GetCompletion::create(ex1, std::move(handler), count);
+    auto request = GetCompletion::create(ex1, std::move(handler),
+                                         count, started);
     // transfer ownership to the list (push_back doesn't throw)
     get_requests.push_back(*request.release());
   }
@@ -139,6 +183,7 @@ void BaseThrottle::start_set_maximum(const Executor1& ex1, size_t count,
     max = std::move(max_request);
 
     maximum = count;
+    on_set_maximum();
 
     if (value <= maximum) {
       // complete successfully
@@ -190,8 +235,8 @@ template <typename Executor1>
 class Throttle : public detail::BaseThrottle {
   Executor1 ex1; //< default callback executor
  public:
-  Throttle(const Executor1& ex1, size_t maximum)
-    : BaseThrottle(maximum), ex1(ex1)
+  Throttle(const Executor1& ex1, size_t maximum, PerfCountersRef&& counters)
+    : BaseThrottle(maximum, std::move(counters)), ex1(ex1)
   {}
 
   using executor_type = Executor1;
