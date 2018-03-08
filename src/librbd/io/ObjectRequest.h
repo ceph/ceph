@@ -357,7 +357,7 @@ public:
     case DISCARD_ACTION_REMOVE:
       return "remove";
     case DISCARD_ACTION_REMOVE_TRUNCATE:
-      return "remove (truncate)";
+      return "remove (create+truncate)";
     case DISCARD_ACTION_TRUNCATE:
       return "truncate";
     case DISCARD_ACTION_ZERO:
@@ -395,6 +395,8 @@ protected:
       wr->remove();
       break;
     case DISCARD_ACTION_REMOVE_TRUNCATE:
+      wr->create(false);
+      // fall through
     case DISCARD_ACTION_TRUNCATE:
       wr->truncate(this->m_object_off);
       break;
