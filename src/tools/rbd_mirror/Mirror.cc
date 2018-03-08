@@ -411,7 +411,7 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
         }
       } else {
         dout(20) << "starting pool replayer for " << peer << dendl;
-        unique_ptr<PoolReplayer> pool_replayer(new PoolReplayer(
+        unique_ptr<PoolReplayer<>> pool_replayer(new PoolReplayer<>(
 	  m_threads, m_service_daemon.get(), kv.first, peer, m_args));
 
         // TODO: make async

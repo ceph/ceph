@@ -29,6 +29,12 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class LeaderWatcher : protected librbd::Watcher {
   using librbd::Watcher::unregister_watch; // Silence overloaded virtual warning
 public:
+  static LeaderWatcher* create(Threads<ImageCtxT> *threads,
+                               librados::IoCtx &io_ctx,
+                               leader_watcher::Listener *listener) {
+    return new LeaderWatcher(threads, io_ctx, listener);
+  }
+
   LeaderWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &io_ctx,
                 leader_watcher::Listener *listener);
   ~LeaderWatcher() override;

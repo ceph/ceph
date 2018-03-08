@@ -33,6 +33,12 @@ template <typename> struct Threads;
 template <typename ImageCtxT = librbd::ImageCtx>
 class PoolWatcher {
 public:
+  static PoolWatcher* create(Threads<ImageCtxT> *threads,
+                             librados::IoCtx &remote_io_ctx,
+                             pool_watcher::Listener &listener) {
+    return new PoolWatcher(threads, remote_io_ctx, listener);
+  }
+
   PoolWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &remote_io_ctx,
               pool_watcher::Listener &listener);
   ~PoolWatcher();
