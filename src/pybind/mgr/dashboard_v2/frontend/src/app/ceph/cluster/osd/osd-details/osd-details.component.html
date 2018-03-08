@@ -1,4 +1,4 @@
-<tabset>
+<tabset *ngIf="selection.hasSingleSelection">
   <tab heading="Attributes (OSD map)">
     <cd-table-key-value *ngIf="osd.loaded"
                         [data]="osd.details.osd_map">
