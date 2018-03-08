@@ -135,20 +135,36 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
   }
   Py_DECREF(set_fn);
 
-  auto c = new MonCommandCompletion(self->py_modules,
+  MonCommandCompletion *command_c = new MonCommandCompletion(self->py_modules,
       completion, tag, PyThreadState_Get());
   if (std::string(type) == "mon") {
+
+    // Wait for the latest OSDMap after each command we send to
+    // the mons.  This is a heavy-handed hack to make life simpler
+    // for python module authors, so that they know whenever they
+    // run a command they've gt a fresh OSDMap afterwards.
+    // TODO: enhance MCommand interface so that it returns
+    // latest cluster map versions on completion, and callers
+    // can wait for those.
+    auto c = new FunctionContext([command_c, self](int command_r){
+      self->py_modules->get_objecter().wait_for_latest_osdmap(
+          new FunctionContext([command_c, command_r](int wait_r){
+            command_c->finish(command_r);
+          })
+      );
+    });
+
     self->py_modules->get_monc().start_mon_command(
         {cmd_json},
         {},
-        &c->outbl,
-        &c->outs,
+        &command_c->outbl,
+        &command_c->outs,
         c);
   } else if (std::string(type) == "osd") {
     std::string err;
     uint64_t osd_id = strict_strtoll(name, 10, &err);
     if (!err.empty()) {
-      delete c;
+      delete command_c;
       string msg("invalid osd_id: ");
       msg.append("\"").append(name).append("\"");
       PyErr_SetString(PyExc_ValueError, msg.c_str());
@@ -161,17 +177,17 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         {cmd_json},
         {},
         &tid,
-        &c->outbl,
-        &c->outs,
-        c);
+        &command_c->outbl,
+        &command_c->outs,
+        command_c);
   } else if (std::string(type) == "mds") {
     int r = self->py_modules->get_client().mds_command(
         name,
         {cmd_json},
         {},
-        &c->outbl,
-        &c->outs,
-        c);
+        &command_c->outbl,
+        &command_c->outs,
+        command_c);
     if (r != 0) {
       string msg("failed to send command to mds: ");
       msg.append(cpp_strerror(r));
@@ -181,7 +197,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
   } else if (std::string(type) == "pg") {
     pg_t pgid;
     if (!pgid.parse(name)) {
-      delete c;
+      delete command_c;
       string msg("invalid pgid: ");
       msg.append("\"").append(name).append("\"");
       PyErr_SetString(PyExc_ValueError, msg.c_str());
@@ -194,12 +210,12 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         {cmd_json},
         {},
         &tid,
-        &c->outbl,
-        &c->outs,
-        c);
+        &command_c->outbl,
+        &command_c->outs,
+        command_c);
     return nullptr;
   } else {
-    delete c;
+    delete command_c;
     string msg("unknown service type: ");
     msg.append(type);
     PyErr_SetString(PyExc_ValueError, msg.c_str());
