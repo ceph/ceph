@@ -3734,26 +3734,27 @@ void OSD::recursive_remove_collection(CephContext* cct,
   ObjectStore::Transaction t;
   SnapMapper mapper(cct, &driver, 0, 0, 0, pgid.shard);
 
+  ghobject_t next;
+  int max = cct->_conf->osd_target_transaction_size;
   vector<ghobject_t> objects;
-  store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			 INT_MAX, &objects, 0);
-  generic_dout(10) << __func__ << " " << objects << dendl;
-  // delete them.
-  int removed = 0;
-  for (vector<ghobject_t>::iterator p = objects.begin();
-       p != objects.end();
-       ++p, removed++) {
-    OSDriver::OSTransaction _t(driver.get_transaction(&t));
-    int r = mapper.remove_oid(p->hobj, &_t);
-    if (r != 0 && r != -ENOENT)
-      ceph_abort();
-    t.remove(tmp, *p);
-    if (removed > cct->_conf->osd_target_transaction_size) {
-      int r = store->queue_transaction(ch, std::move(t));
-      assert(r == 0);
-      t = ObjectStore::Transaction();
-      removed = 0;
+  objects.reserve(max);
+  while (true) {
+    objects.clear();
+    store->collection_list(ch, next, ghobject_t::get_max(),
+      max, &objects, &next);
+    generic_dout(10) << __func__ << " " << objects << dendl;
+    if (objects.empty())
+      break;
+    for (auto& p: objects) {
+      OSDriver::OSTransaction _t(driver.get_transaction(&t));
+      int r = mapper.remove_oid(p.hobj, &_t);
+      if (r != 0 && r != -ENOENT)
+        ceph_abort();
+      t.remove(tmp, p);
     }
+    int r = store->queue_transaction(ch, std::move(t));
+    assert(r == 0);
+    t = ObjectStore::Transaction();
   }
   t.remove_collection(tmp);
   int r = store->queue_transaction(ch, std::move(t));
