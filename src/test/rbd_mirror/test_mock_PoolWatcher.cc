@@ -158,7 +158,7 @@ public:
   typedef librbd::MockMirroringWatcher MockMirroringWatcher;
   typedef librbd::MirroringWatcher<librbd::MockTestImageCtx> MirroringWatcher;
 
-  struct MockListener : MockPoolWatcher::Listener {
+  struct MockListener : pool_watcher::Listener {
     TestMockPoolWatcher *test;
 
     MockListener(TestMockPoolWatcher *test) : test(test) {
