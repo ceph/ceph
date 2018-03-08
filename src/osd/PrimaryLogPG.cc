@@ -9503,7 +9503,7 @@ void PrimaryLogPG::submit_log_entries(
     [this, entries, repop, on_complete]() {
       ObjectStore::Transaction t;
       eversion_t old_last_update = info.last_update;
-      merge_new_log_entries(entries, t);
+      merge_new_log_entries(entries, t, pg_trim_to, min_last_complete_ondisk);
 
 
       set<pg_shard_t> waiting_on;
@@ -9522,7 +9522,9 @@ void PrimaryLogPG::submit_log_entries(
 	    pg_whoami.shard,
 	    get_osdmap()->get_epoch(),
 	    last_peering_reset,
-	    repop->rep_tid);
+	    repop->rep_tid,
+	    pg_trim_to,
+	    min_last_complete_ondisk);
 	  osd->send_message_osd_cluster(
 	    peer.osd, m, get_osdmap()->get_epoch());
 	  waiting_on.insert(peer);
@@ -9604,6 +9606,8 @@ void PrimaryLogPG::submit_log_entries(
       int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
       assert(r == 0);
     });
+
+  calc_trim_to();
 }
 
 void PrimaryLogPG::cancel_log_updates()
@@ -10646,7 +10650,16 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
     op->get_req());
   assert(m->get_type() == MSG_OSD_PG_UPDATE_LOG_MISSING);
   ObjectStore::Transaction t;
-  append_log_entries_update_missing(m->entries, t);
+  boost::optional<eversion_t> op_trim_to, op_roll_forward_to;
+  if (m->pg_trim_to != eversion_t())
+    op_trim_to = m->pg_trim_to;
+  if (m->pg_roll_forward_to != eversion_t())
+    op_roll_forward_to = m->pg_roll_forward_to;
+
+  dout(20) << __func__ << " op_trim_to = " << op_trim_to << " op_roll_forward_to = " << op_roll_forward_to << dendl;
+
+  append_log_entries_update_missing(m->entries, t, op_trim_to, op_roll_forward_to);
+  eversion_t new_lcod = info.last_complete;
 
   Context *complete = new FunctionContext(
     [=](int) {
@@ -10654,13 +10667,15 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
 	op->get_req());
       lock();
       if (!pg_has_reset_since(msg->get_epoch())) {
+	update_last_complete_ondisk(new_lcod);
 	MOSDPGUpdateLogMissingReply *reply =
 	  new MOSDPGUpdateLogMissingReply(
 	    spg_t(info.pgid.pgid, primary_shard().shard),
 	    pg_whoami.shard,
 	    msg->get_epoch(),
 	    msg->min_epoch,
-	    msg->get_tid());
+	    msg->get_tid(),
+	    new_lcod);
 	reply->set_priority(CEPH_MSG_PRIO_HIGH);
 	msg->get_connection()->send_message(reply);
       }
@@ -10702,6 +10717,9 @@ void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
   if (it != log_entry_update_waiting_on.end()) {
     if (it->second.waiting_on.count(m->get_from())) {
       it->second.waiting_on.erase(m->get_from());
+      if (m->last_complete_ondisk != eversion_t()) {
+	update_peer_last_complete_ondisk(m->get_from(), m->last_complete_ondisk);
+      }
     } else {
       osd->clog->error()
 	<< info.pgid << " got reply "

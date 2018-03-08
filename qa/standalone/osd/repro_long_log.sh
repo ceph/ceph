@@ -81,8 +81,8 @@ function do_repro_long_log() {
         rados -p test rm foo
     done
 
-    # this demonstrates the problem - it should fail
-    test_log_size $PGID 41 || return 1
+    # log should have been trimmed down to min_entries with one extra
+    test_log_size $PGID 21 || return 1
 
     if [ "$which" = "test1" ];
     then
@@ -92,10 +92,11 @@ function do_repro_long_log() {
     else
         PRIMARY=$(ceph pg $PGID query  | jq '.info.stats.up_primary')
         kill_daemons $dir TERM osd.$PRIMARY || return 1
-        CEPH_ARGS="--osd-max-pg-log-entries=30 --osd_pg_log_trim_max=5" ceph-objectstore-tool --data-path $dir/$PRIMARY --pgid $PGID --op trim-pg-log || return 1
+
+        CEPH_ARGS="--osd-max-pg-log-entries=2" ceph-objectstore-tool --data-path $dir/$PRIMARY --pgid $PGID --op trim-pg-log || return 1
         run_osd $dir $PRIMARY || return 1
         wait_for_clean || return 1
-        test_log_size $PGID 30 || return 1
+        test_log_size $PGID 2 || return 1
     fi
 }
 
