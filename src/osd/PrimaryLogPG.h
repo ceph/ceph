@@ -1779,6 +1779,7 @@ public:
   void wait_for_all_missing(OpRequestRef op);
 
   bool is_degraded_or_backfilling_object(const hobject_t& oid);
+  bool is_degraded_on_async_recovery_target(const hobject_t& soid);
   void wait_for_degraded_object(const hobject_t& oid, OpRequestRef op);
 
   void block_write_on_full_cache(
