@@ -65,6 +65,39 @@ public:
   void release_leader();
 
 private:
+  /**
+   * @verbatim
+   *
+   * <start>
+   *    |
+   *    v
+   *  INIT
+   *    |
+   *    v
+   * <follower> <-------------------------\
+   *    .                                 |
+   *    .                                 |
+   *    v (leader acquired)               |
+   * INIT_LOCAL_POOL_WATCHER    WAIT_FOR_NOTIFICATIONS
+   *    |                                 ^
+   *    v                                 |
+   * INIT_REMOTE_POOL_WATCHER   SHUT_DOWN_POOL_WATCHERS
+   *    |                                 ^
+   *    v                                 |
+   * INIT_IMAGE_DELETER         SHUT_DOWN_IMAGE_DELETER
+   *    |                                 ^
+   *    v                                 .
+   * <leader> <-----------\               .
+   *    .                 |               .
+   *    . (image update)  |               .
+   *    . . > NOTIFY_INSTANCE_WATCHER     .
+   *    .                                 .
+   *    . (leader lost / shut down)       .
+   *    . . . . . . . . . . . . . . . . . .
+   *
+   * @endverbatim
+   */
+
   struct PoolWatcherListener : public PoolWatcher<>::Listener {
     PoolReplayer *pool_replayer;
     bool local;
