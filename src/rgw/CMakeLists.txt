@@ -60,6 +60,7 @@ set(rgw_a_srcs
   rgw_frontend.cc
   rgw_gc.cc
   rgw_http_client.cc
+  rgw_http_client_curl.cc
   rgw_json_enc.cc
   rgw_keystone.cc
   rgw_ldap.cc
@@ -155,6 +156,10 @@ if (WITH_RADOSGW_BEAST_FRONTEND)
   target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
   target_link_libraries(rgw_a Boost::coroutine Boost::context)
 endif()
+
+if (WITH_CURL_OPENSSL)
+  target_link_libraries(rgw_a ${OPENSSL_LIBRARIES})
+endif (WITH_CURL_OPENSSL)
 
 set(radosgw_srcs
   rgw_loadgen_process.cc
