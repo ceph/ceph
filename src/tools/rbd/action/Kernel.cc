@@ -125,6 +125,9 @@ static int parse_map_options(const std::string &options_string)
     } else if (!strcmp(this_char, "mount_timeout")) {
       if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
         return -EINVAL;
+    } else if (!strcmp(this_char, "osd_request_timeout")) {
+      if (put_map_option_value("osd_request_timeout", value_char, map_option_int_cb))
+        return -EINVAL;
     } else if (!strcmp(this_char, "osdkeepalive")) {
       if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb))
         return -EINVAL;
