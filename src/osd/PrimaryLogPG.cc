@@ -647,9 +647,27 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
   return false;
 }
 
+bool PrimaryLogPG::is_degraded_on_async_recovery_target(const hobject_t& soid)
+{
+  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
+       i != acting_recovery_backfill.end();
+       ++i) {
+    if (*i == get_primary()) continue;
+    pg_shard_t peer = *i;
+    auto peer_missing_entry = peer_missing.find(peer);
+    if (peer_missing_entry != peer_missing.end() &&
+        peer_missing_entry->second.get_items().count(soid) &&
+        async_recovery_targets.count(peer)) {
+      dout(10) << __func__ << " " << soid << dendl;
+      return true;
+    }
+  }
+  return false;
+}
+
 void PrimaryLogPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef op)
 {
-  assert(is_degraded_or_backfilling_object(soid));
+  assert(is_degraded_or_backfilling_object(soid) || is_degraded_on_async_recovery_target(soid));
 
   maybe_kick_recovery(soid);
   waiting_for_degraded_object[soid].push_back(op);
@@ -7524,22 +7542,18 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
   dout(10) << "_rollback_to " << soid << " snapid " << snapid << dendl;
 
   ObjectContextRef rollback_to;
+
   int ret = find_object_context(
     hobject_t(soid.oid, soid.get_key(), snapid, soid.get_hash(), info.pgid.pool(),
 	      soid.get_namespace()),
     &rollback_to, false, false, &missing_oid);
   if (ret == -EAGAIN) {
     /* clone must be missing */
-    assert(is_degraded_or_backfilling_object(missing_oid));
+    assert(is_degraded_or_backfilling_object(missing_oid) || is_degraded_on_async_recovery_target(missing_oid));
     dout(20) << "_rollback_to attempted to roll back to a missing or backfilling clone "
 	     << missing_oid << " (requested snapid: ) " << snapid << dendl;
     block_write_on_degraded_snap(missing_oid, ctx->op);
     return ret;
-  }
-  if(is_degraded_or_backfilling_object(soid)) {
-    dout(10) << __func__ << " " << soid << " is a degraded or backfilling object" << dendl;
-    block_write_on_degraded_snap(soid, ctx->op);
-    return -EAGAIN;
   }
   {
     ObjectContextRef promote_obc;
@@ -7597,7 +7611,8 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     assert(0 == "unexpected error code in _rollback_to");
   } else { //we got our context, let's use it to do the rollback!
     hobject_t& rollback_to_sobject = rollback_to->obs.oi.soid;
-    if (is_degraded_or_backfilling_object(rollback_to_sobject)) {
+    if (is_degraded_or_backfilling_object(rollback_to_sobject) ||
+	is_degraded_on_async_recovery_target(rollback_to_sobject)) {
       dout(20) << "_rollback_to attempted to roll back to a degraded object "
 	       << rollback_to_sobject << " (requested snapid: ) " << snapid << dendl;
       block_write_on_degraded_snap(rollback_to_sobject, ctx->op);
@@ -10816,6 +10831,9 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
     put_snapset_context(ssc);
     if (is_degraded_or_backfilling_object(soid)) {
       dout(20) << __func__ << " clone is degraded or backfilling " << soid << dendl;
+      return -EAGAIN;
+    } else if (is_degraded_on_async_recovery_target(soid)) {
+      dout(20) << __func__ << " clone is recovering " << soid << dendl;
       return -EAGAIN;
     } else {
       dout(20) << __func__ << " missing clone " << soid << dendl;
