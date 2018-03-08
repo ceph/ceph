@@ -1,7 +1,6 @@
 import {
   AfterContentChecked,
   Component,
-  ComponentFactoryResolver,
   EventEmitter,
   Input,
   OnChanges,
@@ -25,7 +24,6 @@ import { Observable } from 'rxjs/Observable';
 
 import { CdTableColumn } from '../../models/cd-table-column';
 import { CdTableSelection } from '../../models/cd-table-selection';
-import { TableDetailsDirective } from '../table-details.directive';
 
 @Component({
   selector: 'cd-table',
@@ -34,7 +32,6 @@ import { TableDetailsDirective } from '../table-details.directive';
 })
 export class TableComponent implements AfterContentChecked, OnInit, OnChanges, OnDestroy {
   @ViewChild(DatatableComponent) table: DatatableComponent;
-  @ViewChild(TableDetailsDirective) detailTemplate: TableDetailsDirective;
   @ViewChild('tableCellBoldTpl') tableCellBoldTpl: TemplateRef<any>;
   @ViewChild('sparklineTpl') sparklineTpl: TemplateRef<any>;
   @ViewChild('routerLinkTpl') routerLinkTpl: TemplateRef<any>;
@@ -48,8 +45,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Input() sorts?: SortPropDir[];
   // Method used for setting column widths.
   @Input() columnMode ?= 'flex';
-  // Name of the component e.g. 'TableDetailsComponent'
-  @Input() detailsComponent?: string;
   // Display the tool header, including reload button, pagination and search fields?
   @Input() toolHeader ?= true;
   // Display the table header?
@@ -58,10 +53,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Input() footer ?= true;
   // Page size to show. Set to 0 to show unlimited number of rows.
   @Input() limit ?= 10;
-  // An optional function that is called before the details page is show.
-  // The current selection is passed as function argument. To do not display
-  // the details page, return false.
-  @Input() beforeShowDetails: Function;
 
   /**
    * Auto reload time in ms - per default every 5s
@@ -72,6 +63,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   // Which row property is unique for a row
   @Input() identifier = 'id';
+  // Allows other components to specify which type of selection they want,
+  // e.g. 'single' or 'multi'.
+  @Input() selectionType: string = undefined;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
@@ -85,6 +79,16 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @Output() fetchData = new EventEmitter();
 
   /**
+   * This should be defined if you need access to the selection object.
+   *
+   * Each time the table selection changes, this will be triggered and
+   * the new selection object will be sent.
+   *
+   * @memberof TableComponent
+   */
+  @Output() updateSelection = new EventEmitter();
+
+  /**
    * Use this variable to access the selected row(s).
    */
   selection = new CdTableSelection();
@@ -93,7 +97,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   cellTemplates: {
     [key: string]: TemplateRef<any>
   } = {};
-  selectionType: string = undefined;
   search = '';
   rows = [];
   loadingIndicator = true;
@@ -110,7 +113,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // table columns after the browser window has been resized.
   private currentWidth: number;
 
-  constructor(private componentFactoryResolver: ComponentFactoryResolver) { }
+  constructor() {}
 
   ngOnInit() {
     this._addTemplates();
@@ -132,9 +135,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       }
       return c;
     });
-    if (this.detailsComponent) {
-      this.selectionType = 'multi';
-    }
     this.tableColumns = this.columns.filter(c => !c.isHidden);
     if (this.autoReload) { // Also if nothing is bound to fetchData nothing will be triggered
       // Force showing the loading indicator because it has been set to False in
@@ -164,7 +164,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
   }
 
-  _addTemplates () {
+  _addTemplates() {
     this.cellTemplates.bold = this.tableCellBoldTpl;
     this.cellTemplates.sparkline = this.sparklineTpl;
     this.cellTemplates.routerLink = this.routerLinkTpl;
@@ -218,15 +218,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   onSelect() {
     this.selection.update();
-    this.toggleExpandRow();
-  }
-
-  toggleExpandRow() {
-    if (this.selection.hasSelection) {
-      this.table.rowDetail.toggleExpandRow(this.selection.first());
-    } else {
-      this.detailTemplate.viewContainerRef.clear();
-    }
+    this.updateSelection.emit(_.clone(this.selection));
   }
 
   toggleColumn($event: any) {
@@ -258,25 +250,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     ];
   }
 
-  updateDetailView() {
-    if (!this.detailsComponent) {
-      return;
-    }
-    if (_.isFunction(this.beforeShowDetails)) {
-      if (!this.beforeShowDetails(this.selection)) {
-        this.detailTemplate.viewContainerRef.clear();
-        return;
-      }
-    }
-    const factories = Array.from(this.componentFactoryResolver['_factories'].keys());
-    const factoryClass = <Type<any>>factories.find((x: any) => x.name === this.detailsComponent);
-    this.detailTemplate.viewContainerRef.clear();
-    const cmpRef = this.detailTemplate.viewContainerRef.createComponent(
-      this.componentFactoryResolver.resolveComponentFactory(factoryClass)
-    );
-    cmpRef.instance.selected = this.selection.selected;
-  }
-
   updateFilter(event?) {
     if (!event) {
       this.search = '';
@@ -284,11 +257,15 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     const val = this.search.toLowerCase();
     const columns = this.columns;
     // update the rows
-    this.rows = this.data.filter(function (d) {
-      return columns.filter((c) => {
-        return (typeof d[c.prop] === 'string' || typeof d[c.prop] === 'number')
-          && (d[c.prop] + '').toLowerCase().indexOf(val) !== -1;
-      }).length > 0;
+    this.rows = this.data.filter((d) => {
+      return (
+        columns.filter(c => {
+          return (
+            (_.isString(d[c.prop]) || _.isNumber(d[c.prop])) &&
+            (d[c.prop] + '').toLowerCase().indexOf(val) !== -1
+          );
+        }).length > 0
+      );
     });
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
@@ -298,7 +275,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     // Return the function used to populate a row's CSS classes.
     return () => {
       return {
-        'clickable': !_.isUndefined(this.detailsComponent)
+        clickable: !_.isUndefined(this.selectionType)
       };
     };
   }
