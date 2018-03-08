@@ -21,7 +21,7 @@ void register_test_leader_watcher() {
 
 class TestLeaderWatcher : public ::rbd::mirror::TestFixture {
 public:
-  class Listener : public rbd::mirror::LeaderWatcher<>::Listener {
+  class Listener : public rbd::mirror::leader_watcher::Listener {
   public:
     Listener()
       : m_test_lock(unique_lock_name("LeaderWatcher::m_test_lock", this)) {

@@ -28,19 +28,8 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class LeaderWatcher : protected librbd::Watcher {
   using librbd::Watcher::unregister_watch; // Silence overloaded virtual warning
 public:
-  struct Listener {
-    virtual ~Listener() {
-    }
-
-    virtual void post_acquire_handler(Context *on_finish) = 0;
-    virtual void pre_release_handler(Context *on_finish) = 0;
-
-    virtual void update_leader_handler(
-      const std::string &leader_instance_id) = 0;
-  };
-
   LeaderWatcher(Threads<ImageCtxT> *threads, librados::IoCtx &io_ctx,
-                Listener *listener);
+                leader_watcher::Listener *listener);
   ~LeaderWatcher() override;
 
   int init();
@@ -192,7 +181,7 @@ private:
   };
 
   Threads<ImageCtxT> *m_threads;
-  Listener *m_listener;
+  leader_watcher::Listener *m_listener;
 
   mutable Mutex m_lock;
   uint64_t m_notifier_id;

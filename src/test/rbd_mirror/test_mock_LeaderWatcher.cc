@@ -254,7 +254,7 @@ using ::testing::Return;
 
 using librbd::MockManagedLock;
 
-struct MockListener : public LeaderWatcher<librbd::MockTestImageCtx>::Listener {
+struct MockListener : public leader_watcher::Listener {
   static MockListener* s_instance;
 
   MockListener() {

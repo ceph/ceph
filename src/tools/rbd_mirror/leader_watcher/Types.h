@@ -7,13 +7,27 @@
 #include "include/int_types.h"
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
+#include <string>
 #include <boost/variant.hpp>
+
+struct Context;
 
 namespace ceph { class Formatter; }
 
 namespace rbd {
 namespace mirror {
 namespace leader_watcher {
+
+struct Listener {
+  virtual ~Listener() {
+  }
+
+  virtual void post_acquire_handler(Context *on_finish) = 0;
+  virtual void pre_release_handler(Context *on_finish) = 0;
+
+  virtual void update_leader_handler(
+    const std::string &leader_instance_id) = 0;
+};
 
 enum NotifyOp {
   NOTIFY_OP_HEARTBEAT        = 0,

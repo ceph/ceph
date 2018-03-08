@@ -15,6 +15,7 @@
 #include "PoolWatcher.h"
 #include "ImageDeleter.h"
 #include "types.h"
+#include "tools/rbd_mirror/leader_watcher/Types.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
 
@@ -191,7 +192,7 @@ private:
     }
   } m_pool_replayer_thread;
 
-  class LeaderListener : public LeaderWatcher<>::Listener {
+  class LeaderListener : public leader_watcher::Listener {
   public:
     LeaderListener(PoolReplayer *pool_replayer)
       : m_pool_replayer(pool_replayer) {
