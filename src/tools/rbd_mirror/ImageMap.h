@@ -112,8 +112,8 @@ private:
         image_map->handle_load(image_mapping);
       }
 
-      on_finish->complete(r);
       image_map->finish_async_op();
+      on_finish->complete(r);
     }
   };
 
