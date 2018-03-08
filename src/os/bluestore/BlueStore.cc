@@ -9898,7 +9898,7 @@ int BlueStore::_touch(TransContext *txc,
   return r;
 }
 
-template <int LogLevelV = 30>
+template <int LogLevelV>
 void BlueStore::_dump_onode(const OnodeRef& o)
 {
   if (!cct->_conf->subsys.should_gather<ceph_subsys_bluestore, LogLevelV>())
@@ -9922,7 +9922,7 @@ void BlueStore::_dump_onode(const OnodeRef& o)
   _dump_extent_map<LogLevelV>(o->extent_map);
 }
 
-template <int LogLevelV = 30>
+template <int LogLevelV>
 void BlueStore::_dump_extent_map(ExtentMap &em)
 {
   uint64_t pos = 0;
@@ -9954,7 +9954,7 @@ void BlueStore::_dump_extent_map(ExtentMap &em)
   }
 }
 
-template <int LogLevelV = 30>
+template <int LogLevelV>
 void BlueStore::_dump_transaction(Transaction *t)
 {
   dout(LogLevelV) << __func__ << " transaction dump:\n";
