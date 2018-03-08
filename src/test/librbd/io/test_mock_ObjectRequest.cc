@@ -288,6 +288,11 @@ struct TestMockIoObjectRequest : public TestMockFixture {
     }
   }
 
+  void expect_create(MockTestImageCtx &mock_image_ctx, bool exclusive) {
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, exclusive))
+      .Times(1);
+  }
+
   void expect_truncate(MockTestImageCtx &mock_image_ctx, int offset, int r) {
     auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
                                truncate(_, offset, _));
@@ -1000,6 +1005,7 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
   expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
   expect_object_may_exist(mock_image_ctx, 0, false);
   expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, false, 0);
+  expect_create(mock_image_ctx, false);
   expect_truncate(mock_image_ctx, 0, 0);
 
   C_SaferCond ctx;
