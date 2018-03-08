@@ -14,9 +14,10 @@ import { OsdService } from '../osd.service';
 
 export class OsdListComponent implements OnInit {
   @ViewChild('statusColor') statusColor: TemplateRef<any>;
+
   osds = [];
-  detailsComponent = 'OsdDetailsComponent';
   columns: CdTableColumn[];
+  selection = new CdTableSelection();
 
   constructor(
     private osdService: OsdService,
@@ -43,6 +44,10 @@ export class OsdListComponent implements OnInit {
       {prop: 'stats.op_r', name: 'Read ops', cellTransformation: CellTemplate.perSecond},
       {prop: 'stats.op_w', name: 'Write ops', cellTransformation: CellTemplate.perSecond}
     ];
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 
   getOsdList() {

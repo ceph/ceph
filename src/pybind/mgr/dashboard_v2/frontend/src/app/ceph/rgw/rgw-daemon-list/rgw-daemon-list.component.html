@@ -5,10 +5,14 @@
         aria-current="page">Object Gateway</li>
   </ol>
 </nav>
+
 <cd-table [data]="daemons"
           [columns]="columns"
           columnMode="flex"
-          [detailsComponent]="detailsComponent"
-          (fetchData)="getDaemonList()"
-          [beforeShowDetails]="beforeShowDetails">
+          selectionType="single"
+          (updateSelection)="updateSelection($event)"
+          (fetchData)="getDaemonList()">
+  <cd-rgw-daemon-details cdTableDetail
+                         [selection]="selection">
+  </cd-rgw-daemon-details>
 </cd-table>

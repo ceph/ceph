@@ -1,7 +1,8 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnChanges } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { RgwDaemonService } from '../services/rgw-daemon.service';
 
 @Component({
@@ -9,19 +10,18 @@ import { RgwDaemonService } from '../services/rgw-daemon.service';
   templateUrl: './rgw-daemon-details.component.html',
   styleUrls: ['./rgw-daemon-details.component.scss']
 })
-export class RgwDaemonDetailsComponent implements OnInit {
-
+export class RgwDaemonDetailsComponent implements OnChanges {
   metadata: any;
   serviceId = '';
 
-  @Input() selected?: Array<any> = [];
+  @Input() selection: CdTableSelection;
 
-  constructor(private rgwDaemonService: RgwDaemonService) { }
+  constructor(private rgwDaemonService: RgwDaemonService) {}
 
-  ngOnInit() {
+  ngOnChanges() {
     // Get the service id of the first selected row.
-    if (this.selected.length > 0) {
-      this.serviceId = this.selected[0].id;
+    if (this.selection.hasSelection) {
+      this.serviceId = this.selection.first().id;
     }
   }
 
@@ -29,9 +29,8 @@ export class RgwDaemonDetailsComponent implements OnInit {
     if (_.isEmpty(this.serviceId)) {
       return;
     }
-    this.rgwDaemonService.get(this.serviceId)
-      .then((resp) => {
-        this.metadata = resp['rgw_metadata'];
-      });
+    this.rgwDaemonService.get(this.serviceId).then(resp => {
+      this.metadata = resp['rgw_metadata'];
+    });
   }
 }
