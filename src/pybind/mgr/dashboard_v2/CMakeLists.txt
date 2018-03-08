@@ -13,7 +13,7 @@ if(WITH_MGR_DASHBOARD_V2_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch6
     NAMES npm
     HINTS $ENV{NPM_ROOT}/bin)
   if(NOT NPM_BIN)
-    message(FATAL_ERROR "WITH_MGR_DASHBOARD_V2_FRONTEND not npm not found")
+    message(FATAL_ERROR "WITH_MGR_DASHBOARD_V2_FRONTEND set, but npm not found")
   endif()
 
 add_custom_command(
