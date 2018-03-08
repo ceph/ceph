@@ -998,7 +998,7 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
   InSequence seq;
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
   expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
-  expect_object_may_exist(mock_image_ctx, 0, true);
+  expect_object_may_exist(mock_image_ctx, 0, false);
   expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, false, 0);
   expect_truncate(mock_image_ctx, 0, 0);
 
