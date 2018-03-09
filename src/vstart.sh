@@ -611,9 +611,9 @@ EOF
             local uuid=`uuidgen`
             echo "add osd$osd $uuid"
 	    OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
-	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > dev/osd$osd/new.json
-            ceph_adm osd new $uuid -i dev/osd$osd/new.json
-	    rm dev/osd$osd/new.json
+	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
+            ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
+	    rm $CEPH_DEV_DIR/osd$osd/new.json
             $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
@@ -844,7 +844,7 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
 
     echo Populating config ...
-    cat <<EOF | $CEPH_BIN/ceph -c ceph.conf config assimilate-conf -i -
+    cat <<EOF | $CEPH_BIN/ceph -c $conf_fn config assimilate-conf -i -
 [global]
 osd_pool_default_size = $OSD_POOL_DEFAULT_SIZE
 osd_pool_default_min_size = 1
@@ -872,7 +872,7 @@ EOF
 
     if [ "$debug" -ne 0 ]; then
 	echo Setting debug configs ...
-	cat <<EOF | $CEPH_BIN/ceph -c ceph.conf config assimilate-conf -i -
+	cat <<EOF | $CEPH_BIN/ceph -c $conf_fn config assimilate-conf -i -
 [mgr]
 debug_ms = 1
 debug_mgr = 20
