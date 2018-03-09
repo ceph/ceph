@@ -50,6 +50,9 @@ private:
    *                          |-----------------> CLOSE_PARENT     *
    *                          |                      |             *
    *                          |                      v             *
+   *                          |                   RESET_EXISTENCE  *
+   *                          |                      |             *
+   *                          |                      v             *
    *                          \-----------------> <finish> < * * * *
    *
    * @endverbatim
@@ -80,6 +83,9 @@ private:
 
   void send_close_parent();
   Context *handle_close_parent(int *result);
+
+  void send_reset_existence_cache();
+  Context *handle_reset_existence_cache(int *result);
 
   void send_complete(int r);
 

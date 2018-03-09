@@ -30,6 +30,7 @@ set(librbd_internal_srcs
   api/Mirror.cc
   api/Snapshot.cc
   cache/ImageWriteback.cc
+  cache/ObjectCacherObjectDispatch.cc
   cache/PassthroughImageCache.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
@@ -60,11 +61,15 @@ set(librbd_internal_srcs
   io/ImageDispatchSpec.cc
   io/ImageRequest.cc
   io/ImageRequestWQ.cc
+  io/ObjectDispatch.cc
+  io/ObjectDispatchSpec.cc
+  io/ObjectDispatcher.cc
   io/ObjectRequest.cc
   io/ReadResult.cc
   io/Utils.cc
   journal/CreateRequest.cc
   journal/DemoteRequest.cc
+  journal/ObjectDispatch.cc
   journal/OpenRequest.cc
   journal/PromoteRequest.cc
   journal/RemoveRequest.cc

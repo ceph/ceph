@@ -884,7 +884,7 @@ void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
 
   if (r < 0) {
     lderr(cct) << ": AIO modify op failed: " << cpp_strerror(r) << dendl;
-    on_safe->complete(r);
+    m_image_ctx.op_work_queue->queue(on_safe, r);
     return;
   }
 

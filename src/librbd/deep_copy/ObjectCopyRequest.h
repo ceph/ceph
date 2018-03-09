@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_DEEP_COPY_OBJECT_COPY_REQUEST_H
 
 #include "include/int_types.h"
+#include "include/interval_set.h"
 #include "include/rados/librados.hpp"
 #include "common/snap_types.h"
 #include "librbd/ImageCtx.h"

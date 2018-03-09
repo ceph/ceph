@@ -7,6 +7,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -441,7 +442,28 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
     return nullptr;
   }
 
-  m_image_ctx->init_cache();
+  return send_init_cache(result);
+}
+
+template <typename I>
+Context *OpenRequest<I>::send_init_cache(int *result) {
+  // cache is disabled or parent image context
+  if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
+    return send_register_watch(result);
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  auto cache = cache::ObjectCacherObjectDispatch<I>::create(m_image_ctx);
+  cache->init();
+
+  // readahead requires the cache
+  m_image_ctx->readahead.set_trigger_requests(
+    m_image_ctx->readahead_trigger_requests);
+  m_image_ctx->readahead.set_max_readahead_size(
+    m_image_ctx->readahead_max_bytes);
+
   return send_register_watch(result);
 }
 

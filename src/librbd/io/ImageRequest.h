@@ -21,7 +21,7 @@ class ImageCtx;
 namespace io {
 
 class AioCompletion;
-class ObjectRequestHandle;
+class ObjectDispatchSpec;
 class ReadResult;
 
 template <typename ImageCtxT = ImageCtx>
@@ -65,7 +65,7 @@ public:
   }
 
 protected:
-  typedef std::list<ObjectRequestHandle *> ObjectRequests;
+  typedef std::list<ObjectDispatchSpec*> ObjectRequests;
 
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
@@ -139,24 +139,18 @@ protected:
 
   void send_request() override;
 
-  virtual int prune_object_extents(ObjectExtents &object_extents) {
+  virtual int validate_object_extents(
+      const ObjectExtents &object_extents) const {
     return 0;
   }
-  virtual uint32_t get_object_cache_request_count(bool journaling) const {
-    return 0;
-  }
-  virtual void send_object_cache_requests(const ObjectExtents &object_extents,
-                                          uint64_t journal_tid) = 0;
 
-  virtual void send_object_requests(const ObjectExtents &object_extents,
-                                    const ::SnapContext &snapc,
-                                    ObjectRequests *object_requests);
-  virtual ObjectRequestHandle *create_object_request(
+  void send_object_requests(const ObjectExtents &object_extents,
+                            const ::SnapContext &snapc, uint64_t journal_tid);
+  virtual ObjectDispatchSpec *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish) = 0;
+      uint64_t journal_tid, Context *on_finish) = 0;
 
-  virtual uint64_t append_journal_event(const ObjectRequests &requests,
-                                        bool synchronous) = 0;
+  virtual uint64_t append_journal_event(bool synchronous) = 0;
   virtual void update_stats(size_t length) = 0;
 
 private:
@@ -191,19 +185,12 @@ protected:
 
   void send_image_cache_request() override;
 
-  void send_object_cache_requests(const ObjectExtents &object_extents,
-                                  uint64_t journal_tid) override;
 
-  void send_object_requests(const ObjectExtents &object_extents,
-                            const ::SnapContext &snapc,
-                            ObjectRequests *aio_object_requests) override;
-
-  ObjectRequestHandle *create_object_request(
+  ObjectDispatchSpec *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish) override;
+      uint64_t journal_tid, Context *on_finish) override;
 
-  uint64_t append_journal_event(const ObjectRequests &requests,
-                                bool synchronous) override;
+  uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
 
 private:
@@ -233,20 +220,13 @@ protected:
     return "aio_discard";
   }
 
-  int prune_object_extents(ObjectExtents &object_extents) override;
-
   void send_image_cache_request() override;
 
-  uint32_t get_object_cache_request_count(bool journaling) const override;
-  void send_object_cache_requests(const ObjectExtents &object_extents,
-                                  uint64_t journal_tid) override;
-
-  ObjectRequestHandle *create_object_request(
+  ObjectDispatchSpec *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish) override;
+      uint64_t journal_tid, Context *on_finish) override;
 
-  uint64_t append_journal_event(const ObjectRequests &requests,
-                                bool synchronous) override;
+  uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
 private:
   bool m_skip_partial_discard;
@@ -308,18 +288,11 @@ protected:
 
   void send_image_cache_request() override;
 
-  void send_object_cache_requests(const ObjectExtents &object_extents,
-                                  uint64_t journal_tid) override;
-
-  void send_object_requests(const ObjectExtents &object_extents,
-                            const ::SnapContext &snapc,
-                            ObjectRequests *object_requests) override;
-  ObjectRequestHandle *create_object_request(
+  ObjectDispatchSpec *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
-      Context *on_finish) override;
+      uint64_t journal_tid, Context *on_finish) override;
 
-  uint64_t append_journal_event(const ObjectRequests &requests,
-                                bool synchronous) override;
+  uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
 private:
   bufferlist m_data_bl;
@@ -345,17 +318,13 @@ public:
 protected:
   void send_image_cache_request() override;
 
-  void send_object_cache_requests(const ObjectExtents &object_extents,
-                                  uint64_t journal_tid) override;
-
   void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
 
-  ObjectRequestHandle *create_object_request(const ObjectExtent &object_extent,
-                                             const ::SnapContext &snapc,
-                                             Context *on_finish) override;
+  ObjectDispatchSpec *create_object_request(
+      const ObjectExtent &object_extent, const ::SnapContext &snapc,
+      uint64_t journal_tid, Context *on_finish) override;
 
-  uint64_t append_journal_event(const ObjectRequests &requests,
-                                bool synchronous) override;
+  uint64_t append_journal_event(bool synchronous) override;
   void update_stats(size_t length) override;
 
   aio_type_t get_aio_type() const override {
@@ -365,7 +334,9 @@ protected:
     return "aio_compare_and_write";
   }
 
-  int prune_object_extents(ObjectExtents &object_extents) override;
+  int validate_object_extents(
+      const ObjectExtents &object_extents) const override;
+
 private:
   bufferlist m_cmp_bl;
   bufferlist m_bl;

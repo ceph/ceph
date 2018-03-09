@@ -4,6 +4,7 @@
 #include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_client.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "journal/Journaler.h"

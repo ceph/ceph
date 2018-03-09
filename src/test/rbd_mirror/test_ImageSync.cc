@@ -11,6 +11,8 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
@@ -25,6 +27,17 @@ namespace rbd {
 namespace mirror {
 
 namespace {
+
+int flush(librbd::ImageCtx *image_ctx) {
+  C_SaferCond ctx;
+  auto aio_comp = librbd::io::AioCompletion::create(
+    &ctx, image_ctx, librbd::io::AIO_TYPE_FLUSH);
+  auto req = librbd::io::ImageDispatchSpec<>::create_flush_request(
+    *image_ctx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
+  req->send();
+  delete req;
+  return ctx.wait();
+}
 
 void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size)
 {
@@ -44,7 +57,7 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size)
   }
 
   RWLock::RLocker owner_locker(image_ctx->owner_lock);
-  ASSERT_EQ(0, image_ctx->flush());
+  ASSERT_EQ(0, flush(image_ctx));
 }
 
 } // anonymous namespace
@@ -164,7 +177,7 @@ TEST_F(TestImageSync, Resize) {
                                                                0));
   {
     RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
-    ASSERT_EQ(0, m_remote_image_ctx->flush());
+    ASSERT_EQ(0, flush(m_remote_image_ctx));
   }
 
   ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap", nullptr));
@@ -206,7 +219,7 @@ TEST_F(TestImageSync, Discard) {
                                                                0));
   {
     RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
-    ASSERT_EQ(0, m_remote_image_ctx->flush());
+    ASSERT_EQ(0, flush(m_remote_image_ctx));
   }
 
   ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap", nullptr));
@@ -215,7 +228,7 @@ TEST_F(TestImageSync, Discard) {
                                                                      len - 2, m_remote_image_ctx->skip_partial_discard));
   {
     RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
-    ASSERT_EQ(0, m_remote_image_ctx->flush());
+    ASSERT_EQ(0, flush(m_remote_image_ctx));
   }
 
   C_SaferCond ctx;
