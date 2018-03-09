@@ -11,6 +11,7 @@
 #include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "librbd/Watcher.h"
+#include "tools/rbd_mirror/instances/Types.h"
 
 namespace librados { class IoCtx; }
 namespace librbd { class ImageCtx; }
@@ -26,14 +27,16 @@ public:
   typedef std::vector<std::string> InstanceIds;
 
   static Instances *create(Threads<ImageCtxT> *threads,
-                           librados::IoCtx &ioctx) {
-    return new Instances(threads, ioctx);
+                           librados::IoCtx &ioctx,
+                           instances::Listener& listener) {
+    return new Instances(threads, ioctx, listener);
   }
   void destroy() {
     delete this;
   }
 
-  Instances(Threads<ImageCtxT> *threads, librados::IoCtx &ioctx);
+  Instances(Threads<ImageCtxT> *threads, librados::IoCtx &ioctx,
+            instances::Listener& listener);
   virtual ~Instances();
 
   void init(Context *on_finish);
@@ -63,13 +66,14 @@ private:
    */
 
   enum InstanceState {
+    INSTANCE_STATE_ADDING,
     INSTANCE_STATE_IDLE,
     INSTANCE_STATE_REMOVING
   };
 
   struct Instance {
     utime_t acked_time{};
-    InstanceState state = INSTANCE_STATE_IDLE;
+    InstanceState state = INSTANCE_STATE_ADDING;
   };
 
   struct C_NotifyBase : public Context {
@@ -99,8 +103,31 @@ private:
     }
   };
 
+  struct C_NotifyInstancesAdded : public C_NotifyBase {
+    C_NotifyInstancesAdded(Instances *instances,
+                           const InstanceIds& instance_ids)
+      : C_NotifyBase(instances, instance_ids) {
+    }
+
+    void execute() override {
+      this->instances->notify_instances_added(this->instance_ids);
+    }
+  };
+
+  struct C_NotifyInstancesRemoved : public C_NotifyBase {
+    C_NotifyInstancesRemoved(Instances *instances,
+                            const InstanceIds& instance_ids)
+      : C_NotifyBase(instances, instance_ids) {
+    }
+
+    void execute() override {
+      this->instances->notify_instances_removed(this->instance_ids);
+    }
+  };
+
   Threads<ImageCtxT> *m_threads;
   librados::IoCtx &m_ioctx;
+  instances::Listener& m_listener;
   CephContext *m_cct;
 
   Mutex m_lock;
@@ -112,6 +139,8 @@ private:
   Context *m_timer_task = nullptr;
 
   void handle_acked(const InstanceIds& instance_ids);
+  void notify_instances_added(const InstanceIds& instance_ids);
+  void notify_instances_removed(const InstanceIds& instance_ids);
 
   void get_instances();
   void handle_get_instances(int r);

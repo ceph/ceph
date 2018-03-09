@@ -212,7 +212,7 @@ struct Instances<librbd::MockTestImageCtx> {
   static Instances* s_instance;
 
   static Instances *create(Threads<librbd::MockTestImageCtx> *threads,
-                           librados::IoCtx &ioctx) {
+                           librados::IoCtx &ioctx, instances::Listener&) {
     assert(s_instance != nullptr);
     return s_instance;
   }
