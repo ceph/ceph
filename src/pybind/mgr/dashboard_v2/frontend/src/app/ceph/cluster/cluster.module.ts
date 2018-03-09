@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { AccordionModule, TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap';
 import { ComponentsModule } from '../../shared/components/components.module';
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
@@ -26,7 +26,6 @@ import { OsdService } from './osd/osd.service';
     CommonModule,
     PerformanceCounterModule,
     ComponentsModule,
-    AccordionModule,
     TabsModule,
     SharedModule,
     RouterModule,

@@ -228,6 +228,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
     if (_.isFunction(this.beforeShowDetails)) {
       if (!this.beforeShowDetails(this.selection)) {
+        this.detailTemplate.viewContainerRef.clear();
         return;
       }
     }

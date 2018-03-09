@@ -7,7 +7,8 @@
 <cd-table [data]="osds"
           (fetchData)="getOsdList()"
           [columns]="columns"
-          [detailsComponent]="detailsComponent">
+          [detailsComponent]="detailsComponent"
+          [beforeShowDetails]="beforeShowDetails">
 </cd-table>
 <ng-template #statusColor
              let-value="value">
