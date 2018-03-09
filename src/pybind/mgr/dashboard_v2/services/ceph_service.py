@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import time
+import collections
+from collections import defaultdict
+
 from .. import mgr
 
 
@@ -58,3 +62,42 @@ class CephService(object):
             return osd_map['pools']
         return [pool for pool in osd_map['pools']
                 if application in pool.get('application_metadata', {})]
+
+    @classmethod
+    def get_pool_list_with_stats(cls, application=None):
+        # pylint: disable=too-many-locals
+        pools = cls.get_pool_list(application)
+
+        pools_w_stats = []
+
+        pg_summary = mgr.get("pg_summary")
+        pool_stats = defaultdict(lambda: defaultdict(
+            lambda: collections.deque(maxlen=10)))
+
+        df = mgr.get("df")
+        pool_stats_dict = dict([(p['id'], p['stats']) for p in df['pools']])
+        now = time.time()
+        for pool_id, stats in pool_stats_dict.items():
+            for stat_name, stat_val in stats.items():
+                pool_stats[pool_id][stat_name].appendleft((now, stat_val))
+
+        for pool in pools:
+            pool['pg_status'] = pg_summary['by_pool'][pool['pool'].__str__()]
+            stats = pool_stats[pool['pool']]
+            s = {}
+
+            def get_rate(series):
+                if len(series) >= 2:
+                    return (float(series[0][1]) - float(series[1][1])) / \
+                        (float(series[0][0]) - float(series[1][0]))
+                return 0
+
+            for stat_name, stat_series in stats.items():
+                s[stat_name] = {
+                    'latest': stat_series[0][1],
+                    'rate': get_rate(stat_series),
+                    'series': [i for i in stat_series]
+                }
+            pool['stats'] = s
+            pools_w_stats.append(pool)
+        return pools_w_stats
