@@ -23,6 +23,8 @@ class FooResource(RESTController):
         return data
 
     def get(self, key, *args, **kwargs):
+        if args:
+            return {'detail': (key, args)}
         return FooResource.elems[int(key)]
 
     def delete(self, key):
@@ -34,10 +36,6 @@ class FooResource(RESTController):
     def set(self, data, key):
         FooResource.elems[int(key)] = data
         return dict(key=key, **data)
-
-    @detail_route(methods=['get'])
-    def detail(self, key):
-        return {'detail': key}
 
 
 class FooArgs(RESTController):
@@ -120,6 +118,11 @@ class RESTControllerTest(helper.CPWebCase):
     def test_not_implemented(self):
         self._put("/foo")
         self.assertStatus(405)
+        body = self.jsonBody()
+        self.assertIsInstance(body, dict)
+        assert body['detail'] == 'Method not implemented.'
+        assert '405' in body['status']
+        assert 'traceback' in body
 
     def test_args_from_json(self):
         self._put("/fooargs/hello", {'name': 'world'})
@@ -127,7 +130,7 @@ class RESTControllerTest(helper.CPWebCase):
 
     def test_detail_route(self):
         self._get('/foo/1/detail')
-        self.assertJsonBody({'detail': '1'})
+        self.assertJsonBody({'detail': ['1', ['detail']]})
 
         self._post('/foo/1/detail', 'post-data')
         self.assertStatus(405)
