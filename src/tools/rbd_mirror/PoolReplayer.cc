@@ -42,6 +42,8 @@ using librbd::util::create_async_context_callback;
 namespace rbd {
 namespace mirror {
 
+using ::operator<<;
+
 namespace {
 
 const std::string SERVICE_DAEMON_LEADER_KEY("leader");
@@ -1025,6 +1027,22 @@ void PoolReplayer<I>::handle_remove_image(const std::string &mirror_uuid,
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
+  // TODO
+}
+
+template <typename I>
+void PoolReplayer<I>::handle_instances_added(const InstanceIds &instance_ids) {
+  dout(5) << "instance_ids=" << instance_ids << dendl;
+
+  // TODO only register ourselves for now
+  auto instance_id = m_instance_watcher->get_instance_id();
+  m_image_map->update_instances_added({instance_id});
+}
+
+template <typename I>
+void PoolReplayer<I>::handle_instances_removed(
+    const InstanceIds &instance_ids) {
+  dout(5) << "instance_ids=" << instance_ids << dendl;
   // TODO
 }
 

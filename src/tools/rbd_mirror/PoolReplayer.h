@@ -25,6 +25,7 @@
 #include <memory>
 #include <atomic>
 #include <string>
+#include <vector>
 
 class AdminSocketHook;
 
@@ -105,6 +106,8 @@ private:
    *
    * @endverbatim
    */
+
+  typedef std::vector<std::string> InstanceIds;
 
   struct PoolWatcherListener : public pool_watcher::Listener {
     PoolReplayer *pool_replayer;
@@ -202,6 +205,9 @@ private:
                            const std::string &instance_id,
                            Context* on_finish);
 
+  void handle_instances_added(const InstanceIds &instance_ids);
+  void handle_instances_removed(const InstanceIds &instance_ids);
+
   Threads<ImageCtxT> *m_threads;
   ServiceDaemon<ImageCtxT>* m_service_daemon;
   int64_t m_local_pool_id = -1;
@@ -267,6 +273,14 @@ private:
     void update_leader_handler(
       const std::string &leader_instance_id) override {
       m_pool_replayer->handle_update_leader(leader_instance_id);
+    }
+
+    void handle_instances_added(const InstanceIds& instance_ids) override {
+      m_pool_replayer->handle_instances_added(instance_ids);
+    }
+
+    void handle_instances_removed(const InstanceIds& instance_ids) override {
+      m_pool_replayer->handle_instances_removed(instance_ids);
     }
 
   private:

@@ -272,6 +272,8 @@ struct MockListener : public leader_watcher::Listener {
   MOCK_METHOD1(pre_release_handler, void(Context *));
 
   MOCK_METHOD1(update_leader_handler, void(const std::string &));
+  MOCK_METHOD1(handle_instances_added, void(const InstanceIds&));
+  MOCK_METHOD1(handle_instances_removed, void(const InstanceIds&));
 };
 
 MockListener *MockListener::s_instance = nullptr;

@@ -8,6 +8,7 @@
 #include "include/buffer_fwd.h"
 #include "include/encoding.h"
 #include <string>
+#include <vector>
 #include <boost/variant.hpp>
 
 struct Context;
@@ -19,6 +20,8 @@ namespace mirror {
 namespace leader_watcher {
 
 struct Listener {
+  typedef std::vector<std::string> InstanceIds;
+
   virtual ~Listener() {
   }
 
@@ -27,6 +30,9 @@ struct Listener {
 
   virtual void update_leader_handler(
     const std::string &leader_instance_id) = 0;
+
+  virtual void handle_instances_added(const InstanceIds& instance_ids) = 0;
+  virtual void handle_instances_removed(const InstanceIds& instance_ids) = 0;
 };
 
 enum NotifyOp {
