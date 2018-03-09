@@ -487,6 +487,113 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
   return 0;
 }
 
+int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
+		   pg_info_t &info, const spg_t &pgid,
+		   ObjectStore::Sequencer &osr, epoch_t map_epoch,
+		   PastIntervals &past_intervals)
+{
+  ghobject_t oid = pgid.make_pgmeta_oid();
+  struct stat st;
+  int r = store->stat(coll, oid, &st);
+  assert(r == 0);
+  assert(st.st_size == 0);
+
+  cerr << "Log bounds are: " << "(" << info.log_tail << ","
+       << info.last_update << "]" << std::endl;
+
+  uint64_t max_entries = g_ceph_context->_conf->osd_max_pg_log_entries;
+  if (info.last_update.version - info.log_tail.version <= max_entries) {
+    cerr << "Log not larger than osd_max_pg_log_entries " << max_entries << std::endl;
+    return 0;
+  }
+
+  assert(info.last_update.version > max_entries);
+  version_t trim_to = info.last_update.version - max_entries;
+  size_t trim_at_once = g_ceph_context->_conf->osd_pg_log_trim_max;
+  eversion_t new_tail;
+  bool done = false;
+
+  while (!done) {
+    // gather keys so we can delete them in a batch without
+    // affecting the iterator
+    set<string> keys_to_trim;
+    {
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(coll, oid);
+    if (!p)
+      break;
+    for (p->seek_to_first(); p->valid(); p->next(false)) {
+      if (p->key()[0] == '_')
+	continue;
+      if (p->key() == "can_rollback_to")
+	continue;
+      if (p->key() == "divergent_priors")
+	continue;
+      if (p->key() == "rollback_info_trimmed_to")
+	continue;
+      if (p->key() == "may_include_deletes_in_missing")
+	continue;
+      if (p->key().substr(0, 7) == string("missing"))
+	continue;
+      if (p->key().substr(0, 4) == string("dup_"))
+	continue;
+
+      bufferlist bl = p->value();
+      bufferlist::iterator bp = bl.begin();
+      pg_log_entry_t e;
+      try {
+	e.decode_with_checksum(bp);
+      } catch (const buffer::error &e) {
+	cerr << "Error reading pg log entry: " << e << std::endl;
+      }
+      if (debug) {
+	cerr << "read entry " << e << std::endl;
+      }
+      if (e.version.version > trim_to) {
+	done = true;
+	break;
+      }
+      keys_to_trim.insert(p->key());
+      new_tail = e.version;
+      if (keys_to_trim.size() >= trim_at_once)
+	break;
+    }
+
+    if (!p->valid())
+      done = true;
+    } // deconstruct ObjectMapIterator
+
+    // delete the keys
+    if (!dry_run && !keys_to_trim.empty()) {
+      cout << "Removing keys " << *keys_to_trim.begin() << " - " << *keys_to_trim.rbegin() << std::endl;
+      ObjectStore::Transaction t;
+      t.omap_rmkeys(coll, oid, keys_to_trim);
+      int r = store->apply_transaction(&osr, std::move(t));
+      if (r) {
+	cerr << "Error trimming logs " << cpp_strerror(r) << std::endl;
+      }
+    }
+  }
+
+  // update pg info with new tail
+  if (!dry_run && new_tail !=  eversion_t()) {
+    info.log_tail = new_tail;
+    ObjectStore::Transaction t;
+    int ret = write_info(t, map_epoch, info, past_intervals);
+    if (ret)
+      return ret;
+    ret = store->apply_transaction(&osr, std::move(t));
+    if (ret) {
+      cerr << "Error updating pg info " << cpp_strerror(ret) << std::endl;
+    }
+  }
+
+  // compact the db since we just removed a bunch of data
+  cerr << "Finished trimming, now compacting..." << std::endl;
+  if (!dry_run)
+    store->compact();
+  return 0;
+}
+
 const int OMAP_BATCH_SIZE = 25;
 void get_omap_batch(ObjectMap::ObjectMapIterator &iter, map<string, bufferlist> &oset)
 {
@@ -2853,12 +2960,12 @@ int main(int argc, char **argv)
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory for info, log, remove, export, export-remove, rm-past-intervals, mark-complete, and mandatory for apply-layout-settings if --pool is not specified")
+     "PG id, mandatory for info, log, remove, export, export-remove, rm-past-intervals, mark-complete, trim-pg-log, and mandatory for apply-layout-settings if --pool is not specified")
     ("pool", po::value<string>(&pool),
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db, dump-import]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db, dump-import, trim-pg-log]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -3361,7 +3468,8 @@ int main(int argc, char **argv)
   // The ops which require --pgid option are checked here and
   // mentioned in the usage for --pgid.
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
-      || op == "export-remove" || op == "rm-past-intervals" || op == "mark-complete") &&
+      || op == "export-remove" || op == "rm-past-intervals"
+      || op == "mark-complete" || op == "trim-pg-log") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
@@ -3564,9 +3672,9 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete" && op != "trim-pg-log") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import)"
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import, trim-pg-log)"
 	 << std::endl;
     usage(desc);
     ret = 1;
@@ -3917,6 +4025,15 @@ int main(int argc, char **argv)
 	fs->apply_transaction(osr, std::move(*t));
       }
       cout << "Marking complete succeeded" << std::endl;
+    } else if (op == "trim-pg-log") {
+      ret = do_trim_pg_log(fs, coll, info, pgid, *osr,
+			   map_epoch, past_intervals);
+      if (ret < 0) {
+	cerr << "Error trimming pg log: " << cpp_strerror(ret) << std::endl;
+	goto out;
+      }
+      cout << "Finished trimming pg log" << std::endl;
+      goto out;
     } else {
       assert(!"Should have already checked for valid --op");
     }
