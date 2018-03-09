@@ -618,7 +618,7 @@ class argdesc(object):
         else:
             self.t = t
             self.typeargs = kwargs
-            self.req = bool(req == True or req == 'True')
+            self.req = req in (True, 'True', 'true')
 
         self.name = name
         self.N = (n in ['n', 'N'])
