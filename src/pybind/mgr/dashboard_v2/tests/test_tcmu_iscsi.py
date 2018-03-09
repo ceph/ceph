@@ -1,10 +1,8 @@
-from cherrypy.test.helper import CPWebCase
+from __future__ import absolute_import
+
 import cherrypy
-import mock
 
 from .. import mgr
-from ..controllers.auth import Auth
-from ..tools import SessionExpireAtBrowserCloseTool
 from ..controllers.tcmu_iscsi import TcmuIscsi
 from .helper import ControllerTestCase
 
@@ -37,19 +35,10 @@ mocked_get_counter = {
 mocked_get_rate = 47
 
 
-class TcmuIscsiControllerTest(ControllerTestCase, CPWebCase):
+class TcmuIscsiControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
-        # Initialize custom handlers.
-        cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
-        cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
-
-        cls._mgr_module = mock.Mock()
-        cls.setup_test()
-
-    @classmethod
-    def setup_test(cls):
         mgr.list_servers.return_value = mocked_servers
         mgr.get_metadata.return_value = mocked_metadata
         mgr.get_daemon_status.return_value = mocked_get_daemon_status
@@ -60,11 +49,7 @@ class TcmuIscsiControllerTest(ControllerTestCase, CPWebCase):
 
         cherrypy.tree.mount(TcmuIscsi(), "/api/test/tcmu")
 
-    def __init__(self, *args, **kwargs):
-        super(TcmuIscsiControllerTest, self).__init__(*args, dashboard_port=54583, **kwargs)
-
     def test_list(self):
-        self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
         self._get('/api/test/tcmu')
         self.assertStatus(200)
         self.assertJsonBody({
