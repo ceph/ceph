@@ -235,7 +235,7 @@ else
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
-	if [ -n dts_ver ]; then
+	if [ -n "$dts_ver" ]; then
             ensure_decent_gcc_on_rh $dts_ver
 	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
