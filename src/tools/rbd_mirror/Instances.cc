@@ -66,6 +66,27 @@ void Instances<I>::shut_down(Context *on_finish) {
 }
 
 template <typename I>
+void Instances<I>::unblock_listener() {
+  dout(5) << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(m_listener_blocked);
+  m_listener_blocked = false;
+
+  InstanceIds added_instance_ids;
+  for (auto& pair : m_instances) {
+    if (pair.second.state == INSTANCE_STATE_ADDING) {
+      added_instance_ids.push_back(pair.first);
+    }
+  }
+
+  if (!added_instance_ids.empty()) {
+    m_threads->work_queue->queue(
+      new C_NotifyInstancesAdded(this, added_instance_ids), 0);
+  }
+}
+
+template <typename I>
 void Instances<I>::acked(const InstanceIds& instance_ids) {
   dout(20) << "instance_ids=" << instance_ids << dendl;
 
@@ -102,7 +123,7 @@ void Instances<I>::handle_acked(const InstanceIds& instance_ids) {
   }
 
   schedule_remove_task(time);
-  if (!added_instance_ids.empty()) {
+  if (!m_listener_blocked && !added_instance_ids.empty()) {
     m_threads->work_queue->queue(
       new C_NotifyInstancesAdded(this, added_instance_ids), 0);
   }

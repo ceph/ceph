@@ -231,6 +231,7 @@ struct Instances<librbd::MockTestImageCtx> {
   MOCK_METHOD1(init, void(Context *));
   MOCK_METHOD1(shut_down, void(Context *));
   MOCK_METHOD1(acked, void(const std::vector<std::string> &));
+  MOCK_METHOD0(unblock_listener, void());
 };
 
 Instances<librbd::MockTestImageCtx> *Instances<librbd::MockTestImageCtx>::s_instance = nullptr;
@@ -446,6 +447,10 @@ public:
     expect_is_leader(mock_managed_lock, false, false);
   }
 
+  void expect_unblock_listener(MockInstances& mock_instances) {
+    EXPECT_CALL(mock_instances, unblock_listener());
+  }
+
   MockThreads *m_mock_threads;
 };
 
@@ -470,6 +475,7 @@ TEST_F(TestMockLeaderWatcher, InitShutdown) {
   expect_try_acquire_lock(mock_managed_lock, 0);
   expect_init(mock_instances, 0);
   expect_acquire_notify(mock_managed_lock, listener, 0);
+  expect_unblock_listener(mock_instances);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
 
   ASSERT_EQ(0, leader_watcher.init());
@@ -507,6 +513,7 @@ TEST_F(TestMockLeaderWatcher, InitReleaseShutdown) {
   expect_try_acquire_lock(mock_managed_lock, 0);
   expect_init(mock_instances, 0);
   expect_acquire_notify(mock_managed_lock, listener, 0);
+  expect_unblock_listener(mock_instances);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
 
   ASSERT_EQ(0, leader_watcher.init());
@@ -581,6 +588,7 @@ TEST_F(TestMockLeaderWatcher, AcquireError) {
   expect_try_acquire_lock(mock_managed_lock, 0);
   expect_init(mock_instances, 0);
   expect_acquire_notify(mock_managed_lock, listener, 0);
+  expect_unblock_listener(mock_instances);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
 
   ASSERT_EQ(0, leader_watcher.init());
@@ -635,6 +643,7 @@ TEST_F(TestMockLeaderWatcher, Break) {
   expect_try_acquire_lock(mock_managed_lock, 0);
   expect_init(mock_instances, 0);
   expect_acquire_notify(mock_managed_lock, listener, 0);
+  expect_unblock_listener(mock_instances);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
 
   ASSERT_EQ(0, leader_watcher.init());

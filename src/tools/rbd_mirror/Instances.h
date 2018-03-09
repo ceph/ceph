@@ -42,6 +42,8 @@ public:
   void init(Context *on_finish);
   void shut_down(Context *on_finish);
 
+  void unblock_listener();
+
   void acked(const InstanceIds& instance_ids);
 
   void list(std::vector<std::string> *instance_ids);
@@ -137,6 +139,8 @@ private:
   AsyncOpTracker m_async_op_tracker;
 
   Context *m_timer_task = nullptr;
+
+  bool m_listener_blocked = true;
 
   void handle_acked(const InstanceIds& instance_ids);
   void notify_instances_added(const InstanceIds& instance_ids);
