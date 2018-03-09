@@ -15,6 +15,7 @@
 #include "librbd/watcher/Types.h"
 #include "Instances.h"
 #include "MirrorStatusWatcher.h"
+#include "tools/rbd_mirror/instances/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 
 namespace librbd { class ImageCtx; }
@@ -91,6 +92,22 @@ private:
    *             notify error)                      ...........................
    * @endverbatim
    */
+
+  struct InstancesListener : public instances::Listener {
+    LeaderWatcher* leader_watcher;
+
+    InstancesListener(LeaderWatcher* leader_watcher)
+      : leader_watcher(leader_watcher) {
+    }
+
+    void handle_added(const InstanceIds& instance_ids) override {
+      // TODO
+    }
+
+    void handle_removed(const InstanceIds& instance_ids) override {
+      // TODO
+    }
+  };
 
   class LeaderLock : public librbd::ManagedLock<ImageCtxT> {
   public:
@@ -184,6 +201,7 @@ private:
   Threads<ImageCtxT> *m_threads;
   leader_watcher::Listener *m_listener;
 
+  InstancesListener m_instances_listener;
   mutable Mutex m_lock;
   uint64_t m_notifier_id;
   LeaderLock *m_leader_lock;

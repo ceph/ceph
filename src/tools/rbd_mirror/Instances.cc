@@ -25,8 +25,9 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-Instances<I>::Instances(Threads<I> *threads, librados::IoCtx &ioctx) :
-  m_threads(threads), m_ioctx(ioctx),
+Instances<I>::Instances(Threads<I> *threads, librados::IoCtx &ioctx,
+                        instances::Listener& listener) :
+  m_threads(threads), m_ioctx(ioctx), m_listener(listener),
   m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
   m_lock("rbd::mirror::Instances " + ioctx.get_pool_name()) {
 }
@@ -89,14 +90,61 @@ void Instances<I>::handle_acked(const InstanceIds& instance_ids) {
     return;
   }
 
+  InstanceIds added_instance_ids;
   auto time = ceph_clock_now();
   for (auto& instance_id : instance_ids) {
     auto &instance = m_instances.insert(
       std::make_pair(instance_id, Instance{})).first->second;
     instance.acked_time = time;
+    if (instance.state == INSTANCE_STATE_ADDING) {
+      added_instance_ids.push_back(instance_id);
+    }
   }
 
   schedule_remove_task(time);
+  if (!added_instance_ids.empty()) {
+    m_threads->work_queue->queue(
+      new C_NotifyInstancesAdded(this, added_instance_ids), 0);
+  }
+}
+
+template <typename I>
+void Instances<I>::notify_instances_added(const InstanceIds& instance_ids) {
+  Mutex::Locker locker(m_lock);
+  InstanceIds added_instance_ids;
+  for (auto& instance_id : instance_ids) {
+    auto it = m_instances.find(instance_id);
+    if (it != m_instances.end() && it->second.state == INSTANCE_STATE_ADDING) {
+      added_instance_ids.push_back(instance_id);
+    }
+  }
+
+  if (added_instance_ids.empty()) {
+    return;
+  }
+
+  dout(5) << "instance_ids=" << added_instance_ids << dendl;
+  m_lock.Unlock();
+  m_listener.handle_added(added_instance_ids);
+  m_lock.Lock();
+
+  for (auto& instance_id : added_instance_ids) {
+    auto it = m_instances.find(instance_id);
+    if (it != m_instances.end() && it->second.state == INSTANCE_STATE_ADDING) {
+      it->second.state = INSTANCE_STATE_IDLE;
+    }
+  }
+}
+
+template <typename I>
+void Instances<I>::notify_instances_removed(const InstanceIds& instance_ids) {
+  dout(5) << "instance_ids=" << instance_ids << dendl;
+  m_listener.handle_removed(instance_ids);
+
+  Mutex::Locker locker(m_lock);
+  for (auto& instance_id : instance_ids) {
+    m_instances.erase(instance_id);
+  }
 }
 
 template <typename I>
@@ -181,6 +229,7 @@ void Instances<I>::remove_instances(const utime_t& time) {
       instance_ids.push_back(instance_pair.first);
     }
   }
+  assert(!instance_ids.empty());
 
   dout(20) << "instance_ids=" << instance_ids << dendl;
   Context* ctx = new FunctionContext([this, instance_ids](int r) {
@@ -207,9 +256,9 @@ void Instances<I>::handle_remove_instances(
   dout(20) << "r=" << r << ", instance_ids=" << instance_ids << dendl;
   assert(r == 0);
 
-  for (auto& instance_id : instance_ids) {
-    m_instances.erase(instance_id);
-  }
+  // fire removed notification now that instaces have been blacklisted
+  m_threads->work_queue->queue(
+    new C_NotifyInstancesRemoved(this, instance_ids), 0);
 
   // reschedule the timer for the next batch
   schedule_remove_task(ceph_clock_now());
@@ -240,7 +289,6 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
     return;
   }
 
-  dout(20) << dendl;
   int after = m_cct->_conf->get_val<int64_t>("rbd_mirror_leader_heartbeat_interval") *
     (1 + m_cct->_conf->get_val<int64_t>("rbd_mirror_leader_max_missed_heartbeats") +
      m_cct->_conf->get_val<int64_t>("rbd_mirror_leader_max_acquire_attempts_before_break"));
@@ -249,6 +297,7 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
   utime_t oldest_time = time;
   for (auto& instance : m_instances) {
     if (instance.second.state == INSTANCE_STATE_REMOVING) {
+      // removal is already in-flight
       continue;
     }
 
@@ -259,6 +308,8 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
   if (!schedule) {
     return;
   }
+
+  dout(20) << dendl;
 
   // schedule a time to fire when the oldest instance should be removed
   m_timer_task = new FunctionContext(

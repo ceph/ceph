@@ -29,7 +29,7 @@ template <typename I>
 LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
                                 leader_watcher::Listener *listener)
   : Watcher(io_ctx, threads->work_queue, RBD_MIRROR_LEADER),
-    m_threads(threads), m_listener(listener),
+    m_threads(threads), m_listener(listener), m_instances_listener(this),
     m_lock("rbd::mirror::LeaderWatcher " + io_ctx.get_pool_name()),
     m_notifier_id(librados::Rados(io_ctx).get_instance_id()),
     m_leader_lock(new LeaderLock(m_ioctx, m_work_queue, m_oid, this, true,
@@ -765,7 +765,7 @@ void LeaderWatcher<I>::init_instances() {
   assert(m_lock.is_locked());
   assert(m_instances == nullptr);
 
-  m_instances = Instances<I>::create(m_threads, m_ioctx);
+  m_instances = Instances<I>::create(m_threads, m_ioctx, m_instances_listener);
 
   Context *ctx = create_context_callback<
     LeaderWatcher<I>, &LeaderWatcher<I>::handle_init_instances>(this);
