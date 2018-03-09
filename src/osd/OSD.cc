@@ -357,6 +357,9 @@ void OSDService::identify_split_children(
   int old_pgnum = old_map->get_pg_num(pgid.pool());
   int new_pgnum = get_possibly_deleted_pool_pg_num(
     new_map, pgid.pool());
+  dout(20) << __func__ << " old " << old_pgnum << " e" << old_map->get_epoch()
+	   << " new " << new_pgnum << " e" << new_map->get_epoch()
+	   << dendl;
   if (pgid.ps() < static_cast<unsigned>(old_pgnum)) {
     set<spg_t> children;
     if (pgid.is_split(old_pgnum, new_pgnum, &children)) {
