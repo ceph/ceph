@@ -107,11 +107,11 @@ private:
     }
 
     void handle_added(const InstanceIds& instance_ids) override {
-      // TODO
+      leader_watcher->m_listener->handle_instances_added(instance_ids);
     }
 
     void handle_removed(const InstanceIds& instance_ids) override {
-      // TODO
+      leader_watcher->m_listener->handle_instances_removed(instance_ids);
     }
   };
 

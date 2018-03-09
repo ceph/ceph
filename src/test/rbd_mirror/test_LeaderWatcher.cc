@@ -74,6 +74,11 @@ public:
     void update_leader_handler(const std::string &leader_instance_id) override {
     }
 
+    void handle_instances_added(const InstanceIds& instance_ids) override {
+    }
+    void handle_instances_removed(const InstanceIds& instance_ids) override {
+    }
+
   private:
     mutable Mutex m_test_lock;
     int m_acquire_count = 0;
