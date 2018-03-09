@@ -684,33 +684,19 @@ void PoolReplayer<I>::handle_update(const std::string &mirror_uuid,
       m_remote_pool_watcher->get_image_count());
   }
 
-  m_update_op_tracker.start_op();
-  Context *ctx = new FunctionContext([this](int r) {
-      dout(20) << "complete handle_update: r=" << r << dendl;
-      m_update_op_tracker.finish_op();
-    });
-
-  C_Gather *gather_ctx = new C_Gather(g_ceph_context, ctx);
-
-  for (auto &image_id : added_image_ids) {
-    // for now always send to myself (the leader)
-    std::string &instance_id = m_instance_watcher->get_instance_id();
-    m_instance_watcher->notify_image_acquire(instance_id, image_id.global_id,
-                                             gather_ctx->new_sub());
+  std::set<std::string> added_global_image_ids;
+  for (auto& image_id : added_image_ids) {
+    added_global_image_ids.insert(image_id.global_id);
   }
 
-  if (!mirror_uuid.empty()) {
-    for (auto &image_id : removed_image_ids) {
-      // for now always send to myself (the leader)
-      std::string &instance_id = m_instance_watcher->get_instance_id();
-      m_instance_watcher->notify_peer_image_removed(instance_id,
-                                                    image_id.global_id,
-                                                    mirror_uuid,
-                                                    gather_ctx->new_sub());
-    }
+  std::set<std::string> removed_global_image_ids;
+  for (auto& image_id : removed_image_ids) {
+    removed_global_image_ids.insert(image_id.global_id);
   }
 
-  gather_ctx->activate();
+  m_image_map->update_images(mirror_uuid,
+                             std::move(added_global_image_ids),
+                             std::move(removed_global_image_ids));
 }
 
 template <typename I>
@@ -1007,7 +993,9 @@ void PoolReplayer<I>::handle_acquire_image(const std::string &global_image_id,
                                            Context* on_finish) {
   dout(5) << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
-  // TODO
+
+  m_instance_watcher->notify_image_acquire(instance_id, global_image_id,
+                                           on_finish);
 }
 
 template <typename I>
@@ -1016,7 +1004,9 @@ void PoolReplayer<I>::handle_release_image(const std::string &global_image_id,
                                            Context* on_finish) {
   dout(5) << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
-  // TODO
+
+  m_instance_watcher->notify_image_release(instance_id, global_image_id,
+                                           on_finish);
 }
 
 template <typename I>
@@ -1024,10 +1014,13 @@ void PoolReplayer<I>::handle_remove_image(const std::string &mirror_uuid,
                                           const std::string &global_image_id,
                                           const std::string &instance_id,
                                           Context* on_finish) {
+  assert(!mirror_uuid.empty());
   dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
-  // TODO
+
+  m_instance_watcher->notify_peer_image_removed(instance_id, global_image_id,
+                                                mirror_uuid, on_finish);
 }
 
 template <typename I>
