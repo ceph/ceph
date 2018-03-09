@@ -67,7 +67,7 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
     # get the latest monmap
     prepare_utils.get_monmap(osd_id)
     # prepare the osd filesystem
-    prepare_utils.osd_mkfs_filestore(osd_id, fsid)
+    prepare_utils.osd_mkfs_filestore(osd_id, fsid, cephx_secret)
     # write the OSD keyring if it doesn't exist already
     prepare_utils.write_keyring(osd_id, cephx_secret)
     if secrets.get('dmcrypt_key'):
