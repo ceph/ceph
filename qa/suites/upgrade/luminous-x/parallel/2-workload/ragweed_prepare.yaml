@@ -1,0 +1,14 @@
+meta:
+- desc: |
+   rgw ragweed prepare
+workload:
+  full_sequential:
+  - sequential:
+    - rgw:
+      - client.0
+    - ragweed:
+        client.0:
+          force-branch: ceph-master
+          rgw_server: client.0
+          stages: prepare
+    - print: "**** done rgw ragweed prepare 2-workload"
