@@ -81,7 +81,7 @@ typedef struct {
 } rbd_child_info_t;
 
 #define RBD_MAX_IMAGE_NAME_SIZE 96
-#define RBD_MAX_BLOCK_NAME_SIZE 24
+#define RBD_MAX_BLOCK_NAME_PREFIX_LENGTH 43
 
 #define RBD_SNAP_REMOVE_UNPROTECT	1 << 0
 #define RBD_SNAP_REMOVE_FLATTEN		1 << 1
@@ -101,7 +101,7 @@ typedef struct {
   uint64_t obj_size;
   uint64_t num_objs;
   int order;
-  char block_name_prefix[RBD_MAX_BLOCK_NAME_SIZE]; /* deprecated */
+  char block_name_prefix[RBD_MAX_BLOCK_NAME_PREFIX_LENGTH]; /* deprecated */
   int64_t parent_pool;			           /* deprecated */
   char parent_name[RBD_MAX_IMAGE_NAME_SIZE];       /* deprecated */
 } rbd_image_info_t;
