@@ -986,14 +986,17 @@ void LeaderWatcher<I>::handle_notify_heartbeat(int r) {
   dout(20) << m_heartbeat_response.acks.size() << " acks received, "
            << m_heartbeat_response.timeouts.size() << " timed out" << dendl;
 
+  std::vector<std::string> instance_ids;
   for (auto &it: m_heartbeat_response.acks) {
     uint64_t notifier_id = it.first.gid;
     if (notifier_id == m_notifier_id) {
       continue;
     }
 
-    std::string instance_id = stringify(notifier_id);
-    m_instances->notify(instance_id);
+    instance_ids.push_back(stringify(notifier_id));
+  }
+  if (!instance_ids.empty()) {
+    m_instances->acked(instance_ids);
   }
 
   schedule_timer_task("heartbeat", 1, true,
