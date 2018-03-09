@@ -76,6 +76,9 @@ TEST_F(TestInstances, InitShutdown)
   instances.init(&on_init);
   ASSERT_EQ(0, on_init.wait());
 
+  ASSERT_LT(0U, m_listener.add.count);
+  instances.unblock_listener();
+
   ASSERT_EQ(0, m_listener.add.ctx.wait());
   ASSERT_EQ(std::set<std::string>({instance_id}), m_listener.add.ids);
 
@@ -124,6 +127,9 @@ TEST_F(TestInstances, NotifyRemove)
   ASSERT_EQ(0, on_init.wait());
 
   instances.acked({instance_id1, instance_id2});
+
+  ASSERT_LT(0U, m_listener.add.count);
+  instances.unblock_listener();
 
   ASSERT_EQ(0, m_listener.add.ctx.wait());
   ASSERT_EQ(std::set<std::string>({instance_id1, instance_id2}),

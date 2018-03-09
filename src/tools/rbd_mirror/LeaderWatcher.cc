@@ -899,6 +899,9 @@ void LeaderWatcher<I>::handle_notify_lock_acquired(int r) {
 
     assert(m_on_finish != nullptr);
     std::swap(m_on_finish, on_finish);
+
+    // listener should be ready for instance add/remove events now
+    m_instances->unblock_listener();
   }
   on_finish->complete(0);
 }
