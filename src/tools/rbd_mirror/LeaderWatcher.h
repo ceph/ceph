@@ -263,9 +263,6 @@ private:
   void notify_heartbeat();
   void handle_notify_heartbeat(int r);
 
-  void get_instances();
-  void handle_get_instances(int r);
-
   void handle_post_acquire_leader_lock(int r, Context *on_finish);
   void handle_pre_release_leader_lock(Context *on_finish);
   void handle_post_release_leader_lock(int r, Context *on_finish);
