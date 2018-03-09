@@ -51,13 +51,16 @@ private:
    * @verbatim
    *
    *  <uninitialized> <------------------------------ WAIT_FOR_TASKS
-   *     | (init)      ^                                      ^
-   *     v             *                                      |
-   *  CREATE_OBJECT  * *  (error)                     UNREGISTER_WATCH
-   *     |             *                                      ^
-   *     v             *                                      |
-   *  REGISTER_WATCH * *                              SHUT_DOWN_LEADER_LOCK
-   *     |                                                    ^
+   *     | (init)            ^                                ^
+   *     v                   *                                |
+   *  CREATE_OBJECT  * * * * *  (error)               UNREGISTER_WATCH
+   *     |                   *                                ^
+   *     v                   *                                |
+   *  REGISTER_WATCH * * * * *                        SHUT_DOWN_STATUS_WATCHER
+   *     |                   *                                ^
+   *     v                   *                                |
+   *  INIT_STATUS_WATCHER  * *                        SHUT_DOWN_LEADER_LOCK
+   *     |                                                    |
    *     |           (no leader heartbeat and acquire failed) |
    *     | BREAK_LOCK <-------------------------------------\ |
    *     |    |                 (no leader heartbeat)       | | (shut down)
@@ -73,16 +76,14 @@ private:
    *     |                   *                           ^
    * ....|...................*....................  .....|.....................
    * .   v                   *                   .  .    |       post_release .
-   * .INIT_STATUS_WATCHER  * * (error)           .  .NOTIFY_LOCK_RELEASED     .
-   * .   |                   ^                   .  .....^.....................
-   * .   v         (error)   |                   .       |
-   * .INIT_INSTANCES *> SHUT_DOWN_STATUS_WATCHER .   RELEASE_LEADER_LOCK
+   * .INIT_INSTANCES * * * * *                   .  .NOTIFY_LOCK_RELEASED     .
+   * .   |                                       .  .....^.....................
+   * .   v                                       .       |
+   * .NOTIFY_LISTENER                            .   RELEASE_LEADER_LOCK
    * .   |                                       .       ^
    * .   v                                       .  .....|.....................
-   * .NOTIFY_LISTENER                            .  .SHUT_DOWN_STATUS_WATCHER .
-   * .   |                                       .  .    ^                    .
-   * .   v                                       .  .    |                    .
-   * .NOTIFY_LOCK_ACQUIRED          post_acquire .  .SHUT_DOWN_INSTANCES      .
+   * .NOTIFY_LOCK_ACQUIRED                       .  .    |                    .
+   * .   |                          post_acquire .  .SHUT_DOWN_INSTANCES      .
    * ....|........................................  .    ^                    .
    *     v                                          .    |                    .
    *  <leader> -----------------------------------> .NOTIFY_LISTENER          .

@@ -463,11 +463,11 @@ TEST_F(TestMockLeaderWatcher, InitShutdown) {
   expect_construct(mock_managed_lock);
   MockLeaderWatcher leader_watcher(m_mock_threads, m_local_io_ctx, &listener);
 
-  // Inint
+  // Init
+  expect_init(mock_mirror_status_watcher, 0);
   C_SaferCond on_heartbeat_finish;
   expect_is_leader(mock_managed_lock, false, false);
   expect_try_acquire_lock(mock_managed_lock, 0);
-  expect_init(mock_mirror_status_watcher, 0);
   expect_init(mock_instances, 0);
   expect_acquire_notify(mock_managed_lock, listener, 0);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
@@ -478,10 +478,9 @@ TEST_F(TestMockLeaderWatcher, InitShutdown) {
   // Shutdown
   expect_release_notify(mock_managed_lock, listener, 0);
   expect_shut_down(mock_instances, 0);
-  expect_shut_down(mock_mirror_status_watcher, 0);
-  expect_is_leader(mock_managed_lock, false, false);
   expect_release_lock(mock_managed_lock, 0);
   expect_shut_down(mock_managed_lock, true, 0);
+  expect_shut_down(mock_mirror_status_watcher, 0);
   expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
@@ -501,11 +500,11 @@ TEST_F(TestMockLeaderWatcher, InitReleaseShutdown) {
   expect_construct(mock_managed_lock);
   MockLeaderWatcher leader_watcher(m_mock_threads, m_local_io_ctx, &listener);
 
-  // Inint
+  // Init
+  expect_init(mock_mirror_status_watcher, 0);
   C_SaferCond on_heartbeat_finish;
   expect_is_leader(mock_managed_lock, false, false);
   expect_try_acquire_lock(mock_managed_lock, 0);
-  expect_init(mock_mirror_status_watcher, 0);
   expect_init(mock_instances, 0);
   expect_acquire_notify(mock_managed_lock, listener, 0);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
@@ -517,8 +516,6 @@ TEST_F(TestMockLeaderWatcher, InitReleaseShutdown) {
   expect_is_leader(mock_managed_lock, false, true);
   expect_release_notify(mock_managed_lock, listener, 0);
   expect_shut_down(mock_instances, 0);
-  expect_shut_down(mock_mirror_status_watcher, 0);
-  expect_is_leader(mock_managed_lock, false, false);
   C_SaferCond on_release;
   expect_release_lock(mock_managed_lock, 0, &on_release);
 
@@ -527,6 +524,34 @@ TEST_F(TestMockLeaderWatcher, InitReleaseShutdown) {
 
   // Shutdown
   expect_shut_down(mock_managed_lock, false, 0);
+  expect_shut_down(mock_mirror_status_watcher, 0);
+  expect_is_leader(mock_managed_lock, false, false);
+
+  leader_watcher.shut_down();
+}
+
+TEST_F(TestMockLeaderWatcher, InitStatusWatcherError) {
+  MockManagedLock mock_managed_lock;
+  MockMirrorStatusWatcher mock_mirror_status_watcher;
+  MockInstances mock_instances;
+  MockListener listener;
+
+  expect_is_shutdown(mock_managed_lock);
+  expect_is_leader(mock_managed_lock);
+  expect_destroy(mock_managed_lock);
+
+  InSequence seq;
+
+  expect_construct(mock_managed_lock);
+  MockLeaderWatcher leader_watcher(m_mock_threads, m_local_io_ctx, &listener);
+
+  // Init
+  expect_init(mock_mirror_status_watcher, -EINVAL);
+  ASSERT_EQ(-EINVAL, leader_watcher.init());
+
+  // Shutdown
+  expect_shut_down(mock_managed_lock, false, 0);
+  expect_shut_down(mock_mirror_status_watcher, 0);
   expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
@@ -547,13 +572,13 @@ TEST_F(TestMockLeaderWatcher, AcquireError) {
   expect_construct(mock_managed_lock);
   MockLeaderWatcher leader_watcher(m_mock_threads, m_local_io_ctx, &listener);
 
-  // Inint
+  // Init
+  expect_init(mock_mirror_status_watcher, 0);
   C_SaferCond on_heartbeat_finish;
   expect_is_leader(mock_managed_lock, false, false);
   expect_try_acquire_lock(mock_managed_lock, -EAGAIN);
   expect_get_locker(mock_managed_lock, librbd::managed_lock::Locker(), -ENOENT);
   expect_try_acquire_lock(mock_managed_lock, 0);
-  expect_init(mock_mirror_status_watcher, 0);
   expect_init(mock_instances, 0);
   expect_acquire_notify(mock_managed_lock, listener, 0);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
@@ -564,55 +589,9 @@ TEST_F(TestMockLeaderWatcher, AcquireError) {
   // Shutdown
   expect_release_notify(mock_managed_lock, listener, 0);
   expect_shut_down(mock_instances, 0);
-  expect_shut_down(mock_mirror_status_watcher, 0);
-  expect_is_leader(mock_managed_lock, false, false);
   expect_release_lock(mock_managed_lock, 0);
   expect_shut_down(mock_managed_lock, true, 0);
-  expect_is_leader(mock_managed_lock, false, false);
-
-  leader_watcher.shut_down();
-}
-
-TEST_F(TestMockLeaderWatcher, ReleaseError) {
-  MockManagedLock mock_managed_lock;
-  MockMirrorStatusWatcher mock_mirror_status_watcher;
-  MockInstances mock_instances;
-  MockListener listener;
-
-  expect_is_shutdown(mock_managed_lock);
-  expect_destroy(mock_managed_lock);
-
-  InSequence seq;
-
-  expect_construct(mock_managed_lock);
-  MockLeaderWatcher leader_watcher(m_mock_threads, m_local_io_ctx, &listener);
-
-  // Inint
-  C_SaferCond on_heartbeat_finish;
-  expect_is_leader(mock_managed_lock, false, false);
-  expect_try_acquire_lock(mock_managed_lock, 0);
-  expect_init(mock_mirror_status_watcher, 0);
-  expect_init(mock_instances, 0);
-  expect_acquire_notify(mock_managed_lock, listener, 0);
-  expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
-
-  ASSERT_EQ(0, leader_watcher.init());
-  ASSERT_EQ(0, on_heartbeat_finish.wait());
-
-  // Release
-  expect_is_leader(mock_managed_lock, false, true);
-  expect_release_notify(mock_managed_lock, listener, -EINVAL);
-  expect_shut_down(mock_instances, 0);
-  expect_shut_down(mock_mirror_status_watcher, -EINVAL);
-  expect_is_leader(mock_managed_lock, false, false);
-  C_SaferCond on_release;
-  expect_release_lock(mock_managed_lock, -EINVAL, &on_release);
-
-  leader_watcher.release_leader();
-  ASSERT_EQ(0, on_release.wait());
-
-  // Shutdown
-  expect_shut_down(mock_managed_lock, false, 0);
+  expect_shut_down(mock_mirror_status_watcher, 0);
   expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();
@@ -644,6 +623,7 @@ TEST_F(TestMockLeaderWatcher, Break) {
   MockLeaderWatcher leader_watcher(m_mock_threads, m_local_io_ctx, &listener);
 
   // Init
+  expect_init(mock_mirror_status_watcher, 0);
   expect_is_leader(mock_managed_lock, false, false);
   for (int i = 0; i < max_acquire_attempts; i++) {
     expect_try_acquire_lock(mock_managed_lock, -EAGAIN);
@@ -653,7 +633,6 @@ TEST_F(TestMockLeaderWatcher, Break) {
   expect_break_lock(mock_managed_lock, locker, 0, &on_break);
   C_SaferCond on_heartbeat_finish;
   expect_try_acquire_lock(mock_managed_lock, 0);
-  expect_init(mock_mirror_status_watcher, 0);
   expect_init(mock_instances, 0);
   expect_acquire_notify(mock_managed_lock, listener, 0);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
@@ -664,10 +643,9 @@ TEST_F(TestMockLeaderWatcher, Break) {
   // Shutdown
   expect_release_notify(mock_managed_lock, listener, 0);
   expect_shut_down(mock_instances, 0);
-  expect_shut_down(mock_mirror_status_watcher, 0);
-  expect_is_leader(mock_managed_lock, false, false);
   expect_release_lock(mock_managed_lock, 0);
   expect_shut_down(mock_managed_lock, true, 0);
+  expect_shut_down(mock_mirror_status_watcher, 0);
   expect_is_leader(mock_managed_lock, false, false);
 
   leader_watcher.shut_down();

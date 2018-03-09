@@ -125,19 +125,18 @@ void LeaderWatcher<I>::handle_register_watch(int r) {
   dout(20) << "r=" << r << dendl;
 
   Context *on_finish = nullptr;
-  {
-    Mutex::Locker timer_locker(m_threads->timer_lock);
+  if (r < 0) {
     Mutex::Locker locker(m_lock);
-
-    if (r < 0) {
-      derr << "error registering leader watcher for " << m_oid << " object: "
-           << cpp_strerror(r) << dendl;
-    } else {
-      schedule_acquire_leader_lock(0);
-    }
-
+    derr << "error registering leader watcher for " << m_oid << " object: "
+         << cpp_strerror(r) << dendl;
+    assert(m_on_finish != nullptr);
     std::swap(on_finish, m_on_finish);
+  } else {
+    Mutex::Locker locker(m_lock);
+    init_status_watcher();
+    return;
   }
+
   on_finish->complete(r);
 }
 
@@ -185,7 +184,7 @@ void LeaderWatcher<I>::handle_shut_down_leader_lock(int r) {
     derr << "error shutting down leader lock: " << cpp_strerror(r) << dendl;
   }
 
-  unregister_watch();
+  shut_down_status_watcher();
 }
 
 template <typename I>
@@ -416,7 +415,7 @@ void LeaderWatcher<I>::handle_post_acquire_leader_lock(int r,
   m_on_finish = on_finish;
   m_ret_val = 0;
 
-  init_status_watcher();
+  init_instances();
 }
 
 template <typename I>
@@ -712,20 +711,20 @@ void LeaderWatcher<I>::handle_init_status_watcher(int r) {
 
   Context *on_finish = nullptr;
   {
+    Mutex::Locker timer_locker(m_threads->timer_lock);
     Mutex::Locker locker(m_lock);
 
-    if (r == 0) {
-      init_instances();
-      return;
+    if (r < 0) {
+      derr << "error initializing mirror status watcher: " << cpp_strerror(r)
+           << cpp_strerror(r) << dendl;
+    } else {
+      schedule_acquire_leader_lock(0);
     }
 
-    derr << "error initializing mirror status watcher: " << cpp_strerror(r)
-         << dendl;
-    m_status_watcher->destroy();
-    m_status_watcher = nullptr;
     assert(m_on_finish != nullptr);
-    std::swap(m_on_finish, on_finish);
+    std::swap(on_finish, m_on_finish);
   }
+
   on_finish->complete(r);
 }
 
@@ -747,31 +746,16 @@ template <typename I>
 void LeaderWatcher<I>::handle_shut_down_status_watcher(int r) {
   dout(20) << "r=" << r << dendl;
 
-  Context *on_finish = nullptr;
-  {
-    Mutex::Locker locker(m_lock);
+  Mutex::Locker locker(m_lock);
+  m_status_watcher->destroy();
+  m_status_watcher = nullptr;
 
-    m_status_watcher->destroy();
-    m_status_watcher = nullptr;
-
-    if (r < 0) {
-      derr << "error shutting mirror status watcher down: " << cpp_strerror(r)
-           << dendl;
-    }
-
-    if (m_ret_val != 0) {
-      r = m_ret_val;
-    }
-
-    if (!is_leader(m_lock)) {
-      // ignore on releasing
-      r = 0;
-    }
-
-    assert(m_on_finish != nullptr);
-    std::swap(m_on_finish, on_finish);
+  if (r < 0) {
+    derr << "error shutting mirror status watcher down: " << cpp_strerror(r)
+         << dendl;
   }
-  on_finish->complete(r);
+
+  unregister_watch();
 }
 
 template <typename I>
@@ -793,18 +777,22 @@ template <typename I>
 void LeaderWatcher<I>::handle_init_instances(int r) {
   dout(20) << "r=" << r << dendl;
 
-  Mutex::Locker locker(m_lock);
-
+  Context *on_finish = nullptr;
   if (r < 0) {
+    Mutex::Locker locker(m_lock);
     derr << "error initializing instances: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
     m_instances->destroy();
     m_instances = nullptr;
-    shut_down_status_watcher();
+
+    assert(m_on_finish != nullptr);
+    std::swap(m_on_finish, on_finish);
+  } else {
+    Mutex::Locker locker(m_lock);
+    notify_listener();
     return;
   }
 
-  notify_listener();
+  on_finish->complete(r);
 }
 
 template <typename I>
@@ -826,12 +814,17 @@ void LeaderWatcher<I>::handle_shut_down_instances(int r) {
   dout(20) << "r=" << r << dendl;
   assert(r == 0);
 
-  Mutex::Locker locker(m_lock);
+  Context *on_finish = nullptr;
+  {
+    Mutex::Locker locker(m_lock);
 
-  m_instances->destroy();
-  m_instances = nullptr;
+    m_instances->destroy();
+    m_instances = nullptr;
 
-  shut_down_status_watcher();
+    assert(m_on_finish != nullptr);
+    std::swap(m_on_finish, on_finish);
+  }
+  on_finish->complete(r);
 }
 
 template <typename I>
