@@ -10,28 +10,34 @@ import { OsdService } from '../osd.service';
   styleUrls: ['./osd-details.component.scss']
 })
 export class OsdDetailsComponent implements OnInit {
-  @Input() selected?: any[];
+  osd: any;
+
+  @Input() selected?: any[] = [];
 
   constructor(private osdService: OsdService) {}
 
   ngOnInit() {
-    _.each(this.selected, (osd) => {
-      this.refresh(osd);
-      osd.autoRefresh = () => {
-        this.refresh(osd);
+    this.osd = {
+      loaded: false
+    };
+    if (this.selected.length > 0) {
+      this.osd = this.selected[0];
+      this.osd.autoRefresh = () => {
+        this.refresh();
       };
-    });
+      this.refresh();
+    }
   }
 
-  refresh(osd: any) {
-    this.osdService.getDetails(osd.tree.id).subscribe((data: any) => {
-      osd.details = data;
-      if (!_.isObject(data.histogram)) {
-        osd.histogram_failed = data.histogram;
-        osd.details.histogram = undefined;
-      }
-      osd.loaded = true;
-    });
+  refresh() {
+    this.osdService.getDetails(this.osd.tree.id)
+      .subscribe((data: any) => {
+        this.osd.details = data;
+        if (!_.isObject(data.histogram)) {
+          this.osd.histogram_failed = data.histogram;
+          this.osd.details.histogram = undefined;
+        }
+        this.osd.loaded = true;
+      });
   }
-
 }

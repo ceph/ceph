@@ -1,7 +1,7 @@
 import { HttpClientModule } from '@angular/common/http';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { AccordionConfig, AccordionModule, TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap';
 
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
@@ -19,8 +19,7 @@ describe('OsdDetailsComponent', () => {
     TestBed.configureTestingModule({
       imports: [
         HttpClientModule,
-        AccordionModule,
-        TabsModule,
+        TabsModule.forRoot(),
         PerformanceCounterModule,
         DataTableModule
       ],
@@ -28,7 +27,7 @@ describe('OsdDetailsComponent', () => {
         OsdDetailsComponent,
         OsdPerformanceHistogramComponent
       ],
-      providers: [OsdService, AccordionConfig]
+      providers: [OsdService]
     })
     .compileComponents();
   }));
