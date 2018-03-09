@@ -28,12 +28,9 @@ def ApiController(path):
             'tools.session_expire_at_browser_close.on': True
         }
         if not hasattr(cls, '_cp_config'):
-            cls._cp_config = dict(cls._cp_config_default)
+            cls._cp_config = {}
+        if 'tools.authenticate.on' not in cls._cp_config:
             config['tools.authenticate.on'] = False
-        else:
-            cls._cp_config.update(cls._cp_config_default)
-            if 'tools.authenticate.on' not in cls._cp_config:
-                config['tools.authenticate.on'] = False
         cls._cp_config.update(config)
         return cls
     return decorate
@@ -42,12 +39,10 @@ def ApiController(path):
 def AuthRequired(enabled=True):
     def decorate(cls):
         if not hasattr(cls, '_cp_config'):
-            cls._cp_config = dict(cls._cp_config_default)
             cls._cp_config = {
                 'tools.authenticate.on': enabled
             }
         else:
-            cls._cp_config.update(cls._cp_config_default)
             cls._cp_config['tools.authenticate.on'] = enabled
         return cls
     return decorate
@@ -85,9 +80,6 @@ class BaseController(object):
     """
     Base class for all controllers providing API endpoints.
     """
-    _cp_config_default = {
-        'request.error_page': {'default': json_error_page},
-    }
 
 
 # pylint: disable=too-many-instance-attributes
