@@ -230,7 +230,7 @@ struct Instances<librbd::MockTestImageCtx> {
   MOCK_METHOD0(destroy, void());
   MOCK_METHOD1(init, void(Context *));
   MOCK_METHOD1(shut_down, void(Context *));
-  MOCK_METHOD1(notify, void(const std::string &));
+  MOCK_METHOD1(acked, void(const std::vector<std::string> &));
 };
 
 Instances<librbd::MockTestImageCtx> *Instances<librbd::MockTestImageCtx>::s_instance = nullptr;

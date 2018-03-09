@@ -82,7 +82,7 @@ TEST_F(TestInstances, NotifyRemove)
   std::vector<std::string> instance_ids;
 
   for (int i = 0; i < 10; i++) {
-    instances.notify(instance_id1);
+    instances.acked({instance_id1});
     sleep(1);
     C_SaferCond on_get;
     InstanceWatcher<>::get_instances(m_local_io_ctx, &instance_ids, &on_get);
