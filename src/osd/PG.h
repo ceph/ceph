@@ -477,7 +477,7 @@ public:
 
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
-  void _delete_some();
+  void _delete_some(ObjectStore::Transaction *t);
 
   // reference counting
 #ifdef PG_DEBUG_REFS

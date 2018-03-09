@@ -6483,12 +6483,11 @@ struct C_DeleteMore : public Context {
   }
 };
 
-void PG::_delete_some()
+void PG::_delete_some(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
 
   vector<ghobject_t> olist;
-  ObjectStore::Transaction t;
   int max = std::min(osd->store->get_ideal_list_max(),
 		     (int)cct->_conf->osd_target_transaction_size);
   ghobject_t next;
@@ -6501,7 +6500,7 @@ void PG::_delete_some()
     &next);
   dout(20) << __func__ << " " << olist << dendl;
 
-  OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
   int64_t num = 0;
   for (auto& oid : olist) {
     if (oid.is_pgmeta()) {
@@ -6511,17 +6510,14 @@ void PG::_delete_some()
     if (r != 0 && r != -ENOENT) {
       ceph_abort();
     }
-    t.remove(coll, oid);
+    t->remove(coll, oid);
     ++num;
   }
   epoch_t e = get_osdmap()->get_epoch();
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, e);
-    t.register_on_commit(fin);
-    osd->store->queue_transaction(
-      ch,
-      std::move(t));
+    t->register_on_commit(fin);
   } else {
     dout(20) << __func__ << " finished" << dendl;
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
@@ -6531,13 +6527,12 @@ void PG::_delete_some()
     // final flush here to ensure completions drop refs.  Of particular concern
     // are the SnapMapper ContainerContexts.
     {
-      ObjectStore::Transaction t;
       PGRef pgref(this);
-      PGLog::clear_info_log(info.pgid, &t);
-      t.remove_collection(coll);
-      t.register_on_commit(new ContainerContext<PGRef>(pgref));
-      t.register_on_applied(new ContainerContext<PGRef>(pgref));
-      osd->store->queue_transaction(ch, std::move(t));
+      PGLog::clear_info_log(info.pgid, t);
+      t->remove_collection(coll);
+      t->register_on_commit(new ContainerContext<PGRef>(pgref));
+      t->register_on_applied(new ContainerContext<PGRef>(pgref));
+      osd->store->queue_transaction(ch, std::move(*t));
     }
     ch->flush();
 
@@ -8512,7 +8507,7 @@ boost::statechart::result PG::RecoveryState::Deleting::react(
   const DeleteSome& evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->_delete_some();
+  pg->_delete_some(context<RecoveryMachine>().get_cur_transaction());
   return discard_event();
 }
 

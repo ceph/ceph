@@ -1977,6 +1977,7 @@ protected:
                         ThreadPool::TPHandle *handle = NULL);
   void dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                     ThreadPool::TPHandle *handle = NULL);
+  void discard_context(PG::RecoveryCtx &ctx);
   void do_notifies(map<int,
 		       vector<pair<pg_notify_t, PastIntervals> > >&
 		       notify_list,
