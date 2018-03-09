@@ -43,14 +43,13 @@ public:
                      std::set<std::string> &&added_global_image_ids,
                      std::set<std::string> &&removed_global_image_ids);
 
-  // handle notify response from remote peer (r : 0 == success, negative otherwise)
-  void handle_peer_ack(const std::string &global_image_id, int r);
-
   // add/remove instances
   void update_instances_added(const std::vector<std::string> &instances);
   void update_instances_removed(const std::vector<std::string> &instances);
 
 private:
+  struct C_NotifyInstance;
+
   ImageMap(librados::IoCtx &ioctx, Threads<ImageCtxT> *threads,
            image_map::Listener &listener);
 
@@ -187,6 +186,8 @@ private:
 
   bool add_peer(const std::string &global_image_id, const std::string &peer_uuid);
   bool remove_peer(const std::string &global_image_id, const std::string &peer_uuid);
+
+  void handle_peer_ack(const std::string &global_image_id, int r);
 
   // queue on-disk,acquire,remove updates in appropriate list
   void queue_update_map(const std::string &global_image_id);

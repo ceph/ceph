@@ -28,6 +28,22 @@ using librbd::util::unique_lock_name;
 using librbd::util::create_async_context_callback;
 
 template <typename I>
+struct ImageMap<I>::C_NotifyInstance : public Context {
+  ImageMap* image_map;
+  std::string global_image_id;
+
+  C_NotifyInstance(ImageMap* image_map, const std::string& global_image_id)
+    : image_map(image_map), global_image_id(global_image_id) {
+    image_map->start_async_op();
+  }
+
+  void finish(int r) override {
+    image_map->handle_peer_ack(global_image_id, r);
+    image_map->finish_async_op();
+  }
+};
+
+template <typename I>
 ImageMap<I>::ImageMap(librados::IoCtx &ioctx, Threads<I> *threads, image_map::Listener &listener)
   : m_ioctx(ioctx),
     m_threads(threads),
@@ -251,17 +267,25 @@ void ImageMap<I>::schedule_action(const std::string &global_image_id) {
 }
 
 template <typename I>
-void ImageMap<I>::notify_listener_acquire_release_images(const Updates &acquire,
-                                                         const Updates &release) {
+void ImageMap<I>::notify_listener_acquire_release_images(
+    const Updates &acquire, const Updates &release) {
   dout(20) << ": acquire_count: " << acquire.size() << ", release_count="
            << release.size() << dendl;
 
   for (auto const &update : acquire) {
-    m_listener.acquire_image(update.global_image_id, update.instance_id);
+    m_listener.acquire_image(
+      update.global_image_id, update.instance_id,
+      create_async_context_callback(
+        m_threads->work_queue,
+        new C_NotifyInstance(this, update.global_image_id)));
   }
 
   for (auto const &update : release) {
-    m_listener.release_image(update.global_image_id, update.instance_id);
+    m_listener.release_image(
+      update.global_image_id, update.instance_id,
+      create_async_context_callback(
+        m_threads->work_queue,
+        new C_NotifyInstance(this, update.global_image_id)));
   }
 }
 
@@ -272,7 +296,11 @@ void ImageMap<I>::notify_listener_remove_images(const std::string &peer_uuid,
            << dendl;
 
   for (auto const &update : remove) {
-    m_listener.remove_image(peer_uuid, update.global_image_id, update.instance_id);
+    m_listener.remove_image(
+      peer_uuid, update.global_image_id, update.instance_id,
+      create_async_context_callback(
+        m_threads->work_queue,
+        new C_NotifyInstance(this, update.global_image_id)));
   }
 }
 
