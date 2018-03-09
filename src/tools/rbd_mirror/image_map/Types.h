@@ -13,6 +13,8 @@
 #include "include/utime.h"
 #include "tools/rbd_mirror/types.h"
 
+struct Context;
+
 namespace ceph {
 class Formatter;
 }
@@ -28,12 +30,15 @@ struct Listener {
   }
 
   virtual void acquire_image(const std::string &global_image_id,
-                             const std::string &instance_id) = 0;
+                             const std::string &instance_id,
+                             Context* on_finish) = 0;
   virtual void release_image(const std::string &global_image_id,
-                             const std::string &instance_id) = 0;
+                             const std::string &instance_id,
+                             Context* on_finish) = 0;
   virtual void remove_image(const std::string &mirror_uuid,
                             const std::string &global_image_id,
-                            const std::string &instance_id) = 0;
+                            const std::string &instance_id,
+                            Context* on_finish) = 0;
 };
 
 struct LookupInfo {
