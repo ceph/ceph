@@ -4969,7 +4969,7 @@ void Monitor::count_metadata(const string& field, Formatter *f)
 
 int Monitor::print_nodes(Formatter *f, ostream& err)
 {
-  map<string, list<int> > mons;	// hostname => mon
+  map<string, list<string> > mons;	// hostname => mon
   for (map<int, Metadata>::iterator it = mon_metadata.begin();
        it != mon_metadata.end(); ++it) {
     const Metadata& m = it->second;
@@ -4978,7 +4978,7 @@ int Monitor::print_nodes(Formatter *f, ostream& err)
       // not likely though
       continue;
     }
-    mons[hostname->second].push_back(it->first);
+    mons[hostname->second].push_back(monmap->get_name(it->first));
   }
 
   dump_services(f, mons, "mon");
