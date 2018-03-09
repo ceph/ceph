@@ -58,6 +58,9 @@ private:
    *            V2_GET_DATA_POOL --------------> REFRESH
    *                                                |
    *                                                v
+   *                                             INIT_CACHE
+   *                                                |
+   *                                                v
    *                                             REGISTER_WATCH (skip if
    *                                                |            read-only)
    *                                                v
@@ -110,6 +113,8 @@ private:
 
   void send_refresh();
   Context *handle_refresh(int *result);
+
+  Context *send_init_cache(int *result);
 
   Context *send_register_watch(int *result);
   Context *handle_register_watch(int *result);
