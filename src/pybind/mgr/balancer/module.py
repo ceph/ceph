@@ -143,6 +143,15 @@ class Eval:
         num = max(len(target), 1)
         r = {}
         for t in ('pgs', 'objects', 'bytes'):
+            if total[t] == 0:
+                r[t] = {
+                    'avg': 0,
+                    'stddev': 0,
+                    'sum_weight': 0,
+                    'score': 0,
+                }
+                continue
+
             avg = float(total[t]) / float(num)
             dev = 0.0
 
@@ -426,7 +435,7 @@ class Module(MgrModule):
         self.log.debug('pool_rule %s' % pool_rule)
 
         osd_weight = { a['osd']: a['weight']
-                       for a in ms.osdmap_dump.get('osds',[]) }
+                       for a in ms.osdmap_dump.get('osds',[]) if a['weight'] > 0 }
 
         # get expected distributions by root
         actual_by_root = {}
@@ -450,10 +459,11 @@ class Module(MgrModule):
             roots.append(root)
             weight_map = ms.crush.get_take_weight_osd_map(rootid)
             adjusted_map = {
-                osd: cw * osd_weight.get(osd, 1.0)
-                for osd,cw in weight_map.iteritems()
+                osd: cw * osd_weight[osd]
+                for osd,cw in weight_map.iteritems() if osd in osd_weight and cw > 0
             }
-            sum_w = sum(adjusted_map.values()) or 1.0
+            sum_w = sum(adjusted_map.values())
+            assert sum_w > 0
             pe.target_by_root[root] = { osd: w / sum_w
                                         for osd,w in adjusted_map.iteritems() }
             actual_by_root[root] = {
@@ -545,7 +555,7 @@ class Module(MgrModule):
                 'objects': objects,
                 'bytes': bytes,
             }
-        for root, m in pe.total_by_root.iteritems():
+        for root in pe.total_by_root.iterkeys():
             pe.count_by_root[root] = {
                 'pgs': {
                     k: float(v)
