@@ -32,6 +32,9 @@
 
 @import 'defaults';
 
+$fa-font-path: "../node_modules/font-awesome/fonts";
+@import "../node_modules/font-awesome/scss/font-awesome";
+
 /* Basics */
 html {
   background-color: #ffffff;
@@ -1168,4 +1171,14 @@ hr.oa-hr-small {
     -webkit-border-radius: 6px 0 6px 6px;
     -moz-border-radius: 6px 0 6px 6px;
     border-radius: 6px 0 6px 6px;
+}
+
+/* Forms */
+.form-group>.control-label>span.required {
+  @extend .fa;
+  @extend .fa-asterisk;
+  @extend .required;
+  font-size: 6px;
+  padding-left: 4px;
+  vertical-align: text-top;
 }
