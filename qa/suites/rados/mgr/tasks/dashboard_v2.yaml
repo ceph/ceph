@@ -31,3 +31,4 @@ tasks:
         - tasks.mgr.dashboard_v2.test_summary
         - tasks.mgr.dashboard_v2.test_rgw
         - tasks.mgr.dashboard_v2.test_rbd
+        - tasks.mgr.dashboard_v2.test_pool
