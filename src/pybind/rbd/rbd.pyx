@@ -3157,7 +3157,7 @@ written." % (self.name, ret, length))
 
     def aio_flush(self, oncomplete):
         """
-        Asyncronously wait until all writes are fully flushed if caching is
+        Asynchronously wait until all writes are fully flushed if caching is
         enabled.
         """
 

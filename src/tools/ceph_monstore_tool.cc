@@ -878,7 +878,7 @@ int main(int argc, char **argv) {
       ("version,v", po::value<unsigned>(&v),
        "map version to obtain")
       ("readable,r", po::value<bool>(&readable)->default_value(false),
-       "print the map infomation in human readable format")
+       "print the map information in human readable format")
       ;
     // this is going to be a positional argument; we don't want to show
     // it as an option during --help, but we do want to have it captured

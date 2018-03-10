@@ -1509,7 +1509,7 @@ OPTION(throttler_perf_counter, OPT_BOOL) // enable/disable throttler perf counte
 
 /* The following are tunables for torrent data */
 OPTION(rgw_torrent_flag, OPT_BOOL)    // produce torrent function flag
-OPTION(rgw_torrent_tracker, OPT_STR)    // torrent field annouce and annouce list
+OPTION(rgw_torrent_tracker, OPT_STR)    // torrent field announce and announce list
 OPTION(rgw_torrent_createby, OPT_STR)    // torrent field created by
 OPTION(rgw_torrent_comment, OPT_STR)    // torrent field comment
 OPTION(rgw_torrent_encoding, OPT_STR)    // torrent field encoding
