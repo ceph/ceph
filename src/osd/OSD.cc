@@ -87,7 +87,6 @@
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
-#include "messages/MOSDPGBackfill.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDForceRecovery.h"
