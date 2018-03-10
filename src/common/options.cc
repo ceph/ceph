@@ -17,6 +17,39 @@
 // rbd feature validation
 #include "librbd/Features.h"
 
+namespace {
+class printer : public boost::static_visitor<> {
+  ostream& out;
+public:
+  explicit printer(ostream& os)
+    : out(os) {}
+  template<typename T>
+  void operator()(const T& v) const {
+    out << v;
+  }
+  void operator()(boost::blank blank) const {
+    return;
+  }
+  void operator()(bool v) const {
+    out << (v ? "true" : "false");
+  }
+  void operator()(double v) const {
+    out << std::fixed << v << std::defaultfloat;
+  }
+  void operator()(const Option::size_t& v) const {
+    out << v.value;
+  }
+  void operator()(const std::chrono::seconds v) const {
+    out << v.count();
+  }
+};
+}
+
+ostream& operator<<(ostream& os, const Option::value_t& v) {
+  printer p{os};
+  v.apply_visitor(p);
+  return os;
+}
 
 void Option::dump_value(const char *field_name,
     const Option::value_t &v, Formatter *f) const
@@ -24,18 +57,21 @@ void Option::dump_value(const char *field_name,
   if (boost::get<boost::blank>(&v)) {
     // This should be nil but Formatter doesn't allow it.
     f->dump_string(field_name, "");
-  } else if (type == TYPE_UINT) {
-    f->dump_unsigned(field_name, boost::get<uint64_t>(v));
-  } else if (type == TYPE_INT) {
-    f->dump_int(field_name, boost::get<int64_t>(v));
-  } else if (type == TYPE_STR) {
-    f->dump_string(field_name, boost::get<std::string>(v));
-  } else if (type == TYPE_FLOAT) {
-    f->dump_float(field_name, boost::get<double>(v));
-  } else if (type == TYPE_BOOL) {
-    f->dump_bool(field_name, boost::get<bool>(v));
-  } else {
-    f->dump_stream(field_name) << v;
+    return;
+  }
+  switch (type) {
+  case TYPE_INT:
+    f->dump_int(field_name, boost::get<int64_t>(v)); break;
+  case TYPE_UINT:
+    f->dump_unsigned(field_name, boost::get<uint64_t>(v)); break;
+  case TYPE_STR:
+    f->dump_string(field_name, boost::get<std::string>(v)); break;
+  case TYPE_FLOAT:
+    f->dump_float(field_name, boost::get<double>(v)); break;
+  case TYPE_BOOL:
+    f->dump_bool(field_name, boost::get<bool>(v)); break;
+  default:
+    f->dump_stream(field_name) << v; break;
   }
 }
 
@@ -87,6 +123,72 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
 
   return 0;
 }
+
+namespace {
+template<class Duration>
+std::chrono::seconds
+do_parse_duration(const char* unit, string val,
+		  size_t start, size_t* new_start)
+{
+  auto found = val.find(unit, start);
+  if (found == val.npos) {
+    *new_start = start;
+    return Duration{0};
+  }
+  val[found] = '\0';
+  string err;
+  char* s = &val[start];
+  auto intervals = strict_strtoll(s, 10, &err);
+  if (!err.empty()) {
+    throw invalid_argument(s);
+  }
+  auto secs = chrono::duration_cast<chrono::seconds>(Duration{intervals});
+  *new_start = found + strlen(unit);
+  return secs;
+}
+
+std::chrono::seconds parse_duration(const std::string& s)
+{
+  using namespace std::chrono;
+  auto secs = 0s;
+  size_t start = 0;
+  size_t new_start = 0;
+  using days_t = duration<int, std::ratio<3600 * 24>>;
+  auto v = s;
+  v.erase(std::remove_if(begin(v), end(v),
+			 [](char c){ return std::isspace(c);}), end(v));
+  if (auto delta = do_parse_duration<days_t>("days", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<hours>("hours", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<minutes>("minutes", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<seconds>("seconds", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (new_start == 0) {
+    string err;
+    if (auto delta = std::chrono::seconds{strict_strtoll(s.c_str(), 10, &err)};
+	err.empty()) {
+      secs += delta;
+    } else {
+      throw invalid_argument(err);
+    }
+  }
+  return secs;
+}
+} // anonymous namespace
 
 int Option::parse_value(
   const std::string& raw_val,
@@ -146,6 +248,18 @@ int Option::parse_value(
       return -EINVAL;
     }
     *out = uuid;
+  } else if (type == Option::TYPE_SIZE) {
+    Option::size_t sz{strict_sistrtoll(val.c_str(), error_message)};
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    *out = sz;
+  } else if (type == Option::TYPE_SECS) {
+    try {
+      *out = parse_duration(val);
+    } catch (const invalid_argument&) {
+      return -EINVAL;
+    }
   } else {
     ceph_abort();
   }
@@ -209,17 +323,6 @@ void Option::dump(Formatter *f) const
 
 std::string Option::to_str(const Option::value_t& v)
 {
-  if (boost::get<boost::blank>(&v)) {
-    return string();
-  }
-  if (const bool *flag = boost::get<const bool>(&v)) {
-    return *flag ? "true" : "false";
-  }
-  if (const double *dp = boost::get<const double>(&v)) {
-    ostringstream oss;
-    oss << std::fixed << *dp;
-    return oss.str();
-  }
   return stringify(v);
 }
 
@@ -1352,7 +1455,7 @@ std::vector<Option> get_global_options() {
     .set_default(50)
     .set_description(""),
 
-    Option("mon_daemon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_daemon_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(400ul << 20)
     .set_description(""),
 
@@ -1364,7 +1467,7 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
-    Option("mon_reweight_min_bytes_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_reweight_min_bytes_per_osd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description(""),
 
@@ -1905,7 +2008,7 @@ std::vector<Option> get_global_options() {
     .set_default(-1)
     .set_description(""),
 
-    Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_K)
     .set_description("the amount of data (in bytes) in a data chunk, per stripe")
     .add_service("mon"),
@@ -2027,7 +2130,7 @@ std::vector<Option> get_global_options() {
     .set_default(25)
     .set_description(""),
 
-    Option("osd_tier_promote_max_bytes_sec", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_promote_max_bytes_sec", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(5_M)
     .set_description(""),
 
@@ -2930,7 +3033,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("This prevents a deep scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
     .add_see_also("osd_deep_scrub_interval"),
 
-    Option("osd_deep_scrub_stride", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_deep_scrub_stride", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(512_K)
     .set_description("Number of bytes to read from an object at a time during deep scrub"),
 
@@ -2948,7 +3051,7 @@ std::vector<Option> get_global_options() {
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_value_sum_threshold"),
 
-    Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description("Warn when we encounter an object with more omap key bytes than this")
     .add_service("osd")
@@ -3439,7 +3542,7 @@ std::vector<Option> get_global_options() {
     .set_default(131072)
     .set_description(""),
 
-    Option("osd_max_omap_bytes_per_request", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_max_omap_bytes_per_request", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description(""),
 
@@ -3484,7 +3587,7 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
-    Option("memstore_device_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("memstore_device_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description(""),
 
@@ -3841,15 +3944,15 @@ std::vector<Option> get_global_options() {
     .set_description("Compression ratio required to store compressed data")
     .set_long_description("If we compress data and get less than this we discard the result and store the original uncompressed data."),
 
-    Option("bluestore_extent_map_shard_max_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_max_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(1200)
     .set_description("Max size (bytes) for a single extent map shard before splitting"),
 
-    Option("bluestore_extent_map_shard_target_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_target_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(500)
     .set_description("Target size (bytes) for a single extent map shard"),
 
-    Option("bluestore_extent_map_shard_min_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_min_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(150)
     .set_description("Min size (bytes) for a single extent map shard before merging"),
 
@@ -3981,17 +4084,17 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Try to submit metadata transaction to rocksdb in queuing thread context"),
 
-    Option("bluestore_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes in flight before we throttle IO submission"),
 
-    Option("bluestore_throttle_deferred_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_deferred_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(128_M)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes for deferred writes before we throttle IO submission"),
 
-    Option("bluestore_throttle_cost_per_io", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_cost_per_io", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Overhead added to transaction cost (in bytes) for each IO"),
@@ -4111,7 +4214,7 @@ std::vector<Option> get_global_options() {
     .set_default(512)
     .set_description(""),
 
-    Option("kstore_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("kstore_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_description(""),
 
@@ -4170,11 +4273,11 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enabling throttling of operations to backing file system"),
 
-    Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(41943040)
     .set_description("Start flushing (fsyncing) when this many bytes are written(btrfs)"),
 
-    Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(419430400)
     .set_description("Block writes when this many bytes haven't been flushed (fsynced) (btrfs)"),
 
@@ -4190,11 +4293,11 @@ std::vector<Option> get_global_options() {
     .set_default(500)
     .set_description("Start flushing (fsyncing) when this many distinct inodes have been modified (btrfs)"),
 
-    Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(41943040)
     .set_description("Start flushing (fsyncing) when this many bytes are written(xfs)"),
 
-    Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(419430400)
     .set_description("Block writes when this many bytes haven't been flushed (fsynced) (xfs)"),
 
@@ -4370,7 +4473,7 @@ std::vector<Option> get_global_options() {
     .set_default(50)
     .set_description("Max IO operations in flight"),
 
-    Option("filestore_queue_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_queue_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Max (written) bytes in flight"),
 
@@ -4603,7 +4706,7 @@ std::vector<Option> get_global_options() {
     .set_description("Filesystem path to the ceph-mgr data directory, used to "
                      "contain keyring."),
 
-    Option("mgr_tick_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mgr_tick_period", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(2)
     .add_service("mgr")
     .set_description("Period in seconds of beacon messages to monitor"),
@@ -4618,7 +4721,7 @@ std::vector<Option> get_global_options() {
                           "if you simply do not require the most up to date "
                           "performance counter data."),
 
-    Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("mgr_client_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(128_M)
     .add_service("mgr"),
 
@@ -4626,7 +4729,7 @@ std::vector<Option> get_global_options() {
     .set_default(512)
     .add_service("mgr"),
 
-    Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("mgr_osd_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(512_M)
     .add_service("mgr"),
 
@@ -4634,7 +4737,7 @@ std::vector<Option> get_global_options() {
     .set_default(8192)
     .add_service("mgr"),
 
-    Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("mgr_mds_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(128_M)
     .add_service("mgr"),
 
@@ -4642,7 +4745,7 @@ std::vector<Option> get_global_options() {
     .set_default(128)
     .add_service("mgr"),
 
-    Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("mgr_mon_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(128_M)
     .add_service("mgr"),
 
@@ -4666,7 +4769,7 @@ std::vector<Option> get_global_options() {
     .set_description("Period in seconds between monitor-to-manager "
                      "health/status updates"),
 
-    Option("mon_mgr_beacon_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_mgr_beacon_grace", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(30)
     .add_service("mon")
     .set_description("Period in seconds from last beacon to monitor marking "
@@ -4716,7 +4819,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(100)
     .set_description("Max number of ACL grants in a single request"),
 
-    Option("rgw_max_chunk_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_chunk_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_M)
     .set_description("Set RGW max chunk size")
     .set_long_description(
@@ -4726,7 +4829,7 @@ std::vector<Option> get_rgw_options() {
         "need to be atomic, and anything larger than this would require more than a single "
         "operation."),
 
-    Option("rgw_put_obj_min_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_put_obj_min_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("The minimum RADOS write window size (in bytes).")
     .set_long_description(
@@ -4736,13 +4839,13 @@ std::vector<Option> get_rgw_options() {
         "in order to better utilize the pipe.")
     .add_see_also({"rgw_put_obj_max_window_size", "rgw_max_chunk_size"}),
 
-    Option("rgw_put_obj_max_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_put_obj_max_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_description("The maximum RADOS write window size (in bytes).")
     .set_long_description("The window size may be dynamically adjusted, but will not surpass this value.")
     .add_see_also({"rgw_put_obj_min_window_size", "rgw_max_chunk_size"}),
 
-    Option("rgw_max_put_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_put_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(5_G)
     .set_description("Max size (in bytes) of regular (non multi-part) object upload.")
     .set_long_description(
@@ -4750,11 +4853,11 @@ std::vector<Option> get_rgw_options() {
         "objects, a special upload mechanism is required. The S3 API provides the "
         "multi-part upload, and Swift provides DLO and SLO."),
 
-    Option("rgw_max_put_param_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_put_param_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description("The maximum size (in bytes) of data input of certain RESTful requests."),
 
-    Option("rgw_max_attr_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_attr_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("The maximum length of metadata value. 0 skips the check"),
 
@@ -5500,7 +5603,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("RGW shutdown timeout")
     .set_long_description("Number of seconds to wait for a process before exiting unconditionally."),
 
-    Option("rgw_get_obj_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_get_obj_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("RGW object read window size")
     .set_long_description("The window size in bytes for a single object read request"),
@@ -5558,7 +5661,7 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "If true, RGW will send progress information when copy operation is executed. "),
 
-    Option("rgw_copy_obj_progress_every_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_copy_obj_progress_every_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description("Send copy-object progress info after these many bytes"),
 
@@ -6052,15 +6155,15 @@ static std::vector<Option> get_rbd_options() {
                      "flush is called, to be sure the user of librbd will send "
                      "flushes so that writeback is safe"),
 
-    Option("rbd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(32_M)
     .set_description("cache size in bytes"),
 
-    Option("rbd_cache_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_max_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(24_M)
     .set_description("dirty limit in bytes - set to 0 for write-through caching"),
 
-    Option("rbd_cache_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_target_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("target dirty limit in bytes"),
 
@@ -6097,7 +6200,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("localize parent requests to closest OSD"),
 
-    Option("rbd_sparse_read_threshold_bytes", Option::TYPE_UINT,
+    Option("rbd_sparse_read_threshold_bytes", Option::TYPE_SIZE,
            Option::LEVEL_ADVANCED)
     .set_default(64_K)
     .set_description("threshold for issuing a sparse-read")
@@ -6113,11 +6216,11 @@ static std::vector<Option> get_rbd_options() {
     .set_default(10)
     .set_description("number of sequential requests necessary to trigger readahead"),
 
-    Option("rbd_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_readahead_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(512_K)
     .set_description("set to 0 to disable readahead"),
 
-    Option("rbd_readahead_disable_after_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_readahead_disable_after_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(50_M)
     .set_description("how many bytes are read in total before readahead is disabled"),
 
@@ -6230,7 +6333,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_description("maximum number of pending commits per journal object"),
 
-    Option("rbd_journal_object_flush_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_journal_object_flush_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum number of pending bytes per journal object"),
 
@@ -6242,7 +6345,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default("")
     .set_description("pool for journal objects"),
 
-    Option("rbd_journal_max_payload_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rbd_journal_max_payload_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16384)
     .set_description("maximum journal payload size before splitting"),
 
@@ -6266,7 +6369,7 @@ static std::vector<Option> get_rbd_mirror_options() {
     .set_default(5)
     .set_description("maximum age (in seconds) between successive journal polls"),
 
-    Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(32768)
     .set_description("maximum bytes to read from each journal data object per fetch"),
 
@@ -6454,7 +6557,7 @@ std::vector<Option> get_mds_options() {
     .set_default(1024)
     .set_description("maximum number of events in an MDS journal segment"),
 
-    Option("mds_log_segment_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mds_log_segment_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("size in bytes of each MDS log segment"),
 
@@ -6815,7 +6918,7 @@ std::vector<Option> get_mds_client_options() {
     .set_default(128*1024)
     .set_description(""),
 
-    Option("client_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("client_readahead_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
 

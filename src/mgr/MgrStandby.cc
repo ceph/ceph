@@ -225,7 +225,8 @@ void MgrStandby::tick()
     active_mgr->tick();
   }
 
-  timer.add_event_after(g_conf->get_val<int64_t>("mgr_tick_period"),
+  timer.add_event_after(
+      g_conf->get_val<std::chrono::seconds>("mgr_tick_period").count(),
       new FunctionContext([this](int r){
           tick();
       }

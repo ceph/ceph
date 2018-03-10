@@ -9,6 +9,7 @@
 #include "include/rados.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
+#include "include/scope_guard.h"
 #include "include/stringify.h"
 #include "common/Checksummer.h"
 #include "global/global_context.h"
@@ -1404,4 +1405,19 @@ TEST_F(LibRadosMiscPP, MinCompatClient) {
 
   ASSERT_LE(-1, require_min_compat_client);
   ASSERT_GT(CEPH_RELEASE_MAX, require_min_compat_client);
+}
+
+TEST_F(LibRadosMiscPP, Conf) {
+  const char* const option = "bluestore_throttle_bytes";
+  size_t new_size = 1 << 20;
+  std::string original;
+  ASSERT_EQ(0, cluster.conf_get(option, original));
+  auto restore_setting = make_scope_guard([&] {
+    cluster.conf_set(option, original.c_str());
+  });
+  std::string expected = std::to_string(new_size);
+  ASSERT_EQ(0, cluster.conf_set(option, expected.c_str()));
+  std::string actual;
+  ASSERT_EQ(0, cluster.conf_get(option, actual));
+  ASSERT_EQ(expected, actual);
 }

@@ -5564,7 +5564,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       if (err)
 	break;
       uint32_t data_chunks = erasure_code->get_data_chunk_count();
-      uint32_t stripe_unit = g_conf->get_val<uint64_t>("osd_pool_erasure_code_stripe_unit");
+      uint32_t stripe_unit = g_conf->get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
       auto it = profile.find("stripe_unit");
       if (it != profile.end()) {
 	string err_str;
