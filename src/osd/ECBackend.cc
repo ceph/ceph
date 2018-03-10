@@ -1039,7 +1039,7 @@ error:
     int r = store->getattrs(
       ch,
       ghobject_t(
-	*i, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+	*i, ghobject_t::NO_GEN, shard),
       reply->attrs_read[*i]);
     if (r < 0) {
       reply->buffers_read.erase(*i);
