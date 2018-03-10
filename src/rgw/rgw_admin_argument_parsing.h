@@ -86,4 +86,13 @@ int parse_other_commandline_params(std::vector<const char*>& args, std::string& 
                                    std::map<std::string, bool>& categories,
                                    uint64_t& orphan_stale_secs, std::string& job_id);
 
+class RgwAdminCommandGroupHandlerFactory {
+public:
+  static RgwAdminCommandGroupHandler* get_command_group_handler(std::vector<const char*>& args);
+
+private:
+  static const std::unordered_map<std::string, RgwAdminCommandGroup> STR_TO_RGW_COMMAND_GROUP;
+  static RgwAdminCommandGroup parse_command_group(std::vector<const char*>& args);
+};
+
 #endif //CEPH_RGW_ADMIN_ARGUMENT_PARSING_H

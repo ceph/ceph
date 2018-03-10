@@ -234,7 +234,7 @@ int main(int argc, const char **argv)
 
   ret = parse_command(access_key, gen_access_key, secret_key, gen_secret_key, args, opt_cmd,
                       metadata_key, tenant, user_id);
-  if (ret != 0) {
+  if (ret > 0) {
     return ret;
   }
 
@@ -602,7 +602,7 @@ int main(int argc, const char **argv)
       break;
     case OPT_USER_CREATE:
       ret = handle_opt_user_create(subuser, user_op, user);
-      if (ret != 0) {
+      if (ret > 0) {
         return ret;
       }
       break;

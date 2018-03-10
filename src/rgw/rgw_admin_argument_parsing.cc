@@ -3,6 +3,7 @@
 
 #include "rgw_admin_argument_parsing.h"
 
+#include <boost/program_options.hpp>
 #include <common/safe_io.h>
 
 #include "auth/Crypto.h"
@@ -1450,3 +1451,150 @@ int parse_other_commandline_params(std::vector<const char*>& args, std::string& 
   }
   return 0;
 }
+
+const std::unordered_map<std::string, RgwAdminCommandGroup> RgwAdminCommandGroupHandlerFactory::STR_TO_RGW_COMMAND_GROUP = {
+    {"bi", BI},
+    {"bilog", BILOG},
+    {"bucket", BUCKET},
+    {"bucket sync", BUCKET_SYNC},
+    {"object", OBJECT},
+    {"objects", OBJECT},
+    {"policy", POLICY},
+    {"reshard", RESHARD},
+    {"data sync", DATA_SYNC},
+    {"metadata sync", METADATA_SYNC},
+    {"period", PERIOD},
+    {"realm", REALM},
+    {"zone", ZONE},
+    {"zone placement", ZONE_PLACEMENT},
+    {"zonegroup", ZONEGROUP},
+    {"zonegroup placement", ZONEGROUP_PLACEMENT},
+    {"global quota", GLOBAL_QUOTA},
+    {"quota", QUOTA},
+    {"role", ROLE},
+    {"role-policy", ROLE_POLICY},
+    {"user", USER},
+    {"subuser", SUBUSER},
+    {"caps", CAPS},
+    {"key", KEY},
+    {"datalog", DATALOG},
+    {"log", LOG},
+    {"mdlog", MDLOG},
+    {"replicalog", REPLICALOG},
+    {"gc", GC},
+    {"lc", LC},
+    {"metadata", METADATA},
+    {"olh", OLH},
+    {"opstate", OPSTATE},
+    {"orphans", ORPHANS},
+    {"pool", POOL},
+    {"sync error", SYNC_ERROR},
+    {"sync status", SYNC_STATUS},
+    {"usage", USAGE},
+    {"user list", USER_LIST},
+};
+
+RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std::vector<const char*>& args) {
+  const char COMMAND_GROUP[] = "command";
+  boost::program_options::options_description desc{"General options"};
+  desc.add_options()
+      ("help,h", "Help screen")
+      (COMMAND_GROUP, boost::program_options::value<std::vector<std::string>>(), "Command");
+
+  boost::program_options::positional_options_description pos_desc;
+  pos_desc.add(COMMAND_GROUP, -1);
+  boost::program_options::variables_map var_map;
+  try {
+    boost::program_options::parsed_options options = boost::program_options::command_line_parser{args.size(), args.data()}
+        .options(desc)
+        .positional(pos_desc)
+        .allow_unregistered()
+        .run();
+
+    boost::program_options::store(options, var_map);
+    boost::program_options::notify(var_map);
+
+    if (var_map.count("help")) {
+      usage();
+    }
+    else if (var_map.count(COMMAND_GROUP)) {
+      std::vector<std::string> command = var_map[COMMAND_GROUP].as<std::vector<std::string>>();
+      std::string first_word = command[0];
+      if (command.size() == 1) {
+        // Will throw an exception if such a command group is not found. Since an exception could
+        // also be thrown by boost::program_options, fail instead of introducing additional checks in the code.
+        return STR_TO_RGW_COMMAND_GROUP.at(first_word);
+      } else {
+        std::string maybe_second_word = command[1];
+        if (STR_TO_RGW_COMMAND_GROUP.count(first_word + " " + maybe_second_word) > 0) {
+          return STR_TO_RGW_COMMAND_GROUP.at(first_word + " " + maybe_second_word);
+        } else {
+          // Will throw an exception if such a command group is not found. Since an exception could
+          // also be thrown by boost::program_options, fail instead of introducing additional checks in the code.
+          return STR_TO_RGW_COMMAND_GROUP.at(first_word);
+        }
+      }
+    } else {
+      std::cout << "No command and no help request provided." << std::endl;
+      usage();
+    }
+  } catch (const std::exception& ex) {
+    std::cout << "Incorrect command." << std::endl;
+    usage();
+  }
+  return INVALID;
+}
+
+RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_group_handler(std::vector<const char*>& args) {
+  RgwAdminCommandGroup command_group = RgwAdminCommandGroupHandlerFactory::parse_command_group(args);
+  switch (command_group) {
+    case(INVALID) : return nullptr;
+    case(BI) : return nullptr;
+    case(BILOG) : return nullptr;
+    case(BUCKET) : return nullptr;
+    case(BUCKET_SYNC) : return nullptr;
+    case(OBJECT) : return nullptr;
+    case(POLICY) : return nullptr;
+    case(RESHARD) : return nullptr;
+    case(DATA_SYNC) : return nullptr;
+    case(METADATA_SYNC) : return nullptr;
+    case(PERIOD) : return nullptr;
+    case(REALM) : return nullptr;
+    case(ZONE) : return nullptr;
+    case(ZONE_PLACEMENT) : return nullptr;
+    case(ZONEGROUP) : return nullptr;
+    case(ZONEGROUP_PLACEMENT) : return nullptr;
+    case(GLOBAL_QUOTA) : return nullptr;
+    case(QUOTA) : return nullptr;
+    case(ROLE) : return nullptr;
+    case(ROLE_POLICY) : return nullptr;
+    case(USER) : return nullptr;
+    case(SUBUSER) : return nullptr;
+    case(CAPS) : return nullptr;
+    case(KEY) : return nullptr;
+    case(DATALOG) : return nullptr;
+    case(LOG) : return nullptr;
+    case(MDLOG) : return nullptr;
+    case(REPLICALOG) : return nullptr;
+    case(GC) : return nullptr;
+    case(LC) : return nullptr;
+    case(METADATA) : return new RgwAdminMetadataCommandsHandler(args, nullptr, nullptr);
+    case(OLH) : return nullptr;
+    case(OPSTATE) : return nullptr;
+    case(ORPHANS) : return nullptr;
+    case(POOL) : return nullptr;
+    case(SYNC_ERROR) : return nullptr;
+    case(SYNC_STATUS) : return nullptr;
+    case(USAGE) : return nullptr;
+    case(USER_LIST) : return nullptr;
+  }
+}
+
+
+
+
+
+
+
+
+

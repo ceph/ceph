@@ -1546,3 +1546,57 @@ void handle_opt_sync_status(RGWRados *store)
 
   tab_dump("data sync", width, data_status);
 }
+
+int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+  const char COMMAND[] = "command";
+  const char METADATA_KEY[] = "metadata-key";
+  const char INFILE[] = "infile";
+  const char MAX_ENTRIES[] = "max-entries";
+  boost::program_options::options_description desc{"General options"};
+  desc.add_options()
+      (METADATA_KEY, boost::program_options::value<std::string>(), "The key to retrieve metadata from with metadata get")
+      (INFILE, boost::program_options::value<std::string>(), "A file to read in when setting data")
+      (MAX_ENTRIES, boost::program_options::value<int>(), "The maximum number of entries to display")
+      (COMMAND, boost::program_options::value<std::vector<std::string>>(), "Command");
+
+  boost::program_options::positional_options_description pos_desc;
+  pos_desc.add(COMMAND, -1);
+  boost::program_options::variables_map var_map;
+  try {
+    boost::program_options::parsed_options options = boost::program_options::command_line_parser{args.size(), args.data()}
+        .options(desc)
+        .positional(pos_desc)
+        .run();
+
+    boost::program_options::store(options, var_map);
+    boost::program_options::notify(var_map);
+
+    if (var_map.count(COMMAND)) {
+      std::vector<std::string> command = var_map[COMMAND].as<std::vector<std::string>>();
+      if (command.size() <= COMMAND_PREFIX.size()) {
+        return EINVAL;
+      }
+      for (int i = 0; i < COMMAND_PREFIX.size(); ++i) {
+        if (command[i] != COMMAND_PREFIX[i]) {
+          return EINVAL;
+        }
+      }
+      m_command = STRING_TO_COMMAND.at(command[COMMAND_PREFIX.size()]);
+    } else {
+      return EINVAL;
+    }
+    if (var_map.count(INFILE)) {
+      infile = var_map[INFILE].as<std::string>();
+    }
+    if (var_map.count(METADATA_KEY)) {
+      metadata_key = var_map[METADATA_KEY].as<std::string>();
+    }
+    if (var_map.count(MAX_ENTRIES)) {
+      max_entries = boost::make_optional(var_map[MAX_ENTRIES].as<int>());
+    }
+  } catch (const std::exception& ex) {
+    std::cout << "Incorrect command." << std::endl;
+    usage();
+  }
+  return EINVAL;
+}

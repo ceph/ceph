@@ -3,6 +3,7 @@
 
 #include <string>
 #include <map>
+#include <boost/program_options.hpp>
 #include "rgw_rados.h"
 #include "rgw_sync.h"
 #include "rgw_bucket.h"
@@ -125,5 +126,54 @@ int handle_opt_replicalog_update(const std::string& replica_log_type_str, Replic
                                  rgw_bucket& bucket, RGWRados *store);
 
 void handle_opt_sync_status(RGWRados *store);
+
+class RgwAdminMetadataCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  explicit RgwAdminMetadataCommandsHandler(std::vector<const char*>& args, RGWRados *store,
+                                           Formatter *formatter)
+      : RgwAdminCommandGroupHandler(args, store, formatter)
+  {
+    parse_command_and_parameters(args);
+  }
+  virtual ~RgwAdminMetadataCommandsHandler() = default;
+  int execute_command() override {
+    switch (m_command) {
+      case(OPT_METADATA_GET) : return handle_opt_metadata_get();
+      case(OPT_METADATA_PUT) : return handle_opt_metadata_put();
+      case(OPT_METADATA_RM) : return handle_opt_metadata_rm();
+      case(OPT_METADATA_LIST) : return handle_opt_metadata_list();
+      default: return EINVAL;
+    }
+  }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_metadata_list() {
+    return ::handle_opt_metadata_list(metadata_key, marker, max_entries.is_initialized(),
+                             max_entries.get_value_or(-1), m_store, m_formatter);
+  }
+  int handle_opt_metadata_get() {
+    return ::handle_opt_metadata_get(metadata_key, m_store, m_formatter);
+  }
+  int handle_opt_metadata_put() {
+    return ::handle_opt_metadata_put(metadata_key, infile, m_store, m_formatter);
+  }
+  int handle_opt_metadata_rm() {
+    return ::handle_opt_metadata_rm(metadata_key, m_store, m_formatter);
+  }
+
+  const std::vector<std::string> COMMAND_PREFIX = {"metadata"};
+  const std::unordered_map<std::string, RgwAdminCommand> STRING_TO_COMMAND = {
+      {"list", OPT_METADATA_LIST},
+      {"get", OPT_METADATA_GET},
+      {"put", OPT_METADATA_PUT},
+      {"rm", OPT_METADATA_RM},
+  };
+  std::string metadata_key;
+  std::string infile;
+  std::string marker;
+  boost::optional<int> max_entries;
+};
 
 #endif //CEPH_RGW_ADMIN_OTHER_H

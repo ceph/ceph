@@ -1,7 +1,58 @@
 #ifndef CEPH_RGW_ADMIN_COMMON_H
 #define CEPH_RGW_ADMIN_COMMON_H
 
+#include "cls/rgw/cls_rgw_types.h"
+
+#include "common/ceph_json.h"
+#include <common/safe_io.h>
+
+#include "rgw_common.h"
 #include "rgw_rados.h"
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_rgw
+
+enum RgwAdminCommandGroup {
+  INVALID = -1,
+  BI,
+  BILOG,
+  BUCKET,
+  BUCKET_SYNC,
+  OBJECT,
+  POLICY,
+  RESHARD,
+  DATA_SYNC,
+  METADATA_SYNC,
+  PERIOD,
+  REALM,
+  ZONE,
+  ZONE_PLACEMENT,
+  ZONEGROUP,
+  ZONEGROUP_PLACEMENT,
+  GLOBAL_QUOTA,
+  QUOTA,
+  ROLE,
+  ROLE_POLICY,
+  USER,
+  SUBUSER,
+  CAPS,
+  KEY,
+  DATALOG,
+  LOG,
+  MDLOG,
+  REPLICALOG,
+  GC,
+  LC,
+  METADATA,
+  OLH,
+  OPSTATE,
+  ORPHANS,
+  POOL,
+  SYNC_ERROR,
+  SYNC_STATUS,
+  USAGE,
+  USER_LIST,
+};
 
 enum RgwAdminCommand {
   OPT_NO_CMD = 0,
@@ -161,6 +212,25 @@ enum RgwAdminCommand {
   OPT_RESHARD_STATUS,
   OPT_RESHARD_PROCESS,
   OPT_RESHARD_CANCEL,
+};
+
+class RgwAdminCommandGroupHandler {
+public:
+  explicit RgwAdminCommandGroupHandler(std::vector<const char*>& args, RGWRados *store,
+                                        Formatter *formatter)
+      : m_store(store), m_formatter(formatter)
+  {}
+  virtual int execute_command() = 0;
+  virtual ~RgwAdminCommandGroupHandler() = default;
+
+protected:
+  virtual int parse_command_and_parameters(std::vector<const char*>& args) = 0;
+
+  RgwAdminCommand m_command;
+  // Does not take ownership.
+  RGWRados* m_store;
+  // Does not take ownership.
+  Formatter* m_formatter;
 };
 
 enum ReplicaLogType {
