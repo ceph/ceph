@@ -3260,7 +3260,7 @@ returned %d, but should return zero on success." % (self.name, ret))
     @requires(('write_op', WriteOp), ('oid', str_type), ('mtime', opt(int)), ('flags', opt(int)))
     def operate_write_op(self, write_op, oid, mtime=0, flags=LIBRADOS_OPERATION_NOFLAG):
         """
-        excute the real write operation
+        execute the real write operation
         :para write_op: write operation object
         :type write_op: WriteOp
         :para oid: object name
@@ -3286,7 +3286,7 @@ returned %d, but should return zero on success." % (self.name, ret))
     @requires(('write_op', WriteOp), ('oid', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)), ('mtime', opt(int)), ('flags', opt(int)))
     def operate_aio_write_op(self, write_op, oid, oncomplete=None, onsafe=None, mtime=0, flags=LIBRADOS_OPERATION_NOFLAG):
         """
-        excute the real write operation asynchronously
+        execute the real write operation asynchronously
         :para write_op: write operation object
         :type write_op: WriteOp
         :para oid: object name
@@ -3328,7 +3328,7 @@ returned %d, but should return zero on success." % (self.name, ret))
     @requires(('read_op', ReadOp), ('oid', str_type), ('flag', opt(int)))
     def operate_read_op(self, read_op, oid, flag=LIBRADOS_OPERATION_NOFLAG):
         """
-        excute the real read operation
+        execute the real read operation
         :para read_op: read operation object
         :type read_op: ReadOp
         :para oid: object name
@@ -3350,7 +3350,7 @@ returned %d, but should return zero on success." % (self.name, ret))
     @requires(('read_op', ReadOp), ('oid', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)), ('flag', opt(int)))
     def operate_aio_read_op(self, read_op, oid, oncomplete=None, onsafe=None, flag=LIBRADOS_OPERATION_NOFLAG):
         """
-        excute the real read operation
+        execute the real read operation
         :para read_op: read operation object
         :type read_op: ReadOp
         :para oid: object name

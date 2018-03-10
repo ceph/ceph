@@ -151,9 +151,9 @@ BlueFS *open_bluefs(
   return fs;
 }
 
-void infering_bluefs_devices(vector<string>& devs, std::string& path)
+void inferring_bluefs_devices(vector<string>& devs, std::string& path)
 {
-  cout << "infering bluefs devices from bluestore path" << std::endl;
+  cout << "inferring bluefs devices from bluestore path" << std::endl;
   for (auto fn : {"block", "block.wal", "block.db"}) {
     string p = path + "/" + fn;
     struct stat st;
@@ -254,7 +254,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     if (devs.empty())
-      infering_bluefs_devices(devs, path);
+      inferring_bluefs_devices(devs, path);
   }
   if (action == "bluefs-export" || action == "bluefs-log-dump") {
     if (path.empty()) {
@@ -265,14 +265,14 @@ int main(int argc, char **argv)
       cerr << "must specify out-dir to export bluefs" << std::endl;
       exit(EXIT_FAILURE);
     }
-    infering_bluefs_devices(devs, path);
+    inferring_bluefs_devices(devs, path);
   }
   if (action == "bluefs-bdev-sizes" || action == "bluefs-bdev-expand") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
     }
-    infering_bluefs_devices(devs, path);
+    inferring_bluefs_devices(devs, path);
   }
 
   vector<const char*> args;

@@ -1739,7 +1739,7 @@ CDentry *CDir::_load_dentry(
         dn->link_remote(dn->get_linkage(), in);
         dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
       } else {
-        dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << dendl;
+        dout(12) << "_fetched  got remote link " << ino << " (don't have it)" << dendl;
       }
     }
   } 

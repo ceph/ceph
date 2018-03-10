@@ -5570,7 +5570,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(0)
     .set_description("HTTP return code override for object creation")
     .set_long_description(
-        "If not zero, this is the HTTP return code that will be returned on a succesful S3 "
+        "If not zero, this is the HTTP return code that will be returned on a successful S3 "
         "object creation."),
 
     Option("rgw_resolve_cname", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5864,7 +5864,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("Length of time to aggregate metadata changes")
     .set_long_description(
         "Length of time (in milliseconds) in which the master zone aggregates all the "
-        "metadata changes that occured, before sending notifications to all the other "
+        "metadata changes that occurred, before sending notifications to all the other "
         "zones."),
 
     Option("rgw_run_sync_thread", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -6014,7 +6014,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_torrent_tracker", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("Torrent field annouce and annouce list"),
+    .set_description("Torrent field announce and announce list"),
 
     Option("rgw_torrent_createby", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")

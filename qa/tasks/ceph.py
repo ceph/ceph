@@ -258,7 +258,7 @@ def assign_devs(roles, devs):
 def valgrind_post(ctx, config):
     """
     After the tests run, look throught all the valgrind logs.  Exceptions are raised
-    if textual errors occured in the logs, or if valgrind exceptions were detected in
+    if textual errors occurred in the logs, or if valgrind exceptions were detected in
     the logs.
 
     :param ctx: Context
@@ -399,7 +399,7 @@ def cluster(ctx, config):
         Mkfs mon nodes.
 
     On exit:
-        If errors occured, extract a failure message and store in ctx.summary.
+        If errors occurred, extract a failure message and store in ctx.summary.
         Unmount all test files and temporary journaling files.
         Save the monitor information and archive all ceph logs.
         Cleanup the keyring setup, and remove all monitor map and data files left over.
