@@ -1557,7 +1557,7 @@ int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<co
       (METADATA_KEY, boost::program_options::value<std::string>(), "The key to retrieve metadata from with metadata get")
       (INFILE, boost::program_options::value<std::string>(), "A file to read in when setting data")
       (MAX_ENTRIES, boost::program_options::value<int>(), "The maximum number of entries to display")
-      (COMMAND, boost::program_options::value<std::vector<std::string>>(), "Command");
+      (COMMAND, boost::program_options::value<std::vector<std::string>>(), "Command: metadata put, metadata get, metadata rm, metadata list");
 
   boost::program_options::positional_options_description pos_desc;
   pos_desc.add(COMMAND, -1);
@@ -1595,8 +1595,7 @@ int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<co
       max_entries = boost::make_optional(var_map[MAX_ENTRIES].as<int>());
     }
   } catch (const std::exception& ex) {
-    std::cout << "Incorrect command." << std::endl;
-    usage();
+    std::cout << "Incorrect command:" << std::endl << desc << std::endl;
   }
   return EINVAL;
 }

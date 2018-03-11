@@ -134,8 +134,9 @@ public:
       : RgwAdminCommandGroupHandler(args, store, formatter)
   {
     parse_command_and_parameters(args);
+    std::cout << "Parsed command: " << m_command;
   }
-  virtual ~RgwAdminMetadataCommandsHandler() = default;
+  ~RgwAdminMetadataCommandsHandler() override = default;
   int execute_command() override {
     switch (m_command) {
       case(OPT_METADATA_GET) : return handle_opt_metadata_get();

@@ -16,6 +16,7 @@
 #include "rgw_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_reshard.h"
+#include "rgw_admin_other.h"
 
 
 void usage()
@@ -1495,6 +1496,7 @@ const std::unordered_map<std::string, RgwAdminCommandGroup> RgwAdminCommandGroup
 };
 
 RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std::vector<const char*>& args) {
+  std::cerr << "Arguments passed start with " << args[0] << std::endl;
   const char COMMAND_GROUP[] = "command";
   boost::program_options::options_description desc{"General options"};
   desc.add_options()
@@ -1519,6 +1521,11 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std
     }
     else if (var_map.count(COMMAND_GROUP)) {
       std::vector<std::string> command = var_map[COMMAND_GROUP].as<std::vector<std::string>>();
+      std::cerr << "Parsed as command: ";
+      for (const auto& cw : command) {
+        std::cerr << cw << " ";
+      }
+      std::cerr << std::endl;
       std::string first_word = command[0];
       if (command.size() == 1) {
         // Will throw an exception if such a command group is not found. Since an exception could
@@ -1539,8 +1546,7 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std
       usage();
     }
   } catch (const std::exception& ex) {
-    std::cout << "Incorrect command." << std::endl;
-    usage();
+    std::cout << "Incorrect command:" << std::endl << desc << std::endl;
   }
   return INVALID;
 }

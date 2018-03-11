@@ -87,6 +87,13 @@ int main(int argc, const char **argv)
 
   common_init_finish(g_ceph_context);
 
+  // trying out the new argument parsing
+  // boost::program_options parser takes argc and argv, i.e. expects that the first argument is the name of the executable
+  args.insert(args.begin(), "rgw_admin.cc");
+  RgwAdminCommandGroupHandler* group_handler = RgwAdminCommandGroupHandlerFactory::get_command_group_handler(args);
+//  return group_handler->execute_command();
+  return 0;
+
   rgw_user user_id;
   std::string tenant;
   std::string access_key, secret_key, user_email, display_name;

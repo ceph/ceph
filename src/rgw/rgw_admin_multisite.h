@@ -4,6 +4,7 @@
 #include <boost/optional.hpp>
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
+#include "rgw_admin_common.h"
 
 // This header and the corresponding source file contain handling of the following commads / groups of commands:
 // Period, realm, zone, zonegroup, data sync, metadata sync
@@ -207,6 +208,45 @@ int handle_opt_data_sync_status(const std::string& source_zone, RGWRados *store,
 int handle_opt_data_sync_init(const std::string& source_zone, const boost::intrusive_ptr<CephContext>& cct, RGWRados *store);
 
 int handle_opt_data_sync_run(const std::string& source_zone, RGWRados *store);
+
+class RgwAdminMetadataSyncCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  explicit RgwAdminMetadataSyncCommandsHandler(std::vector<const char*>& args, RGWRados *store, Formatter *formatter)
+      : RgwAdminCommandGroupHandler(args, store, formatter)
+  {
+    parse_command_and_parameters(args);
+    std::cout << "Parsed command: " << m_command;
+  }
+  ~RgwAdminMetadataSyncCommandsHandler() override = default;
+  int execute_command() override {
+    switch (m_command) {
+      case(OPT_METADATA_SYNC_STATUS) : return handle_opt_metadata_sync_status();
+      case(OPT_METADATA_SYNC_INIT) : return handle_opt_metadata_sync_init();
+      case(OPT_METADATA_SYNC_RUN) : return handle_opt_metadata_sync_run();
+      default: return EINVAL;
+    }
+  }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_metadata_sync_status() {
+    return ::handle_opt_metadata_sync_status(m_store, m_formatter);
+  }
+  int handle_opt_metadata_sync_init() {
+    return ::handle_opt_metadata_sync_init(m_store);
+  }
+  int handle_opt_metadata_sync_run() {
+    return ::handle_opt_metadata_sync_run(m_store);
+  }
+
+  const std::vector<std::string> COMMAND_PREFIX = {"metadata", "sync"};
+  const std::unordered_map<std::string, RgwAdminCommand> STRING_TO_COMMAND = {
+      {"status", OPT_METADATA_SYNC_STATUS},
+      {"init", OPT_METADATA_SYNC_INIT},
+      {"run", OPT_METADATA_SYNC_RUN},
+  };
+};
 
 
 #endif //CEPH_RGW_ADMIN_MULTISITE_H
