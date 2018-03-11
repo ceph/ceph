@@ -151,14 +151,16 @@ private:
   int parse_command_and_parameters(std::vector<const char*>& args) override;
 
   int handle_opt_metadata_list() {
-    return ::handle_opt_metadata_list(metadata_key, marker, max_entries.is_initialized(),
+    // TODO: marker.value() is unsafe, check if the value is set inside the handling function
+    return ::handle_opt_metadata_list(metadata_key, marker.value(), max_entries.is_initialized(),
                              max_entries.get_value_or(-1), m_store, m_formatter);
   }
   int handle_opt_metadata_get() {
     return ::handle_opt_metadata_get(metadata_key, m_store, m_formatter);
   }
   int handle_opt_metadata_put() {
-    return ::handle_opt_metadata_put(metadata_key, infile, m_store, m_formatter);
+    // TODO: infile.value() is unsafe, check if the value is set inside the handling function
+    return ::handle_opt_metadata_put(metadata_key, infile.value(), m_store, m_formatter);
   }
   int handle_opt_metadata_rm() {
     return ::handle_opt_metadata_rm(metadata_key, m_store, m_formatter);
@@ -172,8 +174,8 @@ private:
       {"rm", OPT_METADATA_RM},
   };
   std::string metadata_key;
-  std::string infile;
-  std::string marker;
+  boost::optional<std::string> infile;
+  boost::optional<std::string> marker;
   boost::optional<int> max_entries;
 };
 
