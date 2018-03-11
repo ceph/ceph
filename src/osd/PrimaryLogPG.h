@@ -1084,7 +1084,8 @@ protected:
 				 PGBackend::RecoveryHandle *h,
 				 bool *work_started);
   int prep_object_replica_deletes(const hobject_t& soid, eversion_t v,
-				  PGBackend::RecoveryHandle *h);
+				  PGBackend::RecoveryHandle *h,
+				  bool *work_started);
 
   void finish_degraded_object(const hobject_t& oid);
 
