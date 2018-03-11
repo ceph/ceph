@@ -2110,7 +2110,7 @@ int handle_opt_data_sync_run(const std::string& source_zone, RGWRados *store)
 
 int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
   const char COMMAND[] = "command";
-  boost::program_options::options_description desc{"General options"};
+  boost::program_options::options_description desc{"Metadata sync options"};
   desc.add_options()
       (COMMAND, boost::program_options::value<std::vector<std::string>>(), "Command: metadata sync init, metadata sync run, metadata sync status");
 

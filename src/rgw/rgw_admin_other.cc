@@ -1552,7 +1552,7 @@ int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<co
   const char METADATA_KEY[] = "metadata-key";
   const char INFILE[] = "infile";
   const char MAX_ENTRIES[] = "max-entries";
-  boost::program_options::options_description desc{"General options"};
+  boost::program_options::options_description desc{"Metadata options"};
   desc.add_options()
       (METADATA_KEY, boost::program_options::value<std::string>(), "The key to retrieve metadata from with metadata get")
       (INFILE, boost::program_options::value<std::string>(), "A file to read in when setting data")
