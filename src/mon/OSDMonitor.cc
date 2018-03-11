@@ -8143,6 +8143,10 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
   case POOL_OP_DELETE_UNMANAGED_SNAP:
     if (!pp.is_removed_snap(m->snapid)) {
+      if (m->snapid > pp.get_snap_seq()) {
+        _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+        return false;
+      }
       pp.remove_unmanaged_snap(m->snapid);
       changed = true;
     }
