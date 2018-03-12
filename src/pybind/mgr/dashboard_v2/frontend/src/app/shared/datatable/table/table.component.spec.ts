@@ -87,4 +87,59 @@ describe('TableComponent', () => {
     component.updateFilter();
     expect(component.rows.length).toBe(100);
   });
+
+  describe('after ngInit', () => {
+    const toggleColumn = (prop, checked) => {
+      component.toggleColumn({
+        target: {
+          name: prop,
+          checked: checked
+        }
+      });
+    };
+
+    beforeEach(() => {
+      component.ngOnInit();
+      component.table.sorts = component.sorts;
+    });
+
+    it('should have updated the column definitions', () => {
+      expect(component.columns[0].flexGrow).toBe(1);
+      expect(component.columns[1].flexGrow).toBe(2);
+      expect(component.columns[2].flexGrow).toBe(2);
+      expect(component.columns[2].resizeable).toBe(false);
+    });
+
+    it('should have table columns', () => {
+      expect(component.tableColumns.length).toBe(3);
+      expect(component.tableColumns).toEqual(component.columns);
+    });
+
+    it('should have a unique identifier which is search for', () => {
+      expect(component.identifier).toBe('a');
+      expect(component.sorts[0].prop).toBe('a');
+      expect(component.sorts).toEqual(component.createSortingDefinition('a'));
+    });
+
+    it('should remove column "a"', () => {
+      toggleColumn('a', false);
+      expect(component.table.sorts[0].prop).toBe('b');
+      expect(component.tableColumns.length).toBe(2);
+    });
+
+    it('should not be able to remove all columns', () => {
+      toggleColumn('a', false);
+      toggleColumn('b', false);
+      toggleColumn('c', false);
+      expect(component.table.sorts[0].prop).toBe('c');
+      expect(component.tableColumns.length).toBe(1);
+    });
+
+    it('should enable column "a" again', () => {
+      toggleColumn('a', false);
+      toggleColumn('a', true);
+      expect(component.table.sorts[0].prop).toBe('b');
+      expect(component.tableColumns.length).toBe(3);
+    });
+  });
 });

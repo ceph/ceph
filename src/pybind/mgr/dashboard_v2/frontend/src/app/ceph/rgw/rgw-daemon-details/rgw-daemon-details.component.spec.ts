@@ -2,7 +2,7 @@ import { HttpClientModule } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { BsDropdownModule, TabsModule } from 'ngx-bootstrap';
 
 import { SharedModule } from '../../../shared/shared.module';
 import { PerformanceCounterModule } from '../../performance-counter/performance-counter.module';
@@ -21,6 +21,7 @@ describe('RgwDaemonDetailsComponent', () => {
         PerformanceCounterModule,
         HttpClientTestingModule,
         HttpClientModule,
+        BsDropdownModule.forRoot(),
         TabsModule.forRoot()
       ],
       providers: [ RgwDaemonService ]
