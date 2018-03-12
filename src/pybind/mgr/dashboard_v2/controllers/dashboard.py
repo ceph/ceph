@@ -2,14 +2,13 @@
 from __future__ import absolute_import
 
 import collections
-from collections import defaultdict
 import json
-import time
 
 import cherrypy
 from mgr_module import CommandResult
 
 from .. import mgr
+from ..services.ceph_service import CephService
 from ..tools import ApiController, AuthRequired, BaseController, NotificationQueue
 
 
@@ -72,44 +71,13 @@ class Dashboard(BaseController):
 
         osd_map = self.osd_map()
 
-        pg_summary = mgr.get("pg_summary")
-
-        pools = []
-
-        pool_stats = defaultdict(lambda: defaultdict(
-            lambda: collections.deque(maxlen=10)))
-
-        df = mgr.get("df")
-        pool_stats_dict = dict([(p['id'], p['stats']) for p in df['pools']])
-        now = time.time()
-        for pool_id, stats in pool_stats_dict.items():
-            for stat_name, stat_val in stats.items():
-                pool_stats[pool_id][stat_name].appendleft((now, stat_val))
-
-        for pool in osd_map['pools']:
-            pool['pg_status'] = pg_summary['by_pool'][pool['pool'].__str__()]
-            stats = pool_stats[pool['pool']]
-            s = {}
-
-            def get_rate(series):
-                if len(series) >= 2:
-                    return (float(series[0][1]) - float(series[1][1])) / \
-                        (float(series[0][0]) - float(series[1][0]))
-                return 0
-
-            for stat_name, stat_series in stats.items():
-                s[stat_name] = {
-                    'latest': stat_series[0][1],
-                    'rate': get_rate(stat_series),
-                    'series': [i for i in stat_series]
-                }
-            pool['stats'] = s
-            pools.append(pool)
+        pools = CephService.get_pool_list_with_stats()
 
         # Not needed, skip the effort of transmitting this
         # to UI
         del osd_map['pg_temp']
 
+        df = mgr.get("df")
         df['stats']['total_objects'] = sum(
             [p['stats']['objects'] for p in df['pools']])
 
