@@ -463,7 +463,7 @@ class Module(MgrModule):
                 for osd,cw in weight_map.iteritems() if osd in osd_weight and cw > 0
             }
             sum_w = sum(adjusted_map.values())
-            assert sum_w > 0
+            assert len(adjusted_map) == 0 or sum_w > 0
             pe.target_by_root[root] = { osd: w / sum_w
                                         for osd,w in adjusted_map.iteritems() }
             actual_by_root[root] = {
