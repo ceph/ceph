@@ -2978,8 +2978,10 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
       continue;
 
     /* keys are sorted by epoch, so once we're past end we're done */
-    if (e.epoch >= end)
+    if (e.epoch >= end) {
+      *truncated = false;
       return 0;
+    }
 
     ret = cb(hctx, key, e, param);
     if (ret < 0)
