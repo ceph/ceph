@@ -220,6 +220,7 @@ def task(ctx, config):
             client.1:
               extra_args: ['--exclude', 'TestFile']
     """
+    assert hasattr(ctx, 'rgw'), 'swift must run after the rgw task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
         "task testswift only supports a list or dictionary for configuration"
@@ -235,13 +236,16 @@ def task(ctx, config):
 
     testswift_conf = {}
     for client in clients:
+        endpoint = ctx.rgw.role_endpoints.get(client)
+        assert endpoint, 'swift: no rgw endpoint for {}'.format(client)
+
         testswift_conf[client] = ConfigObj(
                 indent_type='',
                 infile={
                     'func_test':
                         {
-                        'auth_port'      : 7280,
-                        'auth_ssl' : 'no',
+                        'auth_port'      : endpoint.port,
+                        'auth_ssl' : 'yes' if endpoint.cert else 'no',
                         'auth_prefix' : '/auth/',
                         },
                     }
