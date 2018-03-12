@@ -23,6 +23,7 @@ cls_method_handle_t h_user_complete_stats_sync;
 cls_method_handle_t h_user_remove_bucket;
 cls_method_handle_t h_user_list_buckets;
 cls_method_handle_t h_user_get_header;
+cls_method_handle_t h_user_reset_stats;
 
 static int write_entry(cls_method_context_t hctx, const string& key, const cls_user_bucket_entry& entry)
 {
@@ -370,6 +371,54 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
   return 0;
 }
 
+/// A method to reset the user.buckets header stats in accordance to the values
+/// seen in the user.buckets omap keys. This will not be equivalent to --sync-stats
+/// which requires comparing the values with actual bucket meta stats supplied
+/// by RGW
+static int cls_user_reset_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out /*ignore*/)
+{
+  cls_user_reset_stats_op op;
+
+  try {
+    auto bliter = in->begin();
+    decode(op, bliter);
+  } catch (buffer::error& err) {
+    CLS_LOG(0, "ERROR: cls_user_reset_op(): failed to decode op");
+    return -EINVAL;
+  }
+  cls_user_header header;
+  string from_index, prefix;
+#define MAX_ENTRIES 1000
+  int rc;
+  map<string, bufferlist> keys;
+  do {
+    rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES, &keys);
+
+    if (rc < 0)
+      return rc;
+
+    for (const auto&kv : keys){
+      cls_user_bucket_entry e;
+      try {
+	auto bl = kv.second;
+	auto bliter = bl.begin();
+	decode(e, bliter);
+      } catch (buffer::error& err) {
+	CLS_LOG(0, "ERROR: failed to decode bucket entry for %s", kv.first.c_str());
+	return -EIO;
+      }
+      from_index = kv.first;
+      add_header_stats(&header.stats, e);
+    }
+  } while (keys.size() == MAX_ENTRIES);
+
+  bufferlist bl;
+  header.last_stats_update = op.time;
+  encode(header, bl);
+
+  return cls_cxx_map_write_header(hctx, &bl);
+}
+
 void __cls_init()
 {
   CLS_LOG(1, "Loaded user class!");
@@ -384,7 +433,7 @@ void __cls_init()
   cls_register_cxx_method(h_class, "remove_bucket", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_remove_bucket, &h_user_remove_bucket);
   cls_register_cxx_method(h_class, "list_buckets", CLS_METHOD_RD, cls_user_list_buckets, &h_user_list_buckets);
   cls_register_cxx_method(h_class, "get_header", CLS_METHOD_RD, cls_user_get_header, &h_user_get_header);
-
+  cls_register_cxx_method(h_class, "reset_user_stats", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats, &h_user_reset_stats);
   return;
 }
 
