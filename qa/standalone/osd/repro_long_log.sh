@@ -36,17 +36,19 @@ function run() {
     done
 }
 
+PGID=
+
 function test_log_size()
 {
-    PGID=$1
-    EXPECTED=$2
+    local PGID=$1
+    local EXPECTED=$2
     ceph tell osd.\* flush_pg_stats
     sleep 3
     ceph pg $PGID query | jq .info.stats.log_size
     ceph pg $PGID query | jq .info.stats.log_size | grep "${EXPECTED}"
 }
 
-function do_repro_long_log() {
+function setup_log_test() {
     local dir=$1
     local which=$2
 
@@ -81,36 +83,65 @@ function do_repro_long_log() {
         rados -p test rm foo
     done
 
-    # this demonstrates the problem - it should fail
-    test_log_size $PGID 41 || return 1
-
-    if [ "$which" = "test1" ];
-    then
-        # regular write should trim the log
-        rados -p test put foo foo || return 1
-        test_log_size $PGID 22 || return 1
-    else
-        PRIMARY=$(ceph pg $PGID query  | jq '.info.stats.up_primary')
-        kill_daemons $dir TERM osd.$PRIMARY || return 1
-        CEPH_ARGS="--osd-max-pg-log-entries=30 --osd-pg-log-trim-max=5" ceph-objectstore-tool --data-path $dir/$PRIMARY --pgid $PGID --op trim-pg-log || return 1
-        run_osd $dir $PRIMARY || return 1
-        wait_for_clean || return 1
-        test_log_size $PGID 30 || return 1
-    fi
+    # log should have been trimmed down to min_entries with one extra
+    test_log_size $PGID 21 || return 1
 }
 
 function TEST_repro_long_log1()
 {
     local dir=$1
 
-    do_repro_long_log $dir test1
+    setup_log_test $dir || return 1
+    # regular write should trim the log
+    rados -p test put foo foo || return 1
+    test_log_size $PGID 22 || return 1
 }
 
 function TEST_repro_long_log2()
 {
     local dir=$1
 
-    do_repro_long_log $dir test2
+    setup_log_test $dir || return 1
+    local PRIMARY=$(ceph pg $PGID query  | jq '.info.stats.up_primary')
+    kill_daemons $dir TERM osd.$PRIMARY || return 1
+    CEPH_ARGS="--osd-max-pg-log-entries=2 --no-mon-config" ceph-objectstore-tool --data-path $dir/$PRIMARY --pgid $PGID --op trim-pg-log || return 1
+    run_osd $dir $PRIMARY || return 1
+    wait_for_clean || return 1
+    test_log_size $PGID 2 || return 1
+}
+
+function TEST_trim_max_entries()
+{
+    local dir=$1
+
+    setup_log_test $dir || return 1
+
+    ceph tell osd.\* injectargs -- --osd-min-pg-log-entries 1
+    ceph tell osd.\* injectargs -- --osd-pg-log-trim-min 2
+    ceph tell osd.\* injectargs -- --osd-pg-log-trim-max 4
+
+    # adding log entries, should only trim 4 and add one each time
+    rados -p test rm foo
+    test_log_size $PGID 17
+    rados -p test rm foo
+    test_log_size $PGID 14
+    rados -p test rm foo
+    test_log_size $PGID 11
+    rados -p test rm foo
+    test_log_size $PGID 8
+    rados -p test rm foo
+    test_log_size $PGID 5
+    rados -p test rm foo
+    test_log_size $PGID 2
+
+    # below trim_min
+    rados -p test rm foo
+    test_log_size $PGID 3
+    rados -p test rm foo
+    test_log_size $PGID 4
+
+    rados -p test rm foo
+    test_log_size $PGID 2
 }
 
 main repro-long-log "$@"
