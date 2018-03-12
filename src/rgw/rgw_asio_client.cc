@@ -27,6 +27,9 @@ int ClientIO::init_env(CephContext *cct)
 {
   env.init(cct);
 
+  perfcounter->inc(l_rgw_qlen);
+  perfcounter->inc(l_rgw_qactive);
+
   const auto& request = parser.get();
   const auto& headers = request;
   for (auto header = headers.begin(); header != headers.end(); ++header) {
@@ -89,6 +92,8 @@ int ClientIO::init_env(CephContext *cct)
 
 size_t ClientIO::complete_request()
 {
+  perfcounter->inc(l_rgw_qlen, -1);
+  perfcounter->inc(l_rgw_qactive, -1);
   return 0;
 }
 
