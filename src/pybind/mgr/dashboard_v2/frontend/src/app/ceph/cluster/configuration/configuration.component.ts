@@ -18,12 +18,12 @@ export class ConfigurationComponent implements OnInit {
       label: 'Level',
       prop: 'level',
       value: 'basic',
-      options: ['basic', 'advanced', 'developer'],
+      options: ['basic', 'advanced', 'dev'],
       applyFilter: (row, value) => {
         enum Level {
           basic = 0,
           advanced = 1,
-          developer = 2
+          dev = 2
         }
 
         const levelVal = Level[value];
