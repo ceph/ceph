@@ -5246,25 +5246,41 @@ void PG::share_pg_info()
 
 bool PG::append_log_entries_update_missing(
   const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-  ObjectStore::Transaction &t)
+  ObjectStore::Transaction &t, boost::optional<eversion_t> trim_to,
+  boost::optional<eversion_t> roll_forward_to)
 {
   assert(!entries.empty());
   assert(entries.begin()->version > info.last_update);
 
   PGLogEntryHandler rollbacker{this, &t};
+  if (roll_forward_to) {
+    pg_log.roll_forward(&rollbacker);
+  }
   bool invalidate_stats =
     pg_log.append_new_log_entries(info.last_backfill,
 				  info.last_backfill_bitwise,
 				  entries,
 				  &rollbacker);
+
+  if (roll_forward_to && entries.rbegin()->soid > info.last_backfill) {
+    pg_log.roll_forward(&rollbacker);
+  }
+  if (roll_forward_to && *roll_forward_to > pg_log.get_can_rollback_to()) {
+    pg_log.roll_forward_to(*roll_forward_to, &rollbacker);
+    last_rollback_info_trimmed_to_applied = *roll_forward_to;
+  }
+
   info.last_update = pg_log.get_head();
 
   if (pg_log.get_missing().num_missing() == 0) {
     // advance last_complete since nothing else is missing!
     info.last_complete = info.last_update;
   }
-
   info.stats.stats_invalid = info.stats.stats_invalid || invalidate_stats;
+
+  dout(20) << __func__ << "trim_to bool = " << bool(trim_to) << " trim_to = " << (trim_to ? *trim_to : eversion_t()) << dendl;
+  if (trim_to)
+    pg_log.trim(*trim_to, info);
   dirty_info = true;
   write_if_dirty(t);
   return invalidate_stats;
@@ -5273,12 +5289,14 @@ bool PG::append_log_entries_update_missing(
 
 void PG::merge_new_log_entries(
   const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-  ObjectStore::Transaction &t)
+  ObjectStore::Transaction &t,
+  boost::optional<eversion_t> trim_to,
+  boost::optional<eversion_t> roll_forward_to)
 {
   dout(10) << __func__ << " " << entries << dendl;
   assert(is_primary());
 
-  bool rebuild_missing = append_log_entries_update_missing(entries, t);
+  bool rebuild_missing = append_log_entries_update_missing(entries, t, trim_to, roll_forward_to);
   for (set<pg_shard_t>::const_iterator i = actingbackfill.begin();
        i != actingbackfill.end();
        ++i) {
