@@ -2,6 +2,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
+import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { DimlessPipe } from '../../../../shared/pipes/dimless.pipe';
 import { OsdService } from '../osd.service';
 
@@ -61,5 +62,9 @@ export class OsdListComponent implements OnInit {
   collectStates(osd) {
     const select = (onState, offState) => osd[onState] ? onState : offState;
     return [select('up', 'down'), select('in', 'out')];
+  }
+
+  beforeShowDetails(selection: CdTableSelection) {
+    return selection.hasSingleSelection;
   }
 }
