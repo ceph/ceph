@@ -82,6 +82,82 @@ class BaseController(object):
     """
 
 
+class RequestLoggingTool(cherrypy.Tool):
+    def __init__(self):
+        cherrypy.Tool.__init__(self, 'before_handler', self.request_begin,
+                               priority=95)
+
+    def _setup(self):
+        cherrypy.Tool._setup(self)
+        cherrypy.request.hooks.attach('on_end_request', self.request_end,
+                                      priority=5)
+        cherrypy.request.hooks.attach('after_error_response', self.request_error,
+                                      priority=5)
+
+    def _get_user(self):
+        if hasattr(cherrypy.serving, 'session'):
+            return cherrypy.session.get(Session.USERNAME)
+        return None
+
+    def request_begin(self):
+        req = cherrypy.request
+        user = self._get_user()
+        if user:
+            logger.debug("[%s:%s] [%s] [%s] %s", req.remote.ip,
+                         req.remote.port, req.method, user, req.path_info)
+        else:
+            logger.debug("[%s:%s] [%s] %s", req.remote.ip,
+                         req.remote.port, req.method, req.path_info)
+
+    def request_error(self):
+        self._request_log(logger.error)
+        logger.error(cherrypy.response.body)
+
+    def request_end(self):
+        status = cherrypy.response.status[:3]
+        if status in ["401"]:
+            # log unauthorized accesses
+            self._request_log(logger.warning)
+        else:
+            self._request_log(logger.info)
+
+    def _format_bytes(self, num):
+        units = ['B', 'K', 'M', 'G']
+
+        format_str = "{:.0f}{}"
+        for i, unit in enumerate(units):
+            div = 2**(10*i)
+            if num < 2**(10*(i+1)):
+                if num % div == 0:
+                    format_str = "{}{}"
+                else:
+                    div = float(div)
+                    format_str = "{:.1f}{}"
+                return format_str.format(num/div, unit[0])
+
+        # content-length bigger than 1T!! return value in bytes
+        return "{}B".format(num)
+
+    def _request_log(self, logger_fn):
+        req = cherrypy.request
+        res = cherrypy.response
+        lat = time.time() - res.time
+        user = self._get_user()
+        status = res.status[:3] if isinstance(res.status, str) else res.status
+        if 'Content-Length' in res.headers:
+            length = self._format_bytes(res.headers['Content-Length'])
+        else:
+            length = self._format_bytes(0)
+        if user:
+            logger_fn("[%s:%s] [%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
+                      req.remote.port, req.method, status,
+                      "{0:.3f}s".format(lat), user, length, req.path_info)
+        else:
+            logger_fn("[%s:%s] [%s] [%s] [%s] [%s] %s", req.remote.ip,
+                      req.remote.port, req.method, status,
+                      "{0:.3f}s".format(lat), length, req.path_info)
+
+
 # pylint: disable=too-many-instance-attributes
 class ViewCache(object):
     VALUE_OK = 0
