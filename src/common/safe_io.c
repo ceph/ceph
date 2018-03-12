@@ -28,6 +28,7 @@ ssize_t safe_read(int fd, void *buf, size_t count)
 
 	while (cnt < count) {
 		ssize_t r = read(fd, buf, count - cnt);
+
 		if (r <= 0) {
 			if (r == 0) {
 				// EOF
@@ -71,10 +72,11 @@ ssize_t safe_write(int fd, const void *buf, size_t count)
 ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
 {
 	size_t cnt = 0;
-	char *b = (char*)buf;
+	char *b = (char *)buf;
 
 	while (cnt < count) {
 		ssize_t r = pread(fd, b + cnt, count - cnt, offset + cnt);
+
 		if (r <= 0) {
 			if (r == 0) {
 				// EOF
@@ -93,6 +95,7 @@ ssize_t safe_pread(int fd, void *buf, size_t count, off_t offset)
 ssize_t safe_pread_exact(int fd, void *buf, size_t count, off_t offset)
 {
 	ssize_t ret = safe_pread(fd, buf, count, offset);
+
 	if (ret < 0)
 		return ret;
 	if ((size_t)ret != count)
@@ -104,6 +107,7 @@ ssize_t safe_pwrite(int fd, const void *buf, size_t count, off_t offset)
 {
 	while (count > 0) {
 		ssize_t r = pwrite(fd, buf, count, offset);
+
 		if (r < 0) {
 			if (errno == EINTR)
 				continue;
@@ -124,6 +128,7 @@ ssize_t safe_splice(int fd_in, off_t *off_in, int fd_out, off_t *off_out,
 
   while (cnt < len) {
     ssize_t r = splice(fd_in, off_in, fd_out, off_out, len - cnt, flags);
+
     if (r <= 0) {
       if (r == 0) {
 	// EOF
@@ -144,6 +149,7 @@ ssize_t safe_splice_exact(int fd_in, off_t *off_in, int fd_out,
 			  off_t *off_out, size_t len, unsigned int flags)
 {
   ssize_t ret = safe_splice(fd_in, off_in, fd_out, off_out, len, flags);
+
   if (ret < 0)
     return ret;
   if ((size_t)ret != len)
@@ -162,6 +168,7 @@ int safe_write_file(const char *base, const char *file,
 
   // does the file already have correct content?
   char oldval[80];
+
   ret = safe_read_file(base, file, oldval, sizeof(oldval));
   if (ret == (int)vallen && memcmp(oldval, val, vallen) == 0)
     return 0;  // yes.

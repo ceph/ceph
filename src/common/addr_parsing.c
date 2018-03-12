@@ -32,6 +32,7 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
     *plen += BUF_SIZE;
 
     void *_realloc = NULL;
+
     if ((_realloc = realloc(*pstr, (size_t)*plen)) == NULL) {
       printf("Out of memory\n");
       exit(1);
@@ -78,6 +79,7 @@ char *resolve_addrs(const char *orig_str)
     bracecolon = strstr(tok, "]:");
 
     char *port_str = 0;
+
     if (firstcolon && firstcolon == lastcolon) {
       /* host:port or a.b.c.d:port */
       *firstcolon = 0;
@@ -118,6 +120,7 @@ char *resolve_addrs(const char *orig_str)
     ores = res;
     while (res) {
       char host[40], port[40];
+
       getnameinfo(res->ai_addr, res->ai_addrlen,
 		  host, sizeof(host),
 		  port, sizeof(port),
