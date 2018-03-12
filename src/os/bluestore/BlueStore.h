@@ -126,6 +126,8 @@ enum {
   l_bluestore_last
 };
 
+#define META_POOL_ID ((uint64_t)-1ull)
+
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
   // -----------------------------------------------------
@@ -1458,6 +1460,14 @@ public:
     void reset() {
       *this = volatile_statfs();
     }
+    void publish(store_statfs_t* buf) const {
+      buf->allocated = allocated();
+      buf->data_stored = stored();
+      buf->data_compressed = compressed();
+      buf->data_compressed_original = compressed_original();
+      buf->data_compressed_allocated = compressed_allocated();
+    }
+
     volatile_statfs& operator+=(const volatile_statfs& other) {
       for (size_t i = 0; i < STATFS_LAST; ++i) {
 	values[i] += other.values[i];
@@ -1477,6 +1487,21 @@ public:
       return values[STATFS_COMPRESSED];
     }
     int64_t& compressed_allocated() {
+      return values[STATFS_COMPRESSED_ALLOCATED];
+    }
+    int64_t allocated() const {
+      return values[STATFS_ALLOCATED];
+    }
+    int64_t stored() const {
+      return values[STATFS_STORED];
+    }
+    int64_t compressed_original() const {
+      return values[STATFS_COMPRESSED_ORIGINAL];
+    }
+    int64_t compressed() const {
+      return values[STATFS_COMPRESSED];
+    }
+    int64_t compressed_allocated() const {
       return values[STATFS_COMPRESSED_ALLOCATED];
     }
     volatile_statfs& operator=(const store_statfs_t& st) {
@@ -1596,7 +1621,7 @@ public:
 
     interval_set<uint64_t> allocated, released;
     volatile_statfs statfs_delta;	   ///< overall store statistics delta
-    int64_t osd_pool_id = -1;              ///< osd pool id we're operating on
+    uint64_t osd_pool_id = META_POOL_ID;    ///< osd pool id we're operating on
     
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
@@ -2251,6 +2276,11 @@ private:
     BlueStoreRepairer* repairer,
     store_statfs_t& expected_statfs);
 
+  using  per_pool_statfs =
+    mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
+  void _fsck_check_pool_statfs(per_pool_statfs& expected_pool_statfs,
+    int& errors, BlueStoreRepairer* repairer);
+
   void _buffer_cache_write(
     TransContext *txc,
     BlobRef b,
@@ -2570,7 +2600,7 @@ public:
 			 const bufferlist& bl);
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
-  void inject_statfs(const store_statfs_t& new_statfs);
+  void inject_statfs(const string& key, const store_statfs_t& new_statfs);
   void inject_misreference(coll_t cid1, ghobject_t oid1,
 			   coll_t cid2, ghobject_t oid2,
 			   uint64_t offset);
@@ -3033,7 +3063,8 @@ public:
   bool fix_shared_blob(KeyValueDB *db,
 		         uint64_t sbid,
 		       const bufferlist* bl);
-  bool fix_statfs(KeyValueDB *db, const store_statfs_t& new_statfs);
+  bool fix_statfs(KeyValueDB *db, const string& key,
+    const store_statfs_t& new_statfs);
 
   bool fix_leaked(KeyValueDB *db,
 		  FreelistManager* fm,

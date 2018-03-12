@@ -7026,17 +7026,21 @@ namespace {
     return ghobject_t{hobject_t{soid, "", hash, pool, ""}};
   }
 }
-TEST_P(StoreTest, BluestoreRepairTest) {
+
+TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   if (string(GetParam()) != "bluestore")
     return;
   const size_t offs_base = 65536 / 2;
 
   SetVal(g_conf(), "bluestore_fsck_on_mount", "false");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "false");
-  SetVal(g_conf(), "bluestore_max_blob_size",
+  SetVal(g_conf(), "bluestore_max_blob_size", 
     stringify(2 * offs_base).c_str());
   SetVal(g_conf(), "bluestore_extent_map_shard_max_size", "12000");
-  g_ceph_context->_conf.apply_changes(nullptr);
+  SetVal(g_conf(), "bluestore_debug_no_per_pool_stats", "true");
+  SetVal(g_conf(), "bluestore_fsck_error_on_legacy_stats", "true");
+
+  StartDeferred(0x10000);
 
   BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
 
@@ -7105,7 +7109,7 @@ TEST_P(StoreTest, BluestoreRepairTest) {
   statfs.allocated += 0x10000;
   statfs.data_stored += 0x10000;
   ASSERT_FALSE(statfs0 == statfs);
-  bstore->inject_statfs(statfs);
+  bstore->inject_statfs("bluestore_statfs", statfs);
   bstore->umount();
 
   ASSERT_EQ(bstore->fsck(false), 1);
@@ -7176,10 +7180,21 @@ TEST_P(StoreTest, BluestoreRepairTest) {
     g_ceph_context->_conf.apply_changes(nullptr);
   }
 
+  // enable per-pool stats collection hence causing fsck to fail
+  cerr << "per-pool statfs" << std::endl;
+  SetVal(g_conf(), "bluestore_debug_no_per_pool_stats", "false");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  ASSERT_EQ(bstore->fsck(false), 2);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+
 
   cerr << "Completing" << std::endl;
   bstore->mount();
+
 }
+
 TEST_P(StoreTest, BluestoreStatistics) {
   if (string(GetParam()) != "bluestore")
     return;
