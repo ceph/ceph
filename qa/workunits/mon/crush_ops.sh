@@ -90,6 +90,9 @@ ceph osd tree | grep -c host1 | grep -q 1   # now an orphan
 ceph osd crush rm osd.$o1 host1
 ceph osd crush rm host1
 ceph osd tree | grep -c host1 | grep -q 0
+expect_false ceph osd tree-from host1
+ceph osd tree-from host2
+expect_false ceph osd tree-from osd.$o2
 
 expect_false ceph osd crush rm bar   # not empty
 ceph osd crush unlink host2
