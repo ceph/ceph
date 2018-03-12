@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+    crush_tunables: optimal
+    conf:
+      mon:
+        mon osd initial require min compat client: luminous
+      osd:
+        osd_discard_disconnected_ops: false
+tasks:
+- rados:
+    clients: [client.0]
+    ops: 4000
+    objects: 500
+    op_weights:
+      read: 45
+      write: 45
+      delete: 10
