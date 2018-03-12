@@ -1,14 +1,13 @@
+from __future__ import absolute_import
+
 import json
 import mock
 
 import cherrypy
-from cherrypy.test.helper import CPWebCase
 
 from .. import mgr
-from ..controllers.auth import Auth
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirror
-from ..tools import SessionExpireAtBrowserCloseTool
 from .helper import ControllerTestCase
 
 
@@ -46,19 +45,10 @@ mock_osd_map = {
 }
 
 
-class RbdMirroringControllerTest(ControllerTestCase, CPWebCase):
+class RbdMirroringControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
-        # Initialize custom handlers.
-        cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
-        cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
-
-        cls._mgr_module = mock.Mock()
-        cls.setup_test()
-
-    @classmethod
-    def setup_test(cls):
         mgr.list_servers.return_value = mock_list_servers
         mgr.get_metadata.return_value = mock_get_metadata
         mgr.get_daemon_status.return_value = mock_get_daemon_status
@@ -79,9 +69,6 @@ class RbdMirroringControllerTest(ControllerTestCase, CPWebCase):
         cherrypy.tree.mount(RbdMirror(), '/api/test/rbdmirror')
         cherrypy.tree.mount(Summary(), '/api/test/summary')
 
-    def __init__(self, *args, **kwargs):
-        super(RbdMirroringControllerTest, self).__init__(*args, dashboard_port=54583, **kwargs)
-
     @mock.patch('dashboard_v2.controllers.rbd_mirroring.rbd')
     def test_default(self, rbd_mock):  # pylint: disable=W0613
         self._get('/api/test/rbdmirror')
@@ -94,7 +81,8 @@ class RbdMirroringControllerTest(ControllerTestCase, CPWebCase):
     @mock.patch('dashboard_v2.controllers.rbd_mirroring.rbd')
     def test_summary(self, rbd_mock):  # pylint: disable=W0613
         """We're also testing `summary`, as it also uses code from `rbd_mirroring.py`"""
-        data = self._get('/api/test/summary')
+        self._get('/api/test/summary')
         self.assertStatus(200)
-        summary = data['rbd_mirroring']
+
+        summary = self.jsonBody()['rbd_mirroring']
         self.assertEqual(summary, {'errors': 0, 'warnings': 1})
