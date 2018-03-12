@@ -1171,6 +1171,9 @@ struct OSDShard {
   epoch_t get_min_pg_epoch();
   void wait_min_pg_epoch(epoch_t need);
 
+  /// return newest epoch we are waiting for
+  epoch_t get_max_waiting_epoch();
+
   /// push osdmap into shard
   void consume_map(
     OSDMapRef& osdmap,

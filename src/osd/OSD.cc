@@ -4779,6 +4779,17 @@ void OSD::tick_without_osd_lock()
       send_failures();
     }
     map_lock.put_read();
+
+    epoch_t max_waiting_epoch = 0;
+    for (auto s : shards) {
+      max_waiting_epoch = std::max(max_waiting_epoch,
+				   s->get_max_waiting_epoch());
+    }
+    if (max_waiting_epoch > get_osdmap()->get_epoch()) {
+      dout(20) << __func__ << " max_waiting_epoch " << max_waiting_epoch
+	       << ", requesting new map" << dendl;
+      osdmap_subscribe(superblock.newest_map + 1, false);
+    }
   }
 
   if (is_active()) {
@@ -9317,6 +9328,18 @@ void OSDShard::wait_min_pg_epoch(epoch_t need)
     min_pg_epoch_cond.Wait(sdata_op_ordering_lock);
   }
   waiting_for_min_pg_epoch = false;
+}
+
+epoch_t OSDShard::get_max_waiting_epoch()
+{
+  Mutex::Locker l(sdata_op_ordering_lock);
+  epoch_t r = 0;
+  for (auto& i : pg_slots) {
+    if (!i.second->waiting_peering.empty()) {
+      r = std::max(r, i.second->waiting_peering.rbegin()->first);
+    }
+  }
+  return r;
 }
 
 void OSDShard::consume_map(
