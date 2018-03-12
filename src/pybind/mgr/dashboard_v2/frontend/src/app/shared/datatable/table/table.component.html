@@ -39,6 +39,31 @@
     </div>
     <!-- end pagination limit-->
 
+    <!-- show hide columns -->
+    <div class="widget-toolbar">
+      <div dropdown
+           class="dropdown tc_menuitem tc_menuitem_cluster">
+        <a dropdownToggle
+           class="btn btn-sm btn-default dropdown-toggle tc_columnBtn"
+           data-toggle="dropdown">
+          <i class="fa fa-lg fa-table"></i>
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu">
+          <li *ngFor="let column of columns">
+            <label>
+              <input type="checkbox"
+                     (change)="toggleColumn($event)"
+                     [name]="column.prop"
+                     [checked]="!column.isHidden">
+              <span>{{ column.name }}</span>
+            </label>
+          </li>
+        </ul>
+      </div>
+    </div>
+    <!-- end show hide columns -->
+
     <!-- refresh button -->
     <div class="widget-toolbar tc_refreshBtn">
       <a (click)="refreshBtn()">
@@ -55,7 +80,7 @@
                  [selected]="selection.selected"
                  (select)="onSelect()"
                  [sorts]="sorts"
-                 [columns]="columns"
+                 [columns]="tableColumns"
                  [columnMode]="columnMode"
                  [rows]="rows"
                  [rowClass]="getRowClass()"

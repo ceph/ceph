@@ -13,7 +13,7 @@ import { NavigationComponent } from './navigation/navigation.component';
   imports: [
     CommonModule,
     AuthModule,
-    BsDropdownModule.forRoot(),
+    BsDropdownModule,
     AppRoutingModule,
     SharedModule,
     RouterModule

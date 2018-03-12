@@ -1,6 +1,7 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { BsDropdownModule } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 
 import { SharedModule } from '../../../shared/shared.module';
@@ -27,7 +28,11 @@ describe('ClientsComponent', () => {
   beforeEach(
     async(() => {
       TestBed.configureTestingModule({
-        imports: [RouterTestingModule, SharedModule],
+        imports: [
+          RouterTestingModule,
+          BsDropdownModule.forRoot(),
+          SharedModule
+        ],
         declarations: [ClientsComponent],
         providers: [{ provide: CephfsService, useValue: fakeFilesystemService }]
       }).compileComponents();
