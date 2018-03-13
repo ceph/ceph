@@ -228,7 +228,7 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    attrs = ["!fails_on_rgw"]
+    attrs = ["!fails_on_rgw", "!lifecycle_expiration"]
     # beast parser is strict about unreadable headers
     if ctx.rgw.frontend == 'beast':
         attrs.append("!fails_strict_rfc2616")
