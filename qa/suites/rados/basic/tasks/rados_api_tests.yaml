@@ -9,6 +9,9 @@ overrides:
     - (CACHE_POOL_NO_HIT_SET)
     - (CACHE_POOL_NEAR_FULL)
     - (POOL_APP_NOT_ENABLED)
+    conf:
+      client:
+        debug ms: 1
 tasks:
 - workunit:
     clients:
