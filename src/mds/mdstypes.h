@@ -1257,7 +1257,7 @@ namespace std {
   template<> struct hash<metareqid_t> {
     size_t operator()(const metareqid_t &r) const { 
       hash<uint64_t> H;
-      return H(r.name.num()) ^ H(r.name.type()) ^ H(r.tid);
+      return H(r.name.num() ^ H(r.name.type() ^ H(r.tid) ) );
     }
   };
 } // namespace std
