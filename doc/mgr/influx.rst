@@ -54,6 +54,8 @@ Additional optional configuration settings are:
 :port: InfluxDB server port.  Default 8086
 :ssl: Use https connection for InfluxDB server. Use "true" or "false". Default false
 :verify_ssl: Verify https cert for InfluxDB server. Use "true" or "false". Default true
+:timeout: InfluxDB client connection timeout.  Defaults to 2s.
+:retries: InfluxDB client connection retries.  Defaults to 1.  
 :destinations: Set multiple influxdb destinations.   Set as a JSON array of objects.  The property 'hostname' is required in each object.  Other properties will be taken from the global config-key settings if they are not set in the objects.
 
 For example, setting 2 influx destination hosts which will all take database, user, password from the other config key settings:
