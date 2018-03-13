@@ -1,7 +1,7 @@
 import { HttpClientModule } from '@angular/common/http';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { DimlessPipe } from '../../../../shared/pipes/dimless.pipe';
@@ -23,7 +23,7 @@ describe('OsdListComponent', () => {
       imports: [
         HttpClientModule,
         PerformanceCounterModule,
-        TabsModule,
+        TabsModule.forRoot(),
         DataTableModule
       ],
       declarations: [

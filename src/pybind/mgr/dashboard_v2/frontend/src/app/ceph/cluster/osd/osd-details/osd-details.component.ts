@@ -1,7 +1,8 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, Input, OnChanges } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { OsdService } from '../osd.service';
 
 @Component({
@@ -9,19 +10,19 @@ import { OsdService } from '../osd.service';
   templateUrl: './osd-details.component.html',
   styleUrls: ['./osd-details.component.scss']
 })
-export class OsdDetailsComponent implements OnInit {
-  osd: any;
+export class OsdDetailsComponent implements OnChanges {
+  @Input() selection: CdTableSelection;
 
-  @Input() selected?: any[] = [];
+  osd: any;
 
   constructor(private osdService: OsdService) {}
 
-  ngOnInit() {
+  ngOnChanges() {
     this.osd = {
       loaded: false
     };
-    if (this.selected.length > 0) {
-      this.osd = this.selected[0];
+    if (this.selection.hasSelection) {
+      this.osd = this.selection.first();
       this.osd.autoRefresh = () => {
         this.refresh();
       };
