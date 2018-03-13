@@ -116,6 +116,7 @@ public:
   void _session_logged(Session *session, uint64_t state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
+					map<client_t,client_metadata_t>& cmm,
 					map<client_t,pair<Session*,uint64_t> >& smap);
   void finish_force_open_sessions(const map<client_t,pair<Session*,uint64_t> >& smap,
 				  bool dec_import=true);

@@ -843,7 +843,7 @@ void Session::clear_recalled_at()
   recall_release_count = 0;
 }
 
-void Session::set_client_metadata(map<string, string> const &meta)
+void Session::set_client_metadata(const client_metadata_t& meta)
 {
   info.client_metadata = meta;
 
@@ -1011,10 +1011,11 @@ bool SessionFilter::match(
   for (const auto &m : metadata) {
     const auto &k = m.first;
     const auto &v = m.second;
-    if (session.info.client_metadata.count(k) == 0) {
+    auto it = session.info.client_metadata.find(k);
+    if (it == session.info.client_metadata.end()) {
       return false;
     }
-    if (session.info.client_metadata.at(k) != v) {
+    if (it->second != v) {
       return false;
     }
   }
