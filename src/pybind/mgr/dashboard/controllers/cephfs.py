@@ -2,10 +2,10 @@
 from __future__ import absolute_import
 
 from collections import defaultdict
-import json
 
 import cherrypy
-from mgr_module import CommandResult
+
+from ..services.ceph_service import CephService
 
 from .. import mgr
 from ..tools import ApiController, AuthRequired, BaseController, ViewCache
@@ -264,6 +264,7 @@ class CephFS(BaseController):
         except AttributeError:
             raise cherrypy.HTTPError(404,
                                      "No cephfs with id {0}".format(fs_id))
+
         if clients is None:
             raise cherrypy.HTTPError(404,
                                      "No cephfs with id {0}".format(fs_id))
@@ -305,14 +306,5 @@ class CephFSClients(object):
     # pylint: disable=unused-variable
     @ViewCache()
     def get(self):
-        mds_spec = "{0}:0".format(self.fscid)
-        result = CommandResult("")
-        self._module.send_command(result, "mds", mds_spec,
-                                  json.dumps({
-                                      "prefix": "session ls",
-                                  }),
-                                  "")
-        r, outb, outs = result.wait()
         # TODO handle nonzero returns, e.g. when rank isn't active
-        assert r == 0
-        return json.loads(outb)
+        return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
