@@ -702,6 +702,7 @@ public:
   inline bool operator!=(const coll_t& rhs) const {
     return !(*this == rhs);
   }
+  friend struct std::hash<coll_t>;
 
   // get a TEMP collection that corresponds to the current collection,
   // which we presume is a pg collection.
@@ -745,19 +746,9 @@ inline ostream& operator<<(ostream& out, const coll_t& c) {
 
 namespace std {
   template<> struct hash<coll_t> {
-    size_t operator()(const coll_t &c) const { 
-      size_t h = 0;
-      string str(c.to_str());
-      std::string::const_iterator end(str.end());
-      for (std::string::const_iterator s = str.begin(); s != end; ++s) {
-	h += *s;
-	h += (h << 10);
-	h ^= (h >> 6);
-      }
-      h += (h << 3);
-      h ^= (h >> 11);
-      h += (h << 15);
-      return h;
+    size_t operator()(const coll_t &c) const {
+      static rjhash<uint64_t> RJ;
+      return RJ(hash<spg_t>{}(c.pgid) ^ c.type);
     }
   };
 } // namespace std
