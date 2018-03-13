@@ -4803,6 +4803,10 @@ std::vector<Option> get_global_options() {
     .set_description("Period in seconds from last beacon to manager dropping "
                      "state about a monitored service (RGW, rbd-mirror etc)"),
 
+    Option("mgr_client_service_daemon_unregister_timeout", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(1.0)
+    .set_description("Time to wait during shutdown to deregister service with mgr"),
+
     Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
     .add_service("mon")
