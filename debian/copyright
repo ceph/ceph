@@ -102,7 +102,7 @@ License:
 
 Files: src/test/common/Throttle.cc src/test/filestore/chain_xattr.cc
 Copyright: Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
-License: LGPL2 or later
+License: LGPL2.1 or later
 
 Files: src/osd/ErasureCodePluginJerasure/*.{c,h}
 Copyright: Copyright (c) 2011, James S. Plank <plank@cs.utk.edu>

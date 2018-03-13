@@ -6,7 +6,7 @@
  * primarily intended to describe data structures that pass over the
  * wire or that are stored on disk.
  *
- * LGPL2
+ * LGPL2.1
  */
 
 #ifndef CEPH_FS_H
