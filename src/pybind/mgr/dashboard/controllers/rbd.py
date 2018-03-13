@@ -72,6 +72,7 @@ class Rbd(RESTController):
             i = rbd.Image(ioctx, name)
             stat = i.stat()
             stat['name'] = name
+            stat['id'] = i.id()
             features = i.features()
             stat['features'] = features
             stat['features_name'] = self._format_bitmask(features)
