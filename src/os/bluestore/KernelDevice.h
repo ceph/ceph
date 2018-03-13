@@ -17,8 +17,10 @@
 
 #include <atomic>
 
-#include "os/fs/FS.h"
+#include "include/types.h"
 #include "include/interval_set.h"
+#include "common/Mutex.h"
+#include "common/Cond.h"
 
 #include "aio.h"
 #include "BlockDevice.h"
@@ -26,7 +28,6 @@
 class KernelDevice : public BlockDevice {
   int fd_direct, fd_buffered;
   std::string path;
-  FS *fs;
   bool aio, dio;
 
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
