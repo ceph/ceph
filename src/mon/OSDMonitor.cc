@@ -3709,8 +3709,20 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ds);
     } else if (prefix == "osd tree" || prefix == "osd tree-from") {
       string bucket;
-      if (prefix == "osd tree-from")
-	cmd_getval(cct, cmdmap, "bucket", bucket);
+      if (prefix == "osd tree-from") {
+        cmd_getval(cct, cmdmap, "bucket", bucket);
+        if (!osdmap.crush->name_exists(bucket)) {
+          ss << "bucket '" << bucket << "' does not exist";
+          r = -ENOENT;
+          goto reply;
+        }
+        int id = osdmap.crush->get_item_id(bucket);
+        if (id >= 0) {
+          ss << "\"" << bucket << "\" is not a bucket";
+          r = -EINVAL;
+          goto reply;
+        }
+      }
 
       vector<string> states;
       cmd_getval(cct, cmdmap, "states", states);
