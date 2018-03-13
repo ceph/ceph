@@ -10,7 +10,7 @@ Release Index
 .. toctree::
    :maxdepth: 1
 
-   Release Schedule <releases>
+   Release Schedule <schedule>
 
 Active Releases
 ~~~~~~~~~~~~~~~
