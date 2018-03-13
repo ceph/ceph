@@ -404,6 +404,25 @@ void rgw::auth::RemoteApplier::create_account(const rgw_user& acct_user,
   user_info.user_id = new_acct_user;
   user_info.display_name = info.acct_name;
 
+  // Set default quota to ldap account on 1st access
+  if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
+    user_info.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
+    user_info.bucket_quota.enabled = true;
+  }
+  if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
+    user_info.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
+    user_info.bucket_quota.enabled = true;
+  }
+
+  if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
+    user_info.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
+    user_info.user_quota.enabled = true;
+  }
+  if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
+    user_info.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
+    user_info.user_quota.enabled = true;
+  }
+
   int ret = rgw_store_user_info(store, user_info, nullptr, nullptr,
                                 real_time(), true);
   if (ret < 0) {
