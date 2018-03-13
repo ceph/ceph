@@ -29,7 +29,7 @@
 
 class MMDSCacheRejoin : public Message {
 
-  static const int HEAD_VERSION = 1;
+  static const int HEAD_VERSION = 2;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -178,6 +178,7 @@ class MMDSCacheRejoin : public Message {
   // open
   map<inodeno_t,map<client_t, cap_reconnect_t> > cap_exports;
   map<client_t, entity_inst_t> client_map;
+  map<client_t,client_metadata_t> client_metadata_map;
   bufferlist imported_caps;
 
   // full
@@ -323,6 +324,7 @@ public:
     encode(strong_dentries, payload);
     encode(authpinned_dentries, payload);
     encode(xlocked_dentries, payload);
+    encode(client_metadata_map, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
@@ -347,6 +349,8 @@ public:
     decode(strong_dentries, p);
     decode(authpinned_dentries, p);
     decode(xlocked_dentries, p);
+    if (header.version >= 2)
+      decode(client_metadata_map, p);
   }
 
 };

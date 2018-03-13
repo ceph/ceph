@@ -366,6 +366,23 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
 }
 
 /*
+ * client_metadata_t
+ */
+void client_metadata_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(kv_map, bl);
+  ENCODE_FINISH(bl);
+}
+
+void client_metadata_t::decode(bufferlist::iterator& p)
+{
+  DECODE_START(1, p);
+  decode(kv_map, p);
+  DECODE_FINISH(p);
+}
+
+/*
  * session_info_t
  */
 void session_info_t::encode(bufferlist& bl, uint64_t features) const
@@ -375,7 +392,7 @@ void session_info_t::encode(bufferlist& bl, uint64_t features) const
   encode(completed_requests, bl);
   encode(prealloc_inos, bl);   // hacky, see below.
   encode(used_inos, bl);
-  encode(client_metadata, bl);
+  encode(client_metadata.kv_map, bl);
   encode(completed_flushes, bl);
   encode(auth_name, bl);
   ENCODE_FINISH(bl);
@@ -400,7 +417,7 @@ void session_info_t::decode(bufferlist::iterator& p)
   prealloc_inos.insert(used_inos);
   used_inos.clear();
   if (struct_v >= 4) {
-    decode(client_metadata, p);
+    decode(client_metadata.kv_map, p);
   }
   if (struct_v >= 5) {
     decode(completed_flushes, p);
@@ -448,9 +465,8 @@ void session_info_t::dump(Formatter *f) const
   }
   f->close_section();
 
-  for (map<string, string>::const_iterator i = client_metadata.begin();
-      i != client_metadata.end(); ++i) {
-    f->dump_string(i->first.c_str(), i->second);
+  for (auto& p : client_metadata) {
+    f->dump_string(p.first.c_str(), p.second);
   }
 }
 

@@ -305,9 +305,11 @@ public:
   void get_export_client_set(CInode *in, set<client_t> &client_set);
 
   void encode_export_inode(CInode *in, bufferlist& bl, 
-			   map<client_t,entity_inst_t>& exported_client_map);
+			   map<client_t,entity_inst_t>& exported_client_map,
+			   map<client_t,client_metadata_t>& exported_client_metadata_map);
   void encode_export_inode_caps(CInode *in, bool auth_cap, bufferlist& bl,
-				map<client_t,entity_inst_t>& exported_client_map);
+				map<client_t,entity_inst_t>& exported_client_map,
+				map<client_t,client_metadata_t>& exported_client_metadata_map);
   void finish_export_inode(CInode *in, utime_t now, mds_rank_t target,
 			   map<client_t,Capability::Import>& peer_imported,
 			   list<MDSInternalContextBase*>& finished);
@@ -318,6 +320,7 @@ public:
   uint64_t encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
 			map<client_t,entity_inst_t>& exported_client_map,
+			map<client_t,client_metadata_t>& exported_client_metadata_map,
 			utime_t now);
   void finish_export_dir(CDir *dir, utime_t now, mds_rank_t target,
 			 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,

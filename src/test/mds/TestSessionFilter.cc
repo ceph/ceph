@@ -123,10 +123,13 @@ TEST(MDSSessionFilter, MetadataEquality)
   std::stringstream ss;
   int r = filter.parse({"client_metadata.root=/rhubarb"}, &ss);
   ASSERT_EQ(r, 0);
+  client_metadata_t meta;
   Session *a = new Session();
-  a->set_client_metadata({{"root", "/rhubarb"}});
+  meta.kv_map = {{"root", "/rhubarb"}};
+  a->set_client_metadata(meta);
   Session *b = new Session();
-  b->set_client_metadata({{"root", "/custard"}});
+  meta.kv_map = {{"root", "/custard"}};
+  b->set_client_metadata(meta);
 
   ASSERT_TRUE(filter.match(*a, [](client_t c) -> bool {return false;}));
   ASSERT_FALSE(filter.match(*b, [](client_t c) -> bool {return false;}));

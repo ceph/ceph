@@ -1059,17 +1059,50 @@ inline std::ostream& operator<<(std::ostream& out, const old_rstat_t& o) {
   return out << "old_rstat(first " << o.first << " " << o.rstat << " " << o.accounted_rstat << ")";
 }
 
+/*
+ * client_metadata_t
+ */
+struct client_metadata_t {
+  using kv_map_t = std::map<std::string,std::string>;
+  using iterator = kv_map_t::const_iterator;
+
+  kv_map_t kv_map;
+
+  client_metadata_t() {}
+  client_metadata_t(const client_metadata_t& other) :
+    kv_map(other.kv_map) {}
+  client_metadata_t(client_metadata_t&& other) :
+    kv_map(std::move(other.kv_map)) {}
+  client_metadata_t(kv_map_t&& kv) :
+    kv_map(std::move(kv)) {}
+  client_metadata_t& operator=(const client_metadata_t& other) {
+    kv_map = other.kv_map;
+    return *this;
+  }
+
+  bool empty() const { return kv_map.empty(); }
+  iterator find(const std::string& key) const { return kv_map.find(key); }
+  iterator begin() const { return kv_map.begin(); }
+  iterator end() const { return kv_map.end(); }
+  std::string& operator[](const std::string& key) { return kv_map[key]; }
+  void merge(const client_metadata_t& other) {
+    kv_map.insert(other.kv_map.begin(), other.kv_map.end());
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& p);
+};
+WRITE_CLASS_ENCODER(client_metadata_t)
 
 /*
  * session_info_t
  */
-
 struct session_info_t {
   entity_inst_t inst;
   std::map<ceph_tid_t,inodeno_t> completed_requests;
   interval_set<inodeno_t> prealloc_inos;   // preallocated, ready to use.
   interval_set<inodeno_t> used_inos;       // journaling use
-  std::map<std::string, std::string> client_metadata;
+  client_metadata_t client_metadata;
   std::set<ceph_tid_t> completed_flushes;
   EntityName auth_name;
 

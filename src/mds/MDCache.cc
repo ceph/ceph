@@ -4052,12 +4052,13 @@ void MDCache::rejoin_send_rejoins()
       for (auto q = p->second.second.begin(); q != p->second.second.end(); ++q)
 	client_exports[q->first].insert(target);
     }
-    for (map<client_t, set<mds_rank_t> >::iterator p = client_exports.begin();
-	 p != client_exports.end();
-	 ++p) {
-      entity_inst_t inst = mds->sessionmap.get_inst(entity_name_t::CLIENT(p->first.v));
-      for (set<mds_rank_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
-	rejoins[*q]->client_map[p->first] = inst;
+    for (auto& p : client_exports) {
+      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p.first.v));
+      for (auto& q : p.second) {
+	auto rejoin =  rejoins[q];
+	rejoin->client_map[p.first] = session->info.inst;
+	rejoin->client_metadata_map[p.first] = session->info.client_metadata;
+      }
     }
   }
   
@@ -4428,6 +4429,8 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
     // check cap exports.
     rejoin_client_map.insert(weak->client_map.begin(), weak->client_map.end());
+    rejoin_client_metadata_map.insert(weak->client_metadata_map.begin(),
+				      weak->client_metadata_map.end());
 
     for (auto p = weak->cap_exports.begin(); p != weak->cap_exports.end(); ++p) {
       CInode *in = get_inode(p->first);
@@ -5453,10 +5456,14 @@ bool MDCache::process_imported_caps()
 	rejoin_session_map.empty()) {
       C_MDC_RejoinSessionsOpened *finish = new C_MDC_RejoinSessionsOpened(this);
       version_t pv = mds->server->prepare_force_open_sessions(rejoin_client_map,
+							      rejoin_client_metadata_map,
 							      finish->session_map);
-      mds->mdlog->start_submit_entry(new ESessions(pv, rejoin_client_map), finish);
+      ESessions *le = new ESessions(pv, std::move(rejoin_client_map),
+				    std::move(rejoin_client_metadata_map));
+      mds->mdlog->start_submit_entry(le, finish);
       mds->mdlog->flush();
       rejoin_client_map.clear();
+      rejoin_client_metadata_map.clear();
       return true;
     }
 
