@@ -216,6 +216,8 @@ public:
 
   void prepare_new_fingerprint(MonitorDBStore::TransactionRef t);
 
+  std::vector<DaemonHealthMetric> get_health_metrics();
+
   // -- elector --
 private:
   Paxos *paxos;

@@ -5439,7 +5439,34 @@ void Monitor::tick()
     paxos->trigger_propose();
   }
 
+  mgr_client.update_daemon_health(get_health_metrics());
   new_tick();
+}
+
+vector<DaemonHealthMetric> Monitor::get_health_metrics() 
+{
+  vector<DaemonHealthMetric> metrics;
+
+  utime_t oldest_secs;
+  const utime_t now = ceph_clock_now();
+  auto too_old = now;
+  too_old -= g_conf->get_val<double>("mon_op_complaint_time");
+  int slow = 0;
+
+  auto count_slow_ops = [&](TrackedOp& op) {
+    if (op.get_initiated() < too_old) {
+      slow++;
+      return true;
+    } else {
+      return false;
+    }
+  };
+  if (op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops)) {
+    metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
+  } else {
+    metrics.emplace_back(daemon_metric::SLOW_OPS, 0, 0);
+  }
+  return metrics;
 }
 
 void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)
