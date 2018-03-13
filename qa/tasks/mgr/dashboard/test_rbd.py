@@ -41,6 +41,7 @@ class RbdTest(DashboardTestCase):
         self.assertEqual(img1['obj_size'], 4194304)
         self.assertEqual(img1['features_name'],
                          ['deep-flatten', 'exclusive-lock', 'fast-diff', 'layering', 'object-map'])
+        self.assertIn('id', img1)
 
         img2 = data['value'][1]
         self.assertEqual(img2['name'], 'img2')
@@ -49,6 +50,7 @@ class RbdTest(DashboardTestCase):
         self.assertEqual(img2['obj_size'], 4194304)
         self.assertEqual(img2['features_name'],
                          ['deep-flatten', 'exclusive-lock', 'fast-diff', 'layering', 'object-map'])
+        self.assertIn('id', img2)
 
     @authenticate
     def test_create(self):
