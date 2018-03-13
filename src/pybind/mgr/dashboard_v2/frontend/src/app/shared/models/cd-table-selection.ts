@@ -18,6 +18,10 @@ export class CdTableSelection {
     this.hasMultiSelection = this.selected.length > 1;
   }
 
+  /**
+   * Get the first selected row.
+   * @return {any | null}
+   */
   first() {
     return this.hasSelection ? this.selected[0] : null;
   }
