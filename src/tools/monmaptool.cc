@@ -157,7 +157,7 @@ bool handle_features(list<feature_op_t>& lst, MonMap &m)
         target.unset_feature(f.feature);
       }
     } else {
-      cerr << "unknow feature operation type '" << f.op << "'" << std::endl; 
+      cerr << "unknown feature operation type '" << f.op << "'" << std::endl;
     }
   }
   return modified;
