@@ -20,7 +20,7 @@
 #include "json_spirit/json_spirit_writer.h"
 
 #include "mgr/mgr_commands.h"
-#include "mgr/OSDHealthMetricCollector.h"
+#include "mgr/DaemonHealthMetricCollector.h"
 #include "mon/MonCommand.h"
 
 #include "messages/MMgrOpen.h"
@@ -524,7 +524,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
     }
     if (m->get_connection()->peer_is_osd()) {
       // only OSD sends health_checks to me now
-      daemon->osd_health_metrics = std::move(m->osd_health_metrics);
+      daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
     }
   }
 
@@ -1701,13 +1701,13 @@ void DaemonServer::send_report()
     });
 
   auto osds = daemon_state.get_by_service("osd");
-  map<osd_metric, unique_ptr<OSDHealthMetricCollector>> accumulated;
+  map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
   for (const auto& osd : osds) {
     Mutex::Locker l(osd.second->lock);
-    for (const auto& metric : osd.second->osd_health_metrics) {
+    for (const auto& metric : osd.second->daemon_health_metrics) {
       auto acc = accumulated.find(metric.get_type());
       if (acc == accumulated.end()) {
-	auto collector = OSDHealthMetricCollector::create(metric.get_type());
+	auto collector = DaemonHealthMetricCollector::create(metric.get_type());
 	if (!collector) {
 	  derr << __func__ << " " << osd.first << "." << osd.second
 	       << " sent me an unknown health metric: "
