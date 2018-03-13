@@ -522,8 +522,8 @@ bool DaemonServer::handle_report(MMgrReport *m)
     } else if (m->daemon_status) {
       derr << "got status from non-daemon " << key << dendl;
     }
-    if (m->get_connection()->peer_is_osd()) {
-      // only OSD sends health_checks to me now
+    if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
+      // only OSD and MON send health_checks to me now
       daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
     }
   }
@@ -1700,24 +1700,26 @@ void DaemonServer::send_report()
 	});
     });
 
-  auto osds = daemon_state.get_by_service("osd");
   map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
-  for (const auto& osd : osds) {
-    Mutex::Locker l(osd.second->lock);
-    for (const auto& metric : osd.second->daemon_health_metrics) {
-      auto acc = accumulated.find(metric.get_type());
-      if (acc == accumulated.end()) {
-	auto collector = DaemonHealthMetricCollector::create(metric.get_type());
-	if (!collector) {
-	  derr << __func__ << " " << osd.first << "." << osd.second
-	       << " sent me an unknown health metric: "
-	       << static_cast<uint8_t>(metric.get_type()) << dendl;
-	  continue;
-	}
-	tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
-						    std::move(collector));
+  for (auto sercive : {"osd", "mon"} ) {
+    auto daemons = daemon_state.get_by_service(sercive);
+    for (const auto& daemon : daemons) {
+      Mutex::Locker l(daemon.second->lock);
+      for (const auto& metric : daemon.second->daemon_health_metrics) {
+        auto acc = accumulated.find(metric.get_type());
+        if (acc == accumulated.end()) {
+          auto collector = DaemonHealthMetricCollector::create(metric.get_type());
+          if (!collector) {
+            derr << __func__ << " " << daemon.first << "." << daemon.second
+              << " sent me an unknown health metric: "
+              << static_cast<uint8_t>(metric.get_type()) << dendl;
+            continue;
+          }
+          tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
+              std::move(collector));
+        }
+        acc->second->update(daemon.first, metric);
       }
-      acc->second->update(osd.first, metric);
     }
   }
   for (const auto& acc : accumulated) {
