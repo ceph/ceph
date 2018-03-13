@@ -25,6 +25,7 @@
 
 class MMgrMap;
 class MMgrConfigure;
+class MMgrClose;
 class Messenger;
 class MCommandReply;
 class MPGStats;
@@ -57,6 +58,7 @@ protected:
   unique_ptr<MgrSessionState> session;
 
   Mutex lock = {"MgrClient::lock"};
+  Cond shutdown_cond;
 
   uint32_t stats_period = 0;
   uint32_t stats_threshold = 0;
@@ -101,6 +103,7 @@ public:
 
   bool handle_mgr_map(MMgrMap *m);
   bool handle_mgr_configure(MMgrConfigure *m);
+  bool handle_mgr_close(MMgrClose *m);
   bool handle_command_reply(MCommandReply *m);
 
   void send_pgstats();

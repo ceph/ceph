@@ -20,6 +20,7 @@
 #include "messages/MMgrMap.h"
 #include "messages/MMgrReport.h"
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
@@ -48,6 +49,7 @@ void MgrClient::init()
 void MgrClient::shutdown()
 {
   Mutex::Locker l(lock);
+  ldout(cct, 10) << dendl;
 
   if (connect_retry_callback) {
     timer.cancel_event(connect_retry_callback);
@@ -57,6 +59,20 @@ void MgrClient::shutdown()
   // forget about in-flight commands if we are prematurely shut down
   // (e.g., by control-C)
   command_table.clear();
+  if (service_daemon &&
+      session &&
+      session->con &&
+      HAVE_FEATURE(session->con->get_features(), SERVER_MIMIC)) {
+    ldout(cct, 10) << "closing mgr session" << dendl;
+    MMgrClose *m = new MMgrClose();
+    m->daemon_name = daemon_name;
+    m->service_name = service_name;
+    session->con->send_message(m);
+    utime_t timeout;
+    timeout.set_from_double(cct->_conf->get_val<double>(
+			      "mgr_client_service_daemon_unregister_timeout"));
+    shutdown_cond.WaitInterval(lock, timeout);
+  }
 
   timer.shutdown();
   if (session) {
@@ -74,6 +90,8 @@ bool MgrClient::ms_dispatch(Message *m)
     return handle_mgr_map(static_cast<MMgrMap*>(m));
   case MSG_MGR_CONFIGURE:
     return handle_mgr_configure(static_cast<MMgrConfigure*>(m));
+  case MSG_MGR_CLOSE:
+    return handle_mgr_close(static_cast<MMgrClose*>(m));
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_MGR) {
       handle_command_reply(static_cast<MCommandReply*>(m));
@@ -376,6 +394,13 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
   }
 
   m->put();
+  return true;
+}
+
+bool MgrClient::handle_mgr_close(MMgrClose *m)
+{
+  service_daemon = false;
+  shutdown_cond.Signal();
   return true;
 }
 
