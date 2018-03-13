@@ -4985,7 +4985,7 @@ void OSD::tick_without_osd_lock()
     }
   }
 
-  mgrc.update_osd_health(get_health_metrics());
+  mgrc.update_daemon_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
@@ -7065,9 +7065,9 @@ MPGStats* OSD::collect_pg_stats()
   return m;
 }
 
-vector<OSDHealthMetric> OSD::get_health_metrics()
+vector<DaemonHealthMetric> OSD::get_health_metrics()
 {
-  vector<OSDHealthMetric> metrics;
+  vector<DaemonHealthMetric> metrics;
   {
     utime_t oldest_secs;
     const utime_t now = ceph_clock_now();
@@ -7083,10 +7083,10 @@ vector<OSDHealthMetric> OSD::get_health_metrics()
       }
     };
     if (op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops)) {
-      metrics.emplace_back(osd_metric::SLOW_OPS, slow, oldest_secs);
+      metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
     } else {
       // no news is not good news.
-      metrics.emplace_back(osd_metric::SLOW_OPS, 0, 0);
+      metrics.emplace_back(daemon_metric::SLOW_OPS, 0, 0);
     }
   }
   with_unique_lock(pending_creates_lock, [&]() {
@@ -7096,7 +7096,7 @@ vector<OSDHealthMetric> OSD::get_health_metrics()
 	  n_primaries++;
 	}
       }
-      metrics.emplace_back(osd_metric::PENDING_CREATING_PGS, n_primaries);
+      metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
     });
   return metrics;
 }
