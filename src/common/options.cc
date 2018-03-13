@@ -4819,6 +4819,14 @@ std::vector<Option> get_rgw_options() {
     .set_default(100)
     .set_description("Max number of ACL grants in a single request"),
 
+    Option("rgw_rados_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("true if LTTng-UST tracepoints should be enabled"),
+
+    Option("rgw_op_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("true if LTTng-UST tracepoints should be enabled"),
+
     Option("rgw_max_chunk_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_M)
     .set_description("Set RGW max chunk size")

@@ -75,6 +75,16 @@ using namespace librados;
 
 #include "compressor/Compressor.h"
 
+#ifdef WITH_LTTNG
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#include "tracing/rgw_rados.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
+#else
+#define tracepoint(...)
+#endif
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -6904,6 +6914,16 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   RGWRados *store = target->get_store();
 
   ObjectWriteOperation op;
+#ifdef WITH_LTTNG
+  const struct req_state* s =  get_req_state();
+  string req_id;
+  if (!s) {
+    // fake req_id
+    req_id = store->unique_id(store->get_new_req_id());
+  } else {
+    req_id = s->req_id;
+  }
+#endif
 
   RGWObjState *state;
   int r = target->get_state(&state, false, assume_noent);
@@ -7026,12 +7046,16 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   }
 
   if (!index_op->is_prepared()) {
+    tracepoint(rgw_rados, prepare_enter, req_id.c_str());
     r = index_op->prepare(CLS_RGW_OP_ADD, &state->write_tag);
+    tracepoint(rgw_rados, prepare_exit, req_id.c_str());
     if (r < 0)
       return r;
   }
 
+  tracepoint(rgw_rados, operate_enter, req_id.c_str());
   r = ref.ioctx.operate(ref.oid, &op);
+  tracepoint(rgw_rados, operate_exit, req_id.c_str());
   if (r < 0) { /* we can expect to get -ECANCELED if object was replaced under,
                 or -ENOENT if was removed, or -EEXIST if it did not exist
                 before and now it does */
@@ -7050,9 +7074,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     ldout(store->ctx(), 0) << "ERROR: complete_atomic_modification returned r=" << r << dendl;
   }
 
+  tracepoint(rgw_rados, complete_enter, req_id.c_str());
   r = index_op->complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type, &acl_bl,
                         meta.category, meta.remove_objs, meta.user_data);
+  tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
 

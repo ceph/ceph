@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/safe_io.h"
+#include "common/TracepointProvider.h"
 #include "include/compat.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
@@ -46,6 +47,12 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+namespace {
+TracepointProvider::Traits rgw_op_tracepoint_traits("librgw_op_tp.so",
+                                                 "rgw_op_tracing");
+TracepointProvider::Traits rgw_rados_tracepoint_traits("librgw_rados_tp.so",
+                                                 "rgw_rados_tracing");
+}
 
 static sig_t sighandler_alrm;
 
@@ -277,6 +284,9 @@ int main(int argc, const char **argv)
 
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
+
+  TracepointProvider::initialize<rgw_rados_tracepoint_traits>(g_ceph_context);
+  TracepointProvider::initialize<rgw_op_tracepoint_traits>(g_ceph_context);
 
   int r = rgw_tools_init(g_ceph_context);
   if (r < 0) {
