@@ -250,7 +250,7 @@ public:
     }
     if (head.op == CEPH_MDS_OP_SETFILELOCK ||
 	head.op == CEPH_MDS_OP_GETFILELOCK) {
-      out << "rule " << (int)head.args.filelock_change.rule
+      out << " rule " << (int)head.args.filelock_change.rule
 	  << ", type " << (int)head.args.filelock_change.type
 	  << ", owner " << head.args.filelock_change.owner
 	  << ", pid " << head.args.filelock_change.pid
