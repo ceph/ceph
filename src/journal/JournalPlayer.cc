@@ -502,7 +502,7 @@ void JournalPlayer::prune_tag(uint64_t tag_tid) {
 
   // avoid watch delay when pruning stale tags from journal objects
   if (pruned) {
-    ldout(m_cct, 15) << __func__ << ": reseting refetch state to immediate"
+    ldout(m_cct, 15) << __func__ << ": resetting refetch state to immediate"
                      << dendl;
     for (auto &player_pair : m_object_players) {
       ObjectPlayerPtr object_player(player_pair.second);

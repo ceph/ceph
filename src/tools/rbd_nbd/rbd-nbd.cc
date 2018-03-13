@@ -448,7 +448,7 @@ std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
     os << " TRIM ";
     break;
   default:
-    os << " UNKNOW(" << ctx.command << ") ";
+    os << " UNKNOWN(" << ctx.command << ") ";
     break;
   }
 

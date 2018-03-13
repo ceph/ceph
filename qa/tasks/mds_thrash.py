@@ -230,7 +230,7 @@ class MDSThrasher(Greenlet):
             self.do_thrash()
         except Exception as e:
             # Log exceptions here so we get the full backtrace (gevent loses them).
-            # Also allow succesful completion as gevent exception handling is a broken mess:
+            # Also allow successful completion as gevent exception handling is a broken mess:
             #
             # 2017-02-03T14:34:01.259 CRITICAL:root:  File "gevent.libev.corecext.pyx", line 367, in gevent.libev.corecext.loop.handle_error (src/gevent/libev/gevent.corecext.c:5051)
             #   File "/home/teuthworker/src/git.ceph.com_git_teuthology_master/virtualenv/local/lib/python2.7/site-packages/gevent/hub.py", line 558, in handle_error

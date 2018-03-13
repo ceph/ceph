@@ -96,7 +96,7 @@ device.  You can dump the contents of the label with::
 
 The main device will have a lot of metadata, including information
 that used to be stored in small files in the OSD data directory.  The
-auxilliary devices (db and wal) will only have the minimum required
+auxiliary devices (db and wal) will only have the minimum required
 fields (OSD UUID, size, device type, birth time).
 
 OSD directory priming
