@@ -2206,21 +2206,19 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
   // Dump sessions, decorated with recovery/replay status
   f->open_array_section("sessions");
   const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
-  for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
-       p != session_map.end();
-       ++p)  {
-    if (!p->first.is_client()) {
+  for (auto& p : session_map) {
+    if (!p.first.is_client()) {
       continue;
     }
 
-    Session *s = p->second;
+    Session *s = p.second;
 
     if (!filter.match(*s, std::bind(&Server::waiting_for_reconnect, server, std::placeholders::_1))) {
       continue;
     }
 
     f->open_object_section("session");
-    f->dump_int("id", p->first.num());
+    f->dump_int("id", p.first.num());
 
     f->dump_int("num_leases", s->leases.size());
     f->dump_int("num_caps", s->caps.size());
@@ -2228,12 +2226,11 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
     f->dump_string("state", s->get_state_name());
     f->dump_int("replay_requests", is_clientreplay() ? s->get_request_count() : 0);
     f->dump_unsigned("completed_requests", s->get_num_completed_requests());
-    f->dump_bool("reconnecting", server->waiting_for_reconnect(p->first.num()));
+    f->dump_bool("reconnecting", server->waiting_for_reconnect(p.first.num()));
     f->dump_stream("inst") << s->info.inst;
     f->open_object_section("client_metadata");
-    for (map<string, string>::const_iterator i = s->info.client_metadata.begin();
-         i != s->info.client_metadata.end(); ++i) {
-      f->dump_string(i->first.c_str(), i->second);
+    for (auto& q : s->info.client_metadata) {
+      f->dump_string(q.first.c_str(), q.second);
     }
     f->close_section(); // client_metadata
     f->close_section(); //session

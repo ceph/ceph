@@ -338,9 +338,6 @@ void Server::handle_client_session(MClientSession *m)
 	session->is_killing() ||
 	terminating_sessions) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
-      // set client metadata for session opened by prepare_force_open_sessions
-      if (!m->client_meta.empty())
-	session->set_client_metadata(m->client_meta);
       m->put();
       return;
     }
@@ -365,43 +362,48 @@ void Server::handle_client_session(MClientSession *m)
       return;
     }
 
-    session->set_client_metadata(m->client_meta);
-    dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN "
-      << session->info.client_metadata.size() << " metadata entries:" << dendl;
-    for (map<string, string>::iterator i = session->info.client_metadata.begin();
-        i != session->info.client_metadata.end(); ++i) {
-      dout(20) << "  " << i->first << ": " << i->second << dendl;
-    }
-
-    // Special case for the 'root' metadata path; validate that the claimed
-    // root is actually within the caps of the session
-    if (session->info.client_metadata.count("root")) {
-      const auto claimed_root = session->info.client_metadata.at("root");
-      // claimed_root has a leading "/" which we strip before passing
-      // into caps check
-      if (claimed_root.empty() || claimed_root[0] != '/' ||
-          !session->auth_caps.path_capable(claimed_root.substr(1))) {
-        derr << __func__ << " forbidden path claimed as mount root: "
-             << claimed_root << " by " << m->get_source() << dendl;
-        // Tell the client we're rejecting their open
-        mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
-        mds->clog->warn() << "client session with invalid root '" <<
-          claimed_root << "' denied (" << session->info.inst << ")";
-        session->clear();
-        // Drop out; don't record this session in SessionMap or journal it.
-        break;
+    {
+      client_metadata_t client_metadata(std::move(m->client_meta));
+      dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN metadata entries:" << dendl;
+      for (auto& p : client_metadata) {
+	dout(20) << "  " << p.first << ": " << p.second << dendl;
       }
+
+      client_metadata_t::iterator it;
+      // Special case for the 'root' metadata path; validate that the claimed
+      // root is actually within the caps of the session
+      it = client_metadata.find("root");
+      if (it != client_metadata.end()) {
+	auto claimed_root = it->second;
+	// claimed_root has a leading "/" which we strip before passing
+	// into caps check
+	if (claimed_root.empty() || claimed_root[0] != '/' ||
+	    !session->auth_caps.path_capable(claimed_root.substr(1))) {
+	  derr << __func__ << " forbidden path claimed as mount root: "
+	       << claimed_root << " by " << m->get_source() << dendl;
+	  // Tell the client we're rejecting their open
+	  mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
+	  mds->clog->warn() << "client session with invalid root '" << claimed_root
+			    << "' denied (" << session->info.inst << ")";
+	  session->clear();
+	  // Drop out; don't record this session in SessionMap or journal it.
+	  break;
+	}
+      }
+
+      session->set_client_metadata(client_metadata);
+
+      if (session->is_closed())
+	mds->sessionmap.add_session(session);
+
+      pv = mds->sessionmap.mark_projected(session);
+      sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      mds->sessionmap.touch_session(session);
+      mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv,
+					     std::move(client_metadata)),
+				new C_MDS_session_finish(this, session, sseq, true, pv));
+      mdlog->flush();
     }
-
-    if (session->is_closed())
-      mds->sessionmap.add_session(session);
-
-    pv = mds->sessionmap.mark_projected(session);
-    sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
-    mds->sessionmap.touch_session(session);
-    mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, m->client_meta),
-			      new C_MDS_session_finish(this, session, sseq, true, pv));
-    mdlog->flush();
     break;
 
   case CEPH_SESSION_REQUEST_RENEWCAPS:
@@ -590,6 +592,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
  *  - sessions learned from other MDSs during a cross-MDS rename
  */
 version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
+					      map<client_t,client_metadata_t>& cmm,
 					      map<client_t, pair<Session*,uint64_t> >& smap)
 {
   version_t pv = mds->sessionmap.get_projected();
@@ -599,11 +602,12 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	   << dendl;
 
   mds->objecter->with_osdmap(
-      [this, &cm](const OSDMap &osd_map) {
+      [this, &cm, &cmm](const OSDMap &osd_map) {
 	for (auto p = cm.begin(); p != cm.end(); ) {
 	  if (osd_map.is_blacklisted(p->second.addr)) {
 	    dout(10) << " ignoring blacklisted client." << p->first
 		     << " (" <<  p->second.addr << ")" << dendl;
+	    cmm.erase(p->first);
 	    cm.erase(p++);
 	  } else {
 	    ++p;
@@ -619,6 +623,9 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	session->is_closing() ||
 	session->is_killing()) {
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+      auto q = cmm.find(p->first);
+      if (q != cmm.end())
+	session->info.client_metadata.merge(q->second);
     } else {
       assert(session->is_open() ||
 	     session->is_opening() ||
@@ -7387,9 +7394,13 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
 	  
   // imported caps
   map<client_t,entity_inst_t> client_map;
+  map<client_t, client_metadata_t> client_metadata_map;
   decode(client_map, blp);
-  prepare_force_open_sessions(client_map, mdr->more()->imported_session_map);
+  decode(client_metadata_map, blp);
+  prepare_force_open_sessions(client_map, client_metadata_map,
+			      mdr->more()->imported_session_map);
   encode(client_map, *client_map_bl, mds->mdsmap->get_up_features());
+  encode(client_metadata_map, *client_map_bl);
 
   list<ScatterLock*> updated_scatterlocks;
   mdcache->migrator->decode_import_inode(srcdn, blp, srcdn->authority().first, mdr->ls,
@@ -8262,23 +8273,26 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   // export srci?
   if (srcdn->is_auth() && srcdnl->is_primary()) {
     // set export bounds for CInode::encode_export()
-    list<CDir*> bounds;
-    if (srcdnl->get_inode()->is_dir()) {
-      srcdnl->get_inode()->get_dirfrags(bounds);
-      for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
-	(*p)->state_set(CDir::STATE_EXPORTBOUND);
-    }
-
-    map<client_t,entity_inst_t> exported_client_map;
-    bufferlist inodebl;
-    mdcache->migrator->encode_export_inode(srcdnl->get_inode(), inodebl, 
-					   exported_client_map);
-
-    for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
-      (*p)->state_clear(CDir::STATE_EXPORTBOUND);
-
     if (reply) {
+      list<CDir*> bounds;
+      if (srcdnl->get_inode()->is_dir()) {
+	srcdnl->get_inode()->get_dirfrags(bounds);
+	for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
+	  (*p)->state_set(CDir::STATE_EXPORTBOUND);
+      }
+
+      map<client_t,entity_inst_t> exported_client_map;
+      map<client_t, client_metadata_t> exported_client_metadata_map;
+      bufferlist inodebl;
+      mdcache->migrator->encode_export_inode(srcdnl->get_inode(), inodebl,
+					     exported_client_map,
+					     exported_client_metadata_map);
+
+      for (list<CDir*>::iterator p = bounds.begin(); p != bounds.end(); ++p)
+	(*p)->state_clear(CDir::STATE_EXPORTBOUND);
+
       encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
+      encode(exported_client_metadata_map, reply->inode_export);
       reply->inode_export.claim_append(inodebl);
       reply->inode_export_v = srcdnl->get_inode()->inode.version;
     }

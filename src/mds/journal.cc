@@ -1721,7 +1721,7 @@ void ESession::replay(MDSRank *mds)
 
 void ESession::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 5, bl);
   encode(stamp, bl);
   encode(client_inst, bl, features);
   encode(open, bl);
@@ -1734,7 +1734,7 @@ void ESession::encode(bufferlist &bl, uint64_t features) const
 
 void ESession::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
   if (struct_v >= 2)
     decode(stamp, bl);
   decode(client_inst, bl);
@@ -1742,7 +1742,9 @@ void ESession::decode(bufferlist::const_iterator &bl)
   decode(cmapv, bl);
   decode(inos, bl);
   decode(inotablev, bl);
-  if (struct_v >= 4) {
+  if (struct_v == 4) {
+    decode(client_metadata.kv_map, bl);
+  } else if (struct_v >= 5) {
     decode(client_metadata, bl);
   }
   DECODE_FINISH(bl);
@@ -1756,9 +1758,8 @@ void ESession::dump(Formatter *f) const
   f->dump_stream("inos") << inos;
   f->dump_int("inotable version", inotablev);
   f->open_object_section("client_metadata");
-  for (map<string, string>::const_iterator i = client_metadata.begin();
-      i != client_metadata.end(); ++i) {
-    f->dump_string(i->first.c_str(), i->second);
+  for (auto& p : client_metadata) {
+    f->dump_string(p.first.c_str(), p.second);
   }
   f->close_section();  // client_metadata
 }
@@ -1773,10 +1774,11 @@ void ESession::generate_test_instances(list<ESession*>& ls)
 
 void ESessions::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(client_map, bl, features);
   encode(cmapv, bl);
   encode(stamp, bl);
+  encode(client_metadata_map, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1791,11 +1793,12 @@ void ESessions::decode_old(bufferlist::const_iterator &bl)
 
 void ESessions::decode_new(bufferlist::const_iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   decode(client_map, bl);
   decode(cmapv, bl);
-  if (!bl.end())
-    decode(stamp, bl);
+  decode(stamp, bl);
+  if (struct_v >= 2)
+    decode(client_metadata_map, bl);
   DECODE_FINISH(bl);
 }
 
@@ -1832,7 +1835,7 @@ void ESessions::replay(MDSRank *mds)
   } else {
     dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.get_version()
 	     << " < " << cmapv << dendl;
-    mds->sessionmap.replay_open_sessions(client_map);
+    mds->sessionmap.replay_open_sessions(client_map, client_metadata_map);
     assert(mds->sessionmap.get_version() == cmapv);
   }
   update_segment();
@@ -2105,10 +2108,14 @@ void EUpdate::replay(MDSRank *mds)
 	       << " < " << cmapv << dendl;
       // open client sessions?
       map<client_t,entity_inst_t> cm;
+      map<client_t,client_metadata_t> cmm;
       auto blp = client_map.cbegin();
       using ceph::decode;
       decode(cm, blp);
-      mds->sessionmap.replay_open_sessions(cm);
+      if (!blp.end())
+	decode(cmm, blp);
+      mds->sessionmap.replay_open_sessions(cm, cmm);
+
       assert(mds->sessionmap.get_version() == cmapv);
     }
   }
@@ -2944,12 +2951,15 @@ void EImportStart::replay(MDSRank *mds)
     dout(10) << "EImportStart.replay sessionmap " << mds->sessionmap.get_version() 
 	     << " < " << cmapv << dendl;
     map<client_t,entity_inst_t> cm;
+    map<client_t,client_metadata_t> cmm;
     auto blp = client_map.cbegin();
     using ceph::decode;
     decode(cm, blp);
-    mds->sessionmap.replay_open_sessions(cm);
-    if (mds->sessionmap.get_version() != cmapv)
-    {
+    if (!blp.end())
+      decode(cmm, blp);
+    mds->sessionmap.replay_open_sessions(cm, cmm);
+
+    if (mds->sessionmap.get_version() != cmapv) {
       derr << "sessionmap version " << mds->sessionmap.get_version()
            << " != cmapv " << cmapv << dendl;
       mds->clog->error() << "failure replaying journal (EImportStart)";
