@@ -4,8 +4,10 @@ from __future__ import absolute_import
 import time
 import collections
 from collections import defaultdict
+import json
 
-from .. import mgr
+from mgr_module import CommandResult
+from .. import logger, mgr
 
 
 class CephService(object):
@@ -101,3 +103,42 @@ class CephService(object):
             pool['stats'] = s
             pools_w_stats.append(pool)
         return pools_w_stats
+
+    @classmethod
+    def send_command(cls, srv_type, prefix, srv_spec='', **kwargs):
+        """
+        :type prefix: str
+        :param srv_type: mon |
+        :param kwargs: will be added to argdict
+        :param srv_spec: typically empty. or something like "<fs_id>:0"
+
+        :raises PermissionError: See rados.make_ex
+        :raises ObjectNotFound: See rados.make_ex
+        :raises IOError: See rados.make_ex
+        :raises NoSpace: See rados.make_ex
+        :raises ObjectExists: See rados.make_ex
+        :raises ObjectBusy: See rados.make_ex
+        :raises NoData: See rados.make_ex
+        :raises InterruptedOrTimeoutError: See rados.make_ex
+        :raises TimedOut: See rados.make_ex
+        :raises ValueError: return code != 0
+        """
+        argdict = {
+            "prefix": prefix,
+            "format": "json",
+        }
+        argdict.update({k: v for k, v in kwargs.items() if v})
+
+        result = CommandResult("")
+        mgr.send_command(result, srv_type, srv_spec, json.dumps(argdict), "")
+        r, outb, outs = result.wait()
+        if r != 0:
+            msg = "send_command '{}' failed. (r={}, outs=\"{}\", kwargs={})".format(prefix, r, outs,
+                                                                                    kwargs)
+            logger.error(msg)
+            raise ValueError(msg)
+        else:
+            try:
+                return json.loads(outb)
+            except Exception:  # pylint: disable=broad-except
+                return outb
