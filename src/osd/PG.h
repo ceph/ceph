@@ -2341,7 +2341,8 @@ protected:
 	boost::statechart::custom_reaction< RemoteBackfillReserved >,
 	boost::statechart::custom_reaction< RejectRemoteReservation >,
 	boost::statechart::custom_reaction< RemoteReservationRejected >,
-	boost::statechart::custom_reaction< RemoteReservationCanceled >
+	boost::statechart::custom_reaction< RemoteReservationCanceled >,
+	boost::statechart::custom_reaction< RecoveryDone >
 	> reactions;
       explicit RepWaitBackfillReserved(my_context ctx);
       void exit();
@@ -2349,6 +2350,7 @@ protected:
       boost::statechart::result react(const RejectRemoteReservation &evt);
       boost::statechart::result react(const RemoteReservationRejected &evt);
       boost::statechart::result react(const RemoteReservationCanceled &evt);
+      boost::statechart::result react(const RecoveryDone&);
     };
 
     struct RepWaitRecoveryReserved : boost::statechart::state< RepWaitRecoveryReserved, ReplicaActive >, NamedState {
