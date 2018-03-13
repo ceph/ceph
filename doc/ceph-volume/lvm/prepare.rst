@@ -235,6 +235,33 @@ work for both bluestore and filestore OSDs::
     ceph-volume lvm prepare --bluestore --data vg/lv --crush-device-class foo
 
 
+.. _ceph-volume-lvm-multipath:
+
+``multipath`` support
+---------------------
+Devices that come from ``multipath`` are not supported as-is. The tool will
+refuse to consume a raw multipath device and will report a message like::
+
+    -->  RuntimeError: Cannot use device (/dev/mapper/<name>). A vg/lv path or an existing device is needed
+
+The reason for not supporting multipath is that depending on the type of the
+multipath setup, if using an active/passive array as the underlying physical
+devices, filters are required in ``lvm.conf`` to exclude the disks that are part of
+those underlying devices.
+
+It is unfeasible for ceph-volume to understand what type of configuration is
+needed for LVM to be able to work in various different multipath scenarios. The
+functionality to create the LV for you is merely a (naive) convenience,
+anything that involves different settings or configuration must be provided by
+a config management system which can then provide VGs and LVs for ceph-volume
+to consume.
+
+This situation will only arise when trying to use the ceph-volume functionality
+that creates a volume group and logical volume from a device. If a multipath
+device is already a logical volume it *should* work, given that the LVM
+configuration is done correctly to avoid issues.
+
+
 Storing metadata
 ----------------
 The following tags will get applied as part of the preparation process
