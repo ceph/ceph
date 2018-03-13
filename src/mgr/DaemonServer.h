@@ -33,6 +33,7 @@
 
 class MMgrReport;
 class MMgrOpen;
+class MMgrClose;
 class MMonMgrReport;
 class MCommand;
 struct MonCommand;
@@ -132,6 +133,7 @@ public:
       CryptoKey& session_key) override;
 
   bool handle_open(MMgrOpen *m);
+  bool handle_close(MMgrClose *m);
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
   void send_report();
