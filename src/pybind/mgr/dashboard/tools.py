@@ -612,7 +612,14 @@ class NotificationQueue(threading.Thread):
         logger.debug("notification queue stopped")
 
     @classmethod
-    def register(cls, func, n_types=None):
+    def _registered_handler(cls, func, n_types):
+        for _, reg_func in cls._listeners[n_types]:
+            if reg_func == func:
+                return True
+        return False
+
+    @classmethod
+    def register(cls, func, n_types=None, priority=1):
         """Registers function to listen for notifications
 
         If the second parameter `n_types` is omitted, the function in `func`
@@ -620,17 +627,21 @@ class NotificationQueue(threading.Thread):
 
         Args:
             func (function): python function ex: def foo(val)
-            n_types (str|list): the single type to listen, or a list of notification types
+            n_types (str|list): the single type to listen, or a list of types
+            priority (int): the priority level (1=max, +inf=min)
         """
         with cls._lock:
             if not n_types:
-                cls._listeners[cls._ALL_TYPES_].add(func)
+                if not cls._registered_handler(func, cls._ALL_TYPES_):
+                    cls._listeners[cls._ALL_TYPES_].add((priority, func))
                 return
             if isinstance(n_types, str):
-                cls._listeners[n_types].add(func)
+                if not cls._registered_handler(func, n_types):
+                    cls._listeners[n_types].add((priority, func))
             elif isinstance(n_types, list):
                 for typ in n_types:
-                    cls._listeners[typ].add(func)
+                    if not cls._registered_handler(func, typ):
+                        cls._listeners[typ].add((priority, func))
             else:
                 raise Exception("n_types param is neither a string nor a list")
 
@@ -647,8 +658,9 @@ class NotificationQueue(threading.Thread):
             with cls._lock:
                 listeners = list(cls._listeners[notify_type])
                 listeners.extend(cls._listeners[cls._ALL_TYPES_])
+            listeners.sort(key=lambda lis: lis[0])
             for listener in listeners:
-                listener(notify_value)
+                listener[1](notify_value)
 
     def run(self):
         logger.debug("notification queue started")
