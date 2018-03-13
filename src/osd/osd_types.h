@@ -214,7 +214,7 @@ namespace std {
   template<> struct hash<osd_reqid_t> {
     size_t operator()(const osd_reqid_t &r) const { 
       static hash<uint64_t> H;
-      return H(r.name.num() ^ r.tid ^ r.inc);
+      return H(r.name.num() ^ r.inc) ^ r.tid;
     }
   };
 } // namespace std
