@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
-import { ReactiveFormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { AlertModule, ModalModule, PopoverModule, TooltipModule } from 'ngx-bootstrap';
@@ -9,6 +9,7 @@ import { PipesModule } from '../pipes/pipes.module';
 import {
   DeleteConfirmationComponent
 } from './delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeletionButtonComponent } from './deletion-button/deletion-button.component';
 import { HelperComponent } from './helper/helper.component';
 import { ModalComponent } from './modal/modal.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
@@ -19,6 +20,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
 @NgModule({
   imports: [
     CommonModule,
+    FormsModule,
+    ReactiveFormsModule,
     AlertModule.forRoot(),
     PopoverModule.forRoot(),
     TooltipModule.forRoot(),
@@ -34,7 +37,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     SubmitButtonComponent,
     UsageBarComponent,
     DeleteConfirmationComponent,
-    ModalComponent
+    ModalComponent,
+    DeletionButtonComponent
   ],
   providers: [],
   exports: [
@@ -47,7 +51,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
   ],
   entryComponents: [
     DeleteConfirmationComponent,
-    ModalComponent
+    ModalComponent,
+    DeletionButtonComponent
   ]
 })
 export class ComponentsModule { }
