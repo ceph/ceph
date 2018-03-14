@@ -1861,6 +1861,8 @@ class RGWRados
   librados::IoCtx control_pool_ctx;   // .rgw.control
   bool watch_initialized;
 
+  double inject_notify_timeout_probability = 0;
+
   friend class RGWWatcher;
 
   Mutex bucket_id_lock;

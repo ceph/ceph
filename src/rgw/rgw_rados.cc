@@ -57,6 +57,8 @@ using namespace librados;
 #include <map>
 #include "auth/Crypto.h" // get_random_bytes()
 
+#include "xxHash/xxhash.h"
+
 #include "rgw_log.h"
 
 #include "rgw_gc.h"
@@ -2641,11 +2643,36 @@ public:
 		     uint64_t cookie,
 		     uint64_t notifier_id,
 		     bufferlist& bl) {
+    static thread_local unsigned short seed[4];
+    static thread_local bool seeded = false;
+
+    if (unlikely(!seeded)) {
+      auto t = ceph::coarse_mono_clock::now();
+      auto h = XXH64(&t, sizeof(t), 0);
+      static_assert(sizeof(h) == sizeof(seed),
+                    "Please add cases for your machine's widths.");
+      *reinterpret_cast<uint64_t*>(&seed[0]) = h;
+      seeded = true;
+    }
+
+
     ldout(rados->ctx(), 10) << "RGWWatcher::handle_notify() "
 			    << " notify_id " << notify_id
 			    << " cookie " << cookie
 			    << " notifier " << notifier_id
 			    << " bl.length()=" << bl.length() << dendl;
+
+    if (unlikely(rados->inject_notify_timeout_probability == 1) ||
+	(rados->inject_notify_timeout_probability > 0 &&
+	 (rados->inject_notify_timeout_probability >
+	  erand48(seed)))) {
+      ldout(rados->ctx(), 0)
+	<< "RGWWatcher::handle_notify() dropping notification! "
+	<< "If this isn't what you want, set "
+	<< "rgw_inject_notify_timeout_probability to zero!" << dendl;
+      return;
+    }
+
     rados->watch_cb(notify_id, cookie, notifier_id, bl);
 
     bufferlist reply_bl; // empty reply payload
@@ -4061,6 +4088,16 @@ int RGWRados::init_complete()
 int RGWRados::initialize()
 {
   int ret;
+
+  inject_notify_timeout_probability = cct->_conf->rgw_inject_notify_timeout_probability;
+  if (inject_notify_timeout_probability < 0 ||
+      inject_notify_timeout_probability > 1) {
+    lderr(cct) << "ERROR: inject_notify_timeout_probability is a PROBABILITY. "
+               << "That means it must be between 0 and 1. You specified "
+               << inject_notify_timeout_probability << dendl;
+    return -EINVAL;
+  }
+
 
   ret = init_rados();
   if (ret < 0)
