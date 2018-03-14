@@ -10,6 +10,7 @@
 
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "include/utime.h"
 #include "tools/rbd_mirror/types.h"
 
 namespace ceph {
@@ -19,6 +20,8 @@ class Formatter;
 namespace rbd {
 namespace mirror {
 namespace image_map {
+
+extern const std::string UNMAPPED_INSTANCE_ID;
 
 struct Listener {
   virtual ~Listener() {
@@ -31,6 +34,11 @@ struct Listener {
   virtual void remove_image(const std::string &mirror_uuid,
                             const std::string &global_image_id,
                             const std::string &instance_id) = 0;
+};
+
+struct LookupInfo {
+  std::string instance_id = UNMAPPED_INSTANCE_ID;
+  utime_t mapped_time;
 };
 
 enum PolicyMetaType {

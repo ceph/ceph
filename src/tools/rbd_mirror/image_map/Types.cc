@@ -10,6 +10,8 @@ namespace rbd {
 namespace mirror {
 namespace image_map {
 
+const std::string UNMAPPED_INSTANCE_ID("");
+
 namespace {
 
 template <typename E>

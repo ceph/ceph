@@ -19,8 +19,6 @@ namespace image_map {
 
 using librbd::util::unique_lock_name;
 
-const std::string Policy::UNMAPPED_INSTANCE_ID("");
-
 Policy::Policy(librados::IoCtx &ioctx)
   : m_ioctx(ioctx),
     m_map_lock(unique_lock_name("rbd::mirror::image_map::Policy::m_map_lock", this)) {
@@ -40,7 +38,7 @@ void Policy::init(const std::map<std::string, cls::rbd::MirrorImageMap> &image_m
   }
 }
 
-Policy::LookupInfo Policy::lookup(const std::string &global_image_id) {
+LookupInfo Policy::lookup(const std::string &global_image_id) {
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
   RWLock::RLocker map_lock(m_map_lock);
@@ -337,7 +335,7 @@ bool Policy::actions_pending(const std::string &global_image_id, const RWLock &l
   return !it->second.actions.empty();
 }
 
-Policy::LookupInfo Policy::lookup(const std::string &global_image_id, const RWLock &lock) {
+LookupInfo Policy::lookup(const std::string &global_image_id, const RWLock &lock) {
   assert(m_map_lock.is_locked());
 
   LookupInfo info;

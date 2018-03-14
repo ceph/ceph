@@ -161,8 +161,8 @@ public:
 TEST_F(TestImagePolicy, NegativeLookup) {
   const std::string global_image_id = "global id 1";
 
-  Policy::LookupInfo info = m_policy->lookup(global_image_id);
-  ASSERT_TRUE(info.instance_id == Policy::UNMAPPED_INSTANCE_ID);
+  LookupInfo info = m_policy->lookup(global_image_id);
+  ASSERT_TRUE(info.instance_id == UNMAPPED_INSTANCE_ID);
 }
 
 TEST_F(TestImagePolicy, MapImage) {
@@ -170,8 +170,8 @@ TEST_F(TestImagePolicy, MapImage) {
 
   map_image(global_image_id);
 
-  Policy::LookupInfo info = m_policy->lookup(global_image_id);
-  ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  LookupInfo info = m_policy->lookup(global_image_id);
+  ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
 }
 
 TEST_F(TestImagePolicy, UnmapImage) {
@@ -180,8 +180,8 @@ TEST_F(TestImagePolicy, UnmapImage) {
   // map image
   map_image(global_image_id);
 
-  Policy::LookupInfo info = m_policy->lookup(global_image_id);
-  ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  LookupInfo info = m_policy->lookup(global_image_id);
+  ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
 
   reset_flags();
 
@@ -189,7 +189,7 @@ TEST_F(TestImagePolicy, UnmapImage) {
   unmap_image(global_image_id);
 
   info = m_policy->lookup(global_image_id);
-  ASSERT_TRUE(info.instance_id == Policy::UNMAPPED_INSTANCE_ID);
+  ASSERT_TRUE(info.instance_id == UNMAPPED_INSTANCE_ID);
 }
 
 TEST_F(TestImagePolicy, ShuffleImageAddInstance) {
@@ -201,8 +201,8 @@ TEST_F(TestImagePolicy, ShuffleImageAddInstance) {
     // map image
     map_image(global_image_id);
 
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
-    ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+    LookupInfo info = m_policy->lookup(global_image_id);
+    ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
   reset_flags();
@@ -213,8 +213,8 @@ TEST_F(TestImagePolicy, ShuffleImageAddInstance) {
   for (auto const &global_image_id : shuffle_global_image_ids) {
     shuffle_image(global_image_id);
 
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
-    ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+    LookupInfo info = m_policy->lookup(global_image_id);
+    ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 }
 
@@ -227,8 +227,8 @@ TEST_F(TestImagePolicy, ShuffleImageRemoveInstance) {
     // map image
     map_image(global_image_id);
 
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
-    ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+    LookupInfo info = m_policy->lookup(global_image_id);
+    ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
   reset_flags();
@@ -239,14 +239,14 @@ TEST_F(TestImagePolicy, ShuffleImageRemoveInstance) {
   for (auto const &global_image_id : shuffle_global_image_ids) {
     shuffle_image(global_image_id);
 
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
-    ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+    LookupInfo info = m_policy->lookup(global_image_id);
+    ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
   // record which of the images got migrated to the new instance
   std::set<std::string> remapped_global_image_ids;
   for (auto const &global_image_id: shuffle_global_image_ids) {
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
+    LookupInfo info = m_policy->lookup(global_image_id);
     if (info.instance_id == "9876") {
       remapped_global_image_ids.emplace(global_image_id);
     }
@@ -262,8 +262,8 @@ TEST_F(TestImagePolicy, ShuffleImageRemoveInstance) {
   for (auto const &global_image_id : shuffle_global_image_ids) {
     shuffle_image(global_image_id);
 
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
-    ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+    LookupInfo info = m_policy->lookup(global_image_id);
+    ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 }
 
@@ -287,8 +287,8 @@ TEST_F(TestImagePolicy, RetryMapUpdate) {
 
   ASSERT_TRUE(m_updated && m_acquired);
 
-  Policy::LookupInfo info = m_policy->lookup(global_image_id);
-  ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  LookupInfo info = m_policy->lookup(global_image_id);
+  ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
 }
 
 TEST_F(TestImagePolicy, MapFailureAndUnmap) {
@@ -339,8 +339,8 @@ TEST_F(TestImagePolicy, ReshuffleWithMapFailure) {
     // map image
     map_image(global_image_id);
 
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
-    ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+    LookupInfo info = m_policy->lookup(global_image_id);
+    ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
   std::set<std::string> shuffle_global_image_ids;
@@ -396,8 +396,8 @@ TEST_F(TestImagePolicy, ShuffleFailureAndRemove) {
     // map image
     map_image(global_image_id);
 
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
-    ASSERT_TRUE(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+    LookupInfo info = m_policy->lookup(global_image_id);
+    ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
   std::set<std::string> shuffle_global_image_ids;
@@ -459,8 +459,8 @@ TEST_F(TestImagePolicy, ShuffleFailureAndRemove) {
 
   ASSERT_TRUE(m_released && m_removed);
 
-  Policy::LookupInfo info = m_policy->lookup(global_image_id);
-  ASSERT_TRUE(info.instance_id == Policy::UNMAPPED_INSTANCE_ID);
+  LookupInfo info = m_policy->lookup(global_image_id);
+  ASSERT_TRUE(info.instance_id == UNMAPPED_INSTANCE_ID);
 }
 
 } // namespace image_map
