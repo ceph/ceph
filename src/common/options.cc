@@ -6248,6 +6248,22 @@ std::vector<Option> get_rgw_options() {
 			  "of RGW instances under heavy use. If you would like "
 			  "to turn off cache expiry, set this value to zero."),
 
+
+    Option("rgw_inject_notify_timeout_probability", Option::TYPE_FLOAT,
+	   Option::LEVEL_DEV)
+    .set_default(0)
+    .add_tag("fault injection")
+    .add_tag("testing")
+    .add_service("rgw")
+    .set_min_max(0.0, 1.0)
+    .set_description("Likelihood of ignoring a notify")
+    .set_long_description("This is the probability that the RGW cache will "
+			  "ignore a cache notify message. It exists to help "
+			  "with the development and testing of cache "
+			  "consistency and recovery improvements. Please "
+			  "do not set it in a production cluster, as it "
+			  "actively causes failures. Set this to a floating "
+			  "point value between 0 and 1."),
   });
 }
 
