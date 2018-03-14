@@ -1540,8 +1540,8 @@ void PrimaryLogPG::calc_trim_to()
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
       pg_log.get_log().approx_size() > target) {
-    size_t num_to_trim = MIN(pg_log.get_log().approx_size() - target,
-			     cct->_conf->osd_pg_log_trim_max);
+    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+				  cct->_conf->osd_pg_log_trim_max);
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
