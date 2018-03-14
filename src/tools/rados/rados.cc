@@ -52,6 +52,8 @@ using namespace libradosstriper;
 #include "PoolDump.h"
 #include "RadosImport.h"
 
+#include "osd/ECUtil.h"
+
 using namespace librados;
 using ceph::util::generate_random_number;
 
@@ -1348,6 +1350,10 @@ static void dump_errors(const err_t &err, Formatter &f, const char *name)
     f.dump_string("error", "ss_attr_missing");
   if (err.has_ss_attr_corrupted())
     f.dump_string("error", "ss_attr_corrupted");
+  if (err.has_hinfo_missing())
+    f.dump_string("error", "hinfo_missing");
+  if (err.has_hinfo_corrupted())
+    f.dump_string("error", "hinfo_corrupted");
   f.close_section();
 }
 
@@ -1389,11 +1395,23 @@ static void dump_shard(const shard_info_t& shard,
     decode(ss, bliter);  // Can't be corrupted
     f.dump_stream("snapset") << ss;
   }
+  if (!shard.has_hinfo_missing() && !shard.has_hinfo_corrupted() &&
+      inc.has_hinfo_inconsistency()) {
+    ECUtil::HashInfo hi;
+    bufferlist bl;
+    map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(ECUtil::get_hinfo_key());
+    assert(k != shard.attrs.end()); // Can't be missing
+    bufferlist::iterator bliter = k->second.begin();
+    decode(hi, bliter);  // Can't be corrupted
+    f.dump_stream("hashinfo") << hi;
+  }
   if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
      || inc.union_shards.has_oi_attr_missing()
      || inc.union_shards.has_oi_attr_corrupted()
      || inc.union_shards.has_ss_attr_missing()
-     || inc.union_shards.has_ss_attr_corrupted()) {
+     || inc.union_shards.has_ss_attr_corrupted()
+     || inc.union_shards.has_hinfo_missing()
+     || inc.union_shards.has_hinfo_corrupted()) {
     f.open_array_section("attrs");
     for (auto kv : shard.attrs) {
       f.open_object_section("attr");
@@ -1424,6 +1442,8 @@ static void dump_obj_errors(const obj_err_t &err, Formatter &f)
     f.dump_string("error", "attr_name_mismatch");
   if (err.has_snapset_inconsistency())
     f.dump_string("error", "snapset_inconsistency");
+  if (err.has_hinfo_inconsistency())
+    f.dump_string("error", "hinfo_inconsistency");
   f.close_section();
 }
 

@@ -707,7 +707,7 @@ bool PGBackend::be_compare_scrub_objects(
        i != auth.attrs.end();
        ++i) {
     // We check system keys seperately
-    if (i->first == OI_ATTR || i->first == SS_ATTR)
+    if (i->first == OI_ATTR || i->first[0] != '_')
       continue;
     if (!candidate.attrs.count(i->first)) {
       if (error != CLEAN)
@@ -727,7 +727,7 @@ bool PGBackend::be_compare_scrub_objects(
        i != candidate.attrs.end();
        ++i) {
     // We check system keys seperately
-    if (i->first == OI_ATTR || i->first == SS_ATTR)
+    if (i->first == OI_ATTR || i->first[0] != '_')
       continue;
     if (!auth.attrs.count(i->first)) {
       if (error != CLEAN)
@@ -759,7 +759,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   inconsistent_obj_wrapper &object_error)
 {
   eversion_t auth_version;
-  bufferlist first_oi_bl, first_ss_bl;
+  bufferlist first_oi_bl, first_ss_bl, first_hk_bl;
 
   // Create list of shards with primary first so it will be auth copy all
   // other things being equal.
@@ -802,7 +802,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     bufferlist bl;
     map<string, bufferptr>::iterator k;
     SnapSet ss;
-    bufferlist ss_bl;
+    bufferlist ss_bl, hk_bl;
 
     if (i->second.stat_error) {
       shard_info.set_stat_error();
@@ -834,6 +834,31 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	  // invalid snapset, probably corrupt
 	  shard_info.set_ss_attr_corrupted();
 	  error_string += " ss_attr_corrupted";
+        }
+      }
+    }
+
+    if (parent->get_pool().is_erasure()) {
+      ECUtil::HashInfo hi;
+      k = i->second.attrs.find(ECUtil::get_hinfo_key());
+      if (k == i->second.attrs.end()) {
+	shard_info.set_hinfo_missing();
+	error_string += " hinfo_key_missing";
+      } else {
+	hk_bl.push_back(k->second);
+        try {
+	  bufferlist::iterator bliter = hk_bl.begin();
+	  decode(hi, bliter);
+	  if (first_hk_bl.length() == 0) {
+	    first_hk_bl.append(hk_bl);
+	  } else if (!object_error.has_hinfo_inconsistency() && !hk_bl.contents_equal(first_hk_bl)) {
+	    object_error.set_hinfo_inconsistency();
+	    error_string += " hinfo_inconsistency";
+	  }
+        } catch (...) {
+	  // invalid snapset, probably corrupt
+	  shard_info.set_hinfo_corrupted();
+	  error_string += " hinfo_corrupted";
         }
       }
     }
