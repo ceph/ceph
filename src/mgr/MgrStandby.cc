@@ -369,6 +369,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
 bool MgrStandby::ms_dispatch(Message *m)
 {
   Mutex::Locker l(lock);
+  bool handled = false;
   dout(4) << state_str() << " " << *m << dendl;
 
   if (m->get_type() == MSG_MGR_MAP) {
@@ -377,12 +378,17 @@ bool MgrStandby::ms_dispatch(Message *m)
   } else if (active_mgr) {
     auto am = active_mgr;
     lock.Unlock();
-    bool handled = am->ms_dispatch(m);
+    handled = am->ms_dispatch(m);
     lock.Lock();
     return handled;
   } else {
     return false;
   }
+  if (m->get_type() == MSG_MGR_MAP) {
+    // let this pass through for mgrc
+    handled = false;
+  }
+  return handled;
 }
 
 
