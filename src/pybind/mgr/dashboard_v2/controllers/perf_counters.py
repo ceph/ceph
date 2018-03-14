@@ -59,6 +59,7 @@ class PerfCounters(RESTController):
         self.osd = PerfCounter('osd')
         self.rgw = PerfCounter('rgw')
         self.rbd_mirror = PerfCounter('rbd-mirror')
+        self.mgr = PerfCounter('mgr')
 
     def list(self):
         counters = mgr.get_all_perf_counters()
