@@ -44,18 +44,13 @@ class Create(object):
         all the metadata to the logical volumes using LVM tags, and starting
         the OSD daemon.
 
-        Example calls for supported scenarios:
+        Existing logical volume (lv) or device:
 
-        Filestore
-        ---------
+            ceph-volume lvm create --data {vg name/lv name} --journal /path/to/device
 
-          Existing logical volume (lv) or device:
+        Or:
 
-              ceph-volume lvm create --filestore --data {vg name/lv name} --journal /path/to/device
-
-          Or:
-
-              ceph-volume lvm create --filestore --data {vg name/lv name} --journal {vg name/lv name}
+            ceph-volume lvm create --data {vg name/lv name} --journal {vg name/lv name}
 
         """)
         parser = create_parser(
