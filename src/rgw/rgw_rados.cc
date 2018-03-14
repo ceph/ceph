@@ -2935,6 +2935,20 @@ public:
 			    << " cookie " << cookie
 			    << " notifier " << notifier_id
 			    << " bl.length()=" << bl.length() << dendl;
+
+    if (unlikely(rados->inject_notify_timeout_probability == 1) ||
+	(rados->inject_notify_timeout_probability > 0 &&
+	 (rados->inject_notify_timeout_probability >
+	  ceph::util::generate_random_number(0.0, 1.0)))) {
+      ldout(rados->ctx(), 0)
+	<< "RGWWatcher::handle_notify() dropping notification! "
+	<< "If this isn't what you want, set "
+	<< "rgw_inject_notify_timeout_probability to zero!" << dendl;
+      return;
+    }
+
+
+
     rados->watch_cb(notify_id, cookie, notifier_id, bl);
 
     bufferlist reply_bl; // empty reply payload
@@ -4695,6 +4709,9 @@ int RGWRados::init_complete()
 int RGWRados::initialize()
 {
   int ret;
+
+  inject_notify_timeout_probability =
+    cct->_conf->get_val<double>("rgw_inject_notify_timeout_probability");
 
   ret = init_rados();
   if (ret < 0)
