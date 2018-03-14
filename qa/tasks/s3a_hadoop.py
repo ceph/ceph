@@ -84,7 +84,7 @@ def task(ctx, config):
     if hadoop_ver.startswith('2.8'):
         # test all ITtests but skip AWS test using public bucket landsat-pds
         # which is not available from within this test      
-        test_options = '-Dit.test=ITestS3A* -Dparallel-tests -Dscale -Dfs.s3a.scale.test.huge.filesize=128M verify'
+        test_options = '-Dit.test=ITestS3A* -Dfs.s3a.scale.test.enabled -Dparallel-tests -Dscale -Dfs.s3a.scale.test.huge.filesize=128M verify'
     else:
         test_options = 'test -Dtest=S3a*,TestS3A*'
     try:
@@ -258,10 +258,14 @@ def run_s3atest(client, maven_version, testdir, test_options):
     """
     aws_testdir = '{testdir}/hadoop/hadoop-tools/hadoop-aws/'.format(testdir=testdir)
     run_test = '{testdir}/apache-maven-{maven_version}/bin/mvn'.format(testdir=testdir, maven_version=maven_version)
+    # Remove AWS CredentialsProvider tests as it hits public bucket from AWS'
+    rm_test = 'rm src/test/java/org/apache/hadoop/fs/s3a/ITestS3AAWSCredentialsProvider.java'
     client.run(
         args=[
             'cd',
             run.Raw(aws_testdir),
+            run.Raw('&&'),
+            run.Raw(rm_test),
             run.Raw('&&'),
             run.Raw(run_test),
             run.Raw(test_options)
