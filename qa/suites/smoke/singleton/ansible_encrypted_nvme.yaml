@@ -1,0 +1,47 @@
+overrides:
+  ceph_ansible:
+    rhbuild: '2.2'
+    vars:
+      ceph_conf_overrides:
+          global:
+            osd default pool size: 2
+            osd pool default pg num: 64
+            osd pool default pgp num: 64
+            mon max pg per osd: 1024
+      dmcrypt: True
+      ceph_stable_release: luminous
+      ceph_origin: distro
+      ceph_stable: true
+      ceph_stable_rh_storage: true
+      ceph_test: true
+      journal_size: 1024
+      osd_auto_discovery: false
+      osd_scenario: non-collocated
+roles:
+- - mon.a
+- - mon.b
+  - mgr.x
+- - mds.a
+- - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+- - osd.6
+  - osd.7
+  - osd.8
+  - client.0
+tasks:
+- ssh-keys:
+- ceph-ansible:
+- install.ship_utilities:
+- rbd_fio:
+    client.0:
+      fio-io-size: 80%
+      formats: [2]
+      features: [[layering],[layering,exclusive-lock,object-map]]
+      io-engine: rbd
+      test-clone-io: 1
+      rw: randrw
+      runtime: 900
