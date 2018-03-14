@@ -69,7 +69,9 @@
                 "oi_attr_corrupted",
                 "obj_size_oi_mismatch",
                 "ss_attr_missing",
-                "ss_attr_corrupted"
+                "ss_attr_corrupted",
+                "hinfo_missing",
+                "hinfo_corrupted"
               ]
             },
             "minItems": 0,
@@ -86,7 +88,8 @@
                 "size_mismatch",
                 "attr_value_mismatch",
                 "attr_name_mismatch",
-                "snapset_inconsistency"
+                "snapset_inconsistency",
+                "hinfo_inconsistency"
               ]
             },
             "minItems": 0,
@@ -139,7 +142,9 @@
                       "oi_attr_corrupted",
                       "obj_size_oi_mismatch",
                       "ss_attr_missing",
-                      "ss_attr_corrupted"
+                      "ss_attr_corrupted",
+                      "hinfo_missing",
+                      "hinfo_corrupted"
                     ]
                   },
                   "minItems": 0,
