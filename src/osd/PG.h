@@ -421,16 +421,38 @@ public:
     // for every entry in missing_loc, we count how many of each type of shard we have,
     // and maintain totals here.  The sum of the values for this map will always equal
     // missing_loc.size().
-    map<loc_count_t,int> missing_by_count;
+    map < shard_id_t, map<loc_count_t,int> > missing_by_count;
+
+   void pgs_by_shard_id(const set<pg_shard_t>& s, map< shard_id_t, set<pg_shard_t> >& pgsbs) {
+      if (pg->get_osdmap()->pg_is_ec(pg->info.pgid.pgid)) {
+        int num_shards = pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid);
+        // For completely missing shards initialize with empty set<pg_shard_t>
+	for (int i = 0 ; i < num_shards ; ++i) {
+	  shard_id_t shard(i);
+	  pgsbs[shard];
+	}
+	for (auto pgs: s)
+	  pgsbs[pgs.shard].insert(pgs);
+      } else {
+        pgsbs[shard_id_t::NO_SHARD] = s;
+      }
+    }
 
     void _inc_count(const set<pg_shard_t>& s) {
-      ++missing_by_count[_get_count(s)];
+      map< shard_id_t, set<pg_shard_t> > pgsbs;
+      pgs_by_shard_id(s, pgsbs);
+      for (auto shard: pgsbs)
+        ++missing_by_count[shard.first][_get_count(shard.second)];
     }
     void _dec_count(const set<pg_shard_t>& s) {
-      auto p = missing_by_count.find(_get_count(s));
-      assert(p != missing_by_count.end());
-      if (--p->second == 0) {
-	missing_by_count.erase(p);
+      map< shard_id_t, set<pg_shard_t> > pgsbs;
+      pgs_by_shard_id(s, pgsbs);
+      for (auto shard: pgsbs) {
+        auto p = missing_by_count[shard.first].find(_get_count(shard.second));
+        assert(p != missing_by_count[shard.first].end());
+        if (--p->second == 0) {
+	  missing_by_count[shard.first].erase(p);
+        }
       }
     }
 
@@ -633,7 +655,7 @@ public:
     const map<hobject_t, pg_missing_item> &get_needs_recovery() const {
       return needs_recovery_map;
     }
-    const map<loc_count_t,int> &get_missing_by_count() const {
+    const map < shard_id_t, map<loc_count_t,int> > &get_missing_by_count() const {
       return missing_by_count;
     }
   } missing_loc;
