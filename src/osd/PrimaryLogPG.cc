@@ -472,6 +472,7 @@ void PrimaryLogPG::on_peer_recover(
   publish_stats_to_osd();
   // done!
   peer_missing[peer].got(soid, recovery_info.version);
+  missing_loc.add_location(soid, peer);
 }
 
 void PrimaryLogPG::begin_peer_recover(
@@ -11848,46 +11849,6 @@ void PrimaryLogPG::check_recovery_sources(const OSDMapRef& osdmap)
     }
   }
 }
-
-void PG::MissingLoc::check_recovery_sources(const OSDMapRef& osdmap)
-{
-  set<pg_shard_t> now_down;
-  for (set<pg_shard_t>::iterator p = missing_loc_sources.begin();
-       p != missing_loc_sources.end();
-       ) {
-    if (osdmap->is_up(p->osd)) {
-      ++p;
-      continue;
-    }
-    ldout(pg->cct, 10) << __func__ << " source osd." << *p << " now down" << dendl;
-    now_down.insert(*p);
-    missing_loc_sources.erase(p++);
-  }
-
-  if (now_down.empty()) {
-    ldout(pg->cct, 10) << __func__ << " no source osds (" << missing_loc_sources << ") went down" << dendl;
-  } else {
-    ldout(pg->cct, 10) << __func__ << " sources osds " << now_down << " now down, remaining sources are "
-		       << missing_loc_sources << dendl;
-    
-    // filter missing_loc
-    map<hobject_t, set<pg_shard_t>>::iterator p = missing_loc.begin();
-    while (p != missing_loc.end()) {
-      set<pg_shard_t>::iterator q = p->second.begin();
-      while (q != p->second.end())
-	if (now_down.count(*q)) {
-	  p->second.erase(q++);
-	} else {
-	  ++q;
-	}
-      if (p->second.empty())
-	missing_loc.erase(p++);
-      else
-	++p;
-    }
-  }
-}
-  
 
 bool PrimaryLogPG::start_recovery_ops(
   uint64_t max,
