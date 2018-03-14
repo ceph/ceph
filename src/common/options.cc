@@ -6262,7 +6262,6 @@ std::vector<Option> get_rgw_options() {
 			  "of RGW instances under heavy use. If you would like "
 			  "to turn off cache expiry, set this value to zero."),
 
-
     Option("rgw_inject_notify_timeout_probability", Option::TYPE_FLOAT,
 	   Option::LEVEL_DEV)
     .set_default(0)
@@ -6278,6 +6277,19 @@ std::vector<Option> get_rgw_options() {
 			  "do not set it in a production cluster, as it "
 			  "actively causes failures. Set this to a floating "
 			  "point value between 0 and 1."),
+    Option("rgw_max_notify_retries", Option::TYPE_UINT,
+	   Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .add_tag("error recovery")
+    .add_service("rgw")
+    .set_description("Number of attempts to notify peers before giving up.")
+    .set_long_description("The number of times we will attempt to update "
+			  "a peer's cache in the event of error before giving "
+			  "up. This is unlikely to be an issue unless your "
+			  "cluster is very heavily loaded. Beware that "
+			  "increasing this value may cause some operations to "
+			  "take longer in exceptional cases and thus may, "
+			  "rarely, cause clients to time out."),
   });
 }
 
