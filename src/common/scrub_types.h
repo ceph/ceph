@@ -81,6 +81,12 @@ public:
   void set_obj_size_oi_mismatch() {
     errors |= err_t::OBJ_SIZE_OI_MISMATCH;
   }
+  void set_hinfo_missing() {
+    errors |= err_t::HINFO_MISSING;
+  }
+  void set_hinfo_corrupted() {
+    errors |= err_t::HINFO_CORRUPTED;
+  }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
 };
@@ -117,6 +123,9 @@ struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
   }
   void set_snapset_inconsistency() {
     errors |= obj_err_t::SNAPSET_INCONSISTENCY;
+  }
+  void set_hinfo_inconsistency() {
+    errors |= obj_err_t::HINFO_INCONSISTENCY;
   }
   void add_shard(const pg_shard_t& pgs, const shard_info_wrapper& shard);
   void set_auth_missing(const hobject_t& hoid,

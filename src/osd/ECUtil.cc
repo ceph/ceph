@@ -186,6 +186,16 @@ void ECUtil::HashInfo::dump(Formatter *f) const
   f->close_section();
 }
 
+namespace ECUtil {
+std::ostream& operator<<(std::ostream& out, const HashInfo& hi)
+{
+  ostringstream hashes;
+  for (auto hash: hi.cumulative_shard_hashes)
+    hashes << " " << hex << hash;
+  return out << "tcs=" << hi.total_chunk_size << hashes.str();
+}
+}
+
 void ECUtil::HashInfo::generate_test_instances(list<HashInfo*>& o)
 {
   o.push_back(new HashInfo(3));

@@ -1748,7 +1748,7 @@ function corrupt_scrub_erasure() {
     local dir=$1
     local allow_overwrites=$2
     local poolname=ecpool
-    local total_objs=5
+    local total_objs=7
 
     setup $dir || return 1
     run_mon $dir a || return 1
@@ -1808,6 +1808,23 @@ function corrupt_scrub_erasure() {
             # Corrupt EC shard
             dd if=/dev/urandom of=$dir/CORRUPT bs=2048 count=2
             objectstore_tool $dir $osd $objname set-bytes $dir/CORRUPT || return 1
+            ;;
+
+        6)
+            objectstore_tool $dir 0 $objname rm-attr hinfo_key || return 1
+            echo -n bad-val > $dir/bad-val
+            objectstore_tool $dir 1 $objname set-attr hinfo_key $dir/bad-val || return 1
+            ;;
+
+        7)
+            local payload=MAKETHISDIFFERENTFROMOTHEROBJECTS
+            echo $payload > $dir/DIFFERENT
+            rados --pool $poolname put $objname $dir/DIFFERENT || return 1
+
+            # Get hinfo_key from EOBJ1
+            objectstore_tool $dir 0 EOBJ1 get-attr hinfo_key > $dir/hinfo
+            objectstore_tool $dir 0 $objname set-attr hinfo_key $dir/hinfo || return 1
+            rm -f $dir/hinfo
             ;;
 
         esac
@@ -2072,6 +2089,134 @@ function corrupt_scrub_erasure() {
         "nspace": "",
         "name": "EOBJ5"
       }
+   },
+   {
+     "errors": [],
+     "object": {
+       "locator": "",
+       "name": "EOBJ6",
+       "nspace": "",
+       "snap": "head",
+       "version": 8
+     },
+     "selected_object_info": "3:4e671bad:::EOBJ6:head(65'7 client.4441.0:1 dirty|data_digest s 7 uv 8 dd 2ddbf8f5 alloc_hint [0 0 0])",
+     "shards": [
+       {
+         "attrs": [
+           {
+             "Base64": true,
+             "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA="
+           },
+           {
+             "Base64": true,
+             "name": "snapset",
+             "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+           }
+         ],
+         "errors": [
+           "hinfo_missing"
+         ],
+         "osd": 0,
+         "primary": false,
+         "shard": 2,
+         "size": 2048
+       },
+       {
+         "attrs": [
+           {
+             "Base64": true,
+             "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA="
+           },
+           {
+             "Base64": false,
+             "name": "hinfo_key",
+             "value": "bad-val"
+           },
+           {
+             "Base64": true,
+             "name": "snapset",
+             "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+           }
+         ],
+         "errors": [
+           "hinfo_corrupted"
+         ],
+         "osd": 1,
+         "primary": true,
+         "shard": 0,
+         "size": 2048
+       },
+       {
+         "attrs": [
+           {
+             "Base64": true,
+             "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA="
+           },
+           {
+             "Base64": true,
+             "name": "hinfo_key",
+             "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E"
+           },
+           {
+             "Base64": true,
+             "name": "snapset",
+             "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+           }
+         ],
+         "errors": [],
+         "osd": 2,
+         "primary": false,
+         "shard": 1,
+         "size": 2048
+       }
+     ],
+     "union_shard_errors": [
+       "hinfo_missing",
+       "hinfo_corrupted"
+     ]
+   },
+   {
+     "errors": [
+       "hinfo_inconsistency"
+     ],
+     "object": {
+       "locator": "",
+       "name": "EOBJ7",
+       "nspace": "",
+       "snap": "head",
+       "version": 10
+     },
+     "selected_object_info": "3:21a44c43:::EOBJ7:head(65'7 client.4441.0:1 dirty|data_digest s 34 uv 10 dd 136e4e27 alloc_hint [0 0 0])",
+     "shards": [
+       {
+         "hashinfo": "tcs=2048 4cfa72f 5b767cb0 4cfa72f",
+         "errors": [],
+         "osd": 0,
+         "primary": false,
+         "shard": 2,
+         "size": 2048
+       },
+       {
+         "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8",
+         "errors": [],
+         "osd": 1,
+         "primary": true,
+         "shard": 0,
+         "size": 2048
+       },
+       {
+         "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8",
+         "errors": [],
+         "osd": 2,
+         "primary": false,
+         "shard": 1,
+         "size": 2048
+       }
+     ],
+     "union_shard_errors": []
     }
   ],
   "epoch": 0
@@ -2371,6 +2516,145 @@ EOF
         "nspace": "",
         "name": "EOBJ5"
       }
+    },
+    {
+      "object": {
+        "name": "EOBJ6",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 8
+      },
+      "errors": [],
+      "union_shard_errors": [
+        "read_error",
+        "hinfo_missing",
+        "hinfo_corrupted"
+      ],
+      "selected_object_info": "3:4e671bad:::EOBJ6:head(65'8 client.4432.0:1 dirty|data_digest s 7 uv 8 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [
+            "read_error",
+            "hinfo_missing"
+          ],
+          "size": 2048,
+          "attrs": [
+            {
+              "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            },
+            {
+              "name": "snapset",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            }
+          ]
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "read_error",
+            "hinfo_corrupted"
+          ],
+          "size": 2048,
+          "attrs": [
+            {
+              "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            },
+            {
+              "name": "hinfo_key",
+              "value": "bad-val",
+              "Base64": false
+            },
+            {
+              "name": "snapset",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            }
+          ]
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000",
+          "attrs": [
+            {
+              "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            },
+            {
+              "name": "hinfo_key",
+              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
+              "Base64": true
+            },
+            {
+              "name": "snapset",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ7",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 10
+      },
+      "errors": [
+        "hinfo_inconsistency"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": "3:21a44c43:::EOBJ7:head(75'10 client.4498.0:1 dirty|data_digest s 34 uv 10 dd 136e4e27 alloc_hint [0 0 0])",
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000",
+          "hashinfo": "tcs=2048 4cfa72f 5b767cb0 4cfa72f"
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000",
+          "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8"
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x00000000",
+          "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8"
+        }
+      ]
     }
   ],
   "epoch": 0
@@ -2689,6 +2973,147 @@ EOF
         "nspace": "",
         "name": "EOBJ5"
       }
+    },
+    {
+      "object": {
+        "name": "EOBJ6",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 8
+      },
+      "errors": [],
+      "union_shard_errors": [
+        "read_error",
+        "hinfo_missing",
+        "hinfo_corrupted"
+      ],
+      "selected_object_info": "3:4e671bad:::EOBJ6:head(63'8 client.4434.0:1 dirty|data_digest s 7 uv 8 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [
+            "read_error",
+            "hinfo_missing"
+          ],
+          "size": 2048,
+          "attrs": [
+            {
+              "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAPwAAAAAAAAAAAAAAAAAAAAICFQAAAAhSEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAA84+qWvTADR4CAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAADzj6pav3EfHvX42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            },
+            {
+              "name": "snapset",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            }
+          ]
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [
+            "read_error",
+            "hinfo_corrupted"
+          ],
+          "size": 2048,
+          "attrs": [
+            {
+              "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAPwAAAAAAAAAAAAAAAAAAAAICFQAAAAhSEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAA84+qWvTADR4CAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAADzj6pav3EfHvX42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            },
+            {
+              "name": "hinfo_key",
+              "value": "bad-val",
+              "Base64": false
+            },
+            {
+              "name": "snapset",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            }
+          ]
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x04cfa72f",
+          "attrs": [
+            {
+              "name": "_",
+              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAPwAAAAAAAAAAAAAAAAAAAAICFQAAAAhSEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAA84+qWvTADR4CAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAADzj6pav3EfHvX42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            },
+            {
+              "name": "hinfo_key",
+              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
+              "Base64": true
+            },
+            {
+              "name": "snapset",
+              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+              "Base64": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "EOBJ7",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 10
+      },
+      "errors": [
+        "hinfo_inconsistency"
+      ],
+      "union_shard_errors": [
+        "ec_hash_error"
+      ],
+      "selected_object_info": "3:21a44c43:::EOBJ7:head(73'10 client.4498.0:1 dirty|data_digest s 34 uv 10 dd 136e4e27 alloc_hint [0 0 0])",
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "shard": 2,
+          "errors": [
+            "ec_hash_error"
+          ],
+          "size": 2048,
+          "hashinfo": "tcs=2048 4cfa72f 5b767cb0 4cfa72f"
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "shard": 0,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x5b7455a8",
+          "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8"
+        },
+        {
+          "osd": 2,
+          "primary": false,
+          "shard": 1,
+          "errors": [],
+          "size": 2048,
+          "omap_digest": "0xffffffff",
+          "data_digest": "0x5b7455a8",
+          "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8"
+        }
+      ]
     }
   ],
   "epoch": 0

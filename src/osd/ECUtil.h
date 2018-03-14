@@ -15,6 +15,7 @@
 #ifndef ECUTIL_H
 #define ECUTIL_H
 
+#include <ostream>
 #include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
 #include "include/assert.h"
@@ -155,6 +156,7 @@ public:
     *this = rhs;
     projected_total_chunk_size = ptcs;
   }
+  friend std::ostream& operator<<(std::ostream& out, const HashInfo& hi);
 };
 
 typedef ceph::shared_ptr<HashInfo> HashInfoRef;
