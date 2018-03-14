@@ -1958,10 +1958,10 @@ static void get_md_sync_status(list<string>& status)
   for (auto marker_iter : sync_status.sync_markers) {
     full_total += marker_iter.second.total_entries;
     total_shards++;
-    int shard_id = marker_iter.first;
     if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::FullSync) {
       num_full++;
       full_complete += marker_iter.second.pos;
+      int shard_id = marker_iter.first;
       shards_behind_set.insert(shard_id);
     } else {
       full_complete += marker_iter.second.total_entries;
@@ -1979,13 +1979,6 @@ static void get_md_sync_status(list<string>& status)
   }
 
   push_ss(ss, status) << "incremental sync: " << num_inc << "/" << total_shards << " shards";
-
-  rgw_mdlog_info log_info;
-  ret = sync.read_log_info(&log_info);
-  if (ret < 0) {
-    status.push_back(string("failed to fetch local sync status: ") + cpp_strerror(-ret));
-    return;
-  }
 
   map<int, RGWMetadataLogInfo> master_shards_info;
   string master_period = store->get_current_period_id();
@@ -2121,12 +2114,12 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   set<int> shards_behind_set;
 
   for (auto marker_iter : sync_status.sync_markers) {
-    int shard_id = marker_iter.first;
     full_total += marker_iter.second.total_entries;
     total_shards++;
     if (marker_iter.second.state == rgw_data_sync_marker::SyncState::FullSync) {
       num_full++;
       full_complete += marker_iter.second.pos;
+      int shard_id = marker_iter.first;
       shards_behind_set.insert(shard_id);
     } else {
       full_complete += marker_iter.second.total_entries;
@@ -2143,14 +2136,6 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   }
 
   push_ss(ss, status, tab) << "incremental sync: " << num_inc << "/" << total_shards << " shards";
-
-  rgw_datalog_info log_info;
-  ret = sync.read_log_info(&log_info);
-  if (ret < 0) {
-    push_ss(ss, status, tab) << string("failed to fetch local sync status: ") + cpp_strerror(-ret);
-    return;
-  }
-
 
   map<int, RGWDataChangesLogInfo> source_shards_info;
 
