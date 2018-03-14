@@ -67,6 +67,14 @@ private:
     Update(const std::string &global_image_id, const std::string &instance_id)
       : Update(global_image_id, instance_id, ceph_clock_now()) {
     }
+
+    friend std::ostream& operator<<(std::ostream& os,
+                                    const Update& update) {
+      os << "{global_image_id=" << update.global_image_id << ", "
+         << "instance_id=" << update.instance_id << "}";
+      return os;
+    }
+
   };
   typedef std::list<Update> Updates;
 
@@ -85,11 +93,6 @@ private:
 
   // global_image_id -> registered peers ("" == local, remote otherwise)
   std::map<std::string, std::set<std::string> > m_peer_map;
-
-  Updates m_updates;
-  std::set<std::string> m_remove_global_image_ids;
-  Updates m_acquire_updates;
-  Updates m_release_updates;
 
   std::set<std::string> m_global_image_ids;
 
@@ -114,65 +117,6 @@ private:
     }
   };
 
-  // context callbacks which are retry-able get deleted after
-  // transiting to the next state.
-  struct C_UpdateMap : Context {
-    ImageMap *image_map;
-    std::string global_image_id;
-
-    C_UpdateMap(ImageMap *image_map, const std::string &global_image_id)
-      : image_map(image_map),
-        global_image_id(global_image_id) {
-    }
-
-    void finish(int r) override {
-      image_map->queue_update_map(global_image_id);
-    }
-
-    // maybe called more than once
-    void complete(int r) override {
-      finish(r);
-    }
-  };
-
-  struct C_RemoveMap : Context {
-    ImageMap *image_map;
-    std::string global_image_id;
-
-    C_RemoveMap(ImageMap *image_map, const std::string &global_image_id)
-      : image_map(image_map),
-        global_image_id(global_image_id) {
-    }
-
-    void finish(int r) override {
-      image_map->queue_remove_map(global_image_id);
-    }
-
-    // maybe called more than once
-    void complete(int r) override {
-      finish(r);
-    }
-  };
-
-  struct C_AcquireImage : Context {
-    ImageMap *image_map;
-    std::string global_image_id;
-
-    C_AcquireImage(ImageMap *image_map, const std::string &global_image_id)
-      : image_map(image_map),
-        global_image_id(global_image_id) {
-    }
-
-    void finish(int r) override {
-      image_map->queue_acquire_image(global_image_id);
-    }
-
-    // maybe called more than once
-    void complete(int r) override {
-      finish(r);
-    }
-  };
-
   // async op-tracker helper routines
   void start_async_op() {
     m_async_op_tracker.start_op();
@@ -184,23 +128,12 @@ private:
     m_async_op_tracker.wait_for_ops(on_finish);
   }
 
-  bool add_peer(const std::string &global_image_id, const std::string &peer_uuid);
-  bool remove_peer(const std::string &global_image_id, const std::string &peer_uuid);
-
   void handle_peer_ack(const std::string &global_image_id, int r);
-
-  // queue on-disk,acquire,remove updates in appropriate list
-  void queue_update_map(const std::string &global_image_id);
-  void queue_remove_map(const std::string &global_image_id);
-  void queue_acquire_image(const std::string &global_image_id);
-  void queue_release_image(const std::string &global_image_id);
+  void handle_peer_ack_remove(const std::string &global_image_id, int r);
 
   void handle_load(const std::map<std::string, cls::rbd::MirrorImageMap> &image_mapping);
   void handle_update_request(const Updates &updates,
                              const std::set<std::string> &remove_global_image_ids, int r);
-  void handle_add_action(const std::string &global_image_id, int r);
-  void handle_remove_action(const std::string &global_image_id, int r);
-  void handle_shuffle_action(const std::string &global_image_id, int r);
 
   // continue (retry or resume depending on state machine) processing
   // current action.
@@ -211,14 +144,11 @@ private:
 
   void schedule_update_task();
   void process_updates();
-  void update_image_mapping();
+  void update_image_mapping(Updates&& map_updates,
+                            std::set<std::string>&& map_removals);
 
   void notify_listener_acquire_release_images(const Updates &acquire, const Updates &release);
   void notify_listener_remove_images(const std::string &peer_uuid, const Updates &remove);
-
-  void schedule_add_action(const std::string &global_image_id);
-  void schedule_remove_action(const std::string &global_image_id);
-  void schedule_shuffle_action(const std::string &global_image_id);
 
   void update_images_added(const std::string &peer_uuid,
                            const std::set<std::string> &global_image_ids);

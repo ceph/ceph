@@ -2,13 +2,13 @@ set(rbd_mirror_test_srcs
   test_ClusterWatcher.cc
   test_PoolWatcher.cc
   test_ImageDeleter.cc
-  test_ImagePolicy.cc
   test_ImageReplayer.cc
   test_ImageSync.cc
   test_InstanceWatcher.cc
   test_Instances.cc
   test_LeaderWatcher.cc
   test_fixture.cc
+  image_map/test_Policy.cc
   )
 add_library(rbd_mirror_test STATIC ${rbd_mirror_test_srcs})
 set_target_properties(rbd_mirror_test PROPERTIES COMPILE_FLAGS

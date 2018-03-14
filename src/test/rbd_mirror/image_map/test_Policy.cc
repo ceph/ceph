@@ -15,10 +15,13 @@ namespace rbd {
 namespace mirror {
 namespace image_map {
 
-class TestImagePolicy : public TestFixture {
+class TestImageMapPolicy : public TestFixture {
 public:
   void SetUp() override {
     TestFixture::SetUp();
+
+    EXPECT_EQ(0, _rados->conf_set("rbd_mirror_image_policy_migration_throttle",
+                                  "0"));
 
     CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
     std::string policy_type = cct->_conf->get_val<string>("rbd_mirror_image_policy_type");
@@ -37,135 +40,57 @@ public:
     delete m_policy;
   }
 
-  struct C_UpdateMap : Context {
-    TestImagePolicy *test;
-    std::string global_image_id;
-
-    C_UpdateMap(TestImagePolicy *test, const std::string &global_image_id)
-      : test(test),
-        global_image_id(global_image_id) {
-    }
-
-    void finish(int r) override {
-      test->m_updated = true;
-    }
-
-    void complete(int r) override {
-      finish(r);
-    }
-  };
-  struct C_RemoveMap : Context {
-    TestImagePolicy *test;
-    std::string global_image_id;
-
-    C_RemoveMap(TestImagePolicy *test, const std::string &global_image_id)
-      : test(test),
-        global_image_id(global_image_id) {
-    }
-
-    void finish(int r) override {
-      test->m_removed = true;
-    }
-
-    void complete(int r) override {
-      finish(r);
-    }
-  };
-
-  struct C_AcquireImage : Context {
-    TestImagePolicy *test;
-    std::string global_image_id;
-
-    C_AcquireImage(TestImagePolicy *test, const std::string &global_image_id)
-      : test(test),
-        global_image_id(global_image_id) {
-    }
-
-    void finish(int r) override {
-      test->m_acquired = true;
-    }
-
-    void complete(int r) override {
-      finish(r);
-    }
-  };
-
-  void reset_flags() {
-    m_updated = false;
-    m_removed = false;
-    m_acquired = false;
-    m_released = false;
-  }
-
   void map_image(const std::string &global_image_id) {
-    Context *on_update = new C_UpdateMap(this, global_image_id);
-    Context *on_acquire = new C_AcquireImage(this, global_image_id);
+    ASSERT_TRUE(m_policy->add_image(global_image_id));
 
-    ASSERT_TRUE(m_policy->add_image(global_image_id, on_update, on_acquire, nullptr));
-
-    m_policy->start_next_action(global_image_id);
+    ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
     ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-    m_policy->start_next_action(global_image_id);
+    ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
     ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
-
-    ASSERT_TRUE(m_updated && m_acquired);
   }
 
   void unmap_image(const std::string &global_image_id) {
-    Context *on_release = new FunctionContext([this, global_image_id](int r) {
-        m_released = true;
-      });
-    Context *on_remove = new C_RemoveMap(this, global_image_id);
+    ASSERT_TRUE(m_policy->remove_image(global_image_id));
 
-    ASSERT_TRUE(m_policy->remove_image(global_image_id, on_release, on_remove, nullptr));
-
-    m_policy->start_next_action(global_image_id);
+    ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
     ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-    m_policy->start_next_action(global_image_id);
+    ASSERT_EQ(ACTION_TYPE_MAP_REMOVE, m_policy->start_action(global_image_id));
     ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
-
-    ASSERT_TRUE(m_released && m_removed);
   }
 
   void shuffle_image(const std::string &global_image_id) {
-    Context *on_release = new FunctionContext([this, global_image_id](int r) {
-        m_released = true;
-      });
-    Context *on_update = new C_UpdateMap(this, global_image_id);
-    Context *on_acquire = new C_AcquireImage(this, global_image_id);
-
-    ASSERT_TRUE(m_policy->shuffle_image(global_image_id, on_release,
-                                        on_update, on_acquire, nullptr));
-
-    m_policy->start_next_action(global_image_id);
+    ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
     ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-    m_policy->start_next_action(global_image_id);
+    ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
     ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-    m_policy->start_next_action(global_image_id);
+    ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
     ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
-
-    ASSERT_TRUE(m_released && m_updated && m_acquired);
   }
 
   Policy *m_policy;
-  bool m_updated = false;
-  bool m_removed = false;
-  bool m_acquired = false;
-  bool m_released = false;
 };
 
-TEST_F(TestImagePolicy, NegativeLookup) {
+TEST_F(TestImageMapPolicy, NegativeLookup) {
   const std::string global_image_id = "global id 1";
 
   LookupInfo info = m_policy->lookup(global_image_id);
   ASSERT_TRUE(info.instance_id == UNMAPPED_INSTANCE_ID);
 }
 
-TEST_F(TestImagePolicy, MapImage) {
+TEST_F(TestImageMapPolicy, Init) {
+  const std::string global_image_id = "global id 1";
+
+  m_policy->init({{global_image_id, {"9876", {}, {}}}});
+
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
+  ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
+}
+
+TEST_F(TestImageMapPolicy, MapImage) {
   const std::string global_image_id = "global id 1";
 
   map_image(global_image_id);
@@ -174,7 +99,7 @@ TEST_F(TestImagePolicy, MapImage) {
   ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
 }
 
-TEST_F(TestImagePolicy, UnmapImage) {
+TEST_F(TestImageMapPolicy, UnmapImage) {
   const std::string global_image_id = "global id 1";
 
   // map image
@@ -183,8 +108,6 @@ TEST_F(TestImagePolicy, UnmapImage) {
   LookupInfo info = m_policy->lookup(global_image_id);
   ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
 
-  reset_flags();
-
   // unmap image
   unmap_image(global_image_id);
 
@@ -192,7 +115,7 @@ TEST_F(TestImagePolicy, UnmapImage) {
   ASSERT_TRUE(info.instance_id == UNMAPPED_INSTANCE_ID);
 }
 
-TEST_F(TestImagePolicy, ShuffleImageAddInstance) {
+TEST_F(TestImageMapPolicy, ShuffleImageAddInstance) {
   std::set<std::string> global_image_ids {
     "global id 1", "global id 2", "global id 3", "global id 4", "global id 5", "global id 6"
   };
@@ -205,8 +128,6 @@ TEST_F(TestImagePolicy, ShuffleImageAddInstance) {
     ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
 
-  reset_flags();
-
   std::set<std::string> shuffle_global_image_ids;
   m_policy->add_instances({"9876"}, &shuffle_global_image_ids);
 
@@ -218,7 +139,7 @@ TEST_F(TestImagePolicy, ShuffleImageAddInstance) {
   }
 }
 
-TEST_F(TestImagePolicy, ShuffleImageRemoveInstance) {
+TEST_F(TestImageMapPolicy, ShuffleImageRemoveInstance) {
   std::set<std::string> global_image_ids {
     "global id 1", "global id 2", "global id 3", "global id 4", "global id 5"
   };
@@ -230,8 +151,6 @@ TEST_F(TestImagePolicy, ShuffleImageRemoveInstance) {
     LookupInfo info = m_policy->lookup(global_image_id);
     ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
   }
-
-  reset_flags();
 
   std::set<std::string> shuffle_global_image_ids;
   m_policy->add_instances({"9876"}, &shuffle_global_image_ids);
@@ -252,8 +171,6 @@ TEST_F(TestImagePolicy, ShuffleImageRemoveInstance) {
     }
   }
 
-  reset_flags();
-
   shuffle_global_image_ids.clear();
   m_policy->remove_instances({"9876"}, &shuffle_global_image_ids);
 
@@ -267,72 +184,67 @@ TEST_F(TestImagePolicy, ShuffleImageRemoveInstance) {
   }
 }
 
-TEST_F(TestImagePolicy, RetryMapUpdate) {
+TEST_F(TestImageMapPolicy, RetryMapUpdate) {
   const std::string global_image_id = "global id 1";
 
-  Context *on_update = new C_UpdateMap(this, global_image_id);
-  Context *on_acquire = new C_AcquireImage(this, global_image_id);
+  ASSERT_TRUE(m_policy->add_image(global_image_id));
 
-  ASSERT_TRUE(m_policy->add_image(global_image_id, on_update, on_acquire, nullptr));
-
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
   // on-disk map update failed
   ASSERT_TRUE(m_policy->finish_action(global_image_id, -EIO));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
   ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
-
-  ASSERT_TRUE(m_updated && m_acquired);
 
   LookupInfo info = m_policy->lookup(global_image_id);
   ASSERT_TRUE(info.instance_id != UNMAPPED_INSTANCE_ID);
 }
 
-TEST_F(TestImagePolicy, MapFailureAndUnmap) {
+TEST_F(TestImageMapPolicy, MapFailureAndUnmap) {
   const std::string global_image_id = "global id 1";
 
-  Context *on_update = new C_UpdateMap(this, global_image_id);
-  Context *on_acquire = new C_AcquireImage(this, global_image_id);
+  ASSERT_TRUE(m_policy->add_image(global_image_id));
 
-  ASSERT_TRUE(m_policy->add_image(global_image_id, on_update, on_acquire, nullptr));
-
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
+
+  std::set<std::string> shuffle_global_image_ids;
+  m_policy->add_instances({"9876"}, &shuffle_global_image_ids);
+  ASSERT_TRUE(shuffle_global_image_ids.empty());
+
+  m_policy->remove_instances({stringify(m_local_io_ctx.get_instance_id())},
+                             &shuffle_global_image_ids);
+  ASSERT_TRUE(shuffle_global_image_ids.empty());
+
   ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLACKLISTED));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, -ENOENT));
+
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
   ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
 
-  ASSERT_TRUE(m_updated && m_acquired);
+  ASSERT_TRUE(m_policy->remove_image(global_image_id));
 
-  reset_flags();
-
-  Context *on_release = new FunctionContext([this, global_image_id](int r) {
-      m_released = true;
-    });
-  Context *on_remove = new C_RemoveMap(this, global_image_id);
-  ASSERT_TRUE(m_policy->remove_image(global_image_id, on_release, on_remove, nullptr));
-
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_MAP_REMOVE, m_policy->start_action(global_image_id));
   ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
-
-  ASSERT_TRUE(m_removed && m_released);
 }
 
-TEST_F(TestImagePolicy, ReshuffleWithMapFailure) {
+TEST_F(TestImageMapPolicy, ReshuffleWithMapFailure) {
   std::set<std::string> global_image_ids {
-    "global id 1", "global id 2", "global id 3", "global id 4", "global id 5", "global id 6"
+    "global id 1", "global id 2", "global id 3", "global id 4", "global id 5",
+    "global id 6"
   };
 
   for (auto const &global_image_id : global_image_ids) {
@@ -345,32 +257,18 @@ TEST_F(TestImagePolicy, ReshuffleWithMapFailure) {
 
   std::set<std::string> shuffle_global_image_ids;
   m_policy->add_instances({"9876"}, &shuffle_global_image_ids);
-
-  if (shuffle_global_image_ids.empty()) {
-    return;
-  }
+  ASSERT_FALSE(shuffle_global_image_ids.empty());
 
   const std::string global_image_id = *(shuffle_global_image_ids.begin());
   shuffle_global_image_ids.clear();
 
-  reset_flags();
-
-  Context *on_release = new FunctionContext([this, global_image_id](int r) {
-        m_released = true;
-      });
-  Context *on_update = new C_UpdateMap(this, global_image_id);
-  Context *on_acquire = new C_AcquireImage(this, global_image_id);
-
-  ASSERT_TRUE(m_policy->shuffle_image(global_image_id, on_release,
-                                      on_update, on_acquire, nullptr));
-
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
 
   // peer unavailable
   m_policy->remove_instances({"9876"}, &shuffle_global_image_ids);
@@ -378,18 +276,20 @@ TEST_F(TestImagePolicy, ReshuffleWithMapFailure) {
 
   ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLACKLISTED));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
-  ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  ASSERT_TRUE(m_released && m_updated && m_acquired);
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
+  ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
 }
 
-TEST_F(TestImagePolicy, ShuffleFailureAndRemove) {
+TEST_F(TestImageMapPolicy, ShuffleFailureAndRemove) {
   std::set<std::string> global_image_ids {
-    "global id 1", "global id 2", "global id 3", "global id 4", "global id 5", "global id 6"
+    "global id 1", "global id 2", "global id 3", "global id 4", "global id 5",
+    "global id 6"
   };
 
   for (auto const &global_image_id : global_image_ids) {
@@ -402,31 +302,18 @@ TEST_F(TestImagePolicy, ShuffleFailureAndRemove) {
 
   std::set<std::string> shuffle_global_image_ids;
   m_policy->add_instances({"9876"}, &shuffle_global_image_ids);
-  if (shuffle_global_image_ids.empty()) {
-    return;
-  }
+  ASSERT_FALSE(shuffle_global_image_ids.empty());
 
   std::string global_image_id = *(shuffle_global_image_ids.begin());
   shuffle_global_image_ids.clear();
 
-  reset_flags();
-
-  Context *on_release = new FunctionContext([this, global_image_id](int r) {
-      m_released = true;
-    });
-  Context *on_update = new C_UpdateMap(this, global_image_id);
-  Context *on_acquire = new C_AcquireImage(this, global_image_id);
-
-  ASSERT_TRUE(m_policy->shuffle_image(global_image_id, on_release,
-                                      on_update, on_acquire, nullptr));
-
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
 
   // peer unavailable
   m_policy->remove_instances({"9876"}, &shuffle_global_image_ids);
@@ -434,30 +321,22 @@ TEST_F(TestImagePolicy, ShuffleFailureAndRemove) {
 
   ASSERT_TRUE(m_policy->finish_action(global_image_id, -EBLACKLISTED));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
-  ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
-
-  ASSERT_TRUE(m_released && m_updated && m_acquired);
-
-  reset_flags();
-
-  on_release = new FunctionContext([this, global_image_id](int r) {
-      m_released = true;
-    });
-  Context *on_remove = new C_RemoveMap(this, global_image_id);
-
-  ASSERT_TRUE(m_policy->remove_image(global_image_id, on_release, on_remove, nullptr));
-
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
   ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
 
-  m_policy->start_next_action(global_image_id);
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
   ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
 
-  ASSERT_TRUE(m_released && m_removed);
+  ASSERT_TRUE(m_policy->remove_image(global_image_id));
+
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
+
+  ASSERT_EQ(ACTION_TYPE_MAP_REMOVE, m_policy->start_action(global_image_id));
+  ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
 
   LookupInfo info = m_policy->lookup(global_image_id);
   ASSERT_TRUE(info.instance_id == UNMAPPED_INSTANCE_ID);
