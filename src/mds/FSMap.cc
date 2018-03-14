@@ -32,6 +32,8 @@ void Filesystem::dump(Formatter *f) const
 void FSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
+  // Use 'default' naming to match 'set-default' CLI
+  f->dump_int("default_fscid", legacy_client_fscid);
 
   f->open_object_section("compat");
   compat.dump(f);
