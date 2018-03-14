@@ -409,9 +409,9 @@ bool MgrStandby::ms_dispatch(Message *m)
     handled = am->ms_dispatch(m);
     lock.Lock();
   }
-  if (m->get_type() == MSG_MGR_MAP && !handled) {
-    m->put();
-    handled = true;
+  if (m->get_type() == MSG_MGR_MAP) {
+    // let this pass through for mgrc
+    handled = false;
   }
   return handled;
 }
