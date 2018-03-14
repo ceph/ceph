@@ -540,6 +540,7 @@ void ImageRequestWQ<I>::unblock_writes() {
   CephContext *cct = m_image_ctx.cct;
 
   bool wake_up = false;
+  Contexts waiter_contexts;
   {
     RWLock::WLocker locker(m_lock);
     assert(m_write_blockers > 0);
@@ -549,12 +550,34 @@ void ImageRequestWQ<I>::unblock_writes() {
                   << m_write_blockers << dendl;
     if (m_write_blockers == 0) {
       wake_up = true;
+      std::swap(waiter_contexts, m_unblocked_write_waiter_contexts);
     }
   }
 
   if (wake_up) {
+    for (auto ctx : waiter_contexts) {
+      ctx->complete(0);
+    }
     this->signal();
   }
+}
+
+template <typename I>
+void ImageRequestWQ<I>::wait_on_writes_unblocked(Context *on_unblocked) {
+  assert(m_image_ctx.owner_lock.is_locked());
+  CephContext *cct = m_image_ctx.cct;
+
+  {
+    RWLock::WLocker locker(m_lock);
+    ldout(cct, 20) << &m_image_ctx << ", " << "write_blockers="
+                   << m_write_blockers << dendl;
+    if (!m_unblocked_write_waiter_contexts.empty() || m_write_blockers > 0) {
+      m_unblocked_write_waiter_contexts.push_back(on_unblocked);
+      return;
+    }
+  }
+
+  on_unblocked->complete(0);
 }
 
 template <typename I>
