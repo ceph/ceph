@@ -69,8 +69,8 @@ void ImageMap<I>::queue_update_map(const std::string &global_image_id) {
 
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
-  Policy::LookupInfo info = m_policy->lookup(global_image_id);
-  assert(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  image_map::LookupInfo info = m_policy->lookup(global_image_id);
+  assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
 
   m_updates.emplace_back(global_image_id, info.instance_id, info.mapped_time);
 }
@@ -89,8 +89,8 @@ void ImageMap<I>::queue_acquire_image(const std::string &global_image_id) {
 
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
-  Policy::LookupInfo info = m_policy->lookup(global_image_id);
-  assert(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  image_map::LookupInfo info = m_policy->lookup(global_image_id);
+  assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
 
   m_acquire_updates.emplace_back(global_image_id, info.instance_id);
 }
@@ -101,8 +101,8 @@ void ImageMap<I>::queue_release_image(const std::string &global_image_id) {
 
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
-  Policy::LookupInfo info = m_policy->lookup(global_image_id);
-  assert(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  image_map::LookupInfo info = m_policy->lookup(global_image_id);
+  assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
 
   m_release_updates.emplace_back(global_image_id, info.instance_id);
 }
@@ -400,8 +400,8 @@ void ImageMap<I>::update_images_removed(const std::string &peer_uuid,
       schedule_remove_action(global_image_id);
     }
 
-    Policy::LookupInfo info = m_policy->lookup(global_image_id);
-    if (info.instance_id != Policy::UNMAPPED_INSTANCE_ID) {
+    image_map::LookupInfo info = m_policy->lookup(global_image_id);
+    if (info.instance_id != image_map::UNMAPPED_INSTANCE_ID) {
       to_remove.emplace_back(global_image_id, info.instance_id);
     }
   }

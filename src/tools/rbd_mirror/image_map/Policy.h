@@ -12,6 +12,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/rados/librados.hpp"
 #include "Action.h"
+#include "tools/rbd_mirror/image_map/Types.h"
 
 class Context;
 
@@ -30,10 +31,6 @@ public:
   void init(const std::map<std::string, cls::rbd::MirrorImageMap> &image_mapping);
 
   // lookup an image from the map
-  struct LookupInfo {
-    std::string instance_id = UNMAPPED_INSTANCE_ID;
-    utime_t mapped_time;
-  };
   LookupInfo lookup(const std::string &global_image_id);
 
   // add, remove, shuffle
@@ -53,8 +50,6 @@ public:
 
   void start_next_action(const std::string &global_image_id);
   bool finish_action(const std::string &global_image_id, int r);
-
-  static const std::string UNMAPPED_INSTANCE_ID;
 
 private:
   typedef std::list<Action> Actions;
