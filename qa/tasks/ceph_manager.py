@@ -384,13 +384,11 @@ class Thrasher:
             skip_admin_check=skip_admin_check)
         self.dead_osds.remove(osd)
         self.live_osds.append(osd)
-        if self.random_eio > 0 and osd is self.rerrosd:
-            self.ceph_manager.inject_args('osd', self.rerrosd,
-                                          'filestore_debug_random_read_err',
-                                          self.random_eio)
-            self.ceph_manager.inject_args('osd', self.rerrosd,
-                                          'bluestore_debug_random_read_err',
-                                          self.random_eio)
+        if self.random_eio > 0 and osd == self.rerrosd:
+            self.ceph_manager.set_config(self.rerrosd,
+                                         filestore_debug_random_read_err = self.random_eio)
+            self.ceph_manager.set_config(self.rerrosd,
+                                         bluestore_debug_random_read_err = self.random_eio)
 
 
     def out_osd(self, osd=None):
