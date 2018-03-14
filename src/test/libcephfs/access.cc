@@ -265,8 +265,13 @@ TEST(AccessTest, User) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_set(cmount, "key", key.c_str()));
   ASSERT_EQ(-EACCES, ceph_mount(cmount, "/"));
-  ASSERT_EQ(0, ceph_conf_set(cmount, "client_mount_uid", "123"));
-  ASSERT_EQ(0, ceph_conf_set(cmount, "client_mount_gid", "456"));
+  ASSERT_EQ(0, ceph_init(cmount));
+
+  UserPerm *perms = ceph_userperm_new(123, 456, 0, NULL);
+  ASSERT_NE(nullptr, perms);
+  ASSERT_EQ(0, ceph_mount_perms_set(cmount, perms));
+  ceph_userperm_destroy(perms);
+
   ASSERT_EQ(0, ceph_conf_set(cmount, "client_permissions", "0"));
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
