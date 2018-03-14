@@ -91,7 +91,7 @@ void add_devices(
     if (id >= 0) {
       got.insert(id);
       cout << " slot " << id << " " << i << std::endl;
-      int r = fs->add_block_device(id, i);
+      int r = fs->add_block_device(id, i, false);
       if (r < 0) {
 	cerr << "unable to open " << i << ": " << cpp_strerror(r) << std::endl;
 	exit(EXIT_FAILURE);
@@ -103,7 +103,7 @@ void add_devices(
     if (got.count(BlueFS::BDEV_DB))
       id = BlueFS::BDEV_SLOW;
     cout << " slot " << id << " " << main << std::endl;
-    int r = fs->add_block_device(id, main);
+    int r = fs->add_block_device(id, main, false);
     if (r < 0) {
       cerr << "unable to open " << main << ": " << cpp_strerror(r)
 	   << std::endl;

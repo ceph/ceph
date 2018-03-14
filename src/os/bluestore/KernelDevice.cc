@@ -751,8 +751,13 @@ int KernelDevice::aio_write(
 int KernelDevice::discard(uint64_t offset, uint64_t len)
 {
   int r = 0;
-  if (!rotational)
+  if (!rotational) {
+      dout(10) << __func__
+	       << " 0x" << std::hex << offset << "~" << len << std::dec
+	       << dendl;
+
     r = block_device_discard(fd_direct, (int64_t)offset, (int64_t)len);
+  }
   return r;
 }
 
