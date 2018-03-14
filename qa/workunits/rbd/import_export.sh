@@ -1,5 +1,8 @@
 #!/bin/sh -ex
 
+# V1 image unsupported but required for testing purposes
+export RBD_FORCE_ALLOW_V1=1
+
 # returns data pool for a given image
 get_image_data_pool () {
     image=$1
