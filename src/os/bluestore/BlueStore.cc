@@ -4315,10 +4315,16 @@ int BlueStore::_open_bdev(bool create)
 {
   assert(bdev == NULL);
   string p = path + "/block";
+  uint64_t dev_size;
   bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
   int r = bdev->open(p);
   if (r < 0)
     goto fail;
+
+  dev_size = bdev->get_size();
+  if (create && cct->_conf->bdev_enable_discard) {
+    bdev->discard(0, dev_size);
+  }
 
   if (bdev->supported_bdev_label()) {
     r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
@@ -4336,8 +4342,8 @@ int BlueStore::_open_bdev(bool create)
   if (r < 0) {
     goto fail_close;
   }
-  if (bdev->get_size() < cct->_conf->bluestore_bluefs_min) {
-    dout(1) << __func__ << " main device size " << si_t(bdev->get_size())
+  if (dev_size < cct->_conf->bluestore_bluefs_min) {
+    dout(1) << __func__ << " main device size " << si_t(dev_size)
             << " is too small, disable bluestore_bluefs_min for now"
             << dendl;
     int r = cct->_conf->set_val("bluestore_bluefs_min", "0");
@@ -4721,7 +4727,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       bfn = path + "/block.db";
     }
     if (::stat(bfn.c_str(), &st) == 0) {
-      r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn);
+      r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn,
+	    create && cct->_conf->bdev_enable_discard);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
              << cpp_strerror(r) << dendl;
@@ -4761,7 +4768,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     if (read_meta("path_block", &bfn) < 0) {
       bfn = path + "/block";
     }
-    r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
+     // never trim here
+    r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: " 
 	   << cpp_strerror(r) << dendl;
@@ -4793,7 +4801,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       bfn = path + "/block.wal";
     }
     if (::stat(bfn.c_str(), &st) == 0) {
-      r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
+      r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn,
+	create && cct->_conf->bdev_enable_discard);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
 	     << cpp_strerror(r) << dendl;
