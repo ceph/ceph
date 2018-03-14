@@ -3,6 +3,18 @@
 
 * *CephFS*:
 
+  * Upgrading an MDS cluster to 12.2.3+ will result in all active MDS
+    exiting due to feature incompatibilities once an upgraded MDS comes online
+    (even as standby). Operators may ignore the error messages and continue
+    upgrading/restarting or follow this upgrade sequence:
+
+    Reduce the number of ranks to 1 (`ceph fs set <fs_name> max_mds 1`),
+    deactivate all other ranks (`ceph mds deactivate <fs_name>:<n>`), shutdown
+    standbys leaving the one active MDS, upgrade the single active MDS, then
+    upgrade/start standbys. Finally, restore the previous max_mds.
+
+    See also: https://tracker.ceph.com/issues/23172
+
   * Several "ceph mds" commands have been obsoleted and replaced
     by equivalent "ceph fs" commands:
       - mds dump -> fs dump
