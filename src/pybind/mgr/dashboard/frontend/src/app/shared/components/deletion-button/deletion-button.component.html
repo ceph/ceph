@@ -1,0 +1,90 @@
+<button type="button"
+        [class]="btnClasses"
+        (click)="showModal(deletionModal)">
+  <i class="fa fa-fw fa-trash-o"></i>
+  <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
+</button>
+
+<ng-template #deletionModal>
+  <cd-modal #modal
+            [modalRef]="bsModalRef">
+    <ng-container class="modal-title">
+      <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
+    </ng-container>
+
+    <ng-container class="modal-content">
+      <ng-container *ngTemplateOutlet="deletionContent"></ng-container>
+    </ng-container>
+  </cd-modal>
+</ng-template>
+
+<ng-template #deletionContent>
+  <form name="deletionForm"
+        #formDir="ngForm"
+        (submit)="delete()"
+        [formGroup]="deletionForm"
+        novalidate>
+    <div class="modal-body">
+      <ng-template *ngTemplateOutlet="deletionDescription"></ng-template>
+      <p>
+        <ng-container i18n>
+          To confirm the deletion, enter
+        </ng-container>
+        <kbd>{{ pattern }}</kbd>
+        <ng-container i18n>
+          and click on
+        </ng-container>
+        <kbd>
+          <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
+        </kbd>.
+      </p>
+      <div class="form-group"
+           [ngClass]="{'has-error': invalidControl(formDir.submitted)}">
+        <input type="text"
+               class="form-control"
+               name="confirmation"
+               id="confirmation"
+               [placeholder]="pattern"
+               autocomplete="off"
+               (keyup)="updateConfirmation($event)"
+               formControlName="confirmation"
+               autofocus>
+        <span class="help-block"
+              *ngIf="invalidControl(formDir.submitted,'required')"
+              i18n>
+          This field is required.
+        </span>
+        <span class="help-block"
+              *ngIf="invalidControl(formDir.submitted, 'pattern')">
+          '{{ confirmation.value }}'
+          <span i18n>doesn't match</span>
+          '{{ pattern }}'.
+        </span>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-submit-button #submitButton
+                        [form]="deletionForm"
+                        (submitAction)="deletionCall()">
+        <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
+      </cd-submit-button>
+      <button class="btn btn-link btn-sm"
+              (click)="hideModal()"
+              i18n>
+        Cancel
+      </button>
+    </div>
+  </form>
+</ng-template>
+
+<ng-template #deletionHeading>
+  <ng-container i18n>
+    Delete
+  </ng-container>
+  {{ metaType }}
+</ng-template>
+
+<ng-template #deletionDescription>
+  <ng-content></ng-content>
+</ng-template>
+
