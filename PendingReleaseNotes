@@ -86,3 +86,4 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
 * The format of the 'config diff' output via the admin socket has changed.  It
   now reflects the source of each config option (e.g., default, config file,
   command line) as well as the final (active) value.
+
