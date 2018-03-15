@@ -84,7 +84,6 @@ setup(
                       # a dependency but we need it anyway.
                       'python-neutronclient',
                       'prettytable',
-                      'libvirt-python',
                       'python-dateutil',
                       'manhole',
                       'apache-libcloud',
