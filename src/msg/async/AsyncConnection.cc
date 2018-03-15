@@ -45,7 +45,7 @@ ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
 // Notes:
 // 1. Don't dispatch any event when closed! It may cause AsyncConnection alive even if AsyncMessenger dead
 
-const int AsyncConnection::TCP_PREFETCH_MIN_SIZE = 512;
+const uint32_t AsyncConnection::TCP_PREFETCH_MIN_SIZE = 512;
 const int ASYNC_COALESCE_THRESHOLD = 256;
 
 class C_time_wakeup : public EventCallback {
