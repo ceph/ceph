@@ -872,7 +872,7 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
-    Option("ms_tcp_prefetch_max_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("ms_tcp_prefetch_max_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4_K)
     .set_description(""),
 
