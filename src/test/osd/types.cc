@@ -829,20 +829,6 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 
-  // obsolete (BACKLOG)
-  {
-    pg_missing_t missing;
-    pg_log_entry_t e = sample_e;
-
-    e.op = pg_log_entry_t::BACKLOG;
-    EXPECT_TRUE(e.is_backlog());
-    EXPECT_TRUE(e.object_is_indexed());
-    EXPECT_FALSE(e.reqid_is_indexed());
-    EXPECT_FALSE(missing.is_missing(oid));
-    PrCtl unset_dumpable;
-    EXPECT_DEATH(missing.add_next_event(e), "");
-  }
-
   // adding a DELETE matching an existing event
   {
     pg_missing_t missing;
