@@ -23,6 +23,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   columns: Array<CdTableColumn> = [];
 
   @Input() data: any;
+  @Input() autoReload: any = 5000;
 
   tableData: {
     key: string,
