@@ -519,7 +519,7 @@ $COSDMEMSTORE
 $COSDSHORT
 $extra_conf
 [mon]
-        mgr initial modules = restful status dashboard balancer
+        mgr initial modules = restful status balancer
         mon pg warn min per osd = 3
         mon osd allow primary affinity = true
         mon reweight min pgs per osd = 4
@@ -665,10 +665,6 @@ start_mgr() {
 [mgr.$name]
         host = $HOSTNAME
 EOF
-
-	ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
-	DASH_URLS+="http://$IP:$MGR_PORT/"
-	MGR_PORT=$(($MGR_PORT + 1000))
 
 	ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
 	RESTFUL_URLS+="https://$IP:$MGR_PORT"
@@ -1049,12 +1045,11 @@ fi
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
-echo "dashboard urls: $DASH_URLS"
-echo "  restful urls: $RESTFUL_URLS"
-echo "  w/ user/pass: admin / $RESTFUL_SECRET"
-echo ""
 echo "dashboard_v2 urls: $DASH_V2_URLS"
 echo "  w/ user/pass: admin / admin"
+echo "restful urls: $RESTFUL_URLS"
+echo "  w/ user/pass: admin / $RESTFUL_SECRET"
+echo ""
 echo ""
 echo "export PYTHONPATH=./pybind:$PYTHONPATH"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"
