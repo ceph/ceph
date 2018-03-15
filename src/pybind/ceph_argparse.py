@@ -7,7 +7,7 @@ daemon.
 
 Copyright (C) 2013 Inktank Storage, Inc.
 
-LGPL2.  See file COPYING.
+LGPL2.1.  See file COPYING.
 """
 from __future__ import print_function
 import copy
