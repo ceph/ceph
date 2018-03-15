@@ -3313,7 +3313,7 @@ struct pg_log_entry_t {
     MODIFY = 1,   // some unspecified modification (but not *all* modifications)
     CLONE = 2,    // cloned object from head
     DELETE = 3,   // deleted object
-    BACKLOG = 4,  // event invented by generate_backlog [deprecated]
+    //BACKLOG = 4,  // event invented by generate_backlog [obsolete]
     LOST_REVERT = 5, // lost new version, revert to an older version.
     LOST_DELETE = 6, // lost new version, revert to no object (deleted).
     LOST_MARK = 7,   // lost new version, now EIO
@@ -3331,8 +3331,6 @@ struct pg_log_entry_t {
       return "clone";
     case DELETE:
       return "delete";
-    case BACKLOG:
-      return "backlog";
     case LOST_REVERT:
       return "l_revert";
     case LOST_DELETE:
@@ -3386,7 +3384,6 @@ struct pg_log_entry_t {
   bool is_modify() const { return op == MODIFY; }
   bool is_promote() const { return op == PROMOTE; }
   bool is_clean() const { return op == CLEAN; }
-  bool is_backlog() const { return op == BACKLOG; }
   bool is_lost_revert() const { return op == LOST_REVERT; }
   bool is_lost_delete() const { return op == LOST_DELETE; }
   bool is_lost_mark() const { return op == LOST_MARK; }
@@ -3395,7 +3392,7 @@ struct pg_log_entry_t {
   bool is_update() const {
     return
       is_clone() || is_modify() || is_promote() || is_clean() ||
-      is_backlog() || is_lost_revert() || is_lost_mark();
+      is_lost_revert() || is_lost_mark();
   }
   bool is_delete() const {
     return op == DELETE || op == LOST_DELETE;
@@ -3909,9 +3906,6 @@ public:
       rmissing.erase((missing_it->second).need.version);
       (missing_it->second).need = e.version;  // leave .have unchanged.
       missing_it->second.set_delete(e.is_delete());
-    } else if (e.is_backlog()) {
-      // May not have prior version
-      assert(0 == "these don't exist anymore");
     } else {
       // not missing, we must have prior_version (if any)
       assert(!is_missing_divergent_item);
