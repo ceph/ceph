@@ -2,7 +2,7 @@
 
 set -e
 
-cd $CEPH_ROOT/src/pybind/mgr/dashboard_v2/frontend
+cd $CEPH_ROOT/src/pybind/mgr/dashboard/frontend
 
 npm run build -- --prod
 npm run test -- --browsers PhantomJS --watch=false

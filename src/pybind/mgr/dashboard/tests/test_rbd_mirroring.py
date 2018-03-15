@@ -69,7 +69,7 @@ class RbdMirroringControllerTest(ControllerTestCase):
         cherrypy.tree.mount(RbdMirror(), '/api/test/rbdmirror')
         cherrypy.tree.mount(Summary(), '/api/test/summary')
 
-    @mock.patch('dashboard_v2.controllers.rbd_mirroring.rbd')
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
     def test_default(self, rbd_mock):  # pylint: disable=W0613
         self._get('/api/test/rbdmirror')
         result = self.jsonBody()
@@ -78,7 +78,7 @@ class RbdMirroringControllerTest(ControllerTestCase):
         for k in ['daemons', 'pools', 'image_error', 'image_syncing', 'image_ready']:
             self.assertIn(k, result['content_data'])
 
-    @mock.patch('dashboard_v2.controllers.rbd_mirroring.rbd')
+    @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
     def test_summary(self, rbd_mock):  # pylint: disable=W0613
         """We're also testing `summary`, as it also uses code from `rbd_mirroring.py`"""
         self._get('/api/test/summary')

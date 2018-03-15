@@ -1,4 +1,4 @@
-Dashboard v2 Developer Documentation
+Dashboard Developer Documentation
 ====================================
 
 Frontend Development
@@ -15,7 +15,7 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
-Run ``npm install`` in directory ``src/pybind/mgr/dashboard_v2/frontend`` to
+Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
 install the required packages locally.
 
 .. note::
@@ -112,7 +112,7 @@ The Python backend code of this module requires a number of Python modules to be
 installed. They are listed in file ``requirements.txt``. Using `pip
 <https://pypi.python.org/pypi/pip>`_ you may install all required dependencies
 by issuing ``pip install -r requirements.txt`` in directory
-``src/pybind/mgr/dashboard_v2``.
+``src/pybind/mgr/dashboard``.
 
 If you're using the `ceph-dev-docker development environment
 <https://github.com/ricardoasmarques/ceph-dev-docker/>`_, simply run
@@ -175,13 +175,13 @@ a Ceph cluster::
   $ PATH=../../../../build/bin:$PATH tox -e ceph-cluster-start
 
 The command above uses ``vstart.sh`` script to start a Ceph cluster and
-automatically enables the ``dashboard_v2`` module, and configures its cherrypy
+automatically enables the ``dashboard`` module, and configures its cherrypy
 web server to listen in port ``9865``.
 
 After starting the Ceph cluster we can run our test file using ``py.test`` like
 this::
 
-  DASHBOARD_V2_PORT=9865 UNITTEST=true py.test -s tests/test_mycontroller.py
+  DASHBOARD_PORT=9865 UNITTEST=true py.test -s tests/test_mycontroller.py
 
 You can run tests multiple times without having to start and stop the Ceph
 cluster.
