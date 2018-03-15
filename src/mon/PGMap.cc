@@ -2083,9 +2083,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   tab.define_column("UP_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("ACTING", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("ACTING_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("LAST_SCRUB", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("LAST_DEEP_SCRUB", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEEP_SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
 
   for (auto i = pgs.begin(); i != pgs.end(); ++i) {
@@ -2110,9 +2108,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
         << st.up_primary
         << st.acting
         << st.acting_primary
-        << st.last_scrub
         << st.last_scrub_stamp
-        << st.last_deep_scrub
         << st.last_deep_scrub_stamp
         << TextTable::endrow;
   }
