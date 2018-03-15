@@ -419,7 +419,7 @@ test_trash() {
 
     rbd trash mv test2
     ID=`rbd trash ls | cut -d ' ' -f 1`
-    rbd info --image-id $ID | grep "rbd image '$ID'"
+    rbd info --image-id $ID | grep "rbd image 'test2'"
 
     rbd trash restore $ID
     rbd ls | grep test2
