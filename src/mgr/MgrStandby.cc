@@ -154,6 +154,8 @@ int MgrStandby::init()
   client.init();
   timer.init();
 
+  py_module_registry.init();
+
   tick();
 
   dout(4) << "Complete." << dendl;
@@ -342,16 +344,11 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   dout(4) << "active in map: " << active_in_map
           << " active is " << map.active_gid << dendl;
 
-  if (!py_module_registry.is_initialized()) {
-    int r = py_module_registry.init(map);
-
-    // FIXME: error handling
-    assert(r == 0);
-  } else {
-    bool need_respawn = py_module_registry.handle_mgr_map(map);
-    if (need_respawn) {
-      respawn();
-    }
+  // PyModuleRegistry may ask us to respawn if it sees that
+  // this MgrMap is changing its set of enabled modules
+  bool need_respawn = py_module_registry.handle_mgr_map(map);
+  if (need_respawn) {
+    respawn();
   }
 
   if (active_in_map) {

@@ -69,8 +69,8 @@ public:
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  PyModule(const std::string &module_name_, bool const enabled_)
-    : module_name(module_name_), enabled(enabled_)
+  PyModule(const std::string &module_name_)
+    : module_name(module_name_)
   {
   }
 
@@ -84,6 +84,11 @@ public:
   static void init_ceph_logger();
   static void init_ceph_module();
 #endif
+
+  void set_enabled(const bool enabled_)
+  {
+    enabled = enabled_;
+  }
 
   /**
    * Extend `out` with the contents of `this->commands`
