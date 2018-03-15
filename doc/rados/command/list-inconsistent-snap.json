@@ -40,8 +40,8 @@
             "type": "array",
             "items": {
               "enum": [
-                "ss_attr_missing",
-                "ss_attr_corrupted",
+                "snapset_missing",
+                "snapset_corrupted",
                 "oi_attr_missing",
                 "oi_attr_corrupted",
                 "snapset_mismatch",
