@@ -1664,6 +1664,7 @@ struct object_stat_sum_t {
   int64_t num_objects_missing;
   int64_t num_legacy_snapsets; ///< upper bound on pre-luminous-style SnapSets
   int64_t num_large_omap_objects = 0;
+  int64_t num_objects_manifest = 0;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1712,6 +1713,7 @@ struct object_stat_sum_t {
     FLOOR(num_wr_kb);
     FLOOR(num_scrub_errors);
     FLOOR(num_large_omap_objects);
+    FLOOR(num_objects_manifest);
     FLOOR(num_shallow_scrub_errors);
     FLOOR(num_deep_scrub_errors);
     FLOOR(num_objects_recovered);
@@ -1767,6 +1769,7 @@ struct object_stat_sum_t {
     SPLIT(num_wr_kb);
     SPLIT(num_scrub_errors);
     SPLIT(num_large_omap_objects);
+    SPLIT(num_objects_manifest);
     SPLIT(num_shallow_scrub_errors);
     SPLIT(num_deep_scrub_errors);
     SPLIT(num_objects_recovered);
@@ -1824,6 +1827,7 @@ struct object_stat_sum_t {
         sizeof(num_wr_kb) +
         sizeof(num_scrub_errors) +
         sizeof(num_large_omap_objects) +
+        sizeof(num_objects_manifest) +
         sizeof(num_objects_recovered) +
         sizeof(num_bytes_recovered) +
         sizeof(num_keys_recovered) +
@@ -1974,6 +1978,7 @@ struct pg_stat_t {
   bool hitset_stats_invalid:1;
   bool hitset_bytes_stats_invalid:1;
   bool pin_stats_invalid:1;
+  bool manifest_stats_invalid:1;
 
   pg_stat_t()
     : reported_seq(0),
@@ -1991,7 +1996,8 @@ struct pg_stat_t {
       omap_stats_invalid(false),
       hitset_stats_invalid(false),
       hitset_bytes_stats_invalid(false),
-      pin_stats_invalid(false)
+      pin_stats_invalid(false),
+      manifest_stats_invalid(false)
   { }
 
   epoch_t get_effective_last_epoch_clean() const {

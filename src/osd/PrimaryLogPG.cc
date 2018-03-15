@@ -4209,6 +4209,8 @@ int PrimaryLogPG::trim_object(
     ctx->delta_stats.num_object_clones--;
     if (coi.is_cache_pinned())
       ctx->delta_stats.num_objects_pinned--;
+    if (coi.has_manifest())
+      ctx->delta_stats.num_objects_manifest--;
     obc->obs.exists = false;
 
     snapset.clones.erase(p);
@@ -4307,6 +4309,8 @@ int PrimaryLogPG::trim_object(
     if (oi.is_cache_pinned()) {
       ctx->delta_stats.num_objects_pinned--;
     }
+    if (coi.has_manifest())
+      ctx->delta_stats.num_objects_manifest--;
     head_obc->obs.exists = false;
     head_obc->obs.oi = object_info_t(head_oid);
     t->remove(head_oid);
@@ -6579,6 +6583,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
+	if (!oi.has_manifest() && !oi.manifest.is_redirect())
+	  ctx->delta_stats.num_objects_manifest++;
+
         oi.set_flag(object_info_t::FLAG_MANIFEST);
 	oi.manifest.redirect_target = target;
 	oi.manifest.type = object_manifest_t::TYPE_REDIRECT;
@@ -6671,6 +6678,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	chunk_info.offset = tgt_offset;
 	chunk_info.length= src_length;
 	oi.manifest.chunk_map[src_offset] = chunk_info;
+	if (!oi.has_manifest() && !oi.manifest.is_chunked()) 
+	  ctx->delta_stats.num_objects_manifest++;
 
         oi.set_flag(object_info_t::FLAG_MANIFEST);
         oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
@@ -7464,6 +7473,9 @@ inline int PrimaryLogPG::_delete_oid(
   if (oi.is_cache_pinned()) {
     ctx->delta_stats.num_objects_pinned--;
   }
+  if (oi.has_manifest()) {
+    ctx->delta_stats.num_objects_manifest--;
+  }
   obs.exists = false;
   return 0;
 }
@@ -7734,6 +7746,8 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
       ctx->delta_stats.num_objects_omap++;
     if (snap_oi->is_cache_pinned())
       ctx->delta_stats.num_objects_pinned++;
+    if (snap_oi->has_manifest())
+      ctx->delta_stats.num_objects_manifest++;
     ctx->delta_stats.num_object_clones++;
     ctx->new_snapset.clones.push_back(coid.snap);
     ctx->new_snapset.clone_size[coid.snap] = ctx->obs->oi.size;
@@ -10771,6 +10785,8 @@ void PrimaryLogPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
     stat.num_objects_omap++;
   if (oi.is_cache_pinned())
     stat.num_objects_pinned++;
+  if (oi.has_manifest())
+    stat.num_objects_manifest++;
 
   if (oi.soid.is_snap()) {
     stat.num_object_clones++;
@@ -14266,6 +14282,8 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	++stat.num_objects_omap;
       if (oi->is_cache_pinned())
 	++stat.num_objects_pinned;
+      if (oi->has_manifest())
+	++stat.num_objects_manifest;
     }
 
     // Check for any problems while processing clones
@@ -14528,6 +14546,7 @@ void PrimaryLogPG::_scrub_finish()
 	   << scrub_cstat.sum.num_objects_pinned << "/" << info.stats.stats.sum.num_objects_pinned << " pinned, "
 	   << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 	   << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes, "
+	   << scrub_cstat.sum.num_objects_manifest << "/" << info.stats.stats.sum.num_objects_manifest << " manifest objects, "
 	   << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes."
 	   << dendl;
 
@@ -14543,6 +14562,8 @@ void PrimaryLogPG::_scrub_finish()
        !info.stats.hitset_stats_invalid) ||
       (scrub_cstat.sum.num_bytes_hit_set_archive != info.stats.stats.sum.num_bytes_hit_set_archive &&
        !info.stats.hitset_bytes_stats_invalid) ||
+      (scrub_cstat.sum.num_objects_manifest != info.stats.stats.sum.num_objects_manifest &&
+       !info.stats.manifest_stats_invalid) ||
       scrub_cstat.sum.num_whiteouts != info.stats.stats.sum.num_whiteouts ||
       scrub_cstat.sum.num_bytes != info.stats.stats.sum.num_bytes) {
     osd->clog->error() << info.pgid << " " << mode
@@ -14555,6 +14576,7 @@ void PrimaryLogPG::_scrub_finish()
 		      << scrub_cstat.sum.num_objects_hit_set_archive << "/" << info.stats.stats.sum.num_objects_hit_set_archive << " hit_set_archive, "
 		      << scrub_cstat.sum.num_whiteouts << "/" << info.stats.stats.sum.num_whiteouts << " whiteouts, "
 		      << scrub_cstat.sum.num_bytes << "/" << info.stats.stats.sum.num_bytes << " bytes, "
+		      << scrub_cstat.sum.num_objects_manifest << "/" << info.stats.stats.sum.num_objects_manifest << " manifest objects, "
 		      << scrub_cstat.sum.num_bytes_hit_set_archive << "/" << info.stats.stats.sum.num_bytes_hit_set_archive << " hit_set_archive bytes.";
     ++scrubber.shallow_errors;
 
@@ -14566,6 +14588,7 @@ void PrimaryLogPG::_scrub_finish()
       info.stats.hitset_stats_invalid = false;
       info.stats.hitset_bytes_stats_invalid = false;
       info.stats.pin_stats_invalid = false;
+      info.stats.manifest_stats_invalid = false;
       publish_stats_to_osd();
       share_pg_info();
     }
