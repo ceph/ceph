@@ -194,7 +194,7 @@ class SharedDriverQueueData {
 
   ~SharedDriverQueueData() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
-    if (!qpair) {
+    if (qpair) {
       spdk_nvme_ctrlr_free_io_qpair(qpair);
       bdev->queue_number--;
     }
