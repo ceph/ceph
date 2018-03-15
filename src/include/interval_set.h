@@ -30,14 +30,6 @@
  * flat_map and btree_map).
  */
 
-#ifndef MIN
-# define MIN(a,b)  ((a)<=(b) ? (a):(b))
-#endif
-#ifndef MAX
-# define MAX(a,b)  ((a)>=(b) ? (a):(b))
-#endif
-
-
 template<typename T, typename Map = std::map<T,T>>
 class interval_set {
  public:
