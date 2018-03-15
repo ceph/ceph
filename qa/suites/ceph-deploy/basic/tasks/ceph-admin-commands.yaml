@@ -7,7 +7,7 @@ openstack:
 roles:
 - - mon.a
   - mgr.x
-  - mds.0
+  - mds.a
   - osd.0
 - - osd.1
   - mon.b
