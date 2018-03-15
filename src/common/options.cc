@@ -6080,6 +6080,19 @@ std::vector<Option> get_rgw_options() {
 			  "of RGW instances under heavy use. If you would like "
 			  "to turn off cache expiry, set this value to zero."),
 
+    // curl-nss memory leak mitigation
+#if defined(LIBCURL_CONFIG_WITH_NSS)
+    Option("rgw_curl_https_ops_per_global_cleanup", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .add_service("rgw")
+    .set_description("Per how many curl operations to free libcurl memory.")
+    .set_long_description("Configures per how many https curl_easy_perform operation "
+      "to free the Curl/Nss accumulated memory in PK11_CreateGenericObject. "
+      "Applicable to keystone users authority authentication using ssl "
+      "and libcurl configured with NSS (--with-nss) as TLS backend "
+      "(in ceph.conf: rgw_s3_auth_use_keystone=true & rgw_keystone_verify_ssl=true). "
+      "Warning - Only single zone configuration is supported."),
+#endif
   });
 }
 
