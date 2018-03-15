@@ -184,7 +184,7 @@ void inconsistent_snapset_wrapper::set_headless()
   errors |= inc_snapset_t::HEADLESS_CLONE;
 }
 
-void inconsistent_snapset_wrapper::set_ss_attr_missing()
+void inconsistent_snapset_wrapper::set_snapset_missing()
 {
   errors |= inc_snapset_t::SNAPSET_MISSING;
 }
@@ -194,7 +194,7 @@ void inconsistent_snapset_wrapper::set_oi_attr_missing()
   errors |= inc_snapset_t::OI_MISSING;
 }
 
-void inconsistent_snapset_wrapper::set_ss_attr_corrupted()
+void inconsistent_snapset_wrapper::set_snapset_corrupted()
 {
   errors |= inc_snapset_t::SNAPSET_CORRUPTED;
 }

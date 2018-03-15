@@ -68,8 +68,8 @@
                 "oi_attr_missing",
                 "oi_attr_corrupted",
                 "obj_size_oi_mismatch",
-                "ss_attr_missing",
-                "ss_attr_corrupted",
+                "snapset_missing",
+                "snapset_corrupted",
                 "hinfo_missing",
                 "hinfo_corrupted"
               ]
@@ -141,8 +141,8 @@
                       "oi_attr_missing",
                       "oi_attr_corrupted",
                       "obj_size_oi_mismatch",
-                      "ss_attr_missing",
-                      "ss_attr_corrupted",
+                      "snapset_missing",
+                      "snapset_corrupted",
                       "hinfo_missing",
                       "hinfo_corrupted"
                     ]
