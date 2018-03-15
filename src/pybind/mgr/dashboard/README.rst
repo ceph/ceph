@@ -1,4 +1,4 @@
-Dashboard and Administration Module for Ceph Manager (aka "Dashboard v2")
+Dashboard and Administration Module for Ceph Manager
 =========================================================================
 
 Overview
@@ -54,7 +54,7 @@ development environment.
 From within a running Ceph cluster, you can start the Dashboard module by
 running the following command::
 
-  $ ceph mgr module enable dashboard_v2
+  $ ceph mgr module enable dashboard
 
 You can see currently enabled Manager modules with::
 

@@ -24,21 +24,21 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-initial-members=a --mon-host=$MON "
-    CEPH_ARGS+="--mgr-initial-modules=dashbaord_v2 "
+    CEPH_ARGS+="--mgr-initial-modules=dashboard "
     CEPH_ARGS+="--mon-host=$CEPH_MON"
 
     setup $dir || return 1
-    TEST_dashboardv2 $dir || return 1
+    TEST_dashboard $dir || return 1
     teardown $dir || return 1
 }
 
-function TEST_dashboardv2() {
+function TEST_dashboard() {
     local dir=$1
     shift
 
     run_mon $dir a || return 1
     timeout 30 ceph mon stat || return 1
-    ceph config-key set mgr/dashboard_v2/x/server_port 7161
+    ceph config-key set mgr/dashboard/x/server_port 7161
     MGR_ARGS+="--mgr_module_path=${CEPH_ROOT}/src/pybind/mgr "
     run_mgr $dir x ${MGR_ARGS} || return 1
 
@@ -68,8 +68,8 @@ function TEST_dashboardv2() {
     done
 }
 
-main mgr-dashboard_v2-smoke "$@"
+main mgr-dashboard-smoke "$@"
 
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 TESTS=test/mgr/mgr-dashboard_v2-smoke.sh check"
+# compile-command: "cd ../.. ; make -j4 TESTS=test/mgr/mgr-dashboard-smoke.sh check"
 # End:

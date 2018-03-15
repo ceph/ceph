@@ -86,8 +86,8 @@ if [ "$#" -gt 0 ]; then
     TEST_CASES="$TESTS_CASES $t"
   done
 else
-  TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard_v2/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard_v2.$M"; done`
-  TEST_CASES="tasks.mgr.test_dashboard_v2 $TEST_CASES"
+  TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
+  TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
 fi
 
 export PATH=$BUILD_DIR/bin:$PATH

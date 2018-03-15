@@ -136,7 +136,6 @@ VSTART_SEC="client.vstart.sh"
 
 MON_ADDR=""
 DASH_URLS=""
-DASH_V2_URLS=""
 RESTFUL_URLS=""
 
 conf_fn="$CEPH_CONF_PATH/ceph.conf"
@@ -503,7 +502,7 @@ $DAEMONOPTS
 $COSDSHORT
 $extra_conf
 [mon]
-        mgr initial modules = restful status balancer
+        mgr initial modules = dashboard restful status balancer
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
@@ -649,20 +648,19 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
+	ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
+        if [ $mgr -eq 1 ]; then
+            DASH_URLS="http://$IP:$MGR_PORT"
+        else
+            DASH_URLS+=", http://$IP:$MGR_PORT"
+        fi
+	MGR_PORT=$(($MGR_PORT + 1000))
+
 	ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
         if [ $mgr -eq 1 ]; then
             RESTFUL_URLS="https://$IP:$MGR_PORT"
         else
             RESTFUL_URLS+=", https://$IP:$MGR_PORT"
-        fi
-	MGR_PORT=$(($MGR_PORT + 1000))
-
-        # dashboard_v2
-	ceph_adm config-key set mgr/dashboard_v2/$name/server_port $MGR_PORT
-        if [ $mgr -eq 1 ]; then
-            DASH_V2_URLS="http://$IP:$MGR_PORT"
-        else
-            DASH_V2_URLS+=", http://$IP:$MGR_PORT"
         fi
 	MGR_PORT=$(($MGR_PORT + 1000))
 
@@ -672,6 +670,10 @@ EOF
 
     # use tell mgr here because the first mgr might not have activated yet
     # to register the python module commands.
+
+    # setting login credentials for dashboard
+    ceph_adm tell mgr dashboard set-login-credentials admin admin
+
     if ceph_adm tell mgr restful create-self-signed-cert; then
         SF=`mktemp`
         ceph_adm restful create-key admin -o $SF
@@ -680,13 +682,6 @@ EOF
     else 
         echo MGR Restful is not working, perhaps the package is not installed?
     fi
-
-    # dashboard_v2
-    sleep 5  # when running with more than 1 mgrs, if we enable dashboard_v2
-             # immediately it will fail, so we just wait for a bit
-    ceph_adm mgr module enable dashboard_v2
-    # setting login credentials for dashboard_v2
-    ceph_adm tell mgr dashboard set-login-credentials admin admin
 }
 
 start_mds() {
@@ -1063,7 +1058,7 @@ fi
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
-echo "dashboard_v2 urls: $DASH_V2_URLS"
+echo "dashboard urls: $DASH_URLS"
 echo "  w/ user/pass: admin / admin"
 echo "restful urls: $RESTFUL_URLS"
 echo "  w/ user/pass: admin / $RESTFUL_SECRET"
