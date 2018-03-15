@@ -88,10 +88,11 @@ void PyModuleRegistry::init()
         << cpp_strerror(r) << dendl;
       failed_modules.push_back(module_name);
       // Don't drop out here, load the other modules
-    } else {
-      // Success!
-      modules[module_name] = std::move(mod);
     }
+
+    // Record the module even if the load failed, so that we can
+    // report its loading error
+    modules[module_name] = std::move(mod);
   }
 
   if (!failed_modules.empty()) {
@@ -144,7 +145,7 @@ void PyModuleRegistry::standby_start(MonClient *monc)
 
   std::set<std::string> failed_modules;
   for (const auto &i : modules) {
-    if (!i.second->is_enabled()) {
+    if (!(i.second->is_enabled() && i.second->get_can_run())) {
       continue;
     }
 
@@ -195,7 +196,9 @@ void PyModuleRegistry::active_start(
               config_, ds, cs, mc, clog_, objecter_, client_, f));
 
   for (const auto &i : modules) {
-    if (!i.second->is_enabled()) {
+    // Anything we're skipping because of !can_run will be flagged
+    // to the user separately via get_health_checks
+    if (!(i.second->is_enabled() && i.second->get_can_run())) {
       continue;
     }
 
