@@ -34,6 +34,7 @@ struct rgw_sync_aws_src_obj_properties {
   string etag;
   uint32_t zone_short_id{0};
   uint64_t pg_ver{0};
+  uint64_t versioned_epoch{0};
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -41,6 +42,7 @@ struct rgw_sync_aws_src_obj_properties {
     encode(etag, bl);
     encode(zone_short_id, bl);
     encode(pg_ver, bl);
+    encode(versioned_epoch, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -50,6 +52,7 @@ struct rgw_sync_aws_src_obj_properties {
     decode(etag, bl);
     decode(zone_short_id, bl);
     decode(pg_ver, bl);
+    decode(versioned_epoch, bl);
     DECODE_FINISH(bl);
   }
 };
