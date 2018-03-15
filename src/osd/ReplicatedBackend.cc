@@ -1004,7 +1004,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   // sanity checks
   assert(m->map_epoch >= get_info().history.same_interval_since);
 
-  dout(10) << __func__ << " missing before " << get_parent()->get_log().get_missing().get_items() << dendl;
+  dout(30) << __func__ << " missing before " << get_parent()->get_log().get_missing().get_items() << dendl;
   parent->maybe_preempt_replica_scrub(soid);
 
   int ackerosd = m->get_source().num();
@@ -1053,13 +1053,11 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
   if (pmissing.is_missing(soid)) {
-    dout(10) << __func__ << " j->second.is_missing(soid) " << pmissing.is_missing(soid) << dendl;
+    dout(30) << __func__ << " is_missing " << pmissing.is_missing(soid) << dendl;
     for (auto &&e: log) {
-      dout(10) << " add_next_event entry " << e << dendl;
+      dout(30) << " add_next_event entry " << e << dendl;
       get_parent()->add_local_next_event(e);
-      dout(10) << " entry version " << e.version << dendl;
-      dout(10) << " entry prior version " << e.prior_version << dendl;
-      dout(10) << " entry is_delete " << e.is_delete() << dendl;
+      dout(30) << " entry is_delete " << e.is_delete() << dendl;
     }
   }
 
@@ -1081,7 +1079,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   tls.push_back(std::move(rm->opt));
   parent->queue_transactions(tls, op);
   // op is cleaned up by oncommit/onapply when both are executed
-  dout(10) << __func__ << " missing after" << get_parent()->get_log().get_missing().get_items() << dendl;
+  dout(30) << __func__ << " missing after" << get_parent()->get_log().get_missing().get_items() << dendl;
 }
 
 void ReplicatedBackend::repop_commit(RepModifyRef rm)

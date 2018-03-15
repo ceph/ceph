@@ -658,7 +658,7 @@ bool PrimaryLogPG::is_degraded_on_async_recovery_target(const hobject_t& soid)
     if (peer_missing_entry != peer_missing.end() &&
         peer_missing_entry->second.get_items().count(soid) &&
         async_recovery_targets.count(peer)) {
-      dout(10) << __func__ << " " << soid << dendl;
+      dout(30) << __func__ << " " << soid << dendl;
       return true;
     }
   }
@@ -10087,11 +10087,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     projected_log.add(entry);
   }
 
-  for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
-           i != peer_missing.end();
-           ++i) {
-    dout(10) << __func__ << " shard " << i->first << " before missing " << (i->second).get_items() << dendl;
-  }
   bool requires_missing_loc = false;
   for (set<pg_shard_t>::iterator i = async_recovery_targets.begin();
        i != async_recovery_targets.end();
@@ -10101,12 +10096,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     for (auto &&entry: ctx->log) {
       peer_missing[*i].add_next_event(entry);
     }
-  }
-
-  for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
-           i != peer_missing.end();
-           ++i) {
-    dout(10) << __func__ << " shard " << i->first << " after add next missing " << (i->second).get_items() << dendl;
   }
 
   for (set<pg_shard_t>::const_iterator i = acting_recovery_backfill.begin();
@@ -10121,7 +10110,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     }
   }
 
-  dout(10) << __func__ << " missing_loc before: " << missing_loc.get_locations(soid) << dendl;
+  dout(30) << __func__ << " missing_loc before: " << missing_loc.get_locations(soid) << dendl;
 
   if (requires_missing_loc) {
     // clear out missing_loc
@@ -10134,7 +10123,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
         missing_loc.add_location(soid, peer);
     }
   }
-  dout(10) << __func__ << " missing_loc after: " << missing_loc.get_locations(soid) << dendl;
+  dout(30) << __func__ << " missing_loc after: " << missing_loc.get_locations(soid) << dendl;
 
   pgbackend->submit_transaction(
     soid,

@@ -904,16 +904,14 @@ void ECBackend::handle_sub_write(
     }
   }
   clear_temp_objs(op.temp_removed);
-  dout(10) << __func__ << " missing before " << get_parent()->get_log().get_missing().get_items() << dendl;
+  dout(30) << __func__ << " missing before " << get_parent()->get_log().get_missing().get_items() << dendl;
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
   if (pmissing.is_missing(op.soid)) {
-    dout(10) << __func__ << " pmissing.is_missing(op.soid) " << pmissing.is_missing(op.soid) << dendl;
+    dout(30) << __func__ << " is_missing " << pmissing.is_missing(op.soid) << dendl;
     for (auto &&e: op.log_entries) {
-      dout(10) << " add_next_event entry " << e << dendl;
+      dout(30) << " add_next_event entry " << e << dendl;
       get_parent()->add_local_next_event(e);
-      dout(10) << " entry version " << e.version << dendl;
-      dout(10) << " entry prior version " << e.prior_version << dendl;
-      dout(10) << " entry is_delete " << e.is_delete() << dendl;
+      dout(30) << " entry is_delete " << e.is_delete() << dendl;
     }
   }
   get_parent()->log_operation(
@@ -940,7 +938,7 @@ void ECBackend::handle_sub_write(
   tls.push_back(std::move(op.t));
   tls.push_back(std::move(localt));
   get_parent()->queue_transactions(tls, msg);
-  dout(10) << __func__ << " missing after" << get_parent()->get_log().get_missing().get_items() << dendl;
+  dout(30) << __func__ << " missing after" << get_parent()->get_log().get_missing().get_items() << dendl;
 }
 
 void ECBackend::handle_sub_read(
