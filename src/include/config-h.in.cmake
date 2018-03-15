@@ -126,6 +126,9 @@
 /* Define if using NSS. */
 #cmakedefine USE_NSS
 
+/* Define if libcurl was configured with --with-nss. */
+#cmakedefine LIBCURL_CONFIG_WITH_NSS
+
 /* Accelio conditional compilation */
 #cmakedefine HAVE_XIO
 

@@ -448,6 +448,19 @@ if (WITH_RADOSGW)
   else()
     message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
   endif()  # OPENSSL_FOUND
+
+  # curl-nss memory leak mitigation
+  execute_process(
+    COMMAND "curl-config --configure | grep \"\\-\\-with\\-nss\""
+      RESULT_VARIABLE RES
+  )
+  if (RES EQUAL 0)
+      message(STATUS "libcurl is configured with NSS as TLS backend")
+      set(LIBCURL_CONFIG_WITH_NSS ON)
+  else()
+      message(STATUS "libcurl is not configured with NSS as TLS backend")
+      set(LIBCURL_CONFIG_WITH_NSS OFF)
+  endif()
 endif (WITH_RADOSGW)
 
 #option for CephFS
