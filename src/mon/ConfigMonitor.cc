@@ -389,7 +389,6 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     }
     key += name;
 
-    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
     if (prefix == "config set") {
       bufferlist bl;
       bl.append(value);
