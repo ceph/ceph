@@ -13,6 +13,7 @@
 #include "rgw_http_client.h"
 #include "rgw_http_errors.h"
 #include "common/RefCountedObj.h"
+#include "rgw_http_client_curl.h"
 
 #include "rgw_coroutine.h"
 
@@ -368,6 +369,51 @@ static bool is_upload_request(const char *method)
   return strcmp(method, "POST") == 0 || strcmp(method, "PUT") == 0;
 }
 
+// curl-nss memory leak mitigation
+#if defined(LIBCURL_CONFIG_WITH_NSS)
+std::mutex RGWHTTPClient::libcurl_global_cleanup_lock;
+int RGWHTTPClient::curleasy_performs_count(0);
+int RGWHTTPClient::curleasy_in_progress_count(0);
+std::mutex RGWHTTPClient::curleasy_in_progress_lock;
+std::condition_variable RGWHTTPClient::curleasy_in_progress_cond;
+
+void RGWHTTPClient::libcurl_global_cleanup(const char *url)
+{
+  int curleasy_performs_per_cleanup = cct->_conf->get_val<uint64_t>("rgw_curl_https_ops_per_global_cleanup");
+  if(curleasy_performs_per_cleanup > 0) {
+    bool is_ssl_url = boost::algorithm::starts_with(url, "https://");
+    std::lock_guard<std::mutex> cl(libcurl_global_cleanup_lock);
+    if(is_ssl_url && ++curleasy_performs_count > curleasy_performs_per_cleanup) {
+      cv_status cond_ret = cv_status::no_timeout;
+      if(curleasy_in_progress_count > 0) {
+        std::unique_lock<std::mutex> ipl(curleasy_in_progress_lock);
+        cond_ret = curleasy_in_progress_cond.wait_for(ipl, std::chrono::seconds(1));
+      }
+      if(cond_ret == cv_status::no_timeout) {
+        dout(20) << "performing curl global cleanup" << dendl;
+        rgw::curl::cleanup_curl();
+        rgw::curl::setup_curl(boost::none);
+      } else {
+        dout(0) << "WARNING: curl_libcurl_global_cleanup not performed, timeout while waiting for pending curl operations to complete" << dendl;
+      }
+      curleasy_performs_count = 0;
+    }
+    ++curleasy_in_progress_count;
+  }
+}
+
+void RGWHTTPClient::libcurl_global_cleanup_signal_reqs_complete()
+{
+  int curleasy_performs_per_cleanup = cct->_conf->get_val<uint64_t>("rgw_curl_https_ops_per_global_cleanup");
+  if(curleasy_performs_per_cleanup > 0) {
+    std::lock_guard<std::mutex> ipl(curleasy_in_progress_lock);
+    --curleasy_in_progress_count;
+    if(curleasy_in_progress_count == 0 && curleasy_performs_count > curleasy_performs_per_cleanup) {
+      curleasy_in_progress_cond.notify_one();
+    }
+  }
+}
+#endif
 /*
  * process a single simple one off request, not going through RGWHTTPManager. Not using
  * req_data.
@@ -381,6 +427,11 @@ int RGWHTTPClient::process(const char *method, const char *url)
 
   last_method = (method ? method : "");
   last_url = (url ? url : "");
+
+  // curl-nss memory leak mitigation
+#if defined(LIBCURL_CONFIG_WITH_NSS)
+  libcurl_global_cleanup(url);
+#endif
 
   auto ca = handles->get_curl_handle();
   curl_handle = **ca;
@@ -407,7 +458,7 @@ int RGWHTTPClient::process(const char *method, const char *url)
     curl_easy_setopt(curl_handle, CURLOPT_UPLOAD, 1L);
   }
   if (has_send_len) {
-    curl_easy_setopt(curl_handle, CURLOPT_INFILESIZE, (void *)send_len); 
+    curl_easy_setopt(curl_handle, CURLOPT_INFILESIZE, (void *)send_len);
   }
   if (!verify_ssl) {
     curl_easy_setopt(curl_handle, CURLOPT_SSL_VERIFYPEER, 0L);
@@ -423,6 +474,11 @@ int RGWHTTPClient::process(const char *method, const char *url)
   curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_status);
   handles->release_curl_handle(ca);
   curl_slist_free_all(h);
+
+  // curl-nss memory leak mitigation
+#if defined(LIBCURL_CONFIG_WITH_NSS)
+  libcurl_global_cleanup_signal_reqs_complete();
+#endif
 
   return ret;
 }
@@ -939,6 +995,13 @@ int RGWHTTPManager::remove_request(RGWHTTPClient *client)
 int RGWHTTPManager::process_requests(bool wait_for_data, bool *done)
 {
   assert(!is_threaded);
+#if defined(LIBCURL_CONFIG_WITH_NSS)
+  int curleasy_performs_per_cleanup = cct->_conf->get_val<uint64_t>("rgw_curl_https_ops_per_global_cleanup");
+  if (curleasy_performs_per_cleanup > 0) {
+    dout(0) << __func__ << ": WARNING: curl_multi operations not supported in conjustion with rgw_curl_https_ops_per_global_cleanup" << dendl;
+    return -EPERM;
+  }
+#endif
 
   int still_running;
   int mstatus;
@@ -1073,6 +1136,14 @@ void *RGWHTTPManager::reqs_thread_entry()
   int mstatus;
 
   ldout(cct, 20) << __func__ << ": start" << dendl;
+
+#if defined(LIBCURL_CONFIG_WITH_NSS)
+  int curleasy_performs_per_cleanup = cct->_conf->get_val<uint64_t>("rgw_curl_https_ops_per_global_cleanup");
+  if (curleasy_performs_per_cleanup > 0) {
+    dout(0) << __func__ << ": WARNING: curl_multi operations not supported in conjustion with rgw_curl_https_ops_per_global_cleanup" << dendl;
+    return NULL;
+  }
+#endif
 
   while (!going_down) {
     int ret = do_curl_wait(cct, (CURLM *)multi_handle, thread_pipe[0]);

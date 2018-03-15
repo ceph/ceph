@@ -36,6 +36,18 @@ class RGWHTTPClient
 
   std::atomic<unsigned> stopped { 0 };
 
+  // curl-nss memory leak mitigation
+#if defined(LIBCURL_CONFIG_WITH_NSS)
+  static std::mutex libcurl_global_cleanup_lock;
+  static int curleasy_performs_count;
+  static int curleasy_in_progress_count;
+  static std::mutex curleasy_in_progress_lock;
+  static std::condition_variable curleasy_in_progress_cond;
+
+  void libcurl_global_cleanup(const char *url);
+  void libcurl_global_cleanup_signal_reqs_complete();
+#endif
+
 protected:
   CephContext *cct;
   param_vec_t headers;
