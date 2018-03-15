@@ -17,14 +17,6 @@
 
 #include <type_traits>
 
-#ifndef MIN
-#define MIN(a,b) ((a) < (b) ? (a):(b))
-#endif
-
-#ifndef MAX
-#define MAX(a,b) ((a) > (b) ? (a):(b))
-#endif
-
 #ifndef DIV_ROUND_UP
 #define DIV_ROUND_UP(n, d)  (((n) + (d) - 1) / (d))
 #endif
