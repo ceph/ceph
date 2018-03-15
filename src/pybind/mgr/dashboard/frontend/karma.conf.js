@@ -27,7 +27,7 @@ module.exports = function (config) {
     reporters: ['progress', 'kjhtml', 'junit'],
     junitReporter: {
       'outputFile': 'junit.frontend.xml',
-      'suite': 'dashboard_v2',
+      'suite': 'dashboard',
       'useBrowserName': false
     },
     port: 9876,

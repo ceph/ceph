@@ -1,1 +1,1 @@
-add_subdirectory(dashboard_v2)
+add_subdirectory(dashboard)

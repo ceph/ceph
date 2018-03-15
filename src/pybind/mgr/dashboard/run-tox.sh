@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 
 # run from ./ or from ../
-: ${MGR_DASHBOARD_V2_VIRTUALENV:=/tmp/mgr-dashboard_v2-virtualenv}
+: ${MGR_DASHBOARD_VIRTUALENV:=/tmp/mgr-dashboard-virtualenv}
 : ${WITH_PYTHON3:=ON}
-test -d dashboard_v2 && cd dashboard_v2
+test -d dashboard && cd dashboard
 
 if [ -e tox.ini ]; then
     TOX_PATH=`readlink -f tox.ini`
@@ -15,7 +15,7 @@ if [ -z $CEPH_BUILD_DIR ]; then
     export CEPH_BUILD_DIR=$(dirname ${TOX_PATH})
 fi
 
-source ${MGR_DASHBOARD_V2_VIRTUALENV}/bin/activate
+source ${MGR_DASHBOARD_VIRTUALENV}/bin/activate
 
 if [ "$WITH_PYTHON3" = "ON" ]; then
   ENV_LIST="cov-init,py27,py3,cov-report,lint"

@@ -13,17 +13,17 @@ class TestDashboard(MgrTestCase):
     MGRS_REQUIRED = 3
 
     def test_standby(self):
-        self._assign_ports("dashboard_v2", "server_port")
-        self._load_module("dashboard_v2")
+        self._assign_ports("dashboard", "server_port")
+        self._load_module("dashboard")
 
         original_active = self.mgr_cluster.get_active_id()
 
-        original_uri = self._get_uri("dashboard_v2")
+        original_uri = self._get_uri("dashboard")
         log.info("Originally running at {0}".format(original_uri))
 
         self.mgr_cluster.mgr_fail(original_active)
 
-        failed_over_uri = self._get_uri("dashboard_v2")
+        failed_over_uri = self._get_uri("dashboard")
         log.info("After failover running at {0}".format(failed_over_uri))
 
         self.assertNotEqual(original_uri, failed_over_uri)
@@ -35,10 +35,10 @@ class TestDashboard(MgrTestCase):
         self.assertEqual(r.headers['Location'], failed_over_uri)
 
     def test_urls(self):
-        self._assign_ports("dashboard_v2", "server_port")
-        self._load_module("dashboard_v2")
+        self._assign_ports("dashboard", "server_port")
+        self._load_module("dashboard")
 
-        base_uri = self._get_uri("dashboard_v2")
+        base_uri = self._get_uri("dashboard")
 
         # This is a very simple smoke test to check that the dashboard can
         # give us a 200 response to requests.  We're not testing that

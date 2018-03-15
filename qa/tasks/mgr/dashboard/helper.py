@@ -34,9 +34,9 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def setUpClass(cls):
         super(DashboardTestCase, cls).setUpClass()
-        cls._assign_ports("dashboard_v2", "server_port")
-        cls._load_module("dashboard_v2")
-        cls.base_uri = cls._get_uri("dashboard_v2").rstrip('/')
+        cls._assign_ports("dashboard", "server_port")
+        cls._load_module("dashboard")
+        cls.base_uri = cls._get_uri("dashboard").rstrip('/')
 
         if cls.CEPHFS:
             cls.mds_cluster.clear_firewall()
