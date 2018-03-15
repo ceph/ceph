@@ -6047,6 +6047,10 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << "/" << pg.acting;
   if (pg.is_ec_pg())
     out << "p" << pg.get_primary();
+  if (!pg.async_recovery_targets.empty())
+    out << " async=[" << pg.async_recovery_targets << "]";
+  if (!pg.backfill_targets.empty())
+    out << " backfill=[" << pg.backfill_targets << "]";
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
 
