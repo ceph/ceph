@@ -3470,6 +3470,7 @@ void PG::update_snap_map(
 	try {
 	  ::decode(snaps, p);
 	} catch (...) {
+	  derr << __func__ << " decode snaps failure on " << *i << dendl;
 	  snaps.clear();
 	}
 	set<snapid_t> _snaps(snaps.begin(), snaps.end());
