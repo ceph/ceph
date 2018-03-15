@@ -1,4 +1,0 @@
-overrides:
-  deepsea:
-    exec:
-    - suites/basic/health-igw.sh --cli
