@@ -100,9 +100,12 @@ the blacklist:
 
 ::
 
-    ceph osd blacklist ls
-    # ... identify the address of the client ...
-    ceph osd blacklist rm <address>
+    $ ceph osd blacklist ls
+    listed 1 entries
+    127.0.0.1:0/3710147553 2018-03-19 11:32:24.716146
+    $ ceph osd blacklist rm 127.0.0.1:0/3710147553
+    un-blacklisting 127.0.0.1:0/3710147553
+
 
 Doing this may put data integrity at risk if other clients have accessed
 files that the blacklisted client was doing buffered IO to.  It is also not
