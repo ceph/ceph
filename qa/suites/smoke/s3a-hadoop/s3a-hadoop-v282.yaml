@@ -24,4 +24,4 @@ tasks:
 - ssh-keys:
 - ceph-ansible:
 - s3a-hadoop:
-    hadoop-version: '2.8.1'
+    hadoop-version: '2.8.2'
