@@ -2067,7 +2067,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
 {
   TextTable tab;
 
-  tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
+  tab.define_column("PG", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
