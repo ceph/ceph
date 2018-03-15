@@ -22,6 +22,8 @@
 
 std::string handle_pyerror();
 
+std::string peek_pyerror();
+
 /**
  * A Ceph CLI command description provided from a Python module
  */
