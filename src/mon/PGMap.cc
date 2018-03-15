@@ -2069,7 +2069,6 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
 
   tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
@@ -2094,7 +2093,6 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
 
     tab << *i
         << st.stats.sum.num_objects
-        << st.stats.sum.num_objects_missing_on_primary
         << st.stats.sum.num_objects_degraded
         << st.stats.sum.num_objects_misplaced
         << st.stats.sum.num_objects_unfound
