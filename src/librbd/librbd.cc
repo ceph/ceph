@@ -1129,6 +1129,13 @@ namespace librbd {
     return r;
   }
 
+  int Image::get_name(std::string *name)
+  {
+    ImageCtx *ictx = reinterpret_cast<ImageCtx *>(ctx);
+    *name = ictx->name;
+    return 0;
+  }
+
   int Image::get_id(std::string *id)
   {
     ImageCtx *ictx = reinterpret_cast<ImageCtx *>(ctx);
@@ -3145,6 +3152,20 @@ extern "C" int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
   int r = librbd::get_overlap(ictx, overlap);
   tracepoint(librbd, get_overlap_exit, r, *overlap);
   return r;
+}
+
+extern "C" int rbd_get_name(rbd_image_t image, char *name, size_t *name_len)
+{
+  librbd::ImageCtx *ictx = reinterpret_cast<librbd::ImageCtx *>(image);
+  if (*name_len <= ictx->name.size()) {
+    *name_len = ictx->name.size() + 1;
+    return -ERANGE;
+  }
+
+  strncpy(name, ictx->name.c_str(), ictx->name.size());
+  name[ictx->name.size()] = '\0';
+  *name_len = ictx->name.size() + 1;
+  return 0;
 }
 
 extern "C" int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
