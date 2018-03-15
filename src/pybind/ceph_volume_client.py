@@ -1,7 +1,7 @@
 """
 Copyright (C) 2015 Red Hat, Inc.
 
-LGPL2.  See file COPYING.
+LGPL2.1.  See file COPYING.
 """
 
 from contextlib import contextmanager
