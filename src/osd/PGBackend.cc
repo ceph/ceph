@@ -817,8 +817,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     if (obj.is_head()) {
       k = i->second.attrs.find(SS_ATTR);
       if (k == i->second.attrs.end()) {
-	shard_info.set_ss_attr_missing();
-	error_string += " ss_attr_missing";
+	shard_info.set_snapset_missing();
+	error_string += " snapset_missing";
       } else {
         ss_bl.push_back(k->second);
         try {
@@ -832,8 +832,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	  }
         } catch (...) {
 	  // invalid snapset, probably corrupt
-	  shard_info.set_ss_attr_corrupted();
-	  error_string += " ss_attr_corrupted";
+	  shard_info.set_snapset_corrupted();
+	  error_string += " snapset_corrupted";
         }
       }
     }

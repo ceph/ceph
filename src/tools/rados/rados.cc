@@ -1346,10 +1346,10 @@ static void dump_errors(const err_t &err, Formatter &f, const char *name)
     f.dump_string("error", "oi_attr_corrupted");
   if (err.has_obj_size_oi_mismatch())
     f.dump_string("error", "obj_size_oi_mismatch");
-  if (err.has_ss_attr_missing())
-    f.dump_string("error", "ss_attr_missing");
-  if (err.has_ss_attr_corrupted())
-    f.dump_string("error", "ss_attr_corrupted");
+  if (err.has_snapset_missing())
+    f.dump_string("error", "snapset_missing");
+  if (err.has_snapset_corrupted())
+    f.dump_string("error", "snapset_corrupted");
   if (err.has_hinfo_missing())
     f.dump_string("error", "hinfo_missing");
   if (err.has_hinfo_corrupted())
@@ -1385,7 +1385,7 @@ static void dump_shard(const shard_info_t& shard,
     decode(oi, bliter);  // Can't be corrupted
     f.dump_stream("object_info") << oi;
   }
-  if (!shard.has_ss_attr_missing() && !shard.has_ss_attr_corrupted() &&
+  if (!shard.has_snapset_missing() && !shard.has_snapset_corrupted() &&
       inc.has_snapset_inconsistency()) {
     SnapSet ss;
     bufferlist bl;
@@ -1408,8 +1408,8 @@ static void dump_shard(const shard_info_t& shard,
   if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
      || inc.union_shards.has_oi_attr_missing()
      || inc.union_shards.has_oi_attr_corrupted()
-     || inc.union_shards.has_ss_attr_missing()
-     || inc.union_shards.has_ss_attr_corrupted()
+     || inc.union_shards.has_snapset_missing()
+     || inc.union_shards.has_snapset_corrupted()
      || inc.union_shards.has_hinfo_missing()
      || inc.union_shards.has_hinfo_corrupted()) {
     f.open_array_section("attrs");
@@ -1510,10 +1510,10 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
   dump_object_id(inc.object, f);
 
   f.open_array_section("errors");
-  if (inc.ss_attr_missing())
-    f.dump_string("error", "ss_attr_missing");
-  if (inc.ss_attr_corrupted())
-    f.dump_string("error", "ss_attr_corrupted");
+  if (inc.snapset_missing())
+    f.dump_string("error", "snapset_missing");
+  if (inc.snapset_corrupted())
+    f.dump_string("error", "snapset_corrupted");
   if (inc.oi_attr_missing())
     f.dump_string("error", "oi_attr_missing");
   if (inc.oi_attr_corrupted())

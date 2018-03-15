@@ -62,15 +62,17 @@ struct err_t {
     SHARD_EC_SIZE_MISMATCH  = 1 << 13,
     OI_ATTR_MISSING         = 1 << 14,
     OI_ATTR_CORRUPTED       = 1 << 15,
-    SS_ATTR_MISSING         = 1 << 16,
-    SS_ATTR_CORRUPTED       = 1 << 17,
+    SS_ATTR_MISSING         = 1 << 16, // Old
+    SNAPSET_MISSING         = 1 << 16,
+    SS_ATTR_CORRUPTED       = 1 << 17, // Old
+    SNAPSET_CORRUPTED       = 1 << 17,
     OBJ_SIZE_OI_MISMATCH      = 1 << 18,
     HINFO_MISSING         = 1 << 19,
     HINFO_CORRUPTED       = 1 << 20
     // When adding more here add to either SHALLOW_ERRORS or DEEP_ERRORS
   };
   uint64_t errors = 0;
-  static constexpr uint64_t SHALLOW_ERRORS = SHARD_MISSING|SHARD_STAT_ERR|SIZE_MISMATCH_OI|OI_ATTR_MISSING|OI_ATTR_CORRUPTED|SS_ATTR_MISSING|SS_ATTR_CORRUPTED|OBJ_SIZE_OI_MISMATCH|HINFO_MISSING|HINFO_CORRUPTED;
+  static constexpr uint64_t SHALLOW_ERRORS = SHARD_MISSING|SHARD_STAT_ERR|SIZE_MISMATCH_OI|OI_ATTR_MISSING|OI_ATTR_CORRUPTED|SNAPSET_MISSING|SNAPSET_CORRUPTED|OBJ_SIZE_OI_MISMATCH|HINFO_MISSING|HINFO_CORRUPTED;
   static constexpr uint64_t DEEP_ERRORS = SHARD_READ_ERR|DATA_DIGEST_MISMATCH_OI|OMAP_DIGEST_MISMATCH_OI|SHARD_EC_HASH_MISMATCH|SHARD_EC_SIZE_MISMATCH;
   bool has_shard_missing() const {
     return errors & SHARD_MISSING;
@@ -102,11 +104,17 @@ struct err_t {
   bool has_oi_attr_corrupted() const {
     return errors & OI_ATTR_CORRUPTED;
   }
-  bool has_ss_attr_missing() const {
+  bool has_ss_attr_missing() const {	// Compatibility
     return errors & SS_ATTR_MISSING;
   }
-  bool has_ss_attr_corrupted() const {
+  bool has_snapset_missing() const {
+    return errors & SNAPSET_MISSING;
+  }
+  bool has_ss_attr_corrupted() const {	// Compatibility
     return errors & SS_ATTR_CORRUPTED;
+  }
+  bool has_snapset_corrupted() const {
+    return errors & SNAPSET_CORRUPTED;
   }
   bool has_shallow_errors() const {
     return errors & SHALLOW_ERRORS;
@@ -232,10 +240,16 @@ struct inconsistent_snapset_t {
   std::vector<snap_t> clones;
   std::vector<snap_t> missing;
 
-  bool ss_attr_missing() const {
+  bool ss_attr_missing() const {     // Compatibility
     return errors & SNAPSET_MISSING;
   }
-  bool ss_attr_corrupted() const {
+  bool snapset_missing() const {
+    return errors & SNAPSET_MISSING;
+  }
+  bool ss_attr_corrupted() const {   // Compatibility
+    return errors & SNAPSET_CORRUPTED;
+  }
+  bool snapset_corrupted() const {
     return errors & SNAPSET_CORRUPTED;
   }
   bool clone_missing() const  {

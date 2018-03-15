@@ -842,7 +842,7 @@ function TEST_corrupt_scrub_replicated() {
           }
         ],
         "errors": [
-          "ss_attr_missing"
+          "snapset_missing"
         ],
         "osd": 0,
         "primary": false,
@@ -862,7 +862,7 @@ function TEST_corrupt_scrub_replicated() {
           }
         ],
         "errors": [
-          "ss_attr_corrupted"
+          "snapset_corrupted"
         ],
         "osd": 1,
         "primary": true,
@@ -870,8 +870,8 @@ function TEST_corrupt_scrub_replicated() {
       }
       ],
       "union_shard_errors": [
-        "ss_attr_missing",
-        "ss_attr_corrupted"
+        "snapset_missing",
+        "snapset_corrupted"
       ]
     },
     {
@@ -1324,7 +1324,7 @@ EOF
         ],
         "data_digest": "0x2ddbf8f5",
         "errors": [
-          "ss_attr_missing"
+          "snapset_missing"
         ],
         "omap_digest": "0x8b699207",
         "osd": 0,
@@ -1346,7 +1346,7 @@ EOF
         ],
         "data_digest": "0x2ddbf8f5",
         "errors": [
-          "ss_attr_corrupted"
+          "snapset_corrupted"
         ],
         "omap_digest": "0x8b699207",
         "osd": 1,
@@ -1355,8 +1355,8 @@ EOF
       }
       ],
       "union_shard_errors": [
-        "ss_attr_missing",
-        "ss_attr_corrupted"
+        "snapset_missing",
+        "snapset_corrupted"
       ]
     },
     {

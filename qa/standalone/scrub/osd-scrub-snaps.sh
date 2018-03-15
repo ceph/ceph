@@ -293,7 +293,7 @@ function TEST_scrub_snaps() {
     },
     {
       "errors": [
-        "ss_attr_corrupted"
+        "snapset_corrupted"
       ],
       "snap": "head",
       "locator": "",
@@ -306,7 +306,7 @@ function TEST_scrub_snaps() {
         4
       ],
       "errors": [
-        "ss_attr_missing",
+        "snapset_missing",
         "extra_clones"
       ],
       "snap": "head",
