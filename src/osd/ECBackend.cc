@@ -728,8 +728,8 @@ int ECBackend::recover_object(
   }
   h->ops.back().recovery_progress.omap_complete = true;
   for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_actingbackfill_shards().begin();
-       i != get_parent()->get_actingbackfill_shards().end();
+	 get_parent()->get_acting_recovery_backfill_shards().begin();
+       i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     dout(10) << "checking " << *i << dendl;
     if (get_parent()->get_shard_missing(*i).is_missing(hoid)) {
@@ -883,14 +883,13 @@ void ECBackend::handle_sub_write(
   if (msg)
     msg->mark_started();
   trace.event("handle_sub_write");
-  assert(!get_parent()->get_log().get_missing().is_missing(op.soid));
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
   ObjectStore::Transaction localt;
   if (!op.temp_added.empty()) {
     add_temp_objs(op.temp_added);
   }
-  if (op.backfill) {
+  if (op.backfill_or_async_recovery) {
     for (set<hobject_t>::iterator i = op.temp_removed.begin();
 	 i != op.temp_removed.end();
 	 ++i) {
@@ -905,12 +904,22 @@ void ECBackend::handle_sub_write(
     }
   }
   clear_temp_objs(op.temp_removed);
+  dout(30) << __func__ << " missing before " << get_parent()->get_log().get_missing().get_items() << dendl;
+  pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
+  if (pmissing.is_missing(op.soid)) {
+    dout(30) << __func__ << " is_missing " << pmissing.is_missing(op.soid) << dendl;
+    for (auto &&e: op.log_entries) {
+      dout(30) << " add_next_event entry " << e << dendl;
+      get_parent()->add_local_next_event(e);
+      dout(30) << " entry is_delete " << e.is_delete() << dendl;
+    }
+  }
   get_parent()->log_operation(
     op.log_entries,
     op.updated_hit_set_history,
     op.trim_to,
     op.roll_forward_to,
-    !op.backfill,
+    !op.backfill_or_async_recovery,
     localt);
 
   if (!get_parent()->pg_is_undersized() &&
@@ -929,6 +938,7 @@ void ECBackend::handle_sub_write(
   tls.push_back(std::move(op.t));
   tls.push_back(std::move(localt));
   get_parent()->queue_transactions(tls, msg);
+  dout(30) << __func__ << " missing after" << get_parent()->get_log().get_missing().get_items() << dendl;
 }
 
 void ECBackend::handle_sub_read(
@@ -1848,8 +1858,8 @@ bool ECBackend::try_reads_to_commit()
 
   map<shard_id_t, ObjectStore::Transaction> trans;
   for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_actingbackfill_shards().begin();
-       i != get_parent()->get_actingbackfill_shards().end();
+	 get_parent()->get_acting_recovery_backfill_shards().begin();
+       i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     trans[i->shard];
   }
@@ -1905,9 +1915,10 @@ bool ECBackend::try_reads_to_commit()
   ObjectStore::Transaction empty;
   bool should_write_local = false;
   ECSubWrite local_write_op;
+  set<pg_shard_t> backfill_shards = get_parent()->get_backfill_shards();
   for (set<pg_shard_t>::const_iterator i =
-	 get_parent()->get_actingbackfill_shards().begin();
-       i != get_parent()->get_actingbackfill_shards().end();
+	 get_parent()->get_acting_recovery_backfill_shards().begin();
+       i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     op->pending_apply.insert(*i);
     op->pending_commit.insert(*i);
@@ -1916,7 +1927,7 @@ bool ECBackend::try_reads_to_commit()
     assert(iter != trans.end());
     bool should_send = get_parent()->should_send_op(*i, op->hoid);
     const pg_stat_t &stats =
-      should_send ?
+      (should_send || !backfill_shards.count(*i)) ?
       get_info().stats :
       parent->get_shard_info().find(*i)->second.stats;
 
