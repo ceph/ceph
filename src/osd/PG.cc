@@ -458,9 +458,7 @@ void PG::proc_replica_log(
     dout(20) << " after missing " << i->first << " need " << i->second.need
 	     << " have " << i->second.have << dendl;
   }
-  dout(10) << __func__ << " peer_missing " << peer_missing[from].get_items() << dendl;
   peer_missing[from].claim(omissing);
-  dout(10) << __func__ << " peer_missing after claim" << peer_missing[from].get_items() << dendl;
 }
 
 bool PG::proc_replica_info(

@@ -1411,7 +1411,6 @@ public:
 	    }
 	  } else {
 	    ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i << dendl;
-	    ldpp_dout(dpp, 15) << " missing set " << missing.get_items() << dendl;
 	    if (debug_verify_stored_missing) {
 	      auto miter = missing.get_items().find(i->soid);
 	      if (i->is_delete()) {
