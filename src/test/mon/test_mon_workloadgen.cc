@@ -514,7 +514,7 @@ class OSDStub : public TestStub
 	       << " epoch " << pool_epoch << dendl;
 
       for (ps_t ps = 0; ps < pool.get_pg_num(); ++ps) {
-	pg_t pgid(ps, pool_id, -1);
+	pg_t pgid(ps, pool_id);
 	pg_t parent;
 	dout(20) << __func__
 		 << " pgid " << pgid << " parent " << parent << dendl;
@@ -995,14 +995,13 @@ int get_id_interval(int &first, int &last, string &str)
 
 int main(int argc, const char *argv[])
 {
-  vector<const char*> def_args;
   vector<const char*> args;
   our_name = argv[0];
   argv_to_vec(argc, argv, args);
 
-  auto cct = global_init(&def_args, args,
+  auto cct = global_init(NULL, args,
 			 CEPH_ENTITY_TYPE_OSD, CODE_ENVIRONMENT_UTILITY,
-			 0);
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);

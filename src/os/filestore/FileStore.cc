@@ -28,6 +28,7 @@
 
 #if defined(__linux__)
 #include <linux/fs.h>
+#include <linux/falloc.h>
 #endif
 
 #include <iostream>
@@ -3938,7 +3939,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
   if (r < 0 && replaying) {
     assert(r == -ERANGE);
     derr << __FUNC__ << ": short source tolerated because we are replaying" << dendl;
-    r = pos - from;;
+    r = len;
   }
   assert(replaying || pos == end);
   if (r >= 0 && !skip_sloppycrc && m_filestore_sloppy_crc) {
@@ -5604,7 +5605,7 @@ int FileStore::_omap_setkeys(const coll_t& cid, const ghobject_t &hoid,
     }
   }
 skip:
-  if (g_conf->subsys.should_gather(ceph_subsys_filestore, 20)) {
+  if (g_conf->subsys.should_gather<ceph_subsys_filestore, 20>()) {
     for (auto& p : aset) {
       dout(20) << __FUNC__ << ":  set " << p.first << dendl;
     }

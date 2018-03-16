@@ -698,6 +698,13 @@ public:
    */
   map<string, string> get_full_location(int id) const;
 
+  /**
+   * return location map for a item, by name
+   */
+  int get_full_location(
+    const string& name,
+    std::map<string,string> *ploc);
+
   /*
    * identical to get_full_location(int id) although it returns the type/name
    * pairs in the order they occur in the hierarchy.
@@ -728,6 +735,13 @@ public:
    * @return number of items, or error
    */
   int get_children(int id, list<int> *children) const;
+
+  /**
+    * get failure-domain type of a specific crush rule
+    * @param rule_id crush rule id
+    * @return type of failure-domain or a negative errno on error.
+    */
+  int get_rule_failure_domain(int rule_id);
 
   /**
     * enumerate leaves(devices) of given node
@@ -898,6 +912,7 @@ public:
 			   std::map<string,string> *ploc);
   static int parse_loc_multimap(const std::vector<string>& args,
 				std::multimap<string,string> *ploc);
+
 
   /**
    * get an item's weight

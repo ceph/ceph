@@ -36,7 +36,7 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
   : BlockDevice(cct, cb, cbpriv),
     fd_direct(-1),
     fd_buffered(-1),
-    fs(NULL), aio(false), dio(false),
+    aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
     discard_callback(d_cb),
@@ -152,9 +152,6 @@ int KernelDevice::open(const string& p)
   }
   _discard_start();
 
-  fs = FS::create_by_fd(fd_direct);
-  assert(fs);
-
   // round size down to an even block
   size &= ~(block_size - 1);
 
@@ -194,10 +191,6 @@ void KernelDevice::close()
   dout(1) << __func__ << dendl;
   _aio_stop();
   _discard_stop();
-
-  assert(fs);
-  delete fs;
-  fs = NULL;
 
   assert(fd_direct >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
@@ -751,8 +744,13 @@ int KernelDevice::aio_write(
 int KernelDevice::discard(uint64_t offset, uint64_t len)
 {
   int r = 0;
-  if (!rotational)
+  if (!rotational) {
+      dout(10) << __func__
+	       << " 0x" << std::hex << offset << "~" << len << std::dec
+	       << dendl;
+
     r = block_device_discard(fd_direct, (int64_t)offset, (int64_t)len);
+  }
   return r;
 }
 

@@ -70,7 +70,7 @@ by section.
 * Comments > File Comments:
 
    Don't sweat it, unless the license varies from that of the project
-   (LGPL2) or the code origin isn't reflected by the git history.
+   (LGPL2.1) or the code origin isn't reflected by the git history.
 
 * Formatting > Tabs:
   Indent width is two spaces.  When runs of 8 spaces can be compressed

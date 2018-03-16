@@ -684,6 +684,18 @@ map<string, string> CrushWrapper::get_full_location(int id) const
   return full_location;
 }
 
+int CrushWrapper::get_full_location(const string& name,
+				    map<string,string> *ploc)
+{
+  build_rmaps();
+  auto p = name_rmap.find(name);
+  if (p == name_rmap.end()) {
+    return -ENOENT;
+  }
+  *ploc = get_full_location(p->second);
+  return 0;
+}
+
 int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> >& path) const
 {
   if (!item_exists(id))
@@ -766,6 +778,25 @@ int CrushWrapper::get_children(int id, list<int> *children) const
     children->push_back(b->items[n]);
   }
   return b->size;
+}
+
+int CrushWrapper::get_rule_failure_domain(int rule_id)
+{
+  crush_rule *rule = get_rule(rule_id);
+  if (IS_ERR(rule)) {
+    return -ENOENT;
+  }
+  int type = 0; // default to osd-level
+  for (unsigned s = 0; s < rule->len; ++s) {
+    if ((rule->steps[s].op == CRUSH_RULE_CHOOSE_FIRSTN ||
+         rule->steps[s].op == CRUSH_RULE_CHOOSE_INDEP ||
+         rule->steps[s].op == CRUSH_RULE_CHOOSELEAF_FIRSTN ||
+         rule->steps[s].op == CRUSH_RULE_CHOOSELEAF_INDEP) &&
+         rule->steps[s].arg2 > type) {
+      type = rule->steps[s].arg2;
+    }
+  }
+  return type;
 }
 
 int CrushWrapper::_get_leaves(int id, list<int> *leaves) const
@@ -3076,7 +3107,7 @@ int CrushWrapper::_choose_type_stack(
   ldout(cct, 10) << __func__ << " cumulative_fanout " << cumulative_fanout
 		 << dendl;
 
-  // identify underful targets for each intermediate level.
+  // identify underfull targets for each intermediate level.
   // this serves two purposes:
   //   1. we can tell when we are selecting a bucket that does not have any underfull
   //      devices beneath it.  that means that if the current input includes an overfull
@@ -3176,6 +3207,7 @@ int CrushWrapper::_choose_type_stack(
 	    for (auto osd : leaves[pos]) {
 	      if (overfull.count(osd)) {
 		any_overfull = true;
+               break;
 	      }
 	    }
 	    if (any_overfull) {

@@ -24,6 +24,7 @@
 #include <boost/statechart/event_base.hpp>
 #include <boost/scoped_ptr.hpp>
 #include <boost/circular_buffer.hpp>
+#include <boost/container/flat_set.hpp>
 #include "include/memory.h"
 #include "include/mempool.h"
 
@@ -602,17 +603,94 @@ protected:
   }
   ghobject_t    pgmeta_oid;
 
+  // ------------------
+  // MissingLoc
+  
   class MissingLoc {
+  public:
+    // a loc_count indicates how many locations we know in each of
+    // these distinct sets
+    struct loc_count_t {
+      int up = 0;        //< up
+      int other = 0;    //< other
+
+      friend bool operator<(const loc_count_t& l,
+			    const loc_count_t& r) {
+	return (l.up < r.up ||
+		(l.up == r.up &&
+		   (l.other < r.other)));
+      }
+      friend ostream& operator<<(ostream& out, const loc_count_t& l) {
+	assert(l.up >= 0);
+	assert(l.other >= 0);
+	return out << "(" << l.up << "+" << l.other << ")";
+      }
+    };
+
+
+  private:
+
+    loc_count_t _get_count(const set<pg_shard_t>& shards) {
+      loc_count_t r;
+      for (auto s : shards) {
+        if (pg->upset.count(s)) {
+	  r.up++;
+	} else {
+	  r.other++;
+	}
+      }
+      return r;
+    }
+
     map<hobject_t, pg_missing_item> needs_recovery_map;
     map<hobject_t, set<pg_shard_t> > missing_loc;
     set<pg_shard_t> missing_loc_sources;
+
+    // for every entry in missing_loc, we count how many of each type of shard we have,
+    // and maintain totals here.  The sum of the values for this map will always equal
+    // missing_loc.size().
+    map < shard_id_t, map<loc_count_t,int> > missing_by_count;
+
+   void pgs_by_shard_id(const set<pg_shard_t>& s, map< shard_id_t, set<pg_shard_t> >& pgsbs) {
+      if (pg->get_osdmap()->pg_is_ec(pg->info.pgid.pgid)) {
+        int num_shards = pg->get_osdmap()->get_pg_size(pg->info.pgid.pgid);
+        // For completely missing shards initialize with empty set<pg_shard_t>
+	for (int i = 0 ; i < num_shards ; ++i) {
+	  shard_id_t shard(i);
+	  pgsbs[shard];
+	}
+	for (auto pgs: s)
+	  pgsbs[pgs.shard].insert(pgs);
+      } else {
+        pgsbs[shard_id_t::NO_SHARD] = s;
+      }
+    }
+
+    void _inc_count(const set<pg_shard_t>& s) {
+      map< shard_id_t, set<pg_shard_t> > pgsbs;
+      pgs_by_shard_id(s, pgsbs);
+      for (auto shard: pgsbs)
+        ++missing_by_count[shard.first][_get_count(shard.second)];
+    }
+    void _dec_count(const set<pg_shard_t>& s) {
+      map< shard_id_t, set<pg_shard_t> > pgsbs;
+      pgs_by_shard_id(s, pgsbs);
+      for (auto shard: pgsbs) {
+        auto p = missing_by_count[shard.first].find(_get_count(shard.second));
+        assert(p != missing_by_count[shard.first].end());
+        if (--p->second == 0) {
+	  missing_by_count[shard.first].erase(p);
+        }
+      }
+    }
+
     PG *pg;
     set<pg_shard_t> empty_set;
   public:
     boost::scoped_ptr<IsPGReadablePredicate> is_readable;
     boost::scoped_ptr<IsPGRecoverablePredicate> is_recoverable;
     explicit MissingLoc(PG *pg)
-      : pg(pg) {}
+      : pg(pg) { }
     void set_backend_predicates(
       IsPGReadablePredicate *_is_readable,
       IsPGRecoverablePredicate *_is_recoverable) {
@@ -683,14 +761,36 @@ protected:
       needs_recovery_map.clear();
       missing_loc.clear();
       missing_loc_sources.clear();
+      missing_by_count.clear();
     }
 
     void add_location(const hobject_t &hoid, pg_shard_t location) {
-      missing_loc[hoid].insert(location);
+      auto p = missing_loc.find(hoid);
+      if (p == missing_loc.end()) {
+	p = missing_loc.emplace(hoid, set<pg_shard_t>()).first;
+      } else {
+	_dec_count(p->second);
+      }
+      p->second.insert(location);
+      _inc_count(p->second);
     }
     void remove_location(const hobject_t &hoid, pg_shard_t location) {
-      missing_loc[hoid].erase(location);
+      auto p = missing_loc.find(hoid);
+      if (p != missing_loc.end()) {
+	_dec_count(p->second);
+	p->second.erase(location);
+	_inc_count(p->second);
+      }
     }
+
+    void clear_location(const hobject_t &hoid) {
+      auto p = missing_loc.find(hoid);
+      if (p != missing_loc.end()) {
+	_dec_count(p->second);
+        missing_loc.erase(p);
+      }
+    }
+
     void add_active_missing(const pg_missing_t &missing) {
       for (map<hobject_t, pg_missing_item>::const_iterator i =
 	     missing.get_items().begin();
@@ -709,8 +809,8 @@ protected:
       }
     }
 
-    void add_missing(const hobject_t &hoid, eversion_t need, eversion_t have) {
-      needs_recovery_map[hoid] = pg_missing_item(need, have);
+    void add_missing(const hobject_t &hoid, eversion_t need, eversion_t have, bool is_delete=false) {
+      needs_recovery_map[hoid] = pg_missing_item(need, have, is_delete);
     }
     void revise_need(const hobject_t &hoid, eversion_t need) {
       auto it = needs_recovery_map.find(hoid);
@@ -738,7 +838,11 @@ protected:
     /// Call when hoid is no longer missing in acting set
     void recovered(const hobject_t &hoid) {
       needs_recovery_map.erase(hoid);
-      missing_loc.erase(hoid);
+      auto p = missing_loc.find(hoid);
+      if (p != missing_loc.end()) {
+	_dec_count(p->second);
+	missing_loc.erase(p);
+      }
     }
 
     /// Call to update structures for hoid after a change
@@ -781,6 +885,8 @@ protected:
       if (!missing.is_missing(hoid))
 	mliter->second.insert(self);
       for (auto &&i: pmissing) {
+	if (i.first == self)
+	  continue;
 	auto pinfoiter = pinfo.find(i.first);
 	assert(pinfoiter != pinfo.end());
 	if (item->need <= pinfoiter->second.last_update &&
@@ -788,6 +894,7 @@ protected:
 	    !i.second.is_missing(hoid))
 	  mliter->second.insert(i.first);
       }
+      _inc_count(mliter->second);
     }
 
     const set<pg_shard_t> &get_locations(const hobject_t &hoid) const {
@@ -799,6 +906,9 @@ protected:
     }
     const map<hobject_t, pg_missing_item> &get_needs_recovery() const {
       return needs_recovery_map;
+    }
+    const map < shard_id_t, map<loc_count_t,int> > &get_missing_by_count() const {
+      return missing_by_count;
     }
   } missing_loc;
   
@@ -837,7 +947,9 @@ protected:
   pg_shard_t pg_whoami;
   pg_shard_t up_primary;
   vector<int> up, acting, want_acting;
-  set<pg_shard_t> actingbackfill, actingset, upset;
+  // acting_recovery_backfill contains shards that are acting,
+  // async recovery targets, or backfill targets.
+  set<pg_shard_t> acting_recovery_backfill, actingset, upset;
   map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -853,6 +965,7 @@ protected:
   };
 
 public:
+  bool dne() { return info.dne(); }
   struct RecoveryCtx {
     utime_t start_time;
     map<int, map<spg_t, pg_query_t> > *query_map;
@@ -1065,7 +1178,7 @@ protected:
   bool backfill_reserved;
   bool backfill_reserving;
 
-  set<pg_shard_t> backfill_targets;
+  set<pg_shard_t> backfill_targets,  async_recovery_targets;
 
   bool is_backfill_targets(pg_shard_t osd) {
     return backfill_targets.count(osd);
@@ -1178,8 +1291,8 @@ protected:
 
   void clear_primary_state();
 
-  bool is_actingbackfill(pg_shard_t osd) const {
-    return actingbackfill.count(osd);
+  bool is_acting_recovery_backfill(pg_shard_t osd) const {
+    return acting_recovery_backfill.count(osd);
   }
   bool is_acting(pg_shard_t osd) const {
     return has_shard(pool.info.is_erasure(), acting, osd);
@@ -1234,9 +1347,9 @@ protected:
 
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
+    assert(!acting_recovery_backfill.empty());
+    for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
+	 i != acting_recovery_backfill.end();
 	 ++i) {
       if (*i == get_primary()) continue;
       if (peer_last_complete_ondisk.count(*i) == 0)
@@ -1334,6 +1447,16 @@ protected:
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
     ostream &ss);
+  void choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
+                                const pg_info_t &auth_info,
+                                vector<int> *want,
+                                set<pg_shard_t> *async_recovery) const;
+  void choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_info,
+                                        const pg_info_t &auth_info,
+                                        vector<int> *want,
+                                        set<pg_shard_t> *async_recovery) const;
+
+  bool recoverable_and_ge_min_size(const vector<int> &want) const;
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound);
@@ -2731,6 +2854,7 @@ protected:
   bool is_peered() const {
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
+  bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
 
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 
@@ -2813,15 +2937,19 @@ protected:
 
   bool append_log_entries_update_missing(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-    ObjectStore::Transaction &t);
+    ObjectStore::Transaction &t,
+    boost::optional<eversion_t> trim_to,
+    boost::optional<eversion_t> roll_forward_to);
 
   /**
    * Merge entries updating missing as necessary on all
-   * actingbackfill logs and missings (also missing_loc)
+   * acting_recovery_backfill logs and missings (also missing_loc)
    */
   void merge_new_log_entries(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
-    ObjectStore::Transaction &t);
+    ObjectStore::Transaction &t,
+    boost::optional<eversion_t> trim_to,
+    boost::optional<eversion_t> roll_forward_to);
 
   void reset_interval_flush();
   void start_peering_interval(

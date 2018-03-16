@@ -9311,9 +9311,15 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
 void MDCache::request_kill(MDRequestRef& mdr)
 {
   // rollback slave requests is tricky. just let the request proceed.
-  if (mdr->done_locking && mdr->has_more() &&
+  if (mdr->has_more() &&
       (!mdr->more()->witnessed.empty() || !mdr->more()->waiting_on_slave.empty())) {
-    dout(10) << "request_kill " << *mdr << " -- already started slave requests, no-op" << dendl;
+    if (!mdr->done_locking) {
+      assert(mdr->more()->witnessed.empty());
+      mdr->aborted = true;
+      dout(10) << "request_kill " << *mdr << " -- waiting for slave reply, delaying" << dendl;
+    } else {
+      dout(10) << "request_kill " << *mdr << " -- already started slave prep, no-op" << dendl;
+    }
 
     assert(mdr->used_prealloc_ino == 0);
     assert(mdr->prealloc_inos.empty());
@@ -11777,7 +11783,8 @@ void MDCache::show_subtrees(int dbl)
     return;  // i won't print anything.
 
   if (subtrees.empty()) {
-    dout(dbl) << "show_subtrees - no subtrees" << dendl;
+    dout(ceph::dout::need_dynamic(dbl)) << "show_subtrees - no subtrees"
+					<< dendl;
     return;
   }
 
@@ -11866,7 +11873,8 @@ void MDCache::show_subtrees(int dbl)
       snprintf(s, sizeof(s), "%2d,%2d", int(dir->get_dir_auth().first), int(dir->get_dir_auth().second));
     
     // print
-    dout(dbl) << indent << "|_" << pad << s << " " << auth << *dir << dendl;
+    dout(ceph::dout::need_dynamic(dbl)) << indent << "|_" << pad << s
+					<< " " << auth << *dir << dendl;
 
     if (dir->ino() == MDS_INO_ROOT)
       assert(dir->inode == root);
@@ -11946,6 +11954,28 @@ int MDCache::cache_status(Formatter *f)
   return 0;
 }
 
+void MDCache::dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f) 
+{
+  assert(in);
+  if ((max_depth >= 0) && (cur_depth > max_depth)) {
+    return;
+  }
+  list<CDir*> ls;
+  in->get_dirfrags(ls);
+  for (const auto &subdir : ls) {
+    for (const auto &p : subdir->items) {
+      CDentry *dn = p.second;
+      CInode *in = dn->get_linkage()->get_inode();
+      if (in) {
+        dump_tree(in, cur_depth + 1, max_depth, f);
+      }
+    }
+  }
+  f->open_object_section("inode");
+  in->dump(f, CInode::DUMP_DEFAULT | CInode::DUMP_DIRFRAGS);
+  f->close_section();
+}
+
 int MDCache::dump_cache(std::string_view file_name)
 {
   return dump_cache(file_name, NULL);
@@ -11956,17 +11986,11 @@ int MDCache::dump_cache(Formatter *f)
   return dump_cache(std::string_view(""), f);
 }
 
-int MDCache::dump_cache(std::string_view dump_root, int depth, Formatter *f)
-{
-  return dump_cache(std::string_view(""), f, dump_root, depth);
-}
-
 /**
  * Dump the metadata cache, either to a Formatter, if
  * provided, else to a plain text file.
  */
-int MDCache::dump_cache(std::string_view fn, Formatter *f,
-			 std::string_view dump_root, int depth)
+int MDCache::dump_cache(std::string_view fn, Formatter *f)
 {
   int r = 0;
   int fd = -1;
@@ -11990,87 +12014,39 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f,
     }
   }
 
-  auto dump_func = [fd, f, depth, &dump_root](CInode *in) {
+  auto dump_func = [fd, f](CInode *in) {
     int r;
-    if (!dump_root.empty()) {
-      string ipath;
-      if (in->is_root())
-	ipath = "/";
-      else
-	in->make_path_string(ipath);
-
-      if (dump_root.length() > ipath.length() ||
-	  !equal(dump_root.begin(), dump_root.end(), ipath.begin()))
-	return 0;
-
-      if (depth >= 0 &&
-	  count(ipath.begin() + dump_root.length(), ipath.end(), '/') > depth)
-	return 0;
-    }
-
     if (f) {
       f->open_object_section("inode");
-      in->dump(f);
-    } else {
-      ostringstream ss;
-      ss << *in << std::endl;
-      std::string s = ss.str();
-      r = safe_write(fd, s.c_str(), s.length());
-      if (r < 0)
-	return r;
-    }
-
+      in->dump(f, CInode::DUMP_DEFAULT | CInode::DUMP_DIRFRAGS);
+      f->close_section();
+      return 1;
+    } 
+    ostringstream ss;
+    ss << *in << std::endl;
+    std::string s = ss.str();
+    r = safe_write(fd, s.c_str(), s.length());
+    if (r < 0)
+      return r;
     list<CDir*> dfs;
     in->get_dirfrags(dfs);
-    if (f) {
-      f->open_array_section("dirfrags");
-    }
-    for (list<CDir*>::iterator p = dfs.begin(); p != dfs.end(); ++p) {
-      CDir *dir = *p;
-      if (f) {
-        f->open_object_section("dir");
-        dir->dump(f);
-      } else {
-        ostringstream tt;
-        tt << " " << *dir << std::endl;
-        string t = tt.str();
-        r = safe_write(fd, t.c_str(), t.length());
-        if (r < 0)
-	  return r;
-      }
-      
-      if (f) {
-        f->open_array_section("dentries");
-      }
+    for (auto &dir : dfs) {
+      ostringstream tt;
+      tt << " " << *dir << std::endl;
+      std::string t = tt.str();
+      r = safe_write(fd, t.c_str(), t.length());
+      if (r < 0)
+        return r;
       for (auto &p : dir->items) {
 	CDentry *dn = p.second;
-        if (f) {
-	  f->open_object_section("dentry");
-          dn->dump(f);
-          f->close_section();
-        } else {
-          ostringstream uu;
-          uu << "  " << *dn << std::endl;
-          string u = uu.str();
-          r = safe_write(fd, u.c_str(), u.length());
-          if (r < 0)
-	    return r;
-        }
-      }
-      if (f) {
-	f->close_section();  //dentries
+        ostringstream uu;
+        uu << "  " << *dn << std::endl;
+        std::string u = uu.str();
+        r = safe_write(fd, u.c_str(), u.length());
+        if (r < 0)
+          return r;
       }
       dir->check_rstats();
-      if (f) {
-	f->close_section();  //dir
-      }
-    }
-    if (f) {
-      f->close_section();  // dirfrags
-    }
-
-    if (f) {
-      f->close_section();  // inode
     }
     return 1;
   };

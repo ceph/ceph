@@ -1,7 +1,7 @@
 """
 Copyright (C) 2015 Red Hat, Inc.
 
-LGPL2.  See file COPYING.
+LGPL2.1.  See file COPYING.
 """
 
 from contextlib import contextmanager
@@ -627,7 +627,8 @@ class CephFSVolumeClient(object):
             pool_id = self._create_volume_pool(pool_name)
             mds_map = self.get_mds_map()
             if pool_id not in mds_map['data_pools']:
-                self._rados_command("fs {} add_data_pool".format(mds_map['fs_name']), {
+                self._rados_command("fs add_data_pool", {
+                    'fs_name': mds_map['fs_name'],
                     'pool': pool_name
                 })
             self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
@@ -727,7 +728,8 @@ class CephFSVolumeClient(object):
             pool_id = self._get_pool_id(osd_map, pool_name)
             mds_map = self.get_mds_map()
             if pool_id in mds_map['data_pools']:
-                self._rados_command("fs {} rm_data_pool".format(mds_map['fs_name']), {
+                self._rados_command("fs rm_data_pool", {
+                    'fs_name': mds_map['fs_name'],
                     'pool': pool_name
                 })
             self._rados_command("osd pool delete",

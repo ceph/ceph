@@ -36,6 +36,7 @@
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
 #include "rgw_reshard.h"
+#include "rgw_http_client_curl.h"
 
 #include "rgw_admin_argument_parsing.h"
 #include "rgw_admin_common.h"
@@ -76,7 +77,6 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
 
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
@@ -331,6 +331,15 @@ int main(int argc, const char **argv)
 
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
+
+  struct rgw_curl_setup {
+    rgw_curl_setup() {
+      rgw::curl::setup_curl(boost::none);
+    }
+    ~rgw_curl_setup() {
+      rgw::curl::cleanup_curl();
+    }
+  } curl_cleanup;
 
   StoreDestructor store_destructor(store);
 
@@ -1053,7 +1062,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_DATA_SYNC_RUN) {
-    return handle_opt_data_sync_run(source_zone, store);
+    return handle_opt_data_sync_run(source_zone, cct, store);
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_INIT) {
@@ -1104,7 +1113,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_DATALOG_LIST) {
-    return handle_opt_datalog_list(max_entries, start_date, end_date, extra_info, store, formatter);
+    return handle_opt_datalog_list(max_entries, start_date, end_date, specified_shard_id, shard_id,
+                                   marker, extra_info, store, formatter);
   }
 
   if (opt_cmd == OPT_DATALOG_STATUS) {

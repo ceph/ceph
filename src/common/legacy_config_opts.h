@@ -94,12 +94,6 @@ OPTION(xio_max_send_inline, OPT_INT) // xio maximum threshold to send inline
 OPTION(compressor_zlib_isal, OPT_BOOL)
 OPTION(compressor_zlib_level, OPT_INT) //regular zlib compression level, not applicable to isa-l optimized version
 
-OPTION(async_compressor_enabled, OPT_BOOL)
-OPTION(async_compressor_type, OPT_STR)
-OPTION(async_compressor_threads, OPT_INT)
-OPTION(async_compressor_thread_timeout, OPT_INT)
-OPTION(async_compressor_thread_suicide_timeout, OPT_INT)
-
 OPTION(plugin_crypto_accelerator, OPT_STR)
 
 OPTION(mempool_debug, OPT_BOOL)
@@ -119,7 +113,7 @@ OPTION(ms_public_type, OPT_STR)   // messenger backend
 OPTION(ms_cluster_type, OPT_STR)   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL)
 OPTION(ms_tcp_rcvbuf, OPT_INT)
-OPTION(ms_tcp_prefetch_max_size, OPT_INT) // max prefetch size, we limit this to avoid extra memcpy
+OPTION(ms_tcp_prefetch_max_size, OPT_U32) // max prefetch size, we limit this to avoid extra memcpy
 OPTION(ms_initial_backoff, OPT_DOUBLE)
 OPTION(ms_max_backoff, OPT_DOUBLE)
 OPTION(ms_crc_data, OPT_BOOL)
@@ -568,8 +562,6 @@ OPTION(osd_max_write_size, OPT_INT)
 OPTION(osd_max_pgls, OPT_U64) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64) // client data allowed in-memory (in bytes)
 OPTION(osd_client_message_cap, OPT_U64)              // num client messages allowed in-memory
-OPTION(osd_pg_bits, OPT_INT)  // bits per osd
-OPTION(osd_pgp_bits, OPT_INT)  // bits per osd
 OPTION(osd_crush_update_weight_set, OPT_BOOL) // update weight set while updating weights
 OPTION(osd_crush_chooseleaf_type, OPT_INT) // 1 = host
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL) // try to use gmt for hitset archive names if all osds in cluster support it.
@@ -749,6 +741,8 @@ OPTION(osd_deep_scrub_stride, OPT_INT)
 OPTION(osd_deep_scrub_keys, OPT_INT)
 OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT)   // objects must be this old (seconds) before we update the whole-object digest on scrub
 OPTION(osd_skip_data_digest, OPT_BOOL)
+OPTION(osd_deep_scrub_large_omap_object_key_threshold, OPT_U64)
+OPTION(osd_deep_scrub_large_omap_object_value_sum_threshold, OPT_U64)
 OPTION(osd_class_dir, OPT_STR) // where rados plugins are stored
 OPTION(osd_open_classes_on_start, OPT_BOOL)
 OPTION(osd_class_load_list, OPT_STR) // list of object classes allowed to be loaded (allow all: *)
@@ -767,6 +761,7 @@ OPTION(osd_max_pg_log_entries, OPT_U32) // max entries, say when degraded, befor
 OPTION(osd_pg_log_dups_tracked, OPT_U32) // how many versions back to track combined in both pglog's regular + dup logs
 OPTION(osd_force_recovery_pg_log_entries_factor, OPT_FLOAT) // max entries factor before force recovery
 OPTION(osd_pg_log_trim_min, OPT_U32)
+OPTION(osd_pg_log_trim_max, OPT_U32)
 OPTION(osd_op_complaint_time, OPT_FLOAT) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT)
 OPTION(osd_max_pg_blocked_by, OPT_U32)    // max peer osds to report that are blocking our progress
@@ -837,8 +832,6 @@ OPTION(kinetic_hmac_key, OPT_STR) // kinetic key to authenticate with
 OPTION(kinetic_use_ssl, OPT_BOOL) // whether to secure kinetic traffic with TLS
 
 
-OPTION(rocksdb_separate_wal_dir, OPT_BOOL) // use $path.wal for wal
-SAFE_OPTION(rocksdb_db_paths, OPT_STR)   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_U64)  // rocksdb cache size (unless set by bluestore/etc)
 OPTION(rocksdb_cache_row_ratio, OPT_FLOAT)   // ratio of cache for row (vs block)
@@ -1036,7 +1029,7 @@ OPTION(bluestore_cache_size_hdd, OPT_U64)
 OPTION(bluestore_cache_size_ssd, OPT_U64)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE)
 OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE)
-OPTION(bluestore_cache_kv_max, OPT_INT) // limit the maximum amount of cache for the kv store
+OPTION(bluestore_cache_kv_min, OPT_INT)
 OPTION(bluestore_kvbackend, OPT_STR)
 OPTION(bluestore_allocator, OPT_STR)     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT)
@@ -1415,6 +1408,8 @@ OPTION(rgw_gc_max_objs, OPT_INT)
 OPTION(rgw_gc_obj_min_wait, OPT_INT)    // wait time before object may be handled by gc
 OPTION(rgw_gc_processor_max_time, OPT_INT)  // total run time for a single gc processor work
 OPTION(rgw_gc_processor_period, OPT_INT)  // gc processor cycle time
+OPTION(rgw_gc_max_concurrent_io, OPT_INT)  // gc processor cycle time
+OPTION(rgw_gc_max_trim_chunk, OPT_INT)  // gc trim chunk size
 OPTION(rgw_s3_success_create_obj_status, OPT_INT) // alternative success status response for create-obj (0 - default)
 OPTION(rgw_resolve_cname, OPT_BOOL)  // should rgw try to resolve hostname as a dns cname record
 OPTION(rgw_obj_stripe_size, OPT_INT)
@@ -1508,7 +1503,7 @@ OPTION(throttler_perf_counter, OPT_BOOL) // enable/disable throttler perf counte
 
 /* The following are tunables for torrent data */
 OPTION(rgw_torrent_flag, OPT_BOOL)    // produce torrent function flag
-OPTION(rgw_torrent_tracker, OPT_STR)    // torrent field annouce and annouce list
+OPTION(rgw_torrent_tracker, OPT_STR)    // torrent field announce and announce list
 OPTION(rgw_torrent_createby, OPT_STR)    // torrent field created by
 OPTION(rgw_torrent_comment, OPT_STR)    // torrent field comment
 OPTION(rgw_torrent_encoding, OPT_STR)    // torrent field encoding

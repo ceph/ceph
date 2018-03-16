@@ -838,6 +838,7 @@ int handle_opt_datalog_status(bool specified_shard_id, int shard_id, RGWRados *s
 }
 
 int handle_opt_datalog_list(int max_entries, const std::string& start_date, const std::string& end_date,
+                            bool specified_shard_id, int shard_id, const std::string& marker,
                             bool extra_info, RGWRados *store, Formatter *formatter)
 {
   formatter->open_array_section("entries");
@@ -857,11 +858,15 @@ int handle_opt_datalog_list(int max_entries, const std::string& start_date, cons
     return -ret;
 
   RGWDataChangesLog *log = store->data_log;
-  RGWDataChangesLog::LogMarker marker;
+  RGWDataChangesLog::LogMarker log_marker;
 
   do {
     list<rgw_data_change_log_entry> entries;
-    ret = log->list_entries(start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, marker, &truncated);
+    if (specified_shard_id) {
+      ret = log->list_entries(shard_id, start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, marker, NULL, &truncated);
+    } else {
+      ret = log->list_entries(start_time.to_real_time(), end_time.to_real_time(), max_entries - count, entries, log_marker, &truncated);
+    }
     if (ret < 0) {
       cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -869,7 +874,7 @@ int handle_opt_datalog_list(int max_entries, const std::string& start_date, cons
 
     count += entries.size();
 
-    for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+    for (list<rgw_data_change_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
       rgw_data_change_log_entry& entry = *iter;
       if (!extra_info) {
         encode_json("entry", entry.entry, formatter);

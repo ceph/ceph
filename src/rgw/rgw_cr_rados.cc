@@ -41,7 +41,7 @@ void RGWAsyncRadosProcessor::RGWWQ::_process(RGWAsyncRadosRequest *req, ThreadPo
 }
 
 void RGWAsyncRadosProcessor::RGWWQ::_dump_queue() {
-  if (!g_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (!g_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     return;
   }
   deque<RGWAsyncRadosRequest *>::iterator iter;

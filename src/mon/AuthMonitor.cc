@@ -20,6 +20,7 @@
 #include "mon/ConfigKeyService.h"
 #include "mon/OSDMonitor.h"
 #include "mon/MDSMonitor.h"
+#include "mon/ConfigMonitor.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MAuth.h"
@@ -374,6 +375,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   bufferlist::iterator indata = m->auth_payload.begin();
   __u32 proto = m->protocol;
   bool start = false;
+  bool finished = false;
   EntityName entity_name;
 
   // set up handler?
@@ -483,8 +485,10 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 
       proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
       ret = 0;
-      if (caps_info.allow_all)
+      if (caps_info.allow_all) {
 	s->caps.set_allow_all();
+	s->authenticated = true;
+      }
     } else {
       // request
       ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info, &auid);
@@ -504,6 +508,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       }
       s->caps.parse(str, NULL);
       s->auid = auid;
+      s->authenticated = true;
+      finished = true;
     }
   } catch (const buffer::error &err) {
     ret = -EINVAL;
@@ -513,6 +519,9 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 reply:
   reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
   mon->send_reply(op, reply);
+  if (finished) {
+    mon->configmon()->check_sub(s);
+  }
 done:
   return true;
 }

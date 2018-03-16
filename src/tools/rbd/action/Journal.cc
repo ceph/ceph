@@ -674,7 +674,7 @@ public:
       return false;
     }
     if (r != entry_size) {
-      std::cerr << "rbd: error reading from stdin: trucated"
+      std::cerr << "rbd: error reading from stdin: truncated"
 		<< std::endl;
       r = -EINVAL;
       return false;

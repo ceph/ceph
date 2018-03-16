@@ -221,12 +221,23 @@ BuildRequires:	python3-Cython
 BuildRequires:	python%{_python_buildid}-cherrypy
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-werkzeug
+BuildRequires:	python%{_python_buildid}-tox
+BuildRequires:	python%{_python_buildid}-coverage
+%if 0%{?fedora}
+BuildRequires:	python%{_python_buildid}-bcrypt
+%endif
+%if 0%{?rhel}
+BuildRequires:	py-bcrypt
+%endif
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python%{_python_buildid}-CherryPy
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-numpy-devel
+BuildRequires:	python%{_python_buildid}-bcrypt
+BuildRequires:	python%{_python_buildid}-tox
+BuildRequires:	python%{_python_buildid}-coverage
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
@@ -283,7 +294,7 @@ Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
 %if 0%{?suse_version}
-Recommends:    ntp-daemon
+Recommends:    chrony
 %endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
@@ -333,13 +344,6 @@ Summary:	Ceph Monitor Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-# For ceph-rest-api
-%if 0%{?fedora} || 0%{?rhel}
-Requires:      python%{_python_buildid}-flask
-%endif
-%if 0%{?suse_version}
-Requires:      python%{_python_buildid}-Flask
-%endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -358,6 +362,12 @@ Requires:       python%{_python_buildid}-jinja2
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-werkzeug
 Requires:       pyOpenSSL%{_python_buildid}
+%if 0%{?fedora}
+Requires:	python%{_python_buildid}-bcrypt
+%endif
+%if 0%{?rhel}
+Requires:	py-bcrypt
+%endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
@@ -365,6 +375,7 @@ Requires:       python%{_python_buildid}-Jinja2
 Requires:       python%{_python_buildid}-Werkzeug
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-pyOpenSSL
+Requires:       python%{_python_buildid}-bcrypt
 Recommends:     python%{_python_buildid}-influxdb
 %endif
 %description mgr
@@ -888,13 +899,13 @@ cmake .. \
     -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=ON \
+    -DWITH_MGR_DASHBOARD_V2_FRONTEND=OFF \
 %if %{with python2}
     -DWITH_PYTHON2=ON \
 %else
     -DWITH_PYTHON2=OFF \
     -DMGR_PYTHON_VERSION=3 \
 %endif
-    -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
 %endif
@@ -1320,16 +1331,8 @@ fi
 
 %files mon
 %{_bindir}/ceph-mon
-%{_bindir}/ceph-rest-api
 %{_bindir}/ceph-monstore-tool
 %{_mandir}/man8/ceph-mon.8*
-%{_mandir}/man8/ceph-rest-api.8*
-%if 0%{with python2}
-%{python_sitelib}/ceph_rest_api.py*
-%else
-%{python3_sitelib}/ceph_rest_api.py
-%{python3_sitelib}/__pycache__/ceph_rest_api.cpython*.py*
-%endif
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mon.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon

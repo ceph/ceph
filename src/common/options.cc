@@ -17,6 +17,39 @@
 // rbd feature validation
 #include "librbd/Features.h"
 
+namespace {
+class printer : public boost::static_visitor<> {
+  ostream& out;
+public:
+  explicit printer(ostream& os)
+    : out(os) {}
+  template<typename T>
+  void operator()(const T& v) const {
+    out << v;
+  }
+  void operator()(boost::blank blank) const {
+    return;
+  }
+  void operator()(bool v) const {
+    out << (v ? "true" : "false");
+  }
+  void operator()(double v) const {
+    out << std::fixed << v << std::defaultfloat;
+  }
+  void operator()(const Option::size_t& v) const {
+    out << v.value;
+  }
+  void operator()(const std::chrono::seconds v) const {
+    out << v.count();
+  }
+};
+}
+
+ostream& operator<<(ostream& os, const Option::value_t& v) {
+  printer p{os};
+  v.apply_visitor(p);
+  return os;
+}
 
 void Option::dump_value(const char *field_name,
     const Option::value_t &v, Formatter *f) const
@@ -24,18 +57,21 @@ void Option::dump_value(const char *field_name,
   if (boost::get<boost::blank>(&v)) {
     // This should be nil but Formatter doesn't allow it.
     f->dump_string(field_name, "");
-  } else if (type == TYPE_UINT) {
-    f->dump_unsigned(field_name, boost::get<uint64_t>(v));
-  } else if (type == TYPE_INT) {
-    f->dump_int(field_name, boost::get<int64_t>(v));
-  } else if (type == TYPE_STR) {
-    f->dump_string(field_name, boost::get<std::string>(v));
-  } else if (type == TYPE_FLOAT) {
-    f->dump_float(field_name, boost::get<double>(v));
-  } else if (type == TYPE_BOOL) {
-    f->dump_bool(field_name, boost::get<bool>(v));
-  } else {
-    f->dump_stream(field_name) << v;
+    return;
+  }
+  switch (type) {
+  case TYPE_INT:
+    f->dump_int(field_name, boost::get<int64_t>(v)); break;
+  case TYPE_UINT:
+    f->dump_unsigned(field_name, boost::get<uint64_t>(v)); break;
+  case TYPE_STR:
+    f->dump_string(field_name, boost::get<std::string>(v)); break;
+  case TYPE_FLOAT:
+    f->dump_float(field_name, boost::get<double>(v)); break;
+  case TYPE_BOOL:
+    f->dump_bool(field_name, boost::get<bool>(v)); break;
+  default:
+    f->dump_stream(field_name) << v; break;
   }
 }
 
@@ -88,9 +124,159 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
   return 0;
 }
 
+namespace {
+template<class Duration>
+std::chrono::seconds
+do_parse_duration(const char* unit, string val,
+		  size_t start, size_t* new_start)
+{
+  auto found = val.find(unit, start);
+  if (found == val.npos) {
+    *new_start = start;
+    return Duration{0};
+  }
+  val[found] = '\0';
+  string err;
+  char* s = &val[start];
+  auto intervals = strict_strtoll(s, 10, &err);
+  if (!err.empty()) {
+    throw invalid_argument(s);
+  }
+  auto secs = chrono::duration_cast<chrono::seconds>(Duration{intervals});
+  *new_start = found + strlen(unit);
+  return secs;
+}
+
+std::chrono::seconds parse_duration(const std::string& s)
+{
+  using namespace std::chrono;
+  auto secs = 0s;
+  size_t start = 0;
+  size_t new_start = 0;
+  using days_t = duration<int, std::ratio<3600 * 24>>;
+  auto v = s;
+  v.erase(std::remove_if(begin(v), end(v),
+			 [](char c){ return std::isspace(c);}), end(v));
+  if (auto delta = do_parse_duration<days_t>("days", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<hours>("hours", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<minutes>("minutes", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<seconds>("seconds", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (new_start == 0) {
+    string err;
+    if (auto delta = std::chrono::seconds{strict_strtoll(s.c_str(), 10, &err)};
+	err.empty()) {
+      secs += delta;
+    } else {
+      throw invalid_argument(err);
+    }
+  }
+  return secs;
+}
+} // anonymous namespace
+
+int Option::parse_value(
+  const std::string& raw_val,
+  value_t *out,
+  std::string *error_message,
+  std::string *normalized_value) const
+{
+  std::string val = raw_val;
+
+  int r = pre_validate(&val, error_message);
+  if (r != 0) {
+    return r;
+  }
+
+  if (type == Option::TYPE_INT) {
+    int64_t f = strict_si_cast<int64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    *out = f;
+  } else if (type == Option::TYPE_UINT) {
+    uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    *out = f;
+  } else if (type == Option::TYPE_STR) {
+    *out = val;
+  } else if (type == Option::TYPE_FLOAT) {
+    double f = strict_strtod(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    } else {
+      *out = f;
+    }
+  } else if (type == Option::TYPE_BOOL) {
+    if (strcasecmp(val.c_str(), "false") == 0) {
+      *out = false;
+    } else if (strcasecmp(val.c_str(), "true") == 0) {
+      *out = true;
+    } else {
+      int b = strict_strtol(val.c_str(), 10, error_message);
+      if (!error_message->empty()) {
+	return -EINVAL;
+      }
+      *out = (bool)!!b;
+    }
+  } else if (type == Option::TYPE_ADDR) {
+    entity_addr_t addr;
+    if (!addr.parse(val.c_str())){
+      return -EINVAL;
+    }
+    *out = addr;
+  } else if (type == Option::TYPE_UUID) {
+    uuid_d uuid;
+    if (!uuid.parse(val.c_str())) {
+      return -EINVAL;
+    }
+    *out = uuid;
+  } else if (type == Option::TYPE_SIZE) {
+    Option::size_t sz{strict_sistrtoll(val.c_str(), error_message)};
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    *out = sz;
+  } else if (type == Option::TYPE_SECS) {
+    try {
+      *out = parse_duration(val);
+    } catch (const invalid_argument&) {
+      return -EINVAL;
+    }
+  } else {
+    ceph_abort();
+  }
+
+  r = validate(*out, error_message);
+  if (r != 0) {
+    return r;
+  }
+
+  if (normalized_value) {
+    *normalized_value = to_str(*out);
+  }
+  return 0;
+}
+
 void Option::dump(Formatter *f) const
 {
-  f->open_object_section("option");
   f->dump_string("name", name);
 
   f->dump_string("type", type_to_str(type));
@@ -132,7 +318,50 @@ void Option::dump(Formatter *f) const
   dump_value("min", min, f);
   dump_value("max", max, f);
 
-  f->close_section();
+  f->dump_bool("can_update_at_runtime", can_update_at_runtime());
+}
+
+std::string Option::to_str(const Option::value_t& v)
+{
+  return stringify(v);
+}
+
+void Option::print(ostream *out) const
+{
+  *out << name << " - " << desc << "\n";
+  *out << "  (" << type_to_str(type) << ", " << level_to_str(level) << ")\n";
+  if (!boost::get<boost::blank>(&daemon_value)) {
+    *out << "  Default (non-daemon): " << stringify(value) << "\n";
+    *out << "  Default (daemon): " << stringify(daemon_value) << "\n";
+  } else {
+    *out << "  Default: " << stringify(value) << "\n";
+  }
+  if (!enum_allowed.empty()) {
+    *out << "  Possible values: ";
+    for (auto& i : enum_allowed) {
+      *out << " " << stringify(i);
+    }
+    *out << "\n";
+  }
+  if (!boost::get<boost::blank>(&min)) {
+    *out << "  Minimum: " << stringify(min) << "\n"
+	 << "  Maximum: " << stringify(max) << "\n";
+  }
+  *out << "  Can update at runtime: "
+       << (can_update_at_runtime() ? "true" : "false") << "\n";
+  if (!services.empty()) {
+    *out << "  Services: " << services << "\n";
+  }
+  if (!tags.empty()) {
+    *out << "  Tags: " << tags << "\n";
+  }
+  if (!see_also.empty()) {
+    *out << "  See also: " << see_also << "\n";
+  }
+
+  if (long_desc.size()) {
+    *out << "\n" << long_desc << "\n";
+  }
 }
 
 constexpr unsigned long long operator"" _min (unsigned long long min) {
@@ -159,11 +388,13 @@ std::vector<Option> get_global_options() {
     Option("host", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("local hostname")
     .set_long_description("if blank, ceph assumes the short hostname (hostname -s)")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common")
     .add_tag("network"),
 
     Option("fsid", Option::TYPE_UUID, Option::LEVEL_BASIC)
     .set_description("cluster fsid (uuid)")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common")
     .add_tag("service"),
 
@@ -207,8 +438,9 @@ std::vector<Option> get_global_options() {
     .set_description("path to MonMap file")
     .set_long_description("This option is normally used during mkfs, but can also "
   			"be used to identify which monitors to connect to.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("mon")
-    .add_tag("mkfs"),
+    .set_flag(Option::FLAG_CREATE),
 
     Option("mon_host", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("list of hosts or addresses to search for a monitor")
@@ -216,11 +448,13 @@ std::vector<Option> get_global_options() {
   			"list of IP addresses or hostnames. Hostnames are "
   			"resolved via DNS and all A or AAAA records are "
   			"included in the search list.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common"),
 
     Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("ceph-mon")
     .set_description("name of DNS SRV record to check for monitor addresses")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common")
     .add_tag("network")
     .add_see_also("mon_host"),
@@ -228,6 +462,7 @@ std::vector<Option> get_global_options() {
     // lockdep
     Option("lockdep", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_description("enable lockdep lock dependency analyzer")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common"),
 
     Option("lockdep_force_backtrace", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -252,15 +487,12 @@ std::vector<Option> get_global_options() {
     .add_service("common")
     .add_see_also("admin_socket"),
 
-    Option("crushtool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_description("name of the 'crushtool' utility")
-    .add_service("mon"),
-
     // daemon
     Option("daemonize", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_daemon_default(true)
     .set_description("whether to daemonize (background) after startup")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service")
     .add_see_also({"pid_file", "chdir"}),
@@ -293,6 +525,7 @@ std::vector<Option> get_global_options() {
 
     Option("chdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("path to chdir(2) to after daemonizing")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service")
     .add_see_also("daemonize"),
@@ -314,8 +547,7 @@ std::vector<Option> get_global_options() {
     Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR"/erasure-code")
     .set_description("directory where erasure-code plugins can be found")
-    .add_service({"mon", "osd"})
-    .set_safe(),
+    .add_service({"mon", "osd"}),
 
     // logging
     Option("log_file", Option::TYPE_STR, Option::LEVEL_BASIC)
@@ -478,8 +710,7 @@ std::vector<Option> get_global_options() {
 
     Option("plugin_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR)
-    .set_description("")
-    .set_safe(),
+    .set_description(""),
 
     Option("xio_trace_mempool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -545,38 +776,20 @@ std::vector<Option> get_global_options() {
     .set_default(5)
     .set_description(""),
 
-    Option("async_compressor_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("async_compressor_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("snappy")
-    .set_description(""),
-
-    Option("async_compressor_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(2)
-    .set_description(""),
-
-    Option("async_compressor_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(5)
-    .set_description(""),
-
-    Option("async_compressor_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(30)
-    .set_description(""),
-
     Option("plugin_crypto_accelerator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("crypto_isal")
     .set_description(""),
 
     Option("mempool_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
     Option("key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Authentication key")
     .set_long_description("A CephX authentication key, base64 encoded.  It normally looks something like 'AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag=='.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("keyfile")
     .add_see_also("keyring"),
 
@@ -584,6 +797,7 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_description("Path to a file containing a key")
     .set_long_description("The file should contain a CephX authentication key and optionally a trailing newline, but nothing else.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("key"),
 
     Option("keyring", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -598,6 +812,7 @@ std::vector<Option> get_global_options() {
     )
     .set_description("Path to a keyring file.")
     .set_long_description("A keyring file is an INI-style formatted file where the section names are client or daemon names (e.g., 'osd.0') and each section contains a 'key' property with CephX authentication key as the value.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("key")
     .add_see_also("keyfile"),
 
@@ -619,8 +834,7 @@ std::vector<Option> get_global_options() {
 
     Option("ms_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("async+posix")
-    .set_description("")
-    .set_safe(),
+    .set_description(""),
 
     Option("ms_public_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -638,7 +852,7 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
-    Option("ms_tcp_prefetch_max_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("ms_tcp_prefetch_max_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4_K)
     .set_description(""),
 
@@ -739,7 +953,7 @@ std::vector<Option> get_global_options() {
     Option("ms_inject_delay_type", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
     .set_description("")
-    .set_safe(),
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
@@ -837,7 +1051,6 @@ std::vector<Option> get_global_options() {
     Option("ms_dpdk_coremask", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("0xF")         //begin with 0x for the string
     .set_description("")
-    .set_safe()
     .add_see_also("ms_async_op_threads"),
 
     Option("ms_dpdk_memory_channel", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -854,18 +1067,15 @@ std::vector<Option> get_global_options() {
 
     Option("ms_dpdk_host_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
-    .set_safe(),
+    .set_description(""),
 
     Option("ms_dpdk_gateway_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
-    .set_safe(),
+    .set_description(""),
 
     Option("ms_dpdk_netmask_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
-    .set_safe(),
+    .set_description(""),
 
     Option("ms_dpdk_lro", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -892,11 +1102,14 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_default("/var/lib/ceph/mon/$cluster-$id")
     .set_description(""),
 
     Option("mon_initial_members", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_compact_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1105,22 +1318,32 @@ std::vector<Option> get_global_options() {
 
     Option("mon_cache_target_full_warn_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.66)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_osd_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.95)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_osd_backfillfull_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.90)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_osd_nearfull_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.85)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_osd_initial_require_min_compat_client", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jewel")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_allow_pool_delete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1212,7 +1435,7 @@ std::vector<Option> get_global_options() {
     .set_default(50)
     .set_description(""),
 
-    Option("mon_daemon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_daemon_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(400ul << 20)
     .set_description(""),
 
@@ -1224,7 +1447,7 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
-    Option("mon_reweight_min_bytes_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_reweight_min_bytes_per_osd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description(""),
 
@@ -1335,7 +1558,7 @@ std::vector<Option> get_global_options() {
     Option("mon_osd_reporter_subtree_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("host")
     .add_service("mon")
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("in which level of parent bucket the reporters are counted"),
 
     Option("mon_osd_snap_trim_queue_warn_on", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -1373,6 +1596,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_debug_no_require_mimic", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -1381,6 +1605,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_debug_no_initial_persistent_features", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_inject_transaction_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
@@ -1405,6 +1630,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_keyvaluedb", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rocksdb")
+    .set_flag(Option::FLAG_CREATE)
     .set_description(""),
 
     Option("mon_debug_unsafe_allow_tier_with_nonempty_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -1698,10 +1924,12 @@ std::vector<Option> get_global_options() {
 
     Option("osd_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/osd/$cluster-$id")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
     Option("osd_journal", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/osd/$cluster-$id/journal")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
     Option("osd_journal_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -1732,14 +1960,6 @@ std::vector<Option> get_global_options() {
     .set_default(100)
     .set_description(""),
 
-    Option("osd_pg_bits", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(6)
-    .set_description(""),
-
-    Option("osd_pgp_bits", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(6)
-    .set_description(""),
-
     Option("osd_crush_update_weight_set", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
@@ -1768,18 +1988,20 @@ std::vector<Option> get_global_options() {
     .set_default(-1)
     .set_description(""),
 
-    Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_K)
     .set_description("the amount of data (in bytes) in a data chunk, per stripe")
     .add_service("mon"),
 
     Option("osd_pool_default_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("the number of copies of an object")
     .add_service("mon"),
 
     Option("osd_pool_default_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("the minimal number of copies allowed to write to a degraded pool")
     .set_long_description("0 means no specific default; ceph will use size-size/2")
     .add_see_also("osd_pool_default_size")
@@ -1788,22 +2010,26 @@ std::vector<Option> get_global_options() {
     Option("osd_pool_default_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8)
     .set_description("number of PGs for new pools. Configure in global or mon section of ceph.conf")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),
 
     Option("osd_pool_default_pgp_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8)
     .set_description("number of PGs for placement purposes. Should be equal to pg_num")
     .add_see_also("osd_pool_default_pg_num")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),
 
     Option("osd_pool_default_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("replicated")
     .set_enum_allowed({"replicated", "erasure"})
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("")
     .add_service("mon"),
 
     Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("default properties of osd pool create"),
 
     Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -1812,6 +2038,7 @@ std::vector<Option> get_global_options() {
          " isa"
   #endif
         )
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_allow_recovery_below_min_size", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1883,7 +2110,7 @@ std::vector<Option> get_global_options() {
     .set_default(25)
     .set_description(""),
 
-    Option("osd_tier_promote_max_bytes_sec", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_promote_max_bytes_sec", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(5_M)
     .set_description(""),
 
@@ -1891,6 +2118,7 @@ std::vector<Option> get_global_options() {
     .set_default("writeback")
     .set_enum_allowed({"none", "writeback", "forward",
 	               "readonly", "readforward", "readproxy", "proxy"})
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("osd_tier_default_cache_hit_set_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -1904,6 +2132,7 @@ std::vector<Option> get_global_options() {
     Option("osd_tier_default_cache_hit_set_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("bloom")
     .set_enum_allowed({"bloom", "explicit_hash", "explicit_object"})
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("osd_tier_default_cache_min_read_recency_for_promote", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -1924,6 +2153,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_objecter_finishers", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_map_dedup", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1989,26 +2219,32 @@ std::vector<Option> get_global_options() {
 
     Option("osd_op_num_threads_per_shard", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_threads_per_shard_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_threads_per_shard_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_shards", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_shards_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_shards_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(8)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_skip_data_digest", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -2020,6 +2256,7 @@ std::vector<Option> get_global_options() {
     .set_enum_allowed( { "wpq", "prioritized", "mclock_opclass", "mclock_client", "debug_random" } )
     .set_description("which operation queue algorithm to use")
     .set_long_description("which operation queue algorithm to use; mclock_opclass and mclock_client are currently experimental")
+    .set_flag(Option::FLAG_STARTUP)
     .add_see_also("osd_op_queue_cut_off"),
 
     Option("osd_op_queue_cut_off", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -2746,7 +2983,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_scrub_chunk_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(25)
-    .set_description("Maximum number of object to scrub in a single chunk")
+    .set_description("Maximum number of objects to scrub in a single chunk")
     .add_see_also("osd_scrub_chunk_min"),
 
     Option("osd_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -2776,8 +3013,8 @@ std::vector<Option> get_global_options() {
     .set_long_description("This prevents a deep scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
     .add_see_also("osd_deep_scrub_interval"),
 
-    Option("osd_deep_scrub_stride", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(524288)
+    Option("osd_deep_scrub_stride", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(512_K)
     .set_description("Number of bytes to read from an object at a time during deep scrub"),
 
     Option("osd_deep_scrub_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -2794,7 +3031,7 @@ std::vector<Option> get_global_options() {
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_value_sum_threshold"),
 
-    Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description("Warn when we encounter an object with more omap key bytes than this")
     .add_service("osd")
@@ -2841,14 +3078,14 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_min_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1500)
+    .set_default(3000)
     .set_description("minimum number of entries to maintain in the PG log")
     .add_service("osd")
     .add_see_also("osd_max_pg_log_entries")
     .add_see_also("osd_pg_log_dups_tracked"),
 
     Option("osd_max_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(10000)
+    .set_default(3000)
     .set_description("maximum number of entries to maintain in the PG log when degraded before we trim")
     .add_service("osd")
     .add_see_also("osd_min_pg_log_entries")
@@ -2869,12 +3106,23 @@ std::vector<Option> get_global_options() {
     .set_default(100)
     .set_description(""),
 
+    Option("osd_async_recovery_min_pg_log_entries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(100)
+    .set_description("Number of entries difference above which to use asynchronous recovery when appropriate"),
+
     Option("osd_max_pg_per_osd_hard_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2)
     .set_min(1)
     .set_description("Maximum number of PG per OSD, a factor of 'mon_max_pg_per_osd'")
     .set_long_description("OSD will refuse to instantiate PG if the number of PG it serves exceeds this number.")
     .add_see_also("mon_max_pg_per_osd"),
+
+    Option("osd_pg_log_trim_max", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10000)
+    .set_description("maximum number of entries to remove at once from the PG log")
+    .add_service("osd")
+    .add_see_also("osd_min_pg_log_entries")
+    .add_see_also("osd_max_pg_log_entries"),
 
     Option("osd_op_complaint_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
@@ -3112,15 +3360,6 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("rocksdb_separate_wal_dir", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
-
-    Option("rocksdb_db_paths", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("")
-    .set_description("")
-    .set_safe(),
-
     Option("rocksdb_log_to_ceph_log", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
@@ -3287,12 +3526,13 @@ std::vector<Option> get_global_options() {
     .set_default(131072)
     .set_description(""),
 
-    Option("osd_max_omap_bytes_per_request", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_max_omap_bytes_per_request", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description(""),
 
     Option("osd_objectstore", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("filestore")
+    .set_flag(Option::FLAG_CREATE)
     .set_description(""),
 
     Option("osd_objectstore_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3331,7 +3571,7 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
-    Option("memstore_device_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("memstore_device_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description(""),
 
@@ -3439,7 +3679,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_buffered_io", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description(""),
 
     Option("bluefs_sync_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3456,13 +3696,13 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Use BlueFS to back rocksdb")
     .set_long_description("BlueFS allows rocksdb to share the same physical device(s) as the rest of BlueStore.  It should be used in all cases unless testing/developing an alternative metadata database for BlueStore."),
 
     Option("bluestore_bluefs_env_mirror", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Mirror bluefs data to file system for testing/validation"),
 
     Option("bluestore_bluefs_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -3517,186 +3757,186 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_block_path", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Path to block device/file"),
 
     Option("bluestore_block_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(10_G)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for backing bluestore"),
 
     Option("bluestore_block_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Create bluestore_block_path if it doesn't exist")
     .add_see_also("bluestore_block_path").add_see_also("bluestore_block_size"),
 
     Option("bluestore_block_db_path", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Path for db block device"),
 
     Option("bluestore_block_db_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for bluestore_block_db_path"),
 
     Option("bluestore_block_db_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Create bluestore_block_db_path if it doesn't exist")
     .add_see_also("bluestore_block_db_path")
     .add_see_also("bluestore_block_db_size"),
 
     Option("bluestore_block_wal_path", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Path to block device/file backing bluefs wal"),
 
     Option("bluestore_block_wal_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(96_M)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for bluestore_block_wal_path"),
 
     Option("bluestore_block_wal_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Create bluestore_block_wal_path if it doesn't exist")
     .add_see_also("bluestore_block_wal_path")
     .add_see_also("bluestore_block_wal_size"),
 
     Option("bluestore_block_preallocate_file", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Preallocate file created via bluestore_block*_create"),
 
     Option("bluestore_csum_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("crc32c")
     .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"})
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default checksum algorithm to use")
     .set_long_description("crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants use only a subset of the bits for more compact (but less reliable) checksumming."),
 
     Option("bluestore_min_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Minimum allocation size to allocate for an object")
     .set_long_description("A smaller allocation size generally means less data is read and then rewritten when a copy-on-write operation is triggered (e.g., when writing to something that was recently snapshotted).  Similarly, less data is journaled before performing an overwrite (writes smaller than min_alloc_size must first pass through the BlueStore journal).  Larger values of min_alloc_size reduce the amount of metadata required to describe the on-disk layout and reduce overall fragmentation."),
 
     Option("bluestore_min_alloc_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64_K)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for rotational media"),
 
     Option("bluestore_min_alloc_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16_K)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for non-rotational (solid state)  media"),
 
     Option("bluestore_max_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Maximum size of a single allocation (0 for no max)"),
 
     Option("bluestore_prefer_deferred_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Writes smaller than this size will be written to the journal and then asynchronously written to the device.  This can be beneficial when using rotational media where seeks are expensive, and is helpful both with and without solid state journal/wal devices."),
 
     Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(32768)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_prefer_deferred_size for rotational media"),
 
     Option("bluestore_prefer_deferred_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_prefer_deferred_size for non-rotational (solid state) media"),
 
     Option("bluestore_compression_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("none")
     .set_enum_allowed({"none", "passive", "aggressive", "force"})
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default policy for using compression when pool does not specify")
     .set_long_description("'none' means never use compression.  'passive' means use compression when clients hint that data is compressible.  'aggressive' means use compression unless clients hint that data is not compressible.  This option is used when the per-pool property for the compression mode is not present."),
 
     Option("bluestore_compression_algorithm", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("snappy")
     .set_enum_allowed({"", "snappy", "zlib", "zstd", "lz4"})
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default compression algorithm to use when writing object data")
     .set_long_description("This controls the default compressor to use (if any) if the per-pool property is not set.  Note that zstd is *not* recommended for bluestore due to high CPU overhead when compressing small amounts of data."),
 
     Option("bluestore_compression_min_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Chunks smaller than this are never compressed"),
 
     Option("bluestore_compression_min_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_min_blob_size for rotational media"),
 
     Option("bluestore_compression_min_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_min_blob_size for non-rotational (solid state) media"),
 
     Option("bluestore_compression_max_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Chunks larger than this are broken into smaller chunks before being compressed"),
 
     Option("bluestore_compression_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(512_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_max_blob_size for rotational media"),
 
     Option("bluestore_compression_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_max_blob_size for non-rotational (solid state) media"),
 
     Option("bluestore_gc_enable_blob_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_gc_enable_total_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_max_blob_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(64_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_compression_required_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.875)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Compression ratio required to store compressed data")
     .set_long_description("If we compress data and get less than this we discard the result and store the original uncompressed data."),
 
-    Option("bluestore_extent_map_shard_max_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_max_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(1200)
     .set_description("Max size (bytes) for a single extent map shard before splitting"),
 
-    Option("bluestore_extent_map_shard_target_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_target_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(500)
     .set_description("Target size (bytes) for a single extent map shard"),
 
-    Option("bluestore_extent_map_shard_min_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_min_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(150)
     .set_description("Min size (bytes) for a single extent map shard before merging"),
 
@@ -3709,7 +3949,7 @@ std::vector<Option> get_global_options() {
     .set_description("Preallocated buffer for inline shards"),
 
     Option("bluestore_cache_trim_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.2)
+    .set_default(.05)
     .set_description("How frequently we trim the bluestore cache"),
 
     Option("bluestore_cache_trim_max_skip_pinned", Option::TYPE_UINT, Option::LEVEL_DEV)
@@ -3743,23 +3983,28 @@ std::vector<Option> get_global_options() {
     .set_description("Default bluestore_cache_size for non-rotational (solid state) media"),
 
     Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.01)
+    .set_default(.5)
+    .add_see_also("bluestore_cache_size")
     .set_description("Ratio of bluestore cache to devote to metadata"),
 
     Option("bluestore_cache_kv_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.99)
+    .set_default(.5)
+    .add_see_also("bluestore_cache_size")
     .set_description("Ratio of bluestore cache to devote to kv database (rocksdb)"),
 
-    Option("bluestore_cache_kv_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_kv_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(512_M)
-    .set_description("Max memory (bytes) to devote to kv database (rocksdb)")
+    .set_description("Minimum memory (bytes) of bluestore_cache_size to devote to kv database (rocksdb)")
+    .add_see_also("bluestore_cache_size")
     .set_long_description("A negative value means using bluestore_cache_meta_ratio "
       "and bluestore_cache_kv_ratio instead of calculating these ratios using "
-      "bluestore_cache_size_* and bluestore_cache_kv_max."),
+      "bluestore_cache_size_* and bluestore_cache_kv_min.  If "
+      "bluestore_cache_size is below bluestore_cache_kv_min "
+      "then this option has no effect."),
 
     Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Key value database to use for bluestore"),
 
     Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -3823,45 +4068,45 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Try to submit metadata transaction to rocksdb in queuing thread context"),
 
-    Option("bluestore_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes in flight before we throttle IO submission"),
 
-    Option("bluestore_throttle_deferred_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_deferred_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(128_M)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes for deferred writes before we throttle IO submission"),
 
-    Option("bluestore_throttle_cost_per_io", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_cost_per_io", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Overhead added to transaction cost (in bytes) for each IO"),
 
   Option("bluestore_throttle_cost_per_io_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(670000)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_throttle_cost_per_io for rotational media"),
 
     Option("bluestore_throttle_cost_per_io_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4000)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_throttle_cost_per_io for non-rotation (solid state) media"),
 
 
     Option("bluestore_deferred_batch_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Max number of deferred writes before we flush the deferred write queue"),
 
     Option("bluestore_deferred_batch_ops_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_deferred_batch_ops for rotational media"),
 
     Option("bluestore_deferred_batch_ops_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_deferred_batch_ops for non-rotational (solid state) media"),
 
     Option("bluestore_nid_prealloc", Option::TYPE_INT, Option::LEVEL_DEV)
@@ -3874,17 +4119,17 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_clone_cow", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Use copy-on-write when cloning objects (versus reading and rewriting them at clone time)"),
 
     Option("bluestore_default_buffered_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Cache read results by default (unless hinted NOCACHE or WONTNEED)"),
 
     Option("bluestore_default_buffered_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Cache writes by default (unless hinted NOCACHE or WONTNEED)"),
 
     Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -3953,7 +4198,7 @@ std::vector<Option> get_global_options() {
     .set_default(512)
     .set_description(""),
 
-    Option("kstore_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("kstore_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_description(""),
 
@@ -4012,11 +4257,11 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enabling throttling of operations to backing file system"),
 
-    Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(41943040)
     .set_description("Start flushing (fsyncing) when this many bytes are written(btrfs)"),
 
-    Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(419430400)
     .set_description("Block writes when this many bytes haven't been flushed (fsynced) (btrfs)"),
 
@@ -4032,11 +4277,11 @@ std::vector<Option> get_global_options() {
     .set_default(500)
     .set_description("Start flushing (fsyncing) when this many distinct inodes have been modified (btrfs)"),
 
-    Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(41943040)
     .set_description("Start flushing (fsyncing) when this many bytes are written(xfs)"),
 
-    Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(419430400)
     .set_description("Block writes when this many bytes haven't been flushed (fsynced) (xfs)"),
 
@@ -4212,7 +4457,7 @@ std::vector<Option> get_global_options() {
     .set_default(50)
     .set_description("Max IO operations in flight"),
 
-    Option("filestore_queue_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_queue_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Max (written) bytes in flight"),
 
@@ -4427,6 +4672,8 @@ std::vector<Option> get_global_options() {
 
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("restful status balancer")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .add_service("mon")
     .set_description("List of manager modules to enable when the cluster is "
                      "first started")
@@ -4438,11 +4685,12 @@ std::vector<Option> get_global_options() {
 
     Option("mgr_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/mgr/$cluster-$id")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("mgr")
     .set_description("Filesystem path to the ceph-mgr data directory, used to "
                      "contain keyring."),
 
-    Option("mgr_tick_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mgr_tick_period", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(2)
     .add_service("mgr")
     .set_description("Period in seconds of beacon messages to monitor"),
@@ -4457,7 +4705,7 @@ std::vector<Option> get_global_options() {
                           "if you simply do not require the most up to date "
                           "performance counter data."),
 
-    Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("mgr_client_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(128_M)
     .add_service("mgr"),
 
@@ -4465,7 +4713,7 @@ std::vector<Option> get_global_options() {
     .set_default(512)
     .add_service("mgr"),
 
-    Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("mgr_osd_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(512_M)
     .add_service("mgr"),
 
@@ -4473,7 +4721,7 @@ std::vector<Option> get_global_options() {
     .set_default(8192)
     .add_service("mgr"),
 
-    Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("mgr_mds_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(128_M)
     .add_service("mgr"),
 
@@ -4481,7 +4729,7 @@ std::vector<Option> get_global_options() {
     .set_default(128)
     .add_service("mgr"),
 
-    Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("mgr_mon_bytes", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(128_M)
     .add_service("mgr"),
 
@@ -4505,7 +4753,7 @@ std::vector<Option> get_global_options() {
     .set_description("Period in seconds between monitor-to-manager "
                      "health/status updates"),
 
-    Option("mon_mgr_beacon_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_mgr_beacon_grace", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(30)
     .add_service("mon")
     .set_description("Period in seconds from last beacon to monitor marking "
@@ -4555,7 +4803,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(100)
     .set_description("Max number of ACL grants in a single request"),
 
-    Option("rgw_max_chunk_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_chunk_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_M)
     .set_description("Set RGW max chunk size")
     .set_long_description(
@@ -4565,7 +4813,7 @@ std::vector<Option> get_rgw_options() {
         "need to be atomic, and anything larger than this would require more than a single "
         "operation."),
 
-    Option("rgw_put_obj_min_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_put_obj_min_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("The minimum RADOS write window size (in bytes).")
     .set_long_description(
@@ -4575,13 +4823,13 @@ std::vector<Option> get_rgw_options() {
         "in order to better utilize the pipe.")
     .add_see_also({"rgw_put_obj_max_window_size", "rgw_max_chunk_size"}),
 
-    Option("rgw_put_obj_max_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_put_obj_max_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_description("The maximum RADOS write window size (in bytes).")
     .set_long_description("The window size may be dynamically adjusted, but will not surpass this value.")
     .add_see_also({"rgw_put_obj_min_window_size", "rgw_max_chunk_size"}),
 
-    Option("rgw_max_put_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_put_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(5_G)
     .set_description("Max size (in bytes) of regular (non multi-part) object upload.")
     .set_long_description(
@@ -4589,11 +4837,11 @@ std::vector<Option> get_rgw_options() {
         "objects, a special upload mechanism is required. The S3 API provides the "
         "multi-part upload, and Swift provides DLO and SLO."),
 
-    Option("rgw_max_put_param_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_put_param_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description("The maximum size (in bytes) of data input of certain RESTful requests."),
 
-    Option("rgw_max_attr_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_attr_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("The maximum length of metadata value. 0 skips the check"),
 
@@ -4648,6 +4896,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/radosgw/$cluster-$id")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description("Alternative location for RGW configuration.")
     .set_long_description(
         "If this is set, the different Ceph system configurables (such as the keyring file "
@@ -5255,7 +5504,7 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "The number of garbage collector data shards, is the number of RADOS objects that "
         "RGW will use to store the garbage collection information on.")
-    .add_see_also({"rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_processor_period"}),
+    .add_see_also({"rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_obj_min_wait", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2_hr)
@@ -5265,7 +5514,7 @@ std::vector<Option> get_rgw_options() {
        "a deleted object's data. RGW will not remove object immediately, as object could "
        "still have readers. A mechanism exists to increase the object's expiration time "
        "when it's being read.")
-    .add_see_also({"rgw_gc_max_objs", "rgw_gc_processor_max_time", "rgw_gc_processor_period"}),
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_processor_max_time", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_processor_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
@@ -5277,7 +5526,7 @@ std::vector<Option> get_rgw_options() {
         "objects concurrently. This time signifies that maximum amount of time that RGW "
         "is allowed to hold that lease. In the case where RGW goes down uncleanly, this "
         "is the amount of time where processing of that data shard will be blocked.")
-    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_period"}),
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_processor_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
@@ -5286,13 +5535,26 @@ std::vector<Option> get_rgw_options() {
         "The amount of time between the start of consecutive runs of the garbage collector "
         "threads. If garbage collector runs takes more than this period, it will not wait "
         "before running again.")
-    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time"}),
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_concurrent_io", "rgw_gc_max_trim_chunk"}),
+
+    Option("rgw_gc_max_concurrent_io", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("Max concurrent RADOS IO operations for garbage collection")
+    .set_long_description(
+        "The maximum number of concurrent IO operations that the RGW garbage collection "
+        "thread will use when purging old data.")
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_trim_chunk"}),
+
+    Option("rgw_gc_max_trim_chunk", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(16)
+    .set_description("Max number of keys to remove from garbage collector log in a single operation")
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_s3_success_create_obj_status", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("HTTP return code override for object creation")
     .set_long_description(
-        "If not zero, this is the HTTP return code that will be returned on a succesful S3 "
+        "If not zero, this is the HTTP return code that will be returned on a successful S3 "
         "object creation."),
 
     Option("rgw_resolve_cname", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5325,7 +5587,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("RGW shutdown timeout")
     .set_long_description("Number of seconds to wait for a process before exiting unconditionally."),
 
-    Option("rgw_get_obj_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_get_obj_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("RGW object read window size")
     .set_long_description("The window size in bytes for a single object read request"),
@@ -5383,7 +5645,7 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "If true, RGW will send progress information when copy operation is executed. "),
 
-    Option("rgw_copy_obj_progress_every_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_copy_obj_progress_every_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description("Send copy-object progress info after these many bytes"),
 
@@ -5586,7 +5848,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("Length of time to aggregate metadata changes")
     .set_long_description(
         "Length of time (in milliseconds) in which the master zone aggregates all the "
-        "metadata changes that occured, before sending notifications to all the other "
+        "metadata changes that occurred, before sending notifications to all the other "
         "zones."),
 
     Option("rgw_run_sync_thread", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -5736,7 +5998,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_torrent_tracker", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("Torrent field annouce and annouce list"),
+    .set_description("Torrent field announce and announce list"),
 
     Option("rgw_torrent_createby", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -5842,7 +6104,7 @@ static std::vector<Option> get_rbd_options() {
         "name is as follows: +1 -> layering, +2 -> striping, "
         "+4 -> exclusive-lock, +8 -> object-map, +16 -> fast-diff, "
         "+32 -> deep-flatten, +64 -> journaling, +128 -> data-pool")
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_validator([](std::string *value, std::string *error_message) {
 	ostringstream ss;
 	uint64_t features = librbd::rbd_features_from_string(*value, &ss);
@@ -5877,15 +6139,15 @@ static std::vector<Option> get_rbd_options() {
                      "flush is called, to be sure the user of librbd will send "
                      "flushes so that writeback is safe"),
 
-    Option("rbd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(32_M)
     .set_description("cache size in bytes"),
 
-    Option("rbd_cache_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_max_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(24_M)
     .set_description("dirty limit in bytes - set to 0 for write-through caching"),
 
-    Option("rbd_cache_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_target_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("target dirty limit in bytes"),
 
@@ -5922,7 +6184,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("localize parent requests to closest OSD"),
 
-    Option("rbd_sparse_read_threshold_bytes", Option::TYPE_UINT,
+    Option("rbd_sparse_read_threshold_bytes", Option::TYPE_SIZE,
            Option::LEVEL_ADVANCED)
     .set_default(64_K)
     .set_description("threshold for issuing a sparse-read")
@@ -5938,11 +6200,11 @@ static std::vector<Option> get_rbd_options() {
     .set_default(10)
     .set_description("number of sequential requests necessary to trigger readahead"),
 
-    Option("rbd_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_readahead_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(512_K)
     .set_description("set to 0 to disable readahead"),
 
-    Option("rbd_readahead_disable_after_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_readahead_disable_after_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(50_M)
     .set_description("how many bytes are read in total before readahead is disabled"),
 
@@ -6036,7 +6298,7 @@ static std::vector<Option> get_rbd_options() {
                           "setting of 'auto' will use the v2 format if the "
                           "cluster is configured to require mimic or later "
                           "clients.")
-    .set_safe(),
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("rbd_journal_order", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_min(12)
@@ -6055,7 +6317,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_description("maximum number of pending commits per journal object"),
 
-    Option("rbd_journal_object_flush_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_journal_object_flush_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum number of pending bytes per journal object"),
 
@@ -6067,7 +6329,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default("")
     .set_description("pool for journal objects"),
 
-    Option("rbd_journal_max_payload_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rbd_journal_max_payload_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16384)
     .set_description("maximum journal payload size before splitting"),
 
@@ -6091,7 +6353,7 @@ static std::vector<Option> get_rbd_mirror_options() {
     .set_default(5)
     .set_description("maximum age (in seconds) between successive journal polls"),
 
-    Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(32768)
     .set_description("maximum bytes to read from each journal data object per fetch"),
 
@@ -6154,6 +6416,7 @@ std::vector<Option> get_mds_options() {
   return std::vector<Option>({
     Option("mds_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/mds/$cluster-$id")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description("path to MDS data and keyring"),
 
     Option("mds_max_xattr_pairs_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -6278,7 +6541,7 @@ std::vector<Option> get_mds_options() {
     .set_default(1024)
     .set_description("maximum number of events in an MDS journal segment"),
 
-    Option("mds_log_segment_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mds_log_segment_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("size in bytes of each MDS log segment"),
 
@@ -6639,7 +6902,7 @@ std::vector<Option> get_mds_client_options() {
     .set_default(128*1024)
     .set_description(""),
 
-    Option("client_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("client_readahead_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
 

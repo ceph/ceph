@@ -1966,7 +1966,7 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
       /* Similar remarks apply to the check for value size. We're veryfing
        * it early at the RGW's side as it's being claimed in /info. */
       const size_t max_attr_size = \
-        cct->_conf->get_val<size_t>("rgw_max_attr_size");
+        cct->_conf->get_val<Option::size_t>("rgw_max_attr_size");
       if (max_attr_size && xattr.length() > max_attr_size) {
         return -EFBIG;
       }

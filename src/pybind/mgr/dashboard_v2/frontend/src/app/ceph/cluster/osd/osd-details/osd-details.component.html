@@ -1,0 +1,36 @@
+<tabset *ngIf="selection.hasSingleSelection">
+  <tab heading="Attributes (OSD map)">
+    <cd-table-key-value *ngIf="osd.loaded"
+                        [data]="osd.details.osd_map">
+    </cd-table-key-value>
+  </tab>
+  <tab heading="Metadata">
+    <cd-table-key-value *ngIf="osd.loaded"
+                        (fetchData)="osd.autoRefresh()"
+                        [data]="osd.details.osd_metadata">
+    </cd-table-key-value>
+  </tab>
+  <tab heading="Performance counter">
+    <cd-table-performance-counter *ngIf="osd.loaded"
+                                  serviceType="osd"
+                                  [serviceId]="osd.id">
+    </cd-table-performance-counter>
+  </tab>
+  <tab heading="Histogram">
+    <h3 *ngIf="osd.loaded && osd.histogram_failed">
+      Histogram not available -> <span class="text-warning">{{ osd.histogram_failed }}</span>
+    </h3>
+    <div class="row" *ngIf="osd.loaded && osd.details.histogram">
+      <div class="col-md-6">
+        <h4>Writes</h4>
+        <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_w_latency_in_bytes_histogram">
+        </cd-osd-performance-histogram>
+      </div>
+      <div class="col-md-6">
+        <h4>Reads</h4>
+        <cd-osd-performance-histogram [histogram]="osd.details.histogram.osd.op_r_latency_out_bytes_histogram">
+        </cd-osd-performance-histogram>
+      </div>
+    </div>
+  </tab>
+</tabset>

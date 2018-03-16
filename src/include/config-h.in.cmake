@@ -166,6 +166,9 @@
 /* define if radosgw's beast frontend enabled */
 #cmakedefine WITH_RADOSGW_BEAST_FRONTEND
 
+/* define if radosgw has openssl support */
+#cmakedefine WITH_CURL_OPENSSL
+
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY
 

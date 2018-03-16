@@ -206,7 +206,7 @@ int handle_opt_data_sync_status(const std::string& source_zone, RGWRados *store,
 
 int handle_opt_data_sync_init(const std::string& source_zone, const boost::intrusive_ptr<CephContext>& cct, RGWRados *store);
 
-int handle_opt_data_sync_run(const std::string& source_zone, RGWRados *store);
+int handle_opt_data_sync_run(const std::string& source_zone, const boost::intrusive_ptr<CephContext>& cct, RGWRados *store);
 
 
 #endif //CEPH_RGW_ADMIN_MULTISITE_H

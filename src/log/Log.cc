@@ -407,10 +407,8 @@ void Log::dump_recent()
 
   char buf[4096];
   _log_message("--- logging levels ---", true);
-  for (vector<Subsystem>::iterator p = m_subs->m_subsys.begin();
-       p != m_subs->m_subsys.end();
-       ++p) {
-    snprintf(buf, sizeof(buf), "  %2d/%2d %s", p->log_level, p->gather_level, p->name.c_str());
+  for (const auto& p : m_subs->m_subsys) {
+    snprintf(buf, sizeof(buf), "  %2d/%2d %s", p.log_level, p.gather_level, p.name);
     _log_message(buf, true);
   }
 
@@ -442,13 +440,14 @@ void Log::start()
 
 void Log::stop()
 {
-  assert(is_started());
-  pthread_mutex_lock(&m_queue_mutex);
-  m_stop = true;
-  pthread_cond_signal(&m_cond_flusher);
-  pthread_cond_broadcast(&m_cond_loggers);
-  pthread_mutex_unlock(&m_queue_mutex);
-  join();
+  if (is_started()) {
+    pthread_mutex_lock(&m_queue_mutex);
+    m_stop = true;
+    pthread_cond_signal(&m_cond_flusher);
+    pthread_cond_broadcast(&m_cond_loggers);
+    pthread_mutex_unlock(&m_queue_mutex);
+    join();
+  }
 }
 
 void *Log::entry()

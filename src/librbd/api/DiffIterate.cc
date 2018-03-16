@@ -7,10 +7,14 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
 #include "common/errno.h"
 #include "common/Throttle.h"
+#include "osdc/Striper.h"
 #include "librados/snap_set_diff.h"
 #include <boost/tuple/tuple.hpp>
 #include <list>
@@ -131,17 +135,22 @@ private:
     uint64_t end_size;
     bool end_exists;
     librados::snap_t clone_end_snap_id;
+    bool whole_object;
     calc_snap_set_diff(cct, m_snap_set, m_diff_context.from_snap_id,
                        m_diff_context.end_snap_id, &diff, &end_size,
-                       &end_exists, &clone_end_snap_id);
+                       &end_exists, &clone_end_snap_id, &whole_object);
+    if (whole_object) {
+      ldout(cct, 1) << "object " << m_oid << ": need to provide full object"
+                    << dendl;
+    }
     ldout(cct, 20) << "  diff " << diff << " end_exists=" << end_exists
                    << dendl;
-    if (diff.empty()) {
+    if (diff.empty() && !whole_object) {
       if (m_diff_context.from_snap_id == 0 && !end_exists) {
         compute_parent_overlap(diffs);
       }
       return;
-    } else if (m_diff_context.whole_object) {
+    } else if (m_diff_context.whole_object || whole_object) {
       // provide the full object extents to the callback
       for (vector<ObjectExtent>::iterator q = m_object_extents.begin();
            q != m_object_extents.end(); ++q) {
@@ -230,12 +239,22 @@ int DiffIterate<I>::diff_iterate(I *ictx,
       		 << " len = " << len << dendl;
 
   // ensure previous writes are visible to listsnaps
+  C_SaferCond flush_ctx;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->flush();
+    auto aio_comp = io::AioCompletion::create(&flush_ctx, ictx,
+                                              io::AIO_TYPE_FLUSH);
+    auto req = io::ImageDispatchSpec<I>::create_flush_request(
+      *ictx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    req->send();
+    delete req;
+  }
+  int r = flush_ctx.wait();
+  if (r < 0) {
+    return r;
   }
 
-  int r = ictx->state->refresh_if_required();
+  r = ictx->state->refresh_if_required();
   if (r < 0) {
     return r;
   }

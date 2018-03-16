@@ -89,7 +89,8 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   mgrc(m->cct, m),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
-  asok_hook(NULL)
+  asok_hook(NULL),
+  starttime(mono_clock::now())
 {
   orig_argc = 0;
   orig_argv = NULL;
@@ -179,6 +180,9 @@ void MDSDaemon::dump_status(Formatter *f)
     f->dump_unsigned("osdmap_epoch", 0);
     f->dump_unsigned("osdmap_epoch_barrier", 0);
   }
+
+  f->dump_float("uptime", get_uptime().count());
+
   f->close_section(); // status
 }
 
@@ -205,11 +209,11 @@ void MDSDaemon::set_up_admin_socket()
   assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
 				     asok_hook,
-				     "show slowest recent ops");
+				     "show recent ops");
   assert(r == 0);
   r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
 				     asok_hook,
-				     "show slowest recent ops, sorted by op duration");
+				     "show recent ops, sorted by op duration");
   assert(r == 0);
   r = admin_socket->register_command("scrub_path",
 				     "scrub_path name=path,type=CephString "
@@ -655,6 +659,10 @@ COMMAND("config set " \
 	"name=key,type=CephString name=value,type=CephString",
 	"Set a configuration option at runtime (not persistent)",
 	"mds", "*", "cli,rest")
+COMMAND("config unset " \
+	"name=key,type=CephString",
+	"Unset a configuration option at runtime (not persistent)",
+	"mds", "*", "cli,rest")
 COMMAND("exit",
 	"Terminate this MDS",
 	"mds", "*", "cli,rest")
@@ -791,7 +799,14 @@ int MDSDaemon::_handle_command(
     cmd_getval(cct, cmdmap, "key", key);
     std::string val;
     cmd_getval(cct, cmdmap, "value", val);
-    r = cct->_conf->set_val(key, val, true, &ss);
+    r = cct->_conf->set_val(key, val, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
+  } else if (prefix == "config unset") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    r = cct->_conf->rm_val(key);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }

@@ -4,6 +4,7 @@
 #include "tools/rbd_mirror/image_replayer/PrepareRemoteImageRequest.h"
 #include "include/rados/librados.hpp"
 #include "cls/rbd/cls_rbd_client.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "journal/Journaler.h"
@@ -107,7 +108,7 @@ void PrepareRemoteImageRequest<I>::get_client() {
   journal::Settings settings;
   settings.commit_interval = g_ceph_context->_conf->get_val<double>(
     "rbd_mirror_journal_commit_age");
-  settings.max_fetch_bytes = g_ceph_context->_conf->get_val<uint64_t>(
+  settings.max_fetch_bytes = g_ceph_context->_conf->get_val<Option::size_t>(
     "rbd_mirror_journal_max_fetch_bytes");
 
   assert(*m_remote_journaler == nullptr);

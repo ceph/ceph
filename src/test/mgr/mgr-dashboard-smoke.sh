@@ -18,21 +18,24 @@ source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 function run() {
     local dir=$1
 
+    export CEPH_MON=127.0.0.1:7150  # git grep '\<7150\>' : there must be only one
+    export CEPH_ARGS
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--mon-initial-members=a --mon-host=$MON "
+    CEPH_ARGS+="--mgr-initial-modules=dashbaord "
+    CEPH_ARGS+="--mon-host=$CEPH_MON"
+
     setup $dir || return 1
+    TEST_dashboard $dir || return 1
+    teardown $dir || return 1
+}
 
-    MON=127.0.0.1:7150  # git grep '\<7150\>' : there must be only one
-    (
-        FSID=$(uuidgen) 
-        export CEPH_ARGS
-        CEPH_ARGS+="--fsid=$FSID --auth-supported=none "
-        CEPH_ARGS+="--mon-initial-members=a --mon-host=$MON "
-        CEPH_ARGS+="--mgr-initial-modules=dashbaord "
-	CEPH_ARGS+="--mon-host=$MON"
-        run_mon $dir a --public-addr $MON || return 1
-    )
+function TEST_dashboard() {
+    local dir=$1
+    shift
 
-    timeout 360 ceph --mon-host $MON mon stat || return 1
-    export CEPH_ARGS="--mon_host $MON "
+    run_mon $dir a || return 1
+    timeout 360 ceph mon stat || return 1
     ceph config-key set mgr/x/dashboard/server_port 7001
     MGR_ARGS+="--mgr_module_path=${CEPH_ROOT}/src/pybind/mgr "
     run_mgr $dir x ${MGR_ARGS} || return 1
@@ -57,8 +60,6 @@ function run() {
         tries=$((tries+1))
         sleep 0.5
     done
-
-    teardown $dir || return 1
 }
 
 main mgr-dashboard-smoke "$@"

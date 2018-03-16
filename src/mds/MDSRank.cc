@@ -91,7 +91,8 @@ MDSRank::MDSRank(
     messenger(msgr), monc(monc_),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
-    standby_replaying(false)
+    standby_replaying(false),
+    starttime(mono_clock::now())
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
@@ -1812,11 +1813,11 @@ void MDSRankDispatcher::handle_mds_map(
 	found = true;
 	break;
       }
-      if (found)
-	mdlog->set_write_iohint(0);
-      else
-	mdlog->set_write_iohint(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
     }
+    if (found)
+      mdlog->set_write_iohint(0);
+    else
+      mdlog->set_write_iohint(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   }
 
   if (oldmap->get_max_mds() != mdsmap->get_max_mds()) {
@@ -1860,22 +1861,22 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
              command == "ops") {
     if (!op_tracker.dump_ops_in_flight(f)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+	  please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_blocked_ops") {
     if (!op_tracker.dump_ops_in_flight(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	Please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+	Please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_historic_ops") {
     if (!op_tracker.dump_historic_ops(f)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+	  please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_historic_ops_by_duration") {
     if (!op_tracker.dump_historic_ops(f, true)) {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
-	  please enable \"osd_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
+	  please enable \"mds_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "osdmap barrier") {
     int64_t target_epoch = 0;
@@ -1972,19 +1973,7 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
       ss << "Failed to get cache status: " << cpp_strerror(r);
     }
   } else if (command == "dump tree") {
-    string root;
-    int64_t depth;
-    cmd_getval(g_ceph_context, cmdmap, "root", root);
-    if (!cmd_getval(g_ceph_context, cmdmap, "depth", depth))
-      depth = -1;
-    {
-      Mutex::Locker l(mds_lock);
-      int r = mdcache->dump_cache(root, depth, f);
-      if (r != 0) {
-        ss << "Failed to dump tree: " << cpp_strerror(r);
-        f->reset();
-      }
-    }
+    command_dump_tree(cmdmap, ss, f);
   } else if (command == "dump loads") {
     Mutex::Locker l(mds_lock);
     int r = balancer->dump_loads(f);
@@ -2360,6 +2349,24 @@ int MDSRank::_command_export_dir(
   return 0;
 }
 
+void MDSRank::command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f) 
+{
+  std::string root;
+  int64_t depth;
+  cmd_getval(g_ceph_context, cmdmap, "root", root);
+  if (!cmd_getval(g_ceph_context, cmdmap, "depth", depth))
+    depth = -1;
+  Mutex::Locker l(mds_lock);
+  CInode *in = mdcache->cache_traverse(filepath(root.c_str()));
+  if (!in) {
+    ss << "root inode is not in cache";
+    return;
+  }
+  f->open_array_section("inodes");
+  mdcache->dump_tree(in, 0, depth, f);
+  f->close_section();
+}
+
 CDir *MDSRank::_command_dirfrag_get(
     const cmdmap_t &cmdmap,
     std::ostream &ss)
@@ -2534,6 +2541,7 @@ void MDSRank::dump_status(Formatter *f) const
   } else if (state == MDSMap::STATE_CLIENTREPLAY) {
     dump_clientreplay_status(f);
   }
+  f->dump_float("rank_uptime", get_uptime().count());
 }
 
 void MDSRank::dump_clientreplay_status(Formatter *f) const

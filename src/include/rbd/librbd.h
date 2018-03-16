@@ -888,6 +888,8 @@ CEPH_RBD_API int rbd_aio_mirror_image_get_status(rbd_image_t image,
 CEPH_RBD_API int rbd_group_create(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_group_remove(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_group_list(rados_ioctx_t p, char *names, size_t *size);
+CEPH_RBD_API int rbd_group_rename(rados_ioctx_t p, const char *src_name,
+                                  const char *dest_name);
 CEPH_RBD_API int rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                         size_t group_info_size);
 

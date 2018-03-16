@@ -486,8 +486,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     uint8_t v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
-    }
-    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 5;
     }
     ENCODE_START(v, 1, bl); // client-usable data
@@ -1614,6 +1613,138 @@ void OSDMap::clean_temps(CephContext *cct,
   }
 }
 
+void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
+                                    const OSDMap& osdmap,
+                                    Incremental *pending_inc)
+{
+  ldout(cct, 10) << __func__ << dendl;
+  OSDMap tmpmap;
+  tmpmap.deepish_copy_from(osdmap);
+  tmpmap.apply_incremental(*pending_inc);
+
+  for (auto& p : tmpmap.pg_upmap) {
+    ldout(cct, 10) << __func__ << " pg_upmap entry "
+                   << "[" << p.first << ":" << p.second << "]"
+                   << dendl;
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(p.first);
+    if (crush_rule < 0) {
+      lderr(cct) << __func__ << " unable to load crush-rule of pg "
+                 << p.first << dendl;
+      continue;
+    }
+    auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
+    if (type < 0) {
+      lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
+                 << p.first << dendl;
+      continue;
+    } else if (type == 0) {
+      ldout(cct, 10) << __func__ << " failure-domain of pg " << p.first
+                     << " is osd-level, skipping"
+                     << dendl;
+      continue;
+    }
+    ldout(cct, 10) << __func__ << " pg " << p.first
+                   << " crush-rule-id " << crush_rule
+                   << " failure-domain-type " << type
+                   << dendl;
+    vector<int> raw;
+    int primary;
+    tmpmap.pg_to_raw_up(p.first, &raw, &primary);
+    set<int> parents;
+    bool error = false;
+    bool collide = false;
+    for (auto osd : raw) {
+      auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+      if (parent >= 0) {
+        lderr(cct) << __func__ << " unable to get parent of raw osd." << osd
+                   << ", pg " << p.first
+                   << dendl;
+        error = true;
+        break;
+      }
+      auto r = parents.insert(parent);
+      if (!r.second) {
+        collide = true;
+        break;
+      }
+    }
+    if (!error && collide) {
+      ldout(cct, 10) << __func__ << " removing invalid pg_upmap "
+                     << "[" << p.first << ":" << p.second << "]"
+                     << ", final mapping result will be: " << raw
+                     << dendl;
+      auto it = pending_inc->new_pg_upmap.find(p.first);
+      if (it != pending_inc->new_pg_upmap.end()) {
+        pending_inc->new_pg_upmap.erase(it);
+      }
+      if (osdmap.pg_upmap.count(p.first)) {
+        pending_inc->old_pg_upmap.insert(p.first);
+      }
+    }
+  }
+  for (auto& p : tmpmap.pg_upmap_items) {
+    ldout(cct, 10) << __func__ << " pg_upmap_items entry "
+                   << "[" << p.first << ":" << p.second << "]"
+                   << dendl;
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(p.first);
+    if (crush_rule < 0) {
+      lderr(cct) << __func__ << " unable to load crush-rule of pg "
+                 << p.first << dendl;
+      continue;
+    }
+    auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
+    if (type < 0) {
+      lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
+                 << p.first << dendl;
+      continue;
+    } else if (type == 0) {
+      ldout(cct, 10) << __func__ << " failure-domain of pg " << p.first
+                     << " is osd-level, skipping"
+                     << dendl;
+      continue;
+    }
+    ldout(cct, 10) << __func__ << " pg " << p.first
+                   << " crush_rule_id " << crush_rule
+                   << " failure_domain_type " << type
+                   << dendl;
+    vector<int> raw;
+    int primary;
+    tmpmap.pg_to_raw_up(p.first, &raw, &primary);
+    set<int> parents;
+    bool error = false;
+    bool collide = false;
+    for (auto osd : raw) {
+      auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+      if (parent >= 0) {
+        lderr(cct) << __func__ << " unable to get parent of raw osd." << osd
+                   << ", pg " << p.first
+                   << dendl;
+        error = true;
+        break;
+      }
+      auto r = parents.insert(parent);
+      if (!r.second) {
+        collide = true;
+        break;
+      }
+    }
+    if (!error && collide) {
+      ldout(cct, 10) << __func__ << " removing invalid pg_upmap_items "
+                     << "[" << p.first << ":" << p.second << "]"
+                     << ", final mapping result will be: " << raw
+                     << dendl;
+      // This is overkilling, but simpler..
+      auto it = pending_inc->new_pg_upmap_items.find(p.first);
+      if (it != pending_inc->new_pg_upmap_items.end()) {
+        pending_inc->new_pg_upmap_items.erase(it);
+      }
+      if (osdmap.pg_upmap_items.count(p.first)) {
+        pending_inc->old_pg_upmap_items.insert(p.first);
+      }
+    }
+  }
+}
+
 int OSDMap::apply_incremental(const Incremental &inc)
 {
   new_blacklist_entries = false;
@@ -2391,8 +2522,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     uint8_t v = 7;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
-    }
-    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 6;
     }
     ENCODE_START(v, 1, bl); // client-usable data
@@ -2468,8 +2598,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     uint8_t target_v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
-    }
-    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       target_v = 5;
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
@@ -3731,7 +3860,7 @@ int OSDMap::summarize_mapping_stats(
     vector<int> up, up2;
     int up_primary;
     for (unsigned ps = 0; ps < pi->get_pg_num(); ++ps) {
-      pg_t pgid(ps, pool_id, -1);
+      pg_t pgid(ps, pool_id);
       total_pg += pi->get_size();
       pg_to_up_acting_osds(pgid, &up, &up_primary, nullptr, nullptr);
       for (int osd : up) {
@@ -4002,6 +4131,9 @@ int OSDMap::calc_pg_upmaps(
       ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
       for (auto p : pmap) {
 	auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
+        if (adjusted_weight == 0) {
+          continue;
+        }
 	osd_weight[p.first] += adjusted_weight;
 	osd_weight_total += adjusted_weight;
       }

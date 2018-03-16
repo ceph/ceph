@@ -16,6 +16,7 @@
 #include "mds/JournalPointer.h"
 
 #include "mds/events/ESubtreeMap.h"
+#include "mds/PurgeQueue.h"
 
 #include "JournalScanner.h"
 
@@ -33,12 +34,12 @@ int JournalScanner::scan(bool const full)
 {
   int r = 0;
 
-  r = scan_pointer();
+  r = set_journal_ino();
   if (r < 0) {
     return r;
   }
 
-  if (pointer_present) {
+  if (!is_mdlog || pointer_present) {
     r = scan_header();
     if (r < 0) {
       return r;
@@ -55,6 +56,22 @@ int JournalScanner::scan(bool const full)
   return 0;
 }
 
+
+int JournalScanner::set_journal_ino()
+{
+  int r = 0;
+  if (type == "purge_queue") {
+    ino = MDS_INO_PURGE_QUEUE + rank;
+  }
+  else if (type == "mdlog"){
+    r = scan_pointer();
+    is_mdlog = true;
+  }
+  else {
+    ceph_abort(); // should not get here
+  }
+  return r;
+}
 
 int JournalScanner::scan_pointer()
 {
@@ -257,36 +274,52 @@ int JournalScanner::scan_events()
           read_offset += consumed;
           break;
         }
+        bool valid_entry = true;
+        if (is_mdlog) {
+          LogEvent *le = LogEvent::decode(le_bl);
 
-        LogEvent *le = LogEvent::decode(le_bl);
+          if (le) {
+            dout(10) << "Valid entry at 0x" << std::hex << read_offset << std::dec << dendl;
 
-        if (le) {
-          dout(10) << "Valid entry at 0x" << std::hex << read_offset << std::dec << dendl;
-
-          if (le->get_type() == EVENT_SUBTREEMAP
-              || le->get_type() == EVENT_SUBTREEMAP_TEST) {
-            ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
-            if (sle->expire_pos > read_offset) {
-              errors.insert(std::make_pair(
-                    read_offset, EventError(
-                      -ERANGE,
-                      "ESubtreeMap has expire_pos ahead of its own position")));
+            if (le->get_type() == EVENT_SUBTREEMAP
+                || le->get_type() == EVENT_SUBTREEMAP_TEST) {
+              ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+              if (sle->expire_pos > read_offset) {
+                errors.insert(std::make_pair(
+                      read_offset, EventError(
+                        -ERANGE,
+                        "ESubtreeMap has expire_pos ahead of its own position")));
+              }
             }
-          }
 
-          if (filter.apply(read_offset, *le)) {
-            events[read_offset] = EventRecord(le, consumed);
+            if (filter.apply(read_offset, *le)) {
+              events[read_offset] = EventRecord(le, consumed);
+            } else {
+              delete le;
+            }
           } else {
-            delete le;
+            valid_entry = false;
           }
-          events_valid.push_back(read_offset);
-          read_offset += consumed;
+        } else if (type == "purge_queue"){
+           PurgeItem pi;
+           try {
+             bufferlist::iterator q = le_bl.begin();
+             ::decode(pi, q);
+           } catch (const buffer::error &err) {
+             valid_entry = false;
+           }
         } else {
+          ceph_abort(); // should not get here
+        }
+        if (!valid_entry) {
           dout(10) << "Invalid entry at 0x" << std::hex << read_offset << std::dec << dendl;
           gap = true;
           gap_start = read_offset;
           read_offset += consumed;
           break;
+        } else {
+          events_valid.push_back(read_offset);
+          read_offset += consumed;
         }
       }
     }
@@ -325,7 +358,7 @@ JournalScanner::~JournalScanner()
  */
 bool JournalScanner::is_healthy() const
 {
-  return (pointer_present && pointer_valid
+  return ((!is_mdlog || (pointer_present && pointer_valid))
       && header_present && header_valid
       && ranges_invalid.empty()
       && objects_missing.empty());
@@ -367,12 +400,13 @@ void JournalScanner::report(std::ostream &out) const
 {
   out << "Overall journal integrity: " << (is_healthy() ? "OK" : "DAMAGED") << std::endl;
 
-  if (!pointer_present) {
-    out << "Pointer not found" << std::endl;
-  } else if (!pointer_valid) {
-    out << "Pointer could not be decoded" << std::endl;
+  if (is_mdlog) {
+    if (!pointer_present) {
+      out << "Pointer not found" << std::endl;
+    } else if (!pointer_valid) {
+      out << "Pointer could not be decoded" << std::endl;
+    }
   }
-
   if (!header_present) {
     out << "Header not found" << std::endl;
   } else if (!header_valid) {

@@ -60,6 +60,7 @@ set(rgw_a_srcs
   rgw_frontend.cc
   rgw_gc.cc
   rgw_http_client.cc
+  rgw_http_client_curl.cc
   rgw_json_enc.cc
   rgw_keystone.cc
   rgw_ldap.cc
@@ -142,11 +143,7 @@ add_library(rgw_a STATIC ${rgw_a_srcs})
 
 add_dependencies(rgw_a civetweb_h)
 
-target_include_directories(rgw_a SYSTEM PUBLIC
-  ${FCGI_INCLUDE_DIR}
-  "../rapidjson/include"
-  )
-target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
+target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 
 target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
@@ -154,6 +151,15 @@ target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
+
+if (WITH_RADOSGW_BEAST_FRONTEND)
+  target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
+  target_link_libraries(rgw_a Boost::coroutine Boost::context)
+endif()
+
+if (WITH_CURL_OPENSSL)
+  target_link_libraries(rgw_a ${OPENSSL_LIBRARIES})
+endif (WITH_CURL_OPENSSL)
 
 set(radosgw_srcs
   rgw_loadgen_process.cc

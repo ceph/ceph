@@ -26,6 +26,7 @@
 #include "global/signal_handler.h"
 #include "include/compat.h"
 #include "include/str_list.h"
+#include "mon/MonClient.h"
 
 #include <pwd.h>
 #include <grp.h>
@@ -80,57 +81,89 @@ static int chown_path(const std::string &pathname, const uid_t owner, const gid_
   return r;
 }
 
-void global_pre_init(std::vector < const char * > *alt_def_args,
-		     std::vector < const char* >& args,
-		     uint32_t module_type, code_environment_t code_env,
-		     int flags)
+void global_pre_init(
+  const std::map<std::string,std::string> *defaults,
+  std::vector < const char* >& args,
+  uint32_t module_type, code_environment_t code_env,
+  int flags)
 {
   std::string conf_file_list;
   std::string cluster = "";
-  CephInitParameters iparams = ceph_argparse_early_args(args, module_type,
-							&cluster, &conf_file_list);
+
+  CephInitParameters iparams = ceph_argparse_early_args(
+    args, module_type,
+    &cluster, &conf_file_list);
+
   CephContext *cct = common_preinit(iparams, code_env, flags);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
 
-  if (alt_def_args)
-    conf->parse_argv(*alt_def_args);  // alternative default args
+  if (flags & (CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
+	       CINIT_FLAG_NO_MON_CONFIG)) {
+    conf->no_mon_config = true;
+  }
+
+  // alternate defaults
+  if (defaults) {
+    for (auto& i : *defaults) {
+      conf->set_val_default(i.first, i.second);
+    }
+  }
 
   int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
 				     &cerr, flags);
   if (ret == -EDOM) {
-    dout_emergency("global_init: error parsing config file.\n");
+    cct->_log->flush();
+    cerr << "global_init: error parsing config file." << std::endl;
     _exit(1);
   }
   else if (ret == -ENOENT) {
     if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
       if (conf_file_list.length()) {
-	ostringstream oss;
-	oss << "global_init: unable to open config file from search list "
-	    << conf_file_list << "\n";
-        dout_emergency(oss.str());
+	cct->_log->flush();
+	cerr << "global_init: unable to open config file from search list "
+	     << conf_file_list << std::endl;
         _exit(1);
       } else {
-        derr << "did not load config file, using default settings." << dendl;
+	cerr << "did not load config file, using default settings." << std::endl;
       }
     }
   }
   else if (ret) {
-    dout_emergency("global_init: error reading config file.\n");
+    cct->_log->flush();
+    cerr << "global_init: error reading config file." << std::endl;
     _exit(1);
   }
 
-  conf->parse_env(); // environment variables override
+  // environment variables override (CEPH_ARGS, CEPH_KEYRING)
+  conf->parse_env();
 
-  conf->parse_argv(args); // argv override
+  // command line (as passed by caller)
+  conf->parse_argv(args);
+
+  if (!conf->no_mon_config) {
+    // make sure our mini-session gets legacy values
+    conf->apply_changes(nullptr);
+
+    MonClient mc_bootstrap(g_ceph_context);
+    if (mc_bootstrap.get_monmap_and_config() < 0) {
+      cct->_log->flush();
+      cerr << "failed to fetch mon config (--no-mon-config to skip)"
+	   << std::endl;
+      _exit(1);
+    }
+  }
+
+  // do the --show-config[-val], if present in argv
+  conf->do_argv_commands();
 
   // Now we're ready to complain about config file parse errors
   g_conf->complain_about_parse_errors(g_ceph_context);
 }
 
 boost::intrusive_ptr<CephContext>
-global_init(std::vector < const char * > *alt_def_args,
+global_init(const std::map<std::string,std::string> *defaults,
 	    std::vector < const char* >& args,
 	    uint32_t module_type, code_environment_t code_env,
 	    int flags,
@@ -141,7 +174,7 @@ global_init(std::vector < const char * > *alt_def_args,
   if (run_pre_init) {
     // We will run pre_init from here (default).
     assert(!g_ceph_context && first_run);
-    global_pre_init(alt_def_args, args, module_type, code_env, flags);
+    global_pre_init(defaults, args, module_type, code_env, flags);
   } else {
     // Caller should have invoked pre_init manually.
     assert(g_ceph_context && first_run);
@@ -413,13 +446,6 @@ void global_init_postfork_start(CephContext *cct)
 	 << err << dendl;
     exit(1);
   }
-  VOID_TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
-  if (open("/dev/null", O_RDONLY) < 0) {
-    int err = errno;
-    derr << "global_init_daemonize: open(/dev/null) failed: error "
-	 << err << dendl;
-    exit(1);
-  }
 
   const md_config_t *conf = cct->_conf;
   if (pidfile_write(conf) < 0)
@@ -434,8 +460,8 @@ void global_init_postfork_start(CephContext *cct)
 
 void global_init_postfork_finish(CephContext *cct)
 {
-  /* We only close stderr once the caller decides the daemonization
-   * process is finished.  This way we can allow error messages to be
+  /* We only close stdout+stderr once the caller decides the daemonization
+   * process is finished.  This way we can allow error or other messages to be
    * propagated in a manner that the user is able to see.
    */
   if (!(cct->get_init_flags() & CINIT_FLAG_NO_CLOSE_STDERR)) {
@@ -446,6 +472,15 @@ void global_init_postfork_finish(CephContext *cct)
       exit(1);
     }
   }
+
+  VOID_TEMP_FAILURE_RETRY(close(STDOUT_FILENO));
+  if (open("/dev/null", O_RDONLY) < 0) {
+    int err = errno;
+    derr << "global_init_daemonize: open(/dev/null) failed: error "
+	 << err << dendl;
+    exit(1);
+  }
+
   ldout(cct, 1) << "finished global_init_daemonize" << dendl;
 }
 

@@ -834,7 +834,8 @@ TEST_F(TestLibRBD, TestCreateLsDelete)
   std::string name = get_temp_image_name();
   std::string name2 = get_temp_image_name();
   uint64_t size = 2 << 20;
-  
+
+  ASSERT_EQ(0, test_ls(ioctx, 0));
   ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
   ASSERT_EQ(1, test_ls(ioctx, 1, name.c_str()));
   ASSERT_EQ(0, create_image(ioctx, name2.c_str(), size, &order));
@@ -4555,7 +4556,7 @@ TEST_F(TestLibRBD, RebuildObjectMapViaLockOwner)
 
 TEST_F(TestLibRBD, RenameViaLockOwner)
 {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
@@ -4587,7 +4588,7 @@ TEST_F(TestLibRBD, RenameViaLockOwner)
 
 TEST_F(TestLibRBD, SnapCreateViaLockOwner)
 {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
@@ -4631,7 +4632,7 @@ TEST_F(TestLibRBD, SnapCreateViaLockOwner)
 
 TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
 {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_EXCLUSIVE_LOCK);
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));

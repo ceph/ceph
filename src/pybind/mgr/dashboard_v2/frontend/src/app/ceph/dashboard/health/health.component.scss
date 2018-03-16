@@ -1,0 +1,62 @@
+table.ceph-chartbox {
+  width: 100%;
+
+  td {
+    text-align: center;
+    font-weight: bold;
+  }
+}
+
+.center-block {
+  width: 120px;
+}
+
+.pie {
+  height: 120px;
+  width: 120px;
+}
+
+.media {
+  display: block;
+  min-height: 60px;
+  width: 100%;
+
+  .media-left {
+    border-top-left-radius: 2px;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-left-radius: 2px;
+    display: block;
+    float: left;
+    height: 60px;
+    width: 60px;
+    text-align: center;
+    font-size: 40px;
+    line-height: 60px;
+    padding-right: 0;
+
+    .fa {
+      font-size: 45px;
+    }
+  }
+
+  .media-body {
+    padding: 5px 10px;
+    margin-left: 60px;
+
+    .media-heading {
+      text-transform: uppercase;
+      display: block;
+      font-size: 14px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .media-text {
+      display: block;
+      font-weight: bold;
+      font-size: 18px;
+    }
+  }
+}

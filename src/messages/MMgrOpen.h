@@ -19,7 +19,7 @@
 
 class MMgrOpen : public Message
 {
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -30,6 +30,12 @@ public:
   bool service_daemon = false;
   std::map<std::string,std::string> daemon_metadata;
   std::map<std::string,std::string> daemon_status;
+
+  // encode map<string,map<int32_t,string>> of current config
+  bufferlist config_bl;
+
+  // encode map<string,string> of compiled-in defaults
+  bufferlist config_defaults_bl;
 
   void decode_payload() override
   {
@@ -43,6 +49,10 @@ public:
 	decode(daemon_status, p);
       }
     }
+    if (header.version >= 3) {
+      decode(config_bl, p);
+      decode(config_defaults_bl, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -54,6 +64,8 @@ public:
       encode(daemon_metadata, payload);
       encode(daemon_status, payload);
     }
+    encode(config_bl, payload);
+    encode(config_defaults_bl, payload);
   }
 
   const char *get_type_name() const override { return "mgropen"; }

@@ -45,7 +45,7 @@ ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
 // Notes:
 // 1. Don't dispatch any event when closed! It may cause AsyncConnection alive even if AsyncMessenger dead
 
-const int AsyncConnection::TCP_PREFETCH_MIN_SIZE = 512;
+const uint32_t AsyncConnection::TCP_PREFETCH_MIN_SIZE = 512;
 const int ASYNC_COALESCE_THRESHOLD = 256;
 
 class C_time_wakeup : public EventCallback {
@@ -1563,7 +1563,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       goto replace;
     }
 
-    ldout(async_msgr->cct, 0) << __func__ << " accept connect_seq " << connect.connect_seq
+    ldout(async_msgr->cct, 1) << __func__ << " accept connect_seq " << connect.connect_seq
                               << " vs existing csq=" << existing->connect_seq << " existing_state="
                               << get_state_name(existing->state) << dendl;
 

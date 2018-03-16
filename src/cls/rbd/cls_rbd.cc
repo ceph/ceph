@@ -5107,6 +5107,167 @@ int mirror_image_map_remove(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+namespace group {
+
+/********************** methods for rbd_group_directory ***********************/
+
+int dir_add(cls_method_context_t hctx,
+            const string &name, const string &id,
+            bool check_for_unique_id)
+{
+  if (!name.size() || !is_valid_id(id)) {
+    CLS_ERR("invalid group name '%s' or id '%s'",
+            name.c_str(), id.c_str());
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "dir_add name=%s id=%s", name.c_str(), id.c_str());
+
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+  string tmp;
+  int r = read_key(hctx, name_key, &tmp);
+  if (r != -ENOENT) {
+    CLS_LOG(10, "name already exists");
+    return -EEXIST;
+  }
+  r = read_key(hctx, id_key, &tmp);
+  if (r != -ENOENT && check_for_unique_id) {
+    CLS_LOG(10, "id already exists");
+    return -EBADF;
+  }
+  bufferlist id_bl, name_bl;
+  encode(id, id_bl);
+  encode(name, name_bl);
+  map<string, bufferlist> omap_vals;
+  omap_vals[name_key] = id_bl;
+  omap_vals[id_key] = name_bl;
+  return cls_cxx_map_set_vals(hctx, &omap_vals);
+}
+
+int dir_remove(cls_method_context_t hctx,
+               const string &name, const string &id)
+{
+  CLS_LOG(20, "dir_remove name=%s id=%s", name.c_str(), id.c_str());
+
+  string name_key = dir_key_for_name(name);
+  string id_key = dir_key_for_id(id);
+  string stored_name, stored_id;
+
+  int r = read_key(hctx, name_key, &stored_id);
+  if (r < 0) {
+    if (r != -ENOENT)
+      CLS_ERR("error reading name to id mapping: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+  r = read_key(hctx, id_key, &stored_name);
+  if (r < 0) {
+    if (r != -ENOENT)
+      CLS_ERR("error reading id to name mapping: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  // check if this op raced with a rename
+  if (stored_name != name || stored_id != id) {
+    CLS_ERR("stored name '%s' and id '%s' do not match args '%s' and '%s'",
+            stored_name.c_str(), stored_id.c_str(), name.c_str(), id.c_str());
+    return -ESTALE;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, name_key);
+  if (r < 0) {
+    CLS_ERR("error removing name: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, id_key);
+  if (r < 0) {
+    CLS_ERR("error removing id: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+static const string RBD_GROUP_SNAP_KEY_PREFIX = "snapshot_";
+
+std::string snap_key(std::string snap_id) {
+  ostringstream oss;
+  oss << RBD_GROUP_SNAP_KEY_PREFIX << snap_id;
+  return oss.str();
+}
+
+int snap_list(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
+              uint64_t max_return,
+              std::vector<cls::rbd::GroupSnapshot> *group_snaps)
+{
+  int max_read = RBD_MAX_KEYS_READ;
+  std::map<string, bufferlist> vals;
+  string last_read = snap_key(start_after.id);
+
+  group_snaps->clear();
+
+  bool more;
+  do {
+    int r = cls_cxx_map_get_vals(hctx, last_read,
+				 RBD_GROUP_SNAP_KEY_PREFIX,
+				 max_read, &vals, &more);
+    if (r < 0)
+      return r;
+
+    for (map<string, bufferlist>::iterator it = vals.begin();
+	 it != vals.end() && group_snaps->size() < max_return; ++it) {
+
+      bufferlist::iterator iter = it->second.begin();
+      cls::rbd::GroupSnapshot snap;
+      try {
+	decode(snap, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("error decoding snapshot: %s", it->first.c_str());
+	return -EIO;
+      }
+      CLS_LOG(20, "Discovered snapshot %s %s",
+	      snap.name.c_str(),
+	      snap.id.c_str());
+      group_snaps->push_back(snap);
+    }
+
+  } while (more && (group_snaps->size() < max_return));
+
+  return 0;
+}
+
+static int check_duplicate_snap_name(cls_method_context_t hctx,
+				     std::string snap_name,
+				     std::string snap_id)
+{
+  const int max_read = 1024;
+  cls::rbd::GroupSnapshot snap_last;
+  std::vector<cls::rbd::GroupSnapshot> page;
+
+  for (;;) {
+    int r = snap_list(hctx, snap_last, max_read, &page);
+    if (r < 0) {
+      return r;
+    }
+    for (auto& snap: page) {
+      if (snap.name == snap_name && snap.id != snap_id) {
+	return -EEXIST;
+      }
+    }
+
+    if (page.size() < max_read) {
+      break;
+    }
+
+    snap_last = *page.rbegin();
+  }
+
+  return 0;
+}
+
+} // namespace group
+
 /**
  * List groups from the directory.
  *
@@ -5199,34 +5360,37 @@ int group_dir_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  if (!name.size() || !is_valid_id(id)) {
-    CLS_ERR("invalid group name '%s' or id '%s'",
-	    name.c_str(), id.c_str());
+  return group::dir_add(hctx, name, id, true);
+}
+
+/**
+ * Rename a group to the directory.
+ *
+ * Input:
+ * @param src original name of the group (std::string)
+ * @param dest new name of the group (std::string)
+ * @param id the id of the group (std::string)
+ *
+ * Output:
+ * @return 0 on success, negative error code on failure
+ */
+int group_dir_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string src, dest, id;
+  try {
+    bufferlist::iterator iter = in->begin();
+    decode(src, iter);
+    decode(dest, iter);
+    decode(id, iter);
+  } catch (const buffer::error &err) {
     return -EINVAL;
   }
 
-  CLS_LOG(20, "group_dir_add name=%s id=%s", name.c_str(), id.c_str());
+  int r = group::dir_remove(hctx, src, id);
+  if (r < 0)
+    return r;
 
-  string tmp;
-  string name_key = dir_key_for_name(name);
-  string id_key = dir_key_for_id(id);
-  r = read_key(hctx, name_key, &tmp);
-  if (r != -ENOENT) {
-    CLS_LOG(10, "name already exists");
-    return -EEXIST;
-  }
-  r = read_key(hctx, id_key, &tmp);
-  if (r != -ENOENT) {
-    CLS_LOG(10, "id already exists");
-    return -EBADF;
-  }
-  bufferlist id_bl, name_bl;
-  encode(id, id_bl);
-  encode(name, name_bl);
-  map<string, bufferlist> omap_vals;
-  omap_vals[name_key] = id_bl;
-  omap_vals[id_key] = name_bl;
-  return cls_cxx_map_set_vals(hctx, &omap_vals);
+  return group::dir_add(hctx, dest, id, false);
 }
 
 /**
@@ -5250,45 +5414,7 @@ int group_dir_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "group_dir_remove name=%s id=%s", name.c_str(), id.c_str());
-
-  string stored_name, stored_id;
-  string name_key = dir_key_for_name(name);
-  string id_key = dir_key_for_id(id);
-
-  int r = read_key(hctx, name_key, &stored_id);
-  if (r < 0) {
-    if (r != -ENOENT)
-      CLS_ERR("error reading name to id mapping: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-  r = read_key(hctx, id_key, &stored_name);
-  if (r < 0) {
-    if (r != -ENOENT)
-      CLS_ERR("error reading id to name mapping: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  // check if this op raced with a rename
-  if (stored_name != name || stored_id != id) {
-    CLS_ERR("stored name '%s' and id '%s' do not match args '%s' and '%s'",
-	    stored_name.c_str(), stored_id.c_str(), name.c_str(), id.c_str());
-    return -ESTALE;
-  }
-
-  r = cls_cxx_map_remove_key(hctx, name_key);
-  if (r < 0) {
-    CLS_ERR("error removing name: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  r = cls_cxx_map_remove_key(hctx, id_key);
-  if (r < 0) {
-    CLS_ERR("error removing id: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  return 0;
+  return group::dir_remove(hctx, name, id);
 }
 
 /**
@@ -5577,88 +5703,6 @@ int image_group_get(cls_method_context_t hctx,
   return 0;
 }
 
-namespace group {
-
-static const string RBD_GROUP_SNAP_KEY_PREFIX = "snapshot_";
-
-std::string snap_key(std::string snap_id) {
-  ostringstream oss;
-  oss << RBD_GROUP_SNAP_KEY_PREFIX << snap_id;
-  return oss.str();
-}
-
-static int group_snap_list(cls_method_context_t hctx,
-			   cls::rbd::GroupSnapshot start_after,
-			   uint64_t max_return,
-			   std::vector<cls::rbd::GroupSnapshot> *group_snaps)
-{
-  int max_read = RBD_MAX_KEYS_READ;
-  std::map<string, bufferlist> vals;
-  string last_read = snap_key(start_after.id);
-
-  group_snaps->clear();
-
-  bool more;
-  do {
-    int r = cls_cxx_map_get_vals(hctx, last_read,
-				 RBD_GROUP_SNAP_KEY_PREFIX,
-				 max_read, &vals, &more);
-    if (r < 0)
-      return r;
-
-    for (map<string, bufferlist>::iterator it = vals.begin();
-	 it != vals.end() && group_snaps->size() < max_return; ++it) {
-
-      bufferlist::iterator iter = it->second.begin();
-      cls::rbd::GroupSnapshot snap;
-      try {
-	decode(snap, iter);
-      } catch (const buffer::error &err) {
-	CLS_ERR("error decoding snapshot: %s", it->first.c_str());
-	return -EIO;
-      }
-      CLS_LOG(20, "Discovered snapshot %s %s",
-	      snap.name.c_str(),
-	      snap.id.c_str());
-      group_snaps->push_back(snap);
-    }
-
-  } while (more && (group_snaps->size() < max_return));
-
-  return 0;
-}
-
-static int check_duplicate_snap_name(cls_method_context_t hctx,
-				     std::string snap_name,
-				     std::string snap_id)
-{
-  const int max_read = 1024;
-  cls::rbd::GroupSnapshot snap_last;
-  std::vector<cls::rbd::GroupSnapshot> page;
-
-  for (;;) {
-    int r = group_snap_list(hctx, snap_last, max_read, &page);
-    if (r < 0) {
-      return r;
-    }
-    for (auto& snap: page) {
-      if (snap.name == snap_name && snap.id != snap_id) {
-	return -EEXIST;
-      }
-    }
-
-    if (page.size() < max_read) {
-      break;
-    }
-
-    snap_last = *page.rbegin();
-  }
-
-  return 0;
-}
-
-}
-
 /**
  * Save initial snapshot record.
  *
@@ -5811,7 +5855,7 @@ int group_snap_list(cls_method_context_t hctx,
     return -EINVAL;
   }
   std::vector<cls::rbd::GroupSnapshot> group_snaps;
-  group::group_snap_list(hctx, start_after, max_return, &group_snaps);
+  group::snap_list(hctx, start_after, max_return, &group_snaps);
 
   encode(group_snaps, *out);
 
@@ -6119,6 +6163,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_group_dir_list;
   cls_method_handle_t h_group_dir_add;
   cls_method_handle_t h_group_dir_remove;
+  cls_method_handle_t h_group_dir_rename;
   cls_method_handle_t h_group_image_remove;
   cls_method_handle_t h_group_image_list;
   cls_method_handle_t h_group_image_set;
@@ -6407,6 +6452,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "group_dir_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  group_dir_remove, &h_group_dir_remove);
+  cls_register_cxx_method(h_class, "group_dir_rename",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          group_dir_rename, &h_group_dir_rename);
   cls_register_cxx_method(h_class, "group_image_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  group_image_remove, &h_group_image_remove);

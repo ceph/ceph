@@ -101,6 +101,10 @@ def remove_group():
     if group_name is not None:
         RBD().group_remove(ioctx, group_name)
 
+def rename_group():
+    new_group_name = "new" + group_name
+    RBD().group_rename(ioctx, group_name, new_group_name)
+
 def require_new_format():
     def wrapper(fn):
         def _require_new_format(*args, **kwargs):
@@ -1718,6 +1722,15 @@ class TestTrash(object):
 def test_create_group():
     create_group()
     remove_group()
+
+def test_rename_group():
+    create_group()
+    if group_name is not None:
+        rename_group()
+        eq(["new" + group_name], RBD().group_list(ioctx))
+        RBD().group_remove(ioctx, "new" + group_name)
+    else:
+        remove_group()
 
 def test_list_groups_empty():
     eq([], RBD().group_list(ioctx))

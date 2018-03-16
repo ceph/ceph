@@ -189,8 +189,7 @@ OSDMonitor::OSDMonitor(
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    last_attempted_minwait_time(utime_t()),
-   mapper(mn->cct, &mn->cpu_tp),
-   op_tracker(cct, true, 1)
+   mapper(mn->cct, &mn->cpu_tp)
 {}
 
 bool OSDMonitor::_have_pending_crush()
@@ -1237,6 +1236,9 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     }
   }
 
+  // clean inappropriate pg_upmap/pg_upmap_items (if any)
+  osdmap.maybe_remove_pg_upmaps(cct, osdmap, &pending_inc);
+
   // features for osdmap and its incremental
   uint64_t features = mon->get_quorum_con_features();
 
@@ -1414,7 +1416,7 @@ bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
   set<int> checked_osds;
   for (unsigned ps = 0; ps < std::min(8u, pool.get_pg_num()); ++ps) {
     vector<int> up, acting;
-    pg_t pgid(ps, pool_id, -1);
+    pg_t pgid(ps, pool_id);
     osdmap.pg_to_up_acting_osds(pgid, up, acting);
     for (int osd : up) {
       if (checked_osds.find(osd) != checked_osds.end())
@@ -2637,6 +2639,7 @@ bool OSDMonitor::preprocess_pg_created(MonOpRequestRef op)
   auto m = static_cast<MOSDPGCreated*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   auto session = m->get_session();
+  mon->no_reply(op);
   if (!session) {
     dout(10) << __func__ << ": no monitor session!" << dendl;
     return true;
@@ -2900,6 +2903,7 @@ bool OSDMonitor::preprocess_beacon(MonOpRequestRef op)
   auto beacon = static_cast<MOSDBeacon*>(op->get_req());
   // check caps
   auto session = beacon->get_session();
+  mon->no_reply(op);
   if (!session) {
     dout(10) << __func__ << " no monitor session!" << dendl;
     return true;
@@ -3705,8 +3709,20 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ds);
     } else if (prefix == "osd tree" || prefix == "osd tree-from") {
       string bucket;
-      if (prefix == "osd tree-from")
-	cmd_getval(cct, cmdmap, "bucket", bucket);
+      if (prefix == "osd tree-from") {
+        cmd_getval(cct, cmdmap, "bucket", bucket);
+        if (!osdmap.crush->name_exists(bucket)) {
+          ss << "bucket '" << bucket << "' does not exist";
+          r = -ENOENT;
+          goto reply;
+        }
+        int id = osdmap.crush->get_item_id(bucket);
+        if (id >= 0) {
+          ss << "\"" << bucket << "\" is not a bucket";
+          r = -EINVAL;
+          goto reply;
+        }
+      }
 
       vector<string> states;
       cmd_getval(cct, cmdmap, "states", states);
@@ -4251,10 +4267,20 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	goto reply;
       }
 
+      if (pool_opts_t::is_opt_name(var) &&
+	  !p->opts.is_set(pool_opts_t::get_opt_desc(var).key)) {
+	ss << "option '" << var << "' is not set on pool '" << poolstr << "'";
+	r = -ENOENT;
+	goto reply;
+      }
+
       selected_choices.insert(selected);
     }
 
     if (f) {
+      f->open_object_section("pool");
+      f->dump_string("pool", poolstr);
+      f->dump_int("pool_id", pool);
       for(choices_set_t::const_iterator it = selected_choices.begin();
 	  it != selected_choices.end(); ++it) {
 	choices_map_t::const_iterator i;
@@ -4264,12 +4290,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
           }
         }
         assert(i != ALL_CHOICES.end());
-        bool pool_opt = pool_opts_t::is_opt_name(i->first);
-        if (!pool_opt) {
-          f->open_object_section("pool");
-          f->dump_string("pool", poolstr);
-          f->dump_int("pool_id", pool);
-        }
 	switch(*it) {
 	  case PG_NUM:
 	    f->dump_int("pg_num", p->get_pg_num());
@@ -4301,9 +4321,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case WRITE_FADVISE_DONTNEED:
 	  case NOSCRUB:
 	  case NODEEP_SCRUB:
-	    f->dump_string(i->first.c_str(),
-			   p->has_flag(pg_pool_t::get_flag_by_name(i->first)) ?
-			   "true" : "false");
+	    f->dump_bool(i->first.c_str(),
+			   p->has_flag(pg_pool_t::get_flag_by_name(i->first)));
 	    break;
 	  case HIT_SET_PERIOD:
 	    f->dump_int("hit_set_period", p->hit_set_period);
@@ -4401,9 +4420,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CSUM_MIN_BLOCK:
             pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
             if (p->opts.is_set(key)) {
-              f->open_object_section("pool");
-              f->dump_string("pool", poolstr);
-              f->dump_int("pool_id", pool);
               if(*it == CSUM_TYPE) {
                 int val;
                 p->opts.get(pool_opts_t::CSUM_TYPE, &val);
@@ -4411,17 +4427,12 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
               } else {
                 p->opts.dump(i->first, f.get());
               }
-              f->close_section();
-              f->flush(rdata);
-            }
+	    }
             break;
 	}
-        if (!pool_opt) {
-	  f->close_section();
-	  f->flush(rdata);
-        }
       }
-
+      f->close_section();
+      f->flush(rdata);
     } else /* !f */ {
       for(choices_set_t::const_iterator it = selected_choices.begin();
 	  it != selected_choices.end(); ++it) {
@@ -4940,6 +4951,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ss.str());
       ss.str("");
     }
+  } else if (prefix == "osd get-require-min-compat-client") {
+    ss << ceph_release_name(osdmap.require_min_compat_client) << std::endl;
+    rdata.append(ss.str());
+    ss.str("");
+    goto reply;
   } else {
     // try prepare update
     return false;
@@ -5521,7 +5537,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
   switch (pool_type) {
   case pg_pool_t::TYPE_REPLICATED:
     *size = g_conf->get_val<uint64_t>("osd_pool_default_size");
-    *min_size = g_conf->get_val<uint64_t>("osd_pool_default_min_size");
+    *min_size = g_conf->get_osd_pool_default_min_size();
     break;
   case pg_pool_t::TYPE_ERASURE:
     {
@@ -5560,7 +5576,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       if (err)
 	break;
       uint32_t data_chunks = erasure_code->get_data_chunk_count();
-      uint32_t stripe_unit = g_conf->get_val<uint64_t>("osd_pool_erasure_code_stripe_unit");
+      uint32_t stripe_unit = g_conf->get_val<Option::size_t>("osd_pool_erasure_code_stripe_unit");
       auto it = profile.find("stripe_unit");
       if (it != profile.end()) {
 	string err_str;
@@ -7957,7 +7973,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     do {
       // osd crush move <name> <loc1> [<loc2> ...]
       string name;
-      string args;
       vector<string> argvec;
       cmd_getval(cct, cmdmap, "name", name);
       cmd_getval(cct, cmdmap, "args", argvec);
@@ -9532,6 +9547,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "pg " << pgid << " does not exist";
       err = -ENOENT;
       goto reply;
+    }
+    if (pending_inc.old_pools.count(pgid.pool())) {
+      ss << "pool of " << pgid << " is pending removal";
+      err = -ENOENT;
+      getline(ss, rs);
+      wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon, op, err, rs, get_last_committed() + 1));
+      return true;
     }
 
     enum {
@@ -11482,6 +11505,20 @@ int OSDMonitor::_prepare_remove_pool(
       pending_inc.old_pg_upmap.insert(p.first);
     }
   }
+  // remove any pending pg_upmap mappings for this pool
+  {
+    auto it = pending_inc.new_pg_upmap.begin();
+    while (it != pending_inc.new_pg_upmap.end()) {
+      if (it->first.pool() == (uint64_t)pool) {
+        dout(10) << __func__ << " " << pool
+                 << " removing pending pg_upmap "
+                 << it->first << dendl;
+        it = pending_inc.new_pg_upmap.erase(it);
+      } else {
+        it++;
+      }
+    }
+  }
   // remove any pg_upmap_items mappings for this pool
   for (auto& p : osdmap.pg_upmap_items) {
     if (p.first.pool() == (uint64_t)pool) {
@@ -11489,6 +11526,20 @@ int OSDMonitor::_prepare_remove_pool(
                << " removing obsolete pg_upmap_items " << p.first
                << dendl;
       pending_inc.old_pg_upmap_items.insert(p.first);
+    }
+  }
+  // remove any pending pg_upmap mappings for this pool
+  {
+    auto it = pending_inc.new_pg_upmap_items.begin();
+    while (it != pending_inc.new_pg_upmap_items.end()) {
+      if (it->first.pool() == (uint64_t)pool) {
+        dout(10) << __func__ << " " << pool
+                 << " removing pending pg_upmap_items "
+                 << it->first << dendl;
+        it = pending_inc.new_pg_upmap_items.erase(it);
+      } else {
+        it++;
+      }
     }
   }
 

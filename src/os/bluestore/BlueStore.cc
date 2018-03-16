@@ -805,7 +805,7 @@ void BlueStore::Cache::trim(
   target_buffer = min(target_bytes - target_meta, target_buffer);
 
   if (current <= target_bytes) {
-    dout(10) << __func__
+    dout(30) << __func__
 	     << " shard target " << pretty_si_t(target_bytes)
 	     << " meta/data ratios " << target_meta_ratio
 	     << " + " << target_data_ratio << " ("
@@ -834,7 +834,7 @@ void BlueStore::Cache::trim(
   uint64_t max_meta = current_meta - free_meta;
   uint64_t max_onodes = max_meta / bytes_per_onode;
 
-  dout(10) << __func__
+  dout(20) << __func__
 	   << " shard target " << pretty_si_t(target_bytes)
 	   << " ratio " << target_meta_ratio << " ("
 	   << pretty_si_t(target_meta) << " + "
@@ -1618,10 +1618,11 @@ bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
   return false;
 }
 
-void BlueStore::OnodeSpace::dump(CephContext *cct, int lvl)
+template <int LogLevelV = 30>
+void BlueStore::OnodeSpace::dump(CephContext *cct)
 {
   for (auto& i : onode_map) {
-    ldout(cct, lvl) << i.first << " : " << i.second << dendl;
+    ldout(cct, LogLevelV) << i.first << " : " << i.second << dendl;
   }
 }
 
@@ -1703,11 +1704,12 @@ void BlueStore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.sharedblobset(" << this << ") "
 
-void BlueStore::SharedBlobSet::dump(CephContext *cct, int lvl)
+template <int LogLevelV = 30>
+void BlueStore::SharedBlobSet::dump(CephContext *cct)
 {
   std::lock_guard<std::mutex> l(lock);
   for (auto& i : sb_map) {
-    ldout(cct, lvl) << i.first << " : " << *i.second << dendl;
+    ldout(cct, LogLevelV) << i.first << " : " << *i.second << dendl;
   }
 }
 
@@ -3786,7 +3788,7 @@ void BlueStore::_set_compression()
 
   if (comp_mode == Compressor::COMP_NONE) {
     dout(10) << __func__ << " compression mode set to 'none', "
-             << "ignore other compression setttings" << dendl;
+             << "ignore other compression settings" << dendl;
     return;
   }
 
@@ -3886,24 +3888,6 @@ int BlueStore::_set_cache_sizes()
   cache_meta_ratio = cct->_conf->bluestore_cache_meta_ratio;
   cache_kv_ratio = cct->_conf->bluestore_cache_kv_ratio;
 
-  double cache_kv_max = cct->_conf->bluestore_cache_kv_max;
-  double cache_kv_max_ratio = 0;
-
-  // if cache_kv_max is negative, disable it
-  if (cache_size > 0 && cache_kv_max >= 0) {
-    cache_kv_max_ratio = (double) cache_kv_max / (double) cache_size;
-    if (cache_kv_max_ratio < 1.0 && cache_kv_max_ratio < cache_kv_ratio) {
-      dout(1) << __func__ << " max " << cache_kv_max_ratio
-            << " < ratio " << cache_kv_ratio
-            << dendl;
-      cache_meta_ratio = cache_meta_ratio + cache_kv_ratio - cache_kv_max_ratio;
-      cache_kv_ratio = cache_kv_max_ratio;
-    }
-  }  
-
-  cache_data_ratio =
-    (double)1.0 - (double)cache_meta_ratio - (double)cache_kv_ratio;
-
   if (cache_meta_ratio < 0 || cache_meta_ratio > 1.0) {
     derr << __func__ << " bluestore_cache_meta_ratio (" << cache_meta_ratio
 	 << ") must be in range [0,1.0]" << dendl;
@@ -3921,6 +3905,26 @@ int BlueStore::_set_cache_sizes()
 	 << dendl;
     return -EINVAL;
   }
+
+  double cache_kv_min = cct->_conf->bluestore_cache_kv_min;
+  double cache_kv_min_ratio = 0;
+
+  // if cache_kv_min is negative, disable it
+  if (cache_size > 0 && cache_kv_min >= 0) {
+    cache_kv_min_ratio = std::min((double)cache_kv_min / (double)cache_size,
+				  (double)1.0);
+    if (cache_kv_min_ratio > cache_kv_ratio) {
+      dout(1) << __func__ << " kv_min_ratio " << cache_kv_min_ratio
+            << " > kv_ratio " << cache_kv_ratio << dendl;
+      cache_kv_ratio = cache_kv_min_ratio;
+      cache_meta_ratio = std::min((double)cache_meta_ratio,
+				  (double)1.0 - cache_kv_ratio);
+    }
+  }
+
+  cache_data_ratio =
+    (double)1.0 - (double)cache_meta_ratio - (double)cache_kv_ratio;
+
   if (cache_data_ratio < 0) {
     // deal with floating point imprecision
     cache_data_ratio = 0;
@@ -4025,11 +4029,11 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_compress_rejected_count, "compress_rejected_count",
     "Sum for compress ops rejected due to low net gain of space");
   b.add_u64_counter(l_bluestore_write_pad_bytes, "write_pad_bytes",
-    "Sum for write-op padded bytes");
+		    "Sum for write-op padded bytes", NULL, 0, unit_t(BYTES));
   b.add_u64_counter(l_bluestore_deferred_write_ops, "deferred_write_ops",
 		    "Sum for deferred write op");
   b.add_u64_counter(l_bluestore_deferred_write_bytes, "deferred_write_bytes",
-		    "Sum for deferred write bytes", "def");
+		    "Sum for deferred write bytes", "def", 0, unit_t(BYTES));
   b.add_u64_counter(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
 		    "Sum for write penalty read ops");
   b.add_u64(l_bluestore_allocated, "bluestore_allocated",
@@ -4061,22 +4065,22 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_buffers, "bluestore_buffers",
 	    "Number of buffers in cache");
   b.add_u64(l_bluestore_buffer_bytes, "bluestore_buffer_bytes",
-	    "Number of buffer bytes in cache");
+	    "Number of buffer bytes in cache", NULL, 0, unit_t(BYTES));
   b.add_u64(l_bluestore_buffer_hit_bytes, "bluestore_buffer_hit_bytes",
-    "Sum for bytes of read hit in the cache");
+	    "Sum for bytes of read hit in the cache", NULL, 0, unit_t(BYTES));
   b.add_u64(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
-    "Sum for bytes of read missed in the cache");
+	    "Sum for bytes of read missed in the cache", NULL, 0, unit_t(BYTES));
 
   b.add_u64_counter(l_bluestore_write_big, "bluestore_write_big",
 		    "Large aligned writes into fresh blobs");
   b.add_u64_counter(l_bluestore_write_big_bytes, "bluestore_write_big_bytes",
-		    "Large aligned writes into fresh blobs (bytes)");
+		    "Large aligned writes into fresh blobs (bytes)", NULL, 0, unit_t(BYTES));
   b.add_u64_counter(l_bluestore_write_big_blobs, "bluestore_write_big_blobs",
 		    "Large aligned writes into fresh blobs (blobs)");
   b.add_u64_counter(l_bluestore_write_small, "bluestore_write_small",
 		    "Small writes into existing or sparse small blobs");
   b.add_u64_counter(l_bluestore_write_small_bytes, "bluestore_write_small_bytes",
-		    "Small writes into existing or sparse small blobs (bytes)");
+		    "Small writes into existing or sparse small blobs (bytes)", NULL, 0, unit_t(BYTES));
   b.add_u64_counter(l_bluestore_write_small_unused,
 		    "bluestore_write_small_unused",
 		    "Small writes into unused portion of existing blob");
@@ -4313,10 +4317,16 @@ int BlueStore::_open_bdev(bool create)
 {
   assert(bdev == NULL);
   string p = path + "/block";
+  uint64_t dev_size;
   bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
   int r = bdev->open(p);
   if (r < 0)
     goto fail;
+
+  dev_size = bdev->get_size();
+  if (create && cct->_conf->bdev_enable_discard) {
+    bdev->discard(0, dev_size);
+  }
 
   if (bdev->supported_bdev_label()) {
     r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
@@ -4334,8 +4344,8 @@ int BlueStore::_open_bdev(bool create)
   if (r < 0) {
     goto fail_close;
   }
-  if (bdev->get_size() < cct->_conf->bluestore_bluefs_min) {
-    dout(1) << __func__ << " main device size " << si_t(bdev->get_size())
+  if (dev_size < cct->_conf->bluestore_bluefs_min) {
+    dout(1) << __func__ << " main device size " << si_t(dev_size)
             << " is too small, disable bluestore_bluefs_min for now"
             << dendl;
     int r = cct->_conf->set_val("bluestore_bluefs_min", "0");
@@ -4703,6 +4713,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   }
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
+  map<string,string> kv_options;
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
@@ -4719,7 +4730,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       bfn = path + "/block.db";
     }
     if (::stat(bfn.c_str(), &st) == 0) {
-      r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn);
+      r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn,
+	    create && cct->_conf->bdev_enable_discard);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
              << cpp_strerror(r) << dendl;
@@ -4759,7 +4771,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     if (read_meta("path_block", &bfn) < 0) {
       bfn = path + "/block";
     }
-    r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
+     // never trim here
+    r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: " 
 	   << cpp_strerror(r) << dendl;
@@ -4791,7 +4804,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       bfn = path + "/block.wal";
     }
     if (::stat(bfn.c_str(), &st) == 0) {
-      r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
+      r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn,
+	create && cct->_conf->bdev_enable_discard);
       if (r < 0) {
         derr << __func__ << " add block device(" << bfn << ") returned: " 
 	     << cpp_strerror(r) << dendl;
@@ -4816,10 +4830,10 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
 	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
 	   BDEV_LABEL_BLOCK_SIZE);
       }
-      cct->_conf->set_val("rocksdb_separate_wal_dir", "true");
+      kv_options["separate_wal_dir"] = "1";
       bluefs_single_shared_device = false;
     } else if (::lstat(bfn.c_str(), &st) == -1) {
-      cct->_conf->set_val("rocksdb_separate_wal_dir", "false");
+      kv_options.erase("separate_wal_dir");
     } else {
       //symlink exist is bug
       derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
@@ -4863,20 +4877,16 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
                << (uint64_t)(db_size * 95 / 100) << " "
                << fn + ".slow" << ","
                << (uint64_t)(slow_size * 95 / 100);
-      cct->_conf->set_val("rocksdb_db_paths", db_paths.str(), false);
-      dout(10) << __func__ << " set rocksdb_db_paths to "
-	       << cct->_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
+      kv_options["db_paths"] = db_paths.str();
+      dout(10) << __func__ << " set db_paths to " << db_paths.str() << dendl;
     }
 
     if (create) {
       env->CreateDir(fn);
-      if (cct->_conf->rocksdb_separate_wal_dir)
+      if (kv_options.count("separate_wal_dir"))
 	env->CreateDir(fn + ".wal");
-
-      if (cct->_conf->with_val<std::string>(
-            "rocksdb_db_paths", [](const std::string& s) {
-              return s.length(); }))
-        env->CreateDir(fn + ".slow");
+      if (kv_options.count("rocksdb_db_paths"))
+	env->CreateDir(fn + ".slow");
     }
   } else if (create) {
     int r = ::mkdir(fn.c_str(), 0755);
@@ -4889,7 +4899,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     }
 
     // wal_dir, too!
-    if (cct->_conf->rocksdb_separate_wal_dir) {
+    if (kv_options.count("separate_wal_dir")) {
       string walfn = path + "/db.wal";
       r = ::mkdir(walfn.c_str(), 0755);
       if (r < 0)
@@ -4906,6 +4916,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   db = KeyValueDB::create(cct,
 			  kv_backend,
 			  fn,
+			  kv_options,
 			  static_cast<void*>(env));
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
@@ -6051,7 +6062,7 @@ int BlueStore::_fsck(bool deep, bool repair)
       ++num_objects;
       num_spanning_blobs += o->extent_map.spanning_blob_map.size();
       o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-      _dump_onode(o, 30);
+      _dump_onode(o);
       // shards
       if (!o->extent_map.shards.empty()) {
 	++num_sharded_objects;
@@ -6376,7 +6387,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    if (misref_extents.intersects(e.offset, e.length)) {
 	      if (first_dump) {
 		first_dump = false;
-		_dump_onode(o, 10);
+		_dump_onode<10>(o);
 	      }
 	      broken_blob = true;
 	      break;
@@ -9628,7 +9639,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       derr << __func__ << " error " << cpp_strerror(r)
            << " not handled on operation " << op->op
            << " (op " << pos << ", counting from 0)" << dendl;
-      _dump_transaction(t, 0);
+      _dump_transaction<0>(t);
       assert(0 == "unexpected error");
     }
 
@@ -9872,7 +9883,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
              << " (op " << pos << ", counting from 0)"
              << dendl;
         derr << msg << dendl;
-        _dump_transaction(t, 0);
+        _dump_transaction<0>(t);
 	assert(0 == "unexpected error");
       }
     }
@@ -9896,11 +9907,12 @@ int BlueStore::_touch(TransContext *txc,
   return r;
 }
 
-void BlueStore::_dump_onode(const OnodeRef& o, int log_level)
+template <int LogLevelV>
+void BlueStore::_dump_onode(const OnodeRef& o)
 {
-  if (!cct->_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
+  if (!cct->_conf->subsys.should_gather<ceph_subsys_bluestore, LogLevelV>())
     return;
-  dout(log_level) << __func__ << " " << o << " " << o->oid
+  dout(LogLevelV) << __func__ << " " << o << " " << o->oid
 		  << " nid " << o->onode.nid
 		  << " size 0x" << std::hex << o->onode.size
 		  << " (" << std::dec << o->onode.size << ")"
@@ -9913,23 +9925,24 @@ void BlueStore::_dump_onode(const OnodeRef& o, int log_level)
   for (auto p = o->onode.attrs.begin();
        p != o->onode.attrs.end();
        ++p) {
-    dout(log_level) << __func__ << "  attr " << p->first
+    dout(LogLevelV) << __func__ << "  attr " << p->first
 		    << " len " << p->second.length() << dendl;
   }
-  _dump_extent_map(o->extent_map, log_level);
+  _dump_extent_map<LogLevelV>(o->extent_map);
 }
 
-void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
+template <int LogLevelV>
+void BlueStore::_dump_extent_map(ExtentMap &em)
 {
   uint64_t pos = 0;
   for (auto& s : em.shards) {
-    dout(log_level) << __func__ << "  shard " << *s.shard_info
+    dout(LogLevelV) << __func__ << "  shard " << *s.shard_info
 		    << (s.loaded ? " (loaded)" : "")
 		    << (s.dirty ? " (dirty)" : "")
 		    << dendl;
   }
   for (auto& e : em.extent_map) {
-    dout(log_level) << __func__ << "  " << e << dendl;
+    dout(LogLevelV) << __func__ << "  " << e << dendl;
     assert(e.logical_offset >= pos);
     pos = e.logical_offset + e.length;
     const bluestore_blob_t& blob = e.blob->get_blob();
@@ -9938,21 +9951,22 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
       unsigned n = blob.get_csum_count();
       for (unsigned i = 0; i < n; ++i)
 	v.push_back(blob.get_csum_item(i));
-      dout(log_level) << __func__ << "      csum: " << std::hex << v << std::dec
+      dout(LogLevelV) << __func__ << "      csum: " << std::hex << v << std::dec
 		      << dendl;
     }
     std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->get_cache()->lock);
     for (auto& i : e.blob->shared_blob->bc.buffer_map) {
-      dout(log_level) << __func__ << "       0x" << std::hex << i.first
+      dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
 		      << "~" << i.second->length << std::dec
 		      << " " << *i.second << dendl;
     }
   }
 }
 
-void BlueStore::_dump_transaction(Transaction *t, int log_level)
+template <int LogLevelV>
+void BlueStore::_dump_transaction(Transaction *t)
 {
-  dout(log_level) << __func__ << " transaction dump:\n";
+  dout(LogLevelV) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   f.open_object_section("transaction");
   t->dump(&f);
@@ -11110,7 +11124,7 @@ void BlueStore::_do_truncate(
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec << dendl;
 
-  _dump_onode(o, 30);
+  _dump_onode(o);
 
   if (offset == o->onode.size)
     return;
@@ -12101,11 +12115,11 @@ void BlueStore::_flush_cache()
   for (auto& p : coll_map) {
     if (!p.second->onode_map.empty()) {
       derr << __func__ << "stray onodes on " << p.first << dendl;
-      p.second->onode_map.dump(cct, 0);
+      p.second->onode_map.dump<0>(cct);
     }
     if (!p.second->shared_blob_set.empty()) {
       derr << __func__ << " stray shared blobs on " << p.first << dendl;
-      p.second->shared_blob_set.dump(cct, 0);
+      p.second->shared_blob_set.dump<0>(cct);
     }
     assert(p.second->onode_map.empty());
     assert(p.second->shared_blob_set.empty());

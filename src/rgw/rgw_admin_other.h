@@ -89,6 +89,7 @@ int handle_opt_sync_error_trim(const std::string& start_date, const std::string&
 int handle_opt_datalog_status(bool specified_shard_id, int shard_id, RGWRados *store, Formatter *formatter);
 
 int handle_opt_datalog_list(int max_entries, const std::string& start_date, const std::string& end_date,
+                            bool specified_shard_id, int shard_id, const std::string& marker,
                             bool extra_info, RGWRados *store, Formatter *formatter);
 
 int handle_opt_datalog_trim(const std::string& start_date, const std::string& end_date, const std::string& start_marker,

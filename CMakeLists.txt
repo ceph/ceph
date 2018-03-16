@@ -397,8 +397,24 @@ endif(WITH_RADOSGW)
 
 
 if (WITH_RADOSGW)
+# https://curl.haxx.se/docs/install.html mentions the
+# configure flags for various ssl backends
+  execute_process(
+    COMMAND
+  "sh" "-c"
+  "curl-config --configure | grep with-ssl"
+  RESULT_VARIABLE NO_CURL_SSL_LINK
+  ERROR_VARIABLE CURL_CONFIG_ERRORS
+  )
+  if (CURL_CONFIG_ERRORS)
+    message(WARNING "unable to run curl-config; rgw cannot make ssl requests to external systems reliably")
+  endif()
   find_package(OpenSSL)
   if (OPENSSL_FOUND)
+    if (NOT NO_CURL_SSL_LINK)
+      message(STATUS "libcurl is linked with openssl: explicitly setting locks")
+      set(WITH_CURL_OPENSSL ON)
+    endif() # CURL_SSL_LINK
     execute_process(
       COMMAND
 	"sh" "-c"
@@ -431,7 +447,7 @@ if (WITH_RADOSGW)
     message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
   else()
     message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
-  endif()
+  endif()  # OPENSSL_FOUND
 endif (WITH_RADOSGW)
 
 #option for CephFS
@@ -499,10 +515,16 @@ option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
 
-option(WITH_FIO "Support for fio engines" OFF)
-if(WITH_FIO)
+# fio
+option(WITH_FIO "build with fio plugin enabled" OFF)
+option(WITH_SYSTEM_FIO "require and build with system fio" OFF)
+if(WITH_SYSTEM_FIO)
   find_package(fio REQUIRED)
-endif(WITH_FIO)
+elseif(WITH_FIO)
+  set(FIO_INCLUDE_DIR ${CMAKE_BINARY_DIR}/src/fio)
+  include(BuildFIO)
+  build_fio()
+endif()
 
 if(LINUX)
   add_definitions(-D__linux__)
@@ -590,6 +612,9 @@ else()
 endif()
 set(Boost_USE_MULTITHREADED ON)
 
+# dashboard angular2 frontend
+option(WITH_MGR_DASHBOARD_V2_FRONTEND "Build the mgr/dashboard_v2 frontend using `npm`" ON)
+
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
@@ -633,7 +658,7 @@ if(WITH_MANPAGE)
   add_subdirectory(man)
 endif(WITH_MANPAGE)
 
-option(WITH_SYSTEMD "install systemd target and service files" OFF)
+option(WITH_SYSTEMD "install systemd target and service files" ON)
 if(WITH_SYSTEMD)
   add_subdirectory(systemd)
 endif()

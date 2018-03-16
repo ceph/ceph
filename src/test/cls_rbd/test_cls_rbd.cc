@@ -1966,6 +1966,34 @@ TEST_F(TestClsRbd, dir_add_already_existing) {
   ASSERT_EQ(-EEXIST, group_dir_add(&ioctx, RBD_GROUP_DIRECTORY, group_name, group_id));
 }
 
+TEST_F(TestClsRbd, group_dir_rename) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_GROUP_DIRECTORY);
+
+  string group_id = "cgid";
+  string src_name = "cgnamesrc";
+  string dest_name = "cgnamedest";
+  add_group_to_dir(ioctx, group_id, src_name);
+
+  ASSERT_EQ(0, group_dir_rename(&ioctx, RBD_GROUP_DIRECTORY,
+                                src_name, dest_name, group_id));
+  map<string, string> cgs;
+  ASSERT_EQ(0, group_dir_list(&ioctx, RBD_GROUP_DIRECTORY, "", 10, &cgs));
+  ASSERT_EQ(1U, cgs.size());
+  auto it = cgs.begin();
+  ASSERT_EQ(group_id, it->second);
+  ASSERT_EQ(dest_name, it->first);
+
+  // destination group name existing
+  ASSERT_EQ(-EEXIST, group_dir_rename(&ioctx, RBD_GROUP_DIRECTORY,
+                                      dest_name, dest_name, group_id));
+  ASSERT_EQ(0, group_dir_remove(&ioctx, RBD_GROUP_DIRECTORY, dest_name, group_id));
+  // source group name missing
+  ASSERT_EQ(-ENOENT, group_dir_rename(&ioctx, RBD_GROUP_DIRECTORY,
+                                      dest_name, src_name, group_id));
+}
+
 TEST_F(TestClsRbd, group_dir_remove) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
