@@ -255,44 +255,61 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!event) {
       this.search = '';
     }
+    let search = this.search.toLowerCase().replace(/,/g, '');
     const columns = this.columns.filter(c => c.cellTransformation !== CellTemplate.sparkline);
+    if (search.match(/['"][^'"]+['"]/)) {
+      search = search.replace(/['"][^'"]+['"]/g, (match: string) => {
+        return match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+');
+      });
+    }
     // update the rows
-    this.rows = this.subSearch(this.data, this.search.toLowerCase().split(/[, ]/), columns);
+    this.rows = this.subSearch(this.data, search.split(' ').filter(s => s.length > 0), columns);
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
   }
 
   subSearch (data: any[], currentSearch: string[], columns: CdTableColumn[]) {
-    let tempColumns: CdTableColumn[];
     if (currentSearch.length === 0 || data.length === 0) {
       return data;
     }
-    const searchWords: string[] = currentSearch.pop().split(':');
-    if (searchWords.length === 2) {
-      tempColumns = [...columns];
-      columns = columns.filter((c) => c.name.toLowerCase().indexOf(searchWords[0]) !== -1);
+    const searchTerms: string[] = currentSearch.pop().replace('+', ' ').split(':');
+    const columnsClone = [...columns];
+    const dataClone = [...data];
+    const filterColumns = (columnName: string) =>
+      columnsClone.filter((c) => c.name.toLowerCase().indexOf(columnName) !== -1);
+    if (searchTerms.length === 2) {
+      columns = filterColumns(searchTerms[0]);
     }
-    const searchWord: string = _.last(searchWords);
-    if (searchWord.length > 0) {
-      data = data.filter(d => {
-        return columns.filter(c => {
-          let cellValue: any = _.get(d, c.prop);
-          if (_.isUndefined(cellValue)) {
-            return;
-          }
-          if (_.isArray(cellValue)) {
-            cellValue = cellValue.join('');
-          } else if (_.isNumber(cellValue)) {
-            cellValue = cellValue.toString();
-          }
-          return cellValue.toLowerCase().indexOf(searchWord) !== -1;
-        }).length > 0;
-      });
+    const searchTerm: string = _.last(searchTerms);
+    data = this.basicDataSearch(searchTerm, data, columns);
+    // Checks if user searches for column but he is still typing
+    if (data.length === 0 && searchTerms.length === 1 && filterColumns(searchTerm).length > 0) {
+      data = dataClone;
     }
-    if (_.isArray(tempColumns)) {
-      columns = tempColumns;
+    return this.subSearch(data, currentSearch, columnsClone);
+  }
+
+  basicDataSearch(searchTerm: string, data: any[], columns: CdTableColumn[]) {
+    if (searchTerm.length === 0) {
+      return data;
     }
-    return this.subSearch(data, currentSearch, columns);
+    return data.filter(d => {
+      return columns.filter(c => {
+        let cellValue: any = _.get(d, c.prop);
+        if (!_.isUndefined(c.pipe)) {
+          cellValue = c.pipe.transform(cellValue);
+        }
+        if (_.isUndefined(cellValue)) {
+          return;
+        }
+        if (_.isArray(cellValue)) {
+          cellValue = cellValue.join(' ');
+        } else if (_.isNumber(cellValue)) {
+          cellValue = cellValue.toString();
+        }
+        return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
+      }).length > 0;
+    });
   }
 
   getRowClass() {
