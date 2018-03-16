@@ -232,6 +232,7 @@ std::ostream &operator<<(
   return lhs
     << "ECSubRead(tid=" << rhs.tid
     << ", to_read=" << rhs.to_read
+    << ", subchunks=" << rhs.subchunks
     << ", attrs_to_read=" << rhs.attrs_to_read << ")";
 }
 
