@@ -4,9 +4,6 @@ from __future__ import absolute_import
 
 import json
 import logging
-import os
-import subprocess
-import sys
 from collections import namedtuple
 
 import requests
@@ -33,6 +30,9 @@ class DashboardTestCase(MgrTestCase):
     REQUIRE_FILESYSTEM = True
     CLIENTS_REQUIRED = 1
     CEPHFS = False
+
+    _session = None
+    _resp = None
 
     @classmethod
     def setUpClass(cls):
@@ -67,56 +67,80 @@ class DashboardTestCase(MgrTestCase):
             # wait for mds restart to complete...
             cls.fs.wait_for_daemons()
 
+        cls._session = requests.Session()
+        cls._resp = None
+
     @classmethod
     def tearDownClass(cls):
         super(DashboardTestCase, cls).tearDownClass()
 
-    def __init__(self, *args, **kwargs):
-        super(DashboardTestCase, self).__init__(*args, **kwargs)
-        self._session = requests.Session()
-        self._resp = None
-
-    def _request(self, url, method, data=None, params=None):
-        url = "{}{}".format(self.base_uri, url)
-
+    # pylint: disable=inconsistent-return-statements
+    @classmethod
+    def _request(cls, url, method, data=None, params=None):
+        url = "{}{}".format(cls.base_uri, url)
         log.info("request %s to %s", method, url)
         if method == 'GET':
-            self._resp = self._session.get(url, params=params)
+            cls._resp = cls._session.get(url, params=params)
             try:
-                return self._resp.json()
+                return cls._resp.json()
             except ValueError as ex:
-                log.exception("Failed to decode response: %s", self._resp.text)
+                log.exception("Failed to decode response: %s", cls._resp.text)
                 raise ex
         elif method == 'POST':
-            self._resp = self._session.post(url, json=data, params=params)
+            cls._resp = cls._session.post(url, json=data, params=params)
         elif method == 'DELETE':
-            self._resp = self._session.delete(url, json=data, params=params)
+            cls._resp = cls._session.delete(url, json=data, params=params)
         elif method == 'PUT':
-            self._resp = self._session.put(url, json=data, params=params)
+            cls._resp = cls._session.put(url, json=data, params=params)
         else:
             assert False
         return None
 
-    def _get(self, url, params=None):
-        return self._request(url, 'GET', params=params)
+    @classmethod
+    def _get(cls, url, params=None):
+        return cls._request(url, 'GET', params=params)
 
-    def _post(self, url, data=None, params=None):
-        self._request(url, 'POST', data, params=params)
+    @classmethod
+    def _get_view_cache(cls, url, retries=5):
+        retry = True
+        while retry and retries > 0:
+            retry = False
+            res = cls._get(url)
+            if isinstance(res, dict):
+                res = [res]
+            for view in res:
+                assert 'value' in view
+                if not view['value']:
+                    retry = True
+            retries -= 1
+        if retries == 0:
+            raise Exception("{} view cache exceeded number of retries={}"
+                            .format(url, retries))
+        return res
 
-    def _delete(self, url, data=None, params=None):
-        self._request(url, 'DELETE', data, params=params)
+    @classmethod
+    def _post(cls, url, data=None, params=None):
+        cls._request(url, 'POST', data, params)
 
-    def _put(self, url, data=None, params=None):
-        self._request(url, 'PUT', data, params=params)
+    @classmethod
+    def _delete(cls, url, data=None, params=None):
+        cls._request(url, 'DELETE', data, params)
 
-    def cookies(self):
-        return self._resp.cookies
+    @classmethod
+    def _put(cls, url, data=None, params=None):
+        cls._request(url, 'PUT', data, params)
 
-    def jsonBody(self):
-        return self._resp.json()
+    @classmethod
+    def cookies(cls):
+        return cls._resp.cookies
 
-    def reset_session(self):
-        self._session = requests.Session()
+    @classmethod
+    def jsonBody(cls):
+        return cls._resp.json()
+
+    @classmethod
+    def reset_session(cls):
+        cls._session = requests.Session()
 
     def assertJsonBody(self, data):
         body = self._resp.json()
@@ -200,6 +224,7 @@ class _ValError(Exception):
         super(_ValError, self).__init__('In `input{}`: {}'.format(path_str, msg))
 
 
+# pylint: disable=dangerous-default-value,inconsistent-return-statements
 def _validate_json(val, schema, path=[]):
     """
     >>> d = {'a': 1, 'b': 'x', 'c': range(10)}
@@ -235,6 +260,3 @@ def _validate_json(val, schema, path=[]):
         )
 
     assert False, str(path)
-
-
-
