@@ -14400,7 +14400,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       osd->clog->error() << mode << " " << info.pgid << " " << soid
 			<< " no '" << OI_ATTR << "' attr";
       ++scrubber.shallow_errors;
-      soid_error.set_oi_attr_missing();
+      soid_error.set_info_missing();
     } else {
       bufferlist bv;
       bv.push_back(p->second.attrs[OI_ATTR]);
@@ -14412,8 +14412,8 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	osd->clog->error() << mode << " " << info.pgid << " " << soid
 		<< " can't decode '" << OI_ATTR << "' attr " << e.what();
 	++scrubber.shallow_errors;
-	soid_error.set_oi_attr_corrupted();
-        soid_error.set_oi_attr_missing(); // Not available too
+	soid_error.set_info_corrupted();
+        soid_error.set_info_missing(); // Not available too
       }
     }
 

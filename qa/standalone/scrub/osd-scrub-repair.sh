@@ -740,7 +740,7 @@ function TEST_corrupt_scrub_replicated() {
             }
           ],
           "errors": [
-            "oi_attr_corrupted"
+            "info_corrupted"
           ],
           "osd": 0,
           "primary": false
@@ -755,15 +755,15 @@ function TEST_corrupt_scrub_replicated() {
             }
           ],
           "errors": [
-            "oi_attr_missing"
+            "info_missing"
           ],
           "osd": 1,
           "primary": true
         }
       ],
       "union_shard_errors": [
-        "oi_attr_missing",
-        "oi_attr_corrupted"
+        "info_missing",
+        "info_corrupted"
       ],
       "errors": [],
       "object": {
@@ -804,7 +804,7 @@ function TEST_corrupt_scrub_replicated() {
           ],
           "size": 7,
           "errors": [
-            "oi_attr_missing"
+            "info_missing"
           ],
           "osd": 1,
           "primary": true
@@ -812,7 +812,7 @@ function TEST_corrupt_scrub_replicated() {
       ],
       "selected_object_info": "3:30259878:::ROBJ15:head(47'46 osd.0.0:45 dirty|omap|data_digest s 7 uv 45 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
-        "oi_attr_missing"
+        "info_missing"
       ],
       "errors": [],
       "object": {
@@ -1215,7 +1215,7 @@ EOF
           "omap_digest": "0x4f14f849",
           "size": 7,
           "errors": [
-            "oi_attr_corrupted"
+            "info_corrupted"
           ],
           "osd": 0,
           "primary": false
@@ -1232,15 +1232,15 @@ EOF
           "omap_digest": "0x4f14f849",
           "size": 7,
           "errors": [
-            "oi_attr_missing"
+            "info_missing"
           ],
           "osd": 1,
           "primary": true
         }
       ],
       "union_shard_errors": [
-        "oi_attr_missing",
-        "oi_attr_corrupted"
+        "info_missing",
+        "info_corrupted"
       ],
       "errors": [],
       "object": {
@@ -1285,7 +1285,7 @@ EOF
           "omap_digest": "0x2d2a4d6e",
           "size": 7,
           "errors": [
-            "oi_attr_missing"
+            "info_missing"
           ],
           "osd": 1,
           "primary": true
@@ -1293,7 +1293,7 @@ EOF
       ],
       "selected_object_info": "3:30259878:::ROBJ15:head(47'46 osd.0.0:45 dirty|omap|data_digest s 7 uv 45 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
-        "oi_attr_missing"
+        "info_missing"
       ],
       "errors": [],
       "object": {

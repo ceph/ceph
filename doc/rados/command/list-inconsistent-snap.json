@@ -42,8 +42,8 @@
               "enum": [
                 "snapset_missing",
                 "snapset_corrupted",
-                "oi_attr_missing",
-                "oi_attr_corrupted",
+                "info_missing",
+                "info_corrupted",
                 "snapset_mismatch",
                 "head_mismatch",
                 "headless",
