@@ -47,4 +47,10 @@ class PerfCountersControllerTest(DashboardTestCase):
         self.assertEqual('mgr', data['service']['type'])
         self.assertEqual(mgr, data['service']['id'])
         self.assertIsInstance(data['counters'], list)
-        self.assertEqual(len(data['counters']), 0)
+        self.assertGreater(len(data['counters']), 0)
+        counter = data['counters'][0]
+        self.assertIsInstance(counter, dict)
+        self.assertIn('description', counter)
+        self.assertIn('name', counter)
+        self.assertIn('unit', counter)
+        self.assertIn('value', counter)
