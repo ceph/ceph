@@ -827,6 +827,7 @@ protected:
 protected:
   eversion_t  last_update_ondisk;    // last_update that has committed; ONLY DEFINED WHEN is_active()
   eversion_t  last_complete_ondisk;  // last_complete that has committed.
+  eversion_t  last_update_applied;
 
   // entries <= last_rollback_info_trimmed_to_applied have been trimmed
   eversion_t  last_rollback_info_trimmed_to_applied;
