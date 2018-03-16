@@ -16,3 +16,9 @@
           [columns]="columns"
           (fetchData)="loadImages()">
 </cd-table>
+
+<ng-template #parentTpl
+             let-value="value">
+  <span *ngIf="value">{{ value.pool_name }}/{{ value.image_name }}@{{ value.snap_name }}</span>
+  <span *ngIf="!value">-</span>
+</ng-template>

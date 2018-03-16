@@ -114,6 +114,14 @@ class CephService(object):
         return pools_w_stats
 
     @classmethod
+    def get_pool_name_from_id(cls, pool_id):
+        pool_list = cls.get_pool_list()
+        for pool in pool_list:
+            if pool['pool'] == pool_id:
+                return pool['pool_name']
+        return None
+
+    @classmethod
     def send_command(cls, srv_type, prefix, srv_spec='', **kwargs):
         """
         :type prefix: str
