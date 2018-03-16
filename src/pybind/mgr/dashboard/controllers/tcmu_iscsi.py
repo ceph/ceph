@@ -11,6 +11,13 @@ SERVICE_TYPE = 'tcmu-runner'
 @ApiController('tcmuiscsi')
 @AuthRequired()
 class TcmuIscsi(RESTController):
+    def _get_rate(self, daemon_type, daemon_name, stat):
+        data = mgr.get_counter(daemon_type, daemon_name, stat)[stat]
+
+        if data and len(data) > 1:
+            return (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
+        return 0
+
     # pylint: disable=too-many-locals,too-many-nested-blocks
     def list(self):  # pylint: disable=unused-argument
         daemons = {}
@@ -62,7 +69,7 @@ class TcmuIscsi(RESTController):
                     image['stats_history'] = {}
                     for s in ['rd', 'wr', 'rd_bytes', 'wr_bytes']:
                         perf_key = "{}{}".format(perf_key_prefix, s)
-                        image['stats'][s] = mgr.get_rate(
+                        image['stats'][s] = self._get_rate(
                             'tcmu-runner', service_id, perf_key)
                         image['stats_history'][s] = mgr.get_counter(
                             'tcmu-runner', service_id, perf_key)[perf_key]

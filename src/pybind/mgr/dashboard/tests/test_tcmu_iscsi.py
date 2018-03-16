@@ -26,13 +26,11 @@ mocked_get_daemon_status = {
 
 mocked_get_counter = {
     'librbd-42-pool1-image1.lock_acquired_time': [[10000.0, 10000.0]],
-    'librbd-42-pool1-image1.rd': 43,
-    'librbd-42-pool1-image1.wr': 44,
-    'librbd-42-pool1-image1.rd_bytes': 45,
-    'librbd-42-pool1-image1.wr_bytes': 46,
+    'librbd-42-pool1-image1.rd': [[0, 0], [1, 43]],
+    'librbd-42-pool1-image1.wr': [[0, 0], [1, 44]],
+    'librbd-42-pool1-image1.rd_bytes': [[0, 0], [1, 45]],
+    'librbd-42-pool1-image1.wr_bytes': [[0, 0], [1, 46]],
 }
-
-mocked_get_rate = 47
 
 
 class TcmuIscsiControllerTest(ControllerTestCase):
@@ -43,7 +41,6 @@ class TcmuIscsiControllerTest(ControllerTestCase):
         mgr.get_metadata.return_value = mocked_metadata
         mgr.get_daemon_status.return_value = mocked_get_daemon_status
         mgr.get_counter.return_value = mocked_get_counter
-        mgr.get_rate.return_value = mocked_get_rate
         mgr.url_prefix = ''
         TcmuIscsi._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
@@ -64,8 +61,15 @@ class TcmuIscsiControllerTest(ControllerTestCase):
                 'id': '42', 'optimized_paths': ['ceph-dev'],
                 'non_optimized_paths': [],
                 'optimized_since': 1e-05,
-                'stats': {'rd': 47, 'rd_bytes': 47, 'wr': 47, 'wr_bytes': 47},
+                'stats': {
+                    'rd': 43.0,
+                    'wr': 44.0,
+                    'rd_bytes': 45.0,
+                    'wr_bytes': 46.0},
                 'stats_history': {
-                    'rd': 43, 'wr': 44, 'rd_bytes': 45, 'wr_bytes': 46}
+                    'rd': [[0, 0], [1, 43]],
+                    'wr': [[0, 0], [1, 44]],
+                    'rd_bytes': [[0, 0], [1, 45]],
+                    'wr_bytes': [[0, 0], [1, 46]]}
             }]
         })
