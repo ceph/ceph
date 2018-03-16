@@ -7,6 +7,7 @@ import rbd
 
 from . import ApiController, AuthRequired, RESTController
 from .. import mgr
+from ..services.ceph_service import CephService
 from ..tools import ViewCache
 
 
@@ -24,10 +25,6 @@ class Rbd(RESTController):
         rbd.RBD_FEATURE_JOURNALING: "journaling",
         rbd.RBD_FEATURE_DATA_POOL: "data-pool",
     }
-
-    def __init__(self):
-        super(Rbd, self).__init__()
-        self.rbd = None
 
     @staticmethod
     def _format_bitmask(features):
@@ -64,46 +61,99 @@ class Rbd(RESTController):
                 res = key | res
         return res
 
+    def _rbd_image(self, ioctx, pool_name, image_name):
+        img = rbd.Image(ioctx, image_name)
+        stat = img.stat()
+        stat['name'] = image_name
+        stat['id'] = img.id()
+        stat['pool_name'] = pool_name
+        features = img.features()
+        stat['features'] = features
+        stat['features_name'] = self._format_bitmask(features)
+
+        # the following keys are deprecated
+        del stat['parent_pool']
+        del stat['parent_name']
+
+        stat['timestamp'] = "{}Z".format(img.create_timestamp().isoformat())
+
+        stat['stripe_count'] = img.stripe_count()
+        stat['stripe_unit'] = img.stripe_unit()
+
+        data_pool_name = CephService.get_pool_name_from_id(img.data_pool_id())
+        if data_pool_name == pool_name:
+            data_pool_name = None
+        stat['data_pool'] = data_pool_name
+
+        try:
+            parent_info = img.parent_info()
+            stat['parent'] = {
+                'pool_name': parent_info[0],
+                'image_name': parent_info[1],
+                'snap_name': parent_info[2]
+            }
+        except rbd.ImageNotFound:
+            # no parent image
+            stat['parent'] = None
+
+        # snapshots
+        stat['snapshots'] = []
+        for snap in img.list_snaps():
+            snap['timestamp'] = "{}Z".format(img.get_snap_timestamp(snap['id']).isoformat())
+            snap['is_protected'] = img.is_protected_snap(snap['name'])
+            snap['children'] = []
+            img.set_snap(snap['name'])
+            for child_pool_name, child_image_name in img.list_children():
+                snap['children'].append({
+                    'pool_name': child_pool_name,
+                    'image_name': child_image_name
+                })
+            stat['snapshots'].append(snap)
+
+        return stat
+
     @ViewCache()
-    def _rbd_list(self, pool_name):
+    def _rbd_pool_list(self, pool_name):
+        rbd_inst = rbd.RBD()
         ioctx = mgr.rados.open_ioctx(pool_name)
-        self.rbd = rbd.RBD()
-        names = self.rbd.list(ioctx)
+        names = rbd_inst.list(ioctx)
         result = []
         for name in names:
-            i = rbd.Image(ioctx, name)
-            stat = i.stat()
-            stat['name'] = name
-            stat['id'] = i.id()
-            features = i.features()
-            stat['features'] = features
-            stat['features_name'] = self._format_bitmask(features)
-
-            # the following keys are deprecated
-            del stat['parent_pool']
-            del stat['parent_name']
-
             try:
-                parent_info = i.parent_info()
-                parent = "{}@{}".format(parent_info[0], parent_info[1])
-                if parent_info[0] != pool_name:
-                    parent = "{}/{}".format(parent_info[0], parent)
-                stat['parent'] = parent
+                stat = self._rbd_image(ioctx, pool_name, name)
             except rbd.ImageNotFound:
-                pass
+                # may have been removed in the meanwhile
+                continue
             result.append(stat)
         return result
 
-    def get(self, pool_name):
+    def _rbd_list(self, pool_name=None):
+        if pool_name:
+            pools = [pool_name]
+        else:
+            pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
+
+        result = []
+        for pool in pools:
+            # pylint: disable=unbalanced-tuple-unpacking
+            status, value = self._rbd_pool_list(pool)
+            result.append({'status': status, 'value': value, 'pool_name': pool})
+        return result
+
+    def list(self, pool_name=None):
         # pylint: disable=unbalanced-tuple-unpacking
-        status, value = self._rbd_list(pool_name)
-        if status == ViewCache.VALUE_EXCEPTION:
-            raise value
-        return {'status': status, 'value': value}
+        return self._rbd_list(pool_name)
+
+    def get(self, pool_name, image_name):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        try:
+            return self._rbd_image(ioctx, pool_name, image_name)
+        except rbd.ImageNotFound:
+            raise cherrypy.HTTPError(404)
 
     def create(self, data):
-        if not self.rbd:
-            self.rbd = rbd.RBD()
+        # pylint: disable=too-many-locals
+        rbd_inst = rbd.RBD()
 
         # Get input values
         name = data.get('name')
@@ -126,7 +176,7 @@ class Rbd(RESTController):
         ioctx = mgr.rados.open_ioctx(pool_name)
 
         try:
-            self.rbd.create(ioctx, name, size, order=order, old_format=False,
+            rbd_inst.create(ioctx, name, size, order=order, old_format=False,
                             features=feature_bitmask, stripe_unit=stripe_unit,
                             stripe_count=stripe_count, data_pool=data_pool)
         except rbd.OSError as e:

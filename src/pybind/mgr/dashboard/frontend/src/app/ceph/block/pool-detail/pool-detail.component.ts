@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
 import { PoolService } from '../../../shared/api/pool.service';
@@ -13,6 +13,8 @@ import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
   styleUrls: ['./pool-detail.component.scss']
 })
 export class PoolDetailComponent implements OnInit, OnDestroy {
+  @ViewChild('parentTpl') parentTpl: TemplateRef<any>;
+
   name: string;
   images: any;
   columns: CdTableColumn[];
@@ -30,6 +32,7 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
       {
         name: 'Name',
         prop: 'name',
+        cellTemplate: this.parentTpl,
         flexGrow: 2
       },
       {
@@ -61,6 +64,7 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
       {
         name: 'Parent',
         prop: 'parent',
+        cellTemplate: this.parentTpl,
         flexGrow: 2
       }
     ];
@@ -81,8 +85,8 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
   loadImages() {
     this.poolService.rbdPoolImages(this.name).then(
       resp => {
-        this.viewCacheStatus = resp.status;
-        this.images = resp.value;
+        this.viewCacheStatus = resp[0].status;
+        this.images = resp[0].value;
       },
       () => {
         this.viewCacheStatus = ViewCacheStatus.ValueException;
