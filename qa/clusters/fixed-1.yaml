@@ -1,5 +1,6 @@
 overrides:
   ceph-deploy:
+    branch: '1.5.39-stable'
     conf:
       global:
         osd pool default size: 2
