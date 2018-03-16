@@ -66,11 +66,11 @@ public:
   void set_ec_size_mismatch() {
     errors |= err_t::SHARD_EC_SIZE_MISMATCH;
   }
-  void set_oi_attr_missing() {
-    errors |= err_t::OI_ATTR_MISSING;
+  void set_info_missing() {
+    errors |= err_t::INFO_MISSING;
   }
-  void set_oi_attr_corrupted() {
-    errors |= err_t::OI_ATTR_CORRUPTED;
+  void set_info_corrupted() {
+    errors |= err_t::INFO_CORRUPTED;
   }
   void set_snapset_missing() {
     errors |= err_t::SNAPSET_MISSING;
@@ -152,9 +152,9 @@ struct inconsistent_snapset_wrapper : public librados::inconsistent_snapset_t {
   // soid claims that it is a head or a snapdir, but its SS_ATTR
   // is missing.
   void set_snapset_missing();
-  void set_oi_attr_missing();
+  void set_info_missing();
   void set_snapset_corrupted();
-  void set_oi_attr_corrupted();
+  void set_info_corrupted();
   // snapset with missing clone
   void set_clone_missing(snapid_t);
   // Clones that are there

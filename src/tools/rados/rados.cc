@@ -1336,10 +1336,10 @@ static void dump_errors(const err_t &err, Formatter &f, const char *name)
     f.dump_string("error", "ec_hash_error");
   if (err.has_ec_size_error())
     f.dump_string("error", "ec_size_error");
-  if (err.has_oi_attr_missing())
-    f.dump_string("error", "oi_attr_missing");
-  if (err.has_oi_attr_corrupted())
-    f.dump_string("error", "oi_attr_corrupted");
+  if (err.has_info_missing())
+    f.dump_string("error", "info_missing");
+  if (err.has_info_corrupted())
+    f.dump_string("error", "info_corrupted");
   if (err.has_obj_size_oi_mismatch())
     f.dump_string("error", "obj_size_oi_mismatch");
   if (err.has_snapset_missing())
@@ -1371,7 +1371,7 @@ static void dump_shard(const shard_info_t& shard,
     f.dump_format("data_digest", "0x%08x", shard.data_digest);
   }
 
-  if (!shard.has_oi_attr_missing() && !shard.has_oi_attr_corrupted() &&
+  if (!shard.has_info_missing() && !shard.has_info_corrupted() &&
       inc.has_object_info_inconsistency()) {
     object_info_t oi;
     bufferlist bl;
@@ -1402,8 +1402,8 @@ static void dump_shard(const shard_info_t& shard,
     f.dump_stream("hashinfo") << hi;
   }
   if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
-     || inc.union_shards.has_oi_attr_missing()
-     || inc.union_shards.has_oi_attr_corrupted()
+     || inc.union_shards.has_info_missing()
+     || inc.union_shards.has_info_corrupted()
      || inc.union_shards.has_snapset_missing()
      || inc.union_shards.has_snapset_corrupted()
      || inc.union_shards.has_hinfo_missing()
@@ -1510,10 +1510,10 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
     f.dump_string("error", "snapset_missing");
   if (inc.snapset_corrupted())
     f.dump_string("error", "snapset_corrupted");
-  if (inc.oi_attr_missing())
-    f.dump_string("error", "oi_attr_missing");
-  if (inc.oi_attr_corrupted())
-    f.dump_string("error", "oi_attr_corrupted");
+  if (inc.info_missing())
+    f.dump_string("error", "info_missing");
+  if (inc.info_corrupted())
+    f.dump_string("error", "info_corrupted");
   if (inc.snapset_mismatch())
     f.dump_string("error", "snapset_mismatch");
   if (inc.head_mismatch())

@@ -271,7 +271,7 @@ function TEST_scrub_snaps() {
     },
     {
       "errors": [
-        "oi_attr_missing",
+        "info_missing",
         "headless"
       ],
       "snap": 7,

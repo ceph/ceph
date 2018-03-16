@@ -872,8 +872,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     k = i->second.attrs.find(OI_ATTR);
     if (k == i->second.attrs.end()) {
       // no object info on object, probably corrupt
-      shard_info.set_oi_attr_missing();
-      error_string += " oi_attr_missing";
+      shard_info.set_info_missing();
+      error_string += " info_missing";
       goto out;
     }
     bl.push_back(k->second);
@@ -882,8 +882,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       ::decode(oi, bliter);
     } catch (...) {
       // invalid object info, probably corrupt
-      shard_info.set_oi_attr_corrupted();
-      error_string += " oi_attr_corrupted";
+      shard_info.set_info_corrupted();
+      error_string += " info_corrupted";
       goto out;
     }
 
