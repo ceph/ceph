@@ -67,9 +67,9 @@ class TcmuIscsiControllerTest(ControllerTestCase):
                     'rd_bytes': 45.0,
                     'wr_bytes': 46.0},
                 'stats_history': {
-                    'rd': [[0, 0], [1, 43]],
-                    'wr': [[0, 0], [1, 44]],
-                    'rd_bytes': [[0, 0], [1, 45]],
-                    'wr_bytes': [[0, 0], [1, 46]]}
+                    'rd': [[1, 43]],
+                    'wr': [[1, 44]],
+                    'rd_bytes': [[1, 45]],
+                    'wr_bytes': [[1, 46]]}
             }]
         })
