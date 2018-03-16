@@ -30,16 +30,19 @@ fi
 # Set to "yes" in order to ignore diff errors and save results to update test
 getjson="no"
 
-# Ignore the epoch and filter out the attr '_' value because it has date information and won't match
-if [ "$(jq --version 2>&1 | awk '{ print $3}')" = "1.3" ]; then # Not sure all versions that apply here
-    jqfilter='.inconsistents | (.[].shards[].attrs[] | select(.name == "_") | .value) |= "----Stripped-by-test----"'
-else
-    jqfilter='.inconsistents | (.[].shards[].attrs[]? | select(.name == "_") | .value) |= "----Stripped-by-test----"'
-fi
-sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
+# Filter out mtime and local_mtime dates, version, prior_version and last_reqid (client) from any object_info.
+jqfilter='(. | (.inconsistents[].selected_object_info | .mtime ) |= "----Stripped-----")
+        | (. | (.inconsistents[].selected_object_info | .local_mtime ) |= "----Stripped-----" )
+        | (. | (.inconsistents[].selected_object_info | .last_reqid ) |= "----Stripped-----")
+        | (. | (.inconsistents[].selected_object_info | .version ) |= "----Stripped-----" )
+        | (. | (.inconsistents[].selected_object_info | .prior_version ) |= "----Stripped-----" )
+        | ( . | (.inconsistents[].shards[].object_info | .mtime ) |= "----Stripped-----" )
+        | ( . | (.inconsistents[].shards[].object_info | .local_mtime ) |= "----Stripped-----" )
+        | ( . | (.inconsistents[].shards[].object_info | .last_reqid ) |= "----Stripped-----" )
+        | ( .| (.inconsistents[].shards[].object_info | .version ) |= "----Stripped-----" )
+        | ( .| (.inconsistents[].shards[].object_info | .prior_version ) |= "----Stripped-----" )'
 
-# Remove items are not consistent across runs, the pg interval and client
-sedfilter='s/\([ ]*\"\(selected_\)*object_info\":.*head[(]\)[^[:space:]]* [^[:space:]]* \(.*\)/\1\3/'
+sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
 
 function run() {
     local dir=$1
@@ -628,7 +631,7 @@ function TEST_corrupt_scrub_replicated() {
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -640,6 +643,41 @@ function TEST_corrupt_scrub_replicated() {
           "primary": false
         },
         {
+          "object_info": {
+            "oid": {
+              "oid": "ROBJ1",
+              "key": "",
+              "snapid": -2,
+              "hash": 1454963827,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "51'58",
+            "prior_version": "21'3",
+            "last_reqid": "osd.1.0:57",
+            "user_version": 3,
+            "size": 7,
+            "mtime": "",
+            "local_mtime": "",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "omap",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 9,
           "errors": [
             "size_mismatch_info",
@@ -649,7 +687,41 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:ce3f1d6a:::ROBJ1:head(47'54 osd.0.0:53 dirty|omap|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ1",
+          "key": "",
+          "snapid": -2,
+          "hash": 1454963827,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'58",
+        "prior_version": "21'3",
+        "last_reqid": "osd.1.0:57",
+        "user_version": 3,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:19.804040",
+        "local_mtime": "2018-04-05 14:33:19.804839",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "size_mismatch_info",
         "obj_size_info_mismatch"
@@ -681,7 +753,41 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:bc819597:::ROBJ12:head(47'52 osd.0.0:51 dirty|omap|data_digest s 7 uv 36 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ12",
+          "key": "",
+          "snapid": -2,
+          "hash": 3920199997,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'56",
+        "prior_version": "43'36",
+        "last_reqid": "osd.1.0:55",
+        "user_version": 36,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "stat_error"
       ],
@@ -710,7 +816,41 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:d60617f9:::ROBJ13:head(47'55 osd.0.0:54 dirty|omap|data_digest s 7 uv 39 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ13",
+          "key": "",
+          "snapid": -2,
+          "hash": 2682806379,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'59",
+        "prior_version": "45'39",
+        "last_reqid": "osd.1.0:58",
+        "user_version": 39,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "stat_error"
       ],
@@ -726,19 +866,8 @@ function TEST_corrupt_scrub_replicated() {
     {
       "shards": [
         {
+          "object_info": "bad-val",
           "size": 7,
-          "attrs": [
-            {
-              "Base64": false,
-              "value": "",
-              "name": "_"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
-            }
-          ],
           "errors": [
             "info_corrupted"
           ],
@@ -747,13 +876,6 @@ function TEST_corrupt_scrub_replicated() {
         },
         {
           "size": 7,
-          "attrs": [
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
-            }
-          ],
           "errors": [
             "info_missing"
           ],
@@ -777,31 +899,47 @@ function TEST_corrupt_scrub_replicated() {
     {
       "shards": [
         {
-          "attrs": [
-            {
-              "Base64": true,
-              "value": "",
-              "name": "_"
+          "object_info": {
+            "oid": {
+              "oid": "ROBJ15",
+              "key": "",
+              "snapid": -2,
+              "hash": 504996876,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
             },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
-            }
-          ],
+            "version": "51'49",
+            "prior_version": "49'45",
+            "last_reqid": "osd.1.0:48",
+            "user_version": 45,
+            "size": 7,
+            "mtime": "2018-04-05 14:33:29.498969",
+            "local_mtime": "2018-04-05 14:33:29.499890",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "omap",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 7,
           "errors": [],
           "osd": 0,
           "primary": false
         },
         {
-          "attrs": [
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
-            }
-          ],
           "size": 7,
           "errors": [
             "info_missing"
@@ -810,7 +948,41 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:30259878:::ROBJ15:head(47'46 osd.0.0:45 dirty|omap|data_digest s 7 uv 45 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ15",
+          "key": "",
+          "snapid": -2,
+          "hash": 504996876,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'49",
+        "prior_version": "49'45",
+        "last_reqid": "osd.1.0:48",
+        "user_version": 45,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "info_missing"
       ],
@@ -834,13 +1006,6 @@ function TEST_corrupt_scrub_replicated() {
        },
         "shards": [
       {
-        "attrs": [
-          {
-            "Base64": true,
-            "name": "_",
-            "value": ""
-          }
-        ],
         "errors": [
           "snapset_missing"
         ],
@@ -849,23 +1014,12 @@ function TEST_corrupt_scrub_replicated() {
         "size": 7
       },
       {
-        "attrs": [
-          {
-            "Base64": true,
-            "name": "_",
-            "value": ""
-          },
-          {
-            "Base64": false,
-            "name": "snapset",
-            "value": "bad-val"
-          }
-        ],
         "errors": [
           "snapset_corrupted"
         ],
         "osd": 1,
         "primary": true,
+        "snapset": "bad-val",
         "size": 7
       }
       ],
@@ -890,7 +1044,41 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:f2a5b2a4:::ROBJ3:head(47'57 osd.0.0:56 dirty|omap|data_digest s 7 uv 9 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ3",
+          "key": "",
+          "snapid": -2,
+          "hash": 625845583,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'61",
+        "prior_version": "25'9",
+        "last_reqid": "osd.1.0:60",
+        "user_version": 9,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "missing"
       ],
@@ -908,24 +1096,14 @@ function TEST_corrupt_scrub_replicated() {
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "bad-val",
-              "name": "_key1-ROBJ8"
+              "name": "key1-ROBJ8"
             },
             {
               "Base64": false,
               "value": "val2-ROBJ8",
-              "name": "_key2-ROBJ8"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key2-ROBJ8"
             }
           ],
           "size": 7,
@@ -936,24 +1114,14 @@ function TEST_corrupt_scrub_replicated() {
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "val1-ROBJ8",
-              "name": "_key1-ROBJ8"
+              "name": "key1-ROBJ8"
             },
             {
               "Base64": false,
               "value": "val3-ROBJ8",
-              "name": "_key3-ROBJ8"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key3-ROBJ8"
             }
           ],
           "size": 7,
@@ -962,7 +1130,41 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest s 7 uv 66 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ8",
+          "key": "",
+          "snapid": -2,
+          "hash": 2359695969,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "79'66",
+        "prior_version": "79'65",
+        "last_reqid": "client.4554.0:1",
+        "user_version": 66,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -979,14 +1181,82 @@ function TEST_corrupt_scrub_replicated() {
     {
       "shards": [
         {
-          "object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest s 1 uv 67 dd 2b63260d alloc_hint [0 0 0])",
+          "object_info": {
+            "oid": {
+              "oid": "ROBJ9",
+              "key": "",
+              "snapid": -2,
+              "hash": 537189375,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "95'67",
+            "prior_version": "51'64",
+            "last_reqid": "client.4649.0:1",
+            "user_version": 67,
+            "size": 1,
+            "mtime": "",
+            "local_mtime": "",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "omap",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 727918093,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 1,
           "errors": [],
           "osd": 0,
           "primary": false
         },
         {
-          "object_info": "3:ffdb2004:::ROBJ9:head(47'60 osd.0.0:59 dirty|omap|data_digest s 7 uv 27 dd 2ddbf8f5 alloc_hint [0 0 0])",
+          "object_info": {
+            "oid": {
+              "oid": "ROBJ9",
+              "key": "",
+              "snapid": -2,
+              "hash": 537189375,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "51'64",
+            "prior_version": "37'27",
+            "last_reqid": "osd.1.0:63",
+            "user_version": 27,
+            "size": 7,
+            "mtime": "2018-04-05 14:33:25.352485",
+            "local_mtime": "2018-04-05 14:33:25.353746",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "omap",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 1,
           "errors": [
             "obj_size_info_mismatch"
@@ -995,7 +1265,41 @@ function TEST_corrupt_scrub_replicated() {
           "primary": true
         }
       ],
-      "selected_object_info": "3:ffdb2004:::ROBJ9:head(102'63 client.4433.0:1 dirty|omap|data_digest s 1 uv 67 dd 2b63260d alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ9",
+          "key": "",
+          "snapid": -2,
+          "hash": 537189375,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "95'67",
+        "prior_version": "51'64",
+        "last_reqid": "client.4649.0:1",
+        "user_version": 67,
+        "size": 1,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 727918093,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
          "obj_size_info_mismatch"
       ],
@@ -1015,7 +1319,7 @@ function TEST_corrupt_scrub_replicated() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
     diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -1058,7 +1362,7 @@ EOF
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -1072,6 +1376,41 @@ EOF
           "primary": false
         },
         {
+          "object_info": {
+            "oid": {
+              "oid": "ROBJ1",
+              "key": "",
+              "snapid": -2,
+              "hash": 1454963827,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "51'58",
+            "prior_version": "21'3",
+            "last_reqid": "osd.1.0:57",
+            "user_version": 3,
+            "size": 7,
+            "mtime": "2018-04-05 14:33:19.804040",
+            "local_mtime": "2018-04-05 14:33:19.804839",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "omap",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "data_digest": "0x2d4a11c2",
           "omap_digest": "0xf5fba2c6",
           "size": 9,
@@ -1084,7 +1423,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:ce3f1d6a:::ROBJ1:head(47'54 osd.0.0:53 dirty|omap|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ1",
+          "key": "",
+          "snapid": -2,
+          "hash": 1454963827,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'58",
+        "prior_version": "21'3",
+        "last_reqid": "osd.1.0:57",
+        "user_version": 3,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:19.804040",
+        "local_mtime": "2018-04-05 14:33:19.804839",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "data_digest_mismatch_info",
         "size_mismatch_info",
@@ -1121,7 +1494,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:87abbf36:::ROBJ11:head(47'48 osd.0.0:47 dirty|omap|data_digest s 7 uv 33 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ11",
+          "key": "",
+          "snapid": -2,
+          "hash": 1828574689,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'52",
+        "prior_version": "41'33",
+        "last_reqid": "osd.1.0:51",
+        "user_version": 33,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:26.761286",
+        "local_mtime": "2018-04-05 14:33:26.762368",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "read_error"
       ],
@@ -1152,7 +1559,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:bc819597:::ROBJ12:head(47'52 osd.0.0:51 dirty|omap|data_digest s 7 uv 36 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ12",
+          "key": "",
+          "snapid": -2,
+          "hash": 3920199997,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'56",
+        "prior_version": "43'36",
+        "last_reqid": "osd.1.0:55",
+        "user_version": 36,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:27.460958",
+        "local_mtime": "2018-04-05 14:33:27.462109",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "stat_error"
       ],
@@ -1199,18 +1640,7 @@ EOF
     {
       "shards": [
         {
-          "attrs": [
-            {
-              "Base64": false,
-              "value": "",
-              "name": "_"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
-            }
-          ],
+          "object_info": "bad-val",
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x4f14f849",
           "size": 7,
@@ -1221,13 +1651,6 @@ EOF
           "primary": false
         },
         {
-          "attrs": [
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
-            }
-          ],
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x4f14f849",
           "size": 7,
@@ -1254,18 +1677,41 @@ EOF
     {
       "shards": [
         {
-          "attrs": [
-            {
-              "Base64": true,
-              "value": "",
-              "name": "_"
+          "object_info": {
+            "oid": {
+              "oid": "ROBJ15",
+              "key": "",
+              "snapid": -2,
+              "hash": 504996876,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
             },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
-            }
-          ],
+            "version": "51'49",
+            "prior_version": "49'45",
+            "last_reqid": "osd.1.0:48",
+            "user_version": 45,
+            "size": 7,
+            "mtime": "2018-04-05 14:33:29.498969",
+            "local_mtime": "2018-04-05 14:33:29.499890",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "omap",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x2d2a4d6e",
           "size": 7,
@@ -1274,13 +1720,6 @@ EOF
           "primary": false
         },
         {
-          "attrs": [
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
-            }
-          ],
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x2d2a4d6e",
           "size": 7,
@@ -1291,7 +1730,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:30259878:::ROBJ15:head(47'46 osd.0.0:45 dirty|omap|data_digest s 7 uv 45 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ15",
+          "key": "",
+          "snapid": -2,
+          "hash": 504996876,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'49",
+        "prior_version": "49'45",
+        "last_reqid": "osd.1.0:48",
+        "user_version": 45,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:29.498969",
+        "local_mtime": "2018-04-05 14:33:29.499890",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "info_missing"
       ],
@@ -1315,13 +1788,6 @@ EOF
        },
         "shards": [
       {
-        "attrs": [
-          {
-            "Base64": true,
-            "name": "_",
-            "value": ""
-          }
-        ],
         "data_digest": "0x2ddbf8f5",
         "errors": [
           "snapset_missing"
@@ -1332,18 +1798,7 @@ EOF
         "size": 7
       },
       {
-        "attrs": [
-          {
-            "Base64": true,
-            "name": "_",
-            "value": ""
-          },
-          {
-            "Base64": false,
-            "name": "snapset",
-            "value": "bad-val"
-          }
-        ],
+        "snapset": "bad-val",
         "data_digest": "0x2ddbf8f5",
         "errors": [
           "snapset_corrupted"
@@ -1380,7 +1835,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:e97ce31e:::ROBJ2:head(47'56 osd.0.0:55 dirty|omap|data_digest s 7 uv 6 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ2",
+          "key": "",
+          "snapid": -2,
+          "hash": 2026323607,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'60",
+        "prior_version": "23'6",
+        "last_reqid": "osd.1.0:59",
+        "user_version": 6,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:20.498756",
+        "local_mtime": "2018-04-05 14:33:20.499704",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "data_digest_mismatch_info"
       ],
@@ -1413,7 +1902,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:f2a5b2a4:::ROBJ3:head(47'57 osd.0.0:56 dirty|omap|data_digest s 7 uv 9 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ3",
+          "key": "",
+          "snapid": -2,
+          "hash": 625845583,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'61",
+        "prior_version": "25'9",
+        "last_reqid": "osd.1.0:60",
+        "user_version": 9,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:21.189382",
+        "local_mtime": "2018-04-05 14:33:21.190446",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "missing"
       ],
@@ -1445,7 +1968,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:f4981d31:::ROBJ4:head(47'58 osd.0.0:57 dirty|omap|data_digest s 7 uv 12 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ4",
+          "key": "",
+          "snapid": -2,
+          "hash": 2360875311,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'62",
+        "prior_version": "27'12",
+        "last_reqid": "osd.1.0:61",
+        "user_version": 12,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:21.862313",
+        "local_mtime": "2018-04-05 14:33:21.863261",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "omap_digest_mismatch"
@@ -1477,7 +2034,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:f4bfd4d1:::ROBJ5:head(47'59 osd.0.0:58 dirty|omap|data_digest s 7 uv 15 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ5",
+          "key": "",
+          "snapid": -2,
+          "hash": 2334915887,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'63",
+        "prior_version": "29'15",
+        "last_reqid": "osd.1.0:62",
+        "user_version": 15,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:22.589300",
+        "local_mtime": "2018-04-05 14:33:22.590376",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "omap_digest_mismatch"
@@ -1509,7 +2100,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:a53c12e8:::ROBJ6:head(47'50 osd.0.0:49 dirty|omap|data_digest s 7 uv 18 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ6",
+          "key": "",
+          "snapid": -2,
+          "hash": 390610085,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'54",
+        "prior_version": "31'18",
+        "last_reqid": "osd.1.0:53",
+        "user_version": 18,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:23.289188",
+        "local_mtime": "2018-04-05 14:33:23.290130",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "omap_digest_mismatch"
@@ -1541,7 +2166,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:8b55fa4b:::ROBJ7:head(47'49 osd.0.0:48 dirty|omap|data_digest s 7 uv 21 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ7",
+          "key": "",
+          "snapid": -2,
+          "hash": 3529485009,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "51'53",
+        "prior_version": "33'21",
+        "last_reqid": "osd.1.0:52",
+        "user_version": 21,
+        "size": 7,
+        "mtime": "2018-04-05 14:33:23.979658",
+        "local_mtime": "2018-04-05 14:33:23.980731",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "omap_digest_mismatch"
@@ -1559,24 +2218,14 @@ EOF
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "bad-val",
-              "name": "_key1-ROBJ8"
+              "name": "key1-ROBJ8"
             },
             {
               "Base64": false,
               "value": "val2-ROBJ8",
-              "name": "_key2-ROBJ8"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key2-ROBJ8"
             }
           ],
           "data_digest": "0x2ddbf8f5",
@@ -1589,24 +2238,14 @@ EOF
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "val1-ROBJ8",
-              "name": "_key1-ROBJ8"
+              "name": "key1-ROBJ8"
             },
             {
               "Base64": false,
               "value": "val3-ROBJ8",
-              "name": "_key3-ROBJ8"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key3-ROBJ8"
             }
           ],
           "data_digest": "0x2ddbf8f5",
@@ -1617,7 +2256,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:86586531:::ROBJ8:head(82'62 client.4351.0:1 dirty|omap|data_digest s 7 uv 66 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ8",
+          "key": "",
+          "snapid": -2,
+          "hash": 2359695969,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "79'66",
+        "prior_version": "79'65",
+        "last_reqid": "client.4554.0:1",
+        "user_version": 66,
+        "size": 7,
+        "mtime": "2018-04-05 14:34:05.598688",
+        "local_mtime": "2018-04-05 14:34:05.599698",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -1634,7 +2307,41 @@ EOF
     {
       "shards": [
         {
-          "object_info": "3:ffdb2004:::ROBJ9:head(47'60 osd.0.0:59 dirty|omap|data_digest s 7 uv 27 dd 2ddbf8f5 alloc_hint [0 0 0])",
+          "object_info": {
+            "oid": {
+              "oid": "ROBJ9",
+              "key": "",
+              "snapid": -2,
+              "hash": 537189375,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "51'64",
+            "prior_version": "37'27",
+            "last_reqid": "osd.1.0:63",
+            "user_version": 27,
+            "size": 7,
+            "mtime": "2018-04-05 14:33:25.352485",
+            "local_mtime": "2018-04-05 14:33:25.353746",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "omap",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "data_digest": "0x1f26fb26",
           "omap_digest": "0x2eecc539",
           "size": 3,
@@ -1645,7 +2352,41 @@ EOF
           "primary": false
         },
         {
-          "object_info": "3:ffdb2004:::ROBJ9:head(122'64 client.4532.0:1 dirty|omap|data_digest s 3 uv 68 dd 1f26fb26 alloc_hint [0 0 0])",
+          "object_info": {
+            "oid": {
+              "oid": "ROBJ9",
+              "key": "",
+              "snapid": -2,
+              "hash": 537189375,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "119'68",
+            "prior_version": "51'64",
+            "last_reqid": "client.4834.0:1",
+            "user_version": 68,
+            "size": 3,
+            "mtime": "2018-04-05 14:35:01.500659",
+            "local_mtime": "2018-04-05 14:35:01.502117",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "omap",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 522648358,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "data_digest": "0x1f26fb26",
           "omap_digest": "0x2eecc539",
           "size": 3,
@@ -1654,7 +2395,41 @@ EOF
           "primary": true
         }
       ],
-      "selected_object_info": "3:ffdb2004:::ROBJ9:head(122'64 client.4532.0:1 dirty|omap|data_digest s 3 uv 68 dd 1f26fb26 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ9",
+          "key": "",
+          "snapid": -2,
+          "hash": 537189375,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "119'68",
+        "prior_version": "51'64",
+        "last_reqid": "client.4834.0:1",
+        "user_version": 68,
+        "size": 3,
+        "mtime": "2018-04-05 14:35:01.500659",
+        "local_mtime": "2018-04-05 14:35:01.502117",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 522648358,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "obj_size_info_mismatch"
       ],
@@ -1674,7 +2449,7 @@ EOF
 }
 EOF
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
     diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -1794,7 +2569,7 @@ function corrupt_scrub_erasure() {
     # Get epoch for repair-get requests
     epoch=$(jq .epoch $dir/json)
 
-    jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -1807,6 +2582,40 @@ function corrupt_scrub_erasure() {
           "primary": false
         },
         {
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ1",
+              "key": "",
+              "snapid": -2,
+              "hash": 560836233,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "27'1",
+            "prior_version": "0'0",
+            "last_reqid": "client.4184.0:1",
+            "user_version": 1,
+            "size": 7,
+            "mtime": "",
+            "local_mtime": "",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 9,
           "shard": 0,
           "errors": [
@@ -1824,7 +2633,40 @@ function corrupt_scrub_erasure() {
           "primary": false
         }
       ],
-      "selected_object_info": "3:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest s 7 uv 1 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ1",
+          "key": "",
+          "snapid": -2,
+          "hash": 560836233,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "27'1",
+        "prior_version": "0'0",
+        "last_reqid": "client.4184.0:1",
+        "user_version": 1,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "size_mismatch_info",
         "obj_size_info_mismatch"
@@ -1865,7 +2707,40 @@ function corrupt_scrub_erasure() {
           "primary": false
         }
       ],
-      "selected_object_info": "3:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ3",
+          "key": "",
+          "snapid": -2,
+          "hash": 3125668237,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "39'3",
+        "prior_version": "0'0",
+        "last_reqid": "client.4252.0:1",
+        "user_version": 3,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "missing"
       ],
@@ -1883,29 +2758,14 @@ function corrupt_scrub_erasure() {
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "bad-val",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val2-EOBJ4",
-              "name": "_key2-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key2-EOBJ4"
             }
           ],
           "size": 2048,
@@ -1922,29 +2782,14 @@ function corrupt_scrub_erasure() {
           "size": 2048,
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "val1-EOBJ4",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val2-EOBJ4",
-              "name": "_key2-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key2-EOBJ4"
             }
           ]
         },
@@ -1956,34 +2801,52 @@ function corrupt_scrub_erasure() {
           "size": 2048,
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "val1-EOBJ4",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val3-EOBJ4",
-              "name": "_key3-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key3-EOBJ4"
             }
           ]
         }
       ],
-      "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest s 7 uv 6 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ4",
+          "key": "",
+          "snapid": -2,
+          "hash": 1618759290,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "45'6",
+        "prior_version": "45'5",
+        "last_reqid": "client.4294.0:1",
+        "user_version": 6,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -2007,6 +2870,40 @@ function corrupt_scrub_erasure() {
           "primary": false
         },
         {
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ5",
+              "key": "",
+              "snapid": -2,
+              "hash": 2918945441,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "59'7",
+            "prior_version": "0'0",
+            "last_reqid": "client.4382.0:1",
+            "user_version": 7,
+            "size": 7,
+            "mtime": "",
+            "local_mtime": "",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 4096,
           "shard": 0,
           "errors": [
@@ -2024,7 +2921,40 @@ function corrupt_scrub_erasure() {
           "primary": false
         }
       ],
-      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest s 7 uv 7 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ5",
+          "key": "",
+          "snapid": -2,
+          "hash": 2918945441,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "59'7",
+        "prior_version": "0'0",
+        "last_reqid": "client.4382.0:1",
+        "user_version": 7,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "size_mismatch_info",
         "obj_size_info_mismatch"
@@ -2049,21 +2979,42 @@ function corrupt_scrub_erasure() {
        "snap": "head",
        "version": 8
      },
-     "selected_object_info": "3:4e671bad:::EOBJ6:head(65'7 client.4441.0:1 dirty|data_digest s 7 uv 8 dd 2ddbf8f5 alloc_hint [0 0 0])",
+     "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ6",
+          "key": "",
+          "snapid": -2,
+          "hash": 3050890866,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "65'8",
+        "prior_version": "0'0",
+        "last_reqid": "client.4418.0:1",
+        "user_version": 8,
+        "size": 7,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+     },
      "shards": [
        {
-         "attrs": [
-           {
-             "Base64": true,
-             "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA="
-           },
-           {
-             "Base64": true,
-             "name": "snapset",
-             "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-           }
-         ],
          "errors": [
            "hinfo_missing"
          ],
@@ -2073,54 +3024,38 @@ function corrupt_scrub_erasure() {
          "size": 2048
        },
        {
-         "attrs": [
-           {
-             "Base64": true,
-             "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA="
-           },
-           {
-             "Base64": false,
-             "name": "hinfo_key",
-             "value": "bad-val"
-           },
-           {
-             "Base64": true,
-             "name": "snapset",
-             "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-           }
-         ],
          "errors": [
            "hinfo_corrupted"
          ],
          "osd": 1,
          "primary": true,
          "shard": 0,
+         "hashinfo": "bad-val",
          "size": 2048
        },
        {
-         "attrs": [
-           {
-             "Base64": true,
-             "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA="
-           },
-           {
-             "Base64": true,
-             "name": "hinfo_key",
-             "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E"
-           },
-           {
-             "Base64": true,
-             "name": "snapset",
-             "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-           }
-         ],
          "errors": [],
          "osd": 2,
          "primary": false,
          "shard": 1,
-         "size": 2048
+         "size": 2048,
+         "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 80717615,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 80717615,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+         }
        }
      ],
      "union_shard_errors": [
@@ -2139,10 +3074,59 @@ function corrupt_scrub_erasure() {
        "snap": "head",
        "version": 10
      },
-     "selected_object_info": "3:21a44c43:::EOBJ7:head(65'7 client.4441.0:1 dirty|data_digest s 34 uv 10 dd 136e4e27 alloc_hint [0 0 0])",
+     "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ7",
+          "key": "",
+          "snapid": -2,
+          "hash": 3258066308,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "75'10",
+        "prior_version": "75'9",
+        "last_reqid": "client.4482.0:1",
+        "user_version": 10,
+        "size": 34,
+        "mtime": "",
+        "local_mtime": "",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 325996071,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+     },
      "shards": [
        {
-         "hashinfo": "tcs=2048 4cfa72f 5b767cb0 4cfa72f",
+         "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 80717615,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 80717615,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+         },
          "errors": [],
          "osd": 0,
          "primary": false,
@@ -2150,7 +3134,23 @@ function corrupt_scrub_erasure() {
          "size": 2048
        },
        {
-         "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8",
+         "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 1534350760,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 1534350760,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+         },
          "errors": [],
          "osd": 1,
          "primary": true,
@@ -2158,7 +3158,23 @@ function corrupt_scrub_erasure() {
          "size": 2048
        },
        {
-         "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8",
+         "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 1534350760,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 1534350760,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+         },
          "errors": [],
          "osd": 2,
          "primary": false,
@@ -2173,7 +3189,7 @@ function corrupt_scrub_erasure() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
     diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -2199,7 +3215,7 @@ EOF
 
     if [ "$allow_overwrites" = "true" ]
     then
-      jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+      jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -2214,6 +3230,40 @@ EOF
           "primary": false
         },
         {
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ1",
+              "key": "",
+              "snapid": -2,
+              "hash": 560836233,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "27'1",
+            "prior_version": "0'0",
+            "last_reqid": "client.4184.0:1",
+            "user_version": 1,
+            "size": 7,
+            "mtime": "2018-04-05 14:31:33.837147",
+            "local_mtime": "2018-04-05 14:31:33.840763",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 9,
           "shard": 0,
           "errors": [
@@ -2234,7 +3284,40 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:9175b684:::EOBJ1:head(27'1 client.4155.0:1 dirty|data_digest s 7 uv 1 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ1",
+          "key": "",
+          "snapid": -2,
+          "hash": 560836233,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "27'1",
+        "prior_version": "0'0",
+        "last_reqid": "client.4184.0:1",
+        "user_version": 1,
+        "size": 7,
+        "mtime": "2018-04-05 14:31:33.837147",
+        "local_mtime": "2018-04-05 14:31:33.840763",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "read_error",
         "size_mismatch_info",
@@ -2280,7 +3363,40 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:b197b25d:::EOBJ3:head(41'3 client.4199.0:1 dirty|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ3",
+          "key": "",
+          "snapid": -2,
+          "hash": 3125668237,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "39'3",
+        "prior_version": "0'0",
+        "last_reqid": "client.4252.0:1",
+        "user_version": 3,
+        "size": 7,
+        "mtime": "2018-04-05 14:31:46.841145",
+        "local_mtime": "2018-04-05 14:31:46.844996",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "missing"
       ],
@@ -2298,29 +3414,14 @@ EOF
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "bad-val",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val2-EOBJ4",
-              "name": "_key2-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key2-EOBJ4"
             }
           ],
           "data_digest": "0x00000000",
@@ -2334,29 +3435,14 @@ EOF
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "val1-EOBJ4",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val2-EOBJ4",
-              "name": "_key2-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key2-EOBJ4"
             }
           ],
           "data_digest": "0x00000000",
@@ -2370,29 +3456,14 @@ EOF
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "val1-EOBJ4",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val3-EOBJ4",
-              "name": "_key3-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key3-EOBJ4"
             }
           ],
           "data_digest": "0x00000000",
@@ -2404,7 +3475,40 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:5e723e06:::EOBJ4:head(48'6 client.4223.0:1 dirty|data_digest s 7 uv 6 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ4",
+          "key": "",
+          "snapid": -2,
+          "hash": 1618759290,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "45'6",
+        "prior_version": "45'5",
+        "last_reqid": "client.4294.0:1",
+        "user_version": 6,
+        "size": 7,
+        "mtime": "2018-04-05 14:31:54.663622",
+        "local_mtime": "2018-04-05 14:31:54.664527",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -2432,6 +3536,40 @@ EOF
         {
           "data_digest": "0x00000000",
           "omap_digest": "0xffffffff",
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ5",
+              "key": "",
+              "snapid": -2,
+              "hash": 2918945441,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "59'7",
+            "prior_version": "0'0",
+            "last_reqid": "client.4382.0:1",
+            "user_version": 7,
+            "size": 7,
+            "mtime": "2018-04-05 14:32:12.929161",
+            "local_mtime": "2018-04-05 14:32:12.934707",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 4096,
           "errors": [
             "size_mismatch_info",
@@ -2451,7 +3589,40 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4288.0:1 dirty|data_digest s 7 uv 7 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ5",
+          "key": "",
+          "snapid": -2,
+          "hash": 2918945441,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "59'7",
+        "prior_version": "0'0",
+        "last_reqid": "client.4382.0:1",
+        "user_version": 7,
+        "size": 7,
+        "mtime": "2018-04-05 14:32:12.929161",
+        "local_mtime": "2018-04-05 14:32:12.934707",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "size_mismatch_info",
         "obj_size_info_mismatch"
@@ -2481,7 +3652,40 @@ EOF
         "hinfo_missing",
         "hinfo_corrupted"
       ],
-      "selected_object_info": "3:4e671bad:::EOBJ6:head(65'8 client.4432.0:1 dirty|data_digest s 7 uv 8 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ6",
+          "key": "",
+          "snapid": -2,
+          "hash": 3050890866,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "65'8",
+        "prior_version": "0'0",
+        "last_reqid": "client.4418.0:1",
+        "user_version": 8,
+        "size": 7,
+        "mtime": "2018-04-05 14:32:20.634116",
+        "local_mtime": "2018-04-05 14:32:20.637999",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "shards": [
         {
           "osd": 0,
@@ -2491,19 +3695,7 @@ EOF
             "read_error",
             "hinfo_missing"
           ],
-          "size": 2048,
-          "attrs": [
-            {
-              "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
-            },
-            {
-              "name": "snapset",
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
-            }
-          ]
+          "size": 2048
         },
         {
           "osd": 1,
@@ -2514,23 +3706,7 @@ EOF
             "hinfo_corrupted"
           ],
           "size": 2048,
-          "attrs": [
-            {
-              "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
-            },
-            {
-              "name": "hinfo_key",
-              "value": "bad-val",
-              "Base64": false
-            },
-            {
-              "name": "snapset",
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
-            }
-          ]
+          "hashinfo": "bad-val"
         },
         {
           "osd": 2,
@@ -2540,23 +3716,23 @@ EOF
           "size": 2048,
           "omap_digest": "0xffffffff",
           "data_digest": "0x00000000",
-          "attrs": [
+          "hashinfo": {
+            "cumulative_shard_hashes": [
             {
-              "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAQQAAAAAAAAAAAAAAAAAAAAICFQAAAAhQEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAAV5CqWvL8FjMCAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAABXkKpahjpkM/X42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
+              "hash": 80717615,
+              "shard": 0
             },
             {
-              "name": "hinfo_key",
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "Base64": true
+              "hash": 1534491824,
+              "shard": 1
             },
             {
-              "name": "snapset",
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
+              "hash": 80717615,
+              "shard": 2
             }
-          ]
+           ],
+           "total_chunk_size": 2048
+         }
         }
       ]
     },
@@ -2572,7 +3748,40 @@ EOF
         "hinfo_inconsistency"
       ],
       "union_shard_errors": [],
-      "selected_object_info": "3:21a44c43:::EOBJ7:head(75'10 client.4498.0:1 dirty|data_digest s 34 uv 10 dd 136e4e27 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ7",
+          "key": "",
+          "snapid": -2,
+          "hash": 3258066308,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "75'10",
+        "prior_version": "75'9",
+        "last_reqid": "client.4482.0:1",
+        "user_version": 10,
+        "size": 34,
+        "mtime": "2018-04-05 14:32:33.058782",
+        "local_mtime": "2018-04-05 14:32:33.059679",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 325996071,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "shards": [
         {
           "osd": 0,
@@ -2582,7 +3791,23 @@ EOF
           "size": 2048,
           "omap_digest": "0xffffffff",
           "data_digest": "0x00000000",
-          "hashinfo": "tcs=2048 4cfa72f 5b767cb0 4cfa72f"
+          "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 80717615,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 80717615,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+          }
         },
         {
           "osd": 1,
@@ -2592,7 +3817,23 @@ EOF
           "size": 2048,
           "omap_digest": "0xffffffff",
           "data_digest": "0x00000000",
-          "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8"
+          "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 1534350760,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 1534350760,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+          }
         },
         {
           "osd": 2,
@@ -2602,7 +3843,23 @@ EOF
           "size": 2048,
           "omap_digest": "0xffffffff",
           "data_digest": "0x00000000",
-          "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8"
+          "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 1534350760,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 1534350760,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+          }
         }
       ]
     }
@@ -2613,7 +3870,7 @@ EOF
 
     else
 
-      jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+      jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
 {
   "inconsistents": [
     {
@@ -2628,6 +3885,40 @@ EOF
           "primary": false
         },
         {
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ1",
+              "key": "",
+              "snapid": -2,
+              "hash": 560836233,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "27'1",
+            "prior_version": "0'0",
+            "last_reqid": "client.4192.0:1",
+            "user_version": 1,
+            "size": 7,
+            "mtime": "2018-04-05 14:30:10.688009",
+            "local_mtime": "2018-04-05 14:30:10.691774",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 9,
           "shard": 0,
           "errors": [
@@ -2648,7 +3939,40 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest s 7 uv 1 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ1",
+          "key": "",
+          "snapid": -2,
+          "hash": 560836233,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "27'1",
+        "prior_version": "0'0",
+        "last_reqid": "client.4192.0:1",
+        "user_version": 1,
+        "size": 7,
+        "mtime": "2018-04-05 14:30:10.688009",
+        "local_mtime": "2018-04-05 14:30:10.691774",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "read_error",
         "size_mismatch_info",
@@ -2695,7 +4019,40 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:9babd184:::EOBJ2:head(29'2 client.4217.0:1 dirty|data_digest s 7 uv 2 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ2",
+          "key": "",
+          "snapid": -2,
+          "hash": 562812377,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "33'2",
+        "prior_version": "0'0",
+        "last_reqid": "client.4224.0:1",
+        "user_version": 2,
+        "size": 7,
+        "mtime": "2018-04-05 14:30:14.152945",
+        "local_mtime": "2018-04-05 14:30:14.154014",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "ec_hash_error"
       ],
@@ -2737,7 +4094,40 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ3",
+          "key": "",
+          "snapid": -2,
+          "hash": 3125668237,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "39'3",
+        "prior_version": "0'0",
+        "last_reqid": "client.4258.0:1",
+        "user_version": 3,
+        "size": 7,
+        "mtime": "2018-04-05 14:30:18.875544",
+        "local_mtime": "2018-04-05 14:30:18.880153",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "missing"
       ],
@@ -2755,29 +4145,14 @@ EOF
         {
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "bad-val",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val2-EOBJ4",
-              "name": "_key2-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key2-EOBJ4"
             }
           ],
           "data_digest": "0x04cfa72f",
@@ -2798,29 +4173,14 @@ EOF
           "data_digest": "0x04cfa72f",
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "val1-EOBJ4",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val2-EOBJ4",
-              "name": "_key2-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key2-EOBJ4"
             }
           ]
         },
@@ -2834,34 +4194,52 @@ EOF
           "data_digest": "0x04cfa72f",
           "attrs": [
             {
-              "Base64": true,
-              "value": "",
-              "name": "_"
-            },
-            {
               "Base64": false,
               "value": "val1-EOBJ4",
-              "name": "_key1-EOBJ4"
+              "name": "key1-EOBJ4"
             },
             {
               "Base64": false,
               "value": "val3-EOBJ4",
-              "name": "_key3-EOBJ4"
-            },
-            {
-              "Base64": true,
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "name": "hinfo_key"
-            },
-            {
-              "Base64": true,
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "name": "snapset"
+              "name": "key3-EOBJ4"
             }
           ]
         }
       ],
-      "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest s 7 uv 6 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ4",
+          "key": "",
+          "snapid": -2,
+          "hash": 1618759290,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "45'6",
+        "prior_version": "45'5",
+        "last_reqid": "client.4296.0:1",
+        "user_version": 6,
+        "size": 7,
+        "mtime": "2018-04-05 14:30:22.271983",
+        "local_mtime": "2018-04-05 14:30:22.272840",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -2887,6 +4265,40 @@ EOF
           "primary": false
         },
         {
+          "object_info": {
+            "oid": {
+              "oid": "EOBJ5",
+              "key": "",
+              "snapid": -2,
+              "hash": 2918945441,
+              "max": 0,
+              "pool": 3,
+              "namespace": ""
+            },
+            "version": "59'7",
+            "prior_version": "0'0",
+            "last_reqid": "client.4384.0:1",
+            "user_version": 7,
+            "size": 7,
+            "mtime": "2018-04-05 14:30:35.162395",
+            "local_mtime": "2018-04-05 14:30:35.166390",
+            "lost": 0,
+            "flags": [
+              "dirty",
+              "data_digest"
+            ],
+            "truncate_seq": 0,
+            "truncate_size": 0,
+            "data_digest": 769390837,
+            "omap_digest": 4294967295,
+            "expected_object_size": 0,
+            "expected_write_size": 0,
+            "alloc_hint_flags": 0,
+            "manifest": {
+              "type": 0
+            },
+            "watchers": {}
+          },
           "size": 4096,
           "shard": 0,
           "errors": [
@@ -2907,7 +4319,40 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest s 7 uv 7 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ5",
+          "key": "",
+          "snapid": -2,
+          "hash": 2918945441,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "59'7",
+        "prior_version": "0'0",
+        "last_reqid": "client.4384.0:1",
+        "user_version": 7,
+        "size": 7,
+        "mtime": "2018-04-05 14:30:35.162395",
+        "local_mtime": "2018-04-05 14:30:35.166390",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "union_shard_errors": [
         "size_mismatch_info",
         "ec_size_error",
@@ -2938,7 +4383,40 @@ EOF
         "hinfo_missing",
         "hinfo_corrupted"
       ],
-      "selected_object_info": "3:4e671bad:::EOBJ6:head(63'8 client.4434.0:1 dirty|data_digest s 7 uv 8 dd 2ddbf8f5 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ6",
+          "key": "",
+          "snapid": -2,
+          "hash": 3050890866,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "65'8",
+        "prior_version": "0'0",
+        "last_reqid": "client.4420.0:1",
+        "user_version": 8,
+        "size": 7,
+        "mtime": "2018-04-05 14:30:40.914673",
+        "local_mtime": "2018-04-05 14:30:40.917705",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 769390837,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "shards": [
         {
           "osd": 0,
@@ -2948,19 +4426,7 @@ EOF
             "read_error",
             "hinfo_missing"
           ],
-          "size": 2048,
-          "attrs": [
-            {
-              "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAPwAAAAAAAAAAAAAAAAAAAAICFQAAAAhSEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAA84+qWvTADR4CAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAADzj6pav3EfHvX42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
-            },
-            {
-              "name": "snapset",
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
-            }
-          ]
+          "size": 2048
         },
         {
           "osd": 1,
@@ -2971,23 +4437,7 @@ EOF
             "hinfo_corrupted"
           ],
           "size": 2048,
-          "attrs": [
-            {
-              "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAPwAAAAAAAAAAAAAAAAAAAAICFQAAAAhSEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAA84+qWvTADR4CAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAADzj6pav3EfHvX42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
-            },
-            {
-              "name": "hinfo_key",
-              "value": "bad-val",
-              "Base64": false
-            },
-            {
-              "name": "snapset",
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
-            }
-          ]
+          "hashinfo": "bad-val"
         },
         {
           "osd": 2,
@@ -2997,23 +4447,23 @@ EOF
           "size": 2048,
           "omap_digest": "0xffffffff",
           "data_digest": "0x04cfa72f",
-          "attrs": [
+          "hashinfo": {
+           "cumulative_shard_hashes": [
             {
-              "name": "_",
-              "value": "EQj+AAAABAMmAAAAAAAAAAUAAABFT0JKNv7/////////cubYtQAAAAAAAwAAAAAAAAAGAxwAAAADAAAAAAAAAP////8AAAAAAAAAAP//////////AAAAAAgAAAAAAAAAPwAAAAAAAAAAAAAAAAAAAAICFQAAAAhSEQAAAAAAAAEAAAAAAAAAAAAAAAcAAAAAAAAA84+qWvTADR4CAhUAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAABQAAADzj6pav3EfHvX42y3/////AAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
+              "hash": 80717615,
+              "shard": 0
             },
             {
-              "name": "hinfo_key",
-              "value": "AQEYAAAAAAgAAAAAAAADAAAAL6fPBLB8dlsvp88E",
-              "Base64": true
+              "hash": 1534491824,
+              "shard": 1
             },
             {
-              "name": "snapset",
-              "value": "AwIdAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
-              "Base64": true
+              "hash": 80717615,
+              "shard": 2
             }
-          ]
+           ],
+           "total_chunk_size": 2048
+          }
         }
       ]
     },
@@ -3031,7 +4481,40 @@ EOF
       "union_shard_errors": [
         "ec_hash_error"
       ],
-      "selected_object_info": "3:21a44c43:::EOBJ7:head(73'10 client.4498.0:1 dirty|data_digest s 34 uv 10 dd 136e4e27 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "EOBJ7",
+          "key": "",
+          "snapid": -2,
+          "hash": 3258066308,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "75'10",
+        "prior_version": "75'9",
+        "last_reqid": "client.4486.0:1",
+        "user_version": 10,
+        "size": 34,
+        "mtime": "2018-04-05 14:30:50.995009",
+        "local_mtime": "2018-04-05 14:30:50.996112",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 325996071,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "shards": [
         {
           "osd": 0,
@@ -3041,7 +4524,23 @@ EOF
             "ec_hash_error"
           ],
           "size": 2048,
-          "hashinfo": "tcs=2048 4cfa72f 5b767cb0 4cfa72f"
+          "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 80717615,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 80717615,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+         }
         },
         {
           "osd": 1,
@@ -3051,7 +4550,23 @@ EOF
           "size": 2048,
           "omap_digest": "0xffffffff",
           "data_digest": "0x5b7455a8",
-          "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8"
+          "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 1534350760,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 1534350760,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+          }
         },
         {
           "osd": 2,
@@ -3061,7 +4576,23 @@ EOF
           "size": 2048,
           "omap_digest": "0xffffffff",
           "data_digest": "0x5b7455a8",
-          "hashinfo": "tcs=2048 5b7455a8 5b767cb0 5b7455a8"
+          "hashinfo": {
+           "cumulative_shard_hashes": [
+            {
+              "hash": 1534350760,
+              "shard": 0
+            },
+            {
+              "hash": 1534491824,
+              "shard": 1
+            },
+            {
+              "hash": 1534350760,
+              "shard": 2
+            }
+           ],
+           "total_chunk_size": 2048
+          }
         }
       ]
     }
@@ -3072,7 +4603,7 @@ EOF
 
     fi
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
     diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then
@@ -3256,7 +4787,7 @@ function TEST_corrupt_snapset_scrub_rep() {
 
     rados list-inconsistent-obj $pg > $dir/json || return 1
 
-    jq "$jqfilter" << EOF | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/checkcsjson
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python -c "$sortkeys" > $dir/checkcsjson
 {
   "epoch": 34,
   "inconsistents": [
@@ -3272,21 +4803,78 @@ function TEST_corrupt_snapset_scrub_rep() {
         "snapset_inconsistency"
       ],
       "union_shard_errors": [],
-      "selected_object_info": "3:ce3f1d6a:::ROBJ1:head(27'8 client.4143.0:1 dirty|omap|data_digest s 21 uv 8 dd 53acb008 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ1",
+          "key": "",
+          "snapid": -2,
+          "hash": 1454963827,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "24'8",
+        "prior_version": "21'3",
+        "last_reqid": "client.4195.0:1",
+        "user_version": 8,
+        "size": 21,
+        "mtime": "2018-04-05 14:35:43.286117",
+        "local_mtime": "2018-04-05 14:35:43.288990",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 1403826184,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "shards": [
         {
           "osd": 0,
           "primary": false,
           "errors": [],
           "size": 21,
-          "snapset": "1=[1]:{1=[1]}"
+          "snapset": {
+            "clones": [
+              {
+                "overlap": "[]",
+                "size": 7,
+                "snap": 1,
+                "snaps": [
+                  1
+                ]
+              }
+            ],
+            "snap_context": {
+              "seq": 1,
+              "snaps": [
+                1
+              ]
+            }
+          }
         },
         {
           "osd": 1,
           "primary": true,
           "errors": [],
           "size": 21,
-          "snapset": "0=[]:{1=[1]}"
+          "snapset": {
+            "clones": [],
+            "snap_context": {
+              "seq": 0,
+              "snaps": []
+            }
+          }
         }
       ]
     },
@@ -3302,21 +4890,78 @@ function TEST_corrupt_snapset_scrub_rep() {
         "snapset_inconsistency"
       ],
       "union_shard_errors": [],
-      "selected_object_info": "3:e97ce31e:::ROBJ2:head(31'10 client.4155.0:1 dirty|omap|data_digest s 21 uv 10 dd 53acb008 alloc_hint [0 0 0])",
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ2",
+          "key": "",
+          "snapid": -2,
+          "hash": 2026323607,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "28'10",
+        "prior_version": "23'6",
+        "last_reqid": "client.4223.0:1",
+        "user_version": 10,
+        "size": 21,
+        "mtime": "2018-04-05 14:35:48.326856",
+        "local_mtime": "2018-04-05 14:35:48.328097",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": 1403826184,
+        "omap_digest": 4294967295,
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
       "shards": [
         {
           "osd": 0,
           "primary": false,
           "errors": [],
           "size": 21,
-          "snapset": "0=[]:{1=[1]}"
+          "snapset": {
+            "clones": [],
+            "snap_context": {
+              "seq": 0,
+              "snaps": []
+            }
+          }
         },
         {
           "osd": 1,
           "primary": true,
           "errors": [],
           "size": 21,
-          "snapset": "1=[1]:{1=[1]}"
+          "snapset": {
+            "clones": [
+              {
+                "overlap": "[]",
+                "size": 7,
+                "snap": 1,
+                "snaps": [
+                  1
+                ]
+              }
+            ],
+            "snap_context": {
+              "seq": 1,
+              "snaps": [
+                1
+              ]
+            }
+          }
         }
       ]
     }
@@ -3324,7 +4969,7 @@ function TEST_corrupt_snapset_scrub_rep() {
 }
 EOF
 
-    jq "$jqfilter" $dir/json | python -c "$sortkeys" | sed -e "$sedfilter" > $dir/csjson
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python -c "$sortkeys" > $dir/csjson
     diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
     if test $getjson = "yes"
     then

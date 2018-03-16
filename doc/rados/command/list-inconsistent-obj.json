@@ -50,7 +50,9 @@
             ]
           },
           "selected_object_info": {
-              "type": "string"
+              "type": "object",
+              "description": "Selected object information",
+              "additionalProperties": true
           },
           "union_shard_errors": {
             "description": "Union of all shard errors",
@@ -103,7 +105,40 @@
               "type": "object",
               "properties": {
                 "object_info": {
-                  "type": "string"
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "description": "Object information",
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "snapset": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "description": "Snap set information",
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "hashinfo": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "description": "Erasure code hash information",
+                      "additionalProperties": true
+                    }
+                  ]
                 },
                 "shard": {
                   "type": "integer"
@@ -172,11 +207,11 @@
                       "value",
                       "Base64"
                     ],
-                    "additionalProperties": false,
-                    "minItems": 1
+                    "additionalProperties": false
                   }
                 }
               },
+              "additionalProperties": false,
               "required": [
                 "osd",
                 "primary",

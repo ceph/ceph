@@ -5200,7 +5200,11 @@ void object_info_t::dump(Formatter *f) const
   f->dump_stream("mtime") << mtime;
   f->dump_stream("local_mtime") << local_mtime;
   f->dump_unsigned("lost", (int)is_lost());
-  f->dump_unsigned("flags", (int)flags);
+  vector<string> sv = get_flag_vector(flags);
+  f->open_array_section("flags");
+  for (auto str: sv)
+    f->dump_string("flags", str);
+  f->close_section();
   f->dump_unsigned("truncate_seq", truncate_seq);
   f->dump_unsigned("truncate_size", truncate_size);
   f->dump_unsigned("data_digest", data_digest);
