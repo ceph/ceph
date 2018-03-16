@@ -1326,12 +1326,12 @@ static void dump_errors(const err_t &err, Formatter &f, const char *name)
     f.dump_string("error", "stat_error");
   if (err.has_read_error())
     f.dump_string("error", "read_error");
-  if (err.has_data_digest_mismatch_oi())
-    f.dump_string("error", "data_digest_mismatch_oi");
-  if (err.has_omap_digest_mismatch_oi())
-    f.dump_string("error", "omap_digest_mismatch_oi");
-  if (err.has_size_mismatch_oi())
-    f.dump_string("error", "size_mismatch_oi");
+  if (err.has_data_digest_mismatch_info())
+    f.dump_string("error", "data_digest_mismatch_info");
+  if (err.has_omap_digest_mismatch_info())
+    f.dump_string("error", "omap_digest_mismatch_info");
+  if (err.has_size_mismatch_info())
+    f.dump_string("error", "size_mismatch_info");
   if (err.has_ec_hash_error())
     f.dump_string("error", "ec_hash_error");
   if (err.has_ec_size_error())
@@ -1340,8 +1340,8 @@ static void dump_errors(const err_t &err, Formatter &f, const char *name)
     f.dump_string("error", "info_missing");
   if (err.has_info_corrupted())
     f.dump_string("error", "info_corrupted");
-  if (err.has_obj_size_oi_mismatch())
-    f.dump_string("error", "obj_size_oi_mismatch");
+  if (err.has_obj_size_info_mismatch())
+    f.dump_string("error", "obj_size_info_mismatch");
   if (err.has_snapset_missing())
     f.dump_string("error", "snapset_missing");
   if (err.has_snapset_corrupted())
