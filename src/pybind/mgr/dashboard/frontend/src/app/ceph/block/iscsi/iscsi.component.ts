@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { ListPipe } from '../../../shared/pipes/list.pipe';
 import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
@@ -21,7 +21,6 @@ export class IscsiComponent {
 
   constructor(private tcmuIscsiService: TcmuIscsiService,
               cephShortVersionPipe: CephShortVersionPipe,
-              dimlessBinaryPipe: DimlessBinaryPipe,
               dimlessPipe: DimlessPipe,
               relativeDatePipe: RelativeDatePipe,
               listPipe: ListPipe) {
@@ -65,23 +64,25 @@ export class IscsiComponent {
       },
       {
         name: 'Read Bytes',
-        prop: 'stats.rd_bytes',
-        pipe: dimlessBinaryPipe
+        prop: 'stats_history.rd_bytes',
+        cellTransformation: CellTemplate.sparkline
       },
       {
         name: 'Write Bytes',
-        prop: 'stats.wr_bytes',
-        pipe: dimlessBinaryPipe
+        prop: 'stats_history.wr_bytes',
+        cellTransformation: CellTemplate.sparkline
       },
       {
         name: 'Read Ops',
         prop: 'stats.rd',
-        pipe: dimlessPipe
+        pipe: dimlessPipe,
+        cellTransformation: CellTemplate.perSecond
       },
       {
         name: 'Write Ops',
         prop: 'stats.wr',
-        pipe: dimlessPipe
+        pipe: dimlessPipe,
+        cellTransformation: CellTemplate.perSecond
       },
       {
         name: 'A/O Since',
@@ -96,6 +97,11 @@ export class IscsiComponent {
     this.tcmuIscsiService.tcmuiscsi().then((resp) => {
       this.daemons = resp.daemons;
       this.images = resp.images;
+      this.images.map((image) => {
+        image.stats_history.rd_bytes = image.stats_history.rd_bytes.map(i => i[1]);
+        image.stats_history.wr_bytes = image.stats_history.wr_bytes.map(i => i[1]);
+        return image;
+      });
     });
   }
 
