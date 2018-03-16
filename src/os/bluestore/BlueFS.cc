@@ -75,36 +75,36 @@ void BlueFS::_init_logger()
   PerfCountersBuilder b(cct, "bluefs",
                         l_bluefs_first, l_bluefs_last);
   b.add_u64_counter(l_bluefs_gift_bytes, "gift_bytes",
-		    "Bytes gifted from BlueStore");
+		    "Bytes gifted from BlueStore", NULL, 0, unit_t(BYTES));
   b.add_u64_counter(l_bluefs_reclaim_bytes, "reclaim_bytes",
-		    "Bytes reclaimed by BlueStore");
+		    "Bytes reclaimed by BlueStore", NULL, 0, unit_t(BYTES));
   b.add_u64(l_bluefs_db_total_bytes, "db_total_bytes",
 	    "Total bytes (main db device)",
-	    "b", PerfCountersBuilder::PRIO_USEFUL);
+	    "b", PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   b.add_u64(l_bluefs_db_used_bytes, "db_used_bytes",
 	    "Used bytes (main db device)",
-	    "u", PerfCountersBuilder::PRIO_USEFUL);
+	    "u", PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   b.add_u64(l_bluefs_wal_total_bytes, "wal_total_bytes",
 	    "Total bytes (wal device)",
-	    "walb", PerfCountersBuilder::PRIO_USEFUL);
+	    "walb", PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   b.add_u64(l_bluefs_wal_used_bytes, "wal_used_bytes",
 	    "Used bytes (wal device)",
-	    "walu", PerfCountersBuilder::PRIO_USEFUL);
+	    "walu", PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   b.add_u64(l_bluefs_slow_total_bytes, "slow_total_bytes",
 	    "Total bytes (slow device)",
-	    "slob", PerfCountersBuilder::PRIO_USEFUL);
+	    "slob", PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   b.add_u64(l_bluefs_slow_used_bytes, "slow_used_bytes",
 	    "Used bytes (slow device)",
-	    "slou", PerfCountersBuilder::PRIO_USEFUL);
+	    "slou", PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   b.add_u64(l_bluefs_num_files, "num_files", "File count",
 	    "f", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluefs_log_bytes, "log_bytes", "Size of the metadata log",
-	    "jlen", PerfCountersBuilder::PRIO_INTERESTING);
+	    "jlen", PerfCountersBuilder::PRIO_INTERESTING, unit_t(BYTES));
   b.add_u64_counter(l_bluefs_log_compactions, "log_compactions",
 		    "Compactions of the metadata log");
   b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes",
 		    "Bytes written to the metadata log", "j",
-		    PerfCountersBuilder::PRIO_CRITICAL);
+		    PerfCountersBuilder::PRIO_CRITICAL, unit_t(BYTES));
   b.add_u64_counter(l_bluefs_files_written_wal, "files_written_wal",
 		    "Files written to WAL");
   b.add_u64_counter(l_bluefs_files_written_sst, "files_written_sst",
@@ -114,7 +114,7 @@ void BlueFS::_init_logger()
 		    PerfCountersBuilder::PRIO_CRITICAL);
   b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
 		    "Bytes written to SSTs", "sst",
-		    PerfCountersBuilder::PRIO_CRITICAL);
+		    PerfCountersBuilder::PRIO_CRITICAL, unit_t(BYTES));
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -148,7 +148,7 @@ void BlueFS::_update_logger_stats()
   }
 }
 
-int BlueFS::add_block_device(unsigned id, const string& path)
+int BlueFS::add_block_device(unsigned id, const string& path, bool trim)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   assert(id < bdev.size());
@@ -159,6 +159,10 @@ int BlueFS::add_block_device(unsigned id, const string& path)
     delete b;
     return r;
   }
+  if (trim) {
+    b->discard(0, b->get_size());
+  }
+
   dout(1) << __func__ << " bdev " << id << " path " << path
 	  << " size " << pretty_si_t(b->get_size()) << "B" << dendl;
   bdev[id] = b;
@@ -218,12 +222,12 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   assert(got != 0);
   if (got < (int64_t)want) {
     alloc[id]->unreserve(want - std::max<int64_t>(0, got));
-  }
-  if (got < 0) {
-    derr << __func__ << " failed to allocate space to return to bluestore"
-	 << dendl;
-    alloc[id]->dump();
-    return got;
+    if (got < 0) {
+      derr << __func__ << " failed to allocate space to return to bluestore"
+	<< dendl;
+      alloc[id]->dump();
+      return got;
+    }
   }
 
   for (auto& p : *extents) {
@@ -235,8 +239,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
   r = _flush_and_sync_log(l);
   assert(r == 0);
 
-  if (logger)
-    logger->inc(l_bluefs_reclaim_bytes, got);
+  logger->inc(l_bluefs_reclaim_bytes, got);
   dout(1) << __func__ << " bdev " << id << " want 0x" << std::hex << want
 	  << " got " << *extents << dendl;
   return 0;
@@ -873,7 +876,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
         {
 	  bluefs_fnode_t fnode;
 	  decode(fnode, p);
-	  fnode.recalc_allocated();
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_file_update " << " " << fnode << dendl;
           if (unlikely(to_stdout)) {
@@ -1260,19 +1262,15 @@ void BlueFS::_compact_log_sync()
   mempool::bluefs::vector<bluefs_extent_t> old_extents;
   uint64_t old_allocated = 0;
   log_file->fnode.swap_extents(old_extents, old_allocated);
-  while (log_file->fnode.get_allocated() < need) {
-    int r = _allocate(log_file->fnode.prefer_bdev,
-		      need - log_file->fnode.get_allocated(),
-		      &log_file->fnode);
-    assert(r == 0);
-  }
+  int r = _allocate(log_file->fnode.prefer_bdev, need, &log_file->fnode);
+  assert(r == 0);
 
   _close_writer(log_writer);
 
   log_file->fnode.size = bl.length();
   log_writer = _create_writer(log_file);
   log_writer->append(bl);
-  int r = _flush(log_writer, true);
+  r = _flush(log_writer, true);
   assert(r == 0);
 #ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
@@ -1342,15 +1340,11 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 
   // 1. allocate new log space and jump to it.
   old_log_jump_to = log_file->fnode.get_allocated();
-  uint64_t need = old_log_jump_to + cct->_conf->bluefs_max_log_runway;
   dout(10) << __func__ << " old_log_jump_to 0x" << std::hex << old_log_jump_to
-           << " need 0x" << need << std::dec << dendl;
-  while (log_file->fnode.get_allocated() < need) {
-    int r = _allocate(log_file->fnode.prefer_bdev,
-		      cct->_conf->bluefs_max_log_runway,
-		      &log_file->fnode);
-    assert(r == 0);
-  }
+           << " need 0x" << (old_log_jump_to + cct->_conf->bluefs_max_log_runway) << std::dec << dendl;
+  int r = _allocate(log_file->fnode.prefer_bdev,
+		    cct->_conf->bluefs_max_log_runway, &log_file->fnode);
+  assert(r == 0);
   dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
 
   // update the log file change and log a jump to the offset where we want to
@@ -1381,7 +1375,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 	   << std::dec << dendl;
 
   // allocate
-  int r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
+  r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
                     &new_log->fnode);
   assert(r == 0);
   new_log_writer = _create_writer(new_log);
@@ -2448,7 +2442,10 @@ int BlueFS::unlink(const string& dirname, const string& filename)
 
 bool BlueFS::wal_is_rotational()
 {
-  if (!bdev[BDEV_WAL] || bdev[BDEV_WAL]->is_rotational())
-    return true;
-  return false;
+  if (bdev[BDEV_WAL]) {
+    return bdev[BDEV_WAL]->is_rotational();
+  } else if (bdev[BDEV_DB]) {
+    return bdev[BDEV_DB]->is_rotational();
+  }
+  return bdev[BDEV_SLOW]->is_rotational();
 }

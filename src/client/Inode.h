@@ -306,7 +306,7 @@ struct Inode {
   bool cap_is_valid(const Cap &cap) const;
   int caps_issued(int *implemented = 0) const;
   void try_touch_cap(mds_rank_t mds);
-  bool caps_issued_mask(unsigned mask);
+  bool caps_issued_mask(unsigned mask, bool allow_impl=false);
   int caps_used();
   int caps_file_wanted();
   int caps_wanted();

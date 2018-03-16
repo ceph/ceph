@@ -10,6 +10,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ObjectDispatcher.h"
 #include "librbd/operation/ResizeRequest.h"
 #include "osdc/Striper.h"
 #include <boost/lambda/bind.hpp>
@@ -277,9 +278,6 @@ Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
   I &image_ctx = this->m_image_ctx;
 
   apply();
-  if (image_ctx.object_cacher == NULL) {
-    return this->create_context_finisher(0);
-  }
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -288,7 +286,7 @@ Context *SnapshotRollbackRequest<I>::send_invalidate_cache() {
   Context *ctx = create_context_callback<
     SnapshotRollbackRequest<I>,
     &SnapshotRollbackRequest<I>::handle_invalidate_cache>(this);
-  image_ctx.invalidate_cache(true, ctx);
+  image_ctx.io_object_dispatcher->invalidate_cache(ctx);
   return nullptr;
 }
 

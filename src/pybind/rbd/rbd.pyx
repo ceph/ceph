@@ -185,7 +185,7 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef struct rbd_group_image_info_t:
         char *name
-        uint64_t pool
+        int64_t pool
         rbd_group_image_state_t state
 
     ctypedef enum rbd_group_snap_state_t:
@@ -413,6 +413,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_group_create(rados_ioctx_t p, const char *name)
     int rbd_group_remove(rados_ioctx_t p, const char *name)
     int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
+    int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
     void rbd_group_info_cleanup(rbd_group_info_t *group_info,
                                 size_t group_info_size)
     int rbd_group_image_add(rados_ioctx_t group_p, const char *group_name,
@@ -1409,6 +1410,32 @@ class RBD(object):
                     if name]
         finally:
             free(c_names)
+
+    def group_rename(self, ioctx, src, dest):
+        """
+        Rename an RBD group.
+
+        :param ioctx: determines which RADOS pool the group is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param src: the current name of the group
+        :type src: str
+        :param dest: the new name of the group
+        :type dest: str
+        :raises: :class:`ObjectExists`
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        src = cstr(src, 'src')
+        dest = cstr(dest, 'dest')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_src = src
+            char *_dest = dest
+        with nogil:
+            ret = rbd_group_rename(_ioctx, _src, _dest)
+        if ret != 0:
+            raise make_ex(ret, 'error renaming group')
 
 cdef class MirrorPeerIterator(object):
     """
@@ -3130,7 +3157,7 @@ written." % (self.name, ret, length))
 
     def aio_flush(self, oncomplete):
         """
-        Asyncronously wait until all writes are fully flushed if caching is
+        Asynchronously wait until all writes are fully flushed if caching is
         enabled.
         """
 
@@ -3626,7 +3653,6 @@ cdef class GroupImageIterator(object):
                                            &self.num_images)
 
             if ret >= 0:
-                self.num_images = ret
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing images for group %s' % (group.name,), group_errno_to_exception)
@@ -3676,7 +3702,7 @@ cdef class GroupSnapIterator(object):
                                           sizeof(rbd_group_snap_info_t),
                                           &self.num_snaps)
 
-            if ret == 0:
+            if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
                 raise make_ex(ret, 'error listing snapshots for group %s' % (group.name,), group_errno_to_exception)

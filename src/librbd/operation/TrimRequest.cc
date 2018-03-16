@@ -8,7 +8,8 @@
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
-#include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ObjectDispatchSpec.h"
+#include "librbd/io/ObjectDispatcher.h"
 #include "common/ContextCompletion.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -45,10 +46,11 @@ public:
     string oid = image_ctx.get_object_name(m_object_no);
     ldout(image_ctx.cct, 10) << "removing (with copyup) " << oid << dendl;
 
-    auto req = io::ObjectRequest<I>::create_discard(
-      &image_ctx, oid, m_object_no, 0, image_ctx.layout.object_size, m_snapc,
-      false, false, {}, this);
-    req->send();
+    auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
+      &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, oid, m_object_no, 0,
+      image_ctx.layout.object_size, m_snapc,
+      io::OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, 0, {}, this);
+    object_dispatch_spec->send();
     return 0;
   }
 private:
@@ -343,11 +345,11 @@ void TrimRequest<I>::send_clean_boundary() {
       // treat as a full object delete on the boundary
       p->length = image_ctx.layout.object_size;
     }
-    auto req = io::ObjectRequest<I>::create_discard(&image_ctx, p->oid.name,
-                                                    p->objectno, p->offset,
-                                                    p->length, snapc, false,
-                                                    true, {}, req_comp);
-    req->send();
+
+    auto object_dispatch_spec = io::ObjectDispatchSpec::create_discard(
+      &image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, p->oid.name, p->objectno,
+      p->offset, p->length, snapc, 0, 0, {}, req_comp);
+    object_dispatch_spec->send();
   }
   completion->finish_adding_requests();
 }

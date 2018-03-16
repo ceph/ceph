@@ -451,7 +451,6 @@ set(libcommon_files
   common/types.cc
   common/iso_8601.cc
   log/Log.cc
-  log/SubsystemMap.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
@@ -940,7 +939,6 @@ install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_SOURCE_DIR}/src/ceph-run
-  ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
   ${CMAKE_SOURCE_DIR}/src/ceph-clsinfo
   DESTINATION bin)
 install(PROGRAMS

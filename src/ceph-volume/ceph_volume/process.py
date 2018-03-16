@@ -9,6 +9,15 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def which(executable):
+    """
+    Proxy function to ceph_volume.util.system.which because the ``system``
+    module does import ``process``
+    """
+    from ceph_volume.util import system
+    return system.which(executable)
+
+
 def log_output(descriptor, message, terminal_logging, logfile_logging):
     """
     log output to both the logger and the terminal if terminal_logging is
@@ -99,6 +108,8 @@ def run(command, **kw):
     :param stop_on_error: If a nonzero exit status is return, it raises a ``RuntimeError``
     :param fail_msg: If a nonzero exit status is returned this message will be included in the log
     """
+    executable = which(command.pop(0))
+    command.insert(0, executable)
     stop_on_error = kw.pop('stop_on_error', True)
     command_msg = obfuscate(command, kw.pop('obfuscate', None))
     fail_msg = kw.pop('fail_msg', None)
@@ -163,6 +174,8 @@ def call(command, **kw):
                              it is forcefully set to True if a return code is non-zero
     :param logfile_verbose: Log stderr/stdout output to log file. Defaults to True
     """
+    executable = which(command.pop(0))
+    command.insert(0, executable)
     terminal_verbose = kw.pop('terminal_verbose', False)
     logfile_verbose = kw.pop('logfile_verbose', True)
     show_command = kw.pop('show_command', False)

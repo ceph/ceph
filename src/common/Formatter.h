@@ -169,7 +169,6 @@ namespace ceph {
     void open_section_in_ns(const char *name, const char *ns, const FormatterAttrs *attrs);
     void finish_pending_string();
     void print_spaces();
-    static std::string escape_xml_str(std::string_view str);
     void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
     char to_lower_underscore(char c) const;
 

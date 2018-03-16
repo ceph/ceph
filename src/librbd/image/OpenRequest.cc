@@ -7,6 +7,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/cache/ObjectCacherObjectDispatch.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/SetSnapRequest.h"
@@ -174,7 +175,7 @@ Context *OpenRequest<I>::handle_v2_get_name(int *result) {
     *result = cls_client::dir_get_name_finish(&it, &m_image_ctx->name);
   }
   if (*result < 0 && *result != -ENOENT) {
-    lderr(cct) << "failed to retreive name: "
+    lderr(cct) << "failed to retrieve name: "
                << cpp_strerror(*result) << dendl;
     send_close_image(*result);
   } else if (*result == -ENOENT) {
@@ -223,7 +224,7 @@ Context *OpenRequest<I>::handle_v2_get_name_from_trash(int *result) {
       ldout(cct, 5) << "failed to retrieve name for image id "
                     << m_image_ctx->id << dendl;
     } else {
-      lderr(cct) << "failed to retreive name from trash: "
+      lderr(cct) << "failed to retrieve name from trash: "
                  << cpp_strerror(*result) << dendl;
     }
     send_close_image(*result);
@@ -265,7 +266,7 @@ Context *OpenRequest<I>::handle_v2_get_initial_metadata(int *result) {
       &it, &m_image_ctx->object_prefix, &m_image_ctx->order, &m_image_ctx->features);
   }
   if (*result < 0) {
-    lderr(cct) << "failed to retreive initial metadata: "
+    lderr(cct) << "failed to retrieve initial metadata: "
                << cpp_strerror(*result) << dendl;
     send_close_image(*result);
     return nullptr;
@@ -441,7 +442,28 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
     return nullptr;
   }
 
-  m_image_ctx->init_cache();
+  return send_init_cache(result);
+}
+
+template <typename I>
+Context *OpenRequest<I>::send_init_cache(int *result) {
+  // cache is disabled or parent image context
+  if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
+    return send_register_watch(result);
+  }
+
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  auto cache = cache::ObjectCacherObjectDispatch<I>::create(m_image_ctx);
+  cache->init();
+
+  // readahead requires the cache
+  m_image_ctx->readahead.set_trigger_requests(
+    m_image_ctx->readahead_trigger_requests);
+  m_image_ctx->readahead.set_max_readahead_size(
+    m_image_ctx->readahead_max_bytes);
+
   return send_register_watch(result);
 }
 

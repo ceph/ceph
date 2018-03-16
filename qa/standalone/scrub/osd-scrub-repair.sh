@@ -2797,14 +2797,14 @@ function TEST_corrupt_snapset_scrub_rep() {
 
     local pg=$(get_pg $poolname ROBJ0)
 
+    rados -p $poolname mksnap snap1
+    echo -n head_of_snapshot_data > $dir/change
+
     for i in $(seq 1 $total_objs) ; do
         objname=ROBJ${i}
 
         # Alternate corruption between osd.0 and osd.1
         local osd=$(expr $i % 2)
-
-        rados -p $poolname mksnap snap1
-        echo -n head_of_snapshot_data > $dir/change
 
         case $i in
         1)

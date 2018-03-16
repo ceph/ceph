@@ -213,7 +213,7 @@ int RGWRESTSimpleRequest::sign_request(RGWAccessKey& key, RGWEnv& env, req_info&
     return 0;
   }
 
-  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (const auto& i: env.get_map()) {
       ldout(cct, 20) << "> " << i.first << " -> " << rgw::crypt_sanitize::x_meta_map{i.first, i.second} << dendl;
     }

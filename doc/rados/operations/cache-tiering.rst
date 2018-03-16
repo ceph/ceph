@@ -88,7 +88,7 @@ extreme caution before using this feature.
 
 * *librados object enumeration*: The librados-level object enumeration
   API is not meant to be coherent in the presence of the case.  If
-  your applicatoin is using librados directly and relies on object
+  your application is using librados directly and relies on object
   enumeration, cache tiering will probably not work as expected.
   (This is not a problem for RGW, RBD, or CephFS.)
 

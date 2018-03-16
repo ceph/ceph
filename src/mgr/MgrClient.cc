@@ -174,6 +174,8 @@ void MgrClient::_send_open()
       open->service_daemon = service_daemon;
       open->daemon_metadata = daemon_metadata;
     }
+    cct->_conf->get_config_bl(0, &open->config_bl, &last_config_bl_version);
+    cct->_conf->get_defaults_bl(&open->config_defaults_bl);
     session->con->send_message(open);
   }
 }
@@ -292,7 +294,8 @@ void MgrClient::send_report()
 	  type.nick = data.nick;
 	}
 	type.type = data.type;
-        type.priority = perf_counters.get_adjusted_priority(data.prio);
+       type.priority = perf_counters.get_adjusted_priority(data.prio);
+	type.unit = data.unit;
 	report->declare_types.push_back(std::move(type));
 	session->declared.insert(path);
       }
@@ -327,6 +330,10 @@ void MgrClient::send_report()
   }
 
   report->osd_health_metrics = std::move(osd_health_metrics);
+
+  cct->_conf->get_config_bl(last_config_bl_version, &report->config_bl,
+			    &last_config_bl_version);
+
   session->con->send_message(report);
 }
 

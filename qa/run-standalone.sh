@@ -12,14 +12,33 @@ if [ ! -d $TEMP_DIR/ceph-disk-virtualenv -o ! -d $TEMP_DIR/ceph-detect-init-virt
     exit 1
 fi
 
+function get_cmake_variable() {
+    local variable=$1
+    grep "$variable" CMakeCache.txt | cut -d "=" -f 2
+}
+
+function get_python_path() {
+    local ceph_lib=$1
+    shift
+    local py_ver=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
+    if [ -z "${py_ver}" ]; then
+        if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
+            py_ver=2
+        else
+            py_ver=3
+        fi
+    fi
+    echo $(realpath ../src/pybind):$ceph_lib/cython_modules/lib.$py_ver
+}
+
 if [ `uname` = FreeBSD ]; then
     # otherwise module prettytable will not be found
-    export PYTHONPATH=/usr/local/lib/python2.7/site-packages
+    export PYTHONPATH=$(get_python_path):/usr/local/lib/python2.7/site-packages
     exec_mode=+111
     KERNCORE="kern.corefile"
     COREPATTERN="core.%N.%P"
 else
-    export PYTHONPATH=/usr/lib/python2.7/dist-packages
+    export PYTHONPATH=$(get_python_path)
     exec_mode=/111
     KERNCORE="kernel.core_pattern"
     COREPATTERN="core.%e.%p.%t"

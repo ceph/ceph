@@ -125,6 +125,9 @@ static int parse_map_options(const std::string &options_string)
     } else if (!strcmp(this_char, "mount_timeout")) {
       if (put_map_option_value("mount_timeout", value_char, map_option_int_cb))
         return -EINVAL;
+    } else if (!strcmp(this_char, "osd_request_timeout")) {
+      if (put_map_option_value("osd_request_timeout", value_char, map_option_int_cb))
+        return -EINVAL;
     } else if (!strcmp(this_char, "osdkeepalive")) {
       if (put_map_option_value("osdkeepalive", value_char, map_option_int_cb))
         return -EINVAL;
@@ -323,7 +326,7 @@ static int do_kernel_map(const char *poolname, const char *imgname,
 
   r = krbd_is_mapped(krbd, poolname, imgname, snapname, &devnode);
   if (r < 0) {
-    std::cerr << "rbd: warning: can't get image map infomation: "
+    std::cerr << "rbd: warning: can't get image map information: "
 	      << cpp_strerror(r) << std::endl;
   } else if (r > 0) {
     std::cerr << "rbd: warning: image already mapped as " << devnode

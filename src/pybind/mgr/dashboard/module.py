@@ -870,7 +870,7 @@ class Module(MgrModule):
                     counter["description"] = value["description"]
                     if global_instance()._stattype_to_str(value["type"]) == 'counter':
                         counter["value"] = global_instance().get_rate(service_type, service_id, key)
-                        counter["unit"]  = "/s"
+                        counter["unit"]  = global_instance()._unit_to_str(value["units"])
                     else:
                         counter["value"] = global_instance().get_latest(service_type, service_id, key)
                         counter["unit"] = ""

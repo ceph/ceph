@@ -139,6 +139,10 @@ ACTION_P2(QueueContext, r, wq) {
   wq->queue(arg0, r);
 }
 
+ACTION_P(Notify, ctx) {
+  ctx->complete(0);
+}
+
 namespace librbd {
 
 using ::testing::_;

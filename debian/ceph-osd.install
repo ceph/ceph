@@ -1,5 +1,8 @@
 lib/udev/rules.d/60-ceph-by-parttypeuuid.rules
 lib/udev/rules.d/95-ceph-osd.rules
+lib/systemd/system/ceph-disk@.service
+lib/systemd/system/ceph-osd*
+lib/systemd/system/ceph-volume@.service
 usr/bin/ceph-bluestore-tool
 usr/bin/ceph-clsinfo
 usr/bin/ceph-objectstore-tool

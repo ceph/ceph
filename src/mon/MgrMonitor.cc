@@ -510,13 +510,13 @@ void MgrMonitor::tick()
 
   const auto now = ceph::coarse_mono_clock::now();
 
-  const auto mgr_beacon_grace = std::chrono::seconds(
-      g_conf->get_val<int64_t>("mon_mgr_beacon_grace"));
+  const auto mgr_beacon_grace =
+      g_conf->get_val<std::chrono::seconds>("mon_mgr_beacon_grace");
 
   // Note that this is the mgr daemon's tick period, not ours (the
   // beacon is sent with this period).
-  const auto mgr_tick_period = std::chrono::seconds(
-      g_conf->get_val<int64_t>("mgr_tick_period"));
+  const auto mgr_tick_period =
+      g_conf->get_val<std::chrono::seconds>("mgr_tick_period");
 
   if (last_tick != ceph::coarse_mono_clock::time_point::min()
       && (now - last_tick > (mgr_beacon_grace - mgr_tick_period))) {
@@ -932,7 +932,7 @@ void MgrMonitor::on_shutdown()
 }
 
 int MgrMonitor::load_metadata(const string& name, std::map<string, string>& m,
-			      ostream *err)
+			      ostream *err) const
 {
   bufferlist bl;
   int r = mon->store->get(MGR_METADATA_PREFIX, name, bl);
@@ -985,6 +985,28 @@ int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
     f->dump_string(p.first.c_str(), p.second);
   }
   return 0;
+}
+
+void MgrMonitor::print_nodes(Formatter *f) const
+{
+  assert(f);
+
+  std::map<string, list<string> > mgrs; // hostname => mgr
+  auto ls = map.get_all_names();
+  for (auto& name : ls) {
+    std::map<string,string> meta;
+    if (load_metadata(name, meta, nullptr)) {
+      continue;
+    }
+    auto hostname = meta.find("hostname");
+    if (hostname == meta.end()) {
+      // not likely though
+      continue;
+    }
+    mgrs[hostname->second].push_back(name);
+  }
+
+  dump_services(f, mgrs, "mgr");
 }
 
 const std::vector<MonCommand> &MgrMonitor::get_command_descs() const

@@ -994,10 +994,10 @@ static void update_olh_log(struct rgw_bucket_olh_entry& olh_data_entry, OLHLogOp
 
 static string escape_str(const string& s)
 {
-   int len = escape_json_attr_len(s.c_str(), s.size());
-   char escaped[len];
-   escape_json_attr(s.c_str(), s.size(), escaped);
-   return string(escaped);
+  int len = escape_json_attr_len(s.c_str(), s.size());
+  std::string escaped(len, 0);
+  escape_json_attr(s.c_str(), s.size(), escaped.data());
+  return escaped;
 }
 
 static int write_obj_instance_entry(cls_method_context_t hctx, struct rgw_bucket_dir_entry& instance_entry, const string& instance_idx)
@@ -2500,7 +2500,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   bool more;
   int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries, &more); 
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: %s(): list_plain_entries retured ret=%d", __func__, ret);
+    CLS_LOG(0, "ERROR: %s(): list_plain_entries returned ret=%d", __func__, ret);
     return ret;
   }
   int count = ret;
@@ -2510,7 +2510,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   if (!more) {
     ret = list_instance_entries(hctx, op.name, op.marker, max - count, &op_ret.entries, &more);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s(): list_instance_entries retured ret=%d", __func__, ret);
+      CLS_LOG(0, "ERROR: %s(): list_instance_entries returned ret=%d", __func__, ret);
       return ret;
     }
 
@@ -2520,7 +2520,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   if (!more) {
     ret = list_olh_entries(hctx, op.name, op.marker, max - count, &op_ret.entries, &more);
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: %s(): list_olh_entries retured ret=%d", __func__, ret);
+      CLS_LOG(0, "ERROR: %s(): list_olh_entries returned ret=%d", __func__, ret);
       return ret;
     }
 
@@ -3364,11 +3364,9 @@ static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
-static int gc_remove(cls_method_context_t hctx, list<string>& tags)
+static int gc_remove(cls_method_context_t hctx, vector<string>& tags)
 {
-  list<string>::iterator iter;
-
-  for (iter = tags.begin(); iter != tags.end(); ++iter) {
+  for (auto iter = tags.begin(); iter != tags.end(); ++iter) {
     string& tag = *iter;
     cls_rgw_gc_obj_info info;
     int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, tag, &info);

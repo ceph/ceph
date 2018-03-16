@@ -4900,6 +4900,12 @@ void RGWRados::build_bucket_index_marker(const string& shard_id_str, const strin
 
 int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx)
 {
+  const rgw_pool& explicit_pool = bucket_info.bucket.explicit_placement.index_pool;
+
+  if (!explicit_pool.empty()) {
+    return open_pool_ctx(explicit_pool, index_ctx);
+  }
+
   const string *rule = &bucket_info.placement_rule;
   if (rule->empty()) {
     rule = &zonegroup.default_placement;
@@ -5569,7 +5575,7 @@ int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, 
     ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
     return -EIO;
   }
-  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
     ldout(cct, 15) << __func__ << " Read AccessControlPolicy";
     s3policy->to_xml(*_dout);
@@ -8091,6 +8097,15 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (ret < 0) {
     return ret;
   }
+  if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
+    // Current implementation does not follow S3 spec and even
+    // may result in data corruption silently when copying
+    // multipart objects acorss pools. So reject COPY operations
+    //on encrypted objects before it is fully functional.
+    ldout(cct, 0) << "ERROR: copy op for encrypted object " << src_obj
+                  << " has not been implemented." << dendl;
+    return -ERR_NOT_IMPLEMENTED;
+  }
 
   src_attrs[RGW_ATTR_ACL] = attrs[RGW_ATTR_ACL];
   src_attrs.erase(RGW_ATTR_DELETE_AT);
@@ -9309,7 +9324,8 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
       return -EIO;
     }
     ldout(cct, 10) << "manifest: total_size = " << s->manifest.get_obj_size() << dendl;
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20) && s->manifest.has_explicit_objs()) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>() && \
+	s->manifest.has_explicit_objs()) {
       RGWObjManifest::obj_iterator mi;
       for (mi = s->manifest.obj_begin(); mi != s->manifest.obj_end(); ++mi) {
         ldout(cct, 20) << "manifest: ofs=" << mi.get_ofs() << " loc=" << mi.get_location().get_raw_obj(this) << dendl;
@@ -9870,7 +9886,7 @@ int RGWRados::Object::Read::prepare()
   }
   if (params.attrs) {
     *params.attrs = astate->attrset;
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (iter = params.attrs->begin(); iter != params.attrs->end(); ++iter) {
         ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
       }
@@ -9974,7 +9990,7 @@ int RGWRados::stat_system_obj(RGWObjectCtx& obj_ctx,
 
   if (attrs) {
     *attrs = astate->attrset;
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       map<string, bufferlist>::iterator iter;
       for (iter = attrs->begin(); iter != attrs->end(); ++iter) {
         ldout(cct, 20) << "Read xattr: " << iter->first << dendl;
@@ -10663,9 +10679,7 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
         obj_ofs < astate->data.length()) {
       unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
 
-      d->data_lock.Lock();
       r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
-      d->data_lock.Unlock();
       if (r < 0)
         return r;
 
@@ -12753,11 +12767,15 @@ int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
   return gc_pool_ctx.operate(oid, op);
 }
 
-int RGWRados::gc_aio_operate(string& oid, librados::ObjectWriteOperation *op)
+int RGWRados::gc_aio_operate(string& oid, librados::ObjectWriteOperation *op, AioCompletion **pc)
 {
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   int r = gc_pool_ctx.aio_operate(oid, c, op);
-  c->release();
+  if (!pc) {
+    c->release();
+  } else {
+    *pc = c;
+  }
   return r;
 }
 

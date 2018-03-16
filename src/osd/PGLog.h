@@ -34,13 +34,11 @@ constexpr auto PGLOG_INDEXED_ALL              = PGLOG_INDEXED_OBJECTS
 class CephContext;
 
 struct PGLog : DoutPrefixProvider {
-  DoutPrefixProvider *prefix_provider;
   string gen_prefix() const override {
-    return prefix_provider ? prefix_provider->gen_prefix() : "";
+    return "";
   }
   unsigned get_subsys() const override {
-    return prefix_provider ? prefix_provider->get_subsys() :
-      (unsigned)ceph_subsys_osd;
+    return static_cast<unsigned>(ceph_subsys_osd);
   }
   CephContext *get_cct() const override {
     return cct;
@@ -646,8 +644,7 @@ protected:
 public:
 
   // cppcheck-suppress noExplicitConstructor
-  PGLog(CephContext *cct, DoutPrefixProvider *dpp = nullptr) :
-    prefix_provider(dpp),
+  PGLog(CephContext *cct) :
     dirty_from(eversion_t::max()),
     writeout_from(eversion_t::max()),
     dirty_from_dups(eversion_t::max()),
@@ -666,8 +663,12 @@ public:
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
 
-  void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing.add(oid, need, have, false);
+  void missing_add(const hobject_t& oid, eversion_t need, eversion_t have, bool is_delete=false) {
+    missing.add(oid, need, have, is_delete);
+  }
+
+  void missing_add_next_entry(const pg_log_entry_t& e) {
+    missing.add_next_event(e);
   }
 
   //////////////////// get or set log ////////////////////

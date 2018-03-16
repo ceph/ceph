@@ -86,7 +86,7 @@ for bind in rados rbd cephfs rgw; do
         CFLAGS="-iquote$TOPDIR/src/include" \
         CPPFLAGS="-iquote$TOPDIR/src/include" \
         LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
-        $vdir/bin/pip install $TOPDIR/src/pybind/${bind}
+        $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
     # rgwfile_version(), librgw_create(), rgw_mount()
     # since py3.5, distutils adds postfix in between ${bind} and so
     lib_fn=$vdir/lib/python*/*-packages/${bind}.*.so

@@ -282,6 +282,9 @@ Commands
 :command:`group ls` [-p | --pool *pool-name*]
   List rbd groups.
 
+:command:`group rename` *src-group-spec* *dest-group-spec*
+  Rename a group.  Note: rename across pools is not supported.
+
 :command:`group rm` *group-spec*
   Delete a group.
 
@@ -507,7 +510,7 @@ Commands
   This requires image format 2.
 
 :command:`snap purge` *image-spec*
-  Remove all snapshots from an image.
+  Remove all unprotected snapshots from an image.
 
 :command:`snap rename` *src-snap-spec* *dest-snap-spec*
   Rename a snapshot. Note: rename across pools and images is not supported.

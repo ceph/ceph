@@ -98,7 +98,7 @@ void EventOutput::list() const
       detail = eu->type;
     }
 
-    std::cout << "0x"
+    std::cout <<i->second.log_event->get_stamp() << " 0x"
       << std::hex << i->first << std::dec << " "
       << i->second.log_event->get_type_str() << ": "
       << " (" << detail << ")" << std::endl;

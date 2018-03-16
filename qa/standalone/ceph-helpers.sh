@@ -39,11 +39,6 @@ else
 fi
 
 EXTRA_OPTS=""
-if [ -n "$CEPH_LIB" ]; then
-    EXTRA_OPTS+=" --erasure-code-dir $CEPH_LIB"
-    EXTRA_OPTS+=" --plugin-dir $CEPH_LIB"
-    EXTRA_OPTS+=" --osd-class-dir $CEPH_LIB"
-fi
 
 #! @file ceph-helpers.sh
 #  @brief Toolbox to manage Ceph cluster dedicated to testing
@@ -507,6 +502,11 @@ function create_rbd_pool() {
 function create_pool() {
     ceph osd pool create "$@"
     sleep 1
+}
+
+function delete_pool() {
+    local poolname=$1
+    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
 }
 
 #######################################################################
@@ -1397,7 +1397,7 @@ function wait_for_clean() {
     local -a delays=($(get_timeout_delays $TIMEOUT .1))
     local -i loop=0
 
-    flush_pg_stats
+    flush_pg_stats || return 1
     while test $(get_num_pgs) == 0 ; do
 	sleep 1
     done
@@ -1834,7 +1834,7 @@ function test_flush_pg_stats()
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
     rados -p rbd put obj /etc/group
-    flush_pg_stats
+    flush_pg_stats || return 1
     local jq_filter='.pools | .[] | select(.name == "rbd") | .stats'
     raw_bytes_used=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
     bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`

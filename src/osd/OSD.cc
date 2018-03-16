@@ -87,7 +87,6 @@
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
-#include "messages/MOSDPGBackfill.h"
 #include "messages/MBackfillReserve.h"
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDForceRecovery.h"
@@ -1881,15 +1880,7 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
     if (!keyfile.empty()) {
       bufferlist keybl;
       string err;
-      if (keyfile == "-") {
-	static_assert(1024 * 1024 >
-		      (sizeof(CryptoKey) - sizeof(bufferptr) +
-		       sizeof(__u16) + 16 /* AES_KEY_LEN */ + 3 - 1) / 3. * 4.,
-		      "1MB should be enough for a base64 encoded CryptoKey");
-	r = keybl.read_fd(STDIN_FILENO, 1024 * 1024);
-      } else {
-	r = keybl.read_file(keyfile.c_str(), &err);
-      }
+      r = keybl.read_file(keyfile.c_str(), &err);
       if (r < 0) {
 	derr << __func__ << " failed to read keyfile " << keyfile << ": "
 	     << err << ": " << cpp_strerror(r) << dendl;
@@ -2337,10 +2328,10 @@ will start to track new ops received afterwards.";
     store->get_devices(&devnames);
     f->open_object_section("list_devices");
     for (auto dev : devnames) {
-      f->dump_string("device", "/dev/" + dev);
       if (dev.find("dm-") == 0) {
 	continue;
       }
+      f->dump_string("device", "/dev/" + dev);
     }
     f->close_section();
   } else {
@@ -3043,11 +3034,11 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(
     l_osd_op_inb,   "op_in_bytes",
     "Client operations total write size",
-    "wr", PerfCountersBuilder::PRIO_INTERESTING);
+    "wr", PerfCountersBuilder::PRIO_INTERESTING, unit_t(BYTES));
   osd_plb.add_u64_counter(
     l_osd_op_outb,  "op_out_bytes",
     "Client operations total read size",
-    "rd", PerfCountersBuilder::PRIO_INTERESTING);
+    "rd", PerfCountersBuilder::PRIO_INTERESTING, unit_t(BYTES));
   osd_plb.add_time_avg(
     l_osd_op_lat,   "op_latency",
     "Latency of client operations (including queue time)",
@@ -3062,7 +3053,7 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(
     l_osd_op_r, "op_r", "Client read operations");
   osd_plb.add_u64_counter(
-    l_osd_op_r_outb, "op_r_out_bytes", "Client data read");
+    l_osd_op_r_outb, "op_r_out_bytes", "Client data read", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   osd_plb.add_time_avg(
     l_osd_op_r_lat, "op_r_latency",
     "Latency of read operation (including queue time)");
@@ -3098,10 +3089,10 @@ void OSD::create_logger()
     "Client read-modify-write operations");
   osd_plb.add_u64_counter(
     l_osd_op_rw_inb, "op_rw_in_bytes",
-    "Client read-modify-write operations write in");
+    "Client read-modify-write operations write in", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   osd_plb.add_u64_counter(
     l_osd_op_rw_outb,"op_rw_out_bytes",
-    "Client read-modify-write operations read out ");
+    "Client read-modify-write operations read out ", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   osd_plb.add_time_avg(
     l_osd_op_rw_lat, "op_rw_latency",
     "Latency of read-modify-write operation (including queue time)");
@@ -3132,12 +3123,12 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(
     l_osd_sop, "subop", "Suboperations");
   osd_plb.add_u64_counter(
-    l_osd_sop_inb, "subop_in_bytes", "Suboperations total size");
+    l_osd_sop_inb, "subop_in_bytes", "Suboperations total size", NULL, 0, unit_t(BYTES));
   osd_plb.add_time_avg(l_osd_sop_lat, "subop_latency", "Suboperations latency");
 
   osd_plb.add_u64_counter(l_osd_sop_w, "subop_w", "Replicated writes");
   osd_plb.add_u64_counter(
-    l_osd_sop_w_inb, "subop_w_in_bytes", "Replicated written data size");
+    l_osd_sop_w_inb, "subop_w_in_bytes", "Replicated written data size", NULL, 0, unit_t(BYTES));
   osd_plb.add_time_avg(
     l_osd_sop_w_lat, "subop_w_latency", "Replicated writes latency");
   osd_plb.add_u64_counter(
@@ -3147,13 +3138,13 @@ void OSD::create_logger()
   osd_plb.add_u64_counter(
     l_osd_sop_push, "subop_push", "Suboperations push messages");
   osd_plb.add_u64_counter(
-    l_osd_sop_push_inb, "subop_push_in_bytes", "Suboperations pushed size");
+    l_osd_sop_push_inb, "subop_push_in_bytes", "Suboperations pushed size", NULL, 0, unit_t(BYTES));
   osd_plb.add_time_avg(
     l_osd_sop_push_lat, "subop_push_latency", "Suboperations push latency");
 
   osd_plb.add_u64_counter(l_osd_pull, "pull", "Pull requests sent");
   osd_plb.add_u64_counter(l_osd_push, "push", "Push messages sent");
-  osd_plb.add_u64_counter(l_osd_push_outb, "push_out_bytes", "Pushed size");
+  osd_plb.add_u64_counter(l_osd_push_outb, "push_out_bytes", "Pushed size", NULL, 0, unit_t(BYTES));
 
   osd_plb.add_u64_counter(
     l_osd_rop, "recovery_ops",
@@ -3161,8 +3152,8 @@ void OSD::create_logger()
     "rop", PerfCountersBuilder::PRIO_INTERESTING);
 
   osd_plb.add_u64(l_osd_loadavg, "loadavg", "CPU load");
-  osd_plb.add_u64(l_osd_buf, "buffer_bytes", "Total allocated buffer size");
-  osd_plb.add_u64(l_osd_history_alloc_bytes, "history_alloc_Mbytes");
+  osd_plb.add_u64(l_osd_buf, "buffer_bytes", "Total allocated buffer size", NULL, 0, unit_t(BYTES));
+  osd_plb.add_u64(l_osd_history_alloc_bytes, "history_alloc_Mbytes", NULL, 0, unit_t(BYTES));
   osd_plb.add_u64(l_osd_history_alloc_num, "history_alloc_num");
   osd_plb.add_u64(
     l_osd_cached_crc, "cached_crc", "Total number getting crc from crc_cache");
@@ -3216,11 +3207,11 @@ void OSD::create_logger()
 
   osd_plb.add_u64(
     l_osd_stat_bytes, "stat_bytes", "OSD size", "size",
-    PerfCountersBuilder::PRIO_USEFUL);
+    PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
   osd_plb.add_u64(
     l_osd_stat_bytes_used, "stat_bytes_used", "Used space", "used",
-    PerfCountersBuilder::PRIO_USEFUL);
-  osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail", "Available space");
+    PerfCountersBuilder::PRIO_USEFUL, unit_t(BYTES));
+  osd_plb.add_u64(l_osd_stat_bytes_avail, "stat_bytes_avail", "Available space", NULL, 0, unit_t(BYTES));
 
   osd_plb.add_u64_counter(
     l_osd_copyfrom, "copyfrom", "Rados \"copy-from\" operations");
@@ -3742,26 +3733,27 @@ void OSD::recursive_remove_collection(CephContext* cct,
   ObjectStore::Transaction t;
   SnapMapper mapper(cct, &driver, 0, 0, 0, pgid.shard);
 
+  ghobject_t next;
+  int max = cct->_conf->osd_target_transaction_size;
   vector<ghobject_t> objects;
-  store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
-			 INT_MAX, &objects, 0);
-  generic_dout(10) << __func__ << " " << objects << dendl;
-  // delete them.
-  int removed = 0;
-  for (vector<ghobject_t>::iterator p = objects.begin();
-       p != objects.end();
-       ++p, removed++) {
-    OSDriver::OSTransaction _t(driver.get_transaction(&t));
-    int r = mapper.remove_oid(p->hobj, &_t);
-    if (r != 0 && r != -ENOENT)
-      ceph_abort();
-    t.remove(tmp, *p);
-    if (removed > cct->_conf->osd_target_transaction_size) {
-      int r = store->queue_transaction(ch, std::move(t));
-      assert(r == 0);
-      t = ObjectStore::Transaction();
-      removed = 0;
+  objects.reserve(max);
+  while (true) {
+    objects.clear();
+    store->collection_list(ch, next, ghobject_t::get_max(),
+      max, &objects, &next);
+    generic_dout(10) << __func__ << " " << objects << dendl;
+    if (objects.empty())
+      break;
+    for (auto& p: objects) {
+      OSDriver::OSTransaction _t(driver.get_transaction(&t));
+      int r = mapper.remove_oid(p.hobj, &_t);
+      if (r != 0 && r != -ENOENT)
+        ceph_abort();
+      t.remove(tmp, p);
     }
+    int r = store->queue_transaction(ch, std::move(t));
+    assert(r == 0);
+    t = ObjectStore::Transaction();
   }
   t.remove_collection(tmp);
   int r = store->queue_transaction(ch, std::move(t));
@@ -3964,12 +3956,6 @@ void OSD::load_pgs()
       continue;
     }
 
-    if (pgid.preferred() >= 0) {
-      dout(10) << __func__ << ": skipping localized PG " << pgid << dendl;
-      // FIXME: delete it too, eventually
-      continue;
-    }
-
     dout(10) << "pgid " << pgid << " coll " << coll_t(pgid) << dendl;
     epoch_t map_epoch = 0;
     int r = PG::peek_map_epoch(store, pgid, &map_epoch);
@@ -4007,6 +3993,24 @@ void OSD::load_pgs()
 
     // read pg state, log
     pg->read_state(store);
+
+    if (pg->dne())  {
+      dout(10) << "load_pgs " << *it << " deleting dne" << dendl;
+      pg->ch = nullptr;
+      service.pg_remove_epoch(pg->pg_id);
+      pg->unlock();
+      {
+	// Delete pg
+	RWLock::WLocker l(pg_map_lock);
+	auto p = pg_map.find(pg->get_pgid());
+	assert(p != pg_map.end() && p->second == pg);
+	dout(20) << __func__ << " removed pg " << pg << " from pg_map" << dendl;
+	pg_map.erase(p);
+	pg->put("PGMap");
+      }
+      recursive_remove_collection(cct, store, pgid, *it);
+      continue;
+    }
 
     service.init_splits_between(pg->pg_id, pg->get_osdmap(), osdmap);
 
@@ -5816,6 +5820,14 @@ COMMAND("config set " \
 	"name=key,type=CephString name=value,type=CephString",
 	"Set a configuration option at runtime (not persistent)",
 	"osd", "rw", "cli,rest")
+COMMAND("config get " \
+	"name=key,type=CephString",
+	"Get a configuration option at runtime",
+	"osd", "r", "cli,rest")
+COMMAND("config unset " \
+	"name=key,type=CephString",
+	"Unset a configuration option at runtime (not persistent)",
+	"osd", "rw", "cli,rest")
 COMMAND("cluster_log " \
 	"name=level,type=CephChoices,strings=error,warning,info,debug " \
 	"name=message,type=CephString,n=N",
@@ -5939,7 +5951,28 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "key", key);
     cmd_getval(cct, cmdmap, "value", val);
     osd_lock.Unlock();
-    r = cct->_conf->set_val(key, val, true, &ss);
+    r = cct->_conf->set_val(key, val, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
+    osd_lock.Lock();
+  }
+  else if (prefix == "config get") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    osd_lock.Unlock();
+    std::string val;
+    r = cct->_conf->get_val(key, &val);
+    if (r == 0) {
+      ds << val;
+    }
+    osd_lock.Lock();
+  }
+  else if (prefix == "config unset") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    osd_lock.Unlock();
+    r = cct->_conf->rm_val(key);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }
@@ -8171,11 +8204,6 @@ void OSD::handle_pg_create(OpRequestRef op)
       continue;
     pg_t on = p->first;
 
-    if (on.preferred() >= 0) {
-      dout(20) << "ignoring localized pg " << on << dendl;
-      continue;
-    }
-
     if (!osdmap->have_pg_pool(on.pool())) {
       dout(20) << "ignoring pg on deleted pool " << on << dendl;
       continue;
@@ -8287,8 +8315,11 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
 void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
                            ThreadPool::TPHandle *handle)
 {
-  if (service.get_osdmap()->is_up(whoami) &&
-      is_active()) {
+  if (!service.get_osdmap()->is_up(whoami)) {
+    dout(20) << __func__ << " not up in osdmap" << dendl;
+  } else if (!is_active()) {
+    dout(20) << __func__ << " not active" << dendl;
+  } else {
     do_notifies(*ctx.notify_list, curmap);
     do_queries(*ctx.query_map, curmap);
     do_infos(*ctx.info_map, curmap);
@@ -8446,11 +8477,6 @@ void OSD::handle_pg_notify(OpRequestRef op)
   for (auto it = m->get_pg_list().begin();
        it != m->get_pg_list().end();
        ++it) {
-    if (it->first.info.pgid.preferred() >= 0) {
-      dout(20) << "ignoring localized pg " << it->first.info.pgid << dendl;
-      continue;
-    }
-
     handle_pg_peering_evt(
       spg_t(it->first.info.pgid.pgid, it->first.to),
       it->first.info.history, it->second,
@@ -8476,11 +8502,6 @@ void OSD::handle_pg_log(OpRequestRef op)
   int from = m->get_source().num();
   if (!require_same_or_newer_map(op, m->get_epoch(), false))
     return;
-
-  if (m->get_pgid().preferred() >= 0) {
-    dout(10) << "ignoring localized pg " << m->get_pgid() << dendl;
-    return;
-  }
 
   op->mark_started();
   handle_pg_peering_evt(
@@ -8511,11 +8532,6 @@ void OSD::handle_pg_info(OpRequestRef op)
   for (auto p = m->pg_list.begin();
        p != m->pg_list.end();
        ++p) {
-    if (p->first.info.pgid.preferred() >= 0) {
-      dout(10) << "ignoring localized pg " << p->first.info.pgid << dendl;
-      continue;
-    }
-
     handle_pg_peering_evt(
       spg_t(p->first.info.pgid.pgid, p->first.to),
       p->first.info.history, p->second, p->first.epoch_sent,
@@ -8542,11 +8558,6 @@ void OSD::handle_pg_trim(OpRequestRef op)
   int from = m->get_source().num();
   if (!require_same_or_newer_map(op, m->epoch, false))
     return;
-
-  if (m->pgid.preferred() >= 0) {
-    dout(10) << "ignoring localized pg " << m->pgid << dendl;
-    return;
-  }
 
   op->mark_started();
 
@@ -8717,11 +8728,6 @@ void OSD::handle_pg_query(OpRequestRef op)
        ++it) {
     spg_t pgid = it->first;
 
-    if (pgid.preferred() >= 0) {
-      dout(10) << "ignoring localized pg " << pgid << dendl;
-      continue;
-    }
-
     if (service.splitting(pgid)) {
       peering_wait_for_split[pgid].push_back(
 	PGPeeringEventRef(
@@ -8817,11 +8823,6 @@ void OSD::handle_pg_remove(OpRequestRef op)
        it != m->pg_list.end();
        ++it) {
     spg_t pgid = *it;
-    if (pgid.preferred() >= 0) {
-      dout(10) << "ignoring localized pg " << pgid << dendl;
-      continue;
-    }
-
     enqueue_peering_evt(
       pgid,
       PGPeeringEventRef(

@@ -59,6 +59,9 @@
 
 #define MSG_PAXOS                  40
 
+#define MSG_CONFIG           62
+#define MSG_GET_CONFIG       63
+
 
 // osd internal
 #define MSG_OSD_PING         70
@@ -172,7 +175,7 @@
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600
-//#define MSG_MON_HEALTH            0x601  // remove post-luminous
+#define MSG_MON_HEALTH            0x601
 
 // *** Message::encode() crcflags bits ***
 #define MSG_CRC_DATA           (1 << 0)

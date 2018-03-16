@@ -622,7 +622,7 @@ void Migrator::show_exporting()
 
 void Migrator::audit()
 {
-  if (!g_conf->subsys.should_gather(ceph_subsys_mds, 5))
+  if (!g_conf->subsys.should_gather<ceph_subsys_mds, 5>())
     return;  // hrm.
 
   // import_state

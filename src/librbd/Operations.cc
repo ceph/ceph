@@ -5,7 +5,9 @@
 #include "librbd/Operations.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
 #include "common/WorkQueue.h"
+#include "osdc/Striper.h"
 
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"

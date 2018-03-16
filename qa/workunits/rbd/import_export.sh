@@ -143,6 +143,25 @@ if rbd help export | grep -q export-format; then
 
     rbd remove testimg_import
     rbd remove testimg
+
+    # snap protect
+    rbd import --image-format=2 ${TMPDIR}/img testimg
+    rbd snap create testimg@snap1
+    rbd snap create testimg@snap2
+    rbd snap protect testimg@snap2
+    rbd export --export-format 2 testimg ${TMPDIR}/snap_protect
+    rbd import --export-format 2 ${TMPDIR}/snap_protect testimg_import
+    rbd info testimg_import@snap1 | grep 'protected: False'
+    rbd info testimg_import@snap2 | grep 'protected: True'
+
+    rm ${TMPDIR}/snap_protect
+
+    rbd snap unprotect testimg@snap2
+    rbd snap unprotect testimg_import@snap2
+    rbd snap purge testimg
+    rbd snap purge testimg_import
+    rbd remove testimg
+    rbd remove testimg_import
 fi
 
 tiered=0

@@ -117,13 +117,20 @@ ostream& operator<<(ostream& out, const CDir& dir)
   if (dir.state_test(CDir::STATE_FREEZINGTREE)) out << "|freezingtree";
   if (dir.state_test(CDir::STATE_FROZENTREE)) out << "|frozentree";
   if (dir.state_test(CDir::STATE_AUXSUBTREE)) out << "|auxsubtree";
-  //if (dir.state_test(CDir::STATE_FROZENTREELEAF)) out << "|frozentreeleaf";
   if (dir.state_test(CDir::STATE_FROZENDIR)) out << "|frozendir";
   if (dir.state_test(CDir::STATE_FREEZINGDIR)) out << "|freezingdir";
   if (dir.state_test(CDir::STATE_EXPORTBOUND)) out << "|exportbound";
   if (dir.state_test(CDir::STATE_IMPORTBOUND)) out << "|importbound";
   if (dir.state_test(CDir::STATE_BADFRAG)) out << "|badfrag";
   if (dir.state_test(CDir::STATE_FRAGMENTING)) out << "|fragmenting";
+  if (dir.state_test(CDir::STATE_CREATING)) out << "|creating";
+  if (dir.state_test(CDir::STATE_COMMITTING)) out << "|committing";
+  if (dir.state_test(CDir::STATE_FETCHING)) out << "|fetching";
+  if (dir.state_test(CDir::STATE_EXPORTING)) out << "|exporting";
+  if (dir.state_test(CDir::STATE_IMPORTING)) out << "|importing";
+  if (dir.state_test(CDir::STATE_STICKY)) out << "|sticky";
+  if (dir.state_test(CDir::STATE_DNPINNEDFRAG)) out << "|dnpinnedfrag";
+  if (dir.state_test(CDir::STATE_ASSIMRSTAT)) out << "|assimrstat";
 
   // fragstat
   out << " " << dir.fnode.fragstat;
@@ -306,6 +313,7 @@ CDentry *CDir::lookup(std::string_view name, snapid_t snap)
 }
 
 CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
+  dout(20) << __func__ << " (" << last << ", '" << name << "')" << dendl;
   auto p = items.find(dentry_key_t(last, name, inode->hash_dentry_name(name)));
   if (p == items.end())
     return NULL;
@@ -1658,8 +1666,7 @@ CDentry *CDir::_load_dentry(
     bufferlist &bl,
     const int pos,
     const std::set<snapid_t> *snaps,
-    bool *force_dirty,
-    list<CInode*> *undef_inodes)
+    bool *force_dirty)
 {
   bufferlist::iterator q = bl.begin();
 
@@ -1711,10 +1718,16 @@ CDentry *CDir::_load_dentry(
     }
 
     if (dn) {
-      if (dn->get_linkage()->get_inode() == 0) {
-        dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
-      } else {
-        dout(12) << "_fetched  had dentry " << *dn << dendl;
+      CDentry::linkage_t *dnl = dn->get_linkage();
+      dout(12) << "_fetched had " << (dnl->is_null() ? "NEG" : "") << " dentry " << *dn << dendl;
+      if (committed_version == 0 &&
+	  dnl->is_remote() &&
+	  dn->is_dirty() &&
+	  ino == dnl->get_remote_ino() &&
+	  d_type == dnl->get_remote_d_type()) {
+	// see comment below
+	dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
+	dn->mark_clean();
       }
     } else {
       // (remote) link
@@ -1726,7 +1739,7 @@ CDentry *CDir::_load_dentry(
         dn->link_remote(dn->get_linkage(), in);
         dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
       } else {
-        dout(12) << "_fetched  got remote link " << ino << " (dont' have it)" << dendl;
+        dout(12) << "_fetched  got remote link " << ino << " (don't have it)" << dendl;
       }
     }
   } 
@@ -1747,15 +1760,35 @@ CDentry *CDir::_load_dentry(
 
     bool undef_inode = false;
     if (dn) {
-      CInode *in = dn->get_linkage()->get_inode();
-      if (in) {
-        dout(12) << "_fetched  had dentry " << *dn << dendl;
-        if (in->state_test(CInode::STATE_REJOINUNDEF)) {
-          undef_inodes->push_back(in);
-          undef_inode = true;
-        }
-      } else
-        dout(12) << "_fetched  had NEG dentry " << *dn << dendl;
+      CDentry::linkage_t *dnl = dn->get_linkage();
+      dout(12) << "_fetched had " << (dnl->is_null() ? "NEG" : "") << " dentry " << *dn << dendl;
+
+      if (dnl->is_primary()) {
+	CInode *in = dnl->get_inode();
+	if (in->state_test(CInode::STATE_REJOINUNDEF)) {
+	  undef_inode = true;
+	} else if (committed_version == 0 &&
+		   dn->is_dirty() &&
+		   inode_data.inode.ino == in->ino() &&
+		   inode_data.inode.version == in->get_version()) {
+	  /* clean underwater item?
+	   * Underwater item is something that is dirty in our cache from
+	   * journal replay, but was previously flushed to disk before the
+	   * mds failed.
+	   *
+	   * We only do this is committed_version == 0. that implies either
+	   * - this is a fetch after from a clean/empty CDir is created
+	   *   (and has no effect, since the dn won't exist); or
+	   * - this is a fetch after _recovery_, which is what we're worried
+	   *   about.  Items that are marked dirty from the journal should be
+	   *   marked clean if they appear on disk.
+	   */
+	  dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
+	  dn->mark_clean();
+	  dout(10) << "_fetched  had underwater inode " << *dnl->get_inode() << ", marking clean" << dendl;
+	  in->mark_clean();
+	}
+      }
     }
 
     if (!dn || undef_inode) {
@@ -1917,7 +1950,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
     try {
       dn = _load_dentry(
             p->first, dname, last, p->second, pos, snaps,
-            &force_dirty, &undef_inodes);
+            &force_dirty);
     } catch (const buffer::error &err) {
       cache->mds->clog->warn() << "Corrupt dentry '" << dname << "' in "
                                   "dir frag " << dirfrag() << ": "
@@ -1936,35 +1969,16 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       continue;
     }
 
-    if (dn && (wanted_items.count(mempool::mds_co::string(dname)) > 0 || !complete)) {
+    if (!dn)
+      continue;
+
+    CDentry::linkage_t *dnl = dn->get_linkage();
+    if (dnl->is_primary() && dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF))
+      undef_inodes.push_back(dnl->get_inode());
+
+    if (wanted_items.count(mempool::mds_co::string(dname)) > 0 || !complete) {
       dout(10) << " touching wanted dn " << *dn << dendl;
       inode->mdcache->touch_dentry(dn);
-    }
-
-    /** clean underwater item?
-     * Underwater item is something that is dirty in our cache from
-     * journal replay, but was previously flushed to disk before the
-     * mds failed.
-     *
-     * We only do this is committed_version == 0. that implies either
-     * - this is a fetch after from a clean/empty CDir is created
-     *   (and has no effect, since the dn won't exist); or
-     * - this is a fetch after _recovery_, which is what we're worried 
-     *   about.  Items that are marked dirty from the journal should be
-     *   marked clean if they appear on disk.
-     */
-    if (committed_version == 0 &&     
-	dn &&
-	dn->get_version() <= got_fnode.version &&
-	dn->is_dirty()) {
-      dout(10) << "_fetched  had underwater dentry " << *dn << ", marking clean" << dendl;
-      dn->mark_clean();
-
-      if (dn->get_linkage()->is_primary()) {
-	assert(dn->get_linkage()->get_inode()->get_version() <= got_fnode.version);
-	dout(10) << "_fetched  had underwater inode " << *dn->get_linkage()->get_inode() << ", marking clean" << dendl;
-	dn->get_linkage()->get_inode()->mark_clean();
-      }
     }
   }
 
@@ -3015,45 +3029,64 @@ void CDir::unfreeze_dir()
  * for identifying a directory and its state rather than for dumping
  * debug output.
  */
-void CDir::dump(Formatter *f) const
+void CDir::dump(Formatter *f, int flags) const
 {
   assert(f != NULL);
-
-  f->dump_stream("path") << get_path();
-
-  f->dump_stream("dirfrag") << dirfrag();
-  f->dump_int("snapid_first", first);
-
-  f->dump_stream("projected_version") << get_projected_version();
-  f->dump_stream("version") << get_version();
-  f->dump_stream("committing_version") << get_committing_version();
-  f->dump_stream("committed_version") << get_committed_version();
-
-  f->dump_bool("is_rep", is_rep());
-
-  if (get_dir_auth() != CDIR_AUTH_DEFAULT) {
-    if (get_dir_auth().second == CDIR_AUTH_UNKNOWN) {
-      f->dump_stream("dir_auth") << get_dir_auth().first;
-    } else {
-      f->dump_stream("dir_auth") << get_dir_auth();
-    }
-  } else {
-    f->dump_string("dir_auth", "");
+  if (flags & DUMP_PATH) {
+    f->dump_stream("path") << get_path();
   }
-
-  f->open_array_section("states");
-  MDSCacheObject::dump_states(f);
-  if (state_test(CDir::STATE_COMPLETE)) f->dump_string("state", "complete");
-  if (state_test(CDir::STATE_FREEZINGTREE)) f->dump_string("state", "freezingtree");
-  if (state_test(CDir::STATE_FROZENTREE)) f->dump_string("state", "frozentree");
-  if (state_test(CDir::STATE_FROZENDIR)) f->dump_string("state", "frozendir");
-  if (state_test(CDir::STATE_FREEZINGDIR)) f->dump_string("state", "freezingdir");
-  if (state_test(CDir::STATE_EXPORTBOUND)) f->dump_string("state", "exportbound");
-  if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
-  if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
-  f->close_section();
-
-  MDSCacheObject::dump(f);
+  if (flags & DUMP_DIRFRAG) {
+    f->dump_stream("dirfrag") << dirfrag();
+  }
+  if (flags & DUMP_SNAPID_FIRST) {
+    f->dump_int("snapid_first", first);
+  }
+  if (flags & DUMP_VERSIONS) {
+    f->dump_stream("projected_version") << get_projected_version();
+    f->dump_stream("version") << get_version();
+    f->dump_stream("committing_version") << get_committing_version();
+    f->dump_stream("committed_version") << get_committed_version();
+  }
+  if (flags & DUMP_REP) {
+    f->dump_bool("is_rep", is_rep());
+  }
+  if (flags & DUMP_DIR_AUTH) {
+    if (get_dir_auth() != CDIR_AUTH_DEFAULT) {
+      if (get_dir_auth().second == CDIR_AUTH_UNKNOWN) {
+        f->dump_stream("dir_auth") << get_dir_auth().first;
+      } else {
+        f->dump_stream("dir_auth") << get_dir_auth();
+      }
+    } else {
+      f->dump_string("dir_auth", "");
+    }
+  }
+  if (flags & DUMP_STATES) {
+    f->open_array_section("states");
+    MDSCacheObject::dump_states(f);
+    if (state_test(CDir::STATE_COMPLETE)) f->dump_string("state", "complete");
+    if (state_test(CDir::STATE_FREEZINGTREE)) f->dump_string("state", "freezingtree");
+    if (state_test(CDir::STATE_FROZENTREE)) f->dump_string("state", "frozentree");
+    if (state_test(CDir::STATE_FROZENDIR)) f->dump_string("state", "frozendir");
+    if (state_test(CDir::STATE_FREEZINGDIR)) f->dump_string("state", "freezingdir");
+    if (state_test(CDir::STATE_EXPORTBOUND)) f->dump_string("state", "exportbound");
+    if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
+    if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
+    f->close_section();
+  }
+  if (flags & DUMP_MDS_CACHE_OBJECT) {
+    MDSCacheObject::dump(f);
+  }
+  if (flags & DUMP_ITEMS) {
+    f->open_array_section("dentries");
+    for (auto &p : items) {
+      CDentry *dn = p.second;
+      f->open_object_section("dentry");
+      dn->dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 void CDir::dump_load(Formatter *f, utime_t now, const DecayRate& rate)

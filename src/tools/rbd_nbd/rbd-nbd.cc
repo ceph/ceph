@@ -448,7 +448,7 @@ std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
     os << " TRIM ";
     break;
   default:
-    os << " UNKNOW(" << ctx.command << ") ";
+    os << " UNKNOWN(" << ctx.command << ") ";
     break;
   }
 
@@ -665,7 +665,6 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON,
@@ -679,14 +678,13 @@ static int do_map(int argc, const char *argv[], Config *cfg)
       cerr << err << std::endl;
       return r;
     }
-
     if (forker.is_parent()) {
-      global_init_postfork_start(g_ceph_context);
       if (forker.parent_wait(err) != 0) {
         return -ENXIO;
       }
       return 0;
     }
+    global_init_postfork_start(g_ceph_context);
   }
 
   common_init_finish(g_ceph_context);
@@ -855,9 +853,8 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     cout << cfg->devpath << std::endl;
 
     if (g_conf->daemonize) {
-      forker.daemonize();
-      global_init_postfork_start(g_ceph_context);
       global_init_postfork_finish(g_ceph_context);
+      forker.daemonize();
     }
 
     {

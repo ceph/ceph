@@ -39,9 +39,16 @@
 MgrStandby::MgrStandby(int argc, const char **argv) :
   Dispatcher(g_ceph_context),
   monc{g_ceph_context},
-  client_messenger(Messenger::create_client_messenger(g_ceph_context, "mgr")),
+  client_messenger(Messenger::create(
+		     g_ceph_context,
+		     cct->_conf->get_val<std::string>("ms_type"),
+		     entity_name_t::MGR(),
+		     "mgr",
+		     getpid(),
+		     0)),
   objecter{g_ceph_context, client_messenger.get(), &monc, NULL, 0, 0},
   client{client_messenger.get(), &monc, &objecter},
+  mgrc(g_ceph_context, client_messenger.get()),
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
@@ -125,6 +132,9 @@ int MgrStandby::init()
     client_messenger->wait();
     return r;
   }
+  mgrc.init();
+  client_messenger->add_dispatcher_tail(&mgrc);
+
   r = monc.authenticate();
   if (r < 0) {
     derr << "Authentication failed, did you specify a mgr ID with a valid keyring?" << dendl;
@@ -135,7 +145,7 @@ int MgrStandby::init()
   }
 
   client_t whoami = monc.get_global_id();
-  client_messenger->set_myname(entity_name_t::CLIENT(whoami.v));
+  client_messenger->set_myname(entity_name_t::MGR(whoami.v));
   monc.set_log_client(&log_client);
   _update_log_config();
   objecter.set_client_incarnation(0);
@@ -143,6 +153,8 @@ int MgrStandby::init()
   objecter.start();
   client.init();
   timer.init();
+
+  py_module_registry.init();
 
   tick();
 
@@ -215,7 +227,8 @@ void MgrStandby::tick()
     active_mgr->tick();
   }
 
-  timer.add_event_after(g_conf->get_val<int64_t>("mgr_tick_period"),
+  timer.add_event_after(
+      g_conf->get_val<std::chrono::seconds>("mgr_tick_period").count(),
       new FunctionContext([this](int r){
           tick();
       }
@@ -241,6 +254,7 @@ void MgrStandby::shutdown()
   timer.shutdown();
   // client uses monc and objecter
   client.shutdown();
+  mgrc.shutdown();
   // stop monc, so mon won't be able to instruct me to shutdown/activate after
   // the active_mgr is stopped
   monc.shutdown();
@@ -330,16 +344,11 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   dout(4) << "active in map: " << active_in_map
           << " active is " << map.active_gid << dendl;
 
-  if (!py_module_registry.is_initialized()) {
-    int r = py_module_registry.init(map);
-
-    // FIXME: error handling
-    assert(r == 0);
-  } else {
-    bool need_respawn = py_module_registry.handle_mgr_map(map);
-    if (need_respawn) {
-      respawn();
-    }
+  // PyModuleRegistry may ask us to respawn if it sees that
+  // this MgrMap is changing its set of enabled modules
+  bool need_respawn = py_module_registry.handle_mgr_map(map);
+  if (need_respawn) {
+    respawn();
   }
 
   if (active_in_map) {
@@ -380,8 +389,6 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       }
     }
   }
-
-  mmap->put();
 }
 
 bool MgrStandby::ms_dispatch(Message *m)
@@ -391,16 +398,19 @@ bool MgrStandby::ms_dispatch(Message *m)
 
   if (m->get_type() == MSG_MGR_MAP) {
     handle_mgr_map(static_cast<MMgrMap*>(m));
-    return true;
-  } else if (active_mgr) {
+  }
+  bool handled = false;
+  if (active_mgr) {
     auto am = active_mgr;
     lock.Unlock();
-    bool handled = am->ms_dispatch(m);
+    handled = am->ms_dispatch(m);
     lock.Lock();
-    return handled;
-  } else {
-    return false;
   }
+  if (m->get_type() == MSG_MGR_MAP) {
+    // let this pass through for mgrc
+    handled = false;
+  }
+  return handled;
 }
 
 

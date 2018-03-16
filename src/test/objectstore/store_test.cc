@@ -1762,7 +1762,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     t.write(cid, hoid, 0, 0x30000, bl);
     t.zero(cid, hoid, 0, 0x10000);
     t.zero(cid, hoid, 0x20000, 0x10000);
-    cerr << "Rewrite an object and create two holes at the begining and the end" << std::endl;
+    cerr << "Rewrite an object and create two holes at the beginning and the end" << std::endl;
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
 
@@ -6869,7 +6869,6 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
   g_conf->set_val("bluestore_compression_mode", "none");
   g_conf->apply_changes(NULL);
 }
-#endif
 
 TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice) {
   if (string(GetParam()) != "bluestore")
@@ -7067,14 +7066,15 @@ TEST_P(StoreTest, BluestoreRepairTest) {
 
   g_ceph_context->_conf->apply_changes(NULL);
 }
+#endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   g_ceph_context->_conf->set_val("osd_journal_size", "400");

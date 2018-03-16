@@ -953,7 +953,11 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 	min = proj;
       }
     } else {
-      dout(0) << "Cannot get stat of OSD " << p->first << dendl;
+      if (osdmap.is_up(p->first)) {
+        // This is a level 4 rather than an error, because we might have
+        // only just started, and not received the first stats message yet.
+        dout(4) << "OSD " << p->first << " is up, but has no stats" << dendl;
+      }
     }
   }
   return min;
@@ -1023,15 +1027,15 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
   o.back()->stamp = utime_t(123,345);
   o.push_back(new Incremental);
   o.back()->version = 2;
-  o.back()->pg_stat_updates[pg_t(1,2,3)] = pg_stat_t();
+  o.back()->pg_stat_updates[pg_t(1,2)] = pg_stat_t();
   o.back()->osd_stat_updates[5] = osd_stat_t();
   o.push_back(new Incremental);
   o.back()->version = 3;
   o.back()->osdmap_epoch = 1;
   o.back()->pg_scan = 2;
-  o.back()->pg_stat_updates[pg_t(4,5,6)] = pg_stat_t();
+  o.back()->pg_stat_updates[pg_t(4,5)] = pg_stat_t();
   o.back()->osd_stat_updates[6] = osd_stat_t();
-  o.back()->pg_remove.insert(pg_t(1,2,3));
+  o.back()->pg_remove.insert(pg_t(1,2));
   o.back()->osd_stat_rm.insert(5);
 }
 
