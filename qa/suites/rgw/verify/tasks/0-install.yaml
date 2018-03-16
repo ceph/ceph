@@ -8,18 +8,7 @@ tasks:
 - rgw:
     client.0:
       valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
-- s3tests:
-    client.0:
-      force-branch: ceph-luminous
-      rgw_server: client.0
-- swift:
-    client.0:
-      rgw_server: client.0
-- ragweed:
-    client.0:
-      force-branch: ceph-luminous
-      rgw_server: client.0
-      stages: prepare,check
+
 overrides:
   ceph:
     conf:
