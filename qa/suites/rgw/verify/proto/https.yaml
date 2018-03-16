@@ -14,7 +14,6 @@ overrides:
       ca: root
       embed-key: true
   rgw:
-    frontend: civetweb
     client.0:
       ssl certificate: rgw.client.0
     client.1:
