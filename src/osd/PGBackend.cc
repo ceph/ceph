@@ -667,7 +667,7 @@ bool PGBackend::be_compare_scrub_objects(
         errorstream << "data_digest 0x" << std::hex << candidate.digest
 		    << " != data_digest 0x" << auth_oi.data_digest << std::dec
 		    << " from auth oi " << auth_oi;
-        shard_result.set_data_digest_mismatch_oi();
+        shard_result.set_data_digest_mismatch_info();
       }
     }
     if (auth_oi.is_omap_digest() && candidate.omap_digest_present) {
@@ -678,7 +678,7 @@ bool PGBackend::be_compare_scrub_objects(
         errorstream << "omap_digest 0x" << std::hex << candidate.omap_digest
 		    << " != omap_digest 0x" << auth_oi.omap_digest << std::dec
 		    << " from auth oi " << auth_oi;
-        shard_result.set_omap_digest_mismatch_oi();
+        shard_result.set_omap_digest_mismatch_info();
       }
     }
   }
@@ -692,7 +692,7 @@ bool PGBackend::be_compare_scrub_objects(
     errorstream << "size " << candidate.size
 		<< " != size " << oi_size
 		<< " from auth oi " << auth_oi;
-    shard_result.set_size_mismatch_oi();
+    shard_result.set_size_mismatch_info();
   }
   if (auth.size != candidate.size) {
     if (error != CLEAN)
@@ -893,8 +893,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 
     if (i->second.size != be_get_ondisk_size(oi.size)) {
       dout(5) << __func__ << " size " << i->second.size << " oi size " << oi.size << dendl;
-      shard_info.set_obj_size_oi_mismatch();
-      error_string += " obj_size_oi_mismatch";
+      shard_info.set_obj_size_info_mismatch();
+      error_string += " obj_size_info_mismatch";
     }
 
     // Don't use this particular shard due to previous errors
@@ -1074,7 +1074,7 @@ void PGBackend::be_compare_scrubmaps(
       // recorded digest != actual digest?
       if (auth_oi.is_data_digest() && auth_object.digest_present &&
 	  auth_oi.data_digest != auth_object.digest) {
-        assert(shard_map[auth->first].has_data_digest_mismatch_oi());
+        assert(shard_map[auth->first].has_data_digest_mismatch_info());
 	errorstream << pgid << " recorded data digest 0x"
 		    << std::hex << auth_oi.data_digest << " != on disk 0x"
 		    << auth_object.digest << std::dec << " on " << auth_oi.soid
@@ -1084,7 +1084,7 @@ void PGBackend::be_compare_scrubmaps(
       }
       if (auth_oi.is_omap_digest() && auth_object.omap_digest_present &&
 	  auth_oi.omap_digest != auth_object.omap_digest) {
-        assert(shard_map[auth->first].has_omap_digest_mismatch_oi());
+        assert(shard_map[auth->first].has_omap_digest_mismatch_info());
 	errorstream << pgid << " recorded omap digest 0x"
 		    << std::hex << auth_oi.omap_digest << " != on disk 0x"
 		    << auth_object.omap_digest << std::dec

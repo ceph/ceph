@@ -47,14 +47,14 @@ public:
   void set_missing() {
     errors |= err_t::SHARD_MISSING;
   }
-  void set_omap_digest_mismatch_oi() {
-    errors |= err_t::OMAP_DIGEST_MISMATCH_OI;
+  void set_omap_digest_mismatch_info() {
+    errors |= err_t::OMAP_DIGEST_MISMATCH_INFO;
   }
-  void set_size_mismatch_oi() {
-    errors |= err_t::SIZE_MISMATCH_OI;
+  void set_size_mismatch_info() {
+    errors |= err_t::SIZE_MISMATCH_INFO;
   }
-  void set_data_digest_mismatch_oi() {
-    errors |= err_t::DATA_DIGEST_MISMATCH_OI;
+  void set_data_digest_mismatch_info() {
+    errors |= err_t::DATA_DIGEST_MISMATCH_INFO;
   }
   void set_read_error() {
     errors |= err_t::SHARD_READ_ERR;
@@ -80,8 +80,8 @@ public:
   void set_snapset_corrupted() {
     errors |= err_t::SNAPSET_CORRUPTED;
   }
-  void set_obj_size_oi_mismatch() {
-    errors |= err_t::OBJ_SIZE_OI_MISMATCH;
+  void set_obj_size_info_mismatch() {
+    errors |= err_t::OBJ_SIZE_INFO_MISMATCH;
   }
   void set_hinfo_missing() {
     errors |= err_t::HINFO_MISSING;
