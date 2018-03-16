@@ -54,7 +54,7 @@ export class MirroringComponent implements OnInit {
       { prop: 'id', name: 'ID', flexGrow: 2 },
       { prop: 'server_hostname', name: 'Hostname', flexGrow: 2 },
       {
-        prop: 'server_hostname',
+        prop: 'version',
         name: 'Version',
         pipe: this.cephShortVersionPipe,
         flexGrow: 2
