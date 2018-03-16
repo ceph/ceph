@@ -55,9 +55,12 @@ struct err_t {
     SHARD_MISSING        = 1 << 1,
     SHARD_STAT_ERR       = 1 << 2,
     SHARD_READ_ERR       = 1 << 3,
-    DATA_DIGEST_MISMATCH_OI = 1 << 9,
-    OMAP_DIGEST_MISMATCH_OI = 1 << 10,
-    SIZE_MISMATCH_OI        = 1 << 11,
+    DATA_DIGEST_MISMATCH_OI = 1 << 9,   // Old
+    DATA_DIGEST_MISMATCH_INFO = 1 << 9,
+    OMAP_DIGEST_MISMATCH_OI = 1 << 10,  // Old
+    OMAP_DIGEST_MISMATCH_INFO = 1 << 10,
+    SIZE_MISMATCH_OI        = 1 << 11,  // Old
+    SIZE_MISMATCH_INFO        = 1 << 11,
     SHARD_EC_HASH_MISMATCH  = 1 << 12,
     SHARD_EC_SIZE_MISMATCH  = 1 << 13,
     OI_ATTR_MISSING         = 1 << 14, // Old
@@ -68,14 +71,15 @@ struct err_t {
     SNAPSET_MISSING         = 1 << 16,
     SS_ATTR_CORRUPTED       = 1 << 17, // Old
     SNAPSET_CORRUPTED       = 1 << 17,
-    OBJ_SIZE_OI_MISMATCH      = 1 << 18,
+    OBJ_SIZE_OI_MISMATCH      = 1 << 18, // Old
+    OBJ_SIZE_INFO_MISMATCH      = 1 << 18,
     HINFO_MISSING         = 1 << 19,
     HINFO_CORRUPTED       = 1 << 20
     // When adding more here add to either SHALLOW_ERRORS or DEEP_ERRORS
   };
   uint64_t errors = 0;
-  static constexpr uint64_t SHALLOW_ERRORS = SHARD_MISSING|SHARD_STAT_ERR|SIZE_MISMATCH_OI|INFO_MISSING|INFO_CORRUPTED|SNAPSET_MISSING|SNAPSET_CORRUPTED|OBJ_SIZE_OI_MISMATCH|HINFO_MISSING|HINFO_CORRUPTED;
-  static constexpr uint64_t DEEP_ERRORS = SHARD_READ_ERR|DATA_DIGEST_MISMATCH_OI|OMAP_DIGEST_MISMATCH_OI|SHARD_EC_HASH_MISMATCH|SHARD_EC_SIZE_MISMATCH;
+  static constexpr uint64_t SHALLOW_ERRORS = SHARD_MISSING|SHARD_STAT_ERR|SIZE_MISMATCH_INFO|INFO_MISSING|INFO_CORRUPTED|SNAPSET_MISSING|SNAPSET_CORRUPTED|OBJ_SIZE_INFO_MISMATCH|HINFO_MISSING|HINFO_CORRUPTED;
+  static constexpr uint64_t DEEP_ERRORS = SHARD_READ_ERR|DATA_DIGEST_MISMATCH_INFO|OMAP_DIGEST_MISMATCH_INFO|SHARD_EC_HASH_MISMATCH|SHARD_EC_SIZE_MISMATCH;
   bool has_shard_missing() const {
     return errors & SHARD_MISSING;
   }
@@ -85,14 +89,23 @@ struct err_t {
   bool has_read_error() const {
     return errors & SHARD_READ_ERR;
   }
-  bool has_data_digest_mismatch_oi() const {
+  bool has_data_digest_mismatch_oi() const {   // Compatibility
     return errors & DATA_DIGEST_MISMATCH_OI;
   }
-  bool has_omap_digest_mismatch_oi() const {
+  bool has_data_digest_mismatch_info() const {
+    return errors & DATA_DIGEST_MISMATCH_INFO;
+  }
+  bool has_omap_digest_mismatch_oi() const {   // Compatibility
     return errors & OMAP_DIGEST_MISMATCH_OI;
   }
-  bool has_size_mismatch_oi() const {
+  bool has_omap_digest_mismatch_info() const {
+    return errors & OMAP_DIGEST_MISMATCH_INFO;
+  }
+  bool has_size_mismatch_oi() const {   // Compatibility
     return errors & SIZE_MISMATCH_OI;
+  }
+  bool has_size_mismatch_info() const {
+    return errors & SIZE_MISMATCH_INFO;
   }
   bool has_ec_hash_error() const {
     return errors & SHARD_EC_HASH_MISMATCH;
@@ -130,8 +143,11 @@ struct err_t {
   bool has_deep_errors() const {
     return errors & DEEP_ERRORS;
   }
-  bool has_obj_size_oi_mismatch() const {
+  bool has_obj_size_oi_mismatch() const {   // Compatibility
     return errors & OBJ_SIZE_OI_MISMATCH;
+   }
+  bool has_obj_size_info_mismatch() const {
+    return errors & OBJ_SIZE_INFO_MISMATCH;
   }
   bool has_hinfo_missing() const {
     return errors & HINFO_MISSING;
