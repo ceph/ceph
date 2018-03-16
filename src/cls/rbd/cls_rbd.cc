@@ -5474,7 +5474,7 @@ CLS_INIT(rbd)
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  group_image_remove, &h_group_image_remove);
   cls_register_cxx_method(h_class, "group_image_list",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  CLS_METHOD_RD,
 			  group_image_list, &h_group_image_list);
   cls_register_cxx_method(h_class, "group_image_set",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
