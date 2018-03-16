@@ -176,7 +176,7 @@ void ECUtil::HashInfo::decode(bufferlist::iterator &bl)
 void ECUtil::HashInfo::dump(Formatter *f) const
 {
   f->dump_unsigned("total_chunk_size", total_chunk_size);
-  f->open_object_section("cumulative_shard_hashes");
+  f->open_array_section("cumulative_shard_hashes");
   for (unsigned i = 0; i != cumulative_shard_hashes.size(); ++i) {
     f->open_object_section("hash");
     f->dump_unsigned("shard", i);

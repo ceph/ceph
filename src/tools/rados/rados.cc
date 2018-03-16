@@ -1371,47 +1371,73 @@ static void dump_shard(const shard_info_t& shard,
     f.dump_format("data_digest", "0x%08x", shard.data_digest);
   }
 
-  if (!shard.has_info_missing() && !shard.has_info_corrupted() &&
-      inc.has_object_info_inconsistency()) {
-    object_info_t oi;
-    bufferlist bl;
+  if ((inc.union_shards.has_info_missing()
+     || inc.union_shards.has_info_corrupted()
+     || inc.has_object_info_inconsistency()
+     || shard.has_obj_size_info_mismatch()) &&
+        !shard.has_info_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(OI_ATTR);
     assert(k != shard.attrs.end()); // Can't be missing
-    bufferlist::iterator bliter = k->second.begin();
-    ::decode(oi, bliter);  // Can't be corrupted
-    f.dump_stream("object_info") << oi;
+    if (!shard.has_info_corrupted()) {
+      object_info_t oi;
+      bufferlist bl;
+      bufferlist::iterator bliter = k->second.begin();
+      ::decode(oi, bliter);  // Can't be corrupted
+      f.open_object_section("object_info");
+      oi.dump(&f);
+      f.close_section();
+    } else {
+      bool b64;
+      f.dump_string("object_info", cleanbin(k->second, b64));
+    }
   }
-  if (!shard.has_snapset_missing() && !shard.has_snapset_corrupted() &&
-      inc.has_snapset_inconsistency()) {
-    SnapSet ss;
-    bufferlist bl;
+  if ((inc.union_shards.has_snapset_missing()
+       || inc.union_shards.has_snapset_corrupted()
+       || inc.has_snapset_inconsistency()) &&
+       !shard.has_snapset_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(SS_ATTR);
     assert(k != shard.attrs.end()); // Can't be missing
-    bufferlist::iterator bliter = k->second.begin();
-    decode(ss, bliter);  // Can't be corrupted
-    f.dump_stream("snapset") << ss;
+    if (!shard.has_snapset_corrupted()) {
+      SnapSet ss;
+      bufferlist bl;
+      bufferlist::iterator bliter = k->second.begin();
+      decode(ss, bliter);  // Can't be corrupted
+      f.open_object_section("snapset");
+      ss.dump(&f);
+      f.close_section();
+    } else {
+      bool b64;
+      f.dump_string("snapset", cleanbin(k->second, b64));
+    }
   }
-  if (!shard.has_hinfo_missing() && !shard.has_hinfo_corrupted() &&
-      inc.has_hinfo_inconsistency()) {
-    ECUtil::HashInfo hi;
-    bufferlist bl;
+  if ((inc.union_shards.has_hinfo_missing()
+       || inc.union_shards.has_hinfo_corrupted()
+       || inc.has_hinfo_inconsistency()) &&
+       !shard.has_hinfo_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(ECUtil::get_hinfo_key());
     assert(k != shard.attrs.end()); // Can't be missing
-    bufferlist::iterator bliter = k->second.begin();
-    decode(hi, bliter);  // Can't be corrupted
-    f.dump_stream("hashinfo") << hi;
+    if (!shard.has_hinfo_corrupted()) {
+      ECUtil::HashInfo hi;
+      bufferlist bl;
+      bufferlist::iterator bliter = k->second.begin();
+      decode(hi, bliter);  // Can't be corrupted
+      f.open_object_section("hashinfo");
+      hi.dump(&f);
+      f.close_section();
+    } else {
+      bool b64;
+      f.dump_string("hashinfo", cleanbin(k->second, b64));
+    }
   }
-  if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
-     || inc.union_shards.has_info_missing()
-     || inc.union_shards.has_info_corrupted()
-     || inc.union_shards.has_snapset_missing()
-     || inc.union_shards.has_snapset_corrupted()
-     || inc.union_shards.has_hinfo_missing()
-     || inc.union_shards.has_hinfo_corrupted()) {
+  if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()) {
     f.open_array_section("attrs");
     for (auto kv : shard.attrs) {
+      // System attribute handled above
+      if (kv.first == OI_ATTR || kv.first[0] != '_')
+        continue;
       f.open_object_section("attr");
-      f.dump_string("name", kv.first);
+      // Skip leading underscore since only giving user attrs
+      f.dump_string("name", kv.first.substr(1));
       bool b64;
       f.dump_string("value", cleanbin(kv.second, b64));
       f.dump_bool("Base64", b64);
@@ -1481,7 +1507,9 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
       assert(k != shard.attrs.end()); // Can't be missing
       bufferlist::iterator bliter = k->second.begin();
       ::decode(oi, bliter);  // Can't be corrupted
-      f.dump_stream("selected_object_info") << oi;
+      f.open_object_section("selected_object_info");
+      oi.dump(&f);
+      f.close_section();
       break;
     }
   }
