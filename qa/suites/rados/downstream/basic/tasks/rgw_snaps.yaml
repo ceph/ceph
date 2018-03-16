@@ -1,0 +1,38 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug rgw: 20
+        debug ms: 1
+      osd:
+        osd_max_omap_entries_per_request: 10
+tasks:
+- rgw:
+    client.0:
+- ceph_manager.wait_for_pools:
+    kwargs:
+      pools:
+        - .rgw.buckets
+        - .rgw.root
+        - default.rgw.control
+        - default.rgw.meta
+        - default.rgw.log
+- thrash_pool_snaps:
+    pools:
+    - .rgw.buckets
+    - .rgw.root
+    - default.rgw.control
+    - default.rgw.meta
+    - default.rgw.log
+- s3readwrite:
+    client.0:
+      rgw_server: client.0
+      readwrite:
+        bucket: rwtest
+        readers: 10
+        writers: 3
+        duration: 300
+        files:
+          num: 10
+          size: 2000
+          stddev: 500
