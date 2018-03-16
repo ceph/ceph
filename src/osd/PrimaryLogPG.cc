@@ -10040,7 +10040,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     repop->rep_tid,
     ctx->reqid,
     ctx->op);
-  op_applied(ctx->at_version);
 }
 
 PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
