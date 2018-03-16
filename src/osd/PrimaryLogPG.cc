@@ -9932,6 +9932,15 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   dout(10) << "op_applied version " << applied_version << dendl;
   assert(applied_version <= info.last_update);
   last_update_applied = applied_version;
+  if (is_primary()) {
+    if (scrubber.active) {
+      if (last_update_applied >= scrubber.subset_last_update) {
+	requeue_scrub(ops_blocked_by_scrub());
+      }
+    } else {
+      assert(scrubber.start == scrubber.end);
+    }
+  }
 }
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
