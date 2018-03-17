@@ -97,7 +97,7 @@ public:
   bool is_synced() const { return synced; }
   void wait_for_sync(MDSInternalContextBase *c) {
     assert(!synced);
-    waiting_for_version[MAX(cached_version, 1)].push_back(c);
+    waiting_for_version[std::max<version_t>(cached_version, 1)].push_back(c);
   }
 
   snapid_t get_last_created() const { return cached_last_created; }
