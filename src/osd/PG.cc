@@ -4720,22 +4720,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  }
 	}
 
-        // ask replicas to scan
-        scrubber.waiting_on_whom.insert(pg_whoami);
-
-        // request maps from replicas
-	for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	     i != actingbackfill.end();
-	     ++i) {
-	  if (*i == pg_whoami) continue;
-          _request_scrub_map(*i, scrubber.subset_last_update,
-                             scrubber.start, scrubber.end, scrubber.deep,
-			     scrubber.preempt_left > 0);
-          scrubber.waiting_on_whom.insert(*i);
-        }
-	dout(10) << __func__ << " waiting_on_whom " << scrubber.waiting_on_whom
-		 << dendl;
-
         scrubber.state = PG::Scrubber::WAIT_PUSHES;
         break;
 
@@ -4755,6 +4739,22 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           done = true;
 	  break;
 	}
+
+        // ask replicas to scan
+        scrubber.waiting_on_whom.insert(pg_whoami);
+
+        // request maps from replicas
+	for (set<pg_shard_t>::iterator i = actingbackfill.begin();
+	     i != actingbackfill.end();
+	     ++i) {
+	  if (*i == pg_whoami) continue;
+          _request_scrub_map(*i, scrubber.subset_last_update,
+                             scrubber.start, scrubber.end, scrubber.deep,
+			     scrubber.preempt_left > 0);
+          scrubber.waiting_on_whom.insert(*i);
+        }
+	dout(10) << __func__ << " waiting_on_whom " << scrubber.waiting_on_whom
+		 << dendl;
 
 	scrubber.state = PG::Scrubber::BUILD_MAP;
 	scrubber.primary_scrubmap_pos.reset();
