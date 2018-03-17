@@ -365,6 +365,12 @@ int MetadataDriver::inject_unlinked_inode(
   // be ignoring dirfrags that exist
   inode.damage_flags |= (DAMAGE_STATS | DAMAGE_RSTATS | DAMAGE_FRAGTREE);
 
+  if (inono == MDS_INO_ROOT || MDS_INO_IS_MDSDIR(inono)) {
+    sr_t srnode;
+    srnode.seq = 1;
+    encode(srnode, inode.snap_blob);
+  }
+
   // Serialize
   bufferlist inode_bl;
   encode(std::string(CEPH_FS_ONDISK_MAGIC), inode_bl);
