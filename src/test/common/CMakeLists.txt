@@ -277,3 +277,7 @@ add_ceph_unittest(unittest_bounded_key_counter)
 
 add_executable(unittest_static_ptr test_static_ptr.cc)
 add_ceph_unittest(unittest_static_ptr)
+
+add_executable(unittest_async_completion test_async_completion.cc)
+add_ceph_unittest(unittest_async_completion)
+target_link_libraries(unittest_async_completion Boost::system)
