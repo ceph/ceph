@@ -303,7 +303,7 @@ void SnapRealm::check_cache() const
   snapid_t last_destroyed = mdcache->mds->snapclient->get_last_destroyed();
   if (global || srnode.is_parent_global()) {
     last_created = mdcache->mds->snapclient->get_last_created();
-    seq = MAX(last_created, last_destroyed);
+    seq = std::max(last_created, last_destroyed);
   } else {
     last_created = srnode.last_created;
     seq = srnode.seq;

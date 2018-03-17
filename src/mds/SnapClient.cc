@@ -31,9 +31,9 @@ void SnapClient::resend_queries()
   if (!waiting_for_version.empty() || (!synced && sync_reqid > 0)) {
     version_t want;
     if (!waiting_for_version.empty())
-      want = MAX(cached_version, waiting_for_version.rbegin()->first);
+      want = std::max<version_t>(cached_version, waiting_for_version.rbegin()->first);
     else
-      want = MAX(cached_version, 1);
+      want = std::max<version_t>(cached_version, 1);
     refresh(want, NULL);
     if (!synced)
       sync_reqid = last_reqid;
@@ -164,7 +164,7 @@ void SnapClient::sync(MDSInternalContextBase *onfinish)
 {
   dout(10) << __func__ << dendl;
 
-  refresh(MAX(cached_version, 1), onfinish);
+  refresh(std::max<version_t>(cached_version, 1), onfinish);
   synced = false;
   if (server_ready)
     sync_reqid = last_reqid;
