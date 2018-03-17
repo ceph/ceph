@@ -9930,6 +9930,7 @@ void PrimaryLogPG::repop_all_committed(RepGather *repop)
 void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 {
   dout(10) << "op_applied version " << applied_version << dendl;
+  assert(applied_version != eversion_t());
   assert(applied_version <= info.last_update);
   last_update_applied = applied_version;
   if (is_primary()) {
