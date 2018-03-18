@@ -9927,6 +9927,23 @@ void PrimaryLogPG::repop_all_committed(RepGather *repop)
   }
 }
 
+void PrimaryLogPG::op_applied(const eversion_t &applied_version)
+{
+  dout(10) << "op_applied version " << applied_version << dendl;
+  assert(applied_version != eversion_t());
+  assert(applied_version <= info.last_update);
+  last_update_applied = applied_version;
+  if (is_primary()) {
+    if (scrubber.active) {
+      if (last_update_applied >= scrubber.subset_last_update) {
+	requeue_scrub(ops_blocked_by_scrub());
+      }
+    } else {
+      assert(scrubber.start == scrubber.end);
+    }
+  }
+}
+
 void PrimaryLogPG::eval_repop(RepGather *repop)
 {
   const MOSDOp *m = NULL;
@@ -10227,6 +10244,7 @@ void PrimaryLogPG::submit_log_entries(
 	new OnComplete{this, rep_tid, get_osdmap()->get_epoch()});
       int r = osd->store->queue_transaction(ch, std::move(t), NULL);
       assert(r == 0);
+      op_applied(info.last_update);
     });
 }
 
@@ -11202,6 +11220,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
     std::move(t),
     nullptr);
   assert(tr == 0);
+  op_applied(info.last_update);
 }
 
 void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
