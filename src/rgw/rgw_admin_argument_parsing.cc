@@ -1490,8 +1490,7 @@ const std::unordered_map<std::string, RgwAdminCommandGroup> RgwAdminCommandGroup
     {"opstate", OPSTATE},
     {"orphans", ORPHANS},
     {"pool", POOL},
-    {"sync error", SYNC_ERROR},
-    {"sync status", SYNC_STATUS},
+    {"sync", SYNC},
     {"usage", USAGE},
     {"user list", USER_LIST},
 };
@@ -1554,40 +1553,39 @@ RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_gro
     case(BILOG) : return nullptr;
     case(BUCKET) : return nullptr;
     case(BUCKET_SYNC) : return nullptr;
-    case(OBJECT) : return nullptr;
-    case(POLICY) : return nullptr;
-    case(RESHARD) : return nullptr;
+    case(CAPS) : return nullptr;
     case(DATA_SYNC) : return nullptr;
+    case(DATALOG) : return nullptr;
+    case(GC) : return nullptr;
+    case(GLOBAL_QUOTA) : return nullptr;
+    case(KEY) : return nullptr;
+    case(LC) : return nullptr;
+    case(LOG) : return nullptr;
+    case(MDLOG) : return nullptr;
+    case(METADATA) : return new RgwAdminMetadataCommandsHandler(args, nullptr, nullptr);
     case(METADATA_SYNC) : return new RgwAdminMetadataSyncCommandsHandler(args, nullptr, nullptr);
+    case(OBJECT) : return nullptr;
+    case(OLH) : return nullptr;
+    case(OPSTATE) : return nullptr;
+    case(ORPHANS) : return nullptr;
     case(PERIOD) : return nullptr;
+    case(POLICY) : return nullptr;
+    case(POOL) : return nullptr;
+    case(QUOTA) : return nullptr;
     case(REALM) : return nullptr;
+    case(REPLICALOG) : return nullptr;
+    case(RESHARD) : return nullptr;
+    case(ROLE) : return nullptr;
+    case(ROLE_POLICY) : return nullptr;
+    case(SUBUSER) : return nullptr;
+    case(SYNC) : return nullptr;
+    case(USAGE) : return nullptr;
+    case(USER) : return nullptr;
+    case(USER_LIST) : return nullptr;
     case(ZONE) : return nullptr;
     case(ZONE_PLACEMENT) : return nullptr;
     case(ZONEGROUP) : return nullptr;
     case(ZONEGROUP_PLACEMENT) : return nullptr;
-    case(GLOBAL_QUOTA) : return nullptr;
-    case(QUOTA) : return nullptr;
-    case(ROLE) : return nullptr;
-    case(ROLE_POLICY) : return nullptr;
-    case(USER) : return nullptr;
-    case(SUBUSER) : return nullptr;
-    case(CAPS) : return nullptr;
-    case(KEY) : return nullptr;
-    case(DATALOG) : return nullptr;
-    case(LOG) : return nullptr;
-    case(MDLOG) : return nullptr;
-    case(REPLICALOG) : return nullptr;
-    case(GC) : return nullptr;
-    case(LC) : return nullptr;
-    case(METADATA) : return new RgwAdminMetadataCommandsHandler(args, nullptr, nullptr);
-    case(OLH) : return nullptr;
-    case(OPSTATE) : return nullptr;
-    case(ORPHANS) : return nullptr;
-    case(POOL) : return nullptr;
-    case(SYNC_ERROR) : return nullptr;
-    case(SYNC_STATUS) : return nullptr;
-    case(USAGE) : return nullptr;
-    case(USER_LIST) : return nullptr;
   }
   return nullptr;
 }

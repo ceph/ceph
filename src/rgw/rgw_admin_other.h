@@ -11,8 +11,8 @@
 #include "rgw_admin_common.h"
 
 // This header and the corresponding source file contain handling of the following commads / groups of commands:
-// Pool, log, usage, olh, gc, lc, metadata (except metadata sync), user list, mdlog, sync error,
-// datalog, opstate, sync status.
+// Pool, log, usage, olh, gc, lc, metadata (except metadata sync), user list, mdlog, datalog,
+// opstate, sync.
 
 int handle_opt_pool_add(const std::string& pool_name, rgw_pool& pool, RGWRados *store);
 
@@ -147,6 +147,8 @@ public:
       default: return EINVAL;
     }
   }
+
+  RgwAdminCommandGroup get_type() const override { return METADATA; }
 
 private:
   int parse_command_and_parameters(std::vector<const char*>& args) override;

@@ -18,40 +18,39 @@ enum RgwAdminCommandGroup {
   BILOG,
   BUCKET,
   BUCKET_SYNC,
-  OBJECT,
-  POLICY,
-  RESHARD,
+  CAPS,
   DATA_SYNC,
+  DATALOG,
+  GC,
+  GLOBAL_QUOTA,
+  KEY,
+  LC,
+  LOG,
+  MDLOG,
+  METADATA,
   METADATA_SYNC,
+  OBJECT,
+  OLH,
+  OPSTATE,
+  ORPHANS,
   PERIOD,
+  POLICY,
+  POOL,
+  QUOTA,
   REALM,
+  REPLICALOG,
+  RESHARD,
+  ROLE,
+  ROLE_POLICY,
+  SUBUSER,
+  SYNC,
+  USAGE,
+  USER,
+  USER_LIST,
   ZONE,
   ZONE_PLACEMENT,
   ZONEGROUP,
   ZONEGROUP_PLACEMENT,
-  GLOBAL_QUOTA,
-  QUOTA,
-  ROLE,
-  ROLE_POLICY,
-  USER,
-  SUBUSER,
-  CAPS,
-  KEY,
-  DATALOG,
-  LOG,
-  MDLOG,
-  REPLICALOG,
-  GC,
-  LC,
-  METADATA,
-  OLH,
-  OPSTATE,
-  ORPHANS,
-  POOL,
-  SYNC_ERROR,
-  SYNC_STATUS,
-  USAGE,
-  USER_LIST,
 };
 
 enum RgwAdminCommand {
@@ -220,13 +219,14 @@ public:
                                         Formatter *formatter)
       : m_store(store), m_formatter(formatter)
   {}
-  virtual int execute_command() = 0;
   virtual ~RgwAdminCommandGroupHandler() = default;
+  virtual int execute_command() = 0;
+  virtual RgwAdminCommandGroup get_type() const = 0;
 
 protected:
   virtual int parse_command_and_parameters(std::vector<const char*>& args) = 0;
 
-  RgwAdminCommand m_command;
+  RgwAdminCommand m_command = OPT_NO_CMD;
   // Does not take ownership.
   RGWRados* m_store;
   // Does not take ownership.

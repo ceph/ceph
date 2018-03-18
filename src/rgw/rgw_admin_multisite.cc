@@ -2133,7 +2133,7 @@ int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters(std::vecto
       if (command.size() <= COMMAND_PREFIX.size()) {
         return EINVAL;
       }
-      for (int i = 0; i < COMMAND_PREFIX.size(); ++i) {
+      for (std::size_t i = 0; i < COMMAND_PREFIX.size(); ++i) {
         if (command[i] != COMMAND_PREFIX[i]) {
           return EINVAL;
         }

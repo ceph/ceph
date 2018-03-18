@@ -227,6 +227,8 @@ public:
     }
   }
 
+  RgwAdminCommandGroup get_type() const override { return METADATA_SYNC; }
+
 private:
   int parse_command_and_parameters(std::vector<const char*>& args) override;
 
