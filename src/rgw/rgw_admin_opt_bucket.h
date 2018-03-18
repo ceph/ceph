@@ -222,7 +222,7 @@ private:
   std::string bucket_name;
   std::string infile;
   std::string marker;
-  int max_entries;
+  int max_entries = -1;
   std::string object;
   std::string object_version;
   std::string tenant;
