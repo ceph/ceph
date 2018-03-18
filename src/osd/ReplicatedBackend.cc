@@ -498,6 +498,9 @@ void ReplicatedBackend::submit_transaction(
   tls.push_back(std::move(op_t));
 
   parent->queue_transactions(tls, op.op);
+  if (at_version != eversion_t()) {
+    parent->op_applied(at_version);
+  }
 }
 
 void ReplicatedBackend::op_commit(
