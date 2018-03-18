@@ -1,5 +1,7 @@
 #include "rgw_admin_opt_bucket.h"
 
+#include <boost/program_options.hpp>
+
 #include "common/ceph_argparse.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
@@ -1303,4 +1305,73 @@ int handle_opt_object_stat(const std::string& bucket_id, const std::string& buck
   formatter->close_section();
   formatter->flush(cout);
   return 0;
+}
+
+int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+  const char COMMAND[] = "command";
+  const char BUCKET_ID[] = "bucket-id";
+  const char BUCKET_NAME[] = "bucket";
+  const char INDEX_TYPE[] = "index-type";
+  const char INFILE[] = "infile";
+  const char MARKER[] = "marker";
+  const char MAX_ENTRIES[] = "max-entries";
+  const char OBJECT[] = "object";
+  const char OBJECT_VERSION[] = "object-version";
+  const char TENANT[] = "tenant";
+  const char MEAN_IT[] = "yes-i-really-mean-it";
+  std::string bi_index_type_str;
+  boost::program_options::options_description desc{"Bi options"};
+  desc.add_options()
+      (BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
+      (BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
+      (INFILE, boost::program_options::value(&infile), "A file to read in when setting data")
+      (INDEX_TYPE, boost::program_options::value(&bi_index_type_str), "")
+      (MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
+      (MARKER, boost::program_options::value(&marker), "")
+      (OBJECT, boost::program_options::value(&object), "Object name")
+      (OBJECT_VERSION, boost::program_options::value(&object_version), "")
+      (TENANT, boost::program_options::value(&tenant), "Tenant name")
+      (MEAN_IT, "Confirmation of purging certain information")
+      (COMMAND, boost::program_options::value<std::vector<std::string>>(), "Command: bi get, bi "
+          "list, bi purge, bi put");
+
+  boost::program_options::positional_options_description pos_desc;
+  pos_desc.add(COMMAND, -1);
+  boost::program_options::variables_map var_map;
+  try {
+    boost::program_options::parsed_options options = boost::program_options::command_line_parser{args.size(), args.data()}
+        .options(desc)
+        .positional(pos_desc)
+        .run();
+
+    boost::program_options::store(options, var_map);
+    boost::program_options::notify(var_map);
+
+    if (var_map.count(COMMAND)) {
+      std::vector<std::string> command = var_map[COMMAND].as<std::vector<std::string>>();
+      if (command.size() <= COMMAND_PREFIX.size()) {
+        return EINVAL;
+      }
+      for (std::size_t i = 0; i < COMMAND_PREFIX.size(); ++i) {
+        if (command[i] != COMMAND_PREFIX[i]) {
+          return EINVAL;
+        }
+      }
+      m_command = STRING_TO_COMMAND.at(command[COMMAND_PREFIX.size()]);
+    } else {
+      return EINVAL;
+    }
+    if (var_map.count(INDEX_TYPE)) {
+      bi_index_type = get_bi_index_type(bi_index_type_str);
+      if (bi_index_type == InvalidIdx) {
+        return EINVAL;
+      }
+    }
+    if (var_map.count(MEAN_IT)) {
+      yes_i_really_mean_it = true;
+    }
+  } catch (const std::exception& ex) {
+    std::cout << "Incorrect command:" << std::endl << desc << std::endl;
+  }
+  return EINVAL;
 }

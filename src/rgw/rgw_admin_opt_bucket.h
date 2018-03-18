@@ -161,4 +161,72 @@ int handle_opt_reshard_process(RGWRados* store);
 int handle_opt_reshard_status(const std::string& bucket_id, const std::string& bucket_name,
                               const std::string& tenant, RGWRados* store, Formatter* formatter);
 
+class RgwAdminBiCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  explicit RgwAdminBiCommandsHandler(std::vector<const char*>& args, RGWRados *store,
+                                     Formatter *formatter)
+      : RgwAdminCommandGroupHandler(args, store, formatter)
+  {
+    parse_command_and_parameters(args);
+    std::cout << "Parsed command: " << m_command << std::endl;
+  }
+
+  ~RgwAdminBiCommandsHandler() override = default;
+
+  int execute_command() override {
+    switch (m_command) {
+      case OPT_BI_GET : return handle_opt_bi_get();
+      case OPT_BI_LIST : return handle_opt_bi_list();
+      case OPT_BI_PURGE : return handle_opt_bi_purge();
+      case OPT_BI_PUT : return handle_opt_bi_put();
+      default: return EINVAL;
+    }
+  }
+
+  RgwAdminCommandGroup get_type() const override { return BI; }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_bi_get() {
+    return ::handle_opt_bi_get(object, bucket_id, bucket_name, tenant, bi_index_type,
+                               object_version, bucket, m_store, m_formatter);
+  }
+
+  int handle_opt_bi_list() {
+    return ::handle_opt_bi_list(bucket_id, bucket_name, tenant, max_entries, object, marker,
+                                bucket, m_store, m_formatter);
+  }
+
+  int handle_opt_bi_purge() {
+    return ::handle_opt_bi_purge(bucket_id, bucket_name, tenant, yes_i_really_mean_it, bucket,
+                                 m_store);
+  }
+
+  int handle_opt_bi_put() {
+    return ::handle_opt_bi_put(bucket_id, bucket_name, tenant, infile, object_version, bucket,
+                               m_store);
+  }
+
+  const std::vector<std::string> COMMAND_PREFIX = {"bi"};
+  const std::unordered_map<std::string, RgwAdminCommand> STRING_TO_COMMAND = {
+      {"get", OPT_BI_GET},
+      {"list", OPT_BI_LIST},
+      {"purge", OPT_BI_PURGE},
+      {"put", OPT_BI_PUT},
+  };
+
+  BIIndexType bi_index_type = PlainIdx;
+  rgw_bucket bucket;
+  std::string bucket_id;
+  std::string bucket_name;
+  std::string infile;
+  std::string marker;
+  int max_entries;
+  std::string object;
+  std::string object_version;
+  std::string tenant;
+  bool yes_i_really_mean_it = false;
+};
+
 #endif //CEPH_RGW_ADMIN_BUCKET_H
