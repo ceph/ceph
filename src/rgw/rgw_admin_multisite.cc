@@ -2111,9 +2111,12 @@ int handle_opt_data_sync_run(const std::string& source_zone, const boost::intrus
 
 int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
   const char COMMAND[] = "command";
+  std::vector<std::string> command;
   boost::program_options::options_description desc{"Metadata sync options"};
   desc.add_options()
-      (COMMAND, boost::program_options::value<std::vector<std::string>>(), "Command: metadata sync init, metadata sync run, metadata sync status");
+      (COMMAND, boost::program_options::value(&command), "Command: metadata sync init, metadata "
+          "sync "
+          "run, metadata sync status");
 
   boost::program_options::positional_options_description pos_desc;
   pos_desc.add(COMMAND, -1);
@@ -2129,7 +2132,6 @@ int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters(std::vecto
     boost::program_options::notify(var_map);
 
     if (var_map.count(COMMAND)) {
-      std::vector<std::string> command = var_map[COMMAND].as<std::vector<std::string>>();
       if (command.size() <= COMMAND_PREFIX.size()) {
         return EINVAL;
       }

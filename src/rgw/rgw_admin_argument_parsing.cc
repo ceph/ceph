@@ -1498,10 +1498,11 @@ const std::unordered_map<std::string, RgwAdminCommandGroup> RgwAdminCommandGroup
 
 RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std::vector<const char*>& args) {
   const char COMMAND_GROUP[] = "command";
+  std::vector<std::string> command;
   boost::program_options::options_description desc{"General options"};
   desc.add_options()
       ("help,h", "Help screen")
-      (COMMAND_GROUP, boost::program_options::value<std::vector<std::string>>(), "Command");
+      (COMMAND_GROUP, boost::program_options::value(&command), "Command");
 
   boost::program_options::positional_options_description pos_desc;
   pos_desc.add(COMMAND_GROUP, -1);
@@ -1520,7 +1521,6 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std
       usage();
     }
     else if (var_map.count(COMMAND_GROUP)) {
-      std::vector<std::string> command = var_map[COMMAND_GROUP].as<std::vector<std::string>>();
       std::string first_word = command[0];
       if (command.size() == 1) {
         // Will throw an exception if such a command group is not found. Since an exception could

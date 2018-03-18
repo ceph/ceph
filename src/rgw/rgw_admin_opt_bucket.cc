@@ -1320,6 +1320,7 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
   const char TENANT[] = "tenant";
   const char MEAN_IT[] = "yes-i-really-mean-it";
   std::string bi_index_type_str;
+  std::vector<std::string> command;
   boost::program_options::options_description desc{"Bi options"};
   desc.add_options()
       (BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
@@ -1332,8 +1333,7 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
       (OBJECT_VERSION, boost::program_options::value(&object_version), "")
       (TENANT, boost::program_options::value(&tenant), "Tenant name")
       (MEAN_IT, "Confirmation of purging certain information")
-      (COMMAND, boost::program_options::value<std::vector<std::string>>(), "Command: bi get, bi "
-          "list, bi purge, bi put");
+      (COMMAND, boost::program_options::value(&command), "Command: bi get, bi list, bi purge, bi put");
 
   boost::program_options::positional_options_description pos_desc;
   pos_desc.add(COMMAND, -1);
@@ -1348,7 +1348,6 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
     boost::program_options::notify(var_map);
 
     if (var_map.count(COMMAND)) {
-      std::vector<std::string> command = var_map[COMMAND].as<std::vector<std::string>>();
       if (command.size() <= COMMAND_PREFIX.size()) {
         return EINVAL;
       }
