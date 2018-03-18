@@ -211,21 +211,32 @@ int handle_opt_data_sync_run(const std::string& source_zone, const boost::intrus
 
 class RgwAdminMetadataSyncCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  explicit RgwAdminMetadataSyncCommandsHandler(std::vector<const char*>& args, RGWRados *store, Formatter *formatter)
-      : RgwAdminCommandGroupHandler(args, store, formatter)
-  {
-    if (parse_command_and_parameters(args) > 0) {
-      ceph_abort();
+  explicit RgwAdminMetadataSyncCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+                                               Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, {"metadata", "sync"}, {
+      {"status", OPT_METADATA_SYNC_STATUS},
+      {"init",   OPT_METADATA_SYNC_INIT},
+      {"run",    OPT_METADATA_SYNC_RUN},
+  }, store, formatter) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command: " << m_command << std::endl;
     }
-    std::cout << "Parsed command: " << m_command << std::endl;
   }
+
   ~RgwAdminMetadataSyncCommandsHandler() override = default;
+
+  // If parameter parsing failed, the value of m_command is OPT_NO_CMD and a call of this method
+  // will return EINVAL
   int execute_command() override {
     switch (m_command) {
-      case(OPT_METADATA_SYNC_STATUS) : return handle_opt_metadata_sync_status();
-      case(OPT_METADATA_SYNC_INIT) : return handle_opt_metadata_sync_init();
-      case(OPT_METADATA_SYNC_RUN) : return handle_opt_metadata_sync_run();
-      default: return EINVAL;
+      case (OPT_METADATA_SYNC_STATUS) :
+        return handle_opt_metadata_sync_status();
+      case (OPT_METADATA_SYNC_INIT) :
+        return handle_opt_metadata_sync_init();
+      case (OPT_METADATA_SYNC_RUN) :
+        return handle_opt_metadata_sync_run();
+      default:
+        return EINVAL;
     }
   }
 
@@ -243,13 +254,6 @@ private:
   int handle_opt_metadata_sync_run() {
     return ::handle_opt_metadata_sync_run(m_store);
   }
-
-  const std::vector<std::string> COMMAND_PREFIX = {"metadata", "sync"};
-  const std::unordered_map<std::string, RgwAdminCommand> STRING_TO_COMMAND = {
-      {"status", OPT_METADATA_SYNC_STATUS},
-      {"init", OPT_METADATA_SYNC_INIT},
-      {"run", OPT_METADATA_SYNC_RUN},
-  };
 };
 
 

@@ -1553,49 +1553,17 @@ void handle_opt_sync_status(RGWRados *store)
 }
 
 int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
-  const char COMMAND[] = "command";
   const char METADATA_KEY[] = "metadata-key";
   const char INFILE[] = "infile";
   const char MARKER[] = "marker";
   const char MAX_ENTRIES[] = "max-entries";
-  std::vector<std::string> command;
   boost::program_options::options_description desc{"Metadata options"};
   desc.add_options()
       (METADATA_KEY, boost::program_options::value(&metadata_key)->required(), "The key to retrieve metadata from with metadata get")
       (INFILE, boost::program_options::value(&infile), "A file to read in when setting data")
       (MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
-      (MARKER, boost::program_options::value(&marker), "")
-      (COMMAND, boost::program_options::value(&command), "Command: metadata put, metadata get, "
-          "metadata rm, metadata list");
-
-  boost::program_options::positional_options_description pos_desc;
-  pos_desc.add(COMMAND, -1);
+      (MARKER, boost::program_options::value(&marker), "");
   boost::program_options::variables_map var_map;
-  try {
-    boost::program_options::parsed_options options = boost::program_options::command_line_parser{args.size(), args.data()}
-        .options(desc)
-        .positional(pos_desc)
-        .run();
 
-    boost::program_options::store(options, var_map);
-    boost::program_options::notify(var_map);
-
-    if (var_map.count(COMMAND)) {
-      if (command.size() <= COMMAND_PREFIX.size()) {
-        return EINVAL;
-      }
-      for (std::size_t i = 0; i < COMMAND_PREFIX.size(); ++i) {
-        if (command[i] != COMMAND_PREFIX[i]) {
-          return EINVAL;
-        }
-      }
-      m_command = STRING_TO_COMMAND.at(command[COMMAND_PREFIX.size()]);
-    } else {
-      return EINVAL;
-    }
-  } catch (const std::exception& ex) {
-    std::cout << "Incorrect command:" << std::endl << desc << std::endl;
-    return EINVAL;
-  }
-  return 0;
+  return parse_command(args, desc, var_map);
 }

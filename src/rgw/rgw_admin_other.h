@@ -130,23 +130,35 @@ void handle_opt_sync_status(RGWRados *store);
 
 class RgwAdminMetadataCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  explicit RgwAdminMetadataCommandsHandler(std::vector<const char*>& args, RGWRados *store,
-                                           Formatter *formatter)
-      : RgwAdminCommandGroupHandler(args, store, formatter)
-  {
-    if (parse_command_and_parameters(args) > 0) {
-      ceph_abort();
+  explicit RgwAdminMetadataCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+                                           Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, {"metadata"}, {
+      {"list", OPT_METADATA_LIST},
+      {"get",  OPT_METADATA_GET},
+      {"put",  OPT_METADATA_PUT},
+      {"rm",   OPT_METADATA_RM},
+  }, store, formatter) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command: " << m_command << std::endl;
     }
-    std::cout << "Parsed command: " << m_command << std::endl;
   }
+
   ~RgwAdminMetadataCommandsHandler() override = default;
+
+  // If parameter parsing failed, the value of m_command is OPT_NO_CMD and a call of this method
+  // will return EINVAL
   int execute_command() override {
     switch (m_command) {
-      case(OPT_METADATA_GET) : return handle_opt_metadata_get();
-      case(OPT_METADATA_PUT) : return handle_opt_metadata_put();
-      case(OPT_METADATA_RM) : return handle_opt_metadata_rm();
-      case(OPT_METADATA_LIST) : return handle_opt_metadata_list();
-      default: return EINVAL;
+      case (OPT_METADATA_GET) :
+        return handle_opt_metadata_get();
+      case (OPT_METADATA_PUT) :
+        return handle_opt_metadata_put();
+      case (OPT_METADATA_RM) :
+        return handle_opt_metadata_rm();
+      case (OPT_METADATA_LIST) :
+        return handle_opt_metadata_list();
+      default:
+        return EINVAL;
     }
   }
 
@@ -171,13 +183,6 @@ private:
     return ::handle_opt_metadata_rm(metadata_key, m_store, m_formatter);
   }
 
-  const std::vector<std::string> COMMAND_PREFIX = {"metadata"};
-  const std::unordered_map<std::string, RgwAdminCommand> STRING_TO_COMMAND = {
-      {"list", OPT_METADATA_LIST},
-      {"get", OPT_METADATA_GET},
-      {"put", OPT_METADATA_PUT},
-      {"rm", OPT_METADATA_RM},
-  };
   std::string metadata_key;
   boost::optional<std::string> infile;
   boost::optional<std::string> marker;

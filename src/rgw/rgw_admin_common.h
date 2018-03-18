@@ -1,10 +1,13 @@
 #ifndef CEPH_RGW_ADMIN_COMMON_H
 #define CEPH_RGW_ADMIN_COMMON_H
 
+#include <boost/program_options.hpp>
+
 #include "cls/rgw/cls_rgw_types.h"
 
 #include "common/ceph_json.h"
 #include <common/safe_io.h>
+#include <boost/program_options/variables_map.hpp>
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -215,9 +218,13 @@ enum RgwAdminCommand {
 
 class RgwAdminCommandGroupHandler {
 public:
-  explicit RgwAdminCommandGroupHandler(std::vector<const char*>& args, RGWRados *store,
-                                        Formatter *formatter)
-      : m_store(store), m_formatter(formatter)
+  explicit RgwAdminCommandGroupHandler(std::vector<const char*>& args,
+                                       std::vector<std::string>&& command_prefix,
+                                       std::unordered_map<std::string, RgwAdminCommand>&&
+                                        string_to_command,
+                                       RGWRados *store, Formatter *formatter)
+      : COMMAND_PREFIX(command_prefix), STRING_TO_COMMAND(string_to_command), m_store(store),
+        m_formatter(formatter)
   {}
   virtual ~RgwAdminCommandGroupHandler() = default;
   virtual int execute_command() = 0;
@@ -226,6 +233,12 @@ public:
 protected:
   virtual int parse_command_and_parameters(std::vector<const char*>& args) = 0;
 
+  int parse_command(std::vector<const char*>& args,
+                    boost::program_options::options_description& desc,
+                    boost::program_options::variables_map& var_map);
+
+  const std::vector<std::string> COMMAND_PREFIX;
+  const std::unordered_map<std::string, RgwAdminCommand> STRING_TO_COMMAND;
   RgwAdminCommand m_command = OPT_NO_CMD;
   // Does not take ownership.
   RGWRados* m_store;

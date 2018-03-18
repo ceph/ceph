@@ -2110,43 +2110,8 @@ int handle_opt_data_sync_run(const std::string& source_zone, const boost::intrus
 }
 
 int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
-  const char COMMAND[] = "command";
-  std::vector<std::string> command;
   boost::program_options::options_description desc{"Metadata sync options"};
-  desc.add_options()
-      (COMMAND, boost::program_options::value(&command), "Command: metadata sync init, metadata "
-          "sync "
-          "run, metadata sync status");
-
-  boost::program_options::positional_options_description pos_desc;
-  pos_desc.add(COMMAND, -1);
   boost::program_options::variables_map var_map;
-  try {
-    boost::program_options::parsed_options options = boost::program_options::command_line_parser{
-        args.size(), args.data()}
-        .options(desc)
-        .positional(pos_desc)
-        .run();
 
-    boost::program_options::store(options, var_map);
-    boost::program_options::notify(var_map);
-
-    if (var_map.count(COMMAND)) {
-      if (command.size() <= COMMAND_PREFIX.size()) {
-        return EINVAL;
-      }
-      for (std::size_t i = 0; i < COMMAND_PREFIX.size(); ++i) {
-        if (command[i] != COMMAND_PREFIX[i]) {
-          return EINVAL;
-        }
-      }
-      m_command = STRING_TO_COMMAND.at(command[COMMAND_PREFIX.size()]);
-    } else {
-      return EINVAL;
-    }
-  } catch (const std::exception& ex) {
-    std::cout << "Incorrect command:" << std::endl << desc << std::endl;
-    return EINVAL;
-  }
-  return 0;
+  return parse_command(args, desc, var_map);
 }

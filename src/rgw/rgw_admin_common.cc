@@ -192,3 +192,42 @@ int check_reshard_bucket_params(RGWRados *store,
   }
   return 0;
 }
+
+int RgwAdminCommandGroupHandler::parse_command(std::vector<const char*>& args,
+                                               boost::program_options::options_description& desc,
+                                               boost::program_options::variables_map& var_map) {
+  const char COMMAND[] = "command";
+  std::vector<std::string> command;
+  desc.add_options()
+      (COMMAND, boost::program_options::value(&command), "Command");
+
+  boost::program_options::positional_options_description pos_desc;
+  pos_desc.add(COMMAND, -1);
+  try {
+    boost::program_options::parsed_options options = boost::program_options::command_line_parser{args.size(), args.data()}
+        .options(desc)
+        .positional(pos_desc)
+        .run();
+
+    boost::program_options::store(options, var_map);
+    boost::program_options::notify(var_map);
+
+    if (var_map.count(COMMAND)) {
+      if (command.size() <= COMMAND_PREFIX.size()) {
+        return EINVAL;
+      }
+      for (std::size_t i = 0; i < COMMAND_PREFIX.size(); ++i) {
+        if (command[i] != COMMAND_PREFIX[i]) {
+          return EINVAL;
+        }
+      }
+      m_command = STRING_TO_COMMAND.at(command[COMMAND_PREFIX.size()]);
+    } else {
+      return EINVAL;
+    }
+  } catch (const std::exception& ex) {
+    std::cerr << "Incorrect command:" << std::endl << desc << std::endl;
+    return EINVAL;
+  }
+  return 0;
+}

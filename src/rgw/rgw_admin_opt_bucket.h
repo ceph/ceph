@@ -165,16 +165,22 @@ class RgwAdminBiCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
   explicit RgwAdminBiCommandsHandler(std::vector<const char*>& args, RGWRados *store,
                                      Formatter *formatter)
-      : RgwAdminCommandGroupHandler(args, store, formatter)
+      : RgwAdminCommandGroupHandler(args, {"bi"}, {
+      {"get",   OPT_BI_GET},
+      {"list",  OPT_BI_LIST},
+      {"purge", OPT_BI_PURGE},
+      {"put",   OPT_BI_PUT},
+  }, store, formatter)
   {
-    if (parse_command_and_parameters(args) > 0) {
-      ceph_abort();
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command: " << m_command << std::endl;
     }
-    std::cout << "Parsed command: " << m_command << std::endl;
   }
 
   ~RgwAdminBiCommandsHandler() override = default;
 
+  // If parameter parsing failed, the value of m_command is OPT_NO_CMD and a call of this method
+  // will return EINVAL
   int execute_command() override {
     switch (m_command) {
       case OPT_BI_GET : return handle_opt_bi_get();
@@ -209,14 +215,6 @@ private:
     return ::handle_opt_bi_put(bucket_id, bucket_name, tenant, infile, object_version, bucket,
                                m_store);
   }
-
-  const std::vector<std::string> COMMAND_PREFIX = {"bi"};
-  const std::unordered_map<std::string, RgwAdminCommand> STRING_TO_COMMAND = {
-      {"get", OPT_BI_GET},
-      {"list", OPT_BI_LIST},
-      {"purge", OPT_BI_PURGE},
-      {"put", OPT_BI_PUT},
-  };
 
   BIIndexType bi_index_type = PlainIdx;
   rgw_bucket bucket;

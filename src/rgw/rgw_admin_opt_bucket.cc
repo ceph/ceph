@@ -1308,7 +1308,6 @@ int handle_opt_object_stat(const std::string& bucket_id, const std::string& buck
 }
 
 int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
-  const char COMMAND[] = "command";
   const char BUCKET_ID[] = "bucket-id";
   const char BUCKET_NAME[] = "bucket";
   const char INDEX_TYPE[] = "index-type";
@@ -1320,7 +1319,6 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
   const char TENANT[] = "tenant";
   const char MEAN_IT[] = "yes-i-really-mean-it";
   std::string bi_index_type_str;
-  std::vector<std::string> command;
   boost::program_options::options_description desc{"Bi options"};
   desc.add_options()
       (BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
@@ -1332,46 +1330,21 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
       (OBJECT, boost::program_options::value(&object), "Object name")
       (OBJECT_VERSION, boost::program_options::value(&object_version), "")
       (TENANT, boost::program_options::value(&tenant), "Tenant name")
-      (MEAN_IT, "Confirmation of purging certain information")
-      (COMMAND, boost::program_options::value(&command), "Command: bi get, bi list, bi purge, bi put");
-
-  boost::program_options::positional_options_description pos_desc;
-  pos_desc.add(COMMAND, -1);
+      (MEAN_IT, "Confirmation of purging certain information");
   boost::program_options::variables_map var_map;
-  try {
-    boost::program_options::parsed_options options = boost::program_options::command_line_parser{args.size(), args.data()}
-        .options(desc)
-        .positional(pos_desc)
-        .run();
 
-    boost::program_options::store(options, var_map);
-    boost::program_options::notify(var_map);
-
-    if (var_map.count(COMMAND)) {
-      if (command.size() <= COMMAND_PREFIX.size()) {
-        return EINVAL;
-      }
-      for (std::size_t i = 0; i < COMMAND_PREFIX.size(); ++i) {
-        if (command[i] != COMMAND_PREFIX[i]) {
-          return EINVAL;
-        }
-      }
-      m_command = STRING_TO_COMMAND.at(command[COMMAND_PREFIX.size()]);
-    } else {
+  int ret = parse_command(args, desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+  if (var_map.count(INDEX_TYPE)) {
+    bi_index_type = get_bi_index_type(bi_index_type_str);
+    if (bi_index_type == InvalidIdx) {
       return EINVAL;
     }
-    if (var_map.count(INDEX_TYPE)) {
-      bi_index_type = get_bi_index_type(bi_index_type_str);
-      if (bi_index_type == InvalidIdx) {
-        return EINVAL;
-      }
-    }
-    if (var_map.count(MEAN_IT)) {
-      yes_i_really_mean_it = true;
-    }
-  } catch (const std::exception& ex) {
-    std::cout << "Incorrect command:" << std::endl << desc << std::endl;
-    return EINVAL;
+  }
+  if (var_map.count(MEAN_IT)) {
+    yes_i_really_mean_it = true;
   }
   return 0;
 }
