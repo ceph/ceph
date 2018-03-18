@@ -18,6 +18,7 @@
 #include "rgw_reshard.h"
 #include "rgw_admin_multisite.h"
 #include "rgw_admin_other.h"
+#include "rgw_admin_opt_bucket.h"
 
 
 void usage()
@@ -1546,10 +1547,11 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std
 }
 
 RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_group_handler(std::vector<const char*>& args) {
+  // TODO: pass pointers to RGWRados and Formatter
   RgwAdminCommandGroup command_group = RgwAdminCommandGroupHandlerFactory::parse_command_group(args);
   switch (command_group) {
     case(INVALID) : return nullptr;
-    case(BI) : return nullptr;
+    case(BI) : return new RgwAdminBiCommandsHandler(args, nullptr, nullptr);
     case(BILOG) : return nullptr;
     case(BUCKET) : return nullptr;
     case(BUCKET_SYNC) : return nullptr;
