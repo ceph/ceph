@@ -179,6 +179,7 @@ macro(build_boost version)
   ExternalProject_Get_Property(Boost install_dir)
   set(Boost_INCLUDE_DIRS ${install_dir}/include)
   set(Boost_INCLUDE_DIR ${install_dir}/include)
+  set(Boost_VERSION ${version})
   # create the directory so cmake won't complain when looking at the imported
   # target
   file(MAKE_DIRECTORY ${Boost_INCLUDE_DIRS})
