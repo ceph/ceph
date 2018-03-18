@@ -1594,6 +1594,7 @@ int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<co
     }
   } catch (const std::exception& ex) {
     std::cout << "Incorrect command:" << std::endl << desc << std::endl;
+    return EINVAL;
   }
-  return EINVAL;
+  return 0;
 }

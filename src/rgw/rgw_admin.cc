@@ -91,6 +91,9 @@ int main(int argc, const char **argv)
   // boost::program_options parser takes argc and argv, i.e. expects that the first argument is the name of the executable
   args.insert(args.begin(), "rgw_admin.cc");
   RgwAdminCommandGroupHandler* group_handler = RgwAdminCommandGroupHandlerFactory::get_command_group_handler(args);
+  if (group_handler == nullptr) {
+    return EINVAL;
+  }
 //  return group_handler->execute_command();
   return 0;
 

@@ -134,7 +134,9 @@ public:
                                            Formatter *formatter)
       : RgwAdminCommandGroupHandler(args, store, formatter)
   {
-    parse_command_and_parameters(args);
+    if (parse_command_and_parameters(args) > 0) {
+      ceph_abort();
+    }
     std::cout << "Parsed command: " << m_command << std::endl;
   }
   ~RgwAdminMetadataCommandsHandler() override = default;

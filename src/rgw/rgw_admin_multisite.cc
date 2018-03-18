@@ -2144,6 +2144,7 @@ int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters(std::vecto
     }
   } catch (const std::exception& ex) {
     std::cout << "Incorrect command:" << std::endl << desc << std::endl;
+    return EINVAL;
   }
-  return EINVAL;
+  return 0;
 }
