@@ -1035,7 +1035,7 @@ int BlueFS::_read_random(
   while (len > 0) {
     uint64_t x_off = 0;
     auto p = h->file->fnode.seek(off, &x_off);
-    uint64_t l = std::min(p->length - x_off, len);
+    uint64_t l = std::min(p->length - x_off, static_cast<uint64_t>(len));
     dout(20) << __func__ << " read buffered 0x"
              << std::hex << x_off << "~" << l << std::dec
              << " of " << *p << dendl;
