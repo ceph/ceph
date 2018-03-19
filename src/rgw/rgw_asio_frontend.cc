@@ -10,6 +10,9 @@
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 
+#include "include/scope_guard.h"
+#include "common/async/throttle.h"
+
 #include "rgw_asio_client.h"
 #include "rgw_asio_frontend.h"
 
@@ -63,7 +66,11 @@ void Pauser::wait()
 using tcp = boost::asio::ip::tcp;
 namespace beast = boost::beast;
 
+using Throttle = ceph::async::Throttle<boost::asio::io_context::executor_type>;
+auto build_counters = ceph::async::throttle_counters::build;
+
 void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
+                       Throttle& request_throttle,
                        boost::asio::yield_context yield)
 {
   // limit header to 4k, since we read it all into a single flat_buffer
@@ -103,19 +110,32 @@ void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
       return;
     }
 
-    // process the request
-    RGWRequest req{env.store->get_new_req_id()};
+    // wait for request throttle
+    request_throttle.async_get(1, yield[ec]);
+    if (ec == boost::asio::error::operation_aborted) {
+      return;
+    } else if (ec) {
+      ldout(cct, 1) << "failed to wait for request throttle: " << ec.message() << dendl;
+      return;
+    }
+    {
+      // return throttle when process_request() completes
+      auto g = make_scope_guard([&] { request_throttle.put(1); });
 
-    rgw::asio::ClientIO real_client{socket, parser, buffer};
+      // process the request
+      RGWRequest req{env.store->get_new_req_id()};
 
-    auto real_client_io = rgw::io::add_reordering(
-                            rgw::io::add_buffering(cct,
-                              rgw::io::add_chunking(
-                                rgw::io::add_conlen_controlling(
-                                  &real_client))));
-    RGWRestfulIO client(cct, &real_client_io);
-    process_request(env.store, env.rest, &req, env.uri_prefix,
-                    *env.auth_registry, &client, env.olog);
+      rgw::asio::ClientIO real_client{socket, parser, buffer};
+
+      auto real_client_io = rgw::io::add_reordering(
+          rgw::io::add_buffering(cct,
+                                 rgw::io::add_chunking(
+                                     rgw::io::add_conlen_controlling(
+                                         &real_client))));
+      RGWRestfulIO client(cct, &real_client_io);
+      process_request(env.store, env.rest, &req, env.uri_prefix,
+                      *env.auth_registry, &client, env.olog);
+    }
 
     if (!parser.keep_alive()) {
       return;
@@ -158,6 +178,7 @@ class AsioFrontend {
   };
   std::vector<Listener> listeners;
 
+  Throttle request_throttle;
   std::vector<std::thread> threads;
   Pauser pauser;
   std::atomic<bool> going_down{false};
@@ -168,7 +189,11 @@ class AsioFrontend {
 
  public:
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
-    : env(env), conf(conf) {}
+    : env(env), conf(conf),
+      request_throttle(service.get_executor(), 0,
+                       build_counters(env.store->ctx(),
+                                      "throttle-frontend-requests"))
+  {}
 
   int init();
   int run();
@@ -280,7 +305,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   // spawn a coroutine to handle the connection
   boost::asio::spawn(service,
     [this, socket=std::move(socket)] (boost::asio::yield_context yield) mutable {
-      handle_connection(env, socket, yield);
+      handle_connection(env, socket, request_throttle, yield);
     });
 }
 
@@ -303,6 +328,9 @@ int AsioFrontend::run()
       }
     });
   }
+
+  // TODO: use a config observer to update the throttle while !paused
+  request_throttle.set_maximum(cct->_conf->get_val<int64_t>("rgw_max_concurrent_requests"));
   return 0;
 }
 
