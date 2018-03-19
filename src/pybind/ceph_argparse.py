@@ -1024,6 +1024,7 @@ def validate_command(sigdict, args, verbose=False):
         # (so we can maybe give a more-useful error message)
         best_match_cnt = 0
         bestcmds = []
+        exactcmds = []
         for cmdtag, cmd in sigdict.items():
             sig = cmd['sig']
             matched = matchnum(args, sig, partial=True)
@@ -1040,6 +1041,24 @@ def validate_command(sigdict, args, verbose=False):
                         matched, best_match_cnt, cmdtag, concise_sig(sig)
                     ), file=sys.stderr)
                 bestcmds.append({cmdtag: cmd})
+
+        # if more than one possible matches, look for exact match
+        # to avoid matching both 'foo bar' and 'foot barxxx' while 
+        # input is just 'foo bar'
+        if len(bestcmds) > 1:
+            for cmdsig in bestcmds:
+                for (cmdtag, cmd) in cmdsig.items():
+                    sig = cmd['sig']
+                    matched = matchnum(args, sig, partial=False)
+                    if matched == best_match_cnt:
+                        if verbose:
+                            print("exact equal match: {0} > {1}: {2}:{3} ".format(
+                                matched, best_match_cnt, cmdtag, concise_sig(sig)
+                            ), file=sys.stderr)
+                        exactcmds.append({cmdtag: cmd})
+
+        if len(exactcmds) >= 1:
+            bestcmds = exactcmds;
 
         # Sort bestcmds by number of args so we can try shortest first
         # (relies on a cmdsig being key,val where val is a list of len 1)
