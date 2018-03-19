@@ -1348,3 +1348,28 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
   }
   return 0;
 }
+
+int RgwAdminBilogCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+  const char BUCKET_ID[] = "bucket-id";
+  const char BUCKET_NAME[] = "bucket";
+  const char MARKER[] = "marker";
+  const char START_MARKER[] = "start-marker";
+  const char END_MARKER[] = "end-marker";
+  const char MAX_ENTRIES[] = "max-entries";
+  const char SHARD_ID[] = "shard-id";
+  const char TENANT[] = "tenant";
+  std::string bi_index_type_str;
+  boost::program_options::options_description desc{"Bi options"};
+  desc.add_options()
+      (BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
+      (BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
+      (MARKER, boost::program_options::value(&marker), "")
+      (START_MARKER, boost::program_options::value(&start_marker), "Start marker for bilog trim")
+      (END_MARKER, boost::program_options::value(&end_marker), "End marker for bilog trim")
+      (MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
+      (SHARD_ID, boost::program_options::value(&shard_id), "")
+      (TENANT, boost::program_options::value(&tenant), "Tenant name");
+  boost::program_options::variables_map var_map;
+
+  return parse_command(args, desc, var_map);
+}

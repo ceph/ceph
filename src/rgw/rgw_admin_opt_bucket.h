@@ -229,4 +229,73 @@ private:
   bool yes_i_really_mean_it = false;
 };
 
+class RgwAdminBilogCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  explicit RgwAdminBilogCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+                                        Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, {"bilog"}, {
+      {"autotrim", OPT_BILOG_AUTOTRIM},
+      {"list",     OPT_BILOG_LIST},
+      {"status",   OPT_BILOG_STATUS},
+      {"trim",     OPT_BILOG_TRIM},
+  }, store, formatter) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command: " << m_command << std::endl;
+    }
+  }
+
+  ~RgwAdminBilogCommandsHandler() override = default;
+
+  // If parameter parsing failed, the value of m_command is OPT_NO_CMD and a call of this method
+  // will return EINVAL
+  int execute_command() override {
+    switch (m_command) {
+      case OPT_BILOG_AUTOTRIM :
+        return handle_opt_bilog_autotrim();
+      case OPT_BILOG_LIST :
+        return handle_opt_bilog_list();
+      case OPT_BILOG_STATUS :
+        return handle_opt_bilog_status();
+      case OPT_BILOG_TRIM :
+        return handle_opt_bilog_trim();
+      default:
+        return EINVAL;
+    }
+  }
+
+  RgwAdminCommandGroup get_type() const override { return BI; }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_bilog_autotrim() {
+    return ::handle_opt_bilog_autotrim(m_store);
+  }
+
+  int handle_opt_bilog_list() {
+    return ::handle_opt_bilog_list(bucket_id, bucket_name, tenant, max_entries, shard_id, marker,
+                                   bucket, m_store, m_formatter);
+  }
+
+  int handle_opt_bilog_status() {
+    return ::handle_opt_bilog_status(bucket_id, bucket_name, tenant, shard_id, bucket, m_store,
+                                     m_formatter);
+  }
+
+  int handle_opt_bilog_trim() {
+    return ::handle_opt_bilog_trim(bucket_id, bucket_name, tenant, shard_id, start_marker,
+                                   end_marker, bucket, m_store);
+  }
+
+  rgw_bucket bucket;
+  std::string bucket_id;
+  std::string bucket_name;
+  std::string marker;
+  std::string start_marker;
+  std::string end_marker;
+  int max_entries = -1;
+  int shard_id = -1;
+  std::string tenant;
+};
+
 #endif //CEPH_RGW_ADMIN_BUCKET_H

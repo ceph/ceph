@@ -1552,7 +1552,7 @@ RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_gro
   switch (command_group) {
     case(INVALID) : return nullptr;
     case(BI) : return new RgwAdminBiCommandsHandler(args, nullptr, nullptr);
-    case(BILOG) : return nullptr;
+    case(BILOG) : return new RgwAdminBilogCommandsHandler(args, nullptr, nullptr);
     case(BUCKET) : return nullptr;
     case(BUCKET_SYNC) : return nullptr;
     case(CAPS) : return nullptr;
