@@ -2079,9 +2079,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   tab.define_column("VERSION", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("REPORTED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("UP", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("UP_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("ACTING", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("ACTING_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEEP_SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
 
@@ -2091,6 +2089,9 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
     ostringstream reported;
     reported << st.reported_epoch << ":" << st.reported_seq;
 
+    ostringstream upstr, actingstr;
+    upstr << st.up << 'p' << st.up_primary;
+    actingstr << st.acting << 'p' << st.acting_primary;
     tab << *i
         << st.stats.sum.num_objects
         << st.stats.sum.num_objects_degraded
@@ -2102,10 +2103,8 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
         << st.last_change
         << st.version
         << reported.str()
-        << st.up
-        << st.up_primary
-        << st.acting
-        << st.acting_primary
+        << upstr.str()
+        << actingstr.str()
         << st.last_scrub_stamp
         << st.last_deep_scrub_stamp
         << TextTable::endrow;
