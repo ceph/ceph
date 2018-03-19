@@ -1272,36 +1272,18 @@ void ECBackend::filter_read_op(
 {
   set<hobject_t> to_cancel;
   for (map<pg_shard_t, set<hobject_t> >::iterator i = op.source_to_obj.begin();
-       i != op.source_to_obj.end();
-       ++i) {
+       i != op.source_to_obj.end();) {
     if (osdmap->is_down(i->first.osd)) {
       to_cancel.insert(i->second.begin(), i->second.end());
       op.in_progress.erase(i->first);
-      continue;
+      op.source_to_obj.erase(i++);
+    } else {
+      ++i;
     }
   }
 
   if (to_cancel.empty())
     return;
-
-  for (map<pg_shard_t, set<hobject_t> >::iterator i = op.source_to_obj.begin();
-       i != op.source_to_obj.end();
-       ) {
-    for (set<hobject_t>::iterator j = i->second.begin();
-	 j != i->second.end();
-	 ) {
-      if (to_cancel.count(*j))
-	i->second.erase(j++);
-      else
-	++j;
-    }
-    if (i->second.empty()) {
-      op.source_to_obj.erase(i++);
-    } else {
-      assert(!osdmap->is_down(i->first.osd));
-      ++i;
-    }
-  }
 
   for (set<hobject_t>::iterator i = to_cancel.begin();
        i != to_cancel.end();
