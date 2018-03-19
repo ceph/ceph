@@ -3492,20 +3492,18 @@ bool PastIntervals::check_new_interval(
         (*could_have_gone_active)(old_acting_shards)) {
       if (out)
 	*out << __func__ << " " << i
-	     << ": not rw,"
 	     << " up_thru " << lastmap->get_up_thru(i.primary)
 	     << " up_from " << lastmap->get_up_from(i.primary)
-	     << " last_epoch_clean " << last_epoch_clean
-	     << std::endl;
+	     << " last_epoch_clean " << last_epoch_clean;
       if (lastmap->get_up_thru(i.primary) >= i.first &&
 	  lastmap->get_up_from(i.primary) <= i.first) {
 	i.maybe_went_rw = true;
 	if (out)
-	  *out << __func__ << " " << i
+	  *out << " " << i
 	       << " : primary up " << lastmap->get_up_from(i.primary)
 	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " includes interval"
-	       << std::endl;
+               << std::endl;
       } else if (last_epoch_clean >= i.first &&
 		 last_epoch_clean <= i.last) {
 	// If the last_epoch_clean is included in this interval, then
@@ -3517,18 +3515,18 @@ bool PastIntervals::check_new_interval(
 	// last_epoch_clean timing.
 	i.maybe_went_rw = true;
 	if (out)
-	  *out << __func__ << " " << i
+	  *out << " " << i
 	       << " : includes last_epoch_clean " << last_epoch_clean
 	       << " and presumed to have been rw"
 	       << std::endl;
       } else {
 	i.maybe_went_rw = false;
 	if (out)
-	  *out << __func__ << " " << i
+	  *out << " " << i
 	       << " : primary up " << lastmap->get_up_from(i.primary)
 	       << "-" << lastmap->get_up_thru(i.primary)
 	       << " does not include interval"
-	       << std::endl;
+               << std::endl;
       }
     } else {
       i.maybe_went_rw = false;

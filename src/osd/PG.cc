@@ -8379,7 +8379,7 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MInfoRec& infoev
     pg->info.stats = infoevt.info.stats;
     pg->info.hit_set = infoevt.info.hit_set;
   }
-  
+
   assert(infoevt.info.last_update == pg->info.last_update);
   assert(pg->pg_log.get_head() == pg->info.last_update);
 
@@ -8901,6 +8901,28 @@ boost::statechart::result PG::RecoveryState::Down::react(const QueryState& q)
   q.f->close_section();
   return forward_event();
 }
+
+boost::statechart::result PG::RecoveryState::Down::react(const MNotifyRec& infoevt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+
+  assert(pg->is_primary());
+  epoch_t old_start = pg->info.history.last_epoch_started;
+  if (!pg->peer_info.count(infoevt.from) &&
+      pg->get_osdmap()->has_been_up_since(infoevt.from.osd, infoevt.notify.epoch_sent)) {
+    pg->update_history(infoevt.notify.info.history);
+  }
+  // if we got something new to make pg escape down state
+  if (pg->info.history.last_epoch_started > old_start) {
+      ldout(pg->cct, 10) << " last_epoch_started moved forward, re-enter getinfo" << dendl;
+    pg->state_clear(PG_STATE_DOWN);
+    pg->state_set(PG_STATE_PEERING);
+    return transit< GetInfo >();
+  }
+
+  return discard_event();
+}
+
 
 /*------Incomplete--------*/
 PG::RecoveryState::Incomplete::Incomplete(my_context ctx)
