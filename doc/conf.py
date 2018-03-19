@@ -23,7 +23,8 @@ if tags.has('man'):
                          'ceph-volume/*',
                          'radosgw/*',
                          'rbd/*',
-                         'start/*']
+                         'start/*',
+                         'releases/*']
 else:
     exclude_patterns += ['man_index.rst']
 
