@@ -2703,9 +2703,11 @@ protected:
     struct Down : boost::statechart::state< Down, Peering>, NamedState {
       explicit Down(my_context ctx);
       typedef boost::mpl::list <
-	boost::statechart::custom_reaction< QueryState >
+	boost::statechart::custom_reaction< QueryState >,
+	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
-      boost::statechart::result react(const QueryState& infoevt);
+      boost::statechart::result react(const QueryState& q);
+      boost::statechart::result react(const MNotifyRec& infoevt);
       void exit();
     };
 
@@ -2718,7 +2720,7 @@ protected:
       explicit Incomplete(my_context ctx);
       boost::statechart::result react(const AdvMap &advmap);
       boost::statechart::result react(const MNotifyRec& infoevt);
-      boost::statechart::result react(const QueryState& infoevt);
+      boost::statechart::result react(const QueryState& q);
       void exit();
     };
 
