@@ -117,10 +117,6 @@ void ECTransaction::generate_transactions(
 
   auto &hash_infos = plan.hash_infos;
 
-  assert(transactions);
-  assert(temp_added);
-  assert(temp_removed);
-
   map<hobject_t, pg_log_entry_t*> obj_to_log;
   for (auto &&i: entries) {
     obj_to_log.insert(make_pair(i.soid, &i));
