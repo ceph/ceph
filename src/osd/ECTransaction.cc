@@ -14,7 +14,6 @@
 
 #include <iostream>
 #include <vector>
-#include <vector>
 #include <sstream>
 
 #include "ECTransaction.h"
