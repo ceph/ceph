@@ -613,7 +613,7 @@ endif()
 set(Boost_USE_MULTITHREADED ON)
 
 # dashboard angular2 frontend
-option(WITH_MGR_DASHBOARD_V2_FRONTEND "Build the mgr/dashboard_v2 frontend using `npm`" ON)
+option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
 
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 

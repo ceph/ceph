@@ -566,35 +566,35 @@ public:
     : c(c), o(o), it(o->omap.begin()) {}
 
   int seek_to_first() override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard<std::mutex> lock(o->omap_mutex);
     it = o->omap.begin();
     return 0;
   }
   int upper_bound(const string &after) override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard<std::mutex> lock(o->omap_mutex);
     it = o->omap.upper_bound(after);
     return 0;
   }
   int lower_bound(const string &to) override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard<std::mutex> lock(o->omap_mutex);
     it = o->omap.lower_bound(to);
     return 0;
   }
   bool valid() override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard<std::mutex> lock(o->omap_mutex);
     return it != o->omap.end();
   }
   int next(bool validate=true) override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard<std::mutex> lock(o->omap_mutex);
     ++it;
     return 0;
   }
   string key() override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard<std::mutex> lock(o->omap_mutex);
     return it->first;
   }
   bufferlist value() override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard<std::mutex> lock(o->omap_mutex);
     return it->second;
   }
   int status() override {
