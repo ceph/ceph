@@ -159,12 +159,20 @@ CA or intermediate certificates be supplied in one file.  Each of these
 items must be in `pem` form.  Because the combined file contains the
 secret key, it should be protected from unauthorized access.
 
-To configure ssl operation, append ``s`` to the port number.  Currently
-it is not possible to configure the radosgw to listen on both
-http and https, you must pick only one.  So::
+To configure ssl operation, append ``s`` to the port number. For eg::
 
  [client.rgw.gateway-node1]
  rgw_frontends = civetweb port=443s ssl_certificate=/etc/ceph/private/keyandcert.pem
+
+.. versionadded :: Luminous
+
+Furthermore, civetweb can be made to bind to multiple ports, by separating them
+with ``+`` in the configuration. This allows for use cases where both ssl and
+non-ssl connections are hosted by a single rgw instance. For eg::
+
+ [client.rgw.gateway-node1]
+ rgw_frontends = civetweb port=80+443s ssl_certificate=/etc/ceph/private/keyandcert.pem
+
 
 Migrating from Apache to Civetweb
 ---------------------------------
