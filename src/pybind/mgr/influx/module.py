@@ -279,14 +279,16 @@ class Module(MgrModule):
             self.log.debug("Sending data to Influx host: %s",
                 conf['hostname'])
 
-            client = InfluxDBClient(conf['hostname'], conf['port'],
-                conf['username'], 
-                conf['password'], 
-                conf['database'],
-                conf['ssl'],
-                conf['verify_ssl'],
-                conf['timeout'],
-                conf['retries'])
+            client = InfluxDBClient(
+                host=conf['hostname'], 
+                port=conf['port'],
+                username=conf['username'], 
+                password=conf['password'], 
+                database=conf['database'],
+                ssl=conf['ssl'],
+                verify_ssl=conf['verify_ssl'],
+                timeout=conf['timeout'],
+                retries=conf['retries'])
 
             self.clients.append([client,conf])
 
