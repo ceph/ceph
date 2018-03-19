@@ -1,16 +1,33 @@
 #!/usr/bin/env bash
 
-# run from ./
+
+
+# Usage (run from ./):
+# ./run-backend-api-tests.sh
+# ./run-backend-api-tests.sh [tests]...
+#
+# Example:
+# ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.DashboardTest
+#
+# Or source this script. Allows to re-run tests faster:
+# $ source run-backend-api-tests.sh
+# $ run_teuthology_tests [tests]...
+# $ cleanup_teuthology
 
 # creating temp directory to store virtualenv and teuthology
-TEMP_DIR=`mktemp -d`
 
 get_cmake_variable() {
     local variable=$1
     grep "$variable" CMakeCache.txt | cut -d "=" -f 2
 }
 
-read -r -d '' TEUTHOLOFY_PY_REQS <<EOF
+setup_teuthology() {
+    TEMP_DIR=`mktemp -d`
+
+    CURR_DIR=`pwd`
+    BUILD_DIR="$CURR_DIR/../../../../build"
+
+    read -r -d '' TEUTHOLOFY_PY_REQS <<EOF
 apache-libcloud==2.2.1 \
 asn1crypto==0.22.0 \
 bcrypt==3.1.4 \
@@ -45,62 +62,84 @@ urllib3==1.22
 EOF
 
 
-CURR_DIR=`pwd`
 
-cd $TEMP_DIR
+    cd $TEMP_DIR
 
-virtualenv --python=/usr/bin/python venv
-source venv/bin/activate
-eval pip install $TEUTHOLOFY_PY_REQS
-pip install -r $CURR_DIR/requirements.txt
-deactivate
+    virtualenv --python=/usr/bin/python venv
+    source venv/bin/activate
+    eval pip install $TEUTHOLOFY_PY_REQS
+    pip install -r $CURR_DIR/requirements.txt
+    deactivate
 
-git clone https://github.com/ceph/teuthology.git
+    git clone https://github.com/ceph/teuthology.git
 
-cd $CURR_DIR
-cd ../../../../build
+    cd $BUILD_DIR
 
-CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
-if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
-    CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
-else
-    if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
-        CEPH_PY_VERSION_MAJOR=2
+    CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
+    if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
+        CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
     else
-        CEPH_PY_VERSION_MAJOR=3
+        if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
+            CEPH_PY_VERSION_MAJOR=2
+        else
+            CEPH_PY_VERSION_MAJOR=3
+        fi
     fi
-fi
 
-export COVERAGE_ENABLED=true
-export COVERAGE_FILE=.coverage.mgr.dashboard
+    export COVERAGE_ENABLED=true
+    export COVERAGE_FILE=.coverage.mgr.dashboard
 
-MGR=2 RGW=1 ../src/vstart.sh -n -d
-sleep 10
+    MGR=2 RGW=1 ../src/vstart.sh -n -d
+    sleep 10
+    cd $CURR_DIR
+}
 
-source $TEMP_DIR/venv/bin/activate
-BUILD_DIR=`pwd`
+run_teuthology_tests() {
+    cd "$BUILD_DIR"
+    source $TEMP_DIR/venv/bin/activate
 
-if [ "$#" -gt 0 ]; then
-  TEST_CASES=""
-  for t in "$@"; do
-    TEST_CASES="$TESTS_CASES $t"
-  done
-else
-  TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
-  TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
-fi
 
-export PATH=$BUILD_DIR/bin:$PATH
-export LD_LIBRARY_PATH=$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/lib
-export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/
-eval python ../qa/tasks/vstart_runner.py $TEST_CASES
+    if [ "$#" -gt 0 ]; then
+      TEST_CASES=""
+      for t in "$@"; do
+        TEST_CASES="$TEST_CASES $t"
+      done
+    else
+      TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
+      TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
+    fi
 
-deactivate
-killall ceph-mgr
-sleep 10
-../src/stop.sh
-sleep 5
+    export PATH=$BUILD_DIR/bin:$PATH
+    export LD_LIBRARY_PATH=$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/lib
+    export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/
+    eval python ../qa/tasks/vstart_runner.py $TEST_CASES
 
-cd $CURR_DIR
-rm -rf $TEMP_DIR
+    deactivate
+    cd $CURR_DIR
+}
 
+cleanup_teuthology() {
+    cd "$BUILD_DIR"
+    killall ceph-mgr
+    sleep 10
+    ../src/stop.sh
+    sleep 5
+
+    cd $CURR_DIR
+    rm -rf $TEMP_DIR
+
+    unset TEMP_DIR
+    unset CURR_DIR
+    unset BUILD_DIR
+    unset setup_teuthology
+    unset run_teuthology_tests
+    unset cleanup_teuthology
+}
+
+setup_teuthology
+
+# End sourced section
+return 2> /dev/null
+
+run_teuthology_tests "$@"
+cleanup_teuthology
