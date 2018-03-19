@@ -106,16 +106,15 @@ int handle_opt_bucket_stats(RGWBucketAdminOpState& bucket_op, RGWFormatterFlushe
 
 int handle_opt_bucket_sync_init(const std::string& source_zone, const std::string& bucket_name,
                                 const std::string& bucket_id, const std::string& tenant,
-                                RGWBucketAdminOpState& bucket_op, RGWRados* store);
+                                RGWRados* store);
 
 int handle_opt_bucket_sync_run(const std::string& source_zone, const std::string& bucket_name,
                                const std::string& bucket_id, const std::string& tenant,
-                               RGWBucketAdminOpState& bucket_op, RGWRados* store);
+                               RGWRados* store);
 
 int handle_opt_bucket_sync_status(const std::string& source_zone, const std::string& bucket_name,
                                   const std::string& bucket_id, const std::string& tenant,
-                                  RGWBucketAdminOpState& bucket_op, RGWRados* store,
-                                  Formatter* formatter);
+                                  RGWRados* store, Formatter* formatter);
 
 int handle_opt_bucket_unlink(RGWBucketAdminOpState& bucket_op, RGWRados* store);
 
@@ -295,6 +294,79 @@ private:
   std::string end_marker;
   int max_entries = -1;
   int shard_id = -1;
+  std::string tenant;
+};
+
+class RgwAdminBucketSyncCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminBucketSyncCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+                                    Formatter* formatter) :
+      RgwAdminCommandGroupHandler(args, {"bucket", "sync"}, {{"disable", OPT_BUCKET_SYNC_DISABLE},
+                                                             {"enable",  OPT_BUCKET_SYNC_ENABLE},
+                                                             {"init",    OPT_BUCKET_SYNC_INIT},
+                                                             {"run",     OPT_BUCKET_SYNC_RUN},
+                                                             {"status",
+                                                                         OPT_BUCKET_SYNC_STATUS}},
+                                  store, formatter) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command: " << m_command << std::endl;
+    }
+  }
+
+  ~RgwAdminBucketSyncCommandsHandler() override = default;
+
+  int execute_command() override {
+    switch (m_command) {
+      case (OPT_BUCKET_SYNC_DISABLE) :
+        return handle_opt_bucket_sync_disable();
+      case (OPT_BUCKET_SYNC_ENABLE) :
+        return handle_opt_bucket_sync_enable();
+      case (OPT_BUCKET_SYNC_INIT) :
+        return handle_opt_bucket_sync_init();
+      case (OPT_BUCKET_SYNC_RUN) :
+        return handle_opt_bucket_sync_run();
+      case (OPT_BUCKET_SYNC_STATUS) :
+        return handle_opt_bucket_sync_status();
+      default:
+        return EINVAL;
+    }
+  }
+
+  RgwAdminCommandGroup get_type() const override { return BUCKET_SYNC; }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_bucket_sync_disable() {
+    return ::bucket_sync_toggle(OPT_BUCKET_SYNC_DISABLE, bucket_name, tenant, realm_id,
+                                realm_name, object, bucket, g_ceph_context, m_store);
+  }
+
+  int handle_opt_bucket_sync_enable() {
+    return ::bucket_sync_toggle(OPT_BUCKET_SYNC_ENABLE, bucket_name, tenant, realm_id,
+                                realm_name, object, bucket, g_ceph_context, m_store);
+  }
+
+  int handle_opt_bucket_sync_init() {
+    return ::handle_opt_bucket_sync_init(source_zone, bucket_name, bucket_id, tenant, m_store);
+  }
+
+  int handle_opt_bucket_sync_run() {
+    return ::handle_opt_bucket_sync_run(source_zone, bucket_name, bucket_id, tenant, m_store);
+  }
+
+  int handle_opt_bucket_sync_status() {
+    return ::handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, m_store,
+                                           m_formatter);
+  }
+
+  rgw_bucket bucket;
+  std::string bucket_id;
+  std::string bucket_name;
+  std::string object;
+  std::string realm_id;
+  std::string realm_name;
+  std::string source_zone;
   std::string tenant;
 };
 

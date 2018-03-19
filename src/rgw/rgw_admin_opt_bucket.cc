@@ -572,7 +572,7 @@ int bucket_sync_toggle(RgwAdminCommand opt_cmd, const std::string& bucket_name, 
 }
 
 int handle_opt_bucket_sync_init(const std::string& source_zone, const std::string& bucket_name, const std::string& bucket_id,
-                                const std::string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
+                                const std::string& tenant, RGWRados *store) {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
     return EINVAL;
@@ -602,7 +602,7 @@ int handle_opt_bucket_sync_init(const std::string& source_zone, const std::strin
 }
 
 int handle_opt_bucket_sync_status(const std::string& source_zone, const std::string& bucket_name, const std::string& bucket_id,
-                                  const std::string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store, Formatter *formatter) {
+                                  const std::string& tenant, RGWRados *store, Formatter *formatter) {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
     return EINVAL;
@@ -638,7 +638,7 @@ int handle_opt_bucket_sync_status(const std::string& source_zone, const std::str
 }
 
 int handle_opt_bucket_sync_run(const std::string& source_zone, const std::string& bucket_name, const std::string& bucket_id,
-                               const std::string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
+                               const std::string& tenant, RGWRados *store) {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
     return EINVAL;
@@ -1368,6 +1368,30 @@ int RgwAdminBilogCommandsHandler::parse_command_and_parameters(std::vector<const
       (END_MARKER, boost::program_options::value(&end_marker), "End marker for bilog trim")
       (MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
       (SHARD_ID, boost::program_options::value(&shard_id), "")
+      (TENANT, boost::program_options::value(&tenant), "Tenant name");
+  boost::program_options::variables_map var_map;
+
+  return parse_command(args, desc, var_map);
+}
+
+int RgwAdminBucketSyncCommandsHandler::parse_command_and_parameters(
+    std::vector<const char*>& args) {
+  const char BUCKET_ID[] = "bucket-id";
+  const char BUCKET_NAME[] = "bucket";
+  const char OBJECT[] = "object";
+  const char REALM_ID[] = "realm-id";
+  const char REALM_NAME[] = "rgw-realm";
+  const char SOURCE_ZONE[] = "source-zone";
+  const char TENANT[] = "tenant";
+  std::string bi_index_type_str;
+  boost::program_options::options_description desc{"Bi options"};
+  desc.add_options()
+      (BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
+      (BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
+      (OBJECT, boost::program_options::value(&object), "Object name")
+      (REALM_ID, boost::program_options::value(&realm_id), "Realm id")
+      (REALM_NAME, boost::program_options::value(&realm_name), "Realm name")
+      (SOURCE_ZONE, boost::program_options::value(&source_zone), "Specify the source zone for sync")
       (TENANT, boost::program_options::value(&tenant), "Tenant name");
   boost::program_options::variables_map var_map;
 

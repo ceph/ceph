@@ -1076,7 +1076,7 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_INIT) {
-    return handle_opt_bucket_sync_init(source_zone, bucket_name, bucket_id, tenant, bucket_op, store);
+    return handle_opt_bucket_sync_init(source_zone, bucket_name, bucket_id, tenant, store);
   }
 
   if ((opt_cmd == OPT_BUCKET_SYNC_DISABLE) || (opt_cmd == OPT_BUCKET_SYNC_ENABLE)) {
@@ -1085,12 +1085,11 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
-    return handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, bucket_op,
-                                         store, formatter);
+    return handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, store, formatter);
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_RUN) {
-    return handle_opt_bucket_sync_run(source_zone, bucket_name, bucket_id, tenant, bucket_op, store);
+    return handle_opt_bucket_sync_run(source_zone, bucket_name, bucket_id, tenant, store);
   }
 
   if (opt_cmd == OPT_BILOG_LIST) {
