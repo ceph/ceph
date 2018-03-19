@@ -10,6 +10,7 @@ import { SharedModule } from '../../shared/shared.module';
 import { AuthModule } from '../auth/auth.module';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
+import { TaskManagerComponent } from './task-manager/task-manager.component';
 
 @NgModule({
   imports: [
@@ -21,7 +22,7 @@ import { NotificationsComponent } from './notifications/notifications.component'
     SharedModule,
     RouterModule
   ],
-  declarations: [NavigationComponent, NotificationsComponent],
+  declarations: [NavigationComponent, NotificationsComponent, TaskManagerComponent],
   exports: [NavigationComponent]
 })
 export class NavigationModule {}
