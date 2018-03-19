@@ -24,6 +24,14 @@ export class AuthInterceptorService implements HttpInterceptor {
     public notificationService: NotificationService
   ) {}
 
+  _notify (resp) {
+    this.notificationService.show(
+      NotificationType.error,
+      resp.error.detail || '',
+      `${resp.status} - ${resp.statusText}`
+    );
+  }
+
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     return next.handle(request).catch(resp => {
       if (resp instanceof HttpErrorResponse) {
@@ -34,13 +42,11 @@ export class AuthInterceptorService implements HttpInterceptor {
           case 401:
             this.authStorageService.remove();
             this.router.navigate(['/login']);
-          // falls through
-          default:
-            this.notificationService.show(
-              NotificationType.error,
-              resp.error.detail || '',
-              `${resp.status} - ${resp.statusText}`
-            );
+            this._notify(resp);
+            break;
+          case 500:
+            this._notify(resp);
+            break;
         }
       }
       // Return the error to the method that called it.

@@ -1,0 +1,77 @@
+<ng-template #popTemplate>
+  <!-- Executing -->
+  <div *ngIf="executingTasks.length > 0">
+    <div class="separator">
+      EXECUTING
+    </div>
+    <hr>
+    <div *ngFor="let executingTask of executingTasks">
+      <table>
+        <tr>
+          <td class="icon-col">
+            <i class="fa fa-spinner fa-spin fa-fw" aria-hidden="true"></i>
+          </td>
+          <td>{{ executingTask.description }}</td>
+          <td class="text-right italic" *ngIf="executingTask.progress"><span>{{ executingTask.progress }} %</span></td>
+        </tr>
+        <tr>
+          <td colspan="3" class="text-right">
+            <span class="date">{{ executingTask.begin_time | cdDate }}</span></td>
+        </tr>
+      </table>
+      <hr>
+    </div>
+  </div>
+  <!-- Finished -->
+  <div *ngIf="finishedTasks.length > 0">
+    <div class="separator">
+      FINISHED
+    </div>
+    <hr>
+    <div *ngFor="let finishedTask of finishedTasks">
+      <table>
+        <tr>
+          <td class="icon-col">
+            <span *ngIf="!finishedTask.errorMessage">
+              <i class="fa fa-check text-success"></i>
+            </span>
+            <span *ngIf="finishedTask.errorMessage">
+              <i class="fa fa-exclamation-triangle text-danger"></i>
+            </span>
+          </td>
+          <td colspan="2">
+            {{ finishedTask.description }}
+          </td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>
+            <span *ngIf="finishedTask.errorMessage" class="text-danger">
+              {{ finishedTask.errorMessage }}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2" class="text-right">
+            <span class="date">{{ finishedTask.end_time | cdDate }}</span>
+          </td>
+        </tr>
+      </table>
+      <hr>
+    </div>
+  </div>
+  <!-- Empty -->
+  <div *ngIf="executingTasks.length === 0 && finishedTasks.length === 0">
+    <div class="message">
+      There are no background tasks.
+    </div>
+  </div>
+</ng-template>
+<a [popover]="popTemplate"
+   placement="bottom"
+   container="body"
+   outsideClick="true">
+  <i class="fa"
+     [ngClass]="icon"></i>
+  Background-Tasks<span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>
+</a>

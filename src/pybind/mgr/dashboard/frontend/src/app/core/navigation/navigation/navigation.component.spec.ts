@@ -8,13 +8,14 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { SharedModule } from '../../../shared/shared.module';
 import { LogoutComponent } from '../../auth/logout/logout.component';
 import { NotificationsComponent } from '../notifications/notifications.component';
+import { TaskManagerComponent } from '../task-manager/task-manager.component';
 import { NavigationComponent } from './navigation.component';
 
 describe('NavigationComponent', () => {
   let component: NavigationComponent;
   let fixture: ComponentFixture<NavigationComponent>;
 
-  const fakeService = new NotificationService(null);
+  const fakeService = new NotificationService(null, null);
 
   beforeEach(
     async(() => {
@@ -25,7 +26,12 @@ describe('NavigationComponent', () => {
           HttpClientTestingModule,
           PopoverModule.forRoot()
         ],
-        declarations: [NavigationComponent, NotificationsComponent, LogoutComponent],
+        declarations: [
+          NavigationComponent,
+          NotificationsComponent,
+          LogoutComponent,
+          TaskManagerComponent
+        ],
         providers: [{ provide: NotificationService, useValue: fakeService }]
       }).compileComponents();
     })

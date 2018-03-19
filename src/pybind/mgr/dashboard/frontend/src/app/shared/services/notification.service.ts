@@ -6,6 +6,8 @@ import { BehaviorSubject } from 'rxjs/BehaviorSubject';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification } from '../models/cd-notification';
+import { FinishedTask } from '../models/finished-task';
+import { TaskManagerMessageService } from './task-manager-message.service';
 
 @Injectable()
 export class NotificationService {
@@ -17,7 +19,8 @@ export class NotificationService {
 
   KEY = 'cdNotifications';
 
-  constructor(public toastr: ToastsManager) {
+  constructor(public toastr: ToastsManager,
+              private taskManagerMessageService: TaskManagerMessageService) {
     const stringNotifications = localStorage.getItem(this.KEY);
     let notifications: CdNotification[] = [];
 
@@ -80,6 +83,17 @@ export class NotificationService {
       case NotificationType.success:
         this.toastr.success(message, title, options);
         break;
+    }
+  }
+
+  notifyTask(finishedTask: FinishedTask, success: boolean = true) {
+    if (finishedTask.success && success) {
+      this.show(NotificationType.success,
+        this.taskManagerMessageService.getSuccessMessage(finishedTask));
+    } else {
+      this.show(NotificationType.error,
+        this.taskManagerMessageService.getErrorMessage(finishedTask),
+        this.taskManagerMessageService.getDescription(finishedTask));
     }
   }
 }
