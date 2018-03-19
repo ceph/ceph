@@ -38,8 +38,16 @@ The *dashboard* module is enabled with::
 
   ceph mgr module enable dashboard
 
+This can be automated (e.g. during deployment) by adding the following to ceph.conf::
+
+  [mon]
+          mgr initial modules = dashboard
+
 Configuration
 -------------
+
+Host name and port
+^^^^^^^^^^^^^^^^^^
 
 Like most web applications, dashboard binds to a host name and port.
 By default, the ``ceph-mgr`` daemon hosting the dashboard (i.e., the
@@ -66,6 +74,13 @@ If the port is not configured, the web app will bind to port ``7000``.
 If the address it not configured, the web app will bind to ``::``,
 which corresponds to all available IPv4 and IPv6 addresses.
 
+If in doubt which URL to use to access the dashboard, the ``ceph mgr services``
+command will show the endpoints currently configured (look for the "dashboard"
+key).
+
+Username and password
+^^^^^^^^^^^^^^^^^^^^^
+
 In order to be able to log in, you need to define a username and password, which
 will be stored in the MON's configuration database::
 
@@ -73,6 +88,9 @@ will be stored in the MON's configuration database::
 
 The password will be stored in the configuration database in encrypted form
 using ``bcrypt``. This is a global setting that applies to all dashboard instances.
+
+Accessing the dashboard
+^^^^^^^^^^^^^^^^^^^^^^^
 
 You can now access the dashboard using your (JavaScript-enabled) web browser, by
 pointing it to the selected TCP port and any of the host names or IP addresses
