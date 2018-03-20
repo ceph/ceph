@@ -241,7 +241,7 @@ class FOG(object):
         completed)
         """
         self.log.info("Waiting for deploy to finish")
-        with safe_while(sleep=15, tries=40) as proceed:
+        with safe_while(sleep=15, tries=60) as proceed:
             while proceed():
                 if not self.deploy_task_active(task_id):
                     break
@@ -257,7 +257,7 @@ class FOG(object):
 
     def _wait_for_ready(self):
         """ Attempt to connect to the machine via SSH """
-        with safe_while(sleep=6, tries=50) as proceed:
+        with safe_while(sleep=6, tries=100) as proceed:
             while proceed():
                 try:
                     self.remote.connect()
