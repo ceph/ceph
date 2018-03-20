@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import unittest
 import cherrypy
 from cherrypy.lib.sessions import RamSession
 from mock import patch
 
 from .helper import ControllerTestCase
-from ..tools import RESTController, ApiController
+from ..tools import RESTController, ApiController, is_valid_ipv6_address, dict_contains_path
 
 
 # pylint: disable=W0613
@@ -131,3 +132,23 @@ class RESTControllerTest(ControllerTestCase):
         assert 'Content-Type: text/html' in self.body.decode('utf-8')
         assert '<form action="/api/foo/" method="post">' in self.body.decode('utf-8')
         assert '<input type="hidden" name="_method" value="post" />' in self.body.decode('utf-8')
+
+
+class TestFunctions(unittest.TestCase):
+
+    def test_is_valid_ipv6_address(self):
+        self.assertTrue(is_valid_ipv6_address('::'))
+        self.assertTrue(is_valid_ipv6_address('::1'))
+        self.assertFalse(is_valid_ipv6_address('127.0.0.1'))
+        self.assertFalse(is_valid_ipv6_address('localhost'))
+        self.assertTrue(is_valid_ipv6_address('1200:0000:AB00:1234:0000:2552:7777:1313'))
+        self.assertFalse(is_valid_ipv6_address('1200::AB00:1234::2552:7777:1313'))
+
+    def test_dict_contains_path(self):
+        x = {'a': {'b': {'c': 'foo'}}}
+        self.assertTrue(dict_contains_path(x, ['a', 'b', 'c']))
+        self.assertTrue(dict_contains_path(x, ['a', 'b', 'c']))
+        self.assertTrue(dict_contains_path(x, ['a']))
+        self.assertFalse(dict_contains_path(x, ['a', 'c']))
+
+        self.assertTrue(dict_contains_path(x, []))

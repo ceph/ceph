@@ -2,6 +2,7 @@
 # pylint: disable=W0212
 from __future__ import absolute_import
 
+import socket
 import collections
 from datetime import datetime, timedelta
 import fnmatch
@@ -15,8 +16,10 @@ import time
 import threading
 import types  # pylint: disable=import-error
 
-import cherrypy
 from six import add_metaclass
+from six.moves import urllib
+
+import cherrypy
 
 from .settings import Settings
 from . import logger, mgr
@@ -565,6 +568,7 @@ class SessionExpireAtBrowserCloseTool(cherrypy.Tool):
     at browser close if the 'Keep me logged in' checkbox was selected
     on the login page.
     """
+
     def __init__(self):
         cherrypy.Tool.__init__(self, 'before_finalize', self._callback)
 
@@ -965,3 +969,63 @@ class Task(object):
         self.progress = percentage
         if not in_lock:
             self.lock.release()
+
+
+def is_valid_ipv6_address(addr):
+    try:
+        socket.inet_pton(socket.AF_INET6, addr)
+        return True
+    except socket.error:
+        return False
+
+
+def build_url(host, scheme=None, port=None):
+    """
+    Build a valid URL. IPv6 addresses specified in host will be enclosed in brackets
+    automatically.
+
+    >>> build_url('example.com', 'https', 443)
+    'https://example.com:443'
+
+    >>> build_url(host='example.com', port=443)
+    '//example.com:443'
+
+    >>> build_url('fce:9af7:a667:7286:4917:b8d3:34df:8373', port=80, scheme='http')
+    'http://[fce:9af7:a667:7286:4917:b8d3:34df:8373]:80'
+
+    :param scheme: The scheme, e.g. http, https or ftp.
+    :type scheme: str
+    :param host: Consisting of either a registered name (including but not limited to
+                 a hostname) or an IP address.
+    :type host: str
+    :type port: int
+    :rtype: str
+    """
+    netloc = host if not is_valid_ipv6_address(host) else '[{}]'.format(host)
+    if port:
+        netloc += ':{}'.format(port)
+    pr = urllib.parse.ParseResult(
+        scheme=scheme if scheme else '',
+        netloc=netloc,
+        path='',
+        params='',
+        query='',
+        fragment='')
+    return pr.geturl()
+
+
+def dict_contains_path(dct, keys):
+    """
+    Tests wheter the keys exist recursively in `dictionary`.
+
+    :type dct: dict
+    :type keys: list
+    :rtype: bool
+    """
+    if keys:
+        key = keys.pop(0)
+        if key in dct:
+            dct = dct[key]
+            return dict_contains_path(dct, keys)
+        return False
+    return True

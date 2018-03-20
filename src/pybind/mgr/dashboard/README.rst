@@ -69,6 +69,42 @@ The password will be stored as a hash using ``bcrypt``.
 
 The Dashboard's WebUI should then be reachable on TCP port 8080.
 
+Enabling the Object Gateway management frontend
+-----------------------------------------------
+
+If you want to use the Object Gateway management functionality of the
+dashboard, you will need to provide credentials. If you do not have a user
+which shall be used for providing those credentials, you will also need to
+create one::
+
+  $ radosgw-admin user create --uuid=<user> --display-name=<display-name> \
+      --system
+
+The credentials of a user can also be obtained by using `radosgw-admin`::
+
+  $ radosgw-admin user info --uid=<user>
+
+Finally, set the credentials to the dashboard module::
+
+  $ ceph dashboard set-rgw-api-secret-key <secret_key>
+  $ ceph dashboard set-rgw-api-access-key <access_key>
+
+This is all you have to do to get the Object Gateway management functionality
+working. The host and port of the Object Gateway are determined automatically.
+If multiple zones are used, it will automatically determine the host within the
+master zone group and master zone. This should be sufficient for most setups,
+but in some circumstances you might want to set the host and port manually::
+
+  $ ceph dashboard set-rgw-api-host <host>
+  $ ceph dashboard set-rgw-api-port <port>
+
+In addition to the settings mentioned so far, the following settings do also
+exist and you may find yourself in the situation that you have to use them::
+
+  $ ceph dashboard set-rgw-api-scheme <scheme>  # http or https
+  $ ceph dashboard set-rgw-api-admin-resource <admin-resource>
+  $ ceph dashboard set-rgw-api-user-id <user-id>
+
 Working on the Dashboard Code
 -----------------------------
 
