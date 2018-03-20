@@ -30,8 +30,6 @@
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 
-#define RGW_AUTH_GRACE_MINS 15
-
 struct rgw_http_error {
   int http_ret;
   const char *s3_code;
@@ -766,9 +764,6 @@ public:
 
 class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   CephContext* const cct;
-
-  bool is_time_skew_ok(const utime_t& header_time,
-                       const bool qsr) const;
 
   virtual boost::optional<std::string>
   get_v4_canonical_headers(const req_info& info,
