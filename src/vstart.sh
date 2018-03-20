@@ -324,7 +324,7 @@ if [ $kill_all -eq 1 ]; then
 fi
 
 if [ "$overwrite_conf" -eq 0 ]; then
-    CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+    CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
     mkdir -p $CEPH_ASOK_DIR
     MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
@@ -339,7 +339,7 @@ if [ "$overwrite_conf" -eq 0 ]; then
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
-        asok_dir=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+        asok_dir=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
         if [ $asok_dir != /var/run/ceph ]; then
             [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
         fi
@@ -348,7 +348,7 @@ else
         fi
         [ -e "$conf_fn" ] && rm -- "$conf_fn"
     else
-        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
