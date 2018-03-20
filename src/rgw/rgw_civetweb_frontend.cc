@@ -31,15 +31,20 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
   RGWRestfulIO client_io(dout_context, &real_client_io);
 
   RGWRequest req(env.store->get_new_req_id());
+  int http_ret = 0;
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
-                            *env.auth_registry, &client_io, env.olog);
+                            *env.auth_registry, &client_io, env.olog, &http_ret);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;
   }
 
-  /* Mark as processed. */
-  return 1;
+  if (http_ret <= 0) {
+    /* Mark as processed. */
+    return 1;
+  }
+
+  return http_ret;
 }
 
 int RGWCivetWebFrontend::run()
