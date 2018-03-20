@@ -292,7 +292,7 @@ class OpTracker {
   std::atomic<int64_t> seq = { 0 };
   // preallocate space for 32 shards because of the default
   // value for osd_num_op_tracker_shard
-  ceph::containers::tiny_vector<
+  ceph::containers::shard_vector<
     ShardedTrackingData, 32> sharded_in_flight_list;
   OpHistory history;
   float complaint_time;
