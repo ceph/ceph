@@ -11858,6 +11858,10 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
         }
       }
       if (!exists) {
+	// make sure we don't have any cache onodes (negative ones!)
+	// for a collection with no refs; this confuses
+	// TwoQCache::_trim().
+	(*c)->onode_map.clear();
         coll_map.erase(cid);
         txc->removed_collections.push_back(*c);
         (*c)->exists = false;
