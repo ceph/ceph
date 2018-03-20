@@ -476,6 +476,8 @@ public:
 
   bool collect(int *ret, RGWCoroutinesStack *skip_stack); /* returns true if needs to be called again */
 
+  void cancel();
+
   RGWAioCompletionNotifier *create_completion_notifier();
   RGWCompletionManager *get_completion_mgr();
 
