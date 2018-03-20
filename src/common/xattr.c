@@ -49,7 +49,7 @@ ceph_os_setxattr(const char *path, const char *name,
 	error = setxattr(path, name, value, size, 0 /* position */, 0);
 #endif
 
-	return (error);
+	return error;
 }
 
 int
@@ -68,7 +68,7 @@ ceph_os_fsetxattr(int fd, const char *name, const void *value,
 	error = fsetxattr(fd, name, value, size, 0, 0 /* no options should be indentical to Linux */ );
 #endif
 
-	return (error);
+	return error;
 }
 
 ssize_t
@@ -78,7 +78,7 @@ void *value, size_t size)
 	ssize_t error = -1;
 
 #if defined(__FreeBSD__)
-	if (value == NULL || size == 0) {
+	if (!value || size == 0) {
 		error = extattr_get_file(path, EXTATTR_NAMESPACE_USER, name, value,
 		    size);
 	} else {
@@ -103,7 +103,7 @@ void *value, size_t size)
 		errno = ENODATA;
 #endif
 
-	return (error);
+	return error;
 }
 
 ssize_t
@@ -113,7 +113,7 @@ ceph_os_fgetxattr(int fd, const char *name, void *value,
 	ssize_t error = -1;
 
 #if defined(__FreeBSD__)
-	if (value == NULL || size == 0) {
+	if (!value || size == 0) {
 		error = extattr_get_fd(fd, EXTATTR_NAMESPACE_USER, name, value,
 		    size);
 	} else {
@@ -138,7 +138,7 @@ ceph_os_fgetxattr(int fd, const char *name, void *value,
 		errno = ENODATA;
 #endif
 
-	return (error);
+	return error;
 }
 
 ssize_t
@@ -187,7 +187,7 @@ ceph_os_listxattr(const char *path, char *list, size_t size)
 	error = listxattr(path, list, size, 0);
 #endif
 
-	return (error);
+	return error;
 }
 
 ssize_t
@@ -236,7 +236,7 @@ ceph_os_flistxattr(int fd, char *list, size_t size)
 	error = flistxattr(fd, list, size, 0);
 #endif
 
-	return (error);
+	return error;
 }
 
 int
@@ -255,7 +255,7 @@ ceph_os_removexattr(const char *path, const char *name)
 		errno = ENODATA;
 #endif
 
-	return (error);
+	return error;
 }
 
 int
@@ -274,5 +274,5 @@ ceph_os_fremovexattr(int fd, const char *name)
 		errno = ENODATA;
 #endif
 
-	return (error);
+	return error;
 }
