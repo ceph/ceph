@@ -3,9 +3,14 @@ from __future__ import absolute_import
 
 import json
 
-from . import ApiController, RESTController, AuthRequired
+import cherrypy
+
 from .. import logger
 from ..services.ceph_service import CephService
+from ..tools import ApiController, RESTController, AuthRequired
+from ..services.rgw_client import RgwClient
+from ..rest_client import RequestException
+from ..exceptions import NoCredentialsException
 
 
 @ApiController('rgw')
@@ -17,12 +22,20 @@ class Rgw(RESTController):
 @ApiController('rgw/daemon')
 @AuthRequired()
 class RgwDaemon(RESTController):
-
     def list(self):
         daemons = []
         for hostname, server in CephService.get_service_map('rgw').items():
             for service in server['services']:
                 metadata = service['metadata']
+                status = service['status']
+                if 'json' in status:
+                    try:
+                        status = json.loads(status['json'])
+                    except ValueError:
+                        logger.warning("%s had invalid status json", service['id'])
+                        status = {}
+                else:
+                    logger.warning('%s has no key "json" in status', service['id'])
 
                 # extract per-daemon service data and health
                 daemon = {
@@ -58,4 +71,32 @@ class RgwDaemon(RESTController):
 
         daemon['rgw_metadata'] = metadata
         daemon['rgw_status'] = status
+
         return daemon
+
+
+@ApiController('rgw/proxy')
+@AuthRequired()
+class RgwProxy(RESTController):
+    @cherrypy.expose
+    def default(self, *vpath, **params):
+        try:
+            rgw_client = RgwClient.admin_instance()
+
+        except NoCredentialsException as e:
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 401
+            return json.dumps({'message': e.message})
+
+        method = cherrypy.request.method
+        path = '/'.join(vpath)
+        data = None
+
+        if cherrypy.request.body.length:
+            data = cherrypy.request.body.read()
+
+        try:
+            return rgw_client.proxy(method, path, params, data)
+        except RequestException as e:
+            cherrypy.response.status = e.status_code
+            return e.content

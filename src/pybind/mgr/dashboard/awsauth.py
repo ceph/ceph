@@ -1,8 +1,5 @@
 # -*- coding: utf-8 -*-
-<<<<<<< HEAD
 # pylint: disable-all
-=======
->>>>>>> 60417c2dcc... dashboard/mgr: RGW proxy: Include `python-requests-aws`
 #
 # Copyright (c) 2012-2013 Paul Tax <paultax@gmail.com> All rights reserved.
 #
