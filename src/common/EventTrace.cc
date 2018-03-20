@@ -56,7 +56,7 @@ void EventTrace::set_message_attrs(const Message *m, string& oid, string& contex
 
     ostringstream buf;
     buf << m->get_source() << "!" << m->get_source_addr() << "!"
-        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type();;
+        << m->get_tid() << "!" << m->get_seq() << "!" << m->get_type();
     context = buf.str();
   }
 }

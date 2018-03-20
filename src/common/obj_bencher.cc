@@ -527,8 +527,7 @@ int ObjBencher::write_bench(int secondsToRun,
     ++data.in_flight;
     if (data.op_size) {
       if (max_objects &&
-	  data.started >= (int)((data.object_size * max_objects + data.op_size - 1) /
-			       data.op_size))
+	  data.started >= (int)DIV_ROUND_UP(data.object_size * max_objects, data.op_size))
         break;
     }
   }
@@ -608,7 +607,7 @@ int ObjBencher::write_bench(int secondsToRun,
   }
   //write object size/number data for read benchmarks
   encode(data.object_size, b_write);
-  num_objects = (data.finished + writes_per_object - 1) / writes_per_object;
+  num_objects = DIV_ROUND_UP(data.finished, writes_per_object);
   encode(num_objects, b_write);
   encode(getpid(), b_write);
   encode(data.op_size, b_write);
