@@ -422,7 +422,7 @@ static const actpair actpairs[] =
  { "s3:GetObjectVersionTagging", s3GetObjectVersionTagging},
  { "s3:GetReplicationConfiguration", s3GetReplicationConfiguration },
  { "s3:ListAllMyBuckets", s3ListAllMyBuckets },
- { "s3:ListBucketMultiPartUploads", s3ListBucketMultiPartUploads },
+ { "s3:ListBucketMultipartUploads", s3ListBucketMultipartUploads },
  { "s3:ListBucket", s3ListBucket },
  { "s3:ListBucketVersions", s3ListBucketVersions },
  { "s3:ListMultipartUploadParts", s3ListMultipartUploadParts },
@@ -1325,8 +1325,8 @@ const char* action_bit_string(uint64_t action) {
   case s3ListAllMyBuckets:
     return "s3:ListAllMyBuckets";
 
-  case s3ListBucketMultiPartUploads:
-    return "s3:ListBucketMultiPartUploads";
+  case s3ListBucketMultipartUploads:
+    return "s3:ListBucketMultipartUploads";
 
   case s3GetAccelerateConfiguration:
     return "s3:GetAccelerateConfiguration";
