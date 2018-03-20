@@ -115,7 +115,8 @@ int process_request(RGWRados* const store,
                     const std::string& frontend_prefix,
                     const rgw_auth_registry_t& auth_registry,
                     RGWRestfulIO* const client_io,
-                    OpsLogSocket* const olog)
+                    OpsLogSocket* const olog,
+                    int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
 
@@ -220,14 +221,16 @@ done:
     rgw_log_op(store, rest, s, (op ? op->name() : "unknown"), olog);
   }
 
-  int http_ret = s->err.http_ret;
+  if (http_ret != nullptr) {
+    *http_ret = s->err.http_ret;
+  }
   int op_ret = 0;
   if (op) {
     op_ret = op->get_ret();
   }
 
   req->log_format(s, "op status=%d", op_ret);
-  req->log_format(s, "http status=%d", http_ret);
+  req->log_format(s, "http status=%d", s->err.http_ret);
 
   if (handler)
     handler->put_op(op);
@@ -235,7 +238,7 @@ done:
 
   dout(1) << "====== req done req=" << hex << req << dec
 	  << " op status=" << op_ret
-	  << " http_status=" << http_ret
+	  << " http_status=" << s->err.http_ret
 	  << " ======"
 	  << dendl;
 

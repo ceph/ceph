@@ -223,8 +223,21 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-/* FIXME(rzarzynski): duplicated from rgw_rest_s3.h. */
-#define RGW_AUTH_GRACE_MINS 15
+bool is_time_skew_ok(time_t t)
+{
+  auto req_tp = ceph::coarse_real_clock::from_time_t(t);
+  auto cur_tp = ceph::coarse_real_clock::now();
+
+  if (req_tp < cur_tp - RGW_AUTH_GRACE ||
+      req_tp > cur_tp + RGW_AUTH_GRACE) {
+    dout(10) << "NOTICE: request time skew too big." << dendl;
+    using ceph::operator<<;
+    dout(10) << "req_tp=" << req_tp << ", cur_tp=" << cur_tp << dendl;
+    return false;
+  }
+
+  return true;
+}
 
 static inline int parse_v4_query_string(const req_info& info,              /* in */
                                         boost::string_view& credential,    /* out */
@@ -246,41 +259,24 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
     return -EPERM;
   }
 
-  /* Used for pre-signatured url, We shouldn't return -ERR_REQUEST_TIME_SKEWED
-   * when current time <= X-Amz-Expires */
-  bool qsr = false;
-
-  uint64_t now_req = 0;
-  uint64_t now = ceph_clock_now();
-
   boost::string_view expires = info.args.get("X-Amz-Expires");
-  if (!expires.empty()) {
-    /* X-Amz-Expires provides the time period, in seconds, for which
-       the generated presigned URL is valid. The minimum value
-       you can set is 1, and the maximum is 604800 (seven days) */
-    time_t exp = atoll(expires.data());
-    if ((exp < 1) || (exp > 7*24*60*60)) {
-      dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
-      return -EPERM;
-    }
-    /* handle expiration in epoch time */
-    now_req = (uint64_t)internal_timegm(&date_t);
-    if (now >= now_req + exp) {
-      dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
-      return -EPERM;
-    }
-    qsr = true;
+  if (expires.empty()) {
+    return -EPERM;
   }
-
-  if ((now_req < now - RGW_AUTH_GRACE_MINS * 60 ||
-     now_req > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    dout(10) << "NOTICE: request time skew too big." << dendl;
-    dout(10) << "now_req = " << now_req << " now = " << now
-             << "; now - RGW_AUTH_GRACE_MINS="
-             << now - RGW_AUTH_GRACE_MINS * 60
-             << "; now + RGW_AUTH_GRACE_MINS="
-             << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-    return -ERR_REQUEST_TIME_SKEWED;
+  /* X-Amz-Expires provides the time period, in seconds, for which
+     the generated presigned URL is valid. The minimum value
+     you can set is 1, and the maximum is 604800 (seven days) */
+  time_t exp = atoll(expires.data());
+  if ((exp < 1) || (exp > 7*24*60*60)) {
+    dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
+    return -EPERM;
+  }
+  /* handle expiration in epoch time */
+  uint64_t req_sec = (uint64_t)internal_timegm(&date_t);
+  uint64_t now = ceph_clock_now();
+  if (now >= req_sec + exp) {
+    dout(10) << "NOTICE: now = " << now << ", req_sec = " << req_sec << ", exp = " << exp << dendl;
+    return -EPERM;
   }
 
   signedheaders = info.args.get("X-Amz-SignedHeaders");
@@ -407,6 +403,10 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
     return -EACCES;
   }
   date = d;
+
+  if (!is_time_skew_ok(internal_timegm(&t))) {
+    return -ERR_REQUEST_TIME_SKEWED;
+  }
 
   return 0;
 }
