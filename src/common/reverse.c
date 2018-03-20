@@ -14,7 +14,8 @@
 
 #include "reverse.h"
 
-uint32_t reverse_bits(uint32_t v) {
+uint32_t reverse_bits(uint32_t v)
+{
   if (v == 0)
     return v;
 
@@ -29,14 +30,13 @@ uint32_t reverse_bits(uint32_t v) {
   /* swap bytes */
   v = ((v >> 8) & 0x00FF00FF) | ((v & 0x00FF00FF) << 8);
   /* swap 2-byte long pairs */
-  v = ( v >> 16             ) | ( v               << 16);                                
-  return v;
+  return (v >> 16) | (v << 16);
 }
 
-uint32_t reverse_nibbles(uint32_t retval) {
+uint32_t reverse_nibbles(uint32_t retval)
+{
   /* reverse nibbles */
   retval = ((retval & 0x0f0f0f0f) << 4) | ((retval & 0xf0f0f0f0) >> 4);
   retval = ((retval & 0x00ff00ff) << 8) | ((retval & 0xff00ff00) >> 8);
-  retval = ((retval & 0x0000ffff) << 16) | ((retval & 0xffff0000) >> 16);
-  return retval;
+  return ((retval & 0x0000ffff) << 16) | ((retval & 0xffff0000) >> 16);
 }

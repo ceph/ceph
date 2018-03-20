@@ -19,6 +19,8 @@
 
 #include "msg/msg_types.h"
 
+#define ARRAY_SIZE(a)   (sizeof(a) / sizeof(*a))
+
 /* Represents a Ceph entity name.
  *
  * For example, mds.0 is the name of the first metadata server.

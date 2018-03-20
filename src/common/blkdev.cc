@@ -68,7 +68,7 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   char realname[PATH_MAX] = {0};
 
   if (strncmp(dev, "/dev/", 5) != 0) {
-    if (realpath(dev, realname) == NULL || (strncmp(realname, "/dev/", 5) != 0)) {
+    if (!realpath(dev, realname) || (strncmp(realname, "/dev/", 5) != 0)) {
       return -EINVAL;
     }
   }
