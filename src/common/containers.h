@@ -16,6 +16,8 @@
 
 #include <type_traits>
 
+#include "include/intarith.h"
+
 namespace ceph::containers {
 
 // tiny_vector - a CPU-friendly container like small_vector but for
@@ -166,6 +168,66 @@ public:
   }
   const pointer cend() const {
     return reinterpret_cast<pointer>(&data[_size]);
+  }
+};
+
+
+static constexpr const std::size_t CACHE_LINE_SIZE = 64;
+
+// align_wrapper - helper class for providing cache line alignment to
+// any Value type.
+//
+// We're going with extended alignment here. AFAIK the standard makes
+// it non-obligatory for compiler vendors, albeit this feature should
+// be hopefully available on most platforms.
+
+template <typename Value>
+struct alignas(CACHE_LINE_SIZE) align_wrapper : public Value {
+  template<class... Args>
+  align_wrapper(Args&&... args)
+    : Value(std::forward<Args>(args)...) {
+  }
+};
+
+
+// shard_vector - a tiny_vector specially designated for shard handling.
+//
+// The container puts the same requirements on Value as tiny_vector but
+// provides interface enriched with facilities for fast shard accesses.
+// It is possible because assuming (end enforcing in run-time) Capacity
+// is power-of-2. Thanks to that, the modulo operation is implementable
+// with bit twiddling in place of costly divisions.
+//
+// Additionally, the shard_vector takes care of aligning shards to cache
+// line boundary. This is useful as, typically, handled type has a mutex
+// or plain atomic inside. The optimization allows to avoid costly ping-
+// pong between CPUs as well as memory fencing.
+
+template<typename Value, std::size_t Capacity>
+class shard_vector : public tiny_vector<align_wrapper<Value>, Capacity> {
+  typedef tiny_vector<align_wrapper<Value>, Capacity> base_t;
+  typedef typename base_t::size_type size_type;
+  typedef typename base_t::reference reference;
+  typedef typename base_t::const_reference const_reference;
+
+public:
+  template<typename F>
+  shard_vector(const ceph::math::p2_t<size_type> count, F&& f)
+    : base_t(count, std::forward<F>(f)) {
+    assert(count == base_t::size());
+  }
+
+  // Yes, we're overriding (not hiding!) the size() from base_t.
+  ceph::math::p2_t<size_type> size() const {
+    return ceph::math::p2_t<size_type>::from_p2(base_t::size());
+  }
+
+  reference get_shard(const size_type selector) {
+    return (*this)[selector % size()];
+  }
+
+  const_reference get_shard(const size_type selector) const {
+    return (*this)[selector % size()];
   }
 };
 
