@@ -6590,6 +6590,29 @@ TEST_F(TestLibRBD, TestListWatchers) {
   ASSERT_EQ(0, image.close());
 }
 
+TEST_F(TestLibRBD, TestSetSnapById) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+  ASSERT_EQ(0, image.snap_create("snap"));
+
+  vector<librbd::snap_info_t> snaps;
+  ASSERT_EQ(0, image.snap_list(snaps));
+  ASSERT_EQ(1U, snaps.size());
+
+  ASSERT_EQ(0, image.snap_set_by_id(snaps[0].id));
+  ASSERT_EQ(0, image.snap_set_by_id(CEPH_NOSNAP));
+}
+
 // poorman's assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,

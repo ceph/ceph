@@ -13,6 +13,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/api/Image.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/RefreshParentRequest.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -578,7 +579,9 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
-  ASSERT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), "snap"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx,
+                                              cls::rbd::UserSnapshotNamespace(),
+                                              "snap"));
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
