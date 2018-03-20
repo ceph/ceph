@@ -53,6 +53,7 @@ static const std::string DEST_IMAGE_NAME("dest");
 static const std::string GROUP_NAME("group");
 static const std::string DEST_GROUP_NAME("dest-group");
 static const std::string SNAPSHOT_NAME("snap");
+static const std::string SNAPSHOT_ID("snap-id");
 static const std::string DEST_SNAPSHOT_NAME("dest-snap");
 static const std::string JOURNAL_NAME("journal");
 static const std::string DEST_JOURNAL_NAME("dest-journal");
@@ -148,6 +149,7 @@ void add_group_option(boost::program_options::options_description *opt,
 
 void add_snap_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier);
+void add_snap_id_option(boost::program_options::options_description *opt);
 
 void add_journal_option(boost::program_options::options_description *opt,
                       ArgumentModifier modifier,
