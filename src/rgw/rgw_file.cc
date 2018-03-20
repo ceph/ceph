@@ -1927,7 +1927,7 @@ int rgw_readdir2(struct rgw_fs *rgw_fs,
 
   lsubdout(parent->get_fs()->get_context(), rgw, 15)
     << __func__
-    << " offset=" << name
+    << " offset=" << ((name) ? name : "(nil)")
     << dendl;
 
   if ((! name) &&
