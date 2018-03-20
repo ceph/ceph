@@ -1680,7 +1680,7 @@ int RGWListBucketMultiparts_ObjStore::get_params()
 {
   delimiter = s->info.args.get("delimiter");
   prefix = s->info.args.get("prefix");
-  string str = s->info.args.get("max-parts");
+  string str = s->info.args.get("max-uploads");
   if (!str.empty())
     max_uploads = atoi(str.c_str());
   else
