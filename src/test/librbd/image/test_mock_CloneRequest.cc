@@ -177,9 +177,12 @@ public:
       ASSERT_EQ(0, image_ctx->operations->snap_protect(
                      cls::rbd::UserSnapshotNamespace{}, "snap"));
 
+      uint64_t snap_id = image_ctx->snap_ids[
+        {cls::rbd::UserSnapshotNamespace{}, "snap"}];
+      ASSERT_NE(CEPH_NOSNAP, snap_id);
+
       C_SaferCond ctx;
-      image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace{}, "snap",
-                                 &ctx);
+      image_ctx->state->snap_set(snap_id, &ctx);
       ASSERT_EQ(0, ctx.wait());
     }
   }
