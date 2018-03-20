@@ -1796,6 +1796,7 @@ void PG::activate(ObjectStore::Transaction& t,
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
+  last_update_applied = info.last_update;
   last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
 
   need_up_thru = false;
@@ -4636,7 +4637,8 @@ void PG::repair_object(
 
 /* replica_scrub
  *
- * Wait for pushes to complete in case of recent recovery. Build a single
+ * Wait for last_update_applied to match msg->scrub_to as above. Wait
+ * for pushes to complete in case of recent recovery. Build a single
  * scrubmap of objects that are in the range [msg->start, msg->end).
  */
 void PG::replica_scrub(
@@ -4793,6 +4795,11 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
  *  _________v__________    |   |
  * |                    |   |   |
  * |     WAIT_PUSHES    |   |   |
+ * |____________________|   |   |
+ *           |              |   |
+ *  _________v__________    |   |
+ * |                    |   |   |
+ * |  WAIT_LAST_UPDATE  |   |   |
  * |____________________|   |   |
  *           |              |   |
  *  _________v__________    |   |
@@ -4996,6 +5003,26 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  }
 	}
 
+        scrubber.state = PG::Scrubber::WAIT_PUSHES;
+        break;
+
+      case PG::Scrubber::WAIT_PUSHES:
+        if (active_pushes == 0) {
+          scrubber.state = PG::Scrubber::WAIT_LAST_UPDATE;
+        } else {
+          dout(15) << "wait for pushes to apply" << dendl;
+          done = true;
+        }
+        break;
+
+      case PG::Scrubber::WAIT_LAST_UPDATE:
+        if (last_update_applied < scrubber.subset_last_update) {
+          // will be requeued by op_applied
+          dout(15) << "wait for EC read/modify/writes to queue" << dendl;
+          done = true;
+	  break;
+	}
+
         // ask replicas to scan
         scrubber.waiting_on_whom.insert(pg_whoami);
 
@@ -5012,20 +5039,13 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	dout(10) << __func__ << " waiting_on_whom " << scrubber.waiting_on_whom
 		 << dendl;
 
-        scrubber.state = PG::Scrubber::WAIT_PUSHES;
-        break;
-
-      case PG::Scrubber::WAIT_PUSHES:
-        if (active_pushes > 0) {
-          dout(15) << "wait for pushes to apply" << dendl;
-          done = true;
-	  break;
-	}
-	scrubber.primary_scrubmap_pos.reset();
 	scrubber.state = PG::Scrubber::BUILD_MAP;
+	scrubber.primary_scrubmap_pos.reset();
         break;
 
       case PG::Scrubber::BUILD_MAP:
+        assert(last_update_applied >= scrubber.subset_last_update);
+
         // build my own scrub map
 	if (scrub_preempted) {
 	  dout(10) << __func__ << " preempted" << dendl;
@@ -5080,6 +5100,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         break;
 
       case PG::Scrubber::COMPARE_MAPS:
+        assert(last_update_applied >= scrubber.subset_last_update);
         assert(scrubber.waiting_on_whom.empty());
 
         scrub_compare_maps();
@@ -6063,6 +6084,8 @@ ostream& operator<<(ostream& out, const PG& pg)
   if (pg.is_peered()) {
     if (pg.last_update_ondisk != pg.info.last_update)
       out << " luod=" << pg.last_update_ondisk;
+    if (pg.last_update_applied != pg.info.last_update)
+      out << " lua=" << pg.last_update_applied;
   }
 
   if (pg.recovery_ops_active)

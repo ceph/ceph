@@ -15,14 +15,30 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
-Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
-install the required packages locally.
+ * Node 6.9.0 or higher
+ * NPM 3 or higher
 
-.. note::
+nodeenv:
+  During Ceph's build we create a virtualenv with ``node`` and ``npm``
+  installed, which can be used as an alternative to installing node/npm in your
+  system.
 
+  If you want to use the node installed in the virtualenv you just need to
+  activate the virtualenv before you run any npm commands. To activate it run
+  ``. build/src/pybind/mgr/dashboard/node-env/bin/activate``.
+
+  Once you finish, you can simply run ``deactivate`` and exit the virtualenv.
+
+Angular CLI:
   If you do not have the `Angular CLI <https://github.com/angular/angular-cli>`_
   installed globally, then you need to execute ``ng`` commands with an
   additional ``npm run`` before it.
+
+Package installation
+~~~~~~~~~~~~~~~~~~~~
+
+Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
+install the required packages locally.
 
 Setting up a Development Server
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -118,7 +134,15 @@ If you're using the `ceph-dev-docker development environment
 <https://github.com/ricardoasmarques/ceph-dev-docker/>`_, simply run
 ``./install_deps.sh`` from the toplevel directory to install them.
 
-Unit Testing and Linting
+Unit Testing
+~~~~~~~~~~~~
+
+In dashboard we have two different kinds of backend tests:
+
+1. Unit tests based on ``tox``
+2. API tests based on Teuthology.
+
+Unit tests based on tox
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 We included a ``tox`` configuration file that will run the unit tests under
@@ -134,18 +158,8 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-The unit tests must run against a real Ceph cluster (no mocks are used). This
-has the advantage of catching bugs originated from changes in the internal Ceph
-code.
-
-Our ``tox.ini`` script will start a ``vstart`` Ceph cluster before running the
-python unit tests, and then it stops the cluster after the tests are run. Of
-course this implies that you have built/compiled Ceph previously.
-
-To run tox, run the following command in the root directory (where ``tox.ini``
-is located)::
-
-  $ PATH=../../../../build/bin:$PATH tox
+To run the tests, run ``tox`` in the dashboard directory (where ``tox.ini``
+is located).
 
 We also collect coverage information from the backend code. You can check the
 coverage information provided by the tox output, or by running the following
@@ -159,37 +173,33 @@ the code coverage of the backend.
 You can also run a single step of the tox script (aka tox environment), for
 instance if you only want to run the linting tools, do::
 
-  $ PATH=../../../../build/bin:$PATH tox -e lint
+  $ tox -e lint
 
-How to run a single unit test without using ``tox``?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+API tests based on Teuthology
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When developing the code of a controller and respective test code, it's useful
-to be able to run that single test file without going through the whole ``tox``
-workflow.
+To run our API tests against a real Ceph cluster, we leverage the Teuthology framework. This
+has the advantage of catching bugs originated from changes in the internal Ceph
+code.
 
-Since the tests must run against a real Ceph cluster, the first thing is to have
-a Ceph cluster running. For that we can leverage the tox environment that starts
-a Ceph cluster::
 
-  $ PATH=../../../../build/bin:$PATH tox -e ceph-cluster-start
+Our ``run-backend-api-tests.sh`` script will start a ``vstart`` Ceph cluster before running the
+Teuthology tests, and then it stops the cluster after the tests are run. Of
+course this implies that you have built/compiled Ceph previously.
 
-The command above uses ``vstart.sh`` script to start a Ceph cluster and
-automatically enables the ``dashboard`` module, and configures its cherrypy
-web server to listen in port ``9865``.
+Start all dashboard tests by running::
 
-After starting the Ceph cluster we can run our test file using ``py.test`` like
-this::
+  $ ./run-backend-api-tests.sh
 
-  DASHBOARD_PORT=9865 UNITTEST=true py.test -s tests/test_mycontroller.py
+Or, start one or multiple specific tests by specifying the test name::
 
-You can run tests multiple times without having to start and stop the Ceph
-cluster.
+  $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.DashboardTest
 
-After you finish your tests, you can stop the Ceph cluster using another tox
-environment::
+Or, ``source`` the script and run the tests manually::
 
-  $ tox -e ceph-cluster-stop
+  $ source run-backend-api-tests.sh
+  $ run_teuthology_tests [tests]...
+  $ cleanup_teuthology
 
 How to add a new controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

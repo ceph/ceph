@@ -939,6 +939,10 @@ void ECBackend::handle_sub_write(
   tls.push_back(std::move(localt));
   get_parent()->queue_transactions(tls, msg);
   dout(30) << __func__ << " missing after" << get_parent()->get_log().get_missing().get_items() << dendl;
+  if (op.at_version != eversion_t()) {
+    // dummy rollforward transaction doesn't get at_version (and doesn't advance it)
+    get_parent()->op_applied(op.at_version);
+  }
 }
 
 void ECBackend::handle_sub_read(

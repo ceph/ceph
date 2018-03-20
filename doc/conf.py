@@ -2,7 +2,7 @@ import sys
 import os
 
 project = u'Ceph'
-copyright = u'2016, Red Hat, Inc, and contributors. Licensed under Creative Commons BY-SA'
+copyright = u'2016, Red Hat, Inc, and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
 version = 'dev'
 release = 'dev'
 
@@ -23,7 +23,8 @@ if tags.has('man'):
                          'ceph-volume/*',
                          'radosgw/*',
                          'rbd/*',
-                         'start/*']
+                         'start/*',
+                         'releases/*']
 else:
     exclude_patterns += ['man_index.rst']
 
