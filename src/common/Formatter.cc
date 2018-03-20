@@ -79,7 +79,7 @@ Formatter *Formatter::create(std::string_view type,
   else if (fallback != "")
     return create(fallback, "", "");
   else
-    return (Formatter *) NULL;
+    return NULL;
 }
 
 
