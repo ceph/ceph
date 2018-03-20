@@ -20,6 +20,20 @@ class Options(object):
     """
     ENABLE_BROWSABLE_API = (True, bool)
 
+    # RGW settings
+    RGW_API_HOST = ('', str)
+    RGW_API_PORT = (80, int)
+    RGW_API_ACCESS_KEY = ('', str)
+    RGW_API_SECRET_KEY = ('', str)
+    RGW_API_ADMIN_RESOURCE = ('admin', str)
+    RGW_API_SCHEME = ('http', str)
+    RGW_API_USER_ID = ('', str)
+
+    @staticmethod
+    def has_default_value(name):
+        return getattr(Settings, name, None) is None or \
+               getattr(Settings, name) == getattr(Options, name)[0]
+
 
 class SettingsMeta(type):
     def __getattr__(cls, attr):
