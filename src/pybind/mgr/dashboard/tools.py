@@ -647,8 +647,8 @@ class NotificationQueue(threading.Thread):
 
     @classmethod
     def new_notification(cls, notify_type, notify_value):
-        cls._queue.append((notify_type, notify_value))
         with cls._cond:
+            cls._queue.append((notify_type, notify_value))
             cls._cond.notify()
 
     @classmethod
@@ -674,7 +674,8 @@ class NotificationQueue(threading.Thread):
                 pass
             self._notify_listeners(private_buffer)
             with self._cond:
-                self._cond.wait(1.0)
+                while self._running and not self._queue:
+                    self._cond.wait()
         # flush remaining events
         logger.debug("NQ: flush remaining events: %s", len(self._queue))
         self._notify_listeners(self._queue)
