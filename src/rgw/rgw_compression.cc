@@ -79,7 +79,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
   bufferlist out_bl, in_bl, temp_in_bl;
   bl.copy(bl_ofs, bl_len, temp_in_bl); 
   bl_ofs = 0;
-  int r;
+  int r = 0;
   if (waiting.length() != 0) {
     in_bl.append(waiting);
     in_bl.append(temp_in_bl);        
@@ -121,15 +121,17 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
   }
 
   cur_ofs += bl_len;
-
   off_t ch_len = std::min<off_t>(out_bl.length() - q_ofs, q_len);
-  r = next->handle_data(out_bl, q_ofs, ch_len);
-  if (r < 0) {
-    lderr(cct) << "handle_data failed with exit code " << r << dendl;
-    return r;
+  if (ch_len > 0) {
+    r = next->handle_data(out_bl, q_ofs, ch_len);
+    if (r < 0) {
+      lderr(cct) << "handle_data failed with exit code " << r << dendl;
+      return r;
+    }
+    out_bl.splice(0, q_ofs + ch_len);
+    q_len -= ch_len;
+    q_ofs = 0;
   }
-  q_len -= ch_len;
-  q_ofs = 0;
   return r;
 }
 
