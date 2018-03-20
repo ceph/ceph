@@ -299,13 +299,18 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
     return len;
   }
 
-  Mutex::Locker l(req_data->lock);
-  
-  if (!req_data->registered) {
-    return len;
+  RGWHTTPClient *client;
+
+  {
+    Mutex::Locker l(req_data->lock);
+    if (!req_data->registered) {
+      return len;
+    }
+
+    client = req_data->client;
   }
-  
-  int ret = req_data->client->receive_data((char *)ptr + skip_bytes, len - skip_bytes, &pause);
+
+  int ret = client->receive_data((char *)ptr + skip_bytes, len - skip_bytes, &pause);
   if (ret < 0) {
     dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
   }
@@ -315,6 +320,7 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
   if (pause) {
     dout(20) << "RGWHTTPClient::receive_http_data(): pause" << dendl;
     skip_bytes = len;
+    Mutex::Locker l(req_data->lock);
     req_data->read_paused = true;
     return CURL_WRITEFUNC_PAUSE;
   }
@@ -331,21 +337,28 @@ size_t RGWHTTPClient::send_http_data(void * const ptr,
 {
   rgw_http_req_data *req_data = static_cast<rgw_http_req_data *>(_info);
 
-  Mutex::Locker l(req_data->lock);
+  RGWHTTPClient *client;
+
+  {
+    Mutex::Locker l(req_data->lock);
   
-  if (!req_data->registered) {
-    return 0;
+    if (!req_data->registered) {
+      return 0;
+    }
+
+    client = req_data->client;
   }
 
   bool pause = false;
 
-  int ret = req_data->client->send_data(ptr, size * nmemb, &pause);
+  int ret = client->send_data(ptr, size * nmemb, &pause);
   if (ret < 0) {
     dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
   }
 
   if (ret == 0 &&
       pause) {
+    Mutex::Locker l(req_data->lock);
     req_data->write_paused = true;
     return CURL_READFUNC_PAUSE;
   }
