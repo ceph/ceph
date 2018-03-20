@@ -168,7 +168,7 @@ std::ostream& operator<<(std::ostream& out, const EntityName& n)
 uint32_t str_to_ceph_entity_type(const char * str)
 {
   size_t i;
-  for (i = 0; i < sizeof(STR_TO_ENTITY_TYPE)/sizeof(STR_TO_ENTITY_TYPE[0]); ++i) {
+  for (i = 0; i < ARRAY_SIZE(STR_TO_ENTITY_TYPE); ++i) {
     if (strcmp(str, STR_TO_ENTITY_TYPE[i].str) == 0)
       return STR_TO_ENTITY_TYPE[i].type;
   }

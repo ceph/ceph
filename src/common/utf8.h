@@ -17,6 +17,7 @@
 
 #define MAX_UTF8_SZ 6
 #define INVALID_UTF8_CHAR 0xfffffffful
+#define ARRAY_SIZE(a)   (sizeof(a) / sizeof(*a))
 
 #ifdef __cplusplus
 extern "C" {
