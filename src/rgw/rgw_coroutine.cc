@@ -347,6 +347,15 @@ int RGWCoroutinesStack::unwind(int retcode)
   return 0;
 }
 
+void RGWCoroutinesStack::cancel()
+{
+  while (!ops.empty()) {
+    RGWCoroutine *op = *pos;
+    unwind(-ECANCELED);
+    op->put();
+  }
+  put();
+}
 
 bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack) /* returns true if needs to be called again */
 {
@@ -730,7 +739,7 @@ next:
 
   for (auto stack : context_stacks) {
     ldout(cct, 20) << "clearing stack on run() exit: stack=" << (void *)stack << " nref=" << stack->get_nref() << dendl;
-    stack->put();
+    stack->cancel();
   }
   run_contexts.erase(run_context);
   lock.unlock();
