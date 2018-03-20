@@ -68,6 +68,7 @@ int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_id_option(options);
   options->add_options()
     ("all,a", po::bool_switch(), "list all children of snapshot (include trash)");
   at::add_format_options(options);
@@ -75,15 +76,28 @@ void get_arguments(po::options_description *positional,
 
 int execute(const po::variables_map &vm,
             const std::vector<std::string> &ceph_global_init_args) {
+  uint64_t snap_id = LIBRADOS_SNAP_HEAD;
+  auto snap_presence = utils::SNAPSHOT_PRESENCE_REQUIRED;
+  if (vm.count(at::SNAPSHOT_ID)) {
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+    snap_presence = utils::SNAPSHOT_PRESENCE_PERMITTED;
+  }
+
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
+    &snap_name, snap_presence, utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
+  }
+
+  if (snap_id != LIBRADOS_SNAP_HEAD && !snap_name.empty()) {
+    std::cerr << "rbd: trying to access snapshot using both name and id."
+              << std::endl;
+    return -EINVAL;
   }
 
   at::Format::Formatter formatter;
@@ -95,9 +109,23 @@ int execute(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
+  r = utils::init_and_open_image(pool_name, image_name, "", "", true,
                                  &rados, &io_ctx, &image);
   if (r < 0) {
+    return r;
+  }
+
+  if (snap_id == LIBRADOS_SNAP_HEAD) {
+    r = image.snap_set(snap_name.c_str());
+  } else {
+    r = image.snap_set_by_id(snap_id);
+  }
+  if (r == -ENOENT) {
+    std::cerr << "rbd: snapshot does not exist." << std::endl;
+    return r;
+  } else if (r < 0) {
+    std::cerr << "rbd: error setting snapshot: " << cpp_strerror(r)
+              << std::endl;
     return r;
   }
 
