@@ -17,6 +17,13 @@ class RbdTest(DashboardTestCase):
         cls._rbd_cmd(['create', '--size=1G', 'img1'])
         cls._rbd_cmd(['create', '--size=2G', 'img2'])
 
+        osd_metadata = cls.ceph_cluster.mon_manager.get_osd_metadata()
+        cls.bluestore_support = True
+        for osd in osd_metadata:
+            if osd['osd_objectstore'] != 'bluestore':
+                cls.bluestore_support = False
+                break
+
     @classmethod
     def tearDownClass(cls):
         super(RbdTest, cls).tearDownClass()
@@ -66,11 +73,11 @@ class RbdTest(DashboardTestCase):
                                  'deep-flatten, exclusive-lock, fast-diff, layering, object-map')
                 break
 
-    # TODO: Re-enable this test for bluestore cluster by figuring out how to skip none-bluestore
-    # ones automatically
-    @unittest.skip("requires bluestore cluster")
     @authenticate
     def test_create_rbd_in_data_pool(self):
+        if not self.bluestore_support:
+            self.skipTest('requires bluestore cluster')
+
         self._ceph_cmd(['osd', 'pool', 'create', 'data_pool', '12', '12', 'erasure'])
         self._ceph_cmd(['osd', 'pool', 'application', 'enable', 'data_pool', 'rbd'])
         self._ceph_cmd(['osd', 'pool', 'set', 'data_pool', 'allow_ec_overwrites', 'true'])
