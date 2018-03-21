@@ -473,8 +473,9 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         CLS_LOG(20, "entry %s[%s] is not valid\n", key.name.c_str(), key.instance.c_str());
         continue;
       }
-
-      if (!op.list_versions && !entry.is_visible()) {
+      
+      // filter out noncurrent versions, delete markers, and initial marker
+      if (!op.list_versions && (!entry.is_visible() || op.start_obj.name == key.name)) {
         CLS_LOG(20, "entry %s[%s] is not visible\n", key.name.c_str(), key.instance.c_str());
         continue;
       }
