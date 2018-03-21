@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import cherrypy
+
+from .. import mgr
 from ..services.ceph_service import CephService
 from ..tools import ApiController, RESTController, AuthRequired
 
@@ -71,3 +74,29 @@ class Pool(RESTController):
 
         for key, value in kwargs.items():
             CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=value)
+
+    @cherrypy.tools.json_out()
+    @cherrypy.expose
+    def _info(self):
+        """Used by the create-pool dialog"""
+        def rules(pool_type):
+            return [r["rule_name"]
+                    for r in mgr.get('osd_map_crush')['rules']
+                    if r['type'] == pool_type]
+
+        def all_bluestore():
+            return all(o['osd_objectstore'] == 'bluestore'
+                       for o in mgr.get('osd_metadata').values())
+
+        def compression_enum(conf_name):
+            return [o['enum_values'] for o in mgr.get('config_options')['options']
+                    if o['name'] == conf_name][0]
+
+        return {
+            "pool_names": [p['pool_name'] for p in self.list()],
+            "crush_rules_replicated": rules(1),
+            "crush_rules_erasure": rules(3),
+            "is_all_bluestore": all_bluestore(),
+            "compression_algorithms": compression_enum('bluestore_compression_algorithm'),
+            "compression_modes": compression_enum('bluestore_compression_mode'),
+        }
