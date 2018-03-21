@@ -23,7 +23,7 @@ class CephMetrics(Ansible):
     def get_inventory(self):
         return False
 
-    def generate_hosts_file(self):
+    def generate_inventory(self):
         groups_to_roles = {
             'mons': 'mon',
             'mgrs': 'mgr',
@@ -65,7 +65,7 @@ class CephMetrics(Ansible):
                 hosts_lines.append(host_line)
             hosts_lines.append('')
         hosts_str = '\n'.join(hosts_lines)
-        self.inventory = self._write_hosts_file(hosts_str)
+        self.inventory = self._write_inventory_files(hosts_str)
         self.generated_inventory = True
 
     def begin(self):
