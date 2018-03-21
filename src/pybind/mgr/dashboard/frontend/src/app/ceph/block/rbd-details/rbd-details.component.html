@@ -1,0 +1,36 @@
+<div class="panel panel-default"
+     *ngIf="selectedItem">
+  <div class="panel-heading">
+    <h3 class="panel-title">
+      {{ selectedItem.name }}
+    </h3>
+  </div>
+  <div class="panel-body">
+    <dl class="dl-horizontal">
+      <dt>Name:</dt>
+      <dd>{{ selectedItem.name }}</dd>
+      <dt>Size:</dt>
+      <dd>{{ selectedItem.size | dimlessBinary }}</dd>
+      <dt>Objects:</dt>
+      <dd>{{ selectedItem.num_objs | dimless }}</dd>
+      <dt>Object size:</dt>
+      <dd>{{ selectedItem.obj_size | dimlessBinary }}</dd>
+      <dt>Features:</dt>
+      <dd *ngFor="let feature of selectedItem.features_name.split(',')">
+        {{ feature }}
+      </dd>
+      <div *ngIf="selectedItem.features_name.indexOf('striping') !== -1">
+        <dt i18n>Striping unit:</dt>
+        <dd>{{ selectedItem.stripe_unit | dimlessBinary }}</dd>
+        <dt i18n>Striping count:</dt>
+        <dd>{{ selectedItem.stripe_count }}</dd>
+      </div>
+      <dt>Parent:</dt>
+      <dd>{{ selectedItem.parent | empty }}</dd>
+      <dt>Block name prefix:</dt>
+      <dd>{{ selectedItem.block_name_prefix }}</dd>
+      <dt>Order:</dt>
+      <dd>{{ selectedItem.order }}</dd>
+    </dl>
+  </div>
+</div>

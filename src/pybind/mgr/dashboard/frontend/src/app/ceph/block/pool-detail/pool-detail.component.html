@@ -14,5 +14,20 @@
 <cd-table [data]="images"
           columnMode="flex"
           [columns]="columns"
+          identifier="name"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)"
           (fetchData)="loadImages()">
+  <div class="table-actions">
+    <div class="btn-group" dropdown>
+      <button type="button"
+              class="btn btn-sm btn-primary"
+              routerLink="/rbd/add/{{ name }}">
+        <i class="fa fa-fw fa-plus"></i>Add image
+      </button>
+    </div>
+  </div>
+  <cd-rbd-details cdTableDetail
+                  [selection]="selection">
+  </cd-rbd-details>
 </cd-table>

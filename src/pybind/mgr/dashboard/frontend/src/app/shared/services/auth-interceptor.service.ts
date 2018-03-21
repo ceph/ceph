@@ -30,8 +30,9 @@ export class AuthInterceptorService implements HttpInterceptor {
           this.router.navigate(['/404']);
           return;
         }
-
-        this.toastr.error(err.error.detail || '', `${err.status} - ${err.statusText}`);
+        if (err.status === 500) {
+          this.toastr.error(err.error.detail || '', `${err.status} - ${err.statusText}`);
+        }
         if (err.status === 401) {
           this.authStorageService.remove();
           this.router.navigate(['/login']);
