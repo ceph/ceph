@@ -170,14 +170,6 @@ public:
       .WillOnce(Return(123));
   }
 
-  void expect_snap_set(librbd::MockTestImageCtx &mock_image_ctx,
-                       const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, snap_set(_, StrEq(snap_name), _))
-      .WillOnce(WithArg<2>(Invoke([this, r](Context *on_finish) {
-          m_threads->work_queue->queue(on_finish, r);
-        })));
-  }
-
   void expect_notify_sync_request(MockInstanceWatcher &mock_instance_watcher,
                                   const std::string &sync_id, int r) {
     EXPECT_CALL(mock_instance_watcher, notify_sync_request(sync_id, _))

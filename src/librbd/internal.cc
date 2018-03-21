@@ -1967,32 +1967,6 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     return r;
   }
 
-  int snap_set(ImageCtx *ictx, const cls::rbd::SnapshotNamespace &snap_namespace,
-	       const char *snap_name)
-  {
-    ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
-			 << (snap_name ? snap_name : "NULL") << dendl;
-
-    // ignore return value, since we may be set to a non-existent
-    // snapshot and the user is trying to fix that
-    ictx->state->refresh_if_required();
-
-    C_SaferCond ctx;
-    std::string name(snap_name == nullptr ? "" : snap_name);
-    ictx->state->snap_set(snap_namespace, name, &ctx);
-
-    int r = ctx.wait();
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(ictx->cct) << "failed to " << (name.empty() ? "un" : "") << "set "
-                         << "snapshot: " << cpp_strerror(r) << dendl;
-      }
-      return r;
-    }
-
-    return 0;
-  }
-
   int list_lockers(ImageCtx *ictx,
 		   std::list<locker_t> *lockers,
 		   bool *exclusive,

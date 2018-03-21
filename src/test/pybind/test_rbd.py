@@ -734,6 +734,24 @@ class TestImage(object):
         eq(read, data)
         self.image.remove_snap('snap1')
 
+    def test_set_snap_by_id(self):
+        self.image.write(b'\0' * 256, 0)
+        self.image.create_snap('snap1')
+        read = self.image.read(0, 256)
+        eq(read, b'\0' * 256)
+        data = rand_data(256)
+        self.image.write(data, 0)
+        read = self.image.read(0, 256)
+        eq(read, data)
+        snaps = list(self.image.list_snaps())
+        self.image.set_snap_by_id(snaps[0]['id'])
+        read = self.image.read(0, 256)
+        eq(read, b'\0' * 256)
+        self.image.set_snap_by_id(None)
+        read = self.image.read(0, 256)
+        eq(read, data)
+        self.image.remove_snap('snap1')
+
     def test_set_snap_sparse(self):
         self.image.create_snap('snap1')
         read = self.image.read(0, 256)

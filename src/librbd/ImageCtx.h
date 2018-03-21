@@ -234,8 +234,7 @@ namespace librbd {
     void perf_stop();
     void set_read_flag(unsigned flag);
     int get_read_flags(librados::snap_t snap_id);
-    int snap_set(cls::rbd::SnapshotNamespace in_snap_namespace,
-		 std::string in_snap_name);
+    int snap_set(uint64_t snap_id);
     void snap_unset();
     librados::snap_t get_snap_id(const cls::rbd::SnapshotNamespace& in_snap_namespace,
                                  const std::string& in_snap_name) const;
