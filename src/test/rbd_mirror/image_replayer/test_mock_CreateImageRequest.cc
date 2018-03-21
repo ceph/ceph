@@ -287,10 +287,14 @@ public:
 
   void expect_snap_set(librbd::MockTestImageCtx &mock_image_ctx,
                        const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, snap_set(_, StrEq(snap_name), _))
-      .WillOnce(WithArg<2>(Invoke([this, r](Context *on_finish) {
+    EXPECT_CALL(*mock_image_ctx.state, snap_set(_, _))
+      .WillOnce(Invoke([this, &mock_image_ctx, snap_name, r](uint64_t snap_id, Context *on_finish) {
+          RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
+          auto id = mock_image_ctx.image_ctx->get_snap_id(
+            cls::rbd::UserSnapshotNamespace{}, snap_name);
+          ASSERT_NE(snap_id, id);
           m_threads->work_queue->queue(on_finish, r);
-        })));
+        }));
   }
 
   void expect_clone_image(MockCloneRequest &mock_clone_request,
