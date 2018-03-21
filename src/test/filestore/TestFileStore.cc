@@ -21,7 +21,7 @@
 
 class TestFileStore {
 public:
-  static void create_backend(FileStore &fs, long f_type) {
+  static void create_backend(FileStore &fs, unsigned long f_type) {
     fs.create_backend(f_type);
   }
 };
