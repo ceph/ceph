@@ -222,11 +222,6 @@ void inconsistent_snapset_wrapper::set_snapset_mismatch()
   errors |= inc_snapset_t::SNAP_MISMATCH;
 }
 
-void inconsistent_snapset_wrapper::set_head_mismatch()
-{
-  errors |= inc_snapset_t::HEAD_MISMATCH;
-}
-
 void inconsistent_snapset_wrapper::set_size_mismatch()
 {
   errors |= inc_snapset_t::SIZE_MISMATCH;

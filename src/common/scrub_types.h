@@ -163,8 +163,6 @@ struct inconsistent_snapset_wrapper : public librados::inconsistent_snapset_t {
   void set_clone(snapid_t);
   // the snapset is not consistent with itself
   void set_snapset_mismatch();
-  // soid.snap inconsistent with snapset
-  void set_head_mismatch();
   void set_size_mismatch();
 
   void encode(bufferlist& bl) const;

@@ -1548,8 +1548,6 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
     f.dump_string("error", "info_corrupted");
   if (inc.snapset_mismatch())
     f.dump_string("error", "snapset_mismatch");
-  if (inc.head_mismatch())
-    f.dump_string("error", "head_mismatch");
   if (inc.headless())
     f.dump_string("error", "headless");
   if (inc.size_mismatch())
