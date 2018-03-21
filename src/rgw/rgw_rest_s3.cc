@@ -9,11 +9,8 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
-#include <map>
-#include <set>
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
-#include <boost/algorithm/string/join.hpp>
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -3802,7 +3799,8 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
   }
 
   /* craft canonical headers */
-  std::set<std::string> canonical_hdrs_set;
+
+  map<string, string> canonical_hdrs_map;
   istringstream sh(s->aws4_auth->signedheaders);
   string token;
   string port = s->info.env->get("SERVER_PORT", "");
@@ -3841,14 +3839,12 @@ int RGW_Auth_S3::authorize_v4(RGWRados *store, struct req_state *s, bool force_b
 	  token_value = token_value + ":" + port;
       }
     }
-    canonical_hdrs_set.insert(
-      boost::algorithm::join(std::vector<std::string>(
-	{std::string(token), rgw_trim_whitespace(token_value)} ), ":"));
+    canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
   }
 
-  for (const auto& header : canonical_hdrs_set) {
-    s->aws4_auth->canonical_hdrs.append(header.data(), header.length())
-      .append("\n", std::strlen("\n"));
+  for (map<string, string>::iterator it = canonical_hdrs_map.begin();
+      it != canonical_hdrs_map.end(); ++it) {
+    s->aws4_auth->canonical_hdrs.append(it->first + ":" + it->second + "\n");
   }
 
   dout(10) << "canonical headers format = " << s->aws4_auth->canonical_hdrs << dendl;
