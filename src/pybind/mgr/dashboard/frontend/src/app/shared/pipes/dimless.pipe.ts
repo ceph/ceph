@@ -14,7 +14,10 @@ export class DimlessPipe implements PipeTransform {
       'M',
       'G',
       'T',
-      'P'
+      'P',
+      'E',
+      'Z',
+      'Y'
     ]);
   }
 }
