@@ -24,7 +24,6 @@ using tcp = boost::asio::ip::tcp;
 namespace beast = boost::beast;
 
 using Throttle = ceph::async::Throttle<boost::asio::io_context::executor_type>;
-auto build_counters = ceph::async::throttle_counters::build;
 
 void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
                        Throttle& request_throttle,
@@ -120,7 +119,7 @@ void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
   }
 }
 
-class AsioFrontend {
+class AsioFrontend : public md_config_obs_t {
   RGWProcessEnv env;
   RGWFrontendConfig* conf;
   boost::asio::io_context service;
@@ -143,17 +142,24 @@ class AsioFrontend {
   std::vector<std::thread> threads;
   std::atomic<bool> going_down{false};
 
+  struct Pauser {
+    std::mutex mutex;
+    bool paused{false};
+    size_t max_requests{0};
+  } pauser;
+
   CephContext* ctx() const { return env.store->ctx(); }
 
   void accept(Listener& listener, boost::system::error_code ec);
 
+  // config observer
+  const char **get_tracked_conf_keys() const override;
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set<std::string>& changed) override;
+
  public:
-  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
-    : env(env), conf(conf),
-      request_throttle(service.get_executor(), 0,
-                       build_counters(env.store->ctx(),
-                                      "throttle-frontend-requests"))
-  {}
+  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf);
+  ~AsioFrontend();
 
   int init();
   int run();
@@ -162,6 +168,24 @@ class AsioFrontend {
   void pause();
   void unpause(RGWRados* store, rgw_auth_registry_ptr_t);
 };
+
+const auto build_counters = ceph::async::throttle_counters::build;
+
+AsioFrontend::AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
+  : env(env), conf(conf),
+    request_throttle(service.get_executor(), 0,
+                     build_counters(env.store->ctx(),
+                                    "throttle-frontend-requests"))
+{
+  auto _conf = env.store->ctx()->_conf;
+  _conf->add_observer(this);
+  pauser.max_requests = _conf->get_val<int64_t>("rgw_max_concurrent_requests");
+}
+
+AsioFrontend::~AsioFrontend()
+{
+  env.store->ctx()->_conf->remove_observer(this);
+}
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
 {
@@ -288,8 +312,7 @@ int AsioFrontend::run()
     });
   }
 
-  // TODO: use a config observer to update the throttle while !paused
-  request_throttle.set_maximum(cct->_conf->get_val<int64_t>("rgw_max_concurrent_requests"));
+  request_throttle.set_maximum(pauser.max_requests);
   return 0;
 }
 
@@ -323,6 +346,30 @@ void AsioFrontend::join()
   ldout(ctx(), 4) << "frontend done" << dendl;
 }
 
+const char** AsioFrontend::get_tracked_conf_keys() const
+{
+  static const char* keys[] = {
+    "rgw_max_concurrent_requests",
+    nullptr
+  };
+  return keys;
+}
+
+void AsioFrontend::handle_conf_change(const md_config_t *conf,
+                                      const std::set<std::string>& changed)
+{
+  if (changed.count("rgw_max_concurrent_requests")) {
+    std::lock_guard lock{pauser.mutex};
+    pauser.max_requests = conf->get_val<int64_t>("rgw_max_concurrent_requests");
+    if (pauser.max_requests == 0) { // 0 = unlimited
+      pauser.max_requests = std::numeric_limits<size_t>::max();
+    }
+    if (!pauser.paused) { // don't apply until unpause
+      request_throttle.set_maximum(pauser.max_requests);
+    }
+  }
+}
+
 void AsioFrontend::pause()
 {
   ldout(ctx(), 4) << "frontend pausing connections..." << dendl;
@@ -333,7 +380,10 @@ void AsioFrontend::pause()
     l.acceptor.cancel(ec);
   }
 
-  std::mutex mutex;
+  auto& mutex = pauser.mutex;
+  std::unique_lock lock{mutex};
+  pauser.paused = true;
+
   std::condition_variable cond;
   std::optional<boost::system::error_code> result;
 
@@ -344,7 +394,6 @@ void AsioFrontend::pause()
       cond.notify_one();
     });
 
-  std::unique_lock lock{mutex};
   cond.wait(lock, [&] { return result; });
 
   if (*result) {
@@ -360,9 +409,14 @@ void AsioFrontend::unpause(RGWRados* const store,
   env.store = store;
   env.auth_registry = std::move(auth_registry);
 
+  size_t max_requests;
+  {
+    std::lock_guard lock{pauser.mutex};
+    pauser.paused = false;
+    max_requests = pauser.max_requests;
+  }
   // restore max throttle to unblock connections
-  auto conf = env.store->ctx()->_conf;
-  request_throttle.set_maximum(conf->get_val<int64_t>("rgw_max_concurrent_requests"));
+  request_throttle.set_maximum(max_requests);
 
   // start accepting connections again
   for (auto& l : listeners) {
