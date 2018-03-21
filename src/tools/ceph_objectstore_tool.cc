@@ -3271,8 +3271,8 @@ int main(int argc, char **argv)
   if (debug) {
     g_conf->set_val_or_die("log_to_stderr", "true");
     g_conf->set_val_or_die("err_to_stderr", "true");
+    g_conf->apply_changes(NULL);
   }
-  g_conf->apply_changes(NULL);
 
   // Special list handling.  Treating pretty_format as human readable,
   // with one object per line and not an enclosing array.

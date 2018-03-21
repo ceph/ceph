@@ -840,8 +840,6 @@ int main(int argc, char **argv) {
     CODE_ENVIRONMENT_UTILITY,
     CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
-  g_conf = g_ceph_context->_conf;
 
   // this is where we'll write *whatever*, on a per-command basis.
   // not all commands require some place to write their things.
