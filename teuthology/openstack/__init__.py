@@ -46,6 +46,17 @@ from teuthology.config import set_config_attr
 from teuthology.orchestra import connection
 from teuthology import misc
 
+from yaml.representer import SafeRepresenter
+
+class cmd_str(str): pass
+
+def cmd_repr(dumper, data):
+    scalar = SafeRepresenter.represent_str(dumper, data)
+    scalar.style ='|'
+    return scalar
+
+yaml.add_representer(cmd_str, cmd_repr)
+
 log = logging.getLogger(__name__)
 
 class NoFlavorException(Exception):
@@ -153,7 +164,7 @@ class OpenStackInstance(object):
         return self.private_ip
 
     def get_floating_ip(self):
-        ips = json.loads(OpenStack().run("ip floating list -f json"))
+        ips = TeuthologyOpenStack.get_os_floating_ips()
         for ip in ips:
             if ip['Fixed IP Address'] == self.get_ip(''):
                 return ip['Floating IP Address']
@@ -289,6 +300,7 @@ class OpenStack(object):
             raise Exception('no OS_AUTH_URL environment variable')
         providers = (('runabove.io', 'runabove'),
                      ('cloud.ovh.net', 'ovh'),
+                     ('engcloud.prv.suse.net', 'ecp'),
                      ('cloudlab.us', 'cloudlab'),
                      ('entercloudsuite.com', 'entercloudsuite'),
                      ('rackspacecloud.com', 'rackspace'),
@@ -390,29 +402,39 @@ class OpenStack(object):
             self.image_create(name, arch)
         return self.image_name(name)
 
-    def get_sorted_flavors(self, arch, select):
+    @staticmethod
+    def sort_flavors(flavors):
+        def sort_flavor(a, b):
+            return (a['VCPUs'] - b['VCPUs'] or
+                    a['RAM'] - b['RAM'] or
+                    a['Disk'] - b['Disk'])
+        return sorted(flavors, cmp=sort_flavor)
+
+    def get_os_flavors(self):
+        flavors = json.loads(self.run("flavor list -f json"))
+        return flavors
+
+    def get_sorted_flavors(self, arch, select, flavor_list = None):
         log.debug("flavor selection regex: " + select)
-        flavors_string = self.run("flavor list -f json")
-        flavors = json.loads(flavors_string)
+        flavors = flavor_list or self.get_os_flavors()
         found = []
         for flavor in flavors:
             if select and not re.match(select, flavor['Name']):
                 continue
             found.append(flavor)
-
-        def sort_flavor(a, b):
-            return (a['VCPUs'] - b['VCPUs'] or
-                    a['RAM'] - b['RAM'] or
-                    a['Disk'] - b['Disk'])
-        sorted_flavors = sorted(found, cmp=sort_flavor)
+        sorted_flavors = OpenStack.sort_flavors(found)
         log.debug("sorted flavors = " + str(sorted_flavors))
         return sorted_flavors
 
     def __flavor(self, hint, arch, select):
+        flavors = self.get_sorted_flavors(arch, select)
+        return self.__flavor(self, hint, flavors)
+
+    def __flavor(self, hint, flavors):
         """
         Return the smallest flavor that satisfies the desired size.
         """
-        flavors = self.get_sorted_flavors(arch, select)
+        flavors = OpenStack.sort_flavors(flavors)
         for flavor in flavors:
             if (flavor['RAM'] >= hint['ram'] and
                     flavor['VCPUs'] >= hint['cpus'] and
@@ -423,12 +445,16 @@ class OpenStack(object):
                                 " the desired " + str(hint) + " can fit")
 
     def __flavor_range(self, min, good, arch, select):
+        flavors = self.get_sorted_flavors(arch, select)
+        return self.__flavor_range(self, min, good, flavors)
+
+    def __flavor_range(self, min, good, flavors):
         """
         Return the smallest flavor that satisfies the good hint.
         If no such flavor, get the largest flavor smaller than good
         and larger than min.
         """
-        flavors = self.get_sorted_flavors(arch, select)
+        flavors = OpenStack.sort_flavors(flavors)
         low_range = []
         for flavor in flavors:
             if (flavor['RAM'] >= good['ram'] and
@@ -455,22 +481,33 @@ class OpenStack(object):
         This is the one, single place for coding OpenStack-provider-specific
         heuristics for selecting flavors.
         """
-        select = None
-        if self.get_provider() == 'ovh':
-            log.debug("Looking for a match among the El Cheapo flavors...")
-            select = '^vps-ssd-'
+        select_dict = {
+            #'ovh': ['^(s1|vps-ssd)-', '^(c2-[0-9]+|(hg|sg)-.*ssd)$', '^(hg|sg|c2)-.*ssd'],
+            'ovh': [
+                '^s1-', '^c2-[0-9]+$',          # new ovh flavors at first
+                '^vps-ssd-', '^(hg|sg)-.*ssd$'  # old ovh flavors
+            ],
+            'ecp': ['^(m1|m2).'],
+        }
+        if 'flavor' in teuth_config.openstack:
+            flavor_select = teuth_config.openstack['flavor'] or [None]
+        else:
+            flavor_select = select_dict[self.get_provider()] \
+                if self.get_provider() in select_dict else [None]
+        all_flavors = self.get_os_flavors()
+        for select in flavor_select:
             try:
-                if (hint is not None):
-                    return self.__flavor(hint, arch, select)
-                return self.__flavor_range(min, good, arch, select)
+                flavors = self.get_sorted_flavors(arch, select, all_flavors)
+                if hint:
+                    flavor = self.__flavor(hint, flavors)
+                else:
+                    flavor = self.__flavor_range(min, good, flavors)
+                if flavor:
+                    return flavor
             except NoFlavorException:
+                log.debug('No flavor found for select [%s]' % select)
                 pass
-            log.debug("No El Cheapo flavors match the selection criteria. "
-                      "Looking for a match among the more expensive flavors...")
-            select = '^(hg|sg|c2)-.*ssd'
-        if (hint is not None):
-            return self.__flavor(hint, arch, select)
-        return self.__flavor_range(min, good, arch, select)
+        raise NoFlavorException('No flavors found for filters: %s' % flavor_select)
 
     def flavor(self, hint, arch):
         return self.__flavor_wrapper(None, None, hint, arch)
@@ -591,18 +628,28 @@ class OpenStack(object):
     def get_ip(self, instance_id, network):
         return OpenStackInstance(instance_id).get_ip(network)
 
+    def get_network(self):
+        nets = {
+            'entercloudsuite'  : 'default',
+            'cloudlab'         : 'flat-lan-1-net',
+            'ecp'              : 'sesci',
+        }
+        if 'network' in teuth_config.openstack:
+            return teuth_config.openstack['network']
+        elif self.get_provider() in nets:
+            return nets[self.get_provider()]
+        else:
+            return None
+
     def net(self):
         """
         Return the network to be used when creating an OpenStack instance.
         By default it should not be set. But some providers such as
         entercloudsuite require it is.
         """
-        if self.get_provider() == 'entercloudsuite':
-            return "--nic net-id=default"
-        elif self.get_provider() == 'cloudlab':
-            return "--nic net-id=flat-lan-1-net"
-        else:
-            return ""
+        log.debug('Using config: %s', teuth_config)
+        network = self.get_network()
+        return "--nic net-id=" + network if network else ""
 
     def get_available_archs(self):
         if (self.get_provider() == 'cloudlab' or
@@ -638,6 +685,7 @@ class TeuthologyOpenStack(OpenStack):
         """
         self.setup_logs()
         set_config_attr(self.args)
+        log.debug('Teuthology config: %s' % self.config.openstack)
         for keyfile in [self.args.key_filename,
                         os.environ['HOME'] + '/.ssh/id_rsa',
                         os.environ['HOME'] + '/.ssh/id_dsa',
@@ -645,6 +693,8 @@ class TeuthologyOpenStack(OpenStack):
             if (keyfile and os.path.isfile(keyfile)):
                 self.key_filename = keyfile
                 break
+        if not self.key_filename:
+            raise Exception('No key file provided, please, use --key-filename option')
         self.verify_openstack()
         if self.args.teardown:
             self.instance = OpenStackInstance(self.server_name())
@@ -775,6 +825,7 @@ class TeuthologyOpenStack(OpenStack):
                 ]
         while len(original_argv) > 0:
             if original_argv[0] in ('--name',
+                                    '--conf',
                                     '--teuthology-branch',
                                     '--teuthology-git-url',
                                     '--test-repo',
@@ -969,34 +1020,49 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         and a few other values are substituted.
         """
         path = tempfile.mktemp()
-        if self.user_data.startswith('/'):
-            user_data = self.user_data
-        else:
-            user_data = os.path.join(os.path.dirname(__file__),
-                                     '../..', self.user_data)
-        template = open(user_data).read()
+        # if self.user_data.startswith('/'):
+        #     user_data = self.user_data
+        # else:
+        #     user_data = os.path.join(os.path.dirname(__file__),
+        #                              '../..', self.user_data)
+        # template = open(user_data).read()
         openrc = ''
+        cacert_cmd = None
         for (var, value) in os.environ.items():
             if var in ('OS_TOKEN_VALUE', 'OS_TOKEN_EXPIRES'):
                 continue
-            if var.startswith('OS_'):
+            if var == 'OS_CACERT':
+                cacert_path = '/home/%s/.openstack.crt' % self.username
+                cacert_file = value
+                openrc += ' ' + var + '=' + cacert_path
+                cacert_cmd = (
+                    "su - -c 'cat > {path}' {user} <<EOF\n"
+                    "{data}\n"
+                    "EOF\n").format(
+                        path=cacert_path,
+                        user=self.username,
+                        data=open(cacert_file).read())
+            elif var.startswith('OS_'):
                 openrc += ' ' + var + '=' + value
-        if self.args.upload:
-            upload = '--archive-upload ' + self.args.archive_upload
-        else:
-            upload = ''
+        # if self.args.upload:
+        #     upload = '--archive-upload ' + self.args.archive_upload
+        # else:
+        #     upload = ''
         clone = teuth_config.openstack['clone']
+        network = OpenStack().get_network()
+        log.debug('Default teuthology clone: %s' % clone)
         if self.args.teuthology_git_url:
-            clone = ("git clone -b {branch} {url}".format(
+            clone = "git clone -b {branch} {url}".format(
                 branch=self.args.teuthology_branch,
-                url=self.args.teuthology_git_url))
+                url=self.args.teuthology_git_url)
+            log.debug('Overridden teuthology clone: %s' % clone)
         ceph_workbench = ''
         if self.args.ceph_workbench_git_url:
             ceph_workbench += (" --ceph-workbench-branch " +
                                self.args.ceph_workbench_branch)
             ceph_workbench += (" --ceph-workbench-git-url " +
                                self.args.ceph_workbench_git_url)
-        canonical_tags = "--no-canonical-tags" if self.args.no_canonical_tags else ""
+        # canonical_tags = "--no-canonical-tags" if self.args.no_canonical_tags else ""
         setup_options = [
             '--keypair %s' % self.key_pair(),
             '--selfname %s' % self.args.name,
@@ -1020,33 +1086,66 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             '--setup-pulpito',          #do_setup_pulpito=true
             '--populate-paddles',       #do_populate_paddles=true
         ]
-        ceph_workbench = ''
+
         if self.args.ceph_workbench_git_url:
             all_options += [
                 '--setup-ceph-workbench',
                 '--ceph-workbench-branch %s' % self.args.ceph_workbench_branch,
                 '--ceph-workbench-git-url %s' % self.args.ceph_workbench_git_url,
             ]
+        if self.args.no_canonical_tags:
+            all_options += [ '--no-canonical-tags' ]
+        if self.args.upload:
+            all_options += [ '--archive-upload ' + self.args.archive_upload ]
+        if network:
+            all_options += [ '--network ' + network ]
+        if self.args.simultaneous_jobs:
+            all_options += [ '--nworkers ' + str(self.args.simultaneous_jobs) ]
 
-        log.debug("OPENRC = " + openrc + " " +
-                  "TEUTHOLOGY_USERNAME = " + self.username + " " +
-                  "CLONE_OPENSTACK = " + clone + " " +
-                  "UPLOAD = " + upload + " " +
-                  "CEPH_WORKBENCH = " + ceph_workbench + " " +
-                  "NWORKERS = " + str(self.args.simultaneous_jobs) +
-                  "CANONICAL_TAGS = " +
-                  ("(empty string)" if canonical_tags == "" else canonical_tags))
-        content = (template.
-                   replace('SETUP_OPTIONS', ' '.join(setup_options + all_options)).
-                   replace('OPENRC', openrc).
-                   replace('TEUTHOLOGY_USERNAME', self.username).
-                   replace('CLONE_OPENSTACK', clone).
-                   replace('UPLOAD', upload).
-                   replace('CEPH_WORKBENCH', ceph_workbench).
-                   replace('NWORKERS', str(self.args.simultaneous_jobs)).
-                   replace('CANONICAL_TAGS', canonical_tags))
-        open(path, 'w').write(content)
-        log.debug("get_user_data: " + content + " written to " + path)
+        cmds = [
+            "su - -c '(set -x ; %s && cd teuthology && ./bootstrap install)' "
+            "%s >> /tmp/init.out 2>&1" % (clone, self.username),
+            #"echo 'export %s' | tee /home/%s/openrc.sh" % (openrc, self.username),
+            cmd_str(
+                "su - -c 'cat | tee $HOME/openrc.sh' {user} <<EOF\n"
+                "export {openrc}\n"
+                "EOF\n".format(user=self.username, openrc=openrc)),
+            cmd_str(
+                "su - -c '(set -x ; source openrc.sh ; cd teuthology ; "
+                "source virtualenv/bin/activate ; "
+                "teuthology/openstack/setup-openstack.sh {opts})' "
+                "{user} >> /tmp/init.out "
+                "2>&1".format(user=self.username,
+                              opts=' '.join(setup_options + all_options))),
+            "/etc/init.d/teuthology restart"
+        ]
+        if cacert_cmd:
+            cmds.insert(0,cmd_str(cacert_cmd))
+        #cloud-config
+        cloud_config = {
+            'bootcmd': [
+                'touch /tmp/init.out',
+                'echo nameserver 8.8.8.8 | tee -a /etc/resolv.conf',
+            ],
+            'manage_etc_hosts': True,
+            'system_info': {
+                'default_user': {
+                    'name': self.username
+                }
+            },
+            'packages': [
+                'python-virtualenv',
+                'git',
+                'rsync',
+            ],
+            'runcmd': cmds,
+            'final_message': 'teuthology is up and running after $UPTIME seconds'
+        }
+        user_data = "#cloud-config\n%s" % \
+              yaml.dump(cloud_config, default_flow_style = False)
+        open(path, 'w').write(user_data)
+        log.debug("user_data: %s" % user_data)
+
         return path
 
     def key_pair(self):
@@ -1098,7 +1197,7 @@ openstack security group rule create --protocol udp --src-group {server} --dst-p
         """
         Return a floating IP address not associated with an instance or None.
         """
-        ips = json.loads(OpenStack().run("ip floating list -f json"))
+        ips = TeuthologyOpenStack.get_os_floating_ips()
         for ip in ips:
             if not ip['Port']:
                 return ip['Floating IP Address']
@@ -1108,7 +1207,18 @@ openstack security group rule create --protocol udp --src-group {server} --dst-p
     def create_floating_ip():
         try:
             pools = json.loads(OpenStack().run("ip floating pool list -f json"))
-        except subprocess.CalledProcessError:
+        except subprocess.CalledProcessError as e:
+            if 'Floating ip pool operations are only available for Compute v2 network.' \
+                    in e.output:
+                log.debug(e.output)
+                log.debug('Trying newer API than Compute v2')
+                try:
+                    network = 'floating'
+                    ip = json.loads(misc.sh("openstack --quiet floating ip create -f json '%s'" % network))
+                    return ip['floating_ip_address']
+                except subprocess.CalledProcessError:
+                    log.debug("Can't create floating ip for network '%s'" % network)
+
             log.debug("create_floating_ip: ip floating pool list failed")
             return None
         if not pools:
@@ -1135,14 +1245,29 @@ openstack security group rule create --protocol udp --src-group {server} --dst-p
             OpenStack().run("ip floating add " + ip + " " + name_or_id)
 
     @staticmethod
+    def get_os_floating_ips():
+        try:
+            ips = json.loads(OpenStack().run("ip floating list -f json"))
+        except subprocess.CalledProcessError as e:
+            log.warning(e)
+            if e.returncode == 1:
+                return []
+            else:
+                raise e
+        return ips
+
+    @staticmethod
     def get_floating_ip_id(ip):
         """
         Return the id of a floating IP
         """
-        results = json.loads(OpenStack().run("ip floating list -f json"))
+        results = TeuthologyOpenStack.get_os_floating_ips()
         for result in results:
-            if result['IP'] == ip:
-                return str(result['ID'])
+            for k in ['IP', 'Floating IP Address']:
+                if k in result:
+                    if result[k] == ip:
+                        return str(result['ID'])
+
         return None
 
     @staticmethod
@@ -1172,12 +1297,20 @@ openstack security group rule create --protocol udp --src-group {server} --dst-p
         if self.get_provider() == 'rackspace':
             security_group = ''
         arch = self.get_default_arch()
+        flavor = self.teuthology_openstack_flavor(arch)
+        log.debug('Create server: %s' % self.server_name())
+        log.debug('Using config: %s' % self.config.openstack)
+        log.debug('Using flavor: %s' % flavor)
+        key_name = self.args.key_name
+        if not key_name:
+            raise Exception('No key name provided, use --key-name option')
+        log.debug('Using key name: %s' % self.args.key_name)
         self.run(
             "server create " +
             " --image '" + self.image('ubuntu', '16.04', arch) + "' " +
-            " --flavor '" + self.teuthology_openstack_flavor(arch) + "' " +
+            " --flavor '" + flavor + "' " +
             " " + self.net() +
-            " --key-name " + self.args.key_name +
+            " --key-name " + key_name +
             " --user-data " + user_data +
             security_group +
             " --wait " + self.server_name() +
