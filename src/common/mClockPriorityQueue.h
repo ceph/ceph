@@ -44,8 +44,7 @@ namespace ceph {
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
     static unsigned filter_list_pairs(ListPairs *l,
-				      std::function<bool (T&&)> f,
-				      std::list<T>* out = nullptr) {
+				      std::function<bool (T&&)> f) {
       unsigned ret = 0;
       for (typename ListPairs::iterator i = l->end();
 	   i != l->begin();
@@ -55,7 +54,6 @@ namespace ceph {
 	--next;
 	if (f(std::move(next->second))) {
 	  ++ret;
-	  if (out) out->push_back(std::move(next->second));
 	  l->erase(next);
 	} else {
 	  i = next;
