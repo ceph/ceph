@@ -15,7 +15,9 @@ class Pool(RESTController):
     @classmethod
     def _serialize_pool(cls, pool, attrs):
         if not attrs or not isinstance(attrs, list):
-            return pool
+            attrs = pool.keys()
+
+        crush_rules = {r['rule_id']: r["rule_name"] for r in mgr.get('osd_map_crush')['rules']}
 
         res = {}
         for attr in attrs:
@@ -23,6 +25,8 @@ class Pool(RESTController):
                 continue
             if attr == 'type':
                 res[attr] = {1: 'replicated', 3: 'erasure'}[pool[attr]]
+            elif attr == 'crush_rule':
+                res[attr] = crush_rules[pool[attr]]
             else:
                 res[attr] = pool[attr]
 
