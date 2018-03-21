@@ -12,10 +12,6 @@ from ..tools import NotificationQueue
 class Listener(object):
     # pylint: disable=too-many-instance-attributes
     def __init__(self):
-        NotificationQueue.register(self.log_type1, 'type1', priority=90)
-        NotificationQueue.register(self.log_type2, 'type2')
-        NotificationQueue.register(self.log_type1_3, ['type1', 'type3'])
-        NotificationQueue.register(self.log_all, priority=50)
         self.type1 = []
         self.type1_ts = []
         self.type2 = []
@@ -24,6 +20,12 @@ class Listener(object):
         self.type1_3_ts = []
         self.all = []
         self.all_ts = []
+
+    def register(self):
+        NotificationQueue.register(self.log_type1, 'type1', priority=90)
+        NotificationQueue.register(self.log_type2, 'type2')
+        NotificationQueue.register(self.log_type1_3, ['type1', 'type3'])
+        NotificationQueue.register(self.log_all, priority=50)
 
         # these should be ignored by the queue
         NotificationQueue.register(self.log_type1, 'type1')
@@ -55,6 +57,10 @@ class Listener(object):
         self.type1_3_ts = []
         self.all = []
         self.all_ts = []
+        NotificationQueue.deregister(self.log_type1, 'type1')
+        NotificationQueue.deregister(self.log_type2, 'type2')
+        NotificationQueue.deregister(self.log_type1_3, ['type1', 'type3'])
+        NotificationQueue.deregister(self.log_all)
 
 
 class NotificationQueueTest(unittest.TestCase):
@@ -63,6 +69,9 @@ class NotificationQueueTest(unittest.TestCase):
         cls.listener = Listener()
 
     def setUp(self):
+        self.listener.register()
+
+    def tearDown(self):
         self.listener.clear()
 
     def test_invalid_register(self):
@@ -111,3 +120,19 @@ class NotificationQueueTest(unittest.TestCase):
         self.assertEqual(len(self.listener.type2), 200)
         self.assertEqual(len(self.listener.type1_3), 400)
         self.assertEqual(len(self.listener.all), 600)
+
+    def test_deregister(self):
+        NotificationQueue.start_queue()
+        NotificationQueue.new_notification('type1', 1)
+        NotificationQueue.new_notification('type3', 3)
+        NotificationQueue.stop()
+        self.assertEqual(self.listener.type1, [1])
+        self.assertEqual(self.listener.type1_3, [1, 3])
+
+        NotificationQueue.start_queue()
+        NotificationQueue.deregister(self.listener.log_type1_3, ['type1'])
+        NotificationQueue.new_notification('type1', 4)
+        NotificationQueue.new_notification('type3', 5)
+        NotificationQueue.stop()
+        self.assertEqual(self.listener.type1, [1, 4])
+        self.assertEqual(self.listener.type1_3, [1, 3, 5])

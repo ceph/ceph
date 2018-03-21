@@ -632,18 +632,47 @@ class NotificationQueue(threading.Thread):
         """
         with cls._lock:
             if not n_types:
-                if not cls._registered_handler(func, cls._ALL_TYPES_):
-                    cls._listeners[cls._ALL_TYPES_].add((priority, func))
-                return
-            if isinstance(n_types, str):
-                if not cls._registered_handler(func, n_types):
-                    cls._listeners[n_types].add((priority, func))
-            elif isinstance(n_types, list):
-                for typ in n_types:
-                    if not cls._registered_handler(func, typ):
-                        cls._listeners[typ].add((priority, func))
-            else:
+                n_types = [cls._ALL_TYPES_]
+            elif isinstance(n_types, str):
+                n_types = [n_types]
+            elif not isinstance(n_types, list):
                 raise Exception("n_types param is neither a string nor a list")
+            for ev_type in n_types:
+                if not cls._registered_handler(func, ev_type):
+                    cls._listeners[ev_type].add((priority, func))
+                    logger.debug("NQ: function %s was registered for events of"
+                                 " type %s", func, ev_type)
+
+    @classmethod
+    def deregister(cls, func, n_types=None):
+        """Removes the listener function from this notification queue
+
+        If the second parameter `n_types` is ommitted, the function is removed
+        from all event types, otherwise the function is removed only for the
+        specified event types.
+
+        Args:
+            func (function): python function
+            n_types (str|list): the single event type, or a list of event types
+        """
+        with cls._lock:
+            if not n_types:
+                n_types = list(cls._listeners.keys())
+            elif isinstance(n_types, str):
+                n_types = [n_types]
+            elif not isinstance(n_types, list):
+                raise Exception("n_types param is neither a string nor a list")
+            for ev_type in n_types:
+                listeners = cls._listeners[ev_type]
+                toRemove = None
+                for pr, fn in listeners:
+                    if fn == func:
+                        toRemove = (pr, fn)
+                        break
+                if toRemove:
+                    listeners.discard(toRemove)
+                    logger.debug("NQ: function %s was deregistered for events "
+                                 "of type %s", func, ev_type)
 
     @classmethod
     def new_notification(cls, notify_type, notify_value):
