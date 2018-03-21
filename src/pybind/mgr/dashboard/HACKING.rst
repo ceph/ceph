@@ -212,7 +212,7 @@ Start all dashboard tests by running::
 
 Or, start one or multiple specific tests by specifying the test name::
 
-  $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.DashboardTest
+  $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.PoolTest
 
 Or, ``source`` the script and run the tests manually::
 

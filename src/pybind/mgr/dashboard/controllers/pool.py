@@ -47,3 +47,27 @@ class Pool(RESTController):
     def get(self, pool_name, attrs=None, stats=False):
         pools = self.list(attrs, stats)
         return [pool for pool in pools if pool['pool_name'] == pool_name][0]
+
+    def delete(self, pool_name):
+        return CephService.send_command('mon', 'osd pool delete', pool=pool_name, pool2=pool_name,
+                                        sure='--yes-i-really-really-mean-it')
+
+    # pylint: disable=too-many-arguments, too-many-locals
+    @RESTController.args_from_json
+    def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
+               application_metadata=None, rule_name=None, **kwargs):
+        ecp = erasure_code_profile if erasure_code_profile else None
+        CephService.send_command('mon', 'osd pool create', pool=pool, pg_num=int(pg_num),
+                                 pgp_num=int(pg_num), pool_type=pool_type, erasure_code_profile=ecp,
+                                 rule=rule_name)
+
+        if flags and 'ec_overwrites' in flags:
+            CephService.send_command('mon', 'osd pool set', pool=pool, var='allow_ec_overwrites',
+                                     val='true')
+
+        if application_metadata:
+            for app in application_metadata.split(','):
+                CephService.send_command('mon', 'osd pool application enable', pool=pool, app=app)
+
+        for key, value in kwargs.items():
+            CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=value)
