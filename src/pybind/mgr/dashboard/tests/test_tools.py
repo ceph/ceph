@@ -38,8 +38,8 @@ class FooResource(RESTController):
 
 class FooArgs(RESTController):
     @RESTController.args_from_json
-    def set(self, code, name):
-        return {'code': code, 'name': name}
+    def set(self, code, name, opt1=None, opt2=None):
+        return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
 
 
 # pylint: disable=C0102
@@ -93,7 +93,13 @@ class RESTControllerTest(ControllerTestCase):
 
     def test_args_from_json(self):
         self._put("/fooargs/hello", {'name': 'world'})
-        self.assertJsonBody({'code': 'hello', 'name': 'world'})
+        self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': None})
+
+        self._put("/fooargs/hello", {'name': 'world', 'opt1': 'opt1'})
+        self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': 'opt1', 'opt2': None})
+
+        self._put("/fooargs/hello", {'name': 'world', 'opt2': 'opt2'})
+        self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': 'opt2'})
 
     def test_detail_route(self):
         self._get('/foo/1/detail')
