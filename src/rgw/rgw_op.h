@@ -33,6 +33,7 @@
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
+#include "rgw_dmclock.h"
 #include "rgw_rados.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
@@ -199,6 +200,10 @@ public:
   std::ostream& gen_prefix(std::ostream& out) const override;
   CephContext* get_cct() const override { return s->cct; }
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
+
+  using client_id = rgw::dmclock::client_id;
+  virtual client_id dmclock_client() { return client_id::metadata; }
+  virtual rgw::dmclock::Cost dmclock_cost() { return 0; }
 };
 
 class RGWDefaultResponseOp : public RGWOp {
@@ -355,6 +360,7 @@ public:
     *filter = nullptr;
     return 0;
   }
+  client_id dmclock_client() override { return client_id::data; }
 };
 
 class RGWGetObj_CB : public RGWGetObj_Filter
@@ -483,6 +489,7 @@ public:
   const char* name() const override { return "bulk_delete"; }
   RGWOpType get_type() override { return RGW_OP_BULK_DELETE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  rgw::dmclock::client_id dmclock_client() override { return client_id::data; }
 };
 
 inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
@@ -559,6 +566,7 @@ public:
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
+  client_id dmclock_client() override { return client_id::data; }
 }; /* RGWBulkUploadOp */
 
 
@@ -1098,6 +1106,7 @@ public:
   const char* name() const override { return "put_obj"; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  client_id dmclock_client() override { return client_id::data; }
 };
 
 class RGWPostObj : public RGWOp {
@@ -1151,6 +1160,7 @@ public:
   const char* name() const override { return "post_obj"; }
   RGWOpType get_type() override { return RGW_OP_POST_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  client_id dmclock_client() override { return client_id::data; }
 };
 
 class RGWPutMetadataAccount : public RGWOp {
@@ -1282,6 +1292,7 @@ public:
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   virtual bool need_object_expiration() { return false; }
+  rgw::dmclock::client_id dmclock_client() override { return client_id::data; }
 };
 
 class RGWCopyObj : public RGWOp {
@@ -1373,6 +1384,7 @@ public:
   const char* name() const override { return "copy_obj"; }
   RGWOpType get_type() override { return RGW_OP_COPY_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  rgw::dmclock::client_id dmclock_client() override { return client_id::data; }
 };
 
 class RGWGetACLs : public RGWOp {
@@ -2174,6 +2186,7 @@ public:
   virtual int get_params() = 0;
   void execute() override;
   const char* name() const override { return "get_cluster_stat"; }
+  client_id dmclock_client() override { return client_id::admin; }
 };
 
 static inline int parse_value_and_bound(
