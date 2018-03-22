@@ -3,6 +3,8 @@ from __future__ import absolute_import
 
 import logging
 
+import six
+
 from .helper import DashboardTestCase, authenticate
 
 log = logging.getLogger(__name__)
@@ -138,3 +140,22 @@ class PoolTest(DashboardTestCase):
         }]
         for data in pools:
             self._pool_create(data)
+
+    @authenticate
+    def test_pool_info(self):
+        info_data = self._get("/api/pool/_info")
+        self.assertEqual(set(info_data),
+                         {'pool_names', 'crush_rules_replicated', 'crush_rules_erasure',
+                          'is_all_bluestore', 'compression_algorithms', 'compression_modes'})
+        self.assertTrue(all(isinstance(n, six.string_types) for n in info_data['pool_names']))
+        self.assertTrue(
+            all(isinstance(n, six.string_types) for n in info_data['crush_rules_replicated']))
+        self.assertTrue(
+            all(isinstance(n, six.string_types) for n in info_data['crush_rules_erasure']))
+        self.assertIsInstance(info_data['is_all_bluestore'], bool)
+        self.assertTrue(
+            all(isinstance(n, six.string_types) for n in info_data['compression_algorithms']))
+        self.assertTrue(
+            all(isinstance(n, six.string_types) for n in info_data['compression_modes']))
+
+
