@@ -20,6 +20,85 @@ class TaskManagerMessage {
 export class TaskManagerMessageService {
 
   messages = {
+    'rbd/create': new TaskManagerMessage(
+      (metadata) => `Create RBD '${metadata.pool_name}/${metadata.image_name}'`,
+      (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'
+                     has been created successfully`,
+      (metadata) => {
+        return {
+          '17': `Name '${metadata.pool_name}/${metadata.image_name}' is already
+                 in use.`
+        };
+      }
+    ),
+    'rbd/edit': new TaskManagerMessage(
+      (metadata) => `Update RBD '${metadata.pool_name}/${metadata.image_name}'`,
+      (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'
+                     has been updated successfully`,
+      (metadata) => {
+        return {
+          '17': `Name '${metadata.pool_name}/${metadata.image_name}' is already
+                 in use.`
+        };
+      }
+    ),
+    'rbd/delete': new TaskManagerMessage(
+      (metadata) => `Delete RBD '${metadata.pool_name}/${metadata.image_name}'`,
+      (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'
+                     has been deleted successfully`,
+      (metadata) => {
+        return {
+          '39': `RBD image contains snapshots.`
+        };
+      }
+    ),
+    'rbd/snap/create': new TaskManagerMessage(
+      (metadata) => `Create snapshot ` +
+                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
+      (metadata) => `Snapshot ` +
+                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
+                    `has been created successfully`,
+      (metadata) => {
+        return {
+          '17': `Name '${metadata.snapshot_name}' is already in use.`
+        };
+      }
+    ),
+    'rbd/snap/edit': new TaskManagerMessage(
+      (metadata) => `Update snapshot ` +
+                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
+      (metadata) => `Snapshot ` +
+                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
+                    `has been updated successfully`,
+      () => {
+        return {
+          '16': `Cannot unprotect snapshot because it contains child images.`
+        };
+      }
+    ),
+    'rbd/snap/delete': new TaskManagerMessage(
+      (metadata) => `Delete snapshot ` +
+                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
+      (metadata) => `Snapshot ` +
+                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
+                    `has been deleted successfully`,
+      () => {
+        return {
+          '16': `Snapshot is protected.`
+        };
+      }
+    ),
+    'rbd/snap/rollback': new TaskManagerMessage(
+      (metadata) => `Rollback snapshot ` +
+                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
+      (metadata) => `Snapshot ` +
+                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
+                    `has been rolled back successfully`,
+      () => {
+        return {
+        };
+      }
+    ),
   };
 
   defaultMessage = new TaskManagerMessage(

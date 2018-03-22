@@ -1,0 +1,68 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li i18n
+        class="breadcrumb-item">Block</li>
+    <li i18n
+        class="breadcrumb-item active"
+        aria-current="page">Images</li>
+  </ol>
+</nav>
+
+<cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
+               [status]="viewCacheStatus.status"
+               [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
+
+<cd-table [data]="images"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="name"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <div class="table-actions">
+    <div class="btn-group" dropdown>
+      <button type="button"
+              class="btn btn-sm btn-primary"
+              *ngIf="!selection.hasSingleSelection"
+              routerLink="/rbd/add">
+        <i class="fa fa-fw fa-plus"></i><span i18n>Add</span>
+      </button>
+      <button type="button"
+              class="btn btn-sm btn-primary"
+              *ngIf="selection.hasSingleSelection"
+              [ngClass]="{'disabled': selection.first().executing}"
+              routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}">
+        <i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span>
+      </button>
+      <button type="button" dropdownToggle class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split">
+        <span class="caret"></span>
+        <span class="sr-only"></span>
+      </button>
+      <ul *dropdownMenu class="dropdown-menu" role="menu">
+        <li role="menuitem">
+          <a class="dropdown-item" routerLink="/rbd/add"><i class="fa fa-fw fa-plus"></i><span i18n>Add</span></a>
+        </li>
+        <li role="menuitem"
+            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
+          <a class="dropdown-item" routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}"><i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span></a>
+        </li>
+        <li role="menuitem"
+            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
+          <a class="dropdown-item" (click)="deleteRbdModal()"><i class="fa fa-fw fa-trash-o"></i><span i18n>Delete</span></a>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <cd-rbd-details cdTableDetail
+                  [selection]="selection">
+  </cd-rbd-details>
+</cd-table>
+
+<ng-template #usageNotAvailableTooltipTpl>
+  <div i18n [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
+</ng-template>
+
+<ng-template #parentTpl
+             let-value="value">
+  <span *ngIf="value">{{ value.pool_name }}/{{ value.image_name }}@{{ value.snap_name }}</span>
+  <span *ngIf="!value">-</span>
+</ng-template>
