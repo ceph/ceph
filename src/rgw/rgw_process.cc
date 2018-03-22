@@ -6,6 +6,7 @@
 #include "common/WorkQueue.h"
 
 #include "rgw_rados.h"
+#include "rgw_dmclock_queue.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
@@ -35,6 +36,29 @@ void RGWProcess::RGWWQ::_dump_queue()
   }
 } /* RGWProcess::RGWWQ::_dump_queue */
 
+static int wait_for_dmclock(rgw::dmclock::PriorityQueue *dmclock_queue,
+                            req_state *s, RGWOp *op)
+{
+  if (!dmclock_queue || !s->yield) {
+    return 0;
+  }
+
+  auto& yield = s->yield.get_yield_context();
+  const auto client = op->dmclock_client();
+  const auto cost = op->dmclock_cost();
+  ldout(s->cct, 10) << "waiting on dmclock client="
+      << static_cast<int>(client) << " cost=" << cost << "..." << dendl;
+
+  boost::system::error_code ec;
+  dmclock_queue->async_request(client, {}, req_state::Clock::to_double(s->time),
+                               cost, yield[ec]);
+
+  if (ec) {
+    lderr(s->cct) << "dmclock queue failed with " << ec.message() << dendl;
+    return -ec.value();
+  }
+  return 0;
+}
 
 int rgw_process_authenticated(RGWHandler_REST * const handler,
                               RGWOp *& op,
@@ -128,6 +152,7 @@ int process_request(RGWRados* const store,
                     RGWRestfulIO* const client_io,
                     OpsLogSocket* const olog,
                     optional_yield_context yield,
+                    rgw::dmclock::PriorityQueue *dmclock_queue,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
@@ -185,6 +210,12 @@ int process_request(RGWRados* const store,
     goto done;
   }
 
+  ret = wait_for_dmclock(dmclock_queue, s, op);
+  if (ret < 0) {
+    abort_early(s, op, ret, handler);
+    goto done;
+  }
+
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
 
@@ -194,7 +225,7 @@ int process_request(RGWRados* const store,
   ret = op->verify_requester(auth_registry);
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, NULL, ret, handler);
+    abort_early(s, op, ret, handler);
     goto done;
   }
 
