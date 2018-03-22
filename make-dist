@@ -64,7 +64,7 @@ download_boost() {
 build_dashboard_frontend() {
   CURR_DIR=`pwd`
   TEMP_DIR=`mktemp -d`
-  $CURR_DIR/src/tools/setup-virtualenv.sh $TEMP_DIR
+  $CURR_DIR/src/tools/setup-virtualenv.sh --python=python2.7 $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
   $TEMP_DIR/bin/nodeenv -p -n 8.10.0
   cd src/pybind/mgr/dashboard/frontend
