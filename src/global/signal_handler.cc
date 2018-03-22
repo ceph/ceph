@@ -175,6 +175,10 @@ string get_name_by_pid(pid_t pid)
 #else
 string get_name_by_pid(pid_t pid)
 {
+  // If the PID is 0, its means the sender is the Kernel itself
+  if (pid == 0) {
+    return "Kernel";
+  }
   char proc_pid_path[PATH_MAX] = {0};
   snprintf(proc_pid_path, PATH_MAX, PROCPREFIX "/proc/%d/cmdline", pid);
   int fd = open(proc_pid_path, O_RDONLY);
