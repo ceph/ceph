@@ -28,6 +28,8 @@
 
 extern void signal_shutdown();
 
+namespace rgw::dmclock { class PriorityQueue; }
+
 struct RGWProcessEnv {
   RGWRados *store;
   RGWREST *rest;
@@ -198,6 +200,7 @@ extern int process_request(RGWRados* store,
                            RGWRestfulIO* client_io,
                            OpsLogSocket* olog,
                            optional_yield_context y,
+                           rgw::dmclock::PriorityQueue *dmclock_queue,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,

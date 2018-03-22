@@ -151,7 +151,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       RGWRestfulIO client(cct, &real_client_io);
       auto y = optional_yield_context{&socket.get_io_service(), &yield};
       process_request(env.store, env.rest, &req, env.uri_prefix,
-                      *env.auth_registry, &client, env.olog, y);
+                      *env.auth_registry, &client, env.olog, y, nullptr);
     }
 
     if (!parser.keep_alive()) {
