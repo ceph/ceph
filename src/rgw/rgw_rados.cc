@@ -8642,6 +8642,11 @@ void RGWRados::Object::invalidate_state()
   ctx.invalidate(obj);
 }
 
+void RGWRados::SystemObject::invalidate_state()
+{
+  ctx.invalidate(obj);
+}
+
 int RGWRados::Object::prepare_atomic_modification(ObjectWriteOperation& op, bool reset_obj, const string *ptag,
                                                   const char *if_match, const char *if_nomatch, bool removal_op)
 {
