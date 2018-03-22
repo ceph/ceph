@@ -84,7 +84,9 @@ def task(ctx, config):
     if hadoop_ver.startswith('2.8'):
         # test all ITtests but skip AWS test using public bucket landsat-pds
         # which is not available from within this test
-        test_options = '-Dit.test=ITestS3A* -Dit.test=\!ITestS3AAWSCredentialsProvider* -Dparallel-tests -Dscale -Dfs.s3a.scale.test.huge.filesize=128M verify'
+        test_options = '-Dit.test=ITestS3A* -Dparallel-tests -Dscale \
+                        -Dfs.s3a.scale.test.timeout=1200 \
+                        -Dfs.s3a.scale.test.huge.filesize=256M verify'
     else:
         test_options = 'test -Dtest=S3a*,TestS3A*'
     try:
@@ -147,6 +149,8 @@ def fix_rgw_config(client, name):
     client.run(args=['cat', ceph_conf_path])
     client.run(args=['sudo', 'systemctl', 'restart', 'ceph-radosgw.target'])
     client.run(args=['sudo', 'systemctl', 'status', 'ceph-radosgw.target'])
+    # sleep for daemon to be completely up before creating admin user
+    time.sleep(10)
 
 
 def setup_user_bucket(client, dns_name, access_key, secret_key, bucket_name, testdir):
@@ -223,10 +227,15 @@ def run_s3atest(client, maven_version, testdir, test_options):
     """
     aws_testdir = '{testdir}/hadoop/hadoop-tools/hadoop-aws/'.format(testdir=testdir)
     run_test = '{testdir}/apache-maven-{maven_version}/bin/mvn'.format(testdir=testdir, maven_version=maven_version)
+    # Remove AWS CredentialsProvider tests as it hits public bucket from AWS
+    # better solution is to create the public bucket on local server and test
+    rm_test = 'rm src/test/java/org/apache/hadoop/fs/s3a/ITestS3AAWSCredentialsProvider.java'
     client.run(
         args=[
             'cd',
             run.Raw(aws_testdir),
+            run.Raw('&&'),
+            run.Raw(rm_test),
             run.Raw('&&'),
             run.Raw(run_test),
             run.Raw(test_options)
@@ -243,6 +252,11 @@ def configure_s3a(client, dns_name, access_key, secret_key, bucket_name, testdir
 <property>
 <name>fs.s3a.endpoint</name>
 <value>{name}</value>
+</property>
+
+<property>
+<name>fs.contract.test.fs.s3a</name>
+<value>s3a://{bucket_name}/</value>
 </property>
 
 <property>
