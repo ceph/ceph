@@ -1,0 +1,27 @@
+<div class="modal-header">
+  <h4 i18n
+      class="modal-title pull-left">RBD snapshot rollback</h4>
+  <button type="button" class="close pull-right" aria-label="Close" (click)="modalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<form name="rollbackForm"
+      class="form-horizontal"
+      #formDir="ngForm"
+      [formGroup]="rollbackForm"
+      novalidate>
+  <div class="modal-body">
+    You are about to rollback <strong>{{ snapName }}</strong>.
+  </div>
+  <div class="modal-footer">
+    <div class="button-group text-right">
+      <cd-submit-button i18n
+                        [form]="rollbackForm"
+                        (submitAction)="submit()">
+        Rollback
+      </cd-submit-button>
+      <button i18n type="button" class="btn btn-sm btn-default" (click)="modalRef.hide()">Cancel</button>
+    </div>
+  </div>
+</form>
+
