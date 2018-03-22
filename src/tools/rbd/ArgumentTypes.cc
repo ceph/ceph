@@ -171,11 +171,6 @@ void add_snap_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
-void add_snap_id_option(po::options_description *opt) {
-  opt->add_options()
-    (SNAPSHOT_ID.c_str(), po::value<uint64_t>(), "snapshot id");
-}
-
 void add_journal_option(po::options_description *opt,
                       ArgumentModifier modifier,
                       const std::string &desc_suffix) {
