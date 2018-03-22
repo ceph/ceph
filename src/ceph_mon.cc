@@ -197,6 +197,14 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   // We need to specify some default values that may be overridden by the
   // user, that are specific to the monitor.  The options we are overriding
@@ -253,8 +261,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
@@ -274,24 +280,24 @@ int main(int argc, const char **argv)
     }
   }
   if (!args.empty()) {
-    derr << "too many arguments: " << args << dendl;
-    usage();
+    cerr << "too many arguments: " << args << std::endl;
+    exit(1);
   }
 
   if (force_sync && !yes_really) {
-    derr << "are you SURE you want to force a sync?  this will erase local data and may\n"
-	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do." << dendl;
+    cerr << "are you SURE you want to force a sync?  this will erase local data and may\n"
+	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do." << std::endl;
     exit(1);
   }
 
   if (g_conf->mon_data.empty()) {
-    derr << "must specify '--mon-data=foo' data path" << dendl;
-    usage();
+    cerr << "must specify '--mon-data=foo' data path" << std::endl;
+    exit(1);
   }
 
   if (g_conf->name.get_id().empty()) {
-    derr << "must specify id (--id <id> or --name mon.<id>)" << dendl;
-    usage();
+    cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
+    exit(1);
   }
 
   // -- mkfs --
@@ -664,7 +670,6 @@ int main(int argc, const char **argv)
       if (err < 0) {
 	derr << argv[0] << ": error generating initial monmap: "
              << cpp_strerror(err) << dendl;
-	usage();
 	prefork.exit(1);
       }
       if (tmpmap.contains(g_conf->name.get_id())) {

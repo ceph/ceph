@@ -122,15 +122,15 @@ public:
 
 static int usage()
 {
-  cerr << "usage: radosgw [options...]" << std::endl;
-  cerr << "options:\n";
-  cerr << "  --rgw-region=<region>     region in which radosgw runs\n";
-  cerr << "  --rgw-zone=<zone>         zone in which radosgw runs\n";
-  cerr << "  --rgw-socket-path=<path>  specify a unix domain socket path\n";
-  cerr << "  -m monaddress[:port]      connect to specified monitor\n";
-  cerr << "  --keyring=<path>          path to radosgw keyring\n";
-  cerr << "  --logfile=<logfile>       file to log debug output\n";
-  cerr << "  --debug-rgw=<log-level>/<memory-level>  set radosgw debug level\n";
+  cout << "usage: radosgw [options...]" << std::endl;
+  cout << "options:\n";
+  cout << "  --rgw-region=<region>     region in which radosgw runs\n";
+  cout << "  --rgw-zone=<zone>         zone in which radosgw runs\n";
+  cout << "  --rgw-socket-path=<path>  specify a unix domain socket path\n";
+  cout << "  -m monaddress[:port]      connect to specified monitor\n";
+  cout << "  --keyring=<path>          path to radosgw keyring\n";
+  cout << "  --logfile=<logfile>       file to log debug output\n";
+  cout << "  --debug-rgw=<log-level>/<memory-level>  set radosgw debug level\n";
   generic_server_usage();
 
   return 0;
@@ -179,6 +179,14 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   // First, let's determine which frontends are configured.
   int flags = CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS;
@@ -233,13 +241,6 @@ int main(int argc, const char **argv)
   auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
 			 flags, "rgw_data", false);
-
-  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ++i) {
-    if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
-      return 0;
-    }
-  }
 
   // maintain existing region root pool for new multisite objects
   if (!g_conf->rgw_region_root_pool.empty()) {
