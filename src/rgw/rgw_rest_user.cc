@@ -209,6 +209,7 @@ void RGWOp_User_Modify::execute()
   bool suspended;
   bool system;
 
+  bool quota_set;
   int32_t max_buckets;
 
   RGWUserAdminOpState op_state;
@@ -223,7 +224,7 @@ void RGWOp_User_Modify::execute()
   RESTArgs::get_string(s, "user-caps", caps, &caps);
   RESTArgs::get_bool(s, "generate-key", false, &gen_key);
   RESTArgs::get_bool(s, "suspended", false, &suspended);
-  RESTArgs::get_int32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets);
+  RESTArgs::get_int32(s, "max-buckets", RGW_DEFAULT_MAX_BUCKETS, &max_buckets, &quota_set);
   RESTArgs::get_string(s, "key-type", key_type_str, &key_type_str);
 
   RESTArgs::get_bool(s, "system", false, &system);
@@ -252,7 +253,7 @@ void RGWOp_User_Modify::execute()
   if (!secret_key.empty())
     op_state.set_secret_key(secret_key);
 
-  if (max_buckets != RGW_DEFAULT_MAX_BUCKETS)
+  if (quota_set)
     op_state.set_max_buckets(max_buckets);
 
   if (gen_key)
