@@ -312,13 +312,15 @@ public:
     return flags;
   }
 
-  int ImageCtx::snap_set(uint64_t in_snap_id) {
+  int ImageCtx::snap_set(cls::rbd::SnapshotNamespace in_snap_namespace,
+			 string in_snap_name)
+  {
     assert(snap_lock.is_wlocked());
-    auto it = snap_info.find(in_snap_id);
-    if (in_snap_id != CEPH_NOSNAP && it != snap_info.end()) {
+    snap_t in_snap_id = get_snap_id(in_snap_namespace, in_snap_name);
+    if (in_snap_id != CEPH_NOSNAP) {
       snap_id = in_snap_id;
-      snap_namespace = it->second.snap_namespace;
-      snap_name = it->second.name;
+      snap_namespace = in_snap_namespace;
+      snap_name = in_snap_name;
       snap_exists = true;
       data_ctx.snap_set_read(snap_id);
       return 0;

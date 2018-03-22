@@ -240,9 +240,19 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
       }
       return r;
     }
+    std::string snap_name;
+    {
+      RWLock::RLocker parent_snap_locker(src_parent_image_ctx->snap_lock);
+      auto it = src_parent_image_ctx->snap_info.find(parent_spec.snap_id);
+      if (it == src_parent_image_ctx->snap_info.end()) {
+        return -ENOENT;
+      }
+      snap_name = it->second.name;
+    }
 
     C_SaferCond cond;
-    src_parent_image_ctx->state->snap_set(parent_spec.snap_id, &cond);
+    src_parent_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+                                          snap_name, &cond);
     r = cond.wait();
     if (r < 0) {
       if (r != -ENOENT) {

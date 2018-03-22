@@ -1967,8 +1967,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     return r;
   }
 
-  int snap_set(ImageCtx *ictx,
-               const cls::rbd::SnapshotNamespace &snap_namespace,
+  int snap_set(ImageCtx *ictx, const cls::rbd::SnapshotNamespace &snap_namespace,
 	       const char *snap_name)
   {
     ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
@@ -1978,19 +1977,10 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     // snapshot and the user is trying to fix that
     ictx->state->refresh_if_required();
 
-    uint64_t snap_id = CEPH_NOSNAP;
-    std::string name(snap_name == nullptr ? "" : snap_name);
-    if (!name.empty()) {
-      RWLock::RLocker snap_locker(ictx->snap_lock);
-      snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace{},
-                                  snap_name);
-      if (snap_id == CEPH_NOSNAP) {
-        return -ENOENT;
-      }
-    }
-
     C_SaferCond ctx;
-    ictx->state->snap_set(snap_id, &ctx);
+    std::string name(snap_name == nullptr ? "" : snap_name);
+    ictx->state->snap_set(snap_namespace, name, &ctx);
+
     int r = ctx.wait();
     if (r < 0) {
       if (r != -ENOENT) {

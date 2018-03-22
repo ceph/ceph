@@ -284,17 +284,12 @@ TEST_F(TestImageSync, SnapshotStress) {
   read_local_bl.append(std::string(object_size, '1'));
 
   for (auto &snap_name : snap_names) {
-    uint64_t remote_snap_id;
-    {
-      RWLock::RLocker remote_snap_locker(m_remote_image_ctx->snap_lock);
-      remote_snap_id = m_remote_image_ctx->get_snap_id(
-        cls::rbd::UserSnapshotNamespace{}, snap_name);
-    }
-
     uint64_t remote_size;
     {
       C_SaferCond ctx;
-      m_remote_image_ctx->state->snap_set(remote_snap_id, &ctx);
+      m_remote_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+					  snap_name,
+					  &ctx);
       ASSERT_EQ(0, ctx.wait());
 
       RWLock::RLocker remote_snap_locker(m_remote_image_ctx->snap_lock);
@@ -302,17 +297,12 @@ TEST_F(TestImageSync, SnapshotStress) {
         m_remote_image_ctx->snap_id);
     }
 
-    uint64_t local_snap_id;
-    {
-      RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
-      local_snap_id = m_local_image_ctx->get_snap_id(
-        cls::rbd::UserSnapshotNamespace{}, snap_name);
-    }
-
     uint64_t local_size;
     {
       C_SaferCond ctx;
-      m_local_image_ctx->state->snap_set(local_snap_id, &ctx);
+      m_local_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+					 snap_name,
+					 &ctx);
       ASSERT_EQ(0, ctx.wait());
 
       RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);

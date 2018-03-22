@@ -262,12 +262,29 @@ void CreateImageRequest<I>::handle_open_local_parent_image(int r) {
 
 template <typename I>
 void CreateImageRequest<I>::set_local_parent_snap() {
-  dout(20) << ": parent_snap_id=" << m_remote_parent_spec.snap_id << dendl;
+  dout(20) << dendl;
+
+  {
+    RWLock::RLocker remote_snap_locker(m_remote_parent_image_ctx->snap_lock);
+    auto it = m_remote_parent_image_ctx->snap_info.find(
+      m_remote_parent_spec.snap_id);
+    if (it != m_remote_parent_image_ctx->snap_info.end()) {
+      m_parent_snap_name = it->second.name;
+    }
+  }
+
+  if (m_parent_snap_name.empty()) {
+    m_ret_val = -ENOENT;
+    close_local_parent_image();
+    return;
+  }
+  dout(20) << ": parent_snap_name=" << m_parent_snap_name << dendl;
 
   Context *ctx = create_context_callback<
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_set_local_parent_snap>(this);
-  m_local_parent_image_ctx->state->snap_set(m_remote_parent_spec.snap_id,
+  m_local_parent_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+					    m_parent_snap_name,
 					    ctx);
 }
 
@@ -275,7 +292,7 @@ template <typename I>
 void CreateImageRequest<I>::handle_set_local_parent_snap(int r) {
   dout(20) << ": r=" << r << dendl;
   if (r < 0) {
-    derr << ": failed to set parent snapshot " << m_remote_parent_spec.snap_id
+    derr << ": failed to set parent snapshot " << m_parent_snap_name
          << ": " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_local_parent_image();

@@ -508,20 +508,9 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  uint64_t snap_id = CEPH_NOSNAP;
-  {
-    RWLock::RLocker snap_locker(m_image_ctx->snap_lock);
-    snap_id = m_image_ctx->get_snap_id(m_image_ctx->snap_namespace,
-                                       m_image_ctx->snap_name);
-  }
-  if (snap_id == CEPH_NOSNAP) {
-    *result = -ENOENT;
-    return m_on_finish;
-  }
-
   using klass = OpenRequest<I>;
   SetSnapRequest<I> *req = SetSnapRequest<I>::create(
-    *m_image_ctx, snap_id,
+    *m_image_ctx, m_image_ctx->snap_namespace, m_image_ctx->snap_name,
     create_context_callback<klass, &klass::handle_set_snap>(this));
   req->send();
   return nullptr;
