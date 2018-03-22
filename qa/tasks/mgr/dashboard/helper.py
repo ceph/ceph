@@ -78,7 +78,11 @@ class DashboardTestCase(MgrTestCase):
         log.info("request %s to %s", method, url)
         if method == 'GET':
             self._resp = self._session.get(url)
-            return self._resp.json()
+            try:
+                return self._resp.json()
+            except ValueError as ex:
+                log.exception("Failed to decode response: %s", self._resp.text)
+                raise ex
         elif method == 'POST':
             self._resp = self._session.post(url, json=data)
         elif method == 'DELETE':

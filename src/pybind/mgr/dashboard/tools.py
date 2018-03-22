@@ -124,6 +124,12 @@ class RequestLoggingTool(cherrypy.Tool):
     def _format_bytes(self, num):
         units = ['B', 'K', 'M', 'G']
 
+        if isinstance(num, str):
+            try:
+                num = int(num)
+            except ValueError:
+                return "n/a"
+
         format_str = "{:.0f}{}"
         for i, unit in enumerate(units):
             div = 2**(10*i)

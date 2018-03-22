@@ -192,7 +192,7 @@ class CephFS(BaseController):
 
         # Find the standby replays
         # pylint: disable=unused-variable
-        for gid_str, daemon_info in mdsmap['info'].iteritems():
+        for gid_str, daemon_info in mdsmap['info'].items():
             if daemon_info['state'] != "up:standby-replay":
                 continue
 
