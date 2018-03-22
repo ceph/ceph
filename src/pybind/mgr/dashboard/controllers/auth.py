@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 
 import time
-import sys
 
 import bcrypt
 import cherrypy
@@ -58,9 +57,9 @@ class Auth(RESTController):
     def password_hash(password, salt_password=None):
         if not salt_password:
             salt_password = bcrypt.gensalt()
-        if sys.version_info > (3, 0):
-            return bcrypt.hashpw(password, salt_password)
-        return bcrypt.hashpw(password.encode('utf8'), salt_password)
+        else:
+            salt_password = salt_password.encode('utf8')
+        return bcrypt.hashpw(password.encode('utf8'), salt_password).decode('utf8')
 
     @staticmethod
     def check_auth():
