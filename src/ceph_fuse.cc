@@ -75,7 +75,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
   if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
     usage();
+    exit(0);
   }
 
   std::map<std::string,std::string> defaults = {
@@ -95,8 +100,6 @@ int main(int argc, const char **argv, const char *envp[]) {
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)nullptr)) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)nullptr)) {
-      usage();
     } else {
       ++i;
     }
@@ -210,8 +213,10 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     MonClient *mc = new MonClient(g_ceph_context);
     int r = mc->build_initial_monmap();
-    if (r == -EINVAL)
-      usage();
+    if (r == -EINVAL) {
+      cerr << "failed to generate initial mon list" << std::endl;
+      exit(1);
+    }
     if (r < 0)
       goto out_mc_start_failed;
 

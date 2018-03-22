@@ -88,7 +88,7 @@ int JournalTool::main(std::vector<const char*> &argv)
   // Common arg parsing
   // ==================
   if (argv.empty()) {
-    usage();
+    cerr << "missing positional argument" << std::endl;
     return -EINVAL;
   }
 
@@ -171,8 +171,7 @@ int JournalTool::main(std::vector<const char*> &argv)
     } else if (type == std::string("mdlog") && mode == std::string("event")) {
       r = main_event(argv);
     } else {
-      derr << "Bad command '" << mode << "'" << dendl;
-      usage();
+      cerr << "Bad command '" << mode << "'" << std::endl;
       return -EINVAL;
     }
 
@@ -217,12 +216,10 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
         force = true;
       } else {
         std::cerr << "Unknown argument " << argv[1] << std::endl;
-        usage();
         return -EINVAL;
       }
     } else if (argv.size() > 2) {
       std::cerr << "Too many arguments!" << std::endl;
-      usage();
       return -EINVAL;
     }
     return journal_reset(force);
@@ -340,13 +337,11 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   std::string command = *(arg++);
   if (command != "get" && command != "splice" && command != "recover_dentries") {
     derr << "Unknown argument '" << command << "'" << dendl;
-    usage();
     return -EINVAL;
   }
 
   if (arg == argv.end()) {
     derr << "Incomplete command line" << dendl;
-    usage();
     return -EINVAL;
   }
 
@@ -361,15 +356,14 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   // Parse output options
   // ====================
   if (arg == argv.end()) {
-    derr << "Missing output command" << dendl;
-    usage();
+    cerr << "Missing output command" << std::endl;
+    return -EINVAL;
   }
   std::string output_style = *(arg++);
   if (output_style != "binary" && output_style != "json" &&
       output_style != "summary" && output_style != "list") {
-      derr << "Unknown argument: '" << output_style << "'" << dendl;
-      usage();
-      return -EINVAL;
+    cerr << "Unknown argument: '" << output_style << "'" << std::endl;
+    return -EINVAL;
   }
 
   std::string output_path = "dump";
@@ -384,8 +378,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
       assert(r == 0);
       other_pool = true;
     } else {
-      derr << "Unknown argument: '" << *arg << "'" << dendl;
-      usage();
+      cerr << "Unknown argument: '" << *arg << "'" << std::endl;
       return -EINVAL;
     }
   }
@@ -500,8 +493,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 
 
   } else {
-    derr << "Unknown argument '" << command << "'" << dendl;
-    usage();
+    cerr << "Unknown argument '" << command << "'" << std::endl;
     return -EINVAL;
   }
 

@@ -2382,6 +2382,14 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY, 0);
@@ -2537,9 +2545,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
-      ceph_abort();
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
       user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
@@ -2580,8 +2585,7 @@ int main(int argc, const char **argv)
         key_type = KEY_TYPE_S3;
       } else {
         cerr << "bad key type: " << key_type_str << std::endl;
-        usage();
-	ceph_abort();
+        exit(1);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
       job_id = val;
@@ -2695,8 +2699,7 @@ int main(int argc, const char **argv)
       bucket_id = val;
       if (bucket_id.empty()) {
         cerr << "bad bucket-id" << std::endl;
-        usage();
-	ceph_abort();
+        exit(1);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
@@ -2870,7 +2873,7 @@ int main(int argc, const char **argv)
 
   if (args.empty()) {
     usage();
-    ceph_abort();
+    exit(1);
   }
   else {
     const char *prev_cmd = NULL;
@@ -2880,8 +2883,7 @@ int main(int argc, const char **argv)
       opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
       if (opt_cmd < 0) {
 	cerr << "unrecognized arg " << *i << std::endl;
-	usage();
-	ceph_abort();
+	exit(1);
       }
       if (!need_more) {
 	++i;
@@ -2892,8 +2894,8 @@ int main(int argc, const char **argv)
     }
 
     if (opt_cmd == OPT_NO_CMD) {
-      usage();
-      ceph_abort();
+      cerr << "no command" << std::endl;
+      exit(1);
     }
 
     /* some commands may have an optional extra param */
@@ -2953,8 +2955,7 @@ int main(int argc, const char **argv)
     formatter = new JSONFormatter(pretty_format);
   else {
     cerr << "unrecognized format: " << format << std::endl;
-    usage();
-    ceph_abort();
+    exit(1);
   }
 
   realm_name = g_conf->rgw_realm;
@@ -5113,8 +5114,7 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
     if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
       cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
-      usage();
-      ceph_abort();
+      exit(1);
     }
 
     string oid;
@@ -5212,8 +5212,7 @@ next:
   if (opt_cmd == OPT_POOL_ADD) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to add!" << std::endl;
-      usage();
-      ceph_abort();
+      exit(1);
     }
 
     int ret = store->add_bucket_placement(pool);
@@ -5224,8 +5223,7 @@ next:
   if (opt_cmd == OPT_POOL_RM) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to remove!" << std::endl;
-      usage();
-      ceph_abort();
+      exit(1);
     }
 
     int ret = store->remove_bucket_placement(pool);

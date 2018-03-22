@@ -292,7 +292,7 @@ class StoreTool
 
 void usage(const char *pname)
 {
-  std::cerr << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
+  std::cout << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
@@ -317,6 +317,14 @@ int main(int argc, const char *argv[])
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage(argv[0]);
+    exit(0);
+  }
 
   auto cct = global_init(
       NULL, args,

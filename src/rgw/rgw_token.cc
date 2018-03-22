@@ -62,6 +62,14 @@ int main(int argc, char **argv)
   std::string val;
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);
@@ -109,7 +117,6 @@ int main(int argc, char **argv)
 
   if ((! do_encode) ||
       (type == RGWToken::TOKEN_NONE)) {
-    usage();
     return -EINVAL;
   }
 

@@ -355,6 +355,14 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   const char *me = argv[0];
   std::string infn, srcfn, outfn, add_name, add_type, remove_name, reweight_name;
@@ -425,9 +433,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
-      return EXIT_SUCCESS;
     } else if (ceph_argparse_witharg(args, i, &val, "-d", "--decompile", (char*)NULL)) {
       infn = val;
       decompile = true;
