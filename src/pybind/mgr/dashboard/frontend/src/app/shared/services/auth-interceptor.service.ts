@@ -1,12 +1,12 @@
 import {
-  HttpErrorResponse, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest
+  HttpErrorResponse, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest,
+  HttpResponse
 } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { ToastsManager } from 'ng2-toastr';
-import 'rxjs/add/observable/throw';
-import 'rxjs/add/operator/catch';
+import 'rxjs/add/operator/do';
 import { Observable } from 'rxjs/Observable';
 
 import { AuthStorageService } from './auth-storage.service';
@@ -20,24 +20,23 @@ export class AuthInterceptorService implements HttpInterceptor {
   }
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    return next.handle(request)
-      .catch((resp) => {
-        if (resp instanceof HttpErrorResponse) {
-          switch (resp.status) {
-            case 404:
-              this.router.navigate(['/404']);
-              break;
-            case 401:
-              this.authStorageService.remove();
-              this.router.navigate(['/login']);
-              // falls through
-            default:
-              this.toastr.error(resp.error.detail || '',
-                `${resp.status} - ${resp.statusText}`);
-          }
+    return next.handle(request).do((event: HttpEvent<any>) => {
+      if (event instanceof HttpResponse) {
+        // do nothing
+      }
+    }, (err: any) => {
+      if (err instanceof HttpErrorResponse) {
+        if (err.status === 404) {
+          this.router.navigate(['/404']);
+          return;
         }
-        // Return the error to the method that called it.
-        return Observable.throw(resp);
-      });
+
+        this.toastr.error(err.error.detail || '', `${err.status} - ${err.statusText}`);
+        if (err.status === 401) {
+          this.authStorageService.remove();
+          this.router.navigate(['/login']);
+        }
+      }
+    });
   }
 }
