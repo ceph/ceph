@@ -15,10 +15,24 @@
 # GNU Library Public License for more details.
 #
 
+SCRIPTNAME="$(basename $0)"
+
+TEMP=$(getopt --options "" --long "python:" --name "$SCRIPTNAME" -- "$@")
+if [ $? != 0 ] ; then echo "Failed to parse options...exiting" >&2 ; exit 1 ; fi
+eval set -- "$TEMP"
+PYTHON_BINARY="python2.7"
+while true ; do
+    case "$1" in
+        --python) PYTHON_BINARY="$2" ; shift ; shift ;;
+        --) shift ; break ;;
+        *) echo "Internal error" ; exit 1 ;;
+    esac
+done
+
 DIR=$1
 rm -fr $DIR
 mkdir -p $DIR
-virtualenv --python python2.7 $DIR
+virtualenv --python $PYTHON_BINARY $DIR
 . $DIR/bin/activate
 
 if pip --help | grep -q disable-pip-version-check; then
