@@ -841,7 +841,7 @@ mon_pg_warn_min_per_osd = 3
 mon_osd_reporter_subtree_level = osd
 mon_data_avail_warn = 2
 mon_data_avail_crit = 1
-osd_pool_default_erasure_code_profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
+osd_pool_default_erasure_code_profile = 'plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd'
 mon_allow_pool_delete = true
 
 [osd]
