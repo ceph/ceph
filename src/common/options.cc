@@ -249,7 +249,7 @@ int Option::parse_value(
     }
     *out = uuid;
   } else if (type == Option::TYPE_SIZE) {
-    Option::size_t sz{strict_sistrtoll(val.c_str(), error_message)};
+    Option::size_t sz{strict_iecstrtoll(val.c_str(), error_message)};
     if (!error_message->empty()) {
       return -EINVAL;
     }
