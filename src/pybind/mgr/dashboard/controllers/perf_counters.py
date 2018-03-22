@@ -22,8 +22,8 @@ class PerfCounter(RESTController):
         return 0
 
     def get(self, service_id):
-        schema = mgr.get_perf_schema(
-            self._service_type, str(service_id)).values()[0]
+        schema_dict = mgr.get_perf_schema(self._service_type, str(service_id))
+        schema = schema_dict["{}.{}".format(self._service_type, service_id)]
         counters = []
 
         for key, value in sorted(schema.items()):

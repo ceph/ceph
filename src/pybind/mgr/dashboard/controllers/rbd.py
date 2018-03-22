@@ -77,6 +77,10 @@ class Rbd(RESTController):
             stat['features'] = features
             stat['features_name'] = self._format_bitmask(features)
 
+            # the following keys are deprecated
+            del stat['parent_pool']
+            del stat['parent_name']
+
             try:
                 parent_info = i.parent_info()
                 parent = "{}@{}".format(parent_info[0], parent_info[1])
