@@ -38,6 +38,7 @@
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
+#include "rgw_dmclock_queue.h"
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 
@@ -436,6 +437,14 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
+#if defined(WITH_RADOSGW_BEAST_FRONTEND)
+  boost::asio::io_context iocontext;
+  rgw::dmclock::ClientConfig dmclock_clients{cct.get()};
+  rgw::dmclock::PriorityQueue dmclock_queue{cct.get(), iocontext,
+                                            &dmclock_clients,
+                                            std::ref(dmclock_clients)};
+#endif
+
   register_async_signal_handler(SIGTERM, handle_sigterm);
   register_async_signal_handler(SIGINT, handle_sigterm);
   register_async_signal_handler(SIGUSR1, handle_sigterm);
@@ -480,7 +489,7 @@ int main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
-      fe = new RGWAsioFrontend(env, config);
+      fe = new RGWAsioFrontend(env, config, iocontext, &dmclock_queue);
     }
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
