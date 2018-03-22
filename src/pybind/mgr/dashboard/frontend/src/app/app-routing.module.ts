@@ -3,7 +3,8 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
 import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
-import { PoolDetailComponent } from './ceph/block/pool-detail/pool-detail.component';
+import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
+import { RbdListComponent } from './ceph/block/rbd-list/rbd-list.component';
 import { CephfsComponent } from './ceph/cephfs/cephfs/cephfs.component';
 import { ClientsComponent } from './ceph/cephfs/clients/clients.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
@@ -31,7 +32,9 @@ const routes: Routes = [
     canActivate: [AuthGuardService]
   },
   { path: 'block/iscsi', component: IscsiComponent, canActivate: [AuthGuardService] },
-  { path: 'block/pool/:name', component: PoolDetailComponent, canActivate: [AuthGuardService] },
+  { path: 'block/rbd', component: RbdListComponent, canActivate: [AuthGuardService] },
+  { path: 'rbd/add', component: RbdFormComponent, canActivate: [AuthGuardService] },
+  { path: 'rbd/edit/:pool/:name', component: RbdFormComponent, canActivate: [AuthGuardService] },
   {
     path: 'perf_counters/:type/:id',
     component: PerformanceCounterComponent,

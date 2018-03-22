@@ -1,0 +1,50 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left">{{ editing ? 'Rename' : 'Create' }} RBD Snapshot</h4>
+  <button type="button" class="close pull-right" aria-label="Close" (click)="modalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<form name="snapshotForm"
+      class="form-horizontal"
+      #formDir="ngForm"
+      [formGroup]="snapshotForm"
+      novalidate>
+  <div class="modal-body">
+
+    <!-- Name -->
+    <div class="form-group"
+         [ngClass]="{'has-error': (formDir.submitted || snapshotForm.controls.snapshotName.dirty) && snapshotForm.controls.snapshotName.invalid}">
+      <label i18n
+             class="control-label col-sm-3"
+             for="snapshotName">Name
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <input class="form-control"
+               type="text"
+               placeholder="Snapshot name..."
+               id="snapshotName"
+               name="snapshotName"
+               formControlName="snapshotName"
+               autofocus>
+        <span i18n
+              class="help-block"
+              *ngIf="(formDir.submitted || snapshotForm.controls.snapshotName.dirty) && snapshotForm.controls.snapshotName.hasError('required')">
+              This field is required.
+            </span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="modal-footer">
+    <div class="button-group text-right">
+      <cd-submit-button [form]="snapshotForm"
+                        (submitAction)="submit()">
+        {{ editing ? 'Rename' : 'Create' }} Snapshot
+      </cd-submit-button>
+      <button type="button" class="btn btn-sm btn-default" (click)="modalRef.hide()">Close</button>
+    </div>
+  </div>
+</form>
+

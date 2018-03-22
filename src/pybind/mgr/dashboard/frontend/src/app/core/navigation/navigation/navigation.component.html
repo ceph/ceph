@@ -93,6 +93,12 @@
         </a>
 
         <ul class="dropdown-menu">
+          <li routerLinkActive="active">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/block/rbd">Images</a>
+          </li>
+
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_block_mirroring">
             <a i18n
@@ -111,26 +117,6 @@
                routerLink="/block/iscsi">iSCSI</a>
           </li>
 
-          <li class="dropdown-submenu">
-            <a class="dropdown-toggle"
-               data-toggle="dropdown">Pools</a>
-            <ul *dropdownMenu
-                class="dropdown-menu">
-              <li routerLinkActive="active"
-                  class="tc_submenuitem tc_submenuitem_pools"
-                  *ngFor="let rbdPool of rbdPools">
-                <a i18n
-                   class="dropdown-item"
-                   routerLink="/block/pool/{{ rbdPool }}">{{ rbdPool }}
-                </a>
-              </li>
-              <li class="tc_submenuitem tc_submenuitem_cephfs_nofs"
-                  *ngIf="rbdPools.length === 0">
-                <a class="dropdown-item disabled"
-                   i18n>There are no pools</a>
-              </li>
-            </ul>
-          </li>
         </ul>
       </li>
 
