@@ -25,7 +25,7 @@
 namespace {
 
 using tcp = boost::asio::ip::tcp;
-namespace beast = boost::beast;
+namespace http = boost::beast::http;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
 namespace ssl = boost::asio::ssl;
 #endif
@@ -35,11 +35,11 @@ class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
   boost::asio::yield_context yield;
-  beast::flat_buffer& buffer;
+  boost::beast::flat_buffer& buffer;
  public:
   StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
            boost::asio::yield_context yield,
-           beast::flat_buffer& buffer, bool is_ssl,
+           boost::beast::flat_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
@@ -66,9 +66,9 @@ class StreamIO : public rgw::asio::ClientIO {
 
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
-      beast::http::async_read_some(stream, buffer, parser, yield[ec]);
-      if (ec == beast::http::error::partial_message ||
-          ec == beast::http::error::need_buffer) {
+      http::async_read_some(stream, buffer, parser, yield[ec]);
+      if (ec == http::error::partial_message ||
+          ec == http::error::need_buffer) {
         break;
       }
       if (ec) {
@@ -84,7 +84,7 @@ using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_t
 
 template <typename Stream>
 void handle_connection(RGWProcessEnv& env, Stream& stream,
-                       beast::flat_buffer& buffer, bool is_ssl,
+                       boost::beast::flat_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
                        boost::system::error_code& ec,
                        boost::asio::yield_context yield)
@@ -104,25 +104,25 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
     parser.body_limit(body_limit);
 
     // parse the header
-    beast::http::async_read_header(stream, buffer, parser, yield[ec]);
+    http::async_read_header(stream, buffer, parser, yield[ec]);
     if (ec == boost::asio::error::connection_reset ||
         ec == boost::asio::error::bad_descriptor ||
         ec == boost::asio::error::operation_aborted ||
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
         ec == ssl::error::stream_truncated ||
 #endif
-        ec == beast::http::error::end_of_stream) {
+        ec == http::error::end_of_stream) {
       ldout(cct, 20) << "failed to read header: " << ec.message() << dendl;
       return;
     }
     if (ec) {
       ldout(cct, 1) << "failed to read header: " << ec.message() << dendl;
       auto& message = parser.get();
-      beast::http::response<beast::http::empty_body> response;
-      response.result(beast::http::status::bad_request);
+      http::response<http::empty_body> response;
+      response.result(http::status::bad_request);
       response.version(message.version() == 10 ? 10 : 11);
       response.prepare_payload();
-      beast::http::async_write(stream, response, yield[ec]);
+      http::async_write(stream, response, yield[ec]);
       if (ec) {
         ldout(cct, 5) << "failed to write response: " << ec.message() << dendl;
       }
@@ -170,7 +170,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       body.size = discard_buffer.size();
       body.data = discard_buffer.data();
 
-      beast::http::async_read_some(stream, buffer, parser, yield[ec]);
+      http::async_read_some(stream, buffer, parser, yield[ec]);
       if (ec == boost::asio::error::connection_reset) {
         return;
       }
@@ -515,7 +515,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto c = connections.add(conn);
         // wrap the socket in an ssl stream
         ssl::stream<tcp::socket&> stream{s, *ssl_context};
-        beast::flat_buffer buffer;
+        boost::beast::flat_buffer buffer;
         // do ssl handshake
         boost::system::error_code ec;
         auto bytes = stream.async_handshake(ssl::stream_base::server,
@@ -540,7 +540,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
       [this, s=std::move(socket)] (boost::asio::yield_context yield) mutable {
         Connection conn{s};
         auto c = connections.add(conn);
-        beast::flat_buffer buffer;
+        boost::beast::flat_buffer buffer;
         boost::system::error_code ec;
         handle_connection(env, s, buffer, false, pause_mutex, ec, yield);
         s.shutdown(tcp::socket::shutdown_both, ec);
