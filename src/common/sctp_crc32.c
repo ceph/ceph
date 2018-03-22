@@ -652,13 +652,13 @@ update_crc32(uint32_t crc32c,
 	uint32_t offset;
 
 	if (length == 0) {
-		return (crc32c);
+		return crc32c;
 	}
 	offset = ((uintptr_t) buffer) & 0x3;
 	if (buffer)
-		return (sctp_crc32c_sb8_64_bit(crc32c, buffer, length, offset));
+		return sctp_crc32c_sb8_64_bit(crc32c, buffer, length, offset);
 	else
-		return (sctp_crc32c_sb8_64_bit_zero(crc32c, length, offset));
+		return sctp_crc32c_sb8_64_bit_zero(crc32c, length, offset);
 }
 
 uint32_t sctp_crc_c[256] = {

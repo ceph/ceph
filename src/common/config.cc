@@ -548,26 +548,26 @@ int md_config_t::parse_argv(std::vector<const char*>& args, int level)
        * argument parses will still need to see it. */
       break;
     }
-    else if (ceph_argparse_flag(args, i, "--show_conf", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--show_conf", NULL)) {
       cerr << cf << std::endl;
       _exit(0);
     }
-    else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--show_config", NULL)) {
       do_show_config = true;
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", NULL)) {
       do_show_config_value = val;
     }
-    else if (ceph_argparse_flag(args, i, "--no-mon-config", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--no-mon-config", NULL)) {
       no_mon_config = true;
     }
-    else if (ceph_argparse_flag(args, i, "--mon-config", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--mon-config", NULL)) {
       no_mon_config = false;
     }
-    else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "--foreground", "-f", NULL)) {
       set_val_or_die("daemonize", "false");
     }
-    else if (ceph_argparse_flag(args, i, "-d", (char*)NULL)) {
+    else if (ceph_argparse_flag(args, i, "-d", NULL)) {
       set_val_or_die("daemonize", "false");
       set_val_or_die("log_file", "");
       set_val_or_die("log_to_stderr", "true");
@@ -577,16 +577,16 @@ int md_config_t::parse_argv(std::vector<const char*>& args, int level)
     // Some stuff that we wanted to give universal single-character options for
     // Careful: you can burn through the alphabet pretty quickly by adding
     // to this list.
-    else if (ceph_argparse_witharg(args, i, &val, "--monmap", "-M", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--monmap", "-M", NULL)) {
       set_val_or_die("monmap", val.c_str());
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--mon_host", "-m", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--mon_host", "-m", NULL)) {
       set_val_or_die("mon_host", val.c_str());
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--bind", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--bind", NULL)) {
       set_val_or_die("public_addr", val.c_str());
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--keyfile", "-K", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--keyfile", "-K", NULL)) {
       bufferlist bl;
       string err;
       int r;
@@ -600,10 +600,10 @@ int md_config_t::parse_argv(std::vector<const char*>& args, int level)
 	set_val_or_die("key", k.c_str());
       }
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--keyring", "-k", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--keyring", "-k", NULL)) {
       set_val_or_die("keyring", val.c_str());
     }
-    else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", (char*)NULL)) {
+    else if (ceph_argparse_witharg(args, i, &val, "--client_mountpoint", "-r", NULL)) {
       set_val_or_die("client_mountpoint", val.c_str());
     }
     else {
