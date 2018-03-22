@@ -7464,14 +7464,6 @@ PG::RecoveryState::RepWaitBackfillReserved::react(
   return transit<RepNotRecovering>();
 }
 
-boost::statechart::result
-PG::RecoveryState::RepWaitBackfillReserved::react(const RecoveryDone&)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
-  return transit<RepNotRecovering>();
-}
-
 /*---RepRecovering-------*/
 PG::RecoveryState::RepRecovering::RepRecovering(my_context ctx)
   : my_base(ctx),
