@@ -1909,4 +1909,7 @@ extern string  calc_hash_sha256_close_stream(SHA256 **hash);
 
 extern int rgw_parse_op_type_list(const string& str, uint32_t *perm);
 
+void rgw_setup_saved_curl_handles();
+void rgw_release_all_curl_handles();
+
 #endif
