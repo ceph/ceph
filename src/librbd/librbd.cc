@@ -1662,16 +1662,9 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_set_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-    int r = librbd::api::Image<>::snap_set(
-      ictx, cls::rbd::UserSnapshotNamespace(), snap_name);
+    int r = librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), snap_name);
     tracepoint(librbd, snap_set_exit, r);
     return r;
-  }
-
-  int Image::snap_set_by_id(uint64_t snap_id)
-  {
-    ImageCtx *ictx = (ImageCtx *)ctx;
-    return librbd::api::Image<>::snap_set(ictx, snap_id);
   }
 
   ssize_t Image::read(uint64_t ofs, size_t len, bufferlist& bl)
@@ -3565,16 +3558,9 @@ extern "C" int rbd_snap_set(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_set_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-  int r = librbd::api::Image<>::snap_set(
-    ictx, cls::rbd::UserSnapshotNamespace(), snap_name);
+  int r = librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), snap_name);
   tracepoint(librbd, snap_set_exit, r);
   return r;
-}
-
-extern "C" int rbd_snap_set_by_id(rbd_image_t image, uint64_t snap_id)
-{
-  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
-  return librbd::api::Image<>::snap_set(ictx, snap_id);
 }
 
 extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,

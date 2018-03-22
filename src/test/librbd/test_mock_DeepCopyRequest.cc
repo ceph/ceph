@@ -7,7 +7,6 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/internal.h"
-#include "librbd/api/Image.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
@@ -341,9 +340,8 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnCopyMetadata) {
 
 TEST_F(TestMockDeepCopyRequest, Snap) {
   EXPECT_EQ(0, snap_create(*m_src_image_ctx, "copy"));
-  EXPECT_EQ(0, librbd::api::Image<>::snap_set(m_src_image_ctx,
-                                              cls::rbd::UserSnapshotNamespace(),
-                                              "copy"));
+  EXPECT_EQ(0, librbd::snap_set(m_src_image_ctx,
+                                cls::rbd::UserSnapshotNamespace(), "copy"));
 
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);

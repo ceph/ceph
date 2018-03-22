@@ -12,7 +12,6 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/api/DiffIterate.h"
-#include "librbd/api/Image.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -257,8 +256,7 @@ TEST_F(TestInternal, SnapSetReleasesLock) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
-  ASSERT_EQ(0, librbd::api::Image<>::snap_set(
-                 ictx, cls::rbd::UserSnapshotNamespace(), "snap1"));
+  ASSERT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), "snap1"));
 
   bool is_owner;
   ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &is_owner));
@@ -629,8 +627,9 @@ TEST_F(TestInternal, SnapshotCopyup)
   for (std::list<std::string>::iterator it = snaps.begin();
        it != snaps.end(); ++it) {
     const char *snap_name = it->empty() ? NULL : it->c_str();
-    ASSERT_EQ(0, librbd::api::Image<>::snap_set(
-                   ictx2, cls::rbd::UserSnapshotNamespace(), snap_name));
+    ASSERT_EQ(0, librbd::snap_set(ictx2,
+				  cls::rbd::UserSnapshotNamespace(),
+				  snap_name));
 
     ASSERT_EQ(256,
               ictx2->io_work_queue->read(0, 256,
@@ -714,9 +713,9 @@ TEST_F(TestInternal, ResizeCopyup)
                                          true, no_op));
   ASSERT_EQ(0, ictx2->operations->resize(m_image_size - (2 << order) - 32,
                                          true, no_op));
-  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx2,
-				              cls::rbd::UserSnapshotNamespace(),
-				              "snap1"));
+  ASSERT_EQ(0, librbd::snap_set(ictx2,
+				cls::rbd::UserSnapshotNamespace(),
+				"snap1"));
 
   {
     // hide the parent from the snapshot
@@ -781,9 +780,9 @@ TEST_F(TestInternal, DiscardCopyup)
 
   ASSERT_EQ(static_cast<int>(m_image_size - 64),
             ictx2->io_work_queue->discard(32, m_image_size - 64, false));
-  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx2,
-				              cls::rbd::UserSnapshotNamespace(),
-				              "snap1"));
+  ASSERT_EQ(0, librbd::snap_set(ictx2,
+				cls::rbd::UserSnapshotNamespace(),
+				"snap1"));
 
   {
     // hide the parent from the snapshot
@@ -950,9 +949,9 @@ TEST_F(TestInternal, WriteFullCopyup) {
                                        librbd::io::ReadResult{read_result}, 0));
   ASSERT_TRUE(write_full_bl.contents_equal(read_bl));
 
-  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx2,
-				              cls::rbd::UserSnapshotNamespace(),
-				              "snap1"));
+  ASSERT_EQ(0, librbd::snap_set(ictx2,
+				cls::rbd::UserSnapshotNamespace(),
+				"snap1"));
   ASSERT_EQ((ssize_t)read_bl.length(),
             ictx2->io_work_queue->read(0, read_bl.length(),
                                        librbd::io::ReadResult{read_result}, 0));
@@ -1019,9 +1018,7 @@ TEST_F(TestInternal, DiffIterateCloneOverwrite) {
   ASSERT_EQ(0, io_ctx.write(oid, bl, 4096, 4096));
 
   interval_set<uint64_t> diff;
-  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx,
-                                              cls::rbd::UserSnapshotNamespace(),
-                                              "one"));
+  ASSERT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), "one"));
   ASSERT_EQ(0, librbd::api::DiffIterate<>::diff_iterate(
     ictx, cls::rbd::UserSnapshotNamespace(), nullptr, 0, size, true, false,
     iterate_cb, (void *)&diff));

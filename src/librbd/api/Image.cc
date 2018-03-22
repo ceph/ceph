@@ -334,54 +334,6 @@ int Image<I>::deep_copy(I *src, I *dest, ProgressContext &prog_ctx) {
   return 0;
 }
 
-template <typename I>
-int Image<I>::snap_set(I *ictx,
-                       const cls::rbd::SnapshotNamespace &snap_namespace,
-                       const char *snap_name) {
-  ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
-                       << (snap_name ? snap_name : "NULL") << dendl;
-
-  // ignore return value, since we may be set to a non-existent
-  // snapshot and the user is trying to fix that
-  ictx->state->refresh_if_required();
-
-  uint64_t snap_id = CEPH_NOSNAP;
-  std::string name(snap_name == nullptr ? "" : snap_name);
-  if (!name.empty()) {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
-    snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace{},
-                                snap_name);
-    if (snap_id == CEPH_NOSNAP) {
-      return -ENOENT;
-    }
-  }
-
-  return snap_set(ictx, snap_id);
-}
-
-template <typename I>
-int Image<I>::snap_set(I *ictx, uint64_t snap_id) {
-  ldout(ictx->cct, 20) << "snap_set " << ictx << " "
-                       << "snap_id=" << snap_id << dendl;
-
-  // ignore return value, since we may be set to a non-existent
-  // snapshot and the user is trying to fix that
-  ictx->state->refresh_if_required();
-
-  C_SaferCond ctx;
-  ictx->state->snap_set(snap_id, &ctx);
-  int r = ctx.wait();
-  if (r < 0) {
-    if (r != -ENOENT) {
-      lderr(ictx->cct) << "failed to " << (snap_id == CEPH_NOSNAP ? "un" : "")
-                       << "set snapshot: " << cpp_strerror(r) << dendl;
-    }
-    return r;
-  }
-
-  return 0;
-}
-
 } // namespace api
 } // namespace librbd
 

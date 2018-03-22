@@ -9,7 +9,6 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
-#include "librbd/api/Image.h"
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -351,16 +350,16 @@ public:
       std::cout << "comparing '" << snap_name << " (" << src_snap_id
                 << " to " << dst_snap_id << ")" << std::endl;
 
-      r = librbd::api::Image<>::snap_set(m_src_image_ctx,
-			                 cls::rbd::UserSnapshotNamespace(),
-			                 snap_name.c_str());
+      r = librbd::snap_set(m_src_image_ctx,
+			   cls::rbd::UserSnapshotNamespace(),
+			   snap_name.c_str());
       if (r < 0) {
         return r;
       }
 
-      r = librbd::api::Image<>::snap_set(m_dst_image_ctx,
-			                 cls::rbd::UserSnapshotNamespace(),
-			                 snap_name.c_str());
+      r = librbd::snap_set(m_dst_image_ctx,
+			   cls::rbd::UserSnapshotNamespace(),
+			   snap_name.c_str());
       if (r < 0) {
         return r;
       }
@@ -386,15 +385,15 @@ public:
       }
     }
 
-    r = librbd::api::Image<>::snap_set(m_src_image_ctx,
-			               cls::rbd::UserSnapshotNamespace(),
-			               nullptr);
+    r = librbd::snap_set(m_src_image_ctx,
+			 cls::rbd::UserSnapshotNamespace(),
+			 nullptr);
     if (r < 0) {
       return r;
     }
-    r = librbd::api::Image<>::snap_set(m_dst_image_ctx,
-			               cls::rbd::UserSnapshotNamespace(),
-			               nullptr);
+    r = librbd::snap_set(m_dst_image_ctx,
+			 cls::rbd::UserSnapshotNamespace(),
+			 nullptr);
     if (r < 0) {
       return r;
     }

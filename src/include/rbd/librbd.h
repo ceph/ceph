@@ -543,7 +543,6 @@ CEPH_RBD_API int rbd_snap_set_limit(rbd_image_t image, uint64_t limit);
 CEPH_RBD_API int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, struct timespec *timestamp);
 
 CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
-CEPH_RBD_API int rbd_snap_set_by_id(rbd_image_t image, uint64_t snap_id);
 
 CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
 					     uint64_t snap_id,

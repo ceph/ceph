@@ -40,12 +40,6 @@ struct Image {
                        ProgressContext &prog_ctx);
   static int deep_copy(ImageCtxT *src, ImageCtxT *dest,
                        ProgressContext &prog_ctx);
-
-  static int snap_set(ImageCtxT *ictx,
-                      const cls::rbd::SnapshotNamespace &snap_namespace,
-	              const char *snap_name);
-  static int snap_set(ImageCtxT *ictx, uint64_t snap_id);
-
 };
 
 } // namespace api

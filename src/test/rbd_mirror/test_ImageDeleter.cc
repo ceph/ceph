@@ -26,7 +26,6 @@
 #include "librbd/Journal.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
-#include "librbd/api/Image.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/journal/DisabledPolicy.h"
 #include "test/rbd_mirror/test_fixture.h"
@@ -186,8 +185,8 @@ public:
                    cls::rbd::UserSnapshotNamespace(), "snap1"));
     EXPECT_EQ(0, ictx->operations->snap_protect(
                    cls::rbd::UserSnapshotNamespace(), "snap1"));
-    EXPECT_EQ(0, librbd::api::Image<>::snap_set(
-                   ictx, cls::rbd::UserSnapshotNamespace(), "snap1"));
+    EXPECT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(),
+                                  "snap1"));
 
     std::string clone_id = librbd::util::generate_image_id(m_local_io_ctx);
     librbd::ImageOptions clone_opts;
