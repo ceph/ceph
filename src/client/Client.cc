@@ -6085,11 +6085,6 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
   int r = 0;
   Dentry *dn = NULL;
 
-  if (!dir->is_dir()) {
-    r = -ENOTDIR;
-    goto done;
-  }
-
   if (dname == "..") {
     if (dir->dentries.empty()) {
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
@@ -6115,6 +6110,11 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 
   if (dname == ".") {
     *target = dir;
+    goto done;
+  }
+
+  if (!dir->is_dir()) {
+    r = -ENOTDIR;
     goto done;
   }
 
