@@ -821,7 +821,6 @@ public:
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.append((char *)this, sizeof(version_t) + sizeof(epoch_t));
 #else
-    using ceph::encode;
     encode(version, bl);
     encode(epoch, bl);
 #endif
@@ -830,7 +829,6 @@ public:
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.copy(sizeof(version_t) + sizeof(epoch_t), (char *)this);
 #else
-    using ceph::decode;
     decode(version, bl);
     decode(epoch, bl);
 #endif
