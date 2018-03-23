@@ -10,7 +10,6 @@ from .helper import DashboardTestCase
 class AuthTest(DashboardTestCase):
     def setUp(self):
         self.reset_session()
-        self._ceph_cmd(['dashboard', 'set-session-expire', '2'])
         self._ceph_cmd(['dashboard', 'set-login-credentials', 'admin', 'admin'])
 
     def test_a_set_login_credentials(self):
@@ -60,6 +59,7 @@ class AuthTest(DashboardTestCase):
         self.assertStatus(401)
 
     def test_session_expire(self):
+        self._ceph_cmd(['dashboard', 'set-session-expire', '2'])
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
         self.assertStatus(201)
         self._get("/api/host")
@@ -67,6 +67,7 @@ class AuthTest(DashboardTestCase):
         time.sleep(3)
         self._get("/api/host")
         self.assertStatus(401)
+        self._ceph_cmd(['dashboard', 'set-session-expire', '1200'])
 
     def test_unauthorized(self):
         self._get("/api/host")
