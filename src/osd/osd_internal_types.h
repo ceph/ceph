@@ -74,7 +74,7 @@ public:
       return get_state_name(state);
     }
 
-    list<OpRequestRef> waiters;  ///< ops waiting on state change
+    std::list<OpRequestRef> waiters;  ///< ops waiting on state change
     int count;              ///< number of readers or writers
 
     State state:4;               ///< rw state
@@ -89,11 +89,12 @@ public:
 	recovery_read_marker(false),
 	snaptrimmer_write_marker(false)
     {}
-    bool get_read(OpRequestRef op) {
+    bool get_read(OpRequestRef& op) {
       if (get_read_lock()) {
 	return true;
       } // else
-      waiters.push_back(op);
+      // Now we really need to bump up the ref-counter.
+      waiters.emplace_back(op);
       return false;
     }
     /// this function adjusts the counts if necessary
@@ -120,12 +121,12 @@ public:
       }
     }
 
-    bool get_write(OpRequestRef op, bool greedy=false) {
+    bool get_write(OpRequestRef& op, bool greedy=false) {
       if (get_write_lock(greedy)) {
 	return true;
       } // else
       if (op)
-	waiters.push_back(op);
+	waiters.emplace_back(op);
       return false;
     }
     bool get_write_lock(bool greedy=false) {
@@ -171,12 +172,12 @@ public:
 	return false;
       }
     }
-    bool get_excl(OpRequestRef op) {
+    bool get_excl(OpRequestRef& op) {
       if (get_excl_lock()) {
 	return true;
       } // else
       if (op)
-	waiters.push_back(op);
+	waiters.emplace_back(op);
       return false;
     }
     /// same as get_write_lock, but ignore starvation
@@ -211,16 +212,16 @@ public:
     bool empty() const { return state == RWNONE; }
   } rwstate;
 
-  bool get_read(OpRequestRef op) {
+  bool get_read(OpRequestRef& op) {
     return rwstate.get_read(op);
   }
-  bool get_write(OpRequestRef op) {
+  bool get_write(OpRequestRef& op) {
     return rwstate.get_write(op, false);
   }
   bool get_excl(OpRequestRef op) {
     return rwstate.get_excl(op);
   }
-  bool get_lock_type(OpRequestRef op, RWState::State type) {
+  bool get_lock_type(OpRequestRef& op, RWState::State type) {
     switch (type) {
     case RWState::RWWRITE:
       return get_write(op);
@@ -233,7 +234,7 @@ public:
       return true;
     }
   }
-  bool get_write_greedy(OpRequestRef op) {
+  bool get_write_greedy(OpRequestRef& op) {
     return rwstate.get_write(op, true);
   }
   bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
@@ -348,7 +349,7 @@ class ObcLockManager {
     ObjectLockState(
       ObjectContextRef obc,
       ObjectContext::RWState::State type)
-      : obc(obc), type(type) {}
+      : obc(std::move(obc)), type(type) {}
   };
   map<hobject_t, ObjectLockState> locks;
 public:
@@ -362,8 +363,8 @@ public:
   bool get_lock_type(
     ObjectContext::RWState::State type,
     const hobject_t &hoid,
-    ObjectContextRef obc,
-    OpRequestRef op) {
+    ObjectContextRef& obc,
+    OpRequestRef& op) {
     assert(locks.find(hoid) == locks.end());
     if (obc->get_lock_type(op, type)) {
       locks.insert(make_pair(hoid, ObjectLockState(obc, type)));
