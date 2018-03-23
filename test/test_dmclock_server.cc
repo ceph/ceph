@@ -71,7 +71,7 @@ namespace crimson {
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
       ReqParams req_params(1,1);
 
       // Disable coredumps
@@ -116,7 +116,7 @@ namespace crimson {
 	       std::chrono::seconds(3),
 	       std::chrono::seconds(5),
 	       std::chrono::seconds(2),
-	       false);
+	       AtLimit::Wait);
 
       auto lock_pq = [&](std::function<void()> code) {
 	test_locked(pq.data_mtx, code);
@@ -304,7 +304,7 @@ namespace crimson {
 	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
@@ -373,7 +373,7 @@ namespace crimson {
 	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
@@ -456,7 +456,7 @@ namespace crimson {
 	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
@@ -539,7 +539,7 @@ namespace crimson {
 	return &info1;
       };
 
-      Queue pq(client_info_f, true);
+      Queue pq(client_info_f, AtLimit::Allow);
 
       EXPECT_EQ(0u, pq.client_count());
       EXPECT_EQ(0u, pq.request_count());
@@ -613,7 +613,7 @@ namespace crimson {
 	}
       };
 
-      pq = QueueRef(new Queue(client_info_f, false));
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
@@ -666,7 +666,7 @@ namespace crimson {
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
@@ -723,7 +723,7 @@ namespace crimson {
 	}
       };
 
-      pq = QueueRef(new Queue(client_info_f, false));
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
@@ -820,7 +820,7 @@ namespace crimson {
 	}
       };
 
-      pq = QueueRef(new Queue(client_info_f, false));
+      pq = QueueRef(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
@@ -909,7 +909,7 @@ namespace crimson {
 	}
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(0, 0);
 
@@ -964,7 +964,7 @@ namespace crimson {
 	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       // Request req;
       ReqParams req_params(1,1);
@@ -991,7 +991,7 @@ namespace crimson {
 	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, false));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Wait));
 
       ReqParams req_params(1,1);
 
@@ -1022,7 +1022,7 @@ namespace crimson {
 	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, true));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Allow));
 
       ReqParams req_params(1,1);
 
@@ -1053,7 +1053,7 @@ namespace crimson {
 	return &info;
       };
 
-      QueueRef pq(new Queue(client_info_f, true));
+      QueueRef pq(new Queue(client_info_f, AtLimit::Allow));
 
       ReqParams req_params(1,1);
 

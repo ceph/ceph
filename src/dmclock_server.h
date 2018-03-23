@@ -65,6 +65,14 @@ namespace crimson {
       std::numeric_limits<double>::lowest();
     constexpr uint tag_modulo = 1000000;
 
+    enum class AtLimit {
+      // requests are delayed until the limit is restored
+      Wait,
+      // requests are allowed to exceed their limit, if all other reservations
+      // are met and below their limits
+      Allow,
+    };
+
     struct ClientInfo {
       double reservation;  // minimum
       double weight;       // proportional
@@ -744,10 +752,7 @@ namespace crimson {
 				    true>,
 		      B> ready_heap;
 
-      // if all reservations are met and all other requestes are under
-      // limit, this will allow the request next in terms of
-      // proportion to still get issued
-      bool             allow_limit_break;
+      AtLimit          at_limit;
       double           anticipation_timeout;
 
       std::atomic_bool finishing;
@@ -777,10 +782,10 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break,
+			AtLimit _at_limit,
 			double _anticipation_timeout) :
 	client_info_f(_client_info_f),
-	allow_limit_break(_allow_limit_break),
+	at_limit(_at_limit),
 	anticipation_timeout(_anticipation_timeout),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
@@ -1070,7 +1075,7 @@ namespace crimson {
 	// proportion/weight, and if we allow limit break, try to
 	// schedule something with the lowest proportion tag or
 	// alternatively lowest reservation tag.
-	if (allow_limit_break) {
+	if (at_limit == AtLimit::Allow) {
 	  if (readys.has_request() &&
 	      readys.next_request().tag.proportion < max_tag) {
 	    return NextReq(HeapId::ready);
@@ -1218,11 +1223,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break = false,
+			AtLimit _at_limit = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _allow_limit_break, _anticipation_timeout)
+	      _at_limit, _anticipation_timeout)
       {
 	// empty
       }
@@ -1230,13 +1235,13 @@ namespace crimson {
 
       // pull convenience constructor
       PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
-			bool _allow_limit_break = false,
+			AtLimit _at_limit = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	PullPriorityQueue(_client_info_f,
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
-			  _allow_limit_break,
+			  _at_limit,
 			  _anticipation_timeout)
       {
 	// empty
@@ -1449,11 +1454,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _idle_age,
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
-			bool _allow_limit_break = false,
+			AtLimit _at_limit = AtLimit::Wait,
 			double anticipation_timeout = 0.0) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _allow_limit_break, anticipation_timeout)
+	      _at_limit, anticipation_timeout)
       {
 	can_handle_f = _can_handle_f;
 	handle_f = _handle_f;
@@ -1465,7 +1470,7 @@ namespace crimson {
       PushPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 			CanHandleRequestFunc _can_handle_f,
 			HandleRequestFunc _handle_f,
-			bool _allow_limit_break = false,
+			AtLimit _at_limit = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	PushPriorityQueue(_client_info_f,
 			  _can_handle_f,
@@ -1473,7 +1478,7 @@ namespace crimson {
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
-			  _allow_limit_break,
+			  _at_limit,
 			  _anticipation_timeout)
       {
 	// empty
