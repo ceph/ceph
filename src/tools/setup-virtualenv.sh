@@ -15,10 +15,45 @@
 # GNU Library Public License for more details.
 #
 
+SCRIPTNAME="$(basename $0)"
+PYTHON_BINARY="python2.7"
+
+function usage {
+    echo
+    echo "$SCRIPTNAME - automate setup of Python virtual environment"
+    echo "    (for use in building Ceph)"
+    echo
+    echo "Usage:"
+    echo "    $SCRIPTNAME [--python=PYTHON_BINARY] TARGET_DIRECTORY"
+    echo
+    echo "    PYTHON_BINARY defaults to \"$PYTHON_BINARY\""
+    echo "    TARGET_DIRECTORY will be created if it doesn't exist,"
+    echo "        and completely destroyed and re-created if it does!"
+    echo
+    exit 1
+}
+
+TEMP=$(getopt --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
+test $? != 0 && usage
+eval set -- "$TEMP"
+
+while true ; do
+    case "$1" in
+        -h|--help) usage ;;  # does not return
+        --python) PYTHON_BINARY="$2" ; shift ; shift ;;
+        --) shift ; break ;;
+        *) echo "Internal error" ; exit 1 ;;
+    esac
+done
+
 DIR=$1
+if [ -z "$DIR" ] ; then
+    echo "$SCRIPTNAME: need a directory path, but none was provided"
+    usage
+fi
 rm -fr $DIR
 mkdir -p $DIR
-virtualenv --python python2.7 $DIR
+virtualenv --python $PYTHON_BINARY $DIR
 . $DIR/bin/activate
 
 if pip --help | grep -q disable-pip-version-check; then
