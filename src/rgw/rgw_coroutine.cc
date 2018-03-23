@@ -573,13 +573,11 @@ void RGWCoroutinesManager::_schedule(RGWCoroutinesEnv *env, RGWCoroutinesStack *
 
 void RGWCoroutinesManager::set_sleeping(RGWCoroutine *cr, bool flag)
 {
-  RWLock::WLocker wl(lock);
   cr->set_sleeping(flag);
 }
 
 void RGWCoroutinesManager::io_complete(RGWCoroutine *cr, const rgw_io_id& io_id)
 {
-  RWLock::WLocker wl(lock);
   cr->io_complete(io_id);
 }
 

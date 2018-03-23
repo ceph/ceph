@@ -696,13 +696,13 @@ int JSONFormattable::set(const string& name, const string& val)
 
   bool is_valid_json = jp.parse(val.c_str(), val.size());
 
-  for (auto i : tok) {
+  for (const auto& i : tok) {
     vector<field_entity> v;
     int ret = parse_entity(i, &v);
     if (ret < 0) {
       return ret;
     }
-    for (auto vi : v) {
+    for (const auto& vi : v) {
       if (f->type == FMT_NONE) {
         if (vi.is_obj) {
           f->type = FMT_OBJ;
@@ -756,13 +756,13 @@ int JSONFormattable::erase(const string& name)
   JSONFormattable *parent = nullptr;
   field_entity last_entity;
 
-  for (auto i : tok) {
+  for (auto& i : tok) {
     vector<field_entity> v;
     int ret = parse_entity(i, &v);
     if (ret < 0) {
       return ret;
     }
-    for (auto vi : v) {
+    for (const auto& vi : v) {
       if (f->type == FMT_NONE ||
           f->type == FMT_STRING) {
         if (vi.is_obj) {
@@ -787,16 +787,17 @@ int JSONFormattable::erase(const string& name)
         if (vi.is_obj) {
           return -EINVAL;
         }
-        if (vi.index < 0) {
-          vi.index = f->arr.size() + vi.index;
-          if (vi.index < 0) { /* out of bounds, nothing to remove */
+        int index = vi.index;
+        if (index < 0) {
+          index = f->arr.size() + index;
+          if (index < 0) { /* out of bounds, nothing to remove */
             return 0;
           }
         }
-        if ((size_t)vi.index >= f->arr.size()) {
+        if ((size_t)index >= f->arr.size()) {
           return 0; /* index beyond array boundaries */
         }
-        f = &f->arr[vi.index];
+        f = &f->arr[index];
       }
       last_entity = vi;
     }

@@ -10,100 +10,70 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-class RGWCRHTTPGetDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
-  Mutex lock;
-  RGWCoroutinesEnv *env;
-  RGWCoroutine *cr;
-  RGWHTTPStreamRWRequest *req;
-  rgw_io_id io_id;
-  bufferlist data;
-  bufferlist extra_data;
-  bool got_all_extra_data{false};
-  bool paused{false};
-public:
-  RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, RGWHTTPStreamRWRequest *_req) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), req(_req) {
-    io_id = req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ |RGWHTTPClient::HTTPCLIENT_IO_CONTROL);
-    req->set_in_cb(this);
-  }
+RGWCRHTTPGetDataCB::RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, RGWHTTPStreamRWRequest *_req) : lock("RGWCRHTTPGetDataCB"), env(_env), cr(_cr), req(_req) {
+  io_id = req->get_io_id(RGWHTTPClient::HTTPCLIENT_IO_READ |RGWHTTPClient::HTTPCLIENT_IO_CONTROL);
+  req->set_in_cb(this);
+}
 
-  int handle_data(bufferlist& bl, bool *pause) override {
-    {
-      uint64_t bl_len = bl.length();
+int RGWCRHTTPGetDataCB::handle_data(bufferlist& bl, bool *pause) {
+  {
+    uint64_t bl_len = bl.length();
 
-      Mutex::Locker l(lock);
+    Mutex::Locker l(lock);
 
-      if (!got_all_extra_data) {
-        uint64_t max = extra_data_len - extra_data.length();
-        if (max > bl_len) {
-          max = bl_len;
-        }
-        bl.splice(0, max, &extra_data);
-        bl_len -= max;
-        got_all_extra_data = extra_data.length() == extra_data_len;
+    if (!got_all_extra_data) {
+      uint64_t max = extra_data_len - extra_data.length();
+      if (max > bl_len) {
+        max = bl_len;
       }
-
-      data.append(bl);
+      bl.splice(0, max, &extra_data);
+      bl_len -= max;
+      got_all_extra_data = extra_data.length() == extra_data_len;
     }
+
+    data.append(bl);
+  }
 
 #define GET_DATA_WINDOW_SIZE 2 * 1024 * 1024
-    uint64_t data_len = data.length();
-    if (data_len >= GET_DATA_WINDOW_SIZE) {
-      env->manager->io_complete(cr, io_id);
-    }
-    if (data_len >= 2 * GET_DATA_WINDOW_SIZE) {
-      *pause = true;
-      paused = true;
-    }
-    return 0;
+  uint64_t data_len = data.length();
+  if (data_len >= GET_DATA_WINDOW_SIZE) {
+    env->manager->io_complete(cr, io_id);
   }
+  if (data_len >= 2 * GET_DATA_WINDOW_SIZE) {
+    *pause = true;
+    paused = true;
+  }
+  return 0;
+}
 
-  void claim_data(bufferlist *dest, uint64_t max) {
-    bool need_to_unpause = false;
+void RGWCRHTTPGetDataCB::claim_data(bufferlist *dest, uint64_t max) {
+  bool need_to_unpause = false;
 
-    {
-      Mutex::Locker l(lock);
+  {
+    Mutex::Locker l(lock);
 
-      if (data.length() == 0) {
-        return;
-      }
-
-      if (data.length() < max) {
-        max = data.length();
-      }
-
-      data.splice(0, max, dest);
-      need_to_unpause = (paused && data.length() <= GET_DATA_WINDOW_SIZE);
+    if (data.length() == 0) {
+      return;
     }
 
-    if (need_to_unpause) {
-      req->unpause_receive();
+    if (data.length() < max) {
+      max = data.length();
     }
+
+    data.splice(0, max, dest);
+    need_to_unpause = (paused && data.length() <= GET_DATA_WINDOW_SIZE);
   }
 
-  bufferlist& get_extra_data() {
-    return extra_data;
+  if (need_to_unpause) {
+    req->unpause_receive();
   }
-
-  bool has_data() {
-    return (data.length() > 0);
-  }
-
-  bool has_all_extra_data() {
-    return got_all_extra_data;
-  }
-};
-
-
-RGWStreamReadHTTPResourceCRF::~RGWStreamReadHTTPResourceCRF()
-{
-  delete in_cb;
 }
 
 int RGWStreamReadHTTPResourceCRF::init()
 {
   env->stack->init_new_io(req);
 
-  in_cb = new RGWCRHTTPGetDataCB(env, caller, req);
+  in_cb.emplace(env, caller, req);
 
   int r = http_manager->add_request(req);
   if (r < 0) {
