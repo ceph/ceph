@@ -75,6 +75,8 @@ void RGWCivetWeb::flush()
 
 size_t RGWCivetWeb::complete_request()
 {
+  perfcounter->inc(l_rgw_qlen, -1);
+  perfcounter->inc(l_rgw_qactive, -1);
   return 0;
 }
 
@@ -127,6 +129,9 @@ int RGWCivetWeb::init_env(CephContext *cct)
 
     env.set(buf, value);
   }
+
+  perfcounter->inc(l_rgw_qlen);
+  perfcounter->inc(l_rgw_qactive);
 
   env.set("REMOTE_ADDR", info->remote_addr);
   env.set("REQUEST_METHOD", info->request_method);
