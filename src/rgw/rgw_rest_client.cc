@@ -510,6 +510,11 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>
   return send_ready(key, new_attrs, policy, send);
 }
 
+static std::set<string> keep_headers = { "content-type",
+                                         "content-encoding",
+                                         "content-disposition",
+                                         "content-language" };
+
 int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
                                       RGWAccessControlPolicy& policy, bool send)
 {
@@ -522,6 +527,10 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, strin
     if (name.compare(0, sizeof(RGW_AMZ_PREFIX) - 1, RGW_AMZ_PREFIX) == 0) {
       new_env.set(name, val);
       new_info.x_meta_map[name] = val;
+    } else if (keep_headers.find(name) != keep_headers.end()) {
+      new_env.set(attr.first, val); /* Ugh, using the uppercase representation,
+                                       as the signing function calls info.env.get("CONTENT_TYPE").
+                                       This needs to be cleaned up! */
     }
   }
 
