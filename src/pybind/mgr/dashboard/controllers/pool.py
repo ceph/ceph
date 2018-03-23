@@ -84,7 +84,7 @@ class Pool(RESTController):
     def _info(self):
         """Used by the create-pool dialog"""
         def rules(pool_type):
-            return [r["rule_name"]
+            return [r
                     for r in mgr.get('osd_map_crush')['rules']
                     if r['type'] == pool_type]
 
@@ -101,6 +101,7 @@ class Pool(RESTController):
             "crush_rules_replicated": rules(1),
             "crush_rules_erasure": rules(3),
             "is_all_bluestore": all_bluestore(),
+            "osd_count": len(mgr.get('osd_map')['osds']),
             "compression_algorithms": compression_enum('bluestore_compression_algorithm'),
             "compression_modes": compression_enum('bluestore_compression_mode'),
         }
