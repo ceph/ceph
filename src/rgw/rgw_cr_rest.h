@@ -147,10 +147,6 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
     request_cleanup();
   }
 
-  void set_input_bl(bufferlist bl){
-    input_bl = std::move(bl);
-  }
-
   int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
         new RGWRESTSendResource(conn, method, path, params, nullptr, http_manager));
@@ -211,7 +207,6 @@ class RGWSendRESTResourceCR : public RGWSendRawRESTResourceCR<T> {
     jf.flush(ss);
     //bufferlist bl;
     this->input_bl.append(ss.str());
-    //set_input_bl(std::move(bl));
   }
 
 };
@@ -327,7 +322,36 @@ public:
   }
 };
 
-class RGWCRHTTPGetDataCB;
+class RGWCRHTTPGetDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
+  Mutex lock;
+  RGWCoroutinesEnv *env;
+  RGWCoroutine *cr;
+  RGWHTTPStreamRWRequest *req;
+  rgw_io_id io_id;
+  bufferlist data;
+  bufferlist extra_data;
+  bool got_all_extra_data{false};
+  bool paused{false};
+public:
+  RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, RGWHTTPStreamRWRequest *_req);
+
+  int handle_data(bufferlist& bl, bool *pause) override;
+
+  void claim_data(bufferlist *dest, uint64_t max);
+
+  bufferlist& get_extra_data() {
+    return extra_data;
+  }
+
+  bool has_data() {
+    return (data.length() > 0);
+  }
+
+  bool has_all_extra_data() {
+    return got_all_extra_data;
+  }
+};
+
 
 class RGWStreamReadResourceCRF {
 protected:
@@ -365,7 +389,7 @@ class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
 
   RGWHTTPStreamRWRequest *req{nullptr};
 
-  RGWCRHTTPGetDataCB *in_cb{nullptr};
+  std::optional<RGWCRHTTPGetDataCB> in_cb;
 
   bufferlist extra_data;
 
@@ -397,7 +421,6 @@ public:
                                                                 http_manager(_http_manager) {
     rest_obj.key = _src_key;
   }
-  ~RGWStreamReadHTTPResourceCRF() override;
 
   int init() override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */

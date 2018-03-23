@@ -128,7 +128,7 @@ struct ACLMapping {
   dest_id(d) {}
 
   void init(const JSONFormattable& config) {
-    string t = config["type"];
+    const string& t = config["type"];
 
     if (t == "email") {
       type = ACL_TYPE_EMAIL_USER;
@@ -166,7 +166,7 @@ struct ACLMappings {
   map<string, ACLMapping> acl_mappings;
 
   void init(const JSONFormattable& config) {
-    for (auto c : config.array()) {
+    for (auto& c : config.array()) {
       ACLMapping m;
       m.init(c);
 
@@ -186,7 +186,7 @@ struct AWSSyncConfig_ACLProfiles {
   map<string, std::shared_ptr<ACLMappings> > acl_profiles;
 
   void init(const JSONFormattable& config) {
-    for (auto c : config.array()) {
+    for (auto& c : config.array()) {
       const string& profile_id = c["id"];
 
       std::shared_ptr<ACLMappings> ap{new ACLMappings};
@@ -514,7 +514,7 @@ struct AWSSyncConfig {
       init_profile(cct, default_conf, default_profile, false);
     }
 
-    for (auto conn : config["connections"].array()) {
+    for (auto& conn : config["connections"].array()) {
       auto new_conn = conn;
 
       std::shared_ptr<AWSSyncConfig_Connection> c{new AWSSyncConfig_Connection};

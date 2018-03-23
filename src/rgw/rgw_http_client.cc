@@ -315,8 +315,6 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
     dout(0) << "WARNING: client->receive_data() returned ret=" << ret << dendl;
   }
 
-  skip_bytes = 0;
- 
   if (pause) {
     dout(20) << "RGWHTTPClient::receive_http_data(): pause" << dendl;
     skip_bytes = len;

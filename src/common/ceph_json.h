@@ -558,9 +558,11 @@ struct JSONFormattable {
     return def(string(def_val));
   }
 
+#if 0
   string operator ()(const string& def_val) const {
     return def(def_val);
   }
+#endif
 
   int operator()(int def_val) const {
     return def(def_val);

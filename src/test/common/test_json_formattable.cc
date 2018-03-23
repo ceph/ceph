@@ -3,9 +3,7 @@
 /*
  * Ceph - scalable distributed file system
  *
- * Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
- *
- * Author: Loic Dachary <loic@dachary.org>
+ * Copyright (C) 2018 Red Hat Inc.
  *
  *  This library is free software; you can redistribute it and/or
  *  modify it under the terms of the GNU Lesser General Public
