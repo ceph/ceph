@@ -349,14 +349,16 @@ if [ "$overwrite_conf" -eq 0 ]; then
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
-        asok_dir=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
-        if [ $asok_dir != /var/run/ceph ]; then
+	if [ -e "$conf_fn" ]; then
+	  asok_dir=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
+	  rm -- "$conf_fn"
+	  if [ $asok_dir != /var/run/ceph ]; then
             [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
-        fi
-        if [ -z "$CEPH_ASOK_DIR" ]; then
+	  fi
+	fi
+	if [ -z "$CEPH_ASOK_DIR" ]; then
             CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
         fi
-        [ -e "$conf_fn" ] && rm -- "$conf_fn"
     else
         CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
         # -k is implied... (doesn't make sense otherwise)
