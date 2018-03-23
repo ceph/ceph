@@ -7007,7 +7007,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(name.c_str(), bl);
 
     if (name.compare(RGW_ATTR_ETAG) == 0) {
-      etag = bl.c_str();
+      etag = bl.to_str();
     } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
       content_type = bl.c_str();
     } else if (name.compare(RGW_ATTR_ACL) == 0) {
@@ -7750,6 +7750,9 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
     if (iter != src_attrs.end()) {
       bufferlist& etagbl = iter->second;
       *petag = etagbl.to_str();
+      while (petag->size() > 0 && (*petag)[petag->size() - 1] == '\0') {
+        *petag = petag->substr(0, petag->size() - 1);
+      }
     }
   }
 
@@ -9325,7 +9328,18 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   s->has_attrs = true;
   s->accounted_size = s->size;
 
-  auto iter = s->attrset.find(RGW_ATTR_COMPRESSION);
+  auto iter = s->attrset.find(RGW_ATTR_ETAG);
+  if (iter != s->attrset.end()) {
+    /* get rid of extra null character at the end of the etag, as we used to store it like that */
+    bufferlist& bletag = iter->second;
+    if (bletag.length() > 0 && bletag[bletag.length() - 1] == '\0') {
+      bufferlist newbl;
+      bletag.splice(0, bletag.length() - 1, &newbl);
+      bletag.claim(newbl);
+    }
+  }
+
+  iter = s->attrset.find(RGW_ATTR_COMPRESSION);
   const bool compressed = (iter != s->attrset.end());
   if (compressed) {
     // use uncompressed size for accounted_size
@@ -9968,18 +9982,20 @@ int RGWRados::Object::Read::prepare()
     if (r < 0)
       return r;
 
+    
+
     if (conds.if_match) {
       string if_match_str = rgw_string_unquote(conds.if_match);
-      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match_str << dendl;
-      if (if_match_str.compare(etag.c_str()) != 0) {
+      ldout(cct, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-Match: " << if_match_str << dendl;
+      if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
         return -ERR_PRECONDITION_FAILED;
       }
     }
 
     if (conds.if_nomatch) {
       string if_nomatch_str = rgw_string_unquote(conds.if_nomatch);
-      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch_str << dendl;
-      if (if_nomatch_str.compare(etag.c_str()) == 0) {
+      ldout(cct, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-NoMatch: " << if_nomatch_str << dendl;
+      if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
         return -ERR_NOT_MODIFIED;
       }
     }
@@ -13204,11 +13220,11 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
 
   map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_ETAG);
   if (iter != astate->attrset.end()) {
-    etag = iter->second.c_str();
+    etag = iter->second.to_str();
   }
   iter = astate->attrset.find(RGW_ATTR_CONTENT_TYPE);
   if (iter != astate->attrset.end()) {
-    content_type = iter->second.c_str();
+    content_type = iter->second.to_str();
   }
   iter = astate->attrset.find(RGW_ATTR_ACL);
   if (iter != astate->attrset.end()) {
