@@ -578,6 +578,15 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_osdmap()
 
+    # TODO: improve C++->Python interface to return just
+    # the latest if that's all we want.
+    def get_latest(self, daemon_type, daemon_name, counter):
+        data = self.get_counter(daemon_type, daemon_name, counter)[counter]
+        if data:
+            return data[-1][1]
+        else:
+            return 0
+
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL):
         """
         Return the perf counters currently known to this ceph-mgr
@@ -593,14 +602,6 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         result = defaultdict(dict)
 
-        # TODO: improve C++->Python interface to return just
-        # the latest if that's all we want.
-        def get_latest(daemon_type, daemon_name, counter):
-            data = self.get_counter(daemon_type, daemon_name, counter)[counter]
-            if data:
-                return data[-1][1]
-            else:
-                return 0
 
         for server in self.list_servers():
             for service in server['services']:
@@ -628,7 +629,8 @@ class MgrModule(ceph_module.BaseMgrModule):
                         continue
 
                     counter_info = counter_schema
-                    counter_info['value'] = get_latest(service['type'], service['id'], counter_path)
+                    counter_info['value'] = self.get_latest(service['type'], service['id'],
+                                                            counter_path)
                     result[svc_full_name][counter_path] = counter_info
 
         self.log.debug("returning {0} counter".format(len(result)))
