@@ -199,6 +199,7 @@ int main(int argc, const char **argv)
       }
       return 0;
     }
+    setsid();
     global_init_postfork_start(g_ceph_context);
   }
   common_init_finish(g_ceph_context);
