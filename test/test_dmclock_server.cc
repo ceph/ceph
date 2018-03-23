@@ -1068,5 +1068,43 @@ namespace crimson {
       auto& retn = boost::get<Queue::PullReq::Retn>(pr.data);
       EXPECT_EQ(client1, retn.client);
     }
+
+
+    TEST(dmclock_server_pull, pull_reject_at_limit) {
+      using ClientId = int;
+      using Queue = dmc::PullPriorityQueue<ClientId, Request, false>;
+      using MyReqRef = typename Queue::RequestRef;
+
+      ClientId client1 = 52;
+      ClientId client2 = 53;
+
+      dmc::ClientInfo info(0.0, 1.0, 1.0);
+
+      auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
+	return &info;
+      };
+
+      Queue pq(client_info_f, AtLimit::Reject);
+
+      {
+        // success at 1 request per second
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{1}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{2}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{3}));
+        // request too soon
+        EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{3.9}));
+        // previous rejected request counts against limit
+        EXPECT_EQ(EAGAIN, pq.add_request_time({}, client1, {}, Time{4}));
+        EXPECT_EQ(0, pq.add_request_time({}, client1, {}, Time{6}));
+      }
+      {
+        auto r1 = MyReqRef{new Request};
+        ASSERT_EQ(0, pq.add_request(std::move(r1), client2, {}, Time{1}));
+        EXPECT_EQ(nullptr, r1); // add_request takes r1 on success
+        auto r2 = MyReqRef{new Request};
+        ASSERT_EQ(EAGAIN, pq.add_request(std::move(r2), client2, {}, Time{1}));
+        EXPECT_NE(nullptr, r2); // add_request does not take r2 on failure
+      }
+    }
   } // namespace dmclock
 } // namespace crimson

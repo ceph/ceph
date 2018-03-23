@@ -71,6 +71,9 @@ namespace crimson {
       // requests are allowed to exceed their limit, if all other reservations
       // are met and below their limits
       Allow,
+      // if an incoming request would exceed its limit, add_request() will
+      // reject it with EAGAIN instead of adding it to the queue
+      Reject,
     };
 
     struct ClientInfo {
@@ -845,7 +848,10 @@ namespace crimson {
 	return tag;
       }
 
-      // data_mtx must be held by caller
+      // data_mtx must be held by caller. returns 0 on success. when using
+      // AtLimit::Reject, requests that would exceed their limit are rejected
+      // with EAGAIN, and the queue will not take ownership of the given
+      // 'request' argument
       int do_add_request(RequestRef&& request,
 			 const C& client_id,
 			 const ReqParams& req_params,
@@ -921,6 +927,11 @@ namespace crimson {
 	} // if this client was idle
 
 	RequestTag tag = initial_tag(TagCalc{}, client, req_params, time, cost);
+
+	if (at_limit == AtLimit::Reject && tag.limit > time) {
+	  // if the client is over its limit, reject it here
+	  return EAGAIN;
+	}
 
 	client.add_request(tag, std::move(request));
 	if (1 == client.requests.size()) {
