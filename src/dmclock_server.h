@@ -359,10 +359,8 @@ namespace crimson {
 	  last_tick = _tick;
 	}
 
-	inline void add_request(const RequestTag& tag,
-				const C&          client_id,
-				RequestRef&&      request) {
-	  requests.emplace_back(ClientReq(tag, client_id, std::move(request)));
+	inline void add_request(const RequestTag& tag, RequestRef&& request) {
+	  requests.emplace_back(tag, client, std::move(request));
 	}
 
 	inline const ClientReq& next_request() const {
@@ -919,7 +917,7 @@ namespace crimson {
 
 	RequestTag tag = initial_tag(TagCalc{}, client, req_params, time, cost);
 
-	client.add_request(tag, client.client, std::move(request));
+	client.add_request(tag, std::move(request));
 	if (1 == client.requests.size()) {
 	  // NB: can the following 4 calls to adjust be changed
 	  // promote? Can adding a request ever demote a client in the
