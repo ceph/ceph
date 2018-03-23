@@ -16,13 +16,30 @@
 #
 
 SCRIPTNAME="$(basename $0)"
-
-TEMP=$(getopt --options "" --long "python:" --name "$SCRIPTNAME" -- "$@")
-if [ $? != 0 ] ; then echo "Failed to parse options...exiting" >&2 ; exit 1 ; fi
-eval set -- "$TEMP"
 PYTHON_BINARY="python2.7"
+
+function usage {
+    echo
+    echo "$SCRIPTNAME - automate setup of Python virtual environment"
+    echo "    (for use in building Ceph)"
+    echo
+    echo "Usage:"
+    echo "    $SCRIPTNAME [--python=PYTHON_BINARY] TARGET_DIRECTORY"
+    echo
+    echo "    PYTHON_BINARY defaults to \"$PYTHON_BINARY\""
+    echo "    TARGET_DIRECTORY will be created if it doesn't exist,"
+    echo "        and completely destroyed and re-created if it does!"
+    echo
+    exit 1
+}
+
+TEMP=$(getopt --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
+test $? != 0 && usage
+eval set -- "$TEMP"
+
 while true ; do
     case "$1" in
+        -h|--help) usage ;;  # does not return
         --python) PYTHON_BINARY="$2" ; shift ; shift ;;
         --) shift ; break ;;
         *) echo "Internal error" ; exit 1 ;;
