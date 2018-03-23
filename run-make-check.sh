@@ -80,7 +80,7 @@ function run() {
     fi
  
     if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
-        rm -f ${TMPDIR:-/tmp}/ceph-asok.*
+        rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
         return 1
     fi
 }
