@@ -390,15 +390,18 @@ public:
   RGWStreamReadHTTPResourceCRF(CephContext *_cct,
                                RGWCoroutinesEnv *_env,
                                RGWCoroutine *_caller,
-                               RGWHTTPManager *_http_manager) : cct(_cct),
+                               RGWHTTPManager *_http_manager,
+                               const rgw_obj_key& _src_key) : cct(_cct),
                                                                 env(_env),
                                                                 caller(_caller),
-                                                                http_manager(_http_manager) {}
+                                                                http_manager(_http_manager) {
+    rest_obj.key = _src_key;
+  }
   ~RGWStreamReadHTTPResourceCRF() override;
 
   int init() override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
-  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info);
+  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) override;
   bool has_attrs() override;
   void get_attrs(std::map<string, string> *attrs);
   bool is_done();

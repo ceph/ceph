@@ -691,7 +691,8 @@ public:
                                RGWDataSyncEnv *_sync_env,
                                RGWRESTConn *_conn,
                                rgw_obj& _src_obj,
-                               const rgw_sync_aws_src_obj_properties& _src_properties) : RGWStreamReadHTTPResourceCRF(_cct, _env, _caller, _sync_env->http_manager),
+                               const rgw_sync_aws_src_obj_properties& _src_properties) : RGWStreamReadHTTPResourceCRF(_cct, _env, _caller,
+                                                                                                                      _sync_env->http_manager, _src_obj.key),
                                                                                  sync_env(_sync_env), conn(_conn), src_obj(_src_obj),
                                                                                  src_properties(_src_properties) {
   }
@@ -910,6 +911,18 @@ public:
     char buf[32];
     snprintf(buf, sizeof(buf), "%llu", (long long)src_properties.versioned_epoch);
     new_attrs["x-amz-meta-rgwx-versioned-epoch"] = buf;
+
+    utime_t ut(src_properties.mtime);
+    snprintf(buf, sizeof(buf), "%lld.%09lld",
+             (long long)ut.sec(),
+             (long long)ut.nsec());
+
+    new_attrs["x-amz-meta-rgwx-source-mtime"] = buf;
+    new_attrs["x-amz-meta-rgwx-source-etag"] = src_properties.etag;
+    new_attrs["x-amz-meta-rgwx-source-key"] = rest_obj.key.name;
+    if (!rest_obj.key.instance.empty()) {
+      new_attrs["x-amz-meta-rgwx-source-version-id"] = rest_obj.key.instance;
+    }
 
     r->set_send_length(rest_obj.content_len);
 
