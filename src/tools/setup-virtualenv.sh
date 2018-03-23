@@ -30,6 +30,10 @@ while true ; do
 done
 
 DIR=$1
+if [ -z "$DIR" ] ; then
+    echo "$SCRIPTNAME: need directory path in which to create virtualenv"
+    exit 1
+fi
 rm -fr $DIR
 mkdir -p $DIR
 virtualenv --python $PYTHON_BINARY $DIR
