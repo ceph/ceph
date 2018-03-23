@@ -48,8 +48,8 @@ done
 
 DIR=$1
 if [ -z "$DIR" ] ; then
-    echo "$SCRIPTNAME: need directory path in which to create virtualenv"
-    exit 1
+    echo "$SCRIPTNAME: need a directory path, but none was provided"
+    usage
 fi
 rm -fr $DIR
 mkdir -p $DIR
