@@ -519,7 +519,9 @@ def cstr(val, name, encoding="utf-8", opt=False):
         return None
     if isinstance(val, bytes):
         return val
-    elif isinstance(val, unicode):
+    elif isinstance(val, str):
+        return val.encode(encoding)
+    elif sys.version_info < (3, 0) and isinstance(val, unicode):
         return val.encode(encoding)
     else:
         raise InvalidArgument('%s must be a string' % name)
@@ -704,6 +706,7 @@ class RBD(object):
         :raises: :class:`FunctionNotSupported`
         """
         name = cstr(name, 'name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_name = name
@@ -787,6 +790,7 @@ class RBD(object):
         p_snapname = cstr(p_snapname, 'p_snapname')
         p_name = cstr(p_name, 'p_name')
         c_name = cstr(c_name, 'c_name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _p_ioctx = convert_ioctx(p_ioctx)
             rados_ioctx_t _c_ioctx = convert_ioctx(c_ioctx)
@@ -1737,6 +1741,7 @@ cdef class Image(object):
         :raises: :class:`ArgumentOutOfRange`
         """
         dest_name = cstr(dest_name, 'dest_name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
             char *_dest_name = dest_name
