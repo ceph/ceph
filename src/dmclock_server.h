@@ -850,29 +850,22 @@ namespace crimson {
 			  const Cost cost = 1u) {
 	++tick;
 
-	// this pointer will help us create a reference to a shared
-	// pointer, no matter which of two codepaths we take
-	ClientRec* temp_client;
-
-	auto client_it = client_map.find(client_id);
-	if (client_map.end() != client_it) {
-	  temp_client = &(*client_it->second); // address of obj of shared_ptr
-	} else {
+        auto insert = client_map.emplace(client_id, ClientRecRef{});
+        if (insert.second) {
+          // new client entry
 	  const ClientInfo* info = client_info_f(client_id);
-	  ClientRecRef client_rec =
-	    std::make_shared<ClientRec>(client_id, info, tick);
+	  auto client_rec = std::make_shared<ClientRec>(client_id, info, tick);
 	  resv_heap.push(client_rec);
 #if USE_PROP_HEAP
 	  prop_heap.push(client_rec);
 #endif
 	  limit_heap.push(client_rec);
 	  ready_heap.push(client_rec);
-	  client_map[client_id] = client_rec;
-	  temp_client = &(*client_rec); // address of obj of shared_ptr
+	  insert.first->second = std::move(client_rec);
 	}
 
 	// for convenience, we'll create a reference to the shared pointer
-	ClientRec& client = *temp_client;
+	ClientRec& client = *insert.first->second;
 
 	if (client.idle) {
 	  // We need to do an adjustment so that idle clients compete
