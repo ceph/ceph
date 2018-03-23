@@ -846,11 +846,11 @@ namespace crimson {
       }
 
       // data_mtx must be held by caller
-      void do_add_request(RequestRef&& request,
-			  const C& client_id,
-			  const ReqParams& req_params,
-			  const Time time,
-			  const Cost cost = 1u) {
+      int do_add_request(RequestRef&& request,
+			 const C& client_id,
+			 const ReqParams& req_params,
+			 const Time time,
+			 const Cost cost = 1u) {
 	++tick;
 
         auto insert = client_map.emplace(client_id, ClientRecRef{});
@@ -944,7 +944,8 @@ namespace crimson {
 #if USE_PROP_HEAP
 	prop_heap.adjust(client);
 #endif
-      } // add_request
+	return 0;
+      } // do_add_request
 
       // data_mtx must be held by caller
       void update_next_tag(DelayedTagCalc delayed, ClientRec& top,
@@ -1248,78 +1249,79 @@ namespace crimson {
       }
 
 
-      inline void add_request(R&& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Cost cost = 1u) {
-	add_request(typename super::RequestRef(new R(std::move(request))),
-		    client_id,
-		    req_params,
-		    get_time(),
-		    cost);
+      int add_request(R&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Cost cost = 1u) {
+	return add_request(typename super::RequestRef(new R(std::move(request))),
+			   client_id,
+			   req_params,
+			   get_time(),
+			   cost);
       }
 
 
-      inline void add_request(R&& request,
-			      const C& client_id,
-			      const Cost cost = 1u) {
+      int add_request(R&& request,
+		      const C& client_id,
+		      const Cost cost = 1u) {
 	static const ReqParams null_req_params;
-	add_request(typename super::RequestRef(new R(std::move(request))),
-		    client_id,
-		    null_req_params,
-		    get_time(),
-		    cost);
+	return add_request(typename super::RequestRef(new R(std::move(request))),
+			   client_id,
+			   null_req_params,
+			   get_time(),
+			   cost);
       }
 
 
-      inline void add_request_time(R&& request,
-				   const C& client_id,
-				   const ReqParams& req_params,
-				   const Time time,
-				   const Cost cost = 1u) {
-	add_request(typename super::RequestRef(new R(std::move(request))),
-		    client_id,
-		    req_params,
-		    time,
-		    cost);
+      int add_request_time(R&& request,
+			   const C& client_id,
+			   const ReqParams& req_params,
+			   const Time time,
+			   const Cost cost = 1u) {
+	return add_request(typename super::RequestRef(new R(std::move(request))),
+			   client_id,
+			   req_params,
+			   time,
+			   cost);
       }
 
 
-      inline void add_request(typename super::RequestRef&& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Cost cost = 1u) {
-	add_request(request, req_params, client_id, get_time(), cost);
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Cost cost = 1u) {
+	return add_request(request, req_params, client_id, get_time(), cost);
       }
 
 
-      inline void add_request(typename super::RequestRef&& request,
-			      const C& client_id,
-			      const Cost cost = 1u) {
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const Cost cost = 1u) {
 	static const ReqParams null_req_params;
-	add_request(request, null_req_params, client_id, get_time(), cost);
+	return add_request(request, null_req_params, client_id, get_time(), cost);
       }
 
 
       // this does the work; the versions above provide alternate interfaces
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time,
-		       const Cost cost = 1u) {
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Time time,
+		      const Cost cost = 1u) {
 	typename super::DataGuard g(this->data_mtx);
 #ifdef PROFILE
 	add_request_timer.start();
 #endif
-	super::do_add_request(std::move(request),
-			      client_id,
-			      req_params,
-			      time,
-			      cost);
+	int r = super::do_add_request(std::move(request),
+				      client_id,
+				      req_params,
+				      time,
+				      cost);
 	// no call to schedule_request for pull version
 #ifdef PROFILE
 	add_request_timer.stop();
 #endif
+	return r;
       }
 
 
@@ -1493,57 +1495,60 @@ namespace crimson {
 
     public:
 
-      inline void add_request(R&& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Cost cost = 1u) {
-	add_request(typename super::RequestRef(new R(std::move(request))),
-		    client_id,
-		    req_params,
-		    get_time(),
-		    cost);
+      int add_request(R&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Cost cost = 1u) {
+	return add_request(typename super::RequestRef(new R(std::move(request))),
+			   client_id,
+			   req_params,
+			   get_time(),
+			   cost);
       }
 
 
-      inline void add_request(typename super::RequestRef&& request,
-			      const C& client_id,
-			      const ReqParams& req_params,
-			      const Cost cost = 1u) {
-	add_request(request, req_params, client_id, get_time(), cost);
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Cost cost = 1u) {
+	return add_request(request, req_params, client_id, get_time(), cost);
       }
 
 
-      inline void add_request_time(const R& request,
-				   const C& client_id,
-				   const ReqParams& req_params,
-				   const Time time,
-				   const Cost cost = 1u) {
-	add_request(typename super::RequestRef(new R(request)),
-		    client_id,
-		    req_params,
-		    time,
-		    cost);
+      int add_request_time(const R& request,
+			   const C& client_id,
+			   const ReqParams& req_params,
+			   const Time time,
+			   const Cost cost = 1u) {
+	return add_request(typename super::RequestRef(new R(request)),
+			   client_id,
+			   req_params,
+			   time,
+			   cost);
       }
 
 
-      void add_request(typename super::RequestRef&& request,
-		       const C& client_id,
-		       const ReqParams& req_params,
-		       const Time time,
-		       const Cost cost = 1u) {
+      int add_request(typename super::RequestRef&& request,
+		      const C& client_id,
+		      const ReqParams& req_params,
+		      const Time time,
+		      const Cost cost = 1u) {
 	typename super::DataGuard g(this->data_mtx);
 #ifdef PROFILE
 	add_request_timer.start();
 #endif
-	super::do_add_request(std::move(request),
-			      client_id,
-			      req_params,
-			      time,
-			      cost);
-	schedule_request();
+	int r = super::do_add_request(std::move(request),
+				      client_id,
+				      req_params,
+				      time,
+				      cost);
+        if (r == 0) {
+	  schedule_request();
+        }
 #ifdef PROFILE
 	add_request_timer.stop();
 #endif
+	return r;
       }
 
 

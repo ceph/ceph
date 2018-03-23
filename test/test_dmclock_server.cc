@@ -153,7 +153,7 @@ namespace crimson {
 
       Request req;
       dmc::ReqParams req_params(1, 1);
-      pq.add_request_time(req, client, req_params, dmc::get_time());
+      EXPECT_EQ(0, pq.add_request_time(req, client, req_params, dmc::get_time()));
 
       std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -311,15 +311,15 @@ namespace crimson {
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(11), client1, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(0), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(98), client2, req_params);
-      pq.add_request(MyReq(44), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(11), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(0), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(98), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(44), client1, req_params));
 
       EXPECT_EQ(2u, pq.client_count());
       EXPECT_EQ(9u, pq.request_count());
@@ -380,12 +380,12 @@ namespace crimson {
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(2), client1, req_params);
-      pq.add_request(MyReq(3), client1, req_params);
-      pq.add_request(MyReq(4), client1, req_params);
-      pq.add_request(MyReq(5), client1, req_params);
-      pq.add_request(MyReq(6), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(3), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(4), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(5), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(6), client1, req_params));
 
       EXPECT_EQ(1u, pq.client_count());
       EXPECT_EQ(6u, pq.request_count());
@@ -463,12 +463,12 @@ namespace crimson {
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(2), client1, req_params);
-      pq.add_request(MyReq(3), client1, req_params);
-      pq.add_request(MyReq(4), client1, req_params);
-      pq.add_request(MyReq(5), client1, req_params);
-      pq.add_request(MyReq(6), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(3), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(4), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(5), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(6), client1, req_params));
 
       EXPECT_EQ(1u, pq.client_count());
       EXPECT_EQ(6u, pq.request_count());
@@ -546,15 +546,15 @@ namespace crimson {
 
       ReqParams req_params(1,1);
 
-      pq.add_request(MyReq(1), client1, req_params);
-      pq.add_request(MyReq(11), client1, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(0), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(2), client2, req_params);
-      pq.add_request(MyReq(13), client2, req_params);
-      pq.add_request(MyReq(98), client2, req_params);
-      pq.add_request(MyReq(44), client1, req_params);
+      EXPECT_EQ(0, pq.add_request(MyReq(1), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(11), client1, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(0), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(2), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(13), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(98), client2, req_params));
+      EXPECT_EQ(0, pq.add_request(MyReq(44), client1, req_params));
 
       EXPECT_EQ(2u, pq.client_count());
       EXPECT_EQ(9u, pq.request_count());
@@ -620,8 +620,8 @@ namespace crimson {
       auto now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -674,8 +674,8 @@ namespace crimson {
       auto old_time = dmc::get_time() - 100.0;
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request_time(Request{}, client1, req_params, old_time);
-	pq->add_request_time(Request{}, client2, req_params, old_time);
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, old_time));
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client2, req_params, old_time));
 	old_time += 0.001;
       }
 
@@ -730,8 +730,8 @@ namespace crimson {
       auto now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -764,8 +764,8 @@ namespace crimson {
       now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -827,8 +827,8 @@ namespace crimson {
       auto now = dmc::get_time();
 
       for (int i = 0; i < 5; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -860,8 +860,8 @@ namespace crimson {
       now = dmc::get_time();
 
       for (int i = 0; i < 6; ++i) {
-	pq->add_request(Request{}, client1, req_params);
-	pq->add_request(Request{}, client2, req_params);
+	EXPECT_EQ(0, pq->add_request(Request{}, client1, req_params));
+	EXPECT_EQ(0, pq->add_request(Request{}, client2, req_params));
 	now += 0.0001;
       }
 
@@ -918,8 +918,8 @@ namespace crimson {
 
       // add six requests; for same client reservations spaced one apart
       for (int i = 0; i < 3; ++i) {
-	pq->add_request_time(Request{}, client1, req_params, start_time);
-	pq->add_request_time(Request{}, client2, req_params, start_time);
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, start_time));
+	EXPECT_EQ(0, pq->add_request_time(Request{}, client2, req_params, start_time));
       }
 
       Queue::PullReq pr = pq->pull_request(start_time + 0.5);
@@ -998,7 +998,7 @@ namespace crimson {
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(Request{}, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::future, pr.type);
@@ -1029,7 +1029,7 @@ namespace crimson {
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(Request{}, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
@@ -1060,7 +1060,7 @@ namespace crimson {
       // make sure all times are well before now
       auto now = dmc::get_time();
 
-      pq->add_request_time(Request{}, client1, req_params, now + 100);
+      EXPECT_EQ(0, pq->add_request_time(Request{}, client1, req_params, now + 100));
       Queue::PullReq pr = pq->pull_request(now);
 
       EXPECT_EQ(Queue::NextReqType::returning, pr.type);
