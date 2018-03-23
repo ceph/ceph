@@ -2171,6 +2171,10 @@ void RGWSetBucketVersioning::execute()
   if (op_ret < 0)
     return;
 
+  bool cur_mfa_status = (s->bucket_info.flags & BUCKET_MFA_ENABLED) != 0;
+
+  mfa_set_status &= (mfa_status != cur_mfa_status);
+
   if (mfa_set_status &&
       !s->mfa_verified) {
     op_ret = -ERR_MFA_REQUIRED;
