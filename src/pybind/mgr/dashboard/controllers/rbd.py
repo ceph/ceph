@@ -34,11 +34,11 @@ class Rbd(RESTController):
         Formats the bitmask:
 
         >>> Rbd._format_bitmask(45)
-        'deep-flatten, exclusive-lock, layering, object-map'
+        ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
         """
         names = [val for key, val in Rbd.RBD_FEATURES_NAME_MAPPING.items()
                  if key & features == key]
-        return ', '.join(sorted(names))
+        return sorted(names)
 
     @staticmethod
     def _format_features(features):
