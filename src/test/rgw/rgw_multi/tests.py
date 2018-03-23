@@ -391,10 +391,11 @@ def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
                   (target_zone.name, source_zone.name, bucket_name)
 
 def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
-    for source_conn in zonegroup_conns.zones:
+    for source_conn in zonegroup_conns.rw_zones:
         for target_conn in zonegroup_conns.zones:
             if source_conn.zone == target_conn.zone:
                 continue
+            log.debug('bucket checkpoint: source=%s target=%s bucket=%s', source_conn.zone.name, target_conn.zone.name, bucket_name)
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket_name)
             target_conn.check_bucket_eq(source_conn, bucket_name)
 
@@ -831,7 +832,7 @@ def test_multi_period_incremental_sync():
 
 def test_multi_zone_redirect():
     zonegroup = realm.master_zonegroup()
-    if len(zonegroup.zones) < 2:
+    if len(zonegroup.rw_zones) < 2:
         raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more zones in master zonegroup.")
 
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -1027,6 +1028,9 @@ def test_multipart_object_sync():
 def test_encrypted_object_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
+
+    if len(zonegroup.rw_zones) < 2:
+        raise SkipTest("test_zonegroup_remove skipped. Requires 2 or more zones in master zonegroup.")
 
     (zone1, zone2) = zonegroup_conns.rw_zones[0:2]
 
