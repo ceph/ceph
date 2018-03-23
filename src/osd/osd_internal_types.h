@@ -434,10 +434,10 @@ public:
   }
 
   void put_locks(
-    list<pair<hobject_t, list<OpRequestRef> > > *to_requeue,
+    list<pair<ObjectContextRef, list<OpRequestRef> > > *to_requeue,
     bool *requeue_recovery,
     bool *requeue_snaptrimmer) {
-    for (auto p: locks) {
+    for (auto& p: locks) {
       list<OpRequestRef> _to_requeue;
       p.second.obc->put_lock_type(
 	p.second.type,
@@ -445,10 +445,10 @@ public:
 	requeue_recovery,
 	requeue_snaptrimmer);
       if (to_requeue) {
-	to_requeue->push_back(
-	  make_pair(
-	    p.second.obc->obs.oi.soid,
-	    std::move(_to_requeue)));
+        // We can safely std::move here as the whole `locks` is going
+        // to die just after the loop.
+	to_requeue->emplace_back(std::move(p.second.obc),
+				 std::move(_to_requeue));
       }
     }
     locks.clear();

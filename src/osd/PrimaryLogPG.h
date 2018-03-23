@@ -814,7 +814,7 @@ protected:
    */
   void release_object_locks(
     ObcLockManager &lock_manager) {
-    list<pair<hobject_t, list<OpRequestRef> > > to_req;
+    list<pair<ObjectContextRef, list<OpRequestRef> > > to_req;
     bool requeue_recovery = false;
     bool requeue_snaptrim = false;
     lock_manager.put_locks(
@@ -829,7 +829,7 @@ protected:
     if (!to_req.empty()) {
       // requeue at front of scrub blocking queue if we are blocked by scrub
       for (auto &&p: to_req) {
-	if (write_blocked_by_scrub(p.first.get_head())) {
+	if (write_blocked_by_scrub(p.first->obs.oi.soid.get_head())) {
           for (auto& op : p.second) {
             op->mark_delayed("waiting for scrub");
           }
