@@ -297,6 +297,127 @@ private:
   std::string tenant;
 };
 
+class RgwAdminBucketCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminBucketCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+                                Formatter* formatter) :
+  // TODO: support multiple prefixes of the same command group (buckets list / bucket *)
+      RgwAdminCommandGroupHandler(args, {"bucket"}, {{"list",        OPT_BUCKETS_LIST},
+                                                     {"check",       OPT_BUCKET_CHECK},
+                                                     {"limit check", OPT_BUCKET_LIMIT_CHECK},
+                                                     {"link",        OPT_BUCKET_LINK},
+                                                     {"unlink",      OPT_BUCKET_UNLINK},
+                                                     {"stats",       OPT_BUCKET_STATS},
+                                                     {"reshard",     OPT_BUCKET_RESHARD},
+                                                     {"rewrite",     OPT_BUCKET_REWRITE},
+                                                     {"rm",          OPT_BUCKET_RM}},
+                                  store, formatter),
+      rgw_stream_flusher(formatter, std::cout) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command: " << m_command << std::endl;
+      populate_bucket_op();
+    }
+  }
+
+  ~RgwAdminBucketCommandsHandler() override = default;
+
+  int execute_command() override {
+    switch (m_command) {
+      case(OPT_BUCKETS_LIST) : return handle_opt_buckets_list();
+      case(OPT_BUCKET_CHECK) : return handle_opt_bucket_check();
+      case(OPT_BUCKET_LIMIT_CHECK) : return handle_opt_bucket_limit_check();
+      case(OPT_BUCKET_LINK) : return handle_opt_bucket_link();
+      case(OPT_BUCKET_UNLINK) : return handle_opt_bucket_unlink();
+      case(OPT_BUCKET_STATS) : return handle_opt_bucket_stats();
+      case(OPT_BUCKET_RESHARD) : return handle_opt_bucket_reshard();
+      case(OPT_BUCKET_REWRITE) : return handle_opt_bucket_rewrite();
+      case(OPT_BUCKET_RM) : return handle_opt_bucket_rm();
+      default:
+        return EINVAL;
+    }
+  }
+
+  RgwAdminCommandGroup get_type() const override { return BUCKET; }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  void populate_bucket_op();
+
+  int handle_opt_buckets_list() {
+    return ::handle_opt_buckets_list(bucket_name, tenant, bucket_id, marker, max_entries, bucket,
+                                     bucket_op, rgw_stream_flusher, m_store, m_formatter);
+  }
+
+  int handle_opt_bucket_check() {
+    return ::handle_opt_bucket_check(check_head_obj_locator, bucket_name, tenant, fix,
+                                     remove_bad, bucket_op, rgw_stream_flusher, m_store, m_formatter);
+  }
+
+  int handle_opt_bucket_limit_check() {
+    return ::handle_opt_bucket_limit_check(user_id, warnings_only, bucket_op, rgw_stream_flusher,
+                                           m_store);
+  }
+
+  int handle_opt_bucket_link() {
+    return ::handle_opt_bucket_link(bucket_id, bucket_op, m_store);
+  }
+
+  int handle_opt_bucket_unlink() {
+    return ::handle_opt_bucket_unlink(bucket_op, m_store);
+  }
+
+  int handle_opt_bucket_stats() {
+    return ::handle_opt_bucket_stats(bucket_op, rgw_stream_flusher, m_store);
+  }
+
+  int handle_opt_bucket_reshard() {
+    return ::handle_opt_bucket_reshard(bucket_name, tenant, bucket_id, num_shards.is_initialized(),
+                                       num_shards.get_value_or(0), yes_i_really_mean_it,
+                                       max_entries, verbose, m_store, m_formatter);
+  }
+
+  int handle_opt_bucket_rewrite() {
+    return ::handle_opt_bucket_rewrite(bucket_name, tenant, bucket_id, start_date, end_date,
+                                       min_rewrite_size, max_rewrite_size,
+                                       min_rewrite_stripe_size, bucket, m_store, m_formatter);
+  }
+
+  int handle_opt_bucket_rm() {
+    return ::handle_opt_bucket_rm(inconsistent_index, bypass_gc, yes_i_really_mean_it, bucket_op,
+                                  m_store);
+  }
+
+  // Members, set by parse_command_and_parameters:
+  std::string bucket_id;
+  std::string bucket_name;
+  bool bypass_gc = false;
+  bool check_head_obj_locator = false;
+  bool delete_child_objects = false;
+  bool fix = false;
+  bool inconsistent_index = false;
+  std::string marker;
+  int max_entries = -1;
+  uint64_t min_rewrite_size = 4 * 1024 * 1024;
+  uint64_t max_rewrite_size = ULLONG_MAX;
+  uint64_t min_rewrite_stripe_size = 0;
+  int max_concurrent_ios = 32;
+  boost::optional<int> num_shards;
+  bool remove_bad = false;
+  std::string start_date;
+  std::string end_date;
+  std::string tenant;
+  std::string user_id;
+  bool verbose = false;
+  bool warnings_only = false;
+  bool yes_i_really_mean_it = false;
+
+  rgw_bucket bucket;
+  rgw_user user;
+  RGWBucketAdminOpState bucket_op;
+  RGWStreamFlusher rgw_stream_flusher;
+};
+
 class RgwAdminBucketSyncCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
   RgwAdminBucketSyncCommandsHandler(std::vector<const char*>& args, RGWRados* store,

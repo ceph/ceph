@@ -1554,15 +1554,12 @@ void handle_opt_sync_status(RGWRados *store)
 
 int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
   const char METADATA_KEY[] = "metadata-key";
-  const char INFILE[] = "infile";
-  const char MARKER[] = "marker";
-  const char MAX_ENTRIES[] = "max-entries";
   boost::program_options::options_description desc{"Metadata options"};
   desc.add_options()
       (METADATA_KEY, boost::program_options::value(&metadata_key)->required(), "The key to retrieve metadata from with metadata get")
-      (INFILE, boost::program_options::value(&infile), "A file to read in when setting data")
-      (MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
-      (MARKER, boost::program_options::value(&marker), "");
+      (rgw_admin_params::INFILE, boost::program_options::value(&infile), "A file to read in when setting data")
+      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
+      (rgw_admin_params::MARKER, boost::program_options::value(&marker), "");
   boost::program_options::variables_map var_map;
 
   return parse_command(args, desc, var_map);

@@ -1308,29 +1308,20 @@ int handle_opt_object_stat(const std::string& bucket_id, const std::string& buck
 }
 
 int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
-  const char BUCKET_ID[] = "bucket-id";
-  const char BUCKET_NAME[] = "bucket";
   const char INDEX_TYPE[] = "index-type";
-  const char INFILE[] = "infile";
-  const char MARKER[] = "marker";
-  const char MAX_ENTRIES[] = "max-entries";
-  const char OBJECT[] = "object";
-  const char OBJECT_VERSION[] = "object-version";
-  const char TENANT[] = "tenant";
-  const char MEAN_IT[] = "yes-i-really-mean-it";
   std::string bi_index_type_str;
   boost::program_options::options_description desc{"Bi options"};
   desc.add_options()
-      (BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
-      (BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
-      (INFILE, boost::program_options::value(&infile), "A file to read in when setting data")
+      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
+      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
+      (rgw_admin_params::INFILE, boost::program_options::value(&infile), "A file to read in when setting data")
       (INDEX_TYPE, boost::program_options::value(&bi_index_type_str), "")
-      (MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
-      (MARKER, boost::program_options::value(&marker), "")
-      (OBJECT, boost::program_options::value(&object), "Object name")
-      (OBJECT_VERSION, boost::program_options::value(&object_version), "")
-      (TENANT, boost::program_options::value(&tenant), "Tenant name")
-      (MEAN_IT, "Confirmation of purging certain information");
+      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
+      (rgw_admin_params::MARKER, boost::program_options::value(&marker), "")
+      (rgw_admin_params::OBJECT, boost::program_options::value(&object), "Object name")
+      (rgw_admin_params::OBJECT_VERSION, boost::program_options::value(&object_version), "")
+      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name")
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT, "Confirmation of purging certain information");
   boost::program_options::variables_map var_map;
 
   int ret = parse_command(args, desc, var_map);
@@ -1343,56 +1334,135 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
       return EINVAL;
     }
   }
-  if (var_map.count(MEAN_IT)) {
+  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT)) {
     yes_i_really_mean_it = true;
   }
   return 0;
 }
 
 int RgwAdminBilogCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
-  const char BUCKET_ID[] = "bucket-id";
-  const char BUCKET_NAME[] = "bucket";
-  const char MARKER[] = "marker";
-  const char START_MARKER[] = "start-marker";
-  const char END_MARKER[] = "end-marker";
-  const char MAX_ENTRIES[] = "max-entries";
-  const char SHARD_ID[] = "shard-id";
-  const char TENANT[] = "tenant";
   std::string bi_index_type_str;
   boost::program_options::options_description desc{"Bi options"};
   desc.add_options()
-      (BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
-      (BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
-      (MARKER, boost::program_options::value(&marker), "")
-      (START_MARKER, boost::program_options::value(&start_marker), "Start marker for bilog trim")
-      (END_MARKER, boost::program_options::value(&end_marker), "End marker for bilog trim")
-      (MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
-      (SHARD_ID, boost::program_options::value(&shard_id), "")
-      (TENANT, boost::program_options::value(&tenant), "Tenant name");
+      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
+      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
+      (rgw_admin_params::MARKER, boost::program_options::value(&marker), "")
+      (rgw_admin_params::START_MARKER, boost::program_options::value(&start_marker), "Start marker for bilog trim")
+      (rgw_admin_params::END_MARKER, boost::program_options::value(&end_marker), "End marker for bilog trim")
+      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
+      (rgw_admin_params::SHARD_ID, boost::program_options::value(&shard_id), "")
+      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
   boost::program_options::variables_map var_map;
 
   return parse_command(args, desc, var_map);
 }
 
+int RgwAdminBucketCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+  const char BYPASS_GC[] = "bypass-gc";
+  const char CHECK_HOL[] = "check-head-obj-locator";
+  const char FIX[] = "fix";
+  const char INCONS_INDEX[] = "inconsistent-index";
+  const char REMOVE_BAD[] = "remove-bad";
+  const char VERBOSE[] = "verbose";
+  const char WARNINGS[] = "warnings-only";
+
+  boost::program_options::options_description desc{"Bucket options"};
+  desc.add_options()
+      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "")
+      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name), "")
+      (BYPASS_GC, "When specified with bucket deletion, triggers object deletions by not "
+          "involving GC")
+      (CHECK_HOL, "")
+      (rgw_admin_params::DELETE_CHILD_OBJECTS, "remove a bucket's objects before deleting it\n"
+           "(NOTE: required to delete a non-empty bucket)")
+      (FIX, "Besides checking bucket index, will also fix it")
+      (INCONS_INDEX, "When specified with bucket deletion and bypass-gc set to true, ignores "
+          "bucket index consistency")
+      (rgw_admin_params::MARKER, boost::program_options::value(&marker), "")
+      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "")
+      ("min-rewrite-size", boost::program_options::value(&min_rewrite_size), "Min object size for "
+          "bucket rewrite (default 4M)")
+      ("max-rewrite-size", boost::program_options::value(&max_rewrite_size), "Max object size for "
+          "bucket rewrite (default ULLONG_MAX)")
+      (rgw_admin_params::MIN_REWRITE_STRIPE_SIZE, boost::program_options::value(&min_rewrite_stripe_size), "Min "
+          "stripe size for object rewrite (default 0)")
+      (rgw_admin_params::MAX_CONCURRENT_IOS, boost::program_options::value(&max_concurrent_ios), "")
+      (rgw_admin_params::NUM_SHARDS, boost::program_options::value(&num_shards), "Num of shards to use for keeping "
+          "the temporary scan info")
+      (REMOVE_BAD, "")
+      (rgw_admin_params::START_DATE, boost::program_options::value(&start_date), "Start date in the format yyyy-mm-dd")
+      (rgw_admin_params::END_DATE, boost::program_options::value(&end_date), "End date in the format yyyy-mm-dd")
+      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name")
+      (rgw_admin_params::USER_ID, boost::program_options::value(&user_id), "User id")
+      (VERBOSE, "")
+      (WARNINGS, "When specified with bucket limit check, list only buckets nearing or over the "
+          "current max objects per shard value")
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
+  boost::program_options::variables_map var_map;
+
+  int ret = parse_command(args, desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+  if (var_map.count(BYPASS_GC)) {
+    bypass_gc = true;
+  }
+  if (var_map.count(CHECK_HOL)) {
+    check_head_obj_locator = true;
+  }
+  if (var_map.count(rgw_admin_params::DELETE_CHILD_OBJECTS)) {
+    delete_child_objects = true;
+  }
+  if (var_map.count(FIX)) {
+    fix = true;
+  }
+  if (var_map.count(INCONS_INDEX)) {
+    inconsistent_index = true;
+  }
+  if (var_map.count(REMOVE_BAD)) {
+    remove_bad = true;
+  }
+  if (var_map.count(rgw_admin_params::USER_ID)) {
+    user.from_str(user_id);
+  }
+  if (var_map.count(VERBOSE)) {
+    verbose = true;
+  }
+  if (var_map.count(WARNINGS)) {
+    warnings_only = true;
+  }
+  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT)) {
+    yes_i_really_mean_it = true;
+  }
+  return 0;
+}
+
+void RgwAdminBucketCommandsHandler::populate_bucket_op() {
+  // The following fields are accessed in methods of this class (or function called by them):
+  // user_id, bucket_name, fetch_stats, fix_index, delete_children (in bucket_rm), max_aio (in
+  // bucket_rm), fetch_bucket, user_display_name (in bucket_link). Last two weren't set in
+  // rgw_admin.cc, so the default values are used.
+  if (!user_id.empty()) {
+    bucket_op.set_user_id(user_id);
+  }
+  bucket_op.set_bucket_name(bucket_name);
+  bucket_op.set_delete_children(delete_child_objects);
+  bucket_op.set_fix_index(fix);
+  bucket_op.set_max_aio(max_concurrent_ios);
+}
+
 int RgwAdminBucketSyncCommandsHandler::parse_command_and_parameters(
     std::vector<const char*>& args) {
-  const char BUCKET_ID[] = "bucket-id";
-  const char BUCKET_NAME[] = "bucket";
-  const char OBJECT[] = "object";
-  const char REALM_ID[] = "realm-id";
-  const char REALM_NAME[] = "rgw-realm";
-  const char SOURCE_ZONE[] = "source-zone";
-  const char TENANT[] = "tenant";
   std::string bi_index_type_str;
   boost::program_options::options_description desc{"Bi options"};
   desc.add_options()
-      (BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
-      (BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
-      (OBJECT, boost::program_options::value(&object), "Object name")
-      (REALM_ID, boost::program_options::value(&realm_id), "Realm id")
-      (REALM_NAME, boost::program_options::value(&realm_name), "Realm name")
-      (SOURCE_ZONE, boost::program_options::value(&source_zone), "Specify the source zone for sync")
-      (TENANT, boost::program_options::value(&tenant), "Tenant name");
+      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
+      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
+      (rgw_admin_params::OBJECT, boost::program_options::value(&object), "Object name")
+      (rgw_admin_params::REALM_ID, boost::program_options::value(&realm_id), "Realm id")
+      (rgw_admin_params::REALM_NAME, boost::program_options::value(&realm_name), "Realm name")
+      (rgw_admin_params::SOURCE_ZONE, boost::program_options::value(&source_zone), "Specify the source zone for sync")
+      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
   boost::program_options::variables_map var_map;
 
   return parse_command(args, desc, var_map);
