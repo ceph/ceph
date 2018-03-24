@@ -20,32 +20,50 @@
 #include "common/async/completion.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
+#include "common/perf_counters.h"
 #include "rgw_dmclock.h"
 
 namespace rgw::dmclock {
 
+namespace queue_counters {
+
+enum {
+  l_first = 427150,
+  l_qlen,
+  l_cost,
+  l_res,
+  l_res_cost,
+  l_prio,
+  l_prio_cost,
+  l_limit,
+  l_limit_cost,
+  l_cancel,
+  l_cancel_cost,
+  l_res_latency,
+  l_prio_latency,
+  l_last,
+};
+
+PerfCountersRef build(CephContext *cct, const std::string& name);
+
+} // namespace queue_counters
+
+/// function to provide client counters
+using GetClientCounters = std::function<PerfCounters*(client_id)>;
+
 namespace async = ceph::async;
 
-/// A dmclock request scheduling service for use with boost::asio.
+
+/*
+ * A dmclock request scheduling service for use with boost::asio.
+ */
 class PriorityQueue : public md_config_obs_t {
  public:
   template <typename ...Args> // args forwarded to PullPriorityQueue ctor
   PriorityQueue(CephContext *cct, boost::asio::io_context& context,
-                md_config_obs_t *observer, Args&& ...args)
-    : queue(std::forward<Args>(args)...),
-      timer(context), cct(cct), observer(observer)
-  {
-    if (observer) {
-      cct->_conf->add_observer(this);
-    }
-  }
-
-  ~PriorityQueue() {
-    cancel();
-    if (observer) {
-      cct->_conf->remove_observer(this);
-    }
-  }
+                GetClientCounters&& counters, md_config_obs_t *observer,
+                Args&& ...args);
+  ~PriorityQueue();
 
   using executor_type = boost::asio::io_context::executor_type;
 
@@ -74,7 +92,11 @@ class PriorityQueue : public md_config_obs_t {
                           const std::set<std::string>& changed) override;
 
  private:
-  struct Request {}; // empty request type
+  struct Request {
+    client_id client;
+    Time started;
+    Cost cost;
+  };
   using Queue = crimson::dmclock::PullPriorityQueue<client_id, Request>;
   using RequestRef = typename Queue::RequestRef;
   Queue queue; //< dmclock priority queue
@@ -88,6 +110,7 @@ class PriorityQueue : public md_config_obs_t {
 
   CephContext *const cct;
   md_config_obs_t *const observer; //< observer to update ClientInfoFunc
+  GetClientCounters counters; //< provides per-client perf counters
 
   /// set a timer to process the next request
   void schedule(const Time& time);
@@ -96,10 +119,24 @@ class PriorityQueue : public md_config_obs_t {
   void process(const Time& now);
 };
 
+
+template <typename ...Args>
+PriorityQueue::PriorityQueue(CephContext *cct, boost::asio::io_context& context,
+                             GetClientCounters&& counters,
+                             md_config_obs_t *observer, Args&& ...args)
+  : queue(std::forward<Args>(args)...),
+    timer(context), cct(cct), observer(observer),
+    counters(std::move(counters))
+{
+  if (observer) {
+    cct->_conf->add_observer(this);
+  }
+}
+
 template <typename CompletionToken>
 auto PriorityQueue::async_request(const client_id& client,
                                   const ReqParams& params,
-                                  const Time& time, double cost,
+                                  const Time& time, Cost cost,
                                   CompletionToken&& token)
 {
   boost::asio::async_completion<CompletionToken, Signature> init(token);
@@ -108,14 +145,40 @@ auto PriorityQueue::async_request(const client_id& client,
   auto& handler = init.completion_handler;
 
   // allocate the request and add it to the queue
-  auto req = Completion::create(ex1, std::move(handler));
+  auto req = Completion::create(ex1, std::move(handler),
+                                Request{client, time, cost});
+  int r = 0; // TODO: https://github.com/ceph/dmclock/pull/50
   queue.add_request(std::move(req), client, params, time, cost);
-
-  // schedule an immediate call to process() on the executor
-  schedule(crimson::dmclock::TimeZero);
+  if (r == 0) {
+    // schedule an immediate call to process() on the executor
+    schedule(crimson::dmclock::TimeZero);
+    if (auto c = counters(client)) {
+      c->inc(queue_counters::l_qlen);
+      c->inc(queue_counters::l_cost, cost);
+    }
+  } else {
+    boost::system::error_code ec(r, boost::system::system_category());
+    async::post(std::move(req), ec, PhaseType::priority);
+    if (auto c = counters(client)) {
+      c->inc(queue_counters::l_limit);
+      c->inc(queue_counters::l_limit_cost, cost);
+    }
+  }
 
   return init.result.get();
 }
+
+
+/// array of per-client counters to serve as GetClientCounters
+class ClientCounters {
+  std::array<PerfCountersRef, static_cast<size_t>(client_id::count)> clients;
+ public:
+  ClientCounters(CephContext *cct);
+
+  PerfCounters* operator()(client_id client) const {
+    return clients[static_cast<size_t>(client)].get();
+  }
+};
 
 } // namespace rgw::dmclock
 

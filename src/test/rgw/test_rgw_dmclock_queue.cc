@@ -38,7 +38,8 @@ auto capture(std::optional<error_code>& opt_ec,
 TEST(Queue, AsyncRequest)
 {
   boost::asio::io_context context;
-  PriorityQueue queue(g_ceph_context, context, nullptr,
+  ClientCounters counters(g_ceph_context);
+  PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
                       [] (client_id client) -> ClientInfo* {
       static ClientInfo clients[] = {
         {1, 1, 1}, // admin: satisfy by reservation
@@ -56,6 +57,9 @@ TEST(Queue, AsyncRequest)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
+
   context.poll();
   EXPECT_TRUE(context.stopped());
 
@@ -68,12 +72,25 @@ TEST(Queue, AsyncRequest)
   EXPECT_EQ(boost::system::errc::success, *ec2);
   ASSERT_TRUE(p2);
   EXPECT_EQ(PhaseType::priority, *p2);
+
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_cancel));
+
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 TEST(Queue, Cancel)
 {
   boost::asio::io_context context;
-  PriorityQueue queue(g_ceph_context, context, nullptr,
+  ClientCounters counters(g_ceph_context);
+  PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
                       [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
@@ -87,6 +104,9 @@ TEST(Queue, Cancel)
   queue.async_request(client_id::auth, {}, now, 0, capture(ec2, p2));
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
+
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
 
   queue.cancel();
 
@@ -100,12 +120,25 @@ TEST(Queue, Cancel)
   EXPECT_EQ(boost::asio::error::operation_aborted, *ec1);
   ASSERT_TRUE(ec2);
   EXPECT_EQ(boost::asio::error::operation_aborted, *ec2);
+
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_cancel));
+
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 TEST(Queue, CancelClient)
 {
   boost::asio::io_context context;
-  PriorityQueue queue(g_ceph_context, context, nullptr,
+  ClientCounters counters(g_ceph_context);
+  PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
                       [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
@@ -119,6 +152,9 @@ TEST(Queue, CancelClient)
   queue.async_request(client_id::auth, {}, now, 0, capture(ec2, p2));
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
+
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
 
   queue.cancel(client_id::admin);
 
@@ -135,6 +171,18 @@ TEST(Queue, CancelClient)
   EXPECT_EQ(boost::system::errc::success, *ec2);
   ASSERT_TRUE(p2);
   EXPECT_EQ(PhaseType::priority, *p2);
+
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_cancel));
+
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 TEST(Queue, CancelOnDestructor)
@@ -144,8 +192,9 @@ TEST(Queue, CancelOnDestructor)
   std::optional<error_code> ec1, ec2;
   std::optional<PhaseType> p1, p2;
 
+  ClientCounters counters(g_ceph_context);
   {
-    PriorityQueue queue(g_ceph_context, context, nullptr,
+    PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
                         [] (client_id client) -> ClientInfo* {
         static ClientInfo info{0, 1, 1};
         return &info;
@@ -154,6 +203,9 @@ TEST(Queue, CancelOnDestructor)
     auto now = get_time();
     queue.async_request(client_id::admin, {}, now, 0, capture(ec1, p1));
     queue.async_request(client_id::auth, {}, now, 0, capture(ec2, p2));
+
+    EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
+    EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
   }
 
   EXPECT_FALSE(ec1);
@@ -166,6 +218,18 @@ TEST(Queue, CancelOnDestructor)
   EXPECT_EQ(boost::asio::error::operation_aborted, *ec1);
   ASSERT_TRUE(ec2);
   EXPECT_EQ(boost::asio::error::operation_aborted, *ec2);
+
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_cancel));
+
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 // return a lambda from capture() that's bound to run on the given executor
@@ -179,7 +243,8 @@ auto capture(const Executor& ex, std::optional<error_code>& opt_ec,
 TEST(Queue, CrossExecutorRequest)
 {
   boost::asio::io_context queue_context;
-  PriorityQueue queue(g_ceph_context, queue_context, nullptr,
+  ClientCounters counters(g_ceph_context);
+  PriorityQueue queue(g_ceph_context, queue_context, std::ref(counters), nullptr,
                       [] (client_id client) -> ClientInfo* {
       static ClientInfo info{1, 1, 1};
       return &info;
@@ -196,6 +261,9 @@ TEST(Queue, CrossExecutorRequest)
   auto now = get_time();
   queue.async_request(client_id::admin, {}, now, 0, capture(ex2, ec1, p1));
   queue.async_request(client_id::auth, {}, now, 0, capture(ex2, ec2, p2));
+
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
 
   callback_context.poll();
   // maintains work on callback executor while in queue
@@ -231,7 +299,8 @@ TEST(Queue, SpawnAsyncRequest)
   boost::asio::io_context context;
 
   boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
-    PriorityQueue queue(g_ceph_context, context, nullptr,
+    ClientCounters counters(g_ceph_context);
+    PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
                         [] (client_id client) -> ClientInfo* {
         static ClientInfo clients[] = {
           {1, 1, 1}, // admin: satisfy by reservation
