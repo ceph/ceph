@@ -562,4 +562,73 @@ private:
   std::string tenant;
 };
 
+class RgwAdminReshardCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminReshardCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+                                 Formatter* formatter) :
+      RgwAdminCommandGroupHandler(args, {"reshard"}, {{"add",     OPT_RESHARD_ADD},
+                                                      {"cancel",  OPT_RESHARD_CANCEL},
+                                                      {"list",    OPT_RESHARD_LIST},
+                                                      {"status",  OPT_RESHARD_STATUS},
+                                                      {"process", OPT_RESHARD_PROCESS}},
+                                  store, formatter) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command: " << m_command << std::endl;
+    }
+  }
+
+  ~RgwAdminReshardCommandsHandler() override = default;
+
+  int execute_command() override {
+    switch (m_command) {
+      case OPT_RESHARD_ADD:
+        return handle_opt_reshard_add();
+      case OPT_RESHARD_CANCEL :
+        return handle_opt_reshard_cancel();
+      case OPT_RESHARD_LIST :
+        return handle_opt_reshard_list();
+      case OPT_RESHARD_STATUS :
+        return handle_opt_reshard_status();
+      case OPT_RESHARD_PROCESS :
+        return handle_opt_reshard_process();
+      default:
+        return EINVAL;
+    }
+  }
+
+  RgwAdminCommandGroup get_type() const override { return RESHARD; }
+
+private:
+
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_reshard_add() {
+    return ::handle_opt_reshard_add(bucket_id, bucket_name, tenant, num_shards.is_initialized(),
+                                    num_shards.value_or(0), yes_i_really_mean_it, m_store);
+  }
+
+  int handle_opt_reshard_cancel() {
+    return ::handle_opt_reshard_cancel(bucket_name, m_store);
+  }
+
+  int handle_opt_reshard_list() {
+    return ::handle_opt_reshard_list(max_entries, m_store, m_formatter);
+  }
+
+  int handle_opt_reshard_status() {
+    return ::handle_opt_reshard_status(bucket_id, bucket_name, tenant, m_store, m_formatter);
+  }
+
+  int handle_opt_reshard_process() {
+    return ::handle_opt_reshard_process(m_store);
+  }
+
+  std::string bucket_id;
+  std::string bucket_name;
+  int max_entries = -1;
+  boost::optional<int> num_shards;
+  std::string tenant;
+  bool yes_i_really_mean_it = false;
+};
+
 #endif //CEPH_RGW_ADMIN_BUCKET_H

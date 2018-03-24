@@ -1577,7 +1577,8 @@ RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_gro
     case(QUOTA) : return nullptr;
     case(REALM) : return nullptr;
     case(REPLICALOG) : return nullptr;
-    case(RESHARD) : return nullptr;
+    case (RESHARD) :
+      return new RgwAdminReshardCommandsHandler(args, nullptr, nullptr);
     case(ROLE) : return nullptr;
     case(ROLE_POLICY) : return nullptr;
     case(SUBUSER) : return nullptr;

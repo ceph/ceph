@@ -1485,3 +1485,28 @@ int RgwAdminObjectCommandsHandler::parse_command_and_parameters(std::vector<cons
   return parse_command(args, desc, var_map);
 
 }
+
+int RgwAdminReshardCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+  boost::program_options::options_description desc{"Reshard options"};
+  desc.add_options()
+      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
+      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name),
+       "Specify the bucket name")
+      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "")
+      (rgw_admin_params::NUM_SHARDS, boost::program_options::value(&num_shards),
+       "Num of shards to use for keeping "
+           "the temporary scan info")
+      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name")
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
+  boost::program_options::variables_map var_map;
+
+  int ret = parse_command(args, desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+
+  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT)) {
+    yes_i_really_mean_it = true;
+  }
+  return 0;
+}
