@@ -439,10 +439,13 @@ int main(int argc, const char **argv)
 
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
   boost::asio::io_context iocontext;
-  rgw::dmclock::ClientConfig dmclock_clients{cct.get()};
-  rgw::dmclock::PriorityQueue dmclock_queue{cct.get(), iocontext,
-                                            &dmclock_clients,
-                                            std::ref(dmclock_clients)};
+  namespace dmc = rgw::dmclock;
+  auto dmclock_clients = dmc::ClientConfig{cct.get()};
+  auto dmclock_counters = dmc::ClientCounters{cct.get()};
+  auto dmclock_queue = dmc::PriorityQueue(cct.get(), iocontext,
+                                          std::ref(dmclock_counters),
+                                          &dmclock_clients,
+                                          std::ref(dmclock_clients));
 #endif
 
   register_async_signal_handler(SIGTERM, handle_sigterm);
