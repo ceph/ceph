@@ -79,7 +79,7 @@ cat > $codename/conf/distributions <<EOF
 Codename: $codename
 Suite: stable
 Components: main
-Architectures: i386 amd64 source
+Architectures: $(dpkg --print-architecture) source
 EOF
 if [ ! -e conf ]; then
     ln -s $codename/conf conf
