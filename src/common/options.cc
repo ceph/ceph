@@ -3701,7 +3701,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1_M)
+    .set_default(2_M)
     .set_description(""),
 
     Option("bluefs_max_prefetch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)

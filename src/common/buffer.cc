@@ -40,6 +40,10 @@
 
 using namespace ceph;
 
+constexpr unsigned long long operator"" _M (unsigned long long n) {
+  return n << 20;
+}
+
 #define CEPH_BUFFER_ALLOC_UNIT  (std::min(CEPH_PAGE_SIZE, 4096u))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
 
@@ -270,6 +274,59 @@ using namespace ceph;
     }
     raw* clone_empty() override {
       return new raw_mmap_pages(len);
+    }
+  };
+
+  class buffer::raw_huge_pages : public buffer::raw {
+    bool is_explicit_hugepage;
+  public:
+    static constexpr std::size_t huge_page_size { 2_M };
+    MEMPOOL_CLASS_HELPERS();
+
+    raw_huge_pages(const unsigned l) : raw(p2roundup(l, huge_page_size)) {
+      // TODO: profiling shows we spend around 1,7% of bstore_kv_sync's
+      // cycles just for visiting the kernel. Following optimizations
+      // might help:
+      //  * detect and stall explicit jumbo page allocation when getting
+      //    MAP_FAILED constantly (MUST HAVE);
+      //  * recirculate (optionally preallocated) pages. Using TLS looks
+      //    reasonably here and would allow to minimize (avoid?) synchro.
+      data = (char *)::mmap(nullptr, len, PROT_READ | PROT_WRITE,
+			    MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE |
+			    MAP_HUGETLB, -1, 0);
+      is_explicit_hugepage = (data != MAP_FAILED);
+      if (!is_explicit_hugepage) {
+        // let's fallback-allocate in a way that stil allows the kernel
+	// to give us a THP (transparent huge page).
+        const int r = \
+	  ::posix_memalign((void**)(void*)&data, huge_page_size, len);
+        if (r) {
+	  throw bad_alloc();
+        }
+      }
+
+      inc_total_alloc(len);
+      inc_history_alloc(len);
+
+      bdout << "raw_huge_pages " << this << " alloc " << (void *)data
+	    << " l=" << l << ", align=" << huge_page_size
+	    << " total_alloc=" << buffer::get_total_alloc() << bendl;
+    }
+
+    ~raw_huge_pages() override {
+      if (is_explicit_hugepage) {
+	::munmap(data, len);
+      } else {
+	::free(data);
+      }
+      dec_total_alloc(len);
+
+      bdout << "raw_huge_pages " << this << " free " << (void *)data
+	    << " " << buffer::get_total_alloc() << bendl;
+    }
+
+    raw* clone_empty() override {
+      return new raw_huge_pages(len);
     }
   };
 
@@ -716,6 +773,10 @@ using namespace ceph;
 
   buffer::raw* buffer::create_page_aligned(unsigned len) {
     return create_aligned(len, CEPH_PAGE_SIZE);
+  }
+
+  buffer::raw* buffer::create_huge_paged(const unsigned len) {
+    return new raw_huge_pages(len);
   }
 
   buffer::raw* buffer::create_zero_copy(unsigned len, int fd, int64_t *offset) {
@@ -2605,6 +2666,8 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_malloc, buffer_raw_malloc,
 			      buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_mmap_pages, buffer_raw_mmap_pagse,
 			      buffer_meta);
+MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_huge_pages, buffer_raw_huge_pages,
+                              buffer_meta);
 MEMPOOL_DEFINE_OBJECT_FACTORY(buffer::raw_posix_aligned,
 			      buffer_raw_posix_aligned, buffer_meta);
 #ifdef CEPH_HAVE_SPLICE

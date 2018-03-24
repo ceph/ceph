@@ -121,7 +121,7 @@ public:
     uint64_t pos;           ///< start offset for buffer
     bufferlist buffer;      ///< new data to write (at end of file)
     bufferlist tail_block;  ///< existing partial block at end of file, if any
-    bufferlist::page_aligned_appender buffer_appender;  //< for const char* only
+    bufferlist::huge_page_appender buffer_appender;  //< for const char* only
     int writer_type = 0;    ///< WRITER_*
 
     std::mutex lock;
@@ -131,8 +131,7 @@ public:
     FileWriter(FileRef f)
       : file(f),
 	pos(0),
-	buffer_appender(buffer.get_page_aligned_appender(
-			  g_conf->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
+	buffer_appender(buffer.get_huge_page_appender()) {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);

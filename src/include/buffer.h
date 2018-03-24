@@ -153,6 +153,7 @@ namespace buffer CEPH_BUFFER_API {
   class raw_unshareable; // diagnostic, unshareable char buffer
   class raw_combined;
   class raw_claim_buffer;
+  class raw_huge_pages;
 
 
   class xio_mempool;
@@ -171,6 +172,7 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_aligned(unsigned len, unsigned align);
   raw* create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
   raw* create_page_aligned(unsigned len);
+  raw* create_huge_paged(unsigned len);
   raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
   raw* create_static(unsigned len, char *buf);
@@ -687,6 +689,56 @@ namespace buffer CEPH_BUFFER_API {
 
     page_aligned_appender get_page_aligned_appender(unsigned min_pages=1) {
       return page_aligned_appender(this, min_pages);
+    }
+
+    class huge_page_appender {
+      bufferlist *pbl;
+      ptr buffer;
+      char *pos, *end;
+
+      huge_page_appender(list *l)
+	: pbl(l),
+	  pos(nullptr), end(nullptr) {}
+
+      friend class list;
+
+    public:
+      ~huge_page_appender() {
+	flush();
+      }
+
+      void flush() {
+	if (pos && pos != buffer.c_str()) {
+	  size_t len = pos - buffer.c_str();
+	  pbl->append(buffer, 0, len);
+	  buffer.set_length(buffer.length() - len);
+	  buffer.set_offset(buffer.offset() + len);
+	}
+      }
+
+      void append(const char *buf, size_t len) {
+	while (len > 0) {
+	  if (!pos) {
+	    buffer = create_huge_paged(len);
+	    pos = buffer.c_str();
+	    end = buffer.end_c_str();
+	  }
+	  const std::size_t l = \
+            std::min(len, static_cast<std::size_t>(end - pos));
+	  memcpy(pos, buf, l);
+	  pos += l;
+	  buf += l;
+	  len -= l;
+	  if (pos == end) {
+	    pbl->append(buffer, 0, buffer.length());
+	    pos = end = nullptr;
+	  }
+	}
+      }
+    };
+
+    huge_page_appender get_huge_page_appender() {
+      return huge_page_appender(this);
     }
 
   private:
