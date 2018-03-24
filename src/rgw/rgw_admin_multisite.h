@@ -256,5 +256,105 @@ private:
   }
 };
 
+class RgwAdminPeriodCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminPeriodCommandsHandler(std::vector<const char*>& args, RGWRados* store, Formatter*
+  formatter) : RgwAdminCommandGroupHandler(args, {"period"}, {{"commit",      OPT_PERIOD_COMMIT},
+                                                              {"delete",      OPT_PERIOD_DELETE},
+                                                              {"get",         OPT_PERIOD_GET},
+                                                              {"get-current", OPT_PERIOD_GET_CURRENT},
+                                                              {"list",        OPT_PERIOD_LIST},
+                                                              {"pull",        OPT_PERIOD_PULL},
+                                                              {"push",        OPT_PERIOD_PUSH},
+                                                              {"update",      OPT_PERIOD_UPDATE}},
+                                           store, formatter) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command:" << m_command << std::endl;
+    }
+  }
+
+  ~RgwAdminPeriodCommandsHandler() override = default;
+
+  int execute_command() override {
+    switch (m_command) {
+      case (OPT_PERIOD_COMMIT) :
+        return handle_opt_period_commit();
+      case (OPT_PERIOD_DELETE) :
+        return handle_opt_period_delete();
+      case (OPT_PERIOD_GET) :
+        return handle_opt_period_get();
+      case (OPT_PERIOD_GET_CURRENT) :
+        return handle_opt_period_get_current();
+      case (OPT_PERIOD_LIST) :
+        return handle_opt_period_list();
+      case (OPT_PERIOD_PULL) :
+        return handle_opt_period_pull();
+      case (OPT_PERIOD_PUSH) :
+        return handle_opt_period_push();
+      case (OPT_PERIOD_UPDATE) :
+        return handle_opt_period_update();
+      default:
+        return EINVAL;
+    }
+  }
+
+  RgwAdminCommandGroup get_type() const override { return PERIOD; }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_period_commit() {
+    return ::handle_opt_period_commit(period_id, period_epoch, realm_id, realm_name, url,
+                                      access_key, secret_key, remote, yes_i_really_mean_it,
+                                      g_ceph_context, m_store, m_formatter);
+  }
+
+  int handle_opt_period_delete() {
+    return ::handle_opt_period_delete(period_id, g_ceph_context, m_store);
+  }
+
+  int handle_opt_period_get() {
+    return ::handle_opt_period_get(period_epoch, period_id, staging, realm_id, realm_name,
+                                   g_ceph_context, m_store, m_formatter);
+  }
+
+  int handle_opt_period_get_current() {
+    return ::handle_opt_period_get_current(realm_id, realm_name, m_store, m_formatter);
+  }
+
+  int handle_opt_period_list() {
+    return ::handle_opt_period_list(m_store, m_formatter);
+  }
+
+  int handle_opt_period_pull() {
+    return ::handle_opt_period_pull(period_id, period_epoch, realm_id, realm_name, url, access_key,
+                                    secret_key, remote, g_ceph_context, m_store, m_formatter);
+  }
+
+  int handle_opt_period_push() {
+    return ::handle_opt_period_push(period_id, period_epoch, realm_id, realm_name, url,
+                                    access_key, secret_key, g_ceph_context, m_store);
+  }
+
+  int handle_opt_period_update() {
+    return update_period(m_store, realm_id, realm_name, period_id, period_epoch,
+                         commit, remote, url, access_key, secret_key, m_formatter,
+                         yes_i_really_mean_it);
+  }
+
+  // TODO: add an option to generate access key
+  std::string access_key;
+  bool commit = false;
+  std::string period_epoch;
+  std::string period_id;
+  std::string realm_id;
+  std::string realm_name;
+  std::string remote;
+  std::string secret_key;
+  bool staging = false;
+  std::string url;
+  bool yes_i_really_mean_it = false;
+};
+
 
 #endif //CEPH_RGW_ADMIN_MULTISITE_H

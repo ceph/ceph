@@ -1571,7 +1571,8 @@ RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_gro
     case(OLH) : return nullptr;
     case(OPSTATE) : return nullptr;
     case(ORPHANS) : return nullptr;
-    case(PERIOD) : return nullptr;
+    case (PERIOD) :
+      return new RgwAdminPeriodCommandsHandler(args, nullptr, nullptr);
     case(POLICY) : return nullptr;
     case(POOL) : return nullptr;
     case(QUOTA) : return nullptr;

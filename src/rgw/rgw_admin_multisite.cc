@@ -2115,3 +2115,37 @@ int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters(std::vecto
 
   return parse_command(args, desc, var_map);
 }
+
+int RgwAdminPeriodCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+  const char COMMIT[] = "commit";
+  const char PERIOD_EPOCH[] = "epoch";
+  const char REMOTE[] = "remote";
+  const char STAGING[] = "staging";
+  boost::program_options::options_description desc{"Period options"};
+  desc.add_options()
+      (rgw_admin_params::ACCESS_KEY, boost::program_options::value(&access_key), "S3 access key")
+      (rgw_admin_params::SECRET_KEY, boost::program_options::value(&secret_key),
+       "Specify secret key")
+      (COMMIT, "Commit the period during 'period update'")
+      (PERIOD_EPOCH, boost::program_options::value(&period_epoch), "Period epoch")
+      (rgw_admin_params::PERIOD_ID, boost::program_options::value(&period_id), "Period id")
+      (rgw_admin_params::REALM_ID, boost::program_options::value(&realm_id), "Realm id")
+      (rgw_admin_params::REALM_NAME, boost::program_options::value(&realm_name), "Realm name")
+      (REMOTE, boost::program_options::value(&remote), "Zone or zonegroup id of remote gateway")
+      (STAGING, "Get staging period info")
+      (rgw_admin_params::URL, boost::program_options::value(&url), "")
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
+  boost::program_options::variables_map var_map;
+
+  int ret = parse_command(args, desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+  if (var_map.count(COMMIT)) {
+    commit = true;
+  }
+  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT)) {
+    yes_i_really_mean_it = true;
+  }
+  return 0;
+}
