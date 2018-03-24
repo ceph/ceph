@@ -10,12 +10,12 @@
 
 class bluefs_extent_t {
 public:
-  uint8_t bdev;
   uint64_t offset = 0;
   uint32_t length = 0;
+  uint8_t bdev;
 
   bluefs_extent_t(uint8_t b = 0, uint64_t o = 0, uint32_t l = 0)
-    : bdev(b), offset(o), length(l) {}
+    : offset(o), length(l), bdev(b) {}
 
   uint64_t end() const { return  offset + length; }
   DENC(bluefs_extent_t, v, p) {
