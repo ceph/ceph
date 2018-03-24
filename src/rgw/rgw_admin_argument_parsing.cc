@@ -1566,7 +1566,8 @@ RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_gro
     case(MDLOG) : return nullptr;
     case(METADATA) : return new RgwAdminMetadataCommandsHandler(args, nullptr, nullptr);
     case(METADATA_SYNC) : return new RgwAdminMetadataSyncCommandsHandler(args, nullptr, nullptr);
-    case(OBJECT) : return nullptr;
+    case (OBJECT) :
+      return new RgwAdminObjectCommandsHandler(args, nullptr, nullptr);
     case(OLH) : return nullptr;
     case(OPSTATE) : return nullptr;
     case(ORPHANS) : return nullptr;

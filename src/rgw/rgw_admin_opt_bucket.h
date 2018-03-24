@@ -426,8 +426,7 @@ public:
                                                              {"enable",  OPT_BUCKET_SYNC_ENABLE},
                                                              {"init",    OPT_BUCKET_SYNC_INIT},
                                                              {"run",     OPT_BUCKET_SYNC_RUN},
-                                                             {"status",
-                                                                         OPT_BUCKET_SYNC_STATUS}},
+                                                             {"status",  OPT_BUCKET_SYNC_STATUS}},
                                   store, formatter) {
     if (parse_command_and_parameters(args) == 0) {
       std::cout << "Parsed command: " << m_command << std::endl;
@@ -488,6 +487,78 @@ private:
   std::string realm_id;
   std::string realm_name;
   std::string source_zone;
+  std::string tenant;
+};
+
+class RgwAdminObjectCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminObjectCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+                                Formatter* formatter) :
+      RgwAdminCommandGroupHandler(args, {"object"}, {{"expire",  OPT_OBJECTS_EXPIRE},
+                                                     {"stat",    OPT_OBJECT_STAT},
+                                                     {"rewrite", OPT_OBJECT_REWRITE},
+                                                     {"rm",      OPT_OBJECT_RM},
+                                                     {"unlink",  OPT_OBJECT_UNLINK}},
+                                  store, formatter) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command: " << m_command << std::endl;
+    }
+  }
+
+  ~RgwAdminObjectCommandsHandler() override = default;
+
+  int execute_command() override {
+    switch (m_command) {
+      case (OPT_OBJECTS_EXPIRE) :
+        return handle_opt_objects_expire();
+      case (OPT_OBJECT_STAT) :
+        return handle_opt_objects_stat();
+      case (OPT_OBJECT_REWRITE) :
+        return handle_opt_object_rewrite();
+      case (OPT_OBJECT_RM) :
+        return handle_opt_object_rm();
+      case (OPT_OBJECT_UNLINK) :
+        return handle_opt_object_unlink();
+      default:
+        return EINVAL;
+    }
+  }
+
+  RgwAdminCommandGroup get_type() const override { return OBJECT; }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_objects_expire() {
+    return ::handle_opt_object_expire(m_store);
+  }
+
+  int handle_opt_objects_stat() {
+    return ::handle_opt_object_stat(bucket_id, bucket_name, tenant, object, object_version, bucket,
+                                    m_store, m_formatter);
+  }
+
+  int handle_opt_object_rewrite() {
+    return ::handle_opt_object_rewrite(bucket_id, bucket_name, tenant, object, object_version,
+                                       min_rewrite_stripe_size, bucket, m_store);
+  }
+
+  int handle_opt_object_rm() {
+    return ::handle_opt_object_rm(bucket_id, bucket_name, tenant, object, object_version, bucket,
+                                  m_store);
+  }
+
+  int handle_opt_object_unlink() {
+    return ::handle_opt_object_unlink(bucket_id, bucket_name, tenant, object, object_version,
+                                      bucket, m_store);
+  }
+
+  rgw_bucket bucket;
+  std::string bucket_id;
+  std::string bucket_name;
+  uint64_t min_rewrite_stripe_size = 0;
+  std::string object;
+  std::string object_version;
   std::string tenant;
 };
 

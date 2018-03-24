@@ -1467,3 +1467,21 @@ int RgwAdminBucketSyncCommandsHandler::parse_command_and_parameters(
 
   return parse_command(args, desc, var_map);
 }
+
+int RgwAdminObjectCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+  boost::program_options::options_description desc{"Object options"};
+  desc.add_options()
+      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
+      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name),
+       "Specify the bucket name")
+      (rgw_admin_params::MIN_REWRITE_STRIPE_SIZE,
+       boost::program_options::value(&min_rewrite_stripe_size),
+       "Min stripe size for object rewrite (default 0)")
+      (rgw_admin_params::OBJECT, boost::program_options::value(&object), "Object name")
+      (rgw_admin_params::OBJECT_VERSION, boost::program_options::value(&object_version), "")
+      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
+  boost::program_options::variables_map var_map;
+
+  return parse_command(args, desc, var_map);
+
+}
