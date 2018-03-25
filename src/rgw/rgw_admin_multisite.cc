@@ -2149,3 +2149,30 @@ int RgwAdminPeriodCommandsHandler::parse_command_and_parameters(std::vector<cons
   }
   return 0;
 }
+
+int RgwAdminRealmCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+  const char REALM_NEW_NAME[] = "realm-new-name";
+  boost::program_options::options_description desc{"Realm options"};
+  desc.add_options()
+      (rgw_admin_params::ACCESS_KEY, boost::program_options::value(&access_key), "S3 access key")
+      (rgw_admin_params::SECRET_KEY, boost::program_options::value(&secret_key),
+       "Specify secret key")
+      (rgw_admin_params::INFILE, boost::program_options::value(&infile),
+       "A file to read in when setting data")
+      (rgw_admin_params::REALM_ID, boost::program_options::value(&realm_id), "Realm id")
+      (rgw_admin_params::REALM_NAME, boost::program_options::value(&realm_name), "Realm name")
+      (REALM_NEW_NAME, boost::program_options::value(&realm_new_name), "Realm new name")
+      (rgw_admin_params::SET_DEFAULT, "Set realm as default")
+      (rgw_admin_params::URL, boost::program_options::value(&url), "");
+  boost::program_options::variables_map var_map;
+
+  int ret = parse_command(args, desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+  if (var_map.count(rgw_admin_params::SET_DEFAULT)) {
+    set_default = true;
+  }
+  return 0;
+
+}

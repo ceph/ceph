@@ -344,17 +344,122 @@ private:
 
   // TODO: add an option to generate access key
   std::string access_key;
+  std::string secret_key;
   bool commit = false;
   std::string period_epoch;
   std::string period_id;
   std::string realm_id;
   std::string realm_name;
   std::string remote;
-  std::string secret_key;
   bool staging = false;
   std::string url;
   bool yes_i_really_mean_it = false;
 };
 
+class RgwAdminRealmCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminRealmCommandsHandler(std::vector<const char*>& args, RGWRados* store, Formatter*
+  formatter) : RgwAdminCommandGroupHandler(args, {"realm"}, {{"create",       OPT_REALM_CREATE},
+                                                             {"default",      OPT_REALM_DEFAULT},
+                                                             {"delete",       OPT_REALM_DELETE},
+                                                             {"get",          OPT_REALM_GET},
+                                                             {"get-default",  OPT_REALM_GET_DEFAULT},
+                                                             {"list",         OPT_REALM_LIST},
+                                                             {"list-periods", OPT_REALM_LIST_PERIODS},
+                                                             {"rename",       OPT_REALM_RENAME},
+                                                             {"pull",         OPT_REALM_PULL},
+                                                             {"set",          OPT_REALM_SET}},
+                                           store, formatter) {
+    if (parse_command_and_parameters(args) == 0) {
+      std::cout << "Parsed command:" << m_command << std::endl;
+    }
+  }
+
+  ~RgwAdminRealmCommandsHandler() = default;
+
+  RgwAdminCommandGroup get_type() const override { return REALM; }
+
+  int execute_command() override {
+    switch (m_command) {
+      case (OPT_REALM_CREATE) :
+        return handle_opt_realm_create();
+      case (OPT_REALM_DEFAULT) :
+        return handle_opt_realm_default();
+      case (OPT_REALM_DELETE) :
+        return handle_opt_realm_delete();
+      case (OPT_REALM_GET) :
+        return handle_opt_realm_get();
+      case (OPT_REALM_GET_DEFAULT) :
+        return handle_opt_realm_get_default();
+      case (OPT_REALM_LIST) :
+        return handle_opt_realm_list();
+      case (OPT_REALM_LIST_PERIODS) :
+        return handle_opt_realm_list_periods();
+      case (OPT_REALM_RENAME) :
+        return handle_opt_realm_rename();
+      case (OPT_REALM_PULL) :
+        return handle_opt_realm_pull();
+      case (OPT_REALM_SET) :
+        return handle_opt_realm_set();
+      default:
+        return EINVAL;
+    }
+  }
+
+private:
+  int parse_command_and_parameters(std::vector<const char*>& args) override;
+
+  int handle_opt_realm_create() {
+    return ::handle_opt_realm_create(realm_name, set_default, g_ceph_context, m_store, m_formatter);
+  }
+
+  int handle_opt_realm_default() {
+    return ::handle_opt_realm_default(realm_id, realm_name, g_ceph_context, m_store);
+  }
+
+  int handle_opt_realm_delete() {
+    return ::handle_opt_realm_delete(realm_id, realm_name, g_ceph_context, m_store);
+  }
+
+  int handle_opt_realm_get() {
+    return ::handle_opt_realm_get(realm_id, realm_name, g_ceph_context, m_store, m_formatter);
+  }
+
+  int handle_opt_realm_get_default() {
+    return ::handle_opt_realm_get_default(g_ceph_context, m_store);
+  }
+
+  int handle_opt_realm_list() {
+    return ::handle_opt_realm_list(g_ceph_context, m_store, m_formatter);
+  }
+
+  int handle_opt_realm_list_periods() {
+    return ::handle_opt_realm_list_periods(realm_id, realm_name, m_store, m_formatter);
+  }
+
+  int handle_opt_realm_rename() {
+    return ::handle_opt_realm_rename(realm_id, realm_name, realm_new_name, g_ceph_context, m_store);
+  }
+
+  int handle_opt_realm_pull() {
+    return ::handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key,
+                                   set_default, g_ceph_context, m_store, m_formatter);
+  }
+
+  int handle_opt_realm_set() {
+    return ::handle_opt_realm_set(realm_id, realm_name, infile, set_default, g_ceph_context,
+                                  m_store, m_formatter);
+  }
+
+  // TODO: support generating access key
+  std::string access_key;
+  std::string secret_key;
+  std::string infile;
+  std::string realm_id;
+  std::string realm_name;
+  std::string realm_new_name;
+  bool set_default = false;
+  std::string url;
+};
 
 #endif //CEPH_RGW_ADMIN_MULTISITE_H
