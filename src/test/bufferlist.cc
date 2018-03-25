@@ -1817,66 +1817,6 @@ TEST(BufferList, clear) {
   EXPECT_EQ((unsigned)0, bl.get_num_buffers());
 }
 
-TEST(BufferList, push_front) {
-  //
-  // void push_front(ptr& bp)
-  //
-  {
-    bufferlist bl;
-    bufferptr ptr;
-    bl.push_front(ptr);
-    EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
-  }
-  unsigned len = 17;
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(ptr);
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
-    EXPECT_EQ('B', bl.front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
-  }
-  //
-  // void push_front(raw *r)
-  //
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(ptr.get_raw());
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
-    EXPECT_EQ('B', bl.front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
-  }
-  //
-  // void push_front(ptr&& bp)
-  //
-  {
-    bufferlist bl;
-    bufferptr ptr;
-    bl.push_front(std::move(ptr));
-    EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
-  }
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(std::move(ptr));
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ('B', bl.buffers().front()[0]);
-    EXPECT_FALSE(ptr.get_raw());
-  }
-}
-
 TEST(BufferList, push_back) {
   //
   // void push_back(ptr& bp)
