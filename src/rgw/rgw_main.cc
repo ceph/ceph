@@ -445,7 +445,8 @@ int main(int argc, const char **argv)
   auto dmclock_queue = dmc::PriorityQueue(cct.get(), iocontext,
                                           std::ref(dmclock_counters),
                                           &dmclock_clients,
-                                          std::ref(dmclock_clients));
+                                          std::ref(dmclock_clients),
+                                          dmc::AtLimit::Reject);
 #endif
 
   register_async_signal_handler(SIGTERM, handle_sigterm);
