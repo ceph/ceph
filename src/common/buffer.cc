@@ -1839,19 +1839,6 @@ public:
     bl.last_p = bl.begin();
   }
 
-  void buffer::list::claim_prepend(list& bl, unsigned int flags)
-  {
-    // steal the other guy's buffers
-    _len += bl._len;
-    if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
-      bl.make_shareable();
-    _buffers.splice(_buffers.begin(), bl._buffers );
-    bl._len = 0;
-    bl.last_p = bl.begin();
-    // we modified _buffers
-    last_p = begin();
-  }
-
   void buffer::list::claim_append_piecewise(list& bl)
   {
     // steal the other guy's buffers
