@@ -12,13 +12,14 @@ from teuthology.task import Task
 
 log = logging.getLogger(__name__)
 
-class SSL(Task):
+class OpenSSLKeys(Task):
+    name = 'openssl_keys'
     """
     Generates and installs a signed SSL certificate.
 
     To create a self-signed certificate:
 
-        - ssl:
+        - openssl_keys:
             # certificate name
             root: # results in root.key and root.crt
 
@@ -37,7 +38,7 @@ class SSL(Task):
 
     To create a certificate signed by a ca certificate:
 
-        - ssl:
+        - openssl_keys:
             root: (self-signed certificate as above)
               ...
 
@@ -52,7 +53,7 @@ class SSL(Task):
     """
 
     def __init__(self, ctx, config):
-        super(SSL, self).__init__(ctx, config)
+        super(OpenSSLKeys, self).__init__(ctx, config)
         self.certs = []
         self.installed = []
 
@@ -222,4 +223,4 @@ class SSL(Task):
         finally:
             os.remove(local_path)
 
-task = SSL
+task = OpenSSLKeys
