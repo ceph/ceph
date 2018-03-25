@@ -33,20 +33,18 @@ namespace rgw_admin_params {
   const char NUM_SHARDS[] = "num-shards";
   const char OBJECT[] = "object";
   const char OBJECT_VERSION[] = "object-version";
-  const char PERIOD_ID[] = "period-id";
+  const char PERIOD_ID[] = "period";
   const char PLACEMENT_ID[] = "placement-id";
   const char POOL[] = "pool";
   const char PURGE_DATA[] = "purge-data";
   const char QUOTA_SCOPE[] = "quota-scope";
   const char READ_ONLY[] = "read-only";
   const char REALM_ID[] = "realm-id";
-  const char REALM_NAME[] = "realm-name";
+  const char REALM_NAME[] = "rgw-realm";
   const char REDIRECT_ZONE[] = "redirect-zone";
-  const char REDIRECT_ZONE_SET[] = "redirect-zone-set";
-  const char RGW_STREAM_FLUSHER[] = "rgw-stream-flusher";
   const char ROLE_NAME[] = "role-name";
   const char SECRET_KEY[] = "secret-key";
-  const char SET_DEFAULT[] = "set-default";
+  const char SET_DEFAULT[] = "default";
   const char SHARD_ID[] = "shard-id";
   const char SHOW_LOG_ENTRIES[] = "show-log-entries";
   const char SHOW_LOG_SUM[] = "show-log-sum";
@@ -55,16 +53,15 @@ namespace rgw_admin_params {
   const char SYNC_FROM_ALL[] = "sync-from-all";
   const char SYNC_FROM_RM[] = "sync-from-rm";
   const char TENANT[] = "tenant";
-  const char TIER_CONFIG_ADD[] = "tier-config-add";
+  const char TIER_CONFIG_ADD[] = "tier-config";
   const char TIER_TYPE[] = "tier-type";
   const char URL[] = "url";
   const char USER_ID[] = "uid";
-  const char USER_OP[] = "user-op";
   const char YES_I_REALLY_MEAN_IT[] = "yes-i-really-mean-it";
   const char ZONEGROUP_ID[] = "zonegroup-id";
-  const char ZONEGROUP_NAME[] = "zonegroup-name";
+  const char ZONEGROUP_NAME[] = "rgw-zonegroup";
   const char ZONE_ID[] = "zone-id";
-  const char ZONE_NAME[] = "zone-name";
+  const char ZONE_NAME[] = "rgw-zone";
 }
 
 void usage();
@@ -154,7 +151,9 @@ public:
 
 private:
   static const std::unordered_map<std::string, RgwAdminCommandGroup> STR_TO_RGW_COMMAND_GROUP;
-  static RgwAdminCommandGroup parse_command_group(std::vector<const char*>& args);
+
+  static RgwAdminCommandGroup parse_command_group(std::vector<const char*>& args,
+                                                  std::vector<std::string>& command_prefix);
 };
 
 #endif //CEPH_RGW_ADMIN_ARGUMENT_PARSING_H
