@@ -15,21 +15,37 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
-Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
-install the required packages locally.
+ * Node 6.9.0 or higher
+ * NPM 3 or higher
 
-.. note::
+nodeenv:
+  During Ceph's build we create a virtualenv with ``node`` and ``npm``
+  installed, which can be used as an alternative to installing node/npm in your
+  system.
 
+  If you want to use the node installed in the virtualenv you just need to
+  activate the virtualenv before you run any npm commands. To activate it run
+  ``. build/src/pybind/mgr/dashboard/node-env/bin/activate``.
+
+  Once you finish, you can simply run ``deactivate`` and exit the virtualenv.
+
+Angular CLI:
   If you do not have the `Angular CLI <https://github.com/angular/angular-cli>`_
   installed globally, then you need to execute ``ng`` commands with an
   additional ``npm run`` before it.
+
+Package installation
+~~~~~~~~~~~~~~~~~~~~
+
+Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
+install the required packages locally.
 
 Setting up a Development Server
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Create the ``proxy.conf.json`` file based on ``proxy.conf.json.sample``.
 
-Run ``npm start -- --proxy-config proxy.conf.json`` for a dev server.
+Run ``npm start`` for a dev server.
 Navigate to ``http://localhost:4200/``. The app will automatically
 reload if you change any of the source files.
 
@@ -104,6 +120,25 @@ Example:
     import { Credentials } from '../../../shared/models/credentials.model';
     import { HostService } from './services/host.service';
 
+Frontend components
+~~~~~~~~~~~~~~~~~~~
+
+There are several components that can be reused on different pages.
+This components are declared on the components module:
+`src/pybind/mgr/dashboard/frontend/src/app/shared/components`.
+
+Helper
+......
+
+This component should be used to provide additional information to the user.
+
+Example:
+
+.. code:: html
+
+    <cd-helper>
+      Some <strong>helper</strong> html text
+    </cd-helper>
 
 Backend Development
 -------------------

@@ -65,7 +65,7 @@ function TEST_recovery_scrub() {
     pids=""
     for pg in $(seq 0 $(expr $PGS - 1))
     do
-        run_in_background pids pg_scrub $poolid.$(echo "{ obase=16; $pg }" | bc | tr '[:upper:]' '[:lower:]')
+        run_in_background pids pg_scrub $poolid.$(printf "%x" $pg)
     done
     ceph pg dump pgs
     wait_background pids

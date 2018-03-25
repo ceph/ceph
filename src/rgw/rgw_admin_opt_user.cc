@@ -29,6 +29,10 @@ int handle_opt_user_create(const std::string& subuser, RGWUserAdminOpState& user
 int handle_opt_user_stats(bool sync_stats, const std::string& bucket_name, const std::string& tenant,
                           rgw_user& user_id, RGWRados *store, Formatter *formatter)
 {
+  if (user_id.empty()) {
+    cerr << "ERROR: uid not specified" << std::endl;
+    return EINVAL;
+  }
   if (sync_stats) {
     if (!bucket_name.empty()) {
       int ret = rgw_bucket_sync_user_stats(store, tenant, bucket_name);
@@ -45,10 +49,6 @@ int handle_opt_user_stats(bool sync_stats, const std::string& bucket_name, const
     }
   }
 
-  if (user_id.empty()) {
-    cerr << "ERROR: uid not specified" << std::endl;
-    return EINVAL;
-  }
   cls_user_header header;
   string user_str = user_id.to_str();
   int ret = store->cls_user_get_header(user_str, &header);

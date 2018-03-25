@@ -14,7 +14,10 @@ export class DimlessBinaryPipe implements PipeTransform {
       'MiB',
       'GiB',
       'TiB',
-      'PiB'
+      'PiB',
+      'Eib',
+      'Zib',
+      'Yib'
     ]);
   }
 }
