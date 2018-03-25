@@ -34,6 +34,7 @@ using crimson::dmclock::Cost;
 using crimson::dmclock::ReqParams;
 using crimson::dmclock::PhaseType;
 using crimson::dmclock::ClientInfo;
+using crimson::dmclock::AtLimit;
 
 using crimson::dmclock::Time;
 using crimson::dmclock::get_time;

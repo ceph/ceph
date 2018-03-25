@@ -86,6 +86,67 @@ TEST(Queue, AsyncRequest)
   EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
+TEST(Queue, RateLimit)
+{
+  boost::asio::io_context context;
+  ClientCounters counters(g_ceph_context);
+  PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
+                      [] (client_id client) -> ClientInfo* {
+      static ClientInfo clients[] = {
+        {1, 1, 1}, // admin
+        {0, 1, 1}, // auth
+      };
+      return &clients[static_cast<size_t>(client)];
+    }, AtLimit::Reject);
+
+  std::optional<error_code> ec1, ec2, ec3, ec4;
+  std::optional<PhaseType> p1, p2, p3, p4;
+
+  auto now = get_time();
+  queue.async_request(client_id::admin, {}, now, 0, capture(ec1, p1));
+  queue.async_request(client_id::admin, {}, now, 0, capture(ec2, p2));
+  queue.async_request(client_id::auth, {}, now, 0, capture(ec3, p3));
+  queue.async_request(client_id::auth, {}, now, 0, capture(ec4, p4));
+  EXPECT_FALSE(ec1);
+  EXPECT_FALSE(ec2);
+  EXPECT_FALSE(ec3);
+  EXPECT_FALSE(ec4);
+
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
+
+  context.poll();
+  EXPECT_TRUE(context.stopped());
+
+  ASSERT_TRUE(ec1);
+  EXPECT_EQ(boost::system::errc::success, *ec1);
+  ASSERT_TRUE(p1);
+  EXPECT_EQ(PhaseType::reservation, *p1);
+
+  ASSERT_TRUE(ec2);
+  EXPECT_EQ(boost::system::errc::resource_unavailable_try_again, *ec2);
+
+  ASSERT_TRUE(ec3);
+  EXPECT_EQ(boost::system::errc::success, *ec3);
+  ASSERT_TRUE(p3);
+  EXPECT_EQ(PhaseType::priority, *p3);
+
+  ASSERT_TRUE(ec4);
+  EXPECT_EQ(boost::system::errc::resource_unavailable_try_again, *ec4);
+
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_cancel));
+
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
+}
+
 TEST(Queue, Cancel)
 {
   boost::asio::io_context context;

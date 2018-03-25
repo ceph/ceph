@@ -145,10 +145,11 @@ auto PriorityQueue::async_request(const client_id& client,
   auto& handler = init.completion_handler;
 
   // allocate the request and add it to the queue
-  auto req = Completion::create(ex1, std::move(handler),
-                                Request{client, time, cost});
-  int r = 0; // TODO: https://github.com/ceph/dmclock/pull/50
-  queue.add_request(std::move(req), client, params, time, cost);
+  auto completion = Completion::create(ex1, std::move(handler),
+                                       Request{client, time, cost});
+  // cast to unique_ptr<Request>
+  auto req = RequestRef{std::move(completion)};
+  int r = queue.add_request(std::move(req), client, params, time, cost);
   if (r == 0) {
     // schedule an immediate call to process() on the executor
     schedule(crimson::dmclock::TimeZero);
@@ -157,8 +158,12 @@ auto PriorityQueue::async_request(const client_id& client,
       c->inc(queue_counters::l_cost, cost);
     }
   } else {
+    // post the error code
     boost::system::error_code ec(r, boost::system::system_category());
-    async::post(std::move(req), ec, PhaseType::priority);
+    // cast back to Completion
+    auto completion = static_cast<Completion*>(req.release());
+    async::post(std::unique_ptr<Completion>{completion},
+                ec, PhaseType::priority);
     if (auto c = counters(client)) {
       c->inc(queue_counters::l_limit);
       c->inc(queue_counters::l_limit_cost, cost);
