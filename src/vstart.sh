@@ -349,14 +349,16 @@ if [ "$overwrite_conf" -eq 0 ]; then
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
-        asok_dir=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
-        if [ $asok_dir != /var/run/ceph ]; then
+	if [ -e "$conf_fn" ]; then
+	  asok_dir=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
+	  rm -- "$conf_fn"
+	  if [ $asok_dir != /var/run/ceph ]; then
             [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
-        fi
-        if [ -z "$CEPH_ASOK_DIR" ]; then
+	  fi
+	fi
+	if [ -z "$CEPH_ASOK_DIR" ]; then
             CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
         fi
-        [ -e "$conf_fn" ] && rm -- "$conf_fn"
     else
         CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
         # -k is implied... (doesn't make sense otherwise)
@@ -522,6 +524,7 @@ $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
+        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
 EOF
 }
 
@@ -860,7 +863,6 @@ mon_pg_warn_min_per_osd = 3
 mon_osd_reporter_subtree_level = osd
 mon_data_avail_warn = 2
 mon_data_avail_crit = 1
-osd_pool_default_erasure_code_profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
 mon_allow_pool_delete = true
 
 [osd]
