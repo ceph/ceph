@@ -189,7 +189,7 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     static constexpr char SEARCH_AMZ_PREFIX[] = "HTTP_X_AMZ_";
     for (auto iter= orig_map.lower_bound(SEARCH_AMZ_PREFIX); iter != orig_map.end(); ++iter) {
       const string& name = iter->first;
-      if (name == "HTTP_X_AMZ_DATE") /* dont forward date from original request */
+      if (name == "HTTP_X_AMZ_DATE") /* don't forward date from original request */
         continue;
       if (name.compare(0, strlen(SEARCH_AMZ_PREFIX), SEARCH_AMZ_PREFIX) != 0)
         break;
