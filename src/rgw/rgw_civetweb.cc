@@ -51,11 +51,13 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn)
 
 size_t RGWCivetWeb::read_data(char *buf, size_t len)
 {
-  int c, ret;
+  int ret;
+  size_t c;
+
   if (got_eof_on_read) {
     return 0;
   }
-  for (c = 0; c < len; c += ret) {
+  for (c = 0; c < len; c += (size_t)ret) {
     ret = mg_read(conn, buf, len);
     if (ret < 0) {
       throw rgw::io::Exception(EIO, std::system_category());
