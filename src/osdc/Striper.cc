@@ -354,36 +354,21 @@ void Striper::StripedReadResult::assemble_result(CephContext *cct,
 {
   ldout(cct, 10) << "assemble_result(" << this << ") zero_tail=" << zero_tail
 		 << dendl;
-
-  // go backwards, so that we can efficiently discard zeros
-  map<uint64_t,pair<bufferlist,uint64_t> >::reverse_iterator p
-    = partial.rbegin();
-  if (p == partial.rend())
-    return;
-
-  uint64_t end = p->first + p->second.second;
-  while (p != partial.rend()) {
-    // sanity check
-    ldout(cct, 20) << "assemble_result(" << this << ") " << p->first << "~"
-		   << p->second.second << " " << p->second.first.length()
-		   << " bytes" << dendl;
-    assert(p->first == end - p->second.second);
-    end = p->first;
-
-    size_t len = p->second.first.length();
-    if (len < p->second.second) {
-      if (zero_tail || bl.length()) {
-        bufferptr bp(p->second.second - len);
-        bp.zero();
-        bl.push_front(std::move(bp));
-	bl.claim_prepend(p->second.first);
-      } else {
-	bl.claim_prepend(p->second.first);
+  size_t zeros = 0;  // zeros preceding current position
+  for (auto& p : partial) {
+    size_t got = p.second.first.length();
+    size_t expect = p.second.second;
+    if (got) {
+      if (zeros) {
+	bl.append_zero(zeros);
+	zeros = 0;
       }
-    } else {
-      bl.claim_prepend(p->second.first);
+      bl.claim_append(p.second.first);
     }
-    ++p;
+    zeros += expect - got;
+  }
+  if (zero_tail && zeros) {
+    bl.append_zero(zeros);
   }
   partial.clear();
 }
