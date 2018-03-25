@@ -2,33 +2,42 @@ set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
 
 add_custom_target(mgr-dashboard-test-venv
   COMMAND
-  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${MGR_DASHBOARD_VIRTUALENV} &&
+  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=python2.7 ${MGR_DASHBOARD_VIRTUALENV} &&
   ${MGR_DASHBOARD_VIRTUALENV}/bin/pip install --no-index --use-wheel --find-links=file:${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/wheelhouse -r requirements.txt
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard
   COMMENT "dashboard tests virtualenv is being created")
 add_dependencies(tests mgr-dashboard-test-venv)
 
 if(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
-  find_program(NPM_BIN
-    NAMES npm
-    HINTS $ENV{NPM_ROOT}/bin)
-  if(NOT NPM_BIN)
-    message(FATAL_ERROR "WITH_MGR_DASHBOARD_FRONTEND set, but npm not found")
-  endif()
+
+set(mgr-dashboard-nodeenv ${CMAKE_CURRENT_BINARY_DIR}/node-env)
+
+add_custom_command(
+  OUTPUT "${mgr-dashboard-nodeenv}/bin/npm"
+  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=python2.7 ${mgr-dashboard-nodeenv}
+  COMMAND ${mgr-dashboard-nodeenv}/bin/pip install nodeenv
+  COMMAND ${mgr-dashboard-nodeenv}/bin/nodeenv -p -n 8.10.0
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  COMMENT "dashboard nodeenv is being installed"
+)
+
+add_custom_target(mgr-dashboard-nodeenv
+  DEPENDS ${mgr-dashboard-nodeenv}/bin/npm
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+)
 
 add_custom_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/node_modules"
-  COMMAND ${NPM_BIN} install
+  COMMAND . ${mgr-dashboard-nodeenv}/bin/activate && npm install && deactivate
   DEPENDS frontend/package.json
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend dependencies are being installed"
 )
 
 add_custom_target(mgr-dashboard-frontend-deps
-  DEPENDS frontend/node_modules
+  DEPENDS frontend/node_modules mgr-dashboard-nodeenv
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
 )
-
 
 # Glob some frontend files. With CMake 3.6, this can be simplified
 # to *.ts *.html. Just add:
@@ -49,14 +58,14 @@ file(
   frontend/src/*/*/*/*/*/*.html)
 
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(npm_command ${NPM_BIN} run build -- --prod)
+  set(npm_command npm run build -- --prod)
 else()
-  set(npm_command ${NPM_BIN} run build)
+  set(npm_command npm run build)
 endif()
 
 add_custom_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/dist"
-  COMMAND ${npm_command}
+  COMMAND . ${mgr-dashboard-nodeenv}/bin/activate && ${npm_command} && deactivate
   DEPENDS ${frontend_src} frontend/node_modules
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend is being created"

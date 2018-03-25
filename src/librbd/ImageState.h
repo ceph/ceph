@@ -40,9 +40,7 @@ public:
   int refresh_if_required();
   void refresh(Context *on_finish);
 
-  void snap_set(const cls::rbd::SnapshotNamespace &snap_namespace,
-		const std::string &snap_name,
-		Context *on_finish);
+  void snap_set(uint64_t snap_id, Context *on_finish);
 
   void prepare_lock(Context *on_ready);
   void handle_prepare_lock_complete();
@@ -75,8 +73,7 @@ private:
   struct Action {
     ActionType action_type;
     uint64_t refresh_seq = 0;
-    cls::rbd::SnapshotNamespace snap_namespace;
-    std::string snap_name;
+    uint64_t snap_id = CEPH_NOSNAP;
     Context *on_ready = nullptr;
 
     Action(ActionType action_type) : action_type(action_type) {
@@ -89,7 +86,7 @@ private:
       case ACTION_TYPE_REFRESH:
         return (refresh_seq == action.refresh_seq);
       case ACTION_TYPE_SET_SNAP:
-        return (snap_name == action.snap_name) && (snap_namespace == action.snap_namespace);
+        return (snap_id == action.snap_id);
       case ACTION_TYPE_LOCK:
         return false;
       default:
