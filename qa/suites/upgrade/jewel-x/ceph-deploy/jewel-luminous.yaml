@@ -26,7 +26,7 @@ openstack:
     size: 30
 #  reluctantely :( hard-coded machine type
 #  it will override command line args with teuthology-suite  
-machine_type: vps
+machine_type: ovh
 roles:
 - - mon.a
   - mds.a
