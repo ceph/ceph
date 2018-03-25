@@ -751,21 +751,6 @@ namespace buffer CEPH_BUFFER_API {
       last_p = begin();
       append_buffer = ptr();
     }
-    void push_front(ptr& bp) {
-      if (bp.length() == 0)
-	return;
-      _buffers.push_front(bp);
-      _len += bp.length();
-    }
-    void push_front(ptr&& bp) {
-      if (bp.length() == 0)
-	return;
-      _len += bp.length();
-      _buffers.push_front(std::move(bp));
-    }
-    void push_front(raw *r) {
-      push_front(ptr(r));
-    }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
