@@ -1,6 +1,11 @@
 13.0.1
 ------
 
+* *RGW, MON*:
+    Commands variously marked as "del", "delete", "remove" etc. should now all be
+    normalized as "rm". Commands already supporting alternatives to "rm" remain
+    backward-compatible.
+
 * *CephFS*:
 
   * Upgrading an MDS cluster to 12.2.3+ will result in all active MDS

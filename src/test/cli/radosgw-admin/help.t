@@ -37,7 +37,7 @@
     object unlink              unlink object from bucket index
     object rewrite             rewrite the specified object
     objects expire             run expired objects cleanup
-    period delete              delete a period
+    period rm                  remove a period
     period get                 get period info
     period get-current         get current period info
     period pull                pull a period
@@ -53,7 +53,7 @@
     global quota enable        enable a global quota
     global quota disable       disable a global quota
     realm create               create a new realm
-    realm delete               delete a realm
+    realm rm                   remove a realm
     realm get                  show realm info
     realm get-default          get default realm name
     realm list                 list realms
@@ -65,11 +65,11 @@
     zonegroup add              add a zone to a zonegroup
     zonegroup create           create a new zone group info
     zonegroup default          set default zone group
-    zonegroup delete           delete a zone group info
+    zonegroup rm               remove a zone group info
     zonegroup get              show zone group info
     zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
-    zonegroup remove           remove a zone from a zonegroup
+    zonegroup rm               remove a zone from a zonegroup
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
     zonegroup placement list   list zonegroup's placement targets
@@ -78,7 +78,7 @@
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup placement default  set a zonegroup's default placement target
     zone create                create a new zone
-    zone delete                delete a zone
+    zone rm                    remove a zone
     zone get                   show zone cluster params
     zone modify                modify an existing zone
     zone set                   set zone cluster params (requires infile)
@@ -133,19 +133,19 @@
     opstate rm                 remove entry (use client_id, op_id, object)
     replicalog get             get replica metadata log entry
     replicalog update          update replica metadata log entry
-    replicalog delete          delete replica metadata log entry
+    replicalog rm              remove replica metadata log entry
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
     orphans list-jobs          list the current job-ids for orphans search
     role create                create a AWS role for use with STS
-    role delete                delete a role
+    role rm                    remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
     role modify                modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
-    role-policy delete         delete policy attached to a role
+    role-policy rm             remove policy attached to a role
     reshard add                schedule a resharding of a bucket
     reshard list               list all bucket resharding or scheduled to be resharded
     reshard status             read bucket resharding status
