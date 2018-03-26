@@ -172,6 +172,7 @@ class Module(MgrModule):
         data['num_osd_in'] = num_in
 
         osd_fill = list()
+        osd_pgs = list()
         osd_apply_latency_ns = list()
         osd_commit_latency_ns = list()
 
@@ -180,6 +181,7 @@ class Module(MgrModule):
             if osd['kb'] == 0:
                 continue
             osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
+            osd_pgs.append(osd['num_pgs'])
             osd_apply_latency_ns.append(osd['perf_stat']['apply_latency_ns'])
             osd_commit_latency_ns.append(osd['perf_stat']['commit_latency_ns'])
 
@@ -187,6 +189,9 @@ class Module(MgrModule):
             data['osd_max_fill'] = max(osd_fill)
             data['osd_min_fill'] = min(osd_fill)
             data['osd_avg_fill'] = avg(osd_fill)
+            data['osd_max_pgs'] = max(osd_pgs)
+            data['osd_min_pgs'] = min(osd_pgs)
+            data['osd_avg_pgs'] = avg(osd_pgs)
         except ValueError:
             pass
 
