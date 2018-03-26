@@ -10,7 +10,7 @@ We assume here that you have access to an operational test lab; if not, ask
 your local admin for access!
 
 If you're here to test upstream Ceph, start `here
-<http://ceph.github.io/sepia/adding_users/>`__.
+<https://wiki.sepia.ceph.com/doku.php?id=gettingstarted>`__.
 
 
 Terminology
