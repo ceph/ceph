@@ -23,12 +23,13 @@ def download(ctx, config):
     Download the Swift API.
     """
     testdir = teuthology.get_testdir(ctx)
-    assert isinstance(config, list)
+    assert isinstance(config, dict)
     log.info('Downloading swift...')
-    for client in config:
+    for (client, cconf) in config.items():
         ctx.cluster.only(client).run(
             args=[
                 'git', 'clone',
+                '-b', cconf.get('force-branch', 'ceph-master'),
                 teuth_config.ceph_git_base_url + 'swift.git',
                 '{tdir}/swift'.format(tdir=testdir),
                 ],
@@ -38,7 +39,7 @@ def download(ctx, config):
     finally:
         log.info('Removing swift...')
         testdir = teuthology.get_testdir(ctx)
-        for client in config:
+        for (client, _) in config.items():
             ctx.cluster.only(client).run(
                 args=[
                     'rm',
@@ -252,7 +253,7 @@ def task(ctx, config):
                 )
 
     with contextutil.nested(
-        lambda: download(ctx=ctx, config=clients),
+        lambda: download(ctx=ctx, config=config),
         lambda: create_users(ctx=ctx, config=dict(
                 clients=clients,
                 testswift_conf=testswift_conf,
