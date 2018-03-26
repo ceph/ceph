@@ -12,9 +12,12 @@ import pkgutil
 import sys
 import time
 import threading
+import types  # pylint: disable=import-error
 
 import cherrypy
+from six import add_metaclass
 
+from .settings import Settings
 from . import logger
 
 
@@ -76,10 +79,137 @@ def json_error_page(status, message, traceback, version):
                            version=version))
 
 
+# pylint: disable=too-many-locals
+def browsable_api_view(meth):
+    def wrapper(self, *vpath, **kwargs):
+        assert isinstance(self, BaseController)
+        if not Settings.ENABLE_BROWSABLE_API:
+            return meth(self, *vpath, **kwargs)
+        if 'text/html' not in cherrypy.request.headers.get('Accept', ''):
+            return meth(self, *vpath, **kwargs)
+        if '_method' in kwargs:
+            cherrypy.request.method = kwargs.pop('_method').upper()
+        if '_raw' in kwargs:
+            kwargs.pop('_raw')
+            return meth(self, *vpath, **kwargs)
+
+        template = """
+        <html>
+        <h1>Browsable API</h1>
+        {docstring}
+        <h2>Request</h2>
+        <p>{method} {breadcrump}</p>
+        <h2>Response</h2>
+        <p>Status: {status_code}<p>
+        <pre>{reponse_headers}</pre>
+        <form action="/api/{path}/{vpath}" method="get">
+        <input type="hidden" name="_raw" value="true" />
+        <button type="submit">GET raw data</button>
+        </form>
+        <h2>Data</h2>
+        <pre>{data}</pre>
+        {create_form}
+        <h2>Note</h2>
+        <p>Please note that this API is not an official Ceph REST API to be
+        used by third-party applications. It's primary purpose is to serve
+        the requirements of the Ceph Dashboard and is subject to change at
+        any time. Use at your own risk.</p>
+        """
+
+        create_form_template = """
+        <h2>Create Form</h2>
+        <form action="/api/{path}/{vpath}" method="post">
+        {fields}<br>
+        <input type="hidden" name="_method" value="post" />
+        <button type="submit">Create</button>
+        </form>
+        """
+
+        try:
+            data = meth(self, *vpath, **kwargs)
+        except Exception as e:  # pylint: disable=broad-except
+            except_template = """
+            <h2>Exception: {etype}: {tostr}</h2>
+            <pre>{trace}</pre>
+            Params: {kwargs}
+            """
+            import traceback
+            tb = sys.exc_info()[2]
+            cherrypy.response.headers['Content-Type'] = 'text/html'
+            data = except_template.format(
+                etype=e.__class__.__name__,
+                tostr=str(e),
+                trace='\n'.join(traceback.format_tb(tb)),
+                kwargs=kwargs
+            )
+
+        if cherrypy.response.headers['Content-Type'] == 'application/json':
+            data = json.dumps(json.loads(data), indent=2, sort_keys=True)
+
+        try:
+            create = getattr(self, 'create')
+            f_args = RESTController._function_args(create)
+            input_fields = ['{name}:<input type="text" name="{name}">'.format(name=name) for name in
+                            f_args]
+            create_form = create_form_template.format(
+                fields='<br>'.join(input_fields),
+                path=self._cp_path_,
+                vpath='/'.join(vpath)
+            )
+        except AttributeError:
+            create_form = ''
+
+        def mk_breadcrump(elems):
+            return '/'.join([
+                '<a href="/{}">{}</a>'.format('/'.join(elems[0:i+1]), e)
+                for i, e in enumerate(elems)
+            ])
+
+        cherrypy.response.headers['Content-Type'] = 'text/html'
+        return template.format(
+            docstring='<pre>{}</pre>'.format(self.__doc__) if self.__doc__ else '',
+            method=cherrypy.request.method,
+            path=self._cp_path_,
+            vpath='/'.join(vpath),
+            breadcrump=mk_breadcrump(['api', self._cp_path_] + list(vpath)),
+            status_code=cherrypy.response.status,
+            reponse_headers='\n'.join(
+                '{}: {}'.format(k, v) for k, v in cherrypy.response.headers.items()),
+            data=data,
+            create_form=create_form
+        )
+
+    wrapper.exposed = True
+    if hasattr(meth, '_cp_config'):
+        wrapper._cp_config = meth._cp_config
+    return wrapper
+
+
+class BaseControllerMeta(type):
+    def __new__(mcs, name, bases, dct):
+        new_cls = type.__new__(mcs, name, bases, dct)
+
+        for a_name in new_cls.__dict__:
+            thing = new_cls.__dict__[a_name]
+            if isinstance(thing, (types.FunctionType, types.MethodType))\
+                    and getattr(thing, 'exposed', False):
+
+                # @cherrypy.tools.json_out() is incompatible with our browsable_api_view decorator.
+                cp_config = getattr(thing, '_cp_config', {})
+                if not cp_config.get('tools.json_out.on', False):
+                    setattr(new_cls, a_name, browsable_api_view(thing))
+        return new_cls
+
+
+@add_metaclass(BaseControllerMeta)
 class BaseController(object):
     """
     Base class for all controllers providing API endpoints.
     """
+
+    @cherrypy.expose
+    def default(self, *_vpath, **_params):
+        raise cherrypy.NotFound()
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -349,10 +479,24 @@ class RESTController(BaseController):
         func._args_from_json_ = True
         return func
 
+    @staticmethod
+    def _function_args(func):
+        if sys.version_info > (3, 0):  # pylint: disable=no-else-return
+            return list(inspect.signature(func).parameters.keys())
+        else:
+            return inspect.getargspec(func).args[1:]  # pylint: disable=deprecated-method
+
     # pylint: disable=W1505
     @staticmethod
     def _takes_json(func):
         def inner(*args, **kwargs):
+            if cherrypy.request.headers.get('Content-Type',
+                                            '') == 'application/x-www-form-urlencoded':
+                if hasattr(func, '_args_from_json_'):  # pylint: disable=no-else-return
+                    return func(*args, **kwargs)
+                else:
+                    return func(kwargs)
+
             content_length = int(cherrypy.request.headers['Content-Length'])
             body = cherrypy.request.body.read(content_length)
             if not body:
