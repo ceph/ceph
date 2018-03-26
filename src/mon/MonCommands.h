@@ -171,10 +171,11 @@ COMMAND("auth caps " \
 	"name=caps,type=CephString,n=N", \
 	"update caps for <name> from caps specified in the command", \
 	"auth", "rwx", "cli,rest")
-COMMAND("auth del " \
+COMMAND_WITH_FLAG("auth del " \
 	"name=entity,type=CephString", \
 	"delete all caps for <name>", \
-	"auth", "rwx", "cli,rest")
+	"auth", "rwx", "cli,rest", \
+    FLAG(DEPRECATED))
 COMMAND("auth rm " \
 	"name=entity,type=CephString", \
 	"remove all caps for <name>", \
@@ -345,10 +346,10 @@ COMMAND("mds compat rm_incompat " \
 COMMAND_WITH_FLAG("mds add_data_pool " \
 	"name=pool,type=CephString", \
 	"add data pool <pool>", "mds", "rw", "cli,rest", FLAG(OBSOLETE))
-COMMAND_WITH_FLAG("mds remove_data_pool " \
+COMMAND_WITH_FLAG("mds rm_data_pool " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest", FLAG(OBSOLETE))
-COMMAND_WITH_FLAG("mds rm_data_pool " \
+COMMAND_WITH_FLAG("mds remove_data_pool " \
 	"name=pool,type=CephString", \
 	"remove data pool <pool>", "mds", "rw", "cli,rest", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds newfs " \
@@ -423,12 +424,13 @@ COMMAND("mon add " \
 	"name=name,type=CephString " \
 	"name=addr,type=CephIPAddr", \
 	"add new monitor named <name> at <addr>", "mon", "rw", "cli,rest")
-COMMAND("mon remove " \
-	"name=name,type=CephString", \
-	"remove monitor named <name>", "mon", "rw", "cli,rest")
 COMMAND("mon rm " \
 	"name=name,type=CephString", \
 	"remove monitor named <name>", "mon", "rw", "cli,rest")
+COMMAND_WITH_FLAG("mon remove " \
+	"name=name,type=CephString", \
+	"remove monitor named <name>", "mon", "rw", "cli,rest", \
+    FLAG(DEPRECATED))
 COMMAND("mon feature ls " \
         "name=with_value,type=CephChoices,strings=--with-value,req=false", \
         "list available mon map features to be set/unset", \
@@ -582,11 +584,12 @@ COMMAND("osd crush rm " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
 	"remove <name> from crush map (everywhere, or just at <ancestor>)",\
 	"osd", "rw", "cli,rest")
-COMMAND("osd crush remove " \
+COMMAND_WITH_FLAG("osd crush remove " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
 	"remove <name> from crush map (everywhere, or just at <ancestor>)", \
-	"osd", "rw", "cli,rest")
+	"osd", "rw", "cli,rest", \
+    FLAG(DEPRECATED))
 COMMAND("osd crush unlink " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
 	"name=ancestor,type=CephString,req=false,goodchars=[A-Za-z0-9-_.]", \
@@ -914,12 +917,13 @@ COMMAND("osd pool create " \
 	"name=rule,type=CephString,req=false " \
         "name=expected_num_objects,type=CephInt,req=false", \
 	"create pool", "osd", "rw", "cli,rest")
-COMMAND("osd pool delete " \
+COMMAND_WITH_FLAG("osd pool delete " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname,req=false " \
 	"name=sure,type=CephString,req=false", \
 	"delete pool", \
-	"osd", "rw", "cli,rest")
+	"osd", "rw", "cli,rest", \
+    FLAG(DEPRECATED))
 COMMAND("osd pool rm " \
 	"name=pool,type=CephPoolname " \
 	"name=pool2,type=CephPoolname,req=false " \
@@ -994,16 +998,17 @@ COMMAND("osd tier add " \
 	"name=force_nonempty,type=CephChoices,strings=--force-nonempty,req=false",
 	"add the tier <tierpool> (the second one) to base pool <pool> (the first one)", \
 	"osd", "rw", "cli,rest")
-COMMAND("osd tier remove " \
-	"name=pool,type=CephPoolname " \
-	"name=tierpool,type=CephPoolname",
-	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
-	"osd", "rw", "cli,rest")
 COMMAND("osd tier rm " \
 	"name=pool,type=CephPoolname " \
 	"name=tierpool,type=CephPoolname",
 	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
 	"osd", "rw", "cli,rest")
+COMMAND_WITH_FLAG("osd tier remove " \
+	"name=pool,type=CephPoolname " \
+	"name=tierpool,type=CephPoolname",
+	"remove the tier <tierpool> (the second one) from base pool <pool> (the first one)", \
+	"osd", "rw", "cli,rest", \
+    FLAG(DEPRECATED))
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
 	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly|readforward|proxy|readproxy " \
@@ -1013,12 +1018,13 @@ COMMAND("osd tier set-overlay " \
 	"name=pool,type=CephPoolname " \
 	"name=overlaypool,type=CephPoolname", \
 	"set the overlay pool for base pool <pool> to be <overlaypool>", "osd", "rw", "cli,rest")
-COMMAND("osd tier remove-overlay " \
-	"name=pool,type=CephPoolname ", \
-	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier rm-overlay " \
 	"name=pool,type=CephPoolname ", \
 	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest")
+COMMAND_WITH_FLAG("osd tier remove-overlay " \
+	"name=pool,type=CephPoolname ", \
+	"remove the overlay pool for base pool <pool>", "osd", "rw", "cli,rest", \
+    FLAG(DEPRECATED))
 
 COMMAND("osd tier add-cache " \
 	"name=pool,type=CephPoolname " \
@@ -1043,9 +1049,10 @@ COMMAND_WITH_FLAG("config-key put " \
 		  "name=val,type=CephString,req=false",			\
 		  "put <key>, value <val>", "config-key", "rw", "cli,rest",
 		  FLAG(DEPRECATED))
-COMMAND("config-key del " \
+COMMAND_WITH_FLAG("config-key del " \
 	"name=key,type=CephString", \
-	"delete <key>", "config-key", "rw", "cli,rest")
+	"delete <key>", "config-key", "rw", "cli,rest", \
+    FLAG(DEPRECATED))
 COMMAND("config-key rm " \
 	"name=key,type=CephString", \
 	"rm <key>", "config-key", "rw", "cli,rest")

@@ -19,6 +19,8 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 
+#include "include/util.h"
+
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "global/global_init.h"
@@ -94,7 +96,7 @@ void usage()
   cout << "  object unlink              unlink object from bucket index\n";
   cout << "  object rewrite             rewrite the specified object\n";
   cout << "  objects expire             run expired objects cleanup\n";
-  cout << "  period delete              delete a period\n";
+  cout << "  period rm                  remove a period\n";
   cout << "  period get                 get period info\n";
   cout << "  period get-current         get current period info\n";
   cout << "  period pull                pull a period\n";
@@ -110,7 +112,7 @@ void usage()
   cout << "  global quota enable        enable a global quota\n";
   cout << "  global quota disable       disable a global quota\n";
   cout << "  realm create               create a new realm\n";
-  cout << "  realm delete               delete a realm\n";
+  cout << "  realm rm                   remove a realm\n";
   cout << "  realm get                  show realm info\n";
   cout << "  realm get-default          get default realm name\n";
   cout << "  realm list                 list realms\n";
@@ -122,11 +124,11 @@ void usage()
   cout << "  zonegroup add              add a zone to a zonegroup\n";
   cout << "  zonegroup create           create a new zone group info\n";
   cout << "  zonegroup default          set default zone group\n";
-  cout << "  zonegroup delete           delete a zone group info\n";
+  cout << "  zonegroup rm               remove a zone group info\n";
   cout << "  zonegroup get              show zone group info\n";
   cout << "  zonegroup modify           modify an existing zonegroup\n";
   cout << "  zonegroup set              set zone group info (requires infile)\n";
-  cout << "  zonegroup remove           remove a zone from a zonegroup\n";
+  cout << "  zonegroup rm               remove a zone from a zonegroup\n";
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
   cout << "  zonegroup placement list   list zonegroup's placement targets\n";
@@ -135,7 +137,7 @@ void usage()
   cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
   cout << "  zonegroup placement default  set a zonegroup's default placement target\n";
   cout << "  zone create                create a new zone\n";
-  cout << "  zone delete                delete a zone\n";
+  cout << "  zone rm                    remove a zone\n";
   cout << "  zone get                   show zone cluster params\n";
   cout << "  zone modify                modify an existing zone\n";
   cout << "  zone set                   set zone cluster params (requires infile)\n";
@@ -190,19 +192,19 @@ void usage()
   cout << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
   cout << "  replicalog get             get replica metadata log entry\n";
   cout << "  replicalog update          update replica metadata log entry\n";
-  cout << "  replicalog delete          delete replica metadata log entry\n";
+  cout << "  replicalog rm              remove replica metadata log entry\n";
   cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
   cout << "  role create                create a AWS role for use with STS\n";
-  cout << "  role delete                delete a role\n";
+  cout << "  role rm                    remove a role\n";
   cout << "  role get                   get a role\n";
   cout << "  role list                  list roles with specified path prefix\n";
   cout << "  role modify                modify the assume role policy of an existing role\n";
   cout << "  role-policy put            add/update permission policy to role\n";
   cout << "  role-policy list           list policies attached to a role\n";
   cout << "  role-policy get            get the specified inline policy document embedded with the given role\n";
-  cout << "  role-policy delete         delete policy attached to a role\n";
+  cout << "  role-policy rm             remove policy attached to a role\n";
   cout << "  reshard add                schedule a resharding of a bucket\n";
   cout << "  reshard list               list all bucket resharding or scheduled to be resharded\n";
   cout << "  reshard status             read bucket resharding status\n";
@@ -504,6 +506,8 @@ enum {
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
 {
+  using ceph::util::match_str;
+
   *need_more = false;
   // NOTE: please keep the checks in alphabetical order !!!
   if (strcmp(cmd, "bi") == 0 ||
@@ -706,7 +710,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "disable") == 0)
       return OPT_GLOBAL_QUOTA_DISABLE;
   } else if (strcmp(prev_cmd, "period") == 0) {
-    if (strcmp(cmd, "delete") == 0)
+    if (match_str(cmd, "rm", "delete"))
       return OPT_PERIOD_DELETE;
     if (strcmp(cmd, "get") == 0)
       return OPT_PERIOD_GET;
@@ -725,7 +729,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   } else if (strcmp(prev_cmd, "realm") == 0) {
     if (strcmp(cmd, "create") == 0)
       return OPT_REALM_CREATE;
-    if (strcmp(cmd, "delete") == 0)
+    if (match_str(cmd, "rm", "delete"))
       return OPT_REALM_DELETE;
     if (strcmp(cmd, "get") == 0)
       return OPT_REALM_GET;
@@ -772,7 +776,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ZONEGROUP_LIST;
     if (strcmp(cmd, "set") == 0)
       return OPT_ZONEGROUP_SET;
-    if (strcmp(cmd, "remove") == 0)
+    if (match_str(cmd, "rm", "remove"))
       return OPT_ZONEGROUP_REMOVE;
     if (strcmp(cmd, "rename") == 0)
       return OPT_ZONEGROUP_RENAME;
@@ -937,7 +941,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_ROLE_POLICY_LIST;
     if (strcmp(cmd, "get") == 0)
       return OPT_ROLE_POLICY_GET;
-    if (strcmp(cmd, "delete") == 0)
+    if (match_str(cmd, "rm", "delete"))
       return OPT_ROLE_POLICY_DELETE;
   } else if (strcmp(prev_cmd, "reshard") == 0) {
     if (strcmp(cmd, "bucket") == 0)

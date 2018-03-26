@@ -91,4 +91,15 @@ void dump_services(Formatter* f, const map<string, list<string> >& services, con
 
 string cleanbin(bufferlist &bl, bool &b64);
 string cleanbin(string &str);
+
+namespace ceph::util {
+
+// Returns true if s matches any parameters:
+template <typename ...XS>
+bool match_str(const std::string& s, const XS& ...xs)
+{
+ return ((s == xs) || ...);
+}
+
+} // namespace ceph::util
 #endif /* CEPH_UTIL_H */
