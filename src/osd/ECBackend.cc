@@ -2060,9 +2060,7 @@ void ECBackend::objects_read_async(
       sinfo.offset_len_to_stripe_bounds(
 	make_pair(i->first.get<0>(), i->first.get<1>()));
 
-    extent_set esnew;
-    esnew.insert(tmp.first, tmp.second);
-    es.union_of(esnew);
+    es.union_insert(tmp.first, tmp.second);
     flags |= i->first.get<2>();
   }
 
