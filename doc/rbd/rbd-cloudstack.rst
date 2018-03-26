@@ -115,7 +115,7 @@ To add a Ceph block device as Primary Storage, the steps include:
    
 #. Add cluster information (cephx is supported).
 
-   - For **RADOS Monitor**, provide the IP address/hostname of a Ceph monitor node.
+   - For **RADOS Monitor**, provide the IP address of a Ceph monitor node.
    
    - For **RADOS Pool**, provide the name of a RBD pool.
    
