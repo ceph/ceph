@@ -2423,6 +2423,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     pi.inode.rstat.rbytes = new_size;
     dout(10) << "check_inode_max_size mtime " << pi.inode.mtime << " -> " << new_mtime << dendl;
     pi.inode.mtime = new_mtime;
+    if (new_mtime > pi.inode.ctime)
+      pi.inode.ctime = pi.inode.rstat.rctime = new_mtime;
   }
 
   // use EOpen if the file is still open; otherwise, use EUpdate.
@@ -3186,7 +3188,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, CInode::m
   if (m->get_ctime() > pi->ctime) {
     dout(7) << "  ctime " << pi->ctime << " -> " << m->get_ctime()
 	    << " for " << *in << dendl;
-    pi->ctime = m->get_ctime();
+    pi->ctime = pi->rstat.rctime = m->get_ctime();
   }
 
   if ((features & CEPH_FEATURE_FS_CHANGE_ATTR) &&
