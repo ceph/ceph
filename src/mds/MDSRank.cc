@@ -1140,7 +1140,7 @@ void MDSRank::boot_start(BootStep step, int r)
 void MDSRank::validate_sessions()
 {
   assert(mds_lock.is_locked_by_me());
-  std::vector<Session*> victims;
+  bool valid = true;
 
   // Identify any sessions which have state inconsistent with other,
   // after they have been loaded from rados during startup.
@@ -1150,19 +1150,15 @@ void MDSRank::validate_sessions()
     Session *session = i.second;
     interval_set<inodeno_t> badones;
     if (inotable->intersects_free(session->info.prealloc_inos, &badones)) {
-      clog->error() << "Client session loaded with invalid preallocated "
-                          "inodes, evicting session " << *session;
-
-      // Make the session consistent with inotable so that it can
-      // be cleanly torn down
-      session->info.prealloc_inos.subtract(badones);
-
-      victims.push_back(session);
+      clog->error() << "client " << *session
+		    << "loaded with preallocated inodes that are inconsistent with inotable";
+      valid = false;
     }
   }
 
-  for (const auto &session: victims) {
-    server->kill_session(session, nullptr);
+  if (!valid) {
+    damaged();
+    assert(valid);
   }
 }
 
