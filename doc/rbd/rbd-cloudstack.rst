@@ -123,7 +123,7 @@ To add a Ceph block device as Primary Storage, the steps include:
    
    - For **RADOS Secret**, provide the base64 encoded secret associated to the RBD pool user chosen.
    
-   - **Storage Tags** are optional. Use tags at your own discretion.
+   - **Storage Tags** are optional. Use tags at your own discretion. For more information about storage tags in CloudStack, refer to `Storage Tags`_.
    
 #. Click **OK**.
 
@@ -150,5 +150,6 @@ Limitations
 .. _Install and Configure QEMU: ../qemu-rbd
 .. _Install and Configure libvirt: ../libvirt
 .. _KVM Hypervisor Host Installation: http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Installation_Guide/hypervisor-kvm-install-flow.html
+.. _Storage Tags: http://docs.cloudstack.apache.org/projects/cloudstack-administration/en/4.11/storage.html#storage-tags
 .. _Create a New Disk Offering (4.2.0): http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Admin_Guide/compute-disk-service-offerings.html#creating-disk-offerings
 .. _User Management: ../../rados/operations/user-management
