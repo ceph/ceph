@@ -85,7 +85,8 @@ class DashboardTestCase(MgrTestCase):
             self._resp = self._session.delete(url, json=data)
         elif method == 'PUT':
             self._resp = self._session.put(url, json=data)
-        return None
+        else:
+            assert False
 
     def _get(self, url):
         return self._request(url, 'GET')
