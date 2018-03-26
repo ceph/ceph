@@ -103,7 +103,7 @@ To add a Ceph block device as Primary Storage, the steps include:
    
    - Zone.
    
-   - Pod.
+   - Pod
    
    - Cluster.
    
