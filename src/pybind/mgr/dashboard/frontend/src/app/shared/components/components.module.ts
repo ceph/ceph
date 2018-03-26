@@ -6,6 +6,7 @@ import { AlertModule, PopoverModule } from 'ngx-bootstrap';
 
 import { HelperComponent } from './helper/helper.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
+import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { ViewCacheComponent } from './view-cache/view-cache.component';
 
 @NgModule({
@@ -18,13 +19,15 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
   declarations: [
     ViewCacheComponent,
     SparklineComponent,
-    HelperComponent
+    HelperComponent,
+    SubmitButtonComponent
   ],
   providers: [],
   exports: [
     ViewCacheComponent,
     SparklineComponent,
-    HelperComponent
+    HelperComponent,
+    SubmitButtonComponent
   ]
 })
 export class ComponentsModule { }
