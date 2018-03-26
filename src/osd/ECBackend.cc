@@ -2172,7 +2172,6 @@ struct CallClientContexts :
     if (res.r != 0)
       goto out;
     assert(res.returned.size() == to_read.size());
-    assert(res.r == 0);
     assert(res.errors.empty());
     for (auto &&read: to_read) {
       pair<uint64_t, uint64_t> adjusted =
