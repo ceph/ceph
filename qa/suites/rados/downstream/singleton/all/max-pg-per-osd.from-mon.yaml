@@ -1,0 +1,26 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 10 # GB
+overrides:
+  ceph:
+    create_rbd_pool: False
+    conf:
+      mon:
+        osd pool default size: 2
+      osd:
+        mon max pg per osd : 2
+        osd max pg per osd hard ratio : 1
+    log-whitelist:
+      - \(TOO_FEW_PGS\)
+tasks:
+- install:
+- ceph:
+- osd_max_pg_per_osd:
+    test_create_from_mon: True
+    pg_num: 2

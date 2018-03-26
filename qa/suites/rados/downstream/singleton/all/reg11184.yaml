@@ -1,0 +1,28 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+
+overrides:
+  ceph:
+    conf:
+      osd:
+        debug osd: 5
+    log-whitelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+tasks:
+- install:
+- ceph:
+- reg11184:
