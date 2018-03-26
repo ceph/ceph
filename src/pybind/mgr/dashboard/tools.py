@@ -101,7 +101,6 @@ class ViewCache(object):
     VALUE_OK = 0
     VALUE_STALE = 1
     VALUE_NONE = 2
-    VALUE_EXCEPTION = 3
 
     class GetterThread(threading.Thread):
         def __init__(self, view, fn, args, kwargs):
@@ -184,7 +183,8 @@ class ViewCache(object):
                     # We fetched the data within the timeout
                     if self.exception:
                         # execution raised an exception
-                        return ViewCache.VALUE_EXCEPTION, self.exception
+                        # pylint: disable=raising-bad-type
+                        raise self.exception
                     return ViewCache.VALUE_OK, self.value
                 elif self.value_when is not None:
                     # We have some data, but it doesn't meet freshness requirements
