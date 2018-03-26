@@ -99,15 +99,15 @@ To add a Ceph block device as Primary Storage, the steps include:
 #. Click the **Add Primary Storage** button on the top right hand side.
 #. Fill in the following information, according to your infrastructure setup:
 
-   - Scope ``(i.e. Cluster or Zone-Wide)``
+   - Scope ``(i.e. Cluster or Zone-Wide)``.
    
-   - Zone
+   - Zone.
    
-   - Pod
+   - Pod.
    
-   - Cluster
+   - Cluster.
    
-   - Name of Primary Storage
+   - Name of Primary Storage.
    
    - For **Protocol**, select ``RBD``.
    
