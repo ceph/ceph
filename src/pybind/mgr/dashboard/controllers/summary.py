@@ -58,7 +58,7 @@ class Summary(BaseController):
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def default(self):
+    def default(self, *_vpath, **_params):
         return {
             'rbd_pools': self._rbd_pool_data(),
             'health_status': self._health_status(),

@@ -6,10 +6,11 @@ from cherrypy.lib.sessions import RamSession
 from mock import patch
 
 from .helper import ControllerTestCase
-from ..tools import RESTController
+from ..tools import RESTController, ApiController
 
 
 # pylint: disable=W0613
+@ApiController('foo')
 class FooResource(RESTController):
     elems = []
 
@@ -107,3 +108,21 @@ class RESTControllerTest(ControllerTestCase):
 
         self._post('/foo/1/detail', 'post-data')
         self.assertStatus(405)
+
+    def test_developer_page(self):
+        self.getPage('/foo', headers=[('Accept', 'text/html')])
+        self.assertIn('<p>GET', self.body.decode('utf-8'))
+        self.assertIn('Content-Type: text/html', self.body.decode('utf-8'))
+        self.assertIn('<form action="/api/foo/" method="post">', self.body.decode('utf-8'))
+        self.assertIn('<input type="hidden" name="_method" value="post" />',
+                      self.body.decode('utf-8'))
+
+    def test_developer_exception_page(self):
+        self.getPage('/foo',
+                     headers=[('Accept', 'text/html'), ('Content-Length', '0')],
+                     method='put')
+        assert '<p>PUT' in self.body.decode('utf-8')
+        assert 'Exception' in self.body.decode('utf-8')
+        assert 'Content-Type: text/html' in self.body.decode('utf-8')
+        assert '<form action="/api/foo/" method="post">' in self.body.decode('utf-8')
+        assert '<input type="hidden" name="_method" value="post" />' in self.body.decode('utf-8')

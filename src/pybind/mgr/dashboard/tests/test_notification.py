@@ -56,7 +56,7 @@ class NotificationQueueTest(unittest.TestCase):
         with self.assertRaises(Exception) as ctx:
             NotificationQueue.register(None, 1)
         self.assertEqual(str(ctx.exception),
-                         "types param is neither a string nor a list")
+                         "n_types param is neither a string nor a list")
 
     def test_notifications(self):
         NotificationQueue.start_queue()
