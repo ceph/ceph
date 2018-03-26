@@ -9,6 +9,7 @@ from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.systemd import systemctl
 from ceph_volume.api import lvm as api
+from .listing import direct_report
 
 
 logger = logging.getLogger(__name__)
@@ -213,6 +214,11 @@ class Activate(object):
         The lvs associated with the OSD need to have been prepared previously,
         so that all needed tags and metadata exist.
 
+        When migrating OSDs, or a multiple-osd activation is needed, the
+        ``--all`` flag can be used instead of the individual ID and FSID:
+
+            ceph-volume lvm activate --all
+
         """)
         parser = argparse.ArgumentParser(
             prog='ceph-volume lvm activate',
@@ -246,6 +252,11 @@ class Activate(object):
             '--filestore',
             action='store_true',
             help='filestore objectstore',
+        )
+        parser.add_argument(
+            '--all',
+            action='store_true',
+            help='Activate all OSDs found in the system',
         )
         if len(self.argv) == 0:
             print(sub_command_help)
