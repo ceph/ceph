@@ -5116,7 +5116,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   if (bluefs_free < min_free &&
       min_free < free_cap) {
     uint64_t g = min_free - bluefs_free;
-    dout(10) << __func__ << " bluefs_free " << bluefs_total
+    dout(10) << __func__ << " bluefs_free " << bluefs_free
 	     << " < min " << min_free
 	     << ", should gift " << pretty_si_t(g) << dendl;
     if (g > gift)
