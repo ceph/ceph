@@ -45,6 +45,9 @@ class TestModuleSelftest(MgrTestCase):
     def test_influx(self):
         self._selftest_plugin("influx")
 
+    def test_telegraf(self):
+        self._selftest_plugin("telegraf")
+
     def test_iostat(self):
         self._selftest_plugin("iostat")
 
