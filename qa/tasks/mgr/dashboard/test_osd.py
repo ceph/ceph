@@ -2,15 +2,13 @@
 
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, authenticate
+from .helper import DashboardTestCase, authenticate, JObj, JAny, JList, JLeaf, JTuple
 
 
 class OsdTest(DashboardTestCase):
 
     def assert_in_and_not_none(self, data, properties):
-        for prop in properties:
-            self.assertIn(prop, data)
-            self.assertIsNotNone(data[prop])
+        self.assertSchema(data, JObj({p: JAny(none=False) for p in properties}, allow_unknown=True))
 
     @authenticate
     def test_list(self):
@@ -25,6 +23,8 @@ class OsdTest(DashboardTestCase):
         self.assert_in_and_not_none(data['stats'], ['numpg', 'stat_bytes_used', 'stat_bytes',
                                                     'op_r', 'op_w'])
         self.assert_in_and_not_none(data['stats_history'], ['op_out_bytes', 'op_in_bytes'])
+        self.assertSchema(data['stats_history']['op_out_bytes'],
+                          JList(JTuple([JLeaf(int), JLeaf(float)])))
 
     @authenticate
     def test_details(self):
