@@ -468,27 +468,27 @@ class NotificationQueue(threading.Thread):
         logger.debug("notification queue stopped")
 
     @classmethod
-    def register(cls, func, types=None):
+    def register(cls, func, n_types=None):
         """Registers function to listen for notifications
 
-        If the second parameter `types` is omitted, the function in `func`
+        If the second parameter `n_types` is omitted, the function in `func`
         parameter will be called for any type of notifications.
 
         Args:
             func (function): python function ex: def foo(val)
-            types (str|list): the single type to listen, or a list of types
+            n_types (str|list): the single type to listen, or a list of notification types
         """
         with cls._lock:
-            if not types:
+            if not n_types:
                 cls._listeners[cls._ALL_TYPES_].add(func)
                 return
-            if isinstance(types, str):
-                cls._listeners[types].add(func)
-            elif isinstance(types, list):
-                for typ in types:
+            if isinstance(n_types, str):
+                cls._listeners[n_types].add(func)
+            elif isinstance(n_types, list):
+                for typ in n_types:
                     cls._listeners[typ].add(func)
             else:
-                raise Exception("types param is neither a string nor a list")
+                raise Exception("n_types param is neither a string nor a list")
 
     @classmethod
     def new_notification(cls, notify_type, notify_value):
