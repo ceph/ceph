@@ -58,7 +58,7 @@ class Osd(RESTController):
             # Gauge stats
             for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 o['stats'][s.split('.')[1]] = self.get_latest(osd_spec, s)
-        return osds.values()
+        return list(osds.values())
 
     def get_osd_map(self):
         osds = {}
