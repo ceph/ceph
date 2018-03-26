@@ -7077,7 +7077,12 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRevoked &)
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
   cancel_backfill();
-  return transit<WaitLocalBackfillReserved>();
+  if (pg->needs_backfill()) {
+    return transit<WaitLocalBackfillReserved>();
+  } else {
+    // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
+    return discard_event();
+  }
 }
 
 void PG::RecoveryState::Backfilling::exit()
