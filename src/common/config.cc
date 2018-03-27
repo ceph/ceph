@@ -42,7 +42,7 @@ using std::ostringstream;
 using std::pair;
 using std::string;
 
-static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
+static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, $home/.ceph/$cluster.conf, $cluster.conf"
 #if defined(__FreeBSD__)
     ", /usr/local/etc/ceph/$cluster.conf"
 #endif
@@ -1156,6 +1156,9 @@ Option::value_t md_config_t::_expand_meta(
 	out += stringify(getpid());
       } else if (var == "cctid") {
 	out += stringify((unsigned long long)this);
+      } else if (var == "home") {
+	const char *home = getenv("HOME");
+	out = home ? std::string(home) : std::string();
       } else {
 	if (var == "data_dir") {
 	  var = data_dir_option;
