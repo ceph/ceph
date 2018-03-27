@@ -41,7 +41,6 @@ TEST(util, collect_sys_info)
   collect_sys_info(&sys_info, cct);
 
   ASSERT_TRUE(sys_info.find("distro") != sys_info.end());
-  ASSERT_TRUE(sys_info.find("distro_version") != sys_info.end());
   ASSERT_TRUE(sys_info.find("distro_description") != sys_info.end());
 
   cct->put();
