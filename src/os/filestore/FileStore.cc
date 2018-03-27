@@ -759,7 +759,7 @@ int FileStore::dump_journal(ostream& out)
   return r;
 }
 
-FileStoreBackend *FileStoreBackend::create(long f_type, FileStore *fs)
+FileStoreBackend *FileStoreBackend::create(unsigned long f_type, FileStore *fs)
 {
   switch (f_type) {
 #if defined(__linux__)
@@ -779,7 +779,7 @@ FileStoreBackend *FileStoreBackend::create(long f_type, FileStore *fs)
   }
 }
 
-void FileStore::create_backend(long f_type)
+void FileStore::create_backend(unsigned long f_type)
 {
   m_fs_type = f_type;
 
