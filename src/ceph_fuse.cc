@@ -95,6 +95,19 @@ int main(int argc, const char **argv, const char *envp[]) {
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)nullptr)) {
       usage();
+    } else if (ceph_argparse_flag(args, i, "-V", (char*)nullptr)) {
+      const char* tmpargv[] = {
+	"ceph-fuse",
+	"-V"
+      };
+
+      struct fuse_args fargs = FUSE_ARGS_INIT(2, (char**)tmpargv);
+      if (fuse_parse_cmdline(&fargs, nullptr, nullptr, nullptr) == -1) {
+       derr << "fuse_parse_cmdline failed." << dendl;
+      }
+      assert(fargs.allocated);
+      fuse_opt_free_args(&fargs);
+      exit(0);
     } else {
       ++i;
     }
