@@ -661,6 +661,11 @@ Per mapping (block device) `rbd device map` options:
 
 * exclusive - Disable automatic exclusive lock transitions (since 4.12).
 
+* notrim - Turn off discard and write zeroes offload support to avoid
+  deprovisioning a fully provisioned image (since 4.17). When enabled, discard
+  requests will fail with -EOPNOTSUPP, write zeroes requests will fall back to
+  manually zeroing.
+
 `rbd device unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
