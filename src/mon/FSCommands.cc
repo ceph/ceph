@@ -793,7 +793,7 @@ class LegacyHandler : public T
       return -ENOENT;
     }
     std::map<string, cmd_vartype> modified = cmdmap;
-    modified["fs_name"] = fs->mds_map.get_fs_name();
+    modified["fs_name"] = std::string(fs->mds_map.get_fs_name());
     return T::handle(mon, fsmap, op, modified, ss);
   }
 };

@@ -16,6 +16,8 @@
 #ifndef CEPH_MDENTRYUNLINK_H
 #define CEPH_MDENTRYUNLINK_H
 
+#include <boost/utility/string_view.hpp>
+
 class MDentryUnlink : public Message {
   dirfrag_t dirfrag;
   string dn;
@@ -28,7 +30,7 @@ class MDentryUnlink : public Message {
 
   MDentryUnlink() :
     Message(MSG_MDS_DENTRYUNLINK) { }
-  MDentryUnlink(dirfrag_t df, string& n) :
+  MDentryUnlink(dirfrag_t df, boost::string_view n) :
     Message(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n) {}

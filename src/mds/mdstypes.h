@@ -9,6 +9,7 @@
 #include <ostream>
 #include <set>
 #include <map>
+#include <boost/utility/string_view.hpp>
 
 #include "common/config.h"
 #include "common/Clock.h"
@@ -151,19 +152,19 @@ inline string ccap_string(int cap)
 
 
 struct scatter_info_t {
-  version_t version;
+  version_t version = 0;
 
-  scatter_info_t() : version(0) {}
+  scatter_info_t() {}
 };
 
 struct frag_info_t : public scatter_info_t {
   // this frag
   utime_t mtime;
-  uint64_t change_attr;
-  int64_t nfiles;        // files
-  int64_t nsubdirs;      // subdirs
+  uint64_t change_attr = 0;
+  int64_t nfiles = 0;        // files
+  int64_t nsubdirs = 0;      // subdirs
 
-  frag_info_t() : change_attr(0), nfiles(0), nsubdirs(0) {}
+  frag_info_t() {}
 
   int64_t size() const { return nfiles + nsubdirs; }
 
@@ -222,14 +223,14 @@ std::ostream& operator<<(std::ostream &out, const frag_info_t &f);
 struct nest_info_t : public scatter_info_t {
   // this frag + children
   utime_t rctime;
-  int64_t rbytes;
-  int64_t rfiles;
-  int64_t rsubdirs;
+  int64_t rbytes = 0;
+  int64_t rfiles = 0;
+  int64_t rsubdirs = 0;
   int64_t rsize() const { return rfiles + rsubdirs; }
 
-  int64_t rsnaprealms;
+  int64_t rsnaprealms = 0;
 
-  nest_info_t() : rbytes(0), rfiles(0), rsubdirs(0), rsnaprealms(0) {}
+  nest_info_t() {}
 
   void zero() {
     *this = nest_info_t();
@@ -313,10 +314,10 @@ inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
 
 struct quota_info_t
 {
-  int64_t max_bytes;
-  int64_t max_files;
+  int64_t max_bytes = 0;
+  int64_t max_files = 0;
  
-  quota_info_t() : max_bytes(0), max_files(0) {}
+  quota_info_t() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -377,19 +378,19 @@ inline std::ostream& operator<<(std::ostream &out, const vinodeno_t &vino) {
  */
 struct client_writeable_range_t {
   struct byte_range_t {
-    uint64_t first, last;    // interval client can write to
-    byte_range_t() : first(0), last(0) {}
+    uint64_t first = 0, last = 0;    // interval client can write to
+    byte_range_t() {}
   };
 
   byte_range_t range;
-  snapid_t follows;     // aka "data+metadata flushed thru"
+  snapid_t follows = 0;     // aka "data+metadata flushed thru"
 
-  client_writeable_range_t() : follows(0) {}
+  client_writeable_range_t() {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<client_writeable_range_t*>& ls);
+  static void generate_test_instances(std::list<client_writeable_range_t*>& ls);
 };
 
 inline void decode(client_writeable_range_t::byte_range_t& range, bufferlist::iterator& bl) {
@@ -411,7 +412,7 @@ struct inline_data_t {
 private:
   std::unique_ptr<bufferlist> blp;
 public:
-  version_t version;
+  version_t version = 1;
 
   void free_data() {
     blp.reset();
@@ -423,7 +424,7 @@ public:
   }
   size_t length() const { return blp ? blp->length() : 0; }
 
-  inline_data_t() : version(1) {}
+  inline_data_t() {}
   inline_data_t(const inline_data_t& o) : version(o.version) {
     if (o.blp)
       get_data() = *o.blp;
@@ -459,6 +460,7 @@ typedef uint32_t damage_flags_t;
 /*
  * inode_t
  */
+template<template<typename> class Allocator = std::allocator>
 struct inode_t {
   /**
    * ***************
@@ -466,39 +468,40 @@ struct inode_t {
    * ***************
    */
   // base (immutable)
-  inodeno_t ino;
-  uint32_t   rdev;    // if special file
+  inodeno_t ino = 0;
+  uint32_t   rdev = 0;    // if special file
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
   utime_t    btime;   // birth time
 
   // perm (namespace permissions)
-  uint32_t   mode;
-  uid_t      uid;
-  gid_t      gid;
+  uint32_t   mode = 0;
+  uid_t      uid = 0;
+  gid_t      gid = 0;
 
   // nlink
-  int32_t    nlink;  
+  int32_t    nlink = 0;
 
   // file (data access)
   ceph_dir_layout  dir_layout;    // [dir only]
   file_layout_t layout;
-  compact_set <int64_t> old_pools;
-  uint64_t   size;        // on directory, # dentries
-  uint64_t   max_size_ever; // max size the file has ever been
-  uint32_t   truncate_seq;
-  uint64_t   truncate_size, truncate_from;
-  uint32_t   truncate_pending;
+  compact_set<int64_t, std::less<int64_t>, Allocator<int64_t>> old_pools;
+  uint64_t   size = 0;        // on directory, # dentries
+  uint64_t   max_size_ever = 0; // max size the file has ever been
+  uint32_t   truncate_seq = 0;
+  uint64_t   truncate_size = 0, truncate_from = 0;
+  uint32_t   truncate_pending = 0;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
-  uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
-  inline_data_t inline_data;
+  uint32_t   time_warp_seq = 0;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+  inline_data_t inline_data; // FIXME check
 
   // change attribute
-  uint64_t   change_attr;
+  uint64_t   change_attr = 0;
 
-  std::map<client_t,client_writeable_range_t> client_ranges;  // client(s) can write to these ranges
+  using client_range_map = std::map<client_t,client_writeable_range_t,std::less<client_t>,Allocator<std::pair<const client_t,client_writeable_range_t>>>;
+  client_range_map client_ranges;  // client(s) can write to these ranges
 
   // dirfrag, recursive accountin
   frag_info_t dirstat;         // protected by my filelock
@@ -507,31 +510,24 @@ struct inode_t {
 
   quota_info_t quota;
 
-  mds_rank_t export_pin;
+  mds_rank_t export_pin = MDS_RANK_NONE;
  
   // special stuff
-  version_t version;           // auth only
-  version_t file_data_version; // auth only
-  version_t xattr_version;
+  version_t version = 0;           // auth only
+  version_t file_data_version = 0; // auth only
+  version_t xattr_version = 0;
 
   utime_t last_scrub_stamp;    // start time of last complete scrub
-  version_t last_scrub_version;// (parent) start version of last complete scrub
+  version_t last_scrub_version = 0;// (parent) start version of last complete scrub
 
-  version_t backtrace_version;
+  version_t backtrace_version = 0;
 
   snapid_t oldest_snap;
 
-  string stray_prior_path; //stores path before unlink
+  std::basic_string<char,std::char_traits<char>,Allocator<char>> stray_prior_path; //stores path before unlink
 
-  inode_t() : ino(0), rdev(0),
-	      mode(0), uid(0), gid(0), nlink(0),
-	      size(0), max_size_ever(0),
-	      truncate_seq(0), truncate_size(0), truncate_from(0),
-	      truncate_pending(0),
-	      time_warp_seq(0), change_attr(0),
-              export_pin(MDS_RANK_NONE),
-	      version(0), file_data_version(0), xattr_version(0),
-	      last_scrub_version(0), backtrace_version(0) {
+  inode_t()
+  {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));
@@ -614,7 +610,7 @@ struct inode_t {
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<inode_t*>& ls);
+  static void generate_test_instances(std::list<inode_t*>& ls);
   /**
    * Compare this inode_t with another that represent *the same inode*
    * at different points in time.
@@ -631,48 +627,416 @@ struct inode_t {
 private:
   bool older_is_consistent(const inode_t &other) const;
 };
-WRITE_CLASS_ENCODER_FEATURES(inode_t)
 
+// These methods may be moved back to mdstypes.cc when we have pmr
+template<template<typename> class Allocator>
+void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
+{
+  ENCODE_START(15, 6, bl);
+
+  ::encode(ino, bl);
+  ::encode(rdev, bl);
+  ::encode(ctime, bl);
+
+  ::encode(mode, bl);
+  ::encode(uid, bl);
+  ::encode(gid, bl);
+
+  ::encode(nlink, bl);
+  {
+    // removed field
+    bool anchored = 0;
+    ::encode(anchored, bl);
+  }
+
+  ::encode(dir_layout, bl);
+  ::encode(layout, bl, features);
+  ::encode(size, bl);
+  ::encode(truncate_seq, bl);
+  ::encode(truncate_size, bl);
+  ::encode(truncate_from, bl);
+  ::encode(truncate_pending, bl);
+  ::encode(mtime, bl);
+  ::encode(atime, bl);
+  ::encode(time_warp_seq, bl);
+  ::encode(client_ranges, bl);
+
+  ::encode(dirstat, bl);
+  ::encode(rstat, bl);
+  ::encode(accounted_rstat, bl);
+
+  ::encode(version, bl);
+  ::encode(file_data_version, bl);
+  ::encode(xattr_version, bl);
+  ::encode(backtrace_version, bl);
+  ::encode(old_pools, bl);
+  ::encode(max_size_ever, bl);
+  ::encode(inline_data, bl);
+  ::encode(quota, bl);
+
+  ::encode(stray_prior_path, bl);
+
+  ::encode(last_scrub_version, bl);
+  ::encode(last_scrub_stamp, bl);
+
+  ::encode(btime, bl);
+  ::encode(change_attr, bl);
+
+  ::encode(export_pin, bl);
+
+  ENCODE_FINISH(bl);
+}
+
+template<template<typename> class Allocator>
+void inode_t<Allocator>::decode(bufferlist::iterator &p)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
+
+  ::decode(ino, p);
+  ::decode(rdev, p);
+  ::decode(ctime, p);
+
+  ::decode(mode, p);
+  ::decode(uid, p);
+  ::decode(gid, p);
+
+  ::decode(nlink, p);
+  {
+    bool anchored;
+    ::decode(anchored, p);
+  }
+
+  if (struct_v >= 4)
+    ::decode(dir_layout, p);
+  else
+    memset(&dir_layout, 0, sizeof(dir_layout));
+  ::decode(layout, p);
+  ::decode(size, p);
+  ::decode(truncate_seq, p);
+  ::decode(truncate_size, p);
+  ::decode(truncate_from, p);
+  if (struct_v >= 5)
+    ::decode(truncate_pending, p);
+  else
+    truncate_pending = 0;
+  ::decode(mtime, p);
+  ::decode(atime, p);
+  ::decode(time_warp_seq, p);
+  if (struct_v >= 3) {
+    ::decode(client_ranges, p);
+  } else {
+    map<client_t, client_writeable_range_t::byte_range_t> m;
+    ::decode(m, p);
+    for (map<client_t, client_writeable_range_t::byte_range_t>::iterator
+	q = m.begin(); q != m.end(); ++q)
+      client_ranges[q->first].range = q->second;
+  }
+
+  ::decode(dirstat, p);
+  ::decode(rstat, p);
+  ::decode(accounted_rstat, p);
+
+  ::decode(version, p);
+  ::decode(file_data_version, p);
+  ::decode(xattr_version, p);
+  if (struct_v >= 2)
+    ::decode(backtrace_version, p);
+  if (struct_v >= 7)
+    ::decode(old_pools, p);
+  if (struct_v >= 8)
+    ::decode(max_size_ever, p);
+  if (struct_v >= 9) {
+    ::decode(inline_data, p);
+  } else {
+    inline_data.version = CEPH_INLINE_NONE;
+  }
+  if (struct_v < 10)
+    backtrace_version = 0; // force update backtrace
+  if (struct_v >= 11)
+    ::decode(quota, p);
+
+  if (struct_v >= 12) {
+    std::string tmp;
+    ::decode(tmp, p);
+    stray_prior_path = std::basic_string<char,std::char_traits<char>,Allocator<char>>(boost::string_view(tmp));
+  }
+
+  if (struct_v >= 13) {
+    ::decode(last_scrub_version, p);
+    ::decode(last_scrub_stamp, p);
+  }
+  if (struct_v >= 14) {
+    ::decode(btime, p);
+    ::decode(change_attr, p);
+  } else {
+    btime = utime_t();
+    change_attr = 0;
+  }
+
+  if (struct_v >= 15) {
+    ::decode(export_pin, p);
+  } else {
+    export_pin = MDS_RANK_NONE;
+  }
+
+  DECODE_FINISH(p);
+}
+
+template<template<typename> class Allocator>
+void inode_t<Allocator>::dump(Formatter *f) const
+{
+  f->dump_unsigned("ino", ino);
+  f->dump_unsigned("rdev", rdev);
+  f->dump_stream("ctime") << ctime;
+  f->dump_stream("btime") << btime;
+  f->dump_unsigned("mode", mode);
+  f->dump_unsigned("uid", uid);
+  f->dump_unsigned("gid", gid);
+  f->dump_unsigned("nlink", nlink);
+
+  f->open_object_section("dir_layout");
+  ::dump(dir_layout, f);
+  f->close_section();
+
+  f->dump_object("layout", layout);
+
+  f->open_array_section("old_pools");
+  for (const auto &p : old_pools) {
+    f->dump_int("pool", p);
+  }
+  f->close_section();
+
+  f->dump_unsigned("size", size);
+  f->dump_unsigned("truncate_seq", truncate_seq);
+  f->dump_unsigned("truncate_size", truncate_size);
+  f->dump_unsigned("truncate_from", truncate_from);
+  f->dump_unsigned("truncate_pending", truncate_pending);
+  f->dump_stream("mtime") << mtime;
+  f->dump_stream("atime") << atime;
+  f->dump_unsigned("time_warp_seq", time_warp_seq);
+  f->dump_unsigned("change_attr", change_attr);
+  f->dump_int("export_pin", export_pin);
+
+  f->open_array_section("client_ranges");
+  for (const auto &p : client_ranges) {
+    f->open_object_section("client");
+    f->dump_unsigned("client", p.first.v);
+    p.second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_object_section("dirstat");
+  dirstat.dump(f);
+  f->close_section();
+
+  f->open_object_section("rstat");
+  rstat.dump(f);
+  f->close_section();
+
+  f->open_object_section("accounted_rstat");
+  accounted_rstat.dump(f);
+  f->close_section();
+
+  f->dump_unsigned("version", version);
+  f->dump_unsigned("file_data_version", file_data_version);
+  f->dump_unsigned("xattr_version", xattr_version);
+  f->dump_unsigned("backtrace_version", backtrace_version);
+
+  f->dump_string("stray_prior_path", stray_prior_path);
+}
+
+template<template<typename> class Allocator>
+void inode_t<Allocator>::generate_test_instances(list<inode_t*>& ls)
+{
+  ls.push_back(new inode_t<Allocator>);
+  ls.push_back(new inode_t<Allocator>);
+  ls.back()->ino = 1;
+  // i am lazy.
+}
+
+template<template<typename> class Allocator>
+int inode_t<Allocator>::compare(const inode_t<Allocator> &other, bool *divergent) const
+{
+  assert(ino == other.ino);
+  *divergent = false;
+  if (version == other.version) {
+    if (rdev != other.rdev ||
+        ctime != other.ctime ||
+        btime != other.btime ||
+        mode != other.mode ||
+        uid != other.uid ||
+        gid != other.gid ||
+        nlink != other.nlink ||
+        memcmp(&dir_layout, &other.dir_layout, sizeof(dir_layout)) ||
+        layout != other.layout ||
+        old_pools != other.old_pools ||
+        size != other.size ||
+        max_size_ever != other.max_size_ever ||
+        truncate_seq != other.truncate_seq ||
+        truncate_size != other.truncate_size ||
+        truncate_from != other.truncate_from ||
+        truncate_pending != other.truncate_pending ||
+	change_attr != other.change_attr ||
+        mtime != other.mtime ||
+        atime != other.atime ||
+        time_warp_seq != other.time_warp_seq ||
+        inline_data != other.inline_data ||
+        client_ranges != other.client_ranges ||
+        !(dirstat == other.dirstat) ||
+        !(rstat == other.rstat) ||
+        !(accounted_rstat == other.accounted_rstat) ||
+        file_data_version != other.file_data_version ||
+        xattr_version != other.xattr_version ||
+        backtrace_version != other.backtrace_version) {
+      *divergent = true;
+    }
+    return 0;
+  } else if (version > other.version) {
+    *divergent = !older_is_consistent(other);
+    return 1;
+  } else {
+    assert(version < other.version);
+    *divergent = !other.older_is_consistent(*this);
+    return -1;
+  }
+}
+
+template<template<typename> class Allocator>
+bool inode_t<Allocator>::older_is_consistent(const inode_t<Allocator> &other) const
+{
+  if (max_size_ever < other.max_size_ever ||
+      truncate_seq < other.truncate_seq ||
+      time_warp_seq < other.time_warp_seq ||
+      inline_data.version < other.inline_data.version ||
+      dirstat.version < other.dirstat.version ||
+      rstat.version < other.rstat.version ||
+      accounted_rstat.version < other.accounted_rstat.version ||
+      file_data_version < other.file_data_version ||
+      xattr_version < other.xattr_version ||
+      backtrace_version < other.backtrace_version) {
+    return false;
+  }
+  return true;
+}
+
+template<template<typename> class Allocator>
+inline void encode(const inode_t<Allocator> &c, ::ceph::bufferlist &bl, uint64_t features)
+{
+  ENCODE_DUMP_PRE();
+  c.encode(bl, features);
+  ENCODE_DUMP_POST(cl);
+}
+template<template<typename> class Allocator>
+inline void decode(inode_t<Allocator> &c, ::ceph::bufferlist::iterator &p)
+{
+  c.decode(p);
+}
+
+template<template<typename> class Allocator>
+using alloc_string = std::basic_string<char,std::char_traits<char>,Allocator<char>>;
+
+template<template<typename> class Allocator>
+using xattr_map = compact_map<alloc_string<Allocator>, bufferptr, std::less<alloc_string<Allocator>>, Allocator<std::pair<const alloc_string<Allocator>, bufferptr>>>; // FIXME bufferptr not in mempool
 
 /*
  * old_inode_t
  */
+template<template<typename> class Allocator = std::allocator>
 struct old_inode_t {
   snapid_t first;
-  inode_t inode;
-  std::map<string,bufferptr> xattrs;
+  inode_t<Allocator> inode;
+  xattr_map<Allocator> xattrs;
 
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<old_inode_t*>& ls);
+  static void generate_test_instances(std::list<old_inode_t*>& ls);
 };
-WRITE_CLASS_ENCODER_FEATURES(old_inode_t)
+
+// These methods may be moved back to mdstypes.cc when we have pmr
+template<template<typename> class Allocator>
+void old_inode_t<Allocator>::encode(bufferlist& bl, uint64_t features) const
+{
+  ENCODE_START(2, 2, bl);
+  ::encode(first, bl);
+  ::encode(inode, bl, features);
+  ::encode(xattrs, bl);
+  ENCODE_FINISH(bl);
+}
+
+template<template<typename> class Allocator>
+void old_inode_t<Allocator>::decode(bufferlist::iterator& bl)
+{
+  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  ::decode(first, bl);
+  ::decode(inode, bl);
+  ::decode(xattrs, bl);
+  DECODE_FINISH(bl);
+}
+
+template<template<typename> class Allocator>
+void old_inode_t<Allocator>::dump(Formatter *f) const
+{
+  f->dump_unsigned("first", first);
+  inode.dump(f);
+  f->open_object_section("xattrs");
+  for (const auto &p : xattrs) {
+    std::string v(p.second.c_str(), p.second.length());
+    f->dump_string(p.first.c_str(), v);
+  }
+  f->close_section();
+}
+
+template<template<typename> class Allocator>
+void old_inode_t<Allocator>::generate_test_instances(std::list<old_inode_t<Allocator>*>& ls)
+{
+  ls.push_back(new old_inode_t<Allocator>);
+  ls.push_back(new old_inode_t<Allocator>);
+  ls.back()->first = 2;
+  std::list<inode_t<Allocator>*> ils;
+  inode_t<Allocator>::generate_test_instances(ils);
+  ls.back()->inode = *ils.back();
+  ls.back()->xattrs["user.foo"] = buffer::copy("asdf", 4);
+  ls.back()->xattrs["user.unprintable"] = buffer::copy("\000\001\002", 3);
+}
+
+template<template<typename> class Allocator>
+inline void encode(const old_inode_t<Allocator> &c, ::ceph::bufferlist &bl, uint64_t features)
+{
+  ENCODE_DUMP_PRE();
+  c.encode(bl, features);
+  ENCODE_DUMP_POST(cl);
+}
+template<template<typename> class Allocator>
+inline void decode(old_inode_t<Allocator> &c, ::ceph::bufferlist::iterator &p)
+{
+  c.decode(p);
+}
 
 
 /*
  * like an inode, but for a dir frag 
  */
 struct fnode_t {
-  version_t version;
+  version_t version = 0;
   snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
   frag_info_t fragstat, accounted_fragstat;
   nest_info_t rstat, accounted_rstat;
-  damage_flags_t damage_flags;
+  damage_flags_t damage_flags = 0;
 
   // we know we and all our descendants have been scrubbed since this version
-  version_t recursive_scrub_version;
+  version_t recursive_scrub_version = 0;
   utime_t recursive_scrub_stamp;
   // version at which we last scrubbed our personal data structures
-  version_t localized_scrub_version;
+  version_t localized_scrub_version = 0;
   utime_t localized_scrub_stamp;
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<fnode_t*>& ls);
-  fnode_t() : version(0), damage_flags(0),
-	      recursive_scrub_version(0), localized_scrub_version(0) {}
+  fnode_t() {}
 };
 WRITE_CLASS_ENCODER(fnode_t)
 
@@ -728,14 +1092,14 @@ WRITE_CLASS_ENCODER_FEATURES(session_info_t)
 // dentries
 
 struct dentry_key_t {
-  snapid_t snapid;
-  const char *name;
-  __u32 hash;
-  dentry_key_t() : snapid(0), name(0), hash(0) {}
-  dentry_key_t(snapid_t s, const char *n, __u32 h=0) :
+  snapid_t snapid = 0;
+  boost::string_view name;
+  __u32 hash = 0;
+  dentry_key_t() {}
+  dentry_key_t(snapid_t s, boost::string_view n, __u32 h=0) :
     snapid(s), name(n), hash(h) {}
 
-  bool is_valid() { return name || snapid; }
+  bool is_valid() { return name.length() || snapid; }
 
   // encode into something that can be decoded as a string.
   // name_ (head) or name_%x (!head)
@@ -761,19 +1125,20 @@ struct dentry_key_t {
     ::decode(key, bl);
     decode_helper(key, nm, sn);
   }
-  static void decode_helper(const string& key, string& nm, snapid_t& sn) {
+  static void decode_helper(boost::string_view key, string& nm, snapid_t& sn) {
     size_t i = key.find_last_of('_');
     assert(i != string::npos);
-    if (key.compare(i+1, string::npos, "head") == 0) {
+    if (key.compare(i+1, boost::string_view::npos, "head") == 0) {
       // name_head
       sn = CEPH_NOSNAP;
     } else {
       // name_%x
       long long unsigned x = 0;
-      sscanf(key.c_str() + i + 1, "%llx", &x);
+      std::string x_str(key.substr(i+1));
+      sscanf(x_str.c_str(), "%llx", &x);
       sn = x;
     }  
-    nm = string(key.c_str(), i);
+    nm = std::string(key.substr(0, i));
   }
 };
 
@@ -790,7 +1155,7 @@ inline bool operator<(const dentry_key_t& k1, const dentry_key_t& k2)
   int c = ceph_frag_value(k1.hash) - ceph_frag_value(k2.hash);
   if (c)
     return c < 0;
-  c = strcmp(k1.name, k2.name);
+  c = k1.name.compare(k2.name);
   if (c)
     return c < 0;
   return k1.snapid < k2.snapid;
@@ -804,7 +1169,7 @@ struct string_snap_t {
   string name;
   snapid_t snapid;
   string_snap_t() {}
-  string_snap_t(const string& n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(boost::string_view n, snapid_t s) : name(n), snapid(s) {}
   string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
 
   void encode(bufferlist& bl) const;
@@ -815,7 +1180,7 @@ struct string_snap_t {
 WRITE_CLASS_ENCODER(string_snap_t)
 
 inline bool operator<(const string_snap_t& l, const string_snap_t& r) {
-  int c = strcmp(l.name.c_str(), r.name.c_str());
+  int c = l.name.compare(r.name);
   return c < 0 || (c == 0 && l.snapid < r.snapid);
 }
 
@@ -831,10 +1196,10 @@ inline std::ostream& operator<<(std::ostream& out, const string_snap_t &k)
  * pending mutation state in the table.
  */
 struct mds_table_pending_t {
-  uint64_t reqid;
-  __s32 mds;
-  version_t tid;
-  mds_table_pending_t() : reqid(0), mds(0), tid(0) {}
+  uint64_t reqid = 0;
+  __s32 mds = 0;
+  version_t tid = 0;
+  mds_table_pending_t() {}
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
@@ -848,8 +1213,8 @@ WRITE_CLASS_ENCODER(mds_table_pending_t)
 
 struct metareqid_t {
   entity_name_t name;
-  uint64_t tid;
-  metareqid_t() : tid(0) {}
+  uint64_t tid = 0;
+  metareqid_t() {}
   metareqid_t(entity_name_t n, ceph_tid_t t) : name(n), tid(t) {}
   void encode(bufferlist& bl) const {
     ::encode(name, bl);
@@ -904,7 +1269,7 @@ struct cap_reconnect_t {
     memset(&capinfo, 0, sizeof(capinfo));
     snap_follows = 0;
   }
-  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i,
+  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, boost::string_view p, int w, int i,
 		  inodeno_t sr, snapid_t sf, bufferlist& lb) :
     path(p) {
     capinfo.cap_id = cap_id;
@@ -979,10 +1344,10 @@ WRITE_CLASS_ENCODER(old_cap_reconnect_t)
 // dir frag
 
 struct dirfrag_t {
-  inodeno_t ino;
+  inodeno_t ino = 0;
   frag_t    frag;
 
-  dirfrag_t() : ino(0) { }
+  dirfrag_t() {}
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 
   void encode(bufferlist& bl) const {
@@ -1034,15 +1399,13 @@ namespace std {
 
 class inode_load_vec_t {
   static const int NUM = 2;
-  std::vector < DecayCounter > vec;
+  std::array<DecayCounter, NUM> vec;
 public:
   explicit inode_load_vec_t(const utime_t &now)
-     : vec(NUM, DecayCounter(now))
+     : vec{DecayCounter(now), DecayCounter(now)}
   {}
   // for dencoder infrastructure
-  inode_load_vec_t() :
-    vec(NUM, DecayCounter())
-  {}
+  inode_load_vec_t() {}
   DecayCounter &get(int t) { 
     assert(t < NUM);
     return vec[t]; 
@@ -1071,24 +1434,30 @@ inline void decode(inode_load_vec_t & c, bufferlist::iterator &p) {
 class dirfrag_load_vec_t {
 public:
   static const int NUM = 5;
-  std::vector < DecayCounter > vec;
+  std::array<DecayCounter, NUM> vec;
   explicit dirfrag_load_vec_t(const utime_t &now)
-     : vec(NUM, DecayCounter(now))
-  { }
-  // for dencoder infrastructure
-  dirfrag_load_vec_t()
-    : vec(NUM, DecayCounter())
+     : vec{
+         DecayCounter(now),
+         DecayCounter(now),
+         DecayCounter(now),
+         DecayCounter(now),
+         DecayCounter(now)
+       }
   {}
+  // for dencoder infrastructure
+  dirfrag_load_vec_t() {}
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
-    for (int i=0; i<NUM; i++)
-      ::encode(vec[i], bl);
+    for (const auto &i : vec) {
+      ::encode(i, bl);
+    }
     ENCODE_FINISH(bl);
   }
   void decode(const utime_t &t, bufferlist::iterator &p) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
-    for (int i=0; i<NUM; i++)
-      ::decode(vec[i], t, p);
+    for (auto &i : vec) {
+      ::decode(i, t, p);
+    }
     DECODE_FINISH(p);
   }
   // for dencoder infrastructure
@@ -1104,12 +1473,14 @@ public:
     return vec[t]; 
   }
   void adjust(utime_t now, const DecayRate& rate, double d) {
-    for (int i=0; i<NUM; i++) 
-      vec[i].adjust(now, rate, d);
+    for (auto &i : vec) {
+      i.adjust(now, rate, d);
+    }
   }
   void zero(utime_t now) {
-    for (int i=0; i<NUM; i++) 
-      vec[i].reset(now);
+    for (auto &i : vec) {
+      i.reset(now);
+    }
   }
   double meta_load(utime_t now, const DecayRate& rate) {
     return 
@@ -1175,21 +1546,15 @@ struct mds_load_t {
   dirfrag_load_vec_t auth;
   dirfrag_load_vec_t all;
 
-  double req_rate;
-  double cache_hit_rate;
-  double queue_len;
+  double req_rate = 0.0;
+  double cache_hit_rate = 0.0;
+  double queue_len = 0.0;
 
-  double cpu_load_avg;
+  double cpu_load_avg = 0.0;
 
-  explicit mds_load_t(const utime_t &t) : 
-    auth(t), all(t), req_rate(0), cache_hit_rate(0),
-    queue_len(0), cpu_load_avg(0)
-  {}
+  explicit mds_load_t(const utime_t &t) : auth(t), all(t) {}
   // mostly for the dencoder infrastructure
-  mds_load_t() :
-    auth(), all(),
-    req_rate(0), cache_hit_rate(0), queue_len(0), cpu_load_avg(0)
-  {}
+  mds_load_t() : auth(), all() {}
   
   double mds_load();  // defiend in MDBalancer.cc
   void encode(bufferlist& bl) const;
@@ -1223,11 +1588,11 @@ class load_spread_t {
 public:
   static const int MAX = 4;
   int last[MAX];
-  int p, n;
+  int p = 0, n = 0;
   DecayCounter count;
 
 public:
-  load_spread_t() : p(0), n(0), count(ceph_clock_now())
+  load_spread_t() : count(ceph_clock_now())
   {
     for (int i=0; i<MAX; i++)
       last[i] = -1;
@@ -1268,12 +1633,12 @@ typedef std::pair<mds_rank_t, mds_rank_t> mds_authority_t;
 
 class MDSCacheObjectInfo {
 public:
-  inodeno_t ino;
+  inodeno_t ino = 0;
   dirfrag_t dirfrag;
   string dname;
   snapid_t snapid;
 
-  MDSCacheObjectInfo() : ino(0) {}
+  MDSCacheObjectInfo() {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);

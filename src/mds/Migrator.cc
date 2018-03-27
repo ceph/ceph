@@ -1219,8 +1219,8 @@ void Migrator::check_export_size(CDir *dir, export_state_t& stat, set<client_t>&
     dfs.pop_front();
 
     approx_size += frag_size;
-    for (CDir::map_t::iterator p = dir->begin(); p != dir->end(); ++p) {
-      CDentry *dn = p->second;
+    for (auto &p : *dir) {
+      CDentry *dn = p.second;
       if (dn->get_linkage()->is_null()) {
 	approx_size += null_size;
 	continue;
@@ -1593,9 +1593,8 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
   
   // dentries
   list<CDir*> subdirs;
-  CDir::map_t::iterator it;
-  for (it = dir->begin(); it != dir->end(); ++it) {
-    CDentry *dn = it->second;
+  for (auto &p : *dir) {
+    CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
     
     if (!dn->is_replicated())
@@ -1607,7 +1606,7 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
     dout(7) << "encode_export_dir exporting " << *dn << dendl;
     
     // dn name
-    ::encode(dn->name, exportbl);
+    ::encode(dn->get_name(), exportbl);
     ::encode(dn->last, exportbl);
     
     // state
@@ -1652,8 +1651,8 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
   }
 
   // subdirs
-  for (list<CDir*>::iterator it = subdirs.begin(); it != subdirs.end(); ++it)
-    num_exported += encode_export_dir(exportbl, *it, exported_client_map, now);
+  for (auto &dir : subdirs)
+    num_exported += encode_export_dir(exportbl, dir, exported_client_map, now);
 
   return num_exported;
 }
@@ -1684,9 +1683,8 @@ void Migrator::finish_export_dir(CDir *dir, utime_t now, mds_rank_t peer,
 
   // dentries
   list<CDir*> subdirs;
-  CDir::map_t::iterator it;
-  for (it = dir->begin(); it != dir->end(); ++it) {
-    CDentry *dn = it->second;
+  for (auto &p : *dir) {
+    CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
 
     // dentry
@@ -1824,11 +1822,12 @@ void Migrator::export_reverse(CDir *dir, export_state_t& stat)
     CDir *t = rq.front(); 
     rq.pop_front();
     t->abort_export();
-    for (CDir::map_t::iterator p = t->items.begin(); p != t->items.end(); ++p) {
-      p->second->abort_export();
-      if (!p->second->get_linkage()->is_primary())
+    for (auto &p : *t) {
+      CDentry *dn = p.second;
+      dn->abort_export();
+      if (!dn->get_linkage()->is_primary())
 	continue;
-      CInode *in = p->second->get_linkage()->get_inode();
+      CInode *in = dn->get_linkage()->get_inode();
       in->abort_export();
       if (in->state_test(CInode::STATE_EVALSTALECAPS)) {
 	in->state_clear(CInode::STATE_EVALSTALECAPS);
@@ -2641,9 +2640,8 @@ void Migrator::import_reverse(CDir *dir)
     if (cur->is_dirty())
       cur->mark_clean();
 
-    CDir::map_t::iterator it;
-    for (it = cur->begin(); it != cur->end(); ++it) {
-      CDentry *dn = it->second;
+    for (auto &p : *cur) {
+      CDentry *dn = p.second;
 
       // dentry
       dn->state_clear(CDentry::STATE_AUTH);

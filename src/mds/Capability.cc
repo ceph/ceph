@@ -175,9 +175,9 @@ void Capability::dump(Formatter *f) const
   f->dump_unsigned("pending", _pending);
 
   f->open_array_section("revokes");
-  for (list<revoke_info>::const_iterator p = _revokes.begin(); p != _revokes.end(); ++p) {
+  for (const auto &r : _revokes) {
     f->open_object_section("revoke");
-    p->dump(f);
+    r.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -191,12 +191,20 @@ void Capability::generate_test_instances(list<Capability*>& ls)
   ls.back()->last_issue_stamp = utime_t(12, 13);
   ls.back()->_wanted = 14;
   ls.back()->_pending = 15;
-  ls.back()->_revokes.push_back(revoke_info());
-  ls.back()->_revokes.back().before = 16;
-  ls.back()->_revokes.back().seq = 17;
-  ls.back()->_revokes.back().last_issue = 18;
-  ls.back()->_revokes.push_back(revoke_info());
-  ls.back()->_revokes.back().before = 19;
-  ls.back()->_revokes.back().seq = 20;
-  ls.back()->_revokes.back().last_issue = 21;
+  {
+    ls.back()->_revokes.emplace_back();
+    auto &r = ls.back()->_revokes.back();
+    r.before = 16;
+    r.seq = 17;
+    r.last_issue = 18;
+  }
+  {
+    ls.back()->_revokes.emplace_back();
+    auto &r = ls.back()->_revokes.back();
+    r.before = 19;
+    r.seq = 20;
+    r.last_issue = 21;
+  }
 }
+
+MEMPOOL_DEFINE_OBJECT_FACTORY(Capability, co_cap, mds_co);

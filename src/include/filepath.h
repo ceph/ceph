@@ -25,6 +25,7 @@
 
 #include <iosfwd>
 #include <string>
+#include <boost/utility/string_view.hpp>
 #include <vector>
 using namespace std;
 
@@ -73,6 +74,7 @@ class filepath {
 
  public:
   filepath() : ino(0), encoded(false) { }
+  filepath(boost::string_view s, inodeno_t i) : ino(i), path(s), encoded(false) { }
   filepath(const string& s, inodeno_t i) : ino(i), path(s), encoded(false) { }
   filepath(const char* s, inodeno_t i) : ino(i), path(s), encoded(false) { }
   filepath(const filepath& o) {
@@ -83,25 +85,28 @@ class filepath {
   }
   filepath(inodeno_t i) : ino(i), encoded(false) { }
   
-  void set_path(const char *s, inodeno_t b) {
-    path = s;
-    ino = b;
-  }
-
   /*
    * if we are fed a relative path as a string, either set ino=0 (strictly
    * relative) or 1 (absolute).  throw out any leading '/'.
    */
-  filepath(const char *s) : encoded(false) {
+  filepath(boost::string_view s) : encoded(false) {
     set_path(s);
   }
-  void set_path(const char *s) {
+  filepath(const char *s) : encoded(false) {
+    set_path(boost::string_view(s));
+  }
+
+  void set_path(boost::string_view s, inodeno_t b) {
+    path = std::string(s);
+    ino = b;
+  }
+  void set_path(boost::string_view s) {
     if (s[0] == '/') {
-      path = s + 1;    
+      path = std::string(s.substr(1));
       ino = 1;
     } else {
       ino = 0;
-      path = s;
+      path = std::string(s);
     }
     bits.clear();
   }
@@ -163,17 +168,19 @@ class filepath {
     bits.pop_back();
     rebuild_path();
   }    
-  void push_dentry(const string& s) {
+  void push_dentry(boost::string_view s) {
     if (bits.empty() && path.length() > 0) 
       parse_bits();
     if (!bits.empty())
       path += "/";
-    path += s;
-    bits.push_back(s);
+    path += std::string(s);
+    bits.emplace_back(std::string(s));
+  }
+  void push_dentry(const string& s) {
+    push_dentry(boost::string_view(s));
   }
   void push_dentry(const char *cs) {
-    string s = cs;
-    push_dentry(s);
+    push_dentry(boost::string_view(cs, strlen(cs)));
   }
   void push_front_dentry(const string& s) {
     bits.insert(bits.begin(), s);

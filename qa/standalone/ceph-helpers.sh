@@ -1734,11 +1734,17 @@ function test_display_logs() {
 #
 function run_in_background() {
     local pid_variable=$1
-    shift;
+    shift
     # Execute the command and prepend the output with its pid
     # We enforce to return the exit status of the command and not the awk one.
-    ("$@" |& awk '{ a[i++] = $0 }END{for (i = 0; i in a; ++i) { print "'$$': " a[i]} }'; return ${PIPESTATUS[0]}) >&2 &
+    ("$@" |& sed 's/^/'$$': /'; return "${PIPESTATUS[0]}") >&2 &
     eval "$pid_variable+=\" $!\""
+}
+
+function save_stdout {
+    local out="$1"
+    shift
+    "$@" > "$out"
 }
 
 function test_run_in_background() {

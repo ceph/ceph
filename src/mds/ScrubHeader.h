@@ -16,6 +16,8 @@
 #ifndef SCRUB_HEADER_H_
 #define SCRUB_HEADER_H_
 
+#include <boost/utility/string_view.hpp>
+
 class CInode;
 
 /**
@@ -24,7 +26,7 @@ class CInode;
  */
 class ScrubHeader {
 public:
-  ScrubHeader(const std::string &tag_, bool force_, bool recursive_,
+  ScrubHeader(boost::string_view tag_, bool force_, bool recursive_,
               bool repair_, Formatter *f_)
       : tag(tag_), force(force_), recursive(recursive_), repair(repair_),
         formatter(f_), origin(nullptr)
@@ -40,7 +42,7 @@ public:
   bool get_repair() const { return repair; }
   bool get_force() const { return force; }
   const CInode *get_origin() const { return origin; }
-  const std::string &get_tag() const { return tag; }
+  boost::string_view get_tag() const { return tag; }
   Formatter &get_formatter() const { return *formatter; }
 
   bool get_repaired() const { return repaired; }

@@ -125,9 +125,9 @@ void RGWFormatter_Plain::dump_float(const char *name, double d)
   dump_value_int(name, "%f", d);
 }
 
-void RGWFormatter_Plain::dump_string(const char *name, const std::string& s)
+void RGWFormatter_Plain::dump_string(const char *name, boost::string_view s)
 {
-  dump_format(name, "%s", s.c_str());
+  dump_format(name, "%s", s.data());
 }
 
 std::ostream& RGWFormatter_Plain::dump_stream(const char *name)

@@ -107,18 +107,18 @@ void HTMLFormatter::dump_float(const char *name, double d)
   dump_template(name, d);
 }
 
-void HTMLFormatter::dump_string(const char *name, const std::string& s)
+void HTMLFormatter::dump_string(const char *name, boost::string_view s)
 {
-  dump_template(name, escape_xml_str(s.c_str()));
+  dump_template(name, escape_xml_str(s.data()));
 }
 
-void HTMLFormatter::dump_string_with_attrs(const char *name, const std::string& s, const FormatterAttrs& attrs)
+void HTMLFormatter::dump_string_with_attrs(const char *name, boost::string_view s, const FormatterAttrs& attrs)
 {
   std::string e(name);
   std::string attrs_str;
   get_attrs_str(&attrs, attrs_str);
   print_spaces();
-  m_ss << "<li>" << e << ": " << escape_xml_str(s.c_str()) << attrs_str << "</li>";
+  m_ss << "<li>" << e << ": " << escape_xml_str(s.data()) << attrs_str << "</li>";
   if (m_pretty)
     m_ss << "\n";
 }

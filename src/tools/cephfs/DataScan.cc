@@ -909,7 +909,7 @@ int DataScan::scan_links()
     int nlink;
     bool is_dir;
     link_info_t() : version(0), nlink(0), is_dir(false) {}
-    link_info_t(inodeno_t di, frag_t df, const string& n, const inode_t i) :
+    link_info_t(inodeno_t di, frag_t df, const string& n, const CInode::mempool_inode& i) :
       dirino(di), frag(df), name(n),
       version(i.version), nlink(i.nlink), is_dir(S_IFDIR & i.mode) {}
     dirfrag_t dirfrag() const {

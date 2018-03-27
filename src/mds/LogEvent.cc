@@ -94,34 +94,34 @@ std::string LogEvent::get_type_str() const
   }
 }
 
+const std::map<std::string, LogEvent::EventType> LogEvent::types = {
+  {"SUBTREEMAP", EVENT_SUBTREEMAP},
+  {"SUBTREEMAP_TEST", EVENT_SUBTREEMAP_TEST},
+  {"EXPORT", EVENT_EXPORT},
+  {"IMPORTSTART", EVENT_IMPORTSTART},
+  {"IMPORTFINISH", EVENT_IMPORTFINISH},
+  {"FRAGMENT", EVENT_FRAGMENT},
+  {"RESETJOURNAL", EVENT_RESETJOURNAL},
+  {"SESSION", EVENT_SESSION},
+  {"SESSIONS_OLD", EVENT_SESSIONS_OLD},
+  {"SESSIONS", EVENT_SESSIONS},
+  {"UPDATE", EVENT_UPDATE},
+  {"SLAVEUPDATE", EVENT_SLAVEUPDATE},
+  {"OPEN", EVENT_OPEN},
+  {"COMMITTED", EVENT_COMMITTED},
+  {"TABLECLIENT", EVENT_TABLECLIENT},
+  {"TABLESERVER", EVENT_TABLESERVER},
+  {"NOOP", EVENT_NOOP}
+};
 
 /*
  * Resolve type string to type enum
  *
  * Return -1 if not found
  */
-LogEvent::EventType LogEvent::str_to_type(std::string const &str)
+LogEvent::EventType LogEvent::str_to_type(boost::string_view str)
 {
-  std::map<std::string, EventType> types;
-  types["SUBTREEMAP"] = EVENT_SUBTREEMAP;
-  types["SUBTREEMAP_TEST"] = EVENT_SUBTREEMAP_TEST;
-  types["EXPORT"] = EVENT_EXPORT;
-  types["IMPORTSTART"] = EVENT_IMPORTSTART;
-  types["IMPORTFINISH"] = EVENT_IMPORTFINISH;
-  types["FRAGMENT"] = EVENT_FRAGMENT;
-  types["RESETJOURNAL"] = EVENT_RESETJOURNAL;
-  types["SESSION"] = EVENT_SESSION;
-  types["SESSIONS_OLD"] = EVENT_SESSIONS_OLD;
-  types["SESSIONS"] = EVENT_SESSIONS;
-  types["UPDATE"] = EVENT_UPDATE;
-  types["SLAVEUPDATE"] = EVENT_SLAVEUPDATE;
-  types["OPEN"] = EVENT_OPEN;
-  types["COMMITTED"] = EVENT_COMMITTED;
-  types["TABLECLIENT"] = EVENT_TABLECLIENT;
-  types["TABLESERVER"] = EVENT_TABLESERVER;
-  types["NOOP"] = EVENT_NOOP;
-
-  return types[str];
+  return LogEvent::types.at(std::string(str));
 }
 
 

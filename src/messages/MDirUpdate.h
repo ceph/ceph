@@ -19,44 +19,29 @@
 #include "msg/Message.h"
 
 class MDirUpdate : public Message {
-  mds_rank_t from_mds;
-  dirfrag_t dirfrag;
-  int32_t dir_rep;
-  int32_t discover;
-  compact_set<int32_t> dir_rep_by;
-  filepath path;
-  int tried_discover;
+public:
+  MDirUpdate() : Message(MSG_MDS_DIRUPDATE) {}
+  MDirUpdate(mds_rank_t f,
+	     dirfrag_t dirfrag,
+             int dir_rep,
+             const std::set<int32_t>& dir_rep_by,
+             filepath& path,
+             bool discover = false) :
+    Message(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
+    dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
+    this->discover = discover ? 5 : 0;
+  }
 
- public:
   mds_rank_t get_source_mds() const { return from_mds; }
   dirfrag_t get_dirfrag() const { return dirfrag; }
   int get_dir_rep() const { return dir_rep; }
-  const compact_set<int>& get_dir_rep_by() const { return dir_rep_by; }
+  const std::set<int32_t>& get_dir_rep_by() const { return dir_rep_by; }
   bool should_discover() const { return discover > tried_discover; }
   const filepath& get_path() const { return path; }
 
   bool has_tried_discover() const { return tried_discover > 0; }
   void inc_tried_discover() { ++tried_discover; }
 
-  MDirUpdate() : Message(MSG_MDS_DIRUPDATE), tried_discover(0) {}
-  MDirUpdate(mds_rank_t f, 
-	     dirfrag_t dirfrag,
-             int dir_rep,
-             compact_set<int>& dir_rep_by,
-             filepath& path,
-             bool discover = false) :
-    Message(MSG_MDS_DIRUPDATE), tried_discover(0) {
-    this->from_mds = f;
-    this->dirfrag = dirfrag;
-    this->dir_rep = dir_rep;
-    this->dir_rep_by = dir_rep_by;
-    this->discover = discover ? 5 : 0;
-    this->path = path;
-  }
-private:
-  ~MDirUpdate() override {}
-
-public:
   const char *get_type_name() const override { return "dir_update"; }
   void print(ostream& out) const override {
     out << "dir_update(" << get_dirfrag() << ")";
@@ -80,6 +65,17 @@ public:
     ::encode(dir_rep_by, payload);
     ::encode(path, payload);
   }
+
+private:
+  ~MDirUpdate() override {}
+
+  mds_rank_t from_mds = -1;
+  dirfrag_t dirfrag;
+  int32_t dir_rep = 5;
+  int32_t discover = 5;
+  std::set<int32_t> dir_rep_by;
+  filepath path;
+  int tried_discover = 0;
 };
 
 #endif

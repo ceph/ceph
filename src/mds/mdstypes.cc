@@ -239,338 +239,6 @@ void inline_data_t::decode(bufferlist::iterator &p)
     free_data();
 }
 
-/*
- * inode_t
- */
-void inode_t::encode(bufferlist &bl, uint64_t features) const
-{
-  ENCODE_START(15, 6, bl);
-
-  ::encode(ino, bl);
-  ::encode(rdev, bl);
-  ::encode(ctime, bl);
-
-  ::encode(mode, bl);
-  ::encode(uid, bl);
-  ::encode(gid, bl);
-
-  ::encode(nlink, bl);
-  {
-    // removed field
-    bool anchored = 0;
-    ::encode(anchored, bl);
-  }
-
-  ::encode(dir_layout, bl);
-  ::encode(layout, bl, features);
-  ::encode(size, bl);
-  ::encode(truncate_seq, bl);
-  ::encode(truncate_size, bl);
-  ::encode(truncate_from, bl);
-  ::encode(truncate_pending, bl);
-  ::encode(mtime, bl);
-  ::encode(atime, bl);
-  ::encode(time_warp_seq, bl);
-  ::encode(client_ranges, bl);
-
-  ::encode(dirstat, bl);
-  ::encode(rstat, bl);
-  ::encode(accounted_rstat, bl);
-
-  ::encode(version, bl);
-  ::encode(file_data_version, bl);
-  ::encode(xattr_version, bl);
-  ::encode(backtrace_version, bl);
-  ::encode(old_pools, bl);
-  ::encode(max_size_ever, bl);
-  ::encode(inline_data, bl);
-  ::encode(quota, bl);
-
-  ::encode(stray_prior_path, bl);
-
-  ::encode(last_scrub_version, bl);
-  ::encode(last_scrub_stamp, bl);
-
-  ::encode(btime, bl);
-  ::encode(change_attr, bl);
-
-  ::encode(export_pin, bl);
-
-  ENCODE_FINISH(bl);
-}
-
-void inode_t::decode(bufferlist::iterator &p)
-{
-  DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
-
-  ::decode(ino, p);
-  ::decode(rdev, p);
-  ::decode(ctime, p);
-
-  ::decode(mode, p);
-  ::decode(uid, p);
-  ::decode(gid, p);
-
-  ::decode(nlink, p);
-  {
-    bool anchored;
-    ::decode(anchored, p);
-  }
-
-  if (struct_v >= 4)
-    ::decode(dir_layout, p);
-  else
-    memset(&dir_layout, 0, sizeof(dir_layout));
-  ::decode(layout, p);
-  ::decode(size, p);
-  ::decode(truncate_seq, p);
-  ::decode(truncate_size, p);
-  ::decode(truncate_from, p);
-  if (struct_v >= 5)
-    ::decode(truncate_pending, p);
-  else
-    truncate_pending = 0;
-  ::decode(mtime, p);
-  ::decode(atime, p);
-  ::decode(time_warp_seq, p);
-  if (struct_v >= 3) {
-    ::decode(client_ranges, p);
-  } else {
-    map<client_t, client_writeable_range_t::byte_range_t> m;
-    ::decode(m, p);
-    for (map<client_t, client_writeable_range_t::byte_range_t>::iterator
-	q = m.begin(); q != m.end(); ++q)
-      client_ranges[q->first].range = q->second;
-  }
-    
-  ::decode(dirstat, p);
-  ::decode(rstat, p);
-  ::decode(accounted_rstat, p);
-
-  ::decode(version, p);
-  ::decode(file_data_version, p);
-  ::decode(xattr_version, p);
-  if (struct_v >= 2)
-    ::decode(backtrace_version, p);
-  if (struct_v >= 7)
-    ::decode(old_pools, p);
-  if (struct_v >= 8)
-    ::decode(max_size_ever, p);
-  if (struct_v >= 9) {
-    ::decode(inline_data, p);
-  } else {
-    inline_data.version = CEPH_INLINE_NONE;
-  }
-  if (struct_v < 10)
-    backtrace_version = 0; // force update backtrace
-  if (struct_v >= 11)
-    ::decode(quota, p);
-
-  if (struct_v >= 12) {
-    ::decode(stray_prior_path, p);
-  }
-
-  if (struct_v >= 13) {
-    ::decode(last_scrub_version, p);
-    ::decode(last_scrub_stamp, p);
-  }
-  if (struct_v >= 14) {
-    ::decode(btime, p);
-    ::decode(change_attr, p);
-  } else {
-    btime = utime_t();
-    change_attr = 0;
-  }
-
-  if (struct_v >= 15) {
-    ::decode(export_pin, p);
-  } else {
-    export_pin = MDS_RANK_NONE;
-  }
-
-  DECODE_FINISH(p);
-}
-
-void inode_t::dump(Formatter *f) const
-{
-  f->dump_unsigned("ino", ino);
-  f->dump_unsigned("rdev", rdev);
-  f->dump_stream("ctime") << ctime;
-  f->dump_stream("btime") << btime;
-  f->dump_unsigned("mode", mode);
-  f->dump_unsigned("uid", uid);
-  f->dump_unsigned("gid", gid);
-  f->dump_unsigned("nlink", nlink);
-
-  f->open_object_section("dir_layout");
-  ::dump(dir_layout, f);
-  f->close_section();
-
-  f->dump_object("layout", layout);
-
-  f->open_array_section("old_pools");
-  for (compact_set<int64_t>::const_iterator i = old_pools.begin();
-       i != old_pools.end();
-       ++i)
-    f->dump_int("pool", *i);
-  f->close_section();
-
-  f->dump_unsigned("size", size);
-  f->dump_unsigned("truncate_seq", truncate_seq);
-  f->dump_unsigned("truncate_size", truncate_size);
-  f->dump_unsigned("truncate_from", truncate_from);
-  f->dump_unsigned("truncate_pending", truncate_pending);
-  f->dump_stream("mtime") << mtime;
-  f->dump_stream("atime") << atime;
-  f->dump_unsigned("time_warp_seq", time_warp_seq);
-  f->dump_unsigned("change_attr", change_attr);
-  f->dump_int("export_pin", export_pin);
-
-  f->open_array_section("client_ranges");
-  for (map<client_t,client_writeable_range_t>::const_iterator p = client_ranges.begin(); p != client_ranges.end(); ++p) {
-    f->open_object_section("client");
-    f->dump_unsigned("client", p->first.v);
-    p->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-
-  f->open_object_section("dirstat");
-  dirstat.dump(f);
-  f->close_section();
-
-  f->open_object_section("rstat");
-  rstat.dump(f);
-  f->close_section();
-
-  f->open_object_section("accounted_rstat");
-  accounted_rstat.dump(f);
-  f->close_section();
-
-  f->dump_unsigned("version", version);
-  f->dump_unsigned("file_data_version", file_data_version);
-  f->dump_unsigned("xattr_version", xattr_version);
-  f->dump_unsigned("backtrace_version", backtrace_version);
-
-  f->dump_string("stray_prior_path", stray_prior_path);
-}
-
-void inode_t::generate_test_instances(list<inode_t*>& ls)
-{
-  ls.push_back(new inode_t);
-  ls.push_back(new inode_t);
-  ls.back()->ino = 1;
-  // i am lazy.
-}
-
-int inode_t::compare(const inode_t &other, bool *divergent) const
-{
-  assert(ino == other.ino);
-  *divergent = false;
-  if (version == other.version) {
-    if (rdev != other.rdev ||
-        ctime != other.ctime ||
-        btime != other.btime ||
-        mode != other.mode ||
-        uid != other.uid ||
-        gid != other.gid ||
-        nlink != other.nlink ||
-        memcmp(&dir_layout, &other.dir_layout, sizeof(dir_layout)) ||
-        layout != other.layout ||
-        old_pools != other.old_pools ||
-        size != other.size ||
-        max_size_ever != other.max_size_ever ||
-        truncate_seq != other.truncate_seq ||
-        truncate_size != other.truncate_size ||
-        truncate_from != other.truncate_from ||
-        truncate_pending != other.truncate_pending ||
-	change_attr != other.change_attr ||
-        mtime != other.mtime ||
-        atime != other.atime ||
-        time_warp_seq != other.time_warp_seq ||
-        inline_data != other.inline_data ||
-        client_ranges != other.client_ranges ||
-        !(dirstat == other.dirstat) ||
-        !(rstat == other.rstat) ||
-        !(accounted_rstat == other.accounted_rstat) ||
-        file_data_version != other.file_data_version ||
-        xattr_version != other.xattr_version ||
-        backtrace_version != other.backtrace_version) {
-      *divergent = true;
-    }
-    return 0;
-  } else if (version > other.version) {
-    *divergent = !older_is_consistent(other);
-    return 1;
-  } else {
-    assert(version < other.version);
-    *divergent = !other.older_is_consistent(*this);
-    return -1;
-  }
-}
-
-bool inode_t::older_is_consistent(const inode_t &other) const
-{
-  if (max_size_ever < other.max_size_ever ||
-      truncate_seq < other.truncate_seq ||
-      time_warp_seq < other.time_warp_seq ||
-      inline_data.version < other.inline_data.version ||
-      dirstat.version < other.dirstat.version ||
-      rstat.version < other.rstat.version ||
-      accounted_rstat.version < other.accounted_rstat.version ||
-      file_data_version < other.file_data_version ||
-      xattr_version < other.xattr_version ||
-      backtrace_version < other.backtrace_version) {
-    return false;
-  }
-  return true;
-}
-
-/*
- * old_inode_t
- */
-void old_inode_t::encode(bufferlist& bl, uint64_t features) const
-{
-  ENCODE_START(2, 2, bl);
-  ::encode(first, bl);
-  ::encode(inode, bl, features);
-  ::encode(xattrs, bl);
-  ENCODE_FINISH(bl);
-}
-
-void old_inode_t::decode(bufferlist::iterator& bl)
-{
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(first, bl);
-  ::decode(inode, bl);
-  ::decode(xattrs, bl);
-  DECODE_FINISH(bl);
-}
-
-void old_inode_t::dump(Formatter *f) const
-{
-  f->dump_unsigned("first", first);
-  inode.dump(f);
-  f->open_object_section("xattrs");
-  for (map<string,bufferptr>::const_iterator p = xattrs.begin(); p != xattrs.end(); ++p) {
-    string v(p->second.c_str(), p->second.length());
-    f->dump_string(p->first.c_str(), v);
-  }
-  f->close_section();
-}
-
-void old_inode_t::generate_test_instances(list<old_inode_t*>& ls)
-{
-  ls.push_back(new old_inode_t);
-  ls.push_back(new old_inode_t);
-  ls.back()->first = 2;
-  list<inode_t*> ils;
-  inode_t::generate_test_instances(ils);
-  ls.back()->inode = *ils.back();
-  ls.back()->xattrs["user.foo"] = buffer::copy("asdf", 4);
-  ls.back()->xattrs["user.unprintable"] = buffer::copy("\000\001\002", 3);
-}
-
 
 /*
  * fnode_t
@@ -924,25 +592,27 @@ void mds_table_pending_t::generate_test_instances(list<mds_table_pending_t*>& ls
 void inode_load_vec_t::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
-  for (int i=0; i<NUM; i++)
-    ::encode(vec[i], bl);
+  for (const auto &i : vec) {
+    ::encode(i, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void inode_load_vec_t::decode(const utime_t &t, bufferlist::iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
-  for (int i=0; i<NUM; i++)
-    ::decode(vec[i], t, p);
+  for (auto &i : vec) {
+    ::decode(i, t, p);
+  }
   DECODE_FINISH(p);
 }
 
 void inode_load_vec_t::dump(Formatter *f)
 {
   f->open_array_section("Decay Counters");
-  for (vector<DecayCounter>::const_iterator i = vec.begin(); i != vec.end(); ++i) {
+  for (const auto &i : vec) {
     f->open_object_section("Decay Counter");
-    i->dump(f);
+    i.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -961,9 +631,9 @@ void inode_load_vec_t::generate_test_instances(list<inode_load_vec_t*>& ls)
 void dirfrag_load_vec_t::dump(Formatter *f) const
 {
   f->open_array_section("Decay Counters");
-  for (vector<DecayCounter>::const_iterator i = vec.begin(); i != vec.end(); ++i) {
+  for (const auto &i : vec) {
     f->open_object_section("Decay Counter");
-    i->dump(f);
+    i.dump(f);
     f->close_section();
   }
   f->close_section();

@@ -34,7 +34,7 @@
 #define dout_prefix *_dout << "mds.beacon." << name << ' '
 
 
-Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
+Beacon::Beacon(CephContext *cct_, MonClient *monc_, boost::string_view name_) :
   Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
   name(name_), standby_for_rank(MDS_RANK_NONE),
   standby_for_fscid(FS_CLUSTER_ID_NONE), want_state(MDSMap::STATE_BOOT),

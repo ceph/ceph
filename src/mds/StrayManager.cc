@@ -125,11 +125,13 @@ void StrayManager::purge(CDentry *dn)
       to = MAX(in->inode.max_size_ever, to);
     }
 
-    inode_t *pi = in->get_projected_inode();
+    auto pi = in->get_projected_inode();
 
     item.size = to;
     item.layout = pi->layout;
-    item.old_pools = pi->old_pools;
+    item.old_pools.clear();
+    for (const auto &p : pi->old_pools)
+      item.old_pools.insert(p);
     item.snapc = *snapc;
   }
 
@@ -175,13 +177,13 @@ void StrayManager::_purge_stray_purged(
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
     mds->mdlog->start_entry(le);
     
-    inode_t *pi = in->project_inode();
-    pi->size = 0;
-    pi->max_size_ever = 0;
-    pi->client_ranges.clear();
-    pi->truncate_size = 0;
-    pi->truncate_from = 0;
-    pi->version = in->pre_dirty();
+    auto &pi = in->project_inode();
+    pi.inode.size = 0;
+    pi.inode.max_size_ever = 0;
+    pi.inode.client_ranges.clear();
+    pi.inode.truncate_size = 0;
+    pi.inode.truncate_from = 0;
+    pi.inode.version = in->pre_dirty();
 
     le->metablob.add_dir_context(dn->dir);
     le->metablob.add_primary_dentry(dn, in, true);
@@ -463,10 +465,9 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
 
       if (!in->remote_parents.empty()) {
 	// unlink any stale remote snap dentry.
-	for (compact_set<CDentry*>::iterator p = in->remote_parents.begin();
-	     p != in->remote_parents.end(); ) {
-	  CDentry *remote_dn = *p;
-	  ++p;
+	for (auto it = in->remote_parents.begin(); it != in->remote_parents.end(); ) {
+	  CDentry *remote_dn = *it;
+	  ++it;
 	  assert(remote_dn->last != CEPH_NOSNAP);
 	  remote_dn->unlink_remote(remote_dn->get_linkage());
 	}
@@ -606,18 +607,17 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
   /* If no remote_dn hinted, pick one arbitrarily */
   if (remote_dn == NULL) {
     if (!stray_in->remote_parents.empty()) {
-      for (compact_set<CDentry*>::iterator p = stray_in->remote_parents.begin();
-	   p != stray_in->remote_parents.end();
-	   ++p)
-	if ((*p)->last == CEPH_NOSNAP && !(*p)->is_projected()) {
-	  if ((*p)->is_auth()) {
-	    remote_dn = *p;
+      for (const auto &dn : stray_in->remote_parents) {
+	if (dn->last == CEPH_NOSNAP && !dn->is_projected()) {
+	  if (dn->is_auth()) {
+	    remote_dn = dn;
 	    if (remote_dn->dir->can_auth_pin())
 	      break;
 	  } else if (!remote_dn) {
-	    remote_dn = *p;
+	    remote_dn = dn;
 	  }
 	}
+      }
     }
     if (!remote_dn) {
       dout(20) << __func__ << ": not reintegrating (no remote parents in cache)" << dendl;

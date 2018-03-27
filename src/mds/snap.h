@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_SNAP_H
 #define CEPH_MDS_SNAP_H
 
+#include <boost/utility/string_view.hpp>
+
 #include "mdstypes.h"
 #include "common/snap_types.h"
 
@@ -34,7 +36,7 @@ struct SnapInfo {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapInfo*>& ls);
 
-  const string& get_long_name();
+  boost::string_view get_long_name();
 };
 WRITE_CLASS_ENCODER(SnapInfo)
 

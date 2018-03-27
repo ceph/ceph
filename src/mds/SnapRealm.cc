@@ -16,6 +16,8 @@
 #include "MDCache.h"
 #include "MDSRank.h"
 
+#include <boost/utility/string_view.hpp>
+
 #include "messages/MClientSnap.h"
 
 
@@ -338,7 +340,7 @@ void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, 
     parent->get_snap_info(infomap, MAX(first, srnode.current_parent_since), last);
 }
 
-const string& SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
+boost::string_view SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
 {
   auto srnode_snaps_entry = srnode.snaps.find(snapid);
   if (srnode_snaps_entry != srnode.snaps.end()) {
@@ -361,7 +363,7 @@ const string& SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
   return parent->get_snapname(snapid, atino);
 }
 
-snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t first, snapid_t last)
+snapid_t SnapRealm::resolve_snapname(boost::string_view n, inodeno_t atino, snapid_t first, snapid_t last)
 {
   // first try me
   dout(10) << "resolve_snapname '" << n << "' in [" << first << "," << last << "]" << dendl;
@@ -377,8 +379,8 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
 	n[0] != '_') return 0;
     int next_ = n.find('_', 1);
     if (next_ < 0) return 0;
-    pname = n.substr(1, next_ - 1);
-    pino = atoll(n.c_str() + next_ + 1);
+    pname = std::string(n.substr(1, next_ - 1));
+    pino = atoll(n.data() + next_ + 1);
     dout(10) << " " << n << " parses to name '" << pname << "' dirino " << pino << dendl;
   }
 

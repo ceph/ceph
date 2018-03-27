@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_EMETABLOB_H
 #define CEPH_MDS_EMETABLOB_H
 
+#include <boost/utility/string_view.hpp>
+
 #include <stdlib.h>
 
 #include "../CInode.h"
@@ -63,32 +65,31 @@ public:
     static const int STATE_DIRTYPARENT = (1<<1);
     static const int STATE_DIRTYPOOL   = (1<<2);
     static const int STATE_NEED_SNAPFLUSH = (1<<3);
-    typedef compact_map<snapid_t, old_inode_t> old_inodes_t;
-    string  dn;         // dentry
+    std::string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
-    inode_t inode;      // if it's not
+    CInode::mempool_inode inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
     fragtree_t dirfragtree;
-    map<string,bufferptr> xattrs;
-    string symlink;
+    CInode::mempool_xattr_map xattrs;
+    std::string symlink;
     snapid_t oldest_snap;
     bufferlist snapbl;
     __u8 state{0};
-    old_inodes_t old_inodes;
+    CInode::mempool_old_inode_map old_inodes; // XXX should not be part of mempool; wait for std::pmr to simplify
 
     fullbit(const fullbit& o);
     const fullbit& operator=(const fullbit& o);
 
-    fullbit(const string& d, snapid_t df, snapid_t dl, 
-	    version_t v, const inode_t& i, const fragtree_t &dft, 
-	    const map<string,bufferptr> &xa, const string& sym,
+    fullbit(boost::string_view d, snapid_t df, snapid_t dl, 
+	    version_t v, const CInode::mempool_inode& i, const fragtree_t &dft,
+	    const CInode::mempool_xattr_map &xa, boost::string_view sym,
 	    snapid_t os, const bufferlist &sbl, __u8 st,
-	    const old_inodes_t *oi = NULL) :
+	    const CInode::mempool_old_inode_map *oi = NULL) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
       oldest_snap(os), state(st)
     {
       if (i.is_symlink())
-	symlink = sym;
+	symlink = std::string(sym);
       if (i.is_dir())
 	dirfragtree = dft;
       if (oi)
@@ -137,14 +138,14 @@ public:
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
   struct remotebit {
-    string dn;
+    std::string dn;
     snapid_t dnfirst, dnlast;
     version_t dnv;
     inodeno_t ino;
     unsigned char d_type;
     bool dirty;
 
-    remotebit(const string& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+    remotebit(boost::string_view d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     explicit remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
@@ -166,12 +167,12 @@ public:
    * nullbit - a null dentry
    */
   struct nullbit {
-    string dn;
+    std::string dn;
     snapid_t dnfirst, dnlast;
     version_t dnv;
     bool dirty;
 
-    nullbit(const string& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
+    nullbit(boost::string_view d, snapid_t df, snapid_t dl, version_t v, bool dr) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
     explicit nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
@@ -439,7 +440,7 @@ private:
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    const inode_t *pi = in->get_projected_inode();
+    const auto pi = in->get_projected_inode();
     if ((state & fullbit::STATE_DIRTY) && pi->is_backtrace_updated())
       state |= fullbit::STATE_DIRTYPARENT;
 
@@ -487,8 +488,8 @@ private:
     add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 
-  void add_root(bool dirty, CInode *in, const inode_t *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
-		    map<string,bufferptr> *px=0) {
+  void add_root(bool dirty, CInode *in, const CInode::mempool_inode *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
+		    CInode::mempool_xattr_map *px=0) {
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 

@@ -19,7 +19,7 @@
  * Copyright 2014 Cloudius Systems
  */
 /*
- * C++2014 dependencies removed.  Uses of std::string_view adapted to
+ * C++2014 dependencies removed.  Uses of boost::string_view adapted to
  * boost::string_ref.  Matt Benjamin <mbenjamin@redhat.com>
  */
 

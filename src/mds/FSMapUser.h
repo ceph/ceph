@@ -14,9 +14,11 @@
 #ifndef CEPH_FSMAPCOMPACT_H
 #define CEPH_FSMAPCOMPACT_H
 
-#include "mds/mdstypes.h"
 #include <map>
 #include <string>
+#include <boost/utility/string_view.hpp>
+
+#include "mds/mdstypes.h"
 
 class FSMapUser {
 public:
@@ -37,7 +39,7 @@ public:
 
   epoch_t get_epoch() const { return epoch; }
 
-  fs_cluster_id_t get_fs_cid(const std::string &name) const {
+  fs_cluster_id_t get_fs_cid(boost::string_view name) const {
     for (auto &p : filesystems) {
       if (p.second.name == name)
 	return p.first;

@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_LOCKER_H
 #define CEPH_MDS_LOCKER_H
 
+#include <boost/utility/string_view.hpp>
+
 #include "include/types.h"
 
 #include <map>
@@ -26,7 +28,6 @@ using std::set;
 
 class MDSRank;
 class Session;
-class CInode;
 class CDentry;
 struct SnapRealm;
 
@@ -40,6 +41,7 @@ class SimpleLock;
 class ScatterLock;
 class LocalLock;
 
+#include "CInode.h"
 #include "SimpleLock.h"
 #include "Mutation.h"
 
@@ -177,7 +179,7 @@ public:
   bool should_defer_client_cap_frozen(CInode *in);
 
   void process_request_cap_release(MDRequestRef& mdr, client_t client, const ceph_mds_request_release& r,
-				   const string &dname);
+				   boost::string_view dname);
 
   void kick_cap_releases(MDRequestRef& mdr);
   void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);
@@ -191,7 +193,7 @@ public:
   bool _need_flush_mdlog(CInode *in, int wanted_caps);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
-  void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi);
+  void _update_cap_fields(CInode *in, int dirty, MClientCaps *m, CInode::mempool_inode *pi);
   void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, MClientCaps *m, MClientCaps *ack);
   void _do_null_snapflush(CInode *head_in, client_t client, snapid_t last=CEPH_NOSNAP);
   bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, MClientCaps *m,
@@ -252,10 +254,10 @@ protected:
   void file_update_finish(CInode *in, MutationRef& mut, bool share_max, bool issue_client_cap,
 			  client_t client, MClientCaps *ack);
 private:
-  uint64_t calc_new_max_size(inode_t *pi, uint64_t size);
+  uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
 public:
   void calc_new_client_ranges(CInode *in, uint64_t size,
-			      map<client_t, client_writeable_range_t>* new_ranges,
+			      CInode::mempool_inode::client_range_map* new_ranges,
 			      bool *max_increased);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,
                             uint64_t newmax=0, uint64_t newsize=0,

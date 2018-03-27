@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_SNAPREALM_H
 #define CEPH_MDS_SNAPREALM_H
 
+#include <boost/utility/string_view.hpp>
+
 #include "mdstypes.h"
 #include "snap.h"
 #include "include/xlist.h"
@@ -63,7 +65,7 @@ public:
     inodes_with_caps(0) 
   { }
 
-  bool exists(const string &name) const {
+  bool exists(boost::string_view name) const {
     for (map<snapid_t,SnapInfo>::const_iterator p = srnode.snaps.begin();
 	 p != srnode.snaps.end();
 	 ++p) {
@@ -94,8 +96,8 @@ public:
   const bufferlist& get_snap_trace();
   void build_snap_trace(bufferlist& snapbl) const;
 
-  const string& get_snapname(snapid_t snapid, inodeno_t atino);
-  snapid_t resolve_snapname(const string &name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
+  boost::string_view get_snapname(snapid_t snapid, inodeno_t atino);
+  snapid_t resolve_snapname(boost::string_view name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const set<snapid_t>& get_snaps() const;
   const SnapContext& get_snap_context() const;

@@ -91,7 +91,7 @@ public:
   void dump_unsigned(const char *name, uint64_t u) override;
   void dump_int(const char *name, int64_t u) override;
   void dump_float(const char *name, double d) override;
-  void dump_string(const char *name, const std::string& s) override;
+  void dump_string(const char *name, boost::string_view s) override;
   std::ostream& dump_stream(const char *name) override;
   void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
 

@@ -33,6 +33,8 @@
  *  
  */
 
+#include <boost/utility/string_view.hpp>
+
 #include "msg/Message.h"
 #include "include/filepath.h"
 #include "mds/mdstypes.h"
@@ -135,7 +137,7 @@ public:
   void set_retry_attempt(int a) { head.num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
-  void set_string2(const char *s) { path2.set_path(s, 0); }
+  void set_string2(const char *s) { path2.set_path(boost::string_view(s), 0); }
   void set_caller_uid(unsigned u) { head.caller_uid = u; }
   void set_caller_gid(unsigned g) { head.caller_gid = g; }
   void set_gid_list(int count, const gid_t *gids) {

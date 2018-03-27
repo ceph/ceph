@@ -55,9 +55,9 @@ void PyFormatter::dump_float(const char *name, double d)
   dump_pyobject(name, PyFloat_FromDouble(d));
 }
 
-void PyFormatter::dump_string(const char *name, const std::string& s)
+void PyFormatter::dump_string(const char *name, boost::string_view s)
 {
-  dump_pyobject(name, PyString_FromString(s.c_str()));
+  dump_pyobject(name, PyString_FromString(s.data()));
 }
 
 void PyFormatter::dump_bool(const char *name, bool b)

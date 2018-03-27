@@ -16,6 +16,8 @@
 #ifndef BEACON_STATE_H
 #define BEACON_STATE_H
 
+#include <boost/utility/string_view.hpp>
+
 #include "include/types.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
@@ -40,7 +42,7 @@ class MDSRank;
 class Beacon : public Dispatcher
 {
 public:
-  Beacon(CephContext *cct_, MonClient *monc_, std::string name);
+  Beacon(CephContext *cct_, MonClient *monc_, boost::string_view name);
   ~Beacon() override;
 
   void init(MDSMap const *mdsmap);

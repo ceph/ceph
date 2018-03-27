@@ -220,7 +220,7 @@ void CDentry::make_path(filepath& fp, bool projected) const
 {
   assert(dir);
   dir->inode->make_path(fp, projected);
-  fp.push_dentry(name);
+  fp.push_dentry(get_name());
 }
 
 /*
@@ -423,7 +423,7 @@ void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
 void CDentry::set_object_info(MDSCacheObjectInfo &info) 
 {
   info.dirfrag = dir->dirfrag();
-  info.dname = name;
+  info.dname = std::string(boost::string_view(name));
   info.snapid = last;
 }
 

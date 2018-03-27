@@ -15,6 +15,8 @@
 #ifndef CEPH_MMDSCACHEREJOIN_H
 #define CEPH_MMDSCACHEREJOIN_H
 
+#include <boost/utility/string_view.hpp>
+
 #include "msg/Message.h"
 
 #include "include/types.h"
@@ -266,20 +268,20 @@ public:
   void add_weak_dirfrag(dirfrag_t df) {
     weak_dirfrags.insert(df);
   }
-  void add_weak_dentry(inodeno_t dirino, const string& dname, snapid_t last, dn_weak& dnw) {
+  void add_weak_dentry(inodeno_t dirino, boost::string_view dname, snapid_t last, dn_weak& dnw) {
     weak[dirino][string_snap_t(dname, last)] = dnw;
   }
-  void add_weak_primary_dentry(inodeno_t dirino, const string& dname, snapid_t first, snapid_t last, inodeno_t ino) {
+  void add_weak_primary_dentry(inodeno_t dirino, boost::string_view dname, snapid_t first, snapid_t last, inodeno_t ino) {
     weak[dirino][string_snap_t(dname, last)] = dn_weak(first, ino);
   }
-  void add_strong_dentry(dirfrag_t df, const string& dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
+  void add_strong_dentry(dirfrag_t df, boost::string_view dname, snapid_t first, snapid_t last, inodeno_t pi, inodeno_t ri, unsigned char rdt, int n, int ls) {
     strong_dentries[df][string_snap_t(dname, last)] = dn_strong(first, pi, ri, rdt, n, ls);
   }
-  void add_dentry_authpin(dirfrag_t df, const string& dname, snapid_t last,
+  void add_dentry_authpin(dirfrag_t df, boost::string_view dname, snapid_t last,
 			  const metareqid_t& ri, __u32 attempt) {
     authpinned_dentries[df][string_snap_t(dname, last)].push_back(slave_reqid(ri, attempt));
   }
-  void add_dentry_xlock(dirfrag_t df, const string& dname, snapid_t last,
+  void add_dentry_xlock(dirfrag_t df, boost::string_view dname, snapid_t last,
 			const metareqid_t& ri, __u32 attempt) {
     xlocked_dentries[df][string_snap_t(dname, last)] = slave_reqid(ri, attempt);
   }

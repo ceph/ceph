@@ -1103,7 +1103,7 @@ void JournalTool::encode_fullbit_as_inode(
   new_inode.xattrs = fb.xattrs;
   new_inode.dirfragtree = fb.dirfragtree;
   new_inode.snap_blob = fb.snapbl;
-  new_inode.symlink = fb.symlink;
+  new_inode.symlink = mempool::mds_co::string(boost::string_view(fb.symlink));
   new_inode.old_inodes = fb.old_inodes;
 
   // Serialize InodeStore

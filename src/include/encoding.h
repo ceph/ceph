@@ -14,6 +14,19 @@
 #ifndef CEPH_ENCODING_H
 #define CEPH_ENCODING_H
 
+#include <set>
+#include <map>
+#include <deque>
+#include <vector>
+#include <string>
+#include <boost/utility/string_view.hpp>
+#include <tuple>
+#include <boost/optional/optional_io.hpp>
+#include <boost/tuple/tuple.hpp>
+
+#include "include/unordered_map.h"
+#include "include/unordered_set.h"
+
 #include "include/int_types.h"
 
 #include "include/memory.h"
@@ -162,12 +175,16 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 
 // string
-inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
+inline void encode(boost::string_view s, bufferlist& bl, uint64_t features=0)
 {
   __u32 len = s.length();
   encode(len, bl);
   if (len)
     bl.append(s.data(), len);
+}
+inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
+{
+  return encode(boost::string_view(s), bl, features);
 }
 inline void decode(std::string& s, bufferlist::iterator& p)
 {
@@ -177,9 +194,13 @@ inline void decode(std::string& s, bufferlist::iterator& p)
   p.copy(len, s);
 }
 
-inline void encode_nohead(const std::string& s, bufferlist& bl)
+inline void encode_nohead(boost::string_view s, bufferlist& bl)
 {
   bl.append(s.data(), s.length());
+}
+inline void encode_nohead(const std::string& s, bufferlist& bl)
+{
+  encode_nohead(boost::string_view(s), bl);
 }
 inline void decode_nohead(int len, std::string& s, bufferlist::iterator& p)
 {
@@ -190,10 +211,7 @@ inline void decode_nohead(int len, std::string& s, bufferlist::iterator& p)
 // const char* (encode only, string compatible)
 inline void encode(const char *s, bufferlist& bl) 
 {
-  __u32 len = strlen(s);
-  encode(len, bl);
-  if (len)
-    bl.append(s, len);
+  encode(boost::string_view(s, strlen(s)), bl);
 }
 
 
