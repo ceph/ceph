@@ -1141,8 +1141,8 @@ class RBD(object):
             'id'          : decode_cstr(c_info.id),
             'name'        : decode_cstr(c_info.name),
             'source'      : __source_string[c_info.source],
-            'deletion_time' : datetime.fromtimestamp(c_info.deletion_time),
-            'deferment_end_time' : datetime.fromtimestamp(c_info.deferment_end_time)
+            'deletion_time' : datetime.utcfromtimestamp(c_info.deletion_time),
+            'deferment_end_time' : datetime.utcfromtimestamp(c_info.deferment_end_time)
             }
         rbd_trash_get_cleanup(&c_info)
         return info
@@ -1548,7 +1548,7 @@ cdef class MirrorImageStatusIterator(object):
                         },
                     'state'       : self.images[i].state,
                     'description' : decode_cstr(self.images[i].description),
-                    'last_update' : datetime.fromtimestamp(self.images[i].last_update),
+                    'last_update' : datetime.utcfromtimestamp(self.images[i].last_update),
                     'up'          : self.images[i].up,
                     }
             if self.size < self.max_read:
@@ -2499,7 +2499,7 @@ cdef class Image(object):
             ret = rbd_snap_get_timestamp(self.image, _snap_id, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting snapshot timestamp for image: %s, snap_id: %d' % (self.name, snap_id))
-        return datetime.fromtimestamp(timestamp.tv_sec)
+        return datetime.utcfromtimestamp(timestamp.tv_sec)
 
     def remove_snap_limit(self):
         """
@@ -2745,7 +2745,7 @@ written." % (self.name, ret, length))
             ret = rbd_get_create_timestamp(self.image, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting create timestamp for image: %s' % (self.name))
-        return datetime.fromtimestamp(timestamp.tv_sec)
+        return datetime.utcfromtimestamp(timestamp.tv_sec)
 
     def flatten(self):
         """
@@ -3081,7 +3081,7 @@ written." % (self.name, ret, length))
                 },
             'state'       : c_status.state,
             'description' : decode_cstr(c_status.description),
-            'last_update' : datetime.fromtimestamp(c_status.last_update),
+            'last_update' : datetime.utcfromtimestamp(c_status.last_update),
             'up'          : c_status.up,
             }
         free(c_status.name)
@@ -3572,8 +3572,8 @@ cdef class TrashIterator(object):
                 'id'          : decode_cstr(self.entries[i].id),
                 'name'        : decode_cstr(self.entries[i].name),
                 'source'      : TrashIterator.__source_string[self.entries[i].source],
-                'deletion_time' : datetime.fromtimestamp(self.entries[i].deletion_time),
-                'deferment_end_time' : datetime.fromtimestamp(self.entries[i].deferment_end_time)
+                'deletion_time' : datetime.utcfromtimestamp(self.entries[i].deletion_time),
+                'deferment_end_time' : datetime.utcfromtimestamp(self.entries[i].deferment_end_time)
                 }
 
     def __dealloc__(self):
