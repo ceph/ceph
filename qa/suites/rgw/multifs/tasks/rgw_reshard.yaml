@@ -1,0 +1,12 @@
+tasks:
+- install:
+- ceph:
+- rgw: [client.0]
+- rgw_reshard:
+    client.0:
+      rgw_server: client.0
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw reshard max num obj: 10
