@@ -72,7 +72,8 @@ namespace crimson {
       // are met and below their limits
       Allow,
       // if an incoming request would exceed its limit, add_request() will
-      // reject it with EAGAIN instead of adding it to the queue
+      // reject it with EAGAIN instead of adding it to the queue. cannot be used
+      // with DelayedTagCalc, because add_request() needs an accurate tag
       Reject,
     };
 
@@ -797,6 +798,8 @@ namespace crimson {
       {
 	assert(_erase_age >= _idle_age);
 	assert(_check_time < _idle_age);
+	// AtLimit::Reject depends on ImmediateTagCalc
+	assert(at_limit != AtLimit::Reject || !IsDelayed);
 	cleaning_job =
 	  std::unique_ptr<RunEvery>(
 	    new RunEvery(check_time,

@@ -89,6 +89,11 @@ namespace crimson {
 				"proportion.*max_tag") <<
 	"we should fail if a client tries to generate a reservation tag "
 	"where reservation and proportion are both 0";
+
+      EXPECT_DEATH_IF_SUPPORTED(Queue(client_info_f, AtLimit::Reject),
+				"Assertion.*Reject.*Delayed") <<
+	"we should fail if a client tries to construct a queue with both "
+        "DelayedTagCalc and AtLimit::Reject";
     }
 
 
