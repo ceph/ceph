@@ -236,6 +236,7 @@ bool MgrStatMonitor::prepare_update(MonOpRequestRef op)
 
 bool MgrStatMonitor::preprocess_report(MonOpRequestRef op)
 {
+  mon->no_reply(op);
   return false;
 }
 
