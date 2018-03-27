@@ -151,7 +151,10 @@ int SnapMapper::get_snaps(
     bufferlist::iterator bp = got.begin()->second.begin();
     ::decode(*out, bp);
     dout(20) << __func__ << " " << oid << " " << out->snaps << dendl;
-    assert(!out->snaps.empty());
+    if (out->snaps.empty()) {
+      dout(1) << __func__ << " " << oid << " empty snapset" << dendl;
+      assert(!cct->_conf->osd_debug_verify_snaps);
+    }
   } else {
     dout(20) << __func__ << " " << oid << " (out == NULL)" << dendl;
   }
