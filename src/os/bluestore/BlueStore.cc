@@ -11518,7 +11518,6 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
 				 const string& first, const string& last)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  KeyValueDB::Iterator it;
   string key_first, key_last;
   int r = 0;
   if (!o->onode.has_omap()) {
