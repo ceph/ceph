@@ -110,7 +110,6 @@ public:
   bool waiting_for_reconnect(client_t c) const;
   void dump_reconnect_status(Formatter *f) const;
 
-  Session *get_session(Message *m);
   void handle_client_session(class MClientSession *m);
   void _session_logged(Session *session, uint64_t state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);

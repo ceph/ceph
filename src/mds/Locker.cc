@@ -2603,9 +2603,7 @@ bool Locker::should_defer_client_cap_frozen(CInode *in)
  */
 void Locker::handle_client_caps(MClientCaps *m)
 {
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   client_t client = m->get_source().num();
-
   snapid_t follows = m->get_snap_follows();
   dout(7) << "handle_client_caps "
 	  << ((m->flags & CLIENT_CAPS_SYNC) ? "sync" : "async")
@@ -2613,6 +2611,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	  << " tid " << m->get_client_tid() << " follows " << follows
 	  << " op " << ceph_cap_op_name(m->get_op()) << dendl;
 
+  Session *session = mds->get_session(m);
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     if (!session) {
       dout(5) << " no session, dropping " << *m << dendl;
@@ -3316,14 +3315,12 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   if (!dirty && !change_max)
     return false;
 
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  Session *session = mds->get_session(m);
   if (session->check_access(in, MAY_WRITE,
 			    m->caller_uid, m->caller_gid, NULL, 0, 0) < 0) {
-    session->put();
     dout(10) << "check_access failed, dropping cap update on " << *in << dendl;
     return false;
   }
-  session->put();
 
   // do the update.
   EUpdate *le = new EUpdate(mds->mdlog, "cap update");
@@ -3413,7 +3410,7 @@ void Locker::handle_client_cap_release(MClientCapRelease *m)
     mds->set_osd_epoch_barrier(m->osd_epoch_barrier);
   }
 
-  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  Session *session = mds->get_session(m);
 
   for (vector<ceph_mds_cap_item>::iterator p = m->caps.begin(); p != m->caps.end(); ++p) {
     _do_cap_release(client, inodeno_t((uint64_t)p->ino) , p->cap_id, p->migrate_seq, p->seq);
