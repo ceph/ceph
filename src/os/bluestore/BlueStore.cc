@@ -4115,7 +4115,7 @@ int BlueStore::_reload_logger()
   struct store_statfs_t store_statfs;
 
   int r = statfs(&store_statfs);
-  if(r >= 0) {
+  if (r >= 0) {
     logger->set(l_bluestore_allocated, store_statfs.allocated);
     logger->set(l_bluestore_stored, store_statfs.stored);
     logger->set(l_bluestore_compressed, store_statfs.compressed);
@@ -10838,7 +10838,7 @@ void BlueStore::_choose_write_options(
     comp_mode.load(),
     [&]() {
       string val;
-      if(c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
+      if (c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
 	return boost::optional<Compressor::CompressionMode>(
 	  Compressor::get_comp_mode_type(val));
       }
@@ -10874,7 +10874,7 @@ void BlueStore::_choose_write_options(
         comp_max_blob_size.load(),
         [&]() {
           int val;
-          if(c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
+          if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
    	    return boost::optional<uint64_t>((uint64_t)val);
           }
           return boost::optional<uint64_t>();
@@ -10888,7 +10888,7 @@ void BlueStore::_choose_write_options(
         comp_min_blob_size.load(),
         [&]() {
           int val;
-          if(c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
+          if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
    	    return boost::optional<uint64_t>((uint64_t)val);
           }
           return boost::optional<uint64_t>();
