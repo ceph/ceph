@@ -22,9 +22,7 @@ class FooResource(RESTController):
         return data
 
     def get(self, key, *args, **kwargs):
-        if args:
-            return {'detail': (key, args)}
-        return FooResource.elems[int(key)]
+        return {'detail': (key, args)}
 
     def delete(self, key):
         del FooResource.elems[int(key)]
@@ -37,6 +35,7 @@ class FooResource(RESTController):
         return dict(key=key, **data)
 
 
+@ApiController('fooargs')
 class FooArgs(RESTController):
     @RESTController.args_from_json
     def set(self, code, name, opt1=None, opt2=None):
@@ -103,6 +102,12 @@ class RESTControllerTest(ControllerTestCase):
         self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': 'opt2'})
 
     def test_detail_route(self):
+        self._get('/foo/default')
+        self.assertJsonBody({'detail': ['default', []]})
+
+        self._get('/foo/default/default')
+        self.assertJsonBody({'detail': ['default', ['default']]})
+
         self._get('/foo/1/detail')
         self.assertJsonBody({'detail': ['1', ['detail']]})
 
