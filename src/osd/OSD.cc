@@ -12,14 +12,21 @@
  * Foundation.  See file COPYING.
  *
  */
+
 #include "acconfig.h"
-#include <unistd.h>
+
+#include <cerrno>
+#include <cctype>
 #include <fstream>
 #include <iostream>
-#include <errno.h>
+#include <algorithm>
+
+#include <experimental/iterator>
+
+#include <unistd.h>
+
 #include <sys/stat.h>
 #include <signal.h>
-#include <ctype.h>
 #include <boost/scoped_ptr.hpp>
 
 #ifdef HAVE_SYS_PARAM_H
@@ -47,6 +54,7 @@
 #include "common/io_priority.h"
 #include "common/pick_address.h"
 #include "common/SubProcess.h"
+#include "common/PluginRegistry.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -54,7 +62,6 @@
 #endif
 
 #include "PrimaryLogPG.h"
-
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -5540,6 +5547,27 @@ void OSD::_send_boot()
   set_state(STATE_BOOTING);
 }
 
+std::string OSD::_collect_compression_algorithms()
+{
+  using std::experimental::make_ostream_joiner;
+
+  const auto& compression_algorithms = Compressor::compression_algorithms;
+  const auto& plugin_registry = cct->get_plugin_registry()->plugins;
+
+  if (plugin_registry.empty())
+   return {};
+
+  ostringstream os;
+
+  copy_if(begin(compression_algorithms), end(compression_algorithms),
+          make_ostream_joiner(os, ", "),
+          [&plugin_registry](const auto& algorithm) {
+            return plugin_registry.end() != plugin_registry.find(algorithm.first);
+         });
+  
+  return os.str();
+}
+
 void OSD::_collect_metadata(map<string,string> *pm)
 {
   // config info
@@ -5570,6 +5598,10 @@ void OSD::_collect_metadata(map<string,string> *pm)
   set<string> devnames;
   store->get_devices(&devnames);
   (*pm)["devices"] = stringify(devnames);
+
+  // Other information:
+  (*pm)["supported_compression_algorithms"] = _collect_compression_algorithms();
+
   dout(10) << __func__ << " " << *pm << dendl;
 }
 
