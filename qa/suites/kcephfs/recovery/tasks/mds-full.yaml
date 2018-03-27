@@ -8,6 +8,8 @@ overrides:
       - failsafe engaged, dropping updates
       - failsafe disengaged, no longer dropping
       - is full \(reached quota
+      - POOL_FULL
+      - POOL_BACKFILLFULL
     conf:
       osd:
         osd mon report interval max: 5
