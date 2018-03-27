@@ -87,9 +87,7 @@ int main(int argc, const char **argv, const char *envp[]) {
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
-  auto i = args.begin();
-  auto end = args.end();
-  for (; i != end;) {
+  for (auto i = args.begin(); i != args.end();) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)nullptr)) {
