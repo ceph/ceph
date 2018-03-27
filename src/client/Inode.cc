@@ -134,7 +134,9 @@ void Inode::get_open_ref(int mode)
 bool Inode::put_open_ref(int mode)
 {
   //cout << "open_by_mode[" << mode << "] " << open_by_mode[mode] << " -> " << (open_by_mode[mode]-1) << std::endl;
-  if (--open_by_mode[mode] == 0)
+  auto& ref = open_by_mode.at(mode);
+  assert(ref > 0);
+  if (--ref == 0)
     return true;
   return false;
 }

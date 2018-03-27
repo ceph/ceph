@@ -1041,6 +1041,16 @@ int ceph_fsync(struct ceph_mount_info *cmount, int fd, int syncdataonly);
 int ceph_fallocate(struct ceph_mount_info *cmount, int fd, int mode,
 	                      int64_t offset, int64_t length);
 
+/**
+ * Enable/disable lazyio for the file.
+ *
+ * @param cmount the ceph mount handle to use for performing the fsync.
+ * @param fd the file descriptor of the file to sync.
+ * @param enable a boolean to enable lazyio or disable lazyio.
+ * @returns 0 on success or a negative error code on failure.
+ */
+int ceph_lazyio(struct ceph_mount_info *cmount, int fd, int enable);
+
 /** @} file */
 
 /**
@@ -1658,6 +1668,8 @@ int ceph_ll_getlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner);
 int ceph_ll_setlk(struct ceph_mount_info *cmount,
 		  Fh *fh, struct flock *fl, uint64_t owner, int sleep);
+
+int ceph_ll_lazyio(struct ceph_mount_info *cmount, Fh *fh, int enable);
 
 /*
  * Delegation support

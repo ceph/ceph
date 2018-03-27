@@ -848,6 +848,7 @@ private:
   int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
   int _flock(Fh *fh, int cmd, uint64_t owner);
+  int _lazyio(Fh *fh, int enable);
 
   int get_or_create(Inode *dir, const char* name,
 		    Dentry **pdn, bool expect_null=false);
@@ -1108,6 +1109,7 @@ public:
   int64_t drop_caches();
 
   // hpc lazyio
+  int lazyio(int fd, int enable);
   int lazyio_propogate(int fd, loff_t offset, size_t count);
   int lazyio_synchronize(int fd, loff_t offset, size_t count);
 
@@ -1239,6 +1241,7 @@ public:
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
   int ll_flock(Fh *fh, int cmd, uint64_t owner);
+  int ll_lazyio(Fh *fh, int enable);
   int ll_file_layout(Fh *fh, file_layout_t *layout);
   void ll_interrupt(void *d);
   bool ll_handle_umask() {
