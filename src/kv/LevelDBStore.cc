@@ -255,7 +255,7 @@ void LevelDBStore::LevelDBTransactionImpl::set(
     // make sure the buffer isn't too large or we might crash here...    
     char* slicebuf = (char*) alloca(bllen);
     leveldb::Slice newslice(slicebuf, bllen);
-    std::list<buffer::ptr>::const_iterator pb;
+    ceph::bufferlist::buffers_t::const_iterator pb;
     for (pb = to_set_bl.buffers().begin(); pb != to_set_bl.buffers().end(); ++pb) {
       size_t ptrlen = (*pb).length();
       memcpy((void*)slicebuf, (*pb).c_str(), ptrlen);
