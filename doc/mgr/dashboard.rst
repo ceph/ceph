@@ -43,6 +43,12 @@ This can be automated (e.g. during deployment) by adding the following to ceph.c
   [mon]
           mgr initial modules = dashboard
 
+Note that ``mgr initial modules`` takes a space-separated list of modules, so
+if you wanted to include other modules in addition to dashboard, just make it
+a list like so::
+
+          mgr initial modules = balancer dashboard
+
 Configuration
 -------------
 
