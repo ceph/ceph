@@ -6484,6 +6484,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("client_force_lazyio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),

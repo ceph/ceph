@@ -82,7 +82,7 @@ const struct sm_t sm_scatterlock = {
 
 const struct sm_state_t filelock[LOCK_MAX] = {
                       // stable     loner  rep state  r     rp   rd   wr   fwr  l    x    caps(any,loner,xlocker,replica)
-    [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   0,   ANY, 0,   CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD,0,0,CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD },
+    [LOCK_SYNC]      = { 0,         false, LOCK_SYNC, ANY,  0,   ANY, 0,   0,   ANY, 0,   CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD|CEPH_CAP_GLAZYIO,0,0,CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD },
     [LOCK_LOCK_SYNC] = { LOCK_SYNC, false, LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,   CEPH_CAP_GCACHE,0,0,0 },
     [LOCK_EXCL_SYNC] = { LOCK_SYNC, true,  LOCK_LOCK, 0,    0,   0,   0,   XCL, 0,   0,   0,CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD,0,0 },
     [LOCK_MIX_SYNC]  = { LOCK_SYNC, false, LOCK_MIX_SYNC2,0,0,   0,   0,   0,   0,   0,   CEPH_CAP_GRD|CEPH_CAP_GLAZYIO,0,0,CEPH_CAP_GRD },
@@ -106,12 +106,12 @@ const struct sm_state_t filelock[LOCK_MAX] = {
     [LOCK_MIX]       = { 0,         false, LOCK_MIX,  0,    0,   REQ, ANY, 0,   0,   0,   CEPH_CAP_GRD|CEPH_CAP_GWR|CEPH_CAP_GLAZYIO,0,0,CEPH_CAP_GRD },
     [LOCK_SYNC_MIX]  = { LOCK_MIX,  false, LOCK_SYNC_MIX2,ANY,0, 0,   0,   0,   0,   0,   CEPH_CAP_GRD|CEPH_CAP_GLAZYIO,0,0,CEPH_CAP_GRD },
     [LOCK_SYNC_MIX2] = { LOCK_MIX,  false, 0,         0,    0,   0,   0,   0,   0,   0,   CEPH_CAP_GRD|CEPH_CAP_GLAZYIO,0,0,CEPH_CAP_GRD },
-    [LOCK_EXCL_MIX]  = { LOCK_MIX,  true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,   0,CEPH_CAP_GRD|CEPH_CAP_GWR|CEPH_CAP_GLAZYIO,0,0 },
+    [LOCK_EXCL_MIX]  = { LOCK_MIX,  true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,   0,CEPH_CAP_GRD|CEPH_CAP_GWR,0,0 },
     [LOCK_XSYN_MIX]  = { LOCK_MIX,  true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,   0,0,0,0 },
     
-    [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   XCL, XCL, 0,   0,   0,   0,CEPH_CAP_GSHARED|CEPH_CAP_GEXCL|CEPH_CAP_GCACHE|CEPH_CAP_GRD|CEPH_CAP_GWR|CEPH_CAP_GBUFFER|CEPH_CAP_GLAZYIO,0,0 },
+    [LOCK_EXCL]      = { 0,         true,  LOCK_LOCK, 0,    0,   XCL, XCL, 0,   0,   0,   0,CEPH_CAP_GSHARED|CEPH_CAP_GEXCL|CEPH_CAP_GCACHE|CEPH_CAP_GRD|CEPH_CAP_GWR|CEPH_CAP_GBUFFER,0,0 },
     [LOCK_SYNC_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, ANY,  0,   0,   0,   0,   0,   0,   0,CEPH_CAP_GSHARED|CEPH_CAP_GCACHE|CEPH_CAP_GRD,0,0 },
-    [LOCK_MIX_EXCL]  = { LOCK_EXCL, true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,   0,CEPH_CAP_GRD|CEPH_CAP_GWR|CEPH_CAP_GLAZYIO,0,0 },
+    [LOCK_MIX_EXCL]  = { LOCK_EXCL, true,  LOCK_LOCK, 0,    0,   0,   XCL, 0,   0,   0,   0,CEPH_CAP_GRD|CEPH_CAP_GWR,0,0 },
     [LOCK_LOCK_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, AUTH, 0,   0,   0,   0,   0,   0,   0,CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0 },
     [LOCK_XSYN_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, AUTH, 0,   XCL, 0,   0,   0,   0,   0,CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0 },
 
