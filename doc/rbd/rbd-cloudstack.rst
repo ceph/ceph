@@ -99,7 +99,7 @@ To add a Ceph block device as Primary Storage, the steps include:
 #. Click the **Add Primary Storage** button on the top right hand side.
 #. Fill in the following information, according to your infrastructure setup:
 
-   - Scope ``(i.e. Cluster or Zone-Wide)``.
+   - Scope (i.e. Cluster or Zone-Wide).
    
    - Zone.
    
@@ -111,17 +111,17 @@ To add a Ceph block device as Primary Storage, the steps include:
    
    - For **Protocol**, select ``RBD``.
    
-   - For **Provider**, select the appropriate provider type ``(i.e. DefaultPrimary, SolidFire, SolidFireShared, or CloudByte)``.  Depending on the provider chosen, fill out the information pertinent to your setup.
+   - For **Provider**, select the appropriate provider type (i.e. DefaultPrimary, SolidFire, SolidFireShared, or CloudByte).  Depending on the provider chosen, fill out the information pertinent to your setup.
    
-#. Add cluster information (cephx is supported).
+#. Add cluster information (``cephx`` is supported).
 
    - For **RADOS Monitor**, provide the IP address of a Ceph monitor node.
    
-   - For **RADOS Pool**, provide the name of a RBD pool.
+   - For **RADOS Pool**, provide the name of an RBD pool.
    
-   - For **RADOS User**, provide an user that has sufficient rights to the RBD pool. Note: Do not include the ``client.`` part of the user.
+   - For **RADOS User**, provide a user that has sufficient rights to the RBD pool. Note: Do not include the ``client.`` part of the user.
    
-   - For **RADOS Secret**, provide the secret associated to the RBD user chosen.
+   - For **RADOS Secret**, provide the secret the user's secret.
    
    - **Storage Tags** are optional. Use tags at your own discretion. For more information about storage tags in CloudStack, refer to `Storage Tags`_.
    
