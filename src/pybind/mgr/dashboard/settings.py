@@ -18,7 +18,7 @@ class Options(object):
         GRAFANA_API_HOST = ('localhost', str)
         GRAFANA_API_PORT = (3000, int)
     """
-    pass
+    ENABLE_BROWSABLE_API = (True, bool)
 
 
 class SettingsMeta(type):
