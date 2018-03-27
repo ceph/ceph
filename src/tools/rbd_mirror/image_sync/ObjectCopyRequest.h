@@ -120,6 +120,7 @@ private:
 
   bool m_retry_missing_read = false;
   librados::snap_set_t m_retry_snap_set;
+  std::map<librados::snap_t, bool> m_read_whole_object;
 
   SnapSyncOps m_snap_sync_ops;
   SnapObjectStates m_snap_object_states;
