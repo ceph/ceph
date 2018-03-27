@@ -8788,7 +8788,6 @@ retry:
       uninline_data(in, onuninline.get());
     } else {
       uint32_t len = in->inline_data.length();
-
       uint64_t endoff = offset + size;
       if (endoff > in->size)
         endoff = in->size;
@@ -8803,7 +8802,7 @@ retry:
       } else if ((uint64_t)offset < endoff) {
         bl->append_zero(endoff - offset);
       }
-
+      r = endoff - offset;
       goto success;
     }
   }
