@@ -387,16 +387,17 @@ namespace buffer CEPH_BUFFER_API {
    */
 
   class CEPH_BUFFER_API list {
+  public:
+    typedef std::list<ptr> buffers_t;
+    class iterator;
+
+  private:
     // my private bits
-    std::list<ptr> _buffers;
+    buffers_t _buffers;
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
 
-  public:
-    class iterator;
-
-  private:
     template <bool is_const>
     class CEPH_BUFFER_API iterator_impl
       : public std::iterator<std::forward_iterator_tag, char> {
@@ -405,11 +406,11 @@ namespace buffer CEPH_BUFFER_API {
 					const list,
 					list>::type bl_t;
       typedef typename std::conditional<is_const,
-					const std::list<ptr>,
-					std::list<ptr> >::type list_t;
+					const buffers_t,
+					buffers_t >::type list_t;
       typedef typename std::conditional<is_const,
-					typename std::list<ptr>::const_iterator,
-					typename std::list<ptr>::iterator>::type list_iter_t;
+					typename buffers_t::const_iterator,
+					typename buffers_t::iterator>::type list_iter_t;
       bl_t* bl;
       list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
       unsigned off; // in bl
@@ -762,7 +763,7 @@ namespace buffer CEPH_BUFFER_API {
     }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
-    const std::list<ptr>& buffers() const { return _buffers; }
+    const buffers_t& buffers() const { return _buffers; }
     void swap(list& other) noexcept;
     unsigned length() const {
 #if 0
@@ -846,7 +847,7 @@ namespace buffer CEPH_BUFFER_API {
 
     // clone non-shareable buffers (make shareable)
     void make_shareable() {
-      std::list<buffer::ptr>::iterator pb;
+      decltype(_buffers)::iterator pb;
       for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
         (void) pb->make_shareable();
       }
@@ -857,7 +858,7 @@ namespace buffer CEPH_BUFFER_API {
     {
       if (this != &bl) {
         clear();
-        std::list<buffer::ptr>::const_iterator pb;
+        decltype(_buffers)::const_iterator pb;
         for (pb = bl._buffers.begin(); pb != bl._buffers.end(); ++pb) {
           push_back(*pb);
         }

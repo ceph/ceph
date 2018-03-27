@@ -700,8 +700,8 @@ public:
       vector<__le32> &cm,
       vector<__le32> &om) {
 
-      list<bufferptr> list = bl.buffers();
-      std::list<bufferptr>::iterator p;
+      ceph::bufferlist::buffers_t list = bl.buffers();
+      ceph::bufferlist::buffers_t::iterator p;
 
       for(p = list.begin(); p != list.end(); ++p) {
         ceph_assert(p->length() % sizeof(Op) == 0);

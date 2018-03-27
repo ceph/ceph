@@ -111,7 +111,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
   ssize_t send(bufferlist &bl, bool more) override {
     size_t sent_bytes = 0;
-    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
+    ceph::bufferlist::buffers_t::const_iterator pb = bl.buffers().begin();
     uint64_t left_pbrs = bl.buffers().size();
     while (left_pbrs) {
       struct msghdr msg;
