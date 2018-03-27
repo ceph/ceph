@@ -58,6 +58,7 @@ int RGWCivetWebFrontend::run()
   set_conf_default(conf_map, "validate_http_method", "no");
   set_conf_default(conf_map, "canonicalize_url_path", "no");
   set_conf_default(conf_map, "enable_auth_domain_check", "no");
+  set_conf_default(conf_map, "allow_unicode_in_urls", "yes");
 
   std::string listening_ports;
   // support multiple port= entries
