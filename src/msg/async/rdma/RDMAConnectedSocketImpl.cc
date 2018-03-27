@@ -447,8 +447,8 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
     return 0;
 
   auto fill_tx_via_copy = [this](std::vector<Chunk*> &tx_buffers, unsigned bytes,
-                                 std::list<bufferptr>::const_iterator &start,
-                                 std::list<bufferptr>::const_iterator &end) -> unsigned {
+                                 ceph::bufferlist::buffers_t::const_iterator &start,
+                                 ceph::bufferlist::buffers_t::const_iterator &end) -> unsigned {
     ceph_assert(start != end);
     auto chunk_idx = tx_buffers.size();
     int ret = worker->get_reged_mem(this, tx_buffers, bytes);
@@ -481,8 +481,8 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   };
 
   std::vector<Chunk*> tx_buffers;
-  std::list<bufferptr>::const_iterator it = pending_bl.buffers().begin();
-  std::list<bufferptr>::const_iterator copy_it = it;
+  ceph::bufferlist::buffers_t::const_iterator it = pending_bl.buffers().begin();
+  ceph::bufferlist::buffers_t::const_iterator copy_it = it;
   unsigned total = 0;
   unsigned need_reserve_bytes = 0;
   while (it != pending_bl.buffers().end()) {
