@@ -292,6 +292,19 @@ int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
   return ::create_new_bucket_instance(store, new_num_shards, bucket_info, bucket_attrs, new_bucket_info);
 }
 
+int RGWBucketReshard::cancel()
+{
+  int ret = lock_bucket();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = clear_resharding();
+
+  unlock_bucket();
+  return 0;
+}
+
 class BucketInfoReshardUpdate
 {
   RGWRados *store;

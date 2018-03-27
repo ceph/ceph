@@ -5850,29 +5850,46 @@ next:
   }
 
   if (opt_cmd == OPT_RESHARD_CANCEL) {
-    RGWReshard reshard(store);
-
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
+
+    rgw_bucket bucket;
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    RGWBucketReshard br(store, bucket_info, attrs);
+    int ret = br.cancel();
+    if (ret < 0) {
+      cerr << "Error canceling bucket " << bucket_name << " resharding: " << cpp_strerror(-ret) <<
+	std::endl;
+      return ret;
+    }
+
+    RGWReshard reshard(store);
+
     cls_rgw_reshard_entry entry;
     //entry.tenant = tenant;
     entry.bucket_name = bucket_name;
     //entry.bucket_id = bucket_id;
-    int ret = reshard.get(entry);
-    if (ret < 0) {
+
+    ret = reshard.get(entry);
+    if (ret < 0 && ret != -ENOENT) {
       cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
       return ret;
-    }
-
-    /* TBD stop running resharding */
-
-    ret =reshard.remove(entry);
-    if (ret < 0) {
-      cerr << "Error removing bucket " << bucket_name << " for resharding queue: " << cpp_strerror(-ret) <<
-	std::endl;
-      return ret;
+    } else if (ret != -ENOENT) {
+      ret = reshard.remove(entry);
+      if (ret < 0) {
+	cerr << "Error removing bucket " << bucket_name << " from resharding queue: " << cpp_strerror(-ret) <<
+	  std::endl;
+	return ret;
+      }
     }
   }
 
