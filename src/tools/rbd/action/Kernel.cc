@@ -143,6 +143,8 @@ static int parse_map_options(const std::string &options_string)
       put_map_option("lock_on_read", this_char);
     } else if (!strcmp(this_char, "exclusive")) {
       put_map_option("exclusive", this_char);
+    } else if (!strcmp(this_char, "notrim")) {
+      put_map_option("notrim", this_char);
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
       return -EINVAL;
