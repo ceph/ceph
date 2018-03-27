@@ -9,6 +9,7 @@ import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 })
 export class ViewCacheComponent implements OnInit {
   @Input() status: ViewCacheStatus;
+  @Input() statusFor: string;
   vcs = ViewCacheStatus;
 
   constructor() {}
