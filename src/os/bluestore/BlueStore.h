@@ -2815,7 +2815,7 @@ public:
   unsigned apply(KeyValueDB* db);
 
   void note_misreference(uint64_t offs, uint64_t len, bool inc_error) {
-    misreferenced_extents.insert(offs, len);
+    misreferenced_extents.union_insert(offs, len);
     if (inc_error) {
       ++to_repair_cnt;
     }
