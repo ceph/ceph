@@ -1,6 +1,7 @@
 #!/bin/bash -ex
 
 STACK_BRANCH=stable/pike
+TEMPEST_BRANCH=17.2.0
 
 STACK_USER=${STACK_USER:-stack}
 STACK_GROUP=${STACK_GROUP:-stack}
@@ -102,6 +103,7 @@ sed -i 's/appdirs===1.4.0/appdirs===1.4.3/' requirements/upper-constraints.txt
 cd devstack
 cp ${STACK_HOME_PATH}/local.conf .
 
+export TEMPEST_BRANCH=${TEMPEST_BRANCH}
 export PYTHONUNBUFFERED=true
 export PROJECTS="openstack/devstack-plugin-ceph openstack/devstack-plugin-mariadb"
 
