@@ -46,6 +46,7 @@ public:
 	      RGWReshard *reshard_log = nullptr);
   int abort();
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
+  int cancel();
 };
 
 class RGWReshard {
