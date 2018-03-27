@@ -291,6 +291,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
     int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
                                   size_t prefix_len)
+    int64_t rbd_get_data_pool_id(rbd_image_t image)
     int rbd_get_parent_info2(rbd_image_t image,
                              char *parent_poolname, size_t ppoolnamelen,
                              char *parent_name, size_t pnamelen,
@@ -1994,6 +1995,14 @@ cdef class Image(object):
             return decode_cstr(prefix)
         finally:
             free(prefix)
+
+    def data_pool_id(self):
+        """
+        Get the pool id of the pool where the data of this RBD image is stored.
+
+        :returns: int - the pool id
+        """
+        return rbd_get_data_pool_id(self.image)
 
     def parent_info(self):
         """
