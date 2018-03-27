@@ -445,7 +445,7 @@ public:
    * on the writing list.
    */
   struct Op : boost::intrusive::list_base_hook<> {
-    /// From submit_transaction caller, decribes operation
+    /// From submit_transaction caller, describes operation
     hobject_t hoid;
     object_stat_sum_t delta_stats;
     eversion_t version;
@@ -527,7 +527,7 @@ public:
    * reused).  Next, factor this part into a class and maintain one per
    * ordering token.  Next, fixup PrimaryLogPG's repop queue to be
    * partitioned by ordering token.  Finally, refactor the op pipeline
-   * so that the log entries passed into submit_tranaction aren't
+   * so that the log entries passed into submit_transaction aren't
    * versioned.  We can't assign versions to them until we actually
    * submit the operation.  That's probably going to be the hard part.
    */
@@ -570,7 +570,7 @@ public:
   /**
    * ECRecPred
    *
-   * Determines the whether _have is suffient to recover an object
+   * Determines the whether _have is sufficient to recover an object
    */
   class ECRecPred : public IsPGRecoverablePredicate {
     set<int> want;
@@ -599,7 +599,7 @@ public:
   /**
    * ECReadPred
    *
-   * Determines the whether _have is suffient to read an object
+   * Determines the whether _have is sufficient to read an object
    */
   class ECReadPred : public IsPGReadablePredicate {
     pg_shard_t whoami;
