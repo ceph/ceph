@@ -6472,7 +6472,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    
 	    // relying on blob's pextents to decide what to release.
 	    for (auto& p : pext_to_release) {
-	      to_release.insert(p.offset, p.length);
+	      to_release.union_insert(p.offset, p.length);
 	    }
 	  } else {
 	    for (auto& p : pext_to_release) {
@@ -6480,7 +6480,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	      if (compressed) {
 		expected_statfs.compressed_allocated -= p.length;
 	      }
-	      to_release.insert(p.offset, p.length);
+	      to_release.union_insert(p.offset, p.length);
 	    }
 	  }
 	  if (bypass_rest) {
