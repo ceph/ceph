@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=too-many-arguments
+# pylint: disable=too-many-arguments,too-many-locals
 from __future__ import absolute_import
 
 import math
@@ -62,6 +62,29 @@ class Rbd(RESTController):
                 res = key | res
         return res
 
+    @classmethod
+    def _rbd_disk_usage(cls, image, snaps):
+        class DUCallback(object):
+            def __init__(self):
+                self.used_size = 0
+
+            def __call__(self, offset, length, exists):
+                if exists:
+                    self.used_size += length
+
+        snap_map = {}
+        prev_snap = None
+        total_used_size = 0
+        for _, size, name in snaps:
+            image.set_snap(name)
+            du_callb = DUCallback()
+            image.diff_iterate(0, size, prev_snap, du_callb, whole_object=True)
+            snap_map[name] = du_callb.used_size
+            total_used_size += du_callb.used_size
+            prev_snap = name
+
+        return total_used_size, snap_map
+
     def _rbd_image(self, ioctx, pool_name, image_name):
         img = rbd.Image(ioctx, image_name)
         stat = img.stat()
@@ -102,6 +125,7 @@ class Rbd(RESTController):
         for snap in img.list_snaps():
             snap['timestamp'] = "{}Z".format(img.get_snap_timestamp(snap['id']).isoformat())
             snap['is_protected'] = img.is_protected_snap(snap['name'])
+            snap['used_bytes'] = None
             snap['children'] = []
             img.set_snap(snap['name'])
             for child_pool_name, child_image_name in img.list_children():
@@ -110,6 +134,25 @@ class Rbd(RESTController):
                     'image_name': child_image_name
                 })
             stat['snapshots'].append(snap)
+
+        # disk usage
+        if 'fast-diff' in stat['features_name']:
+            snaps = [(s['id'], s['size'], s['name']) for s in stat['snapshots']]
+            snaps.sort(key=lambda s: s[0])
+            snaps += [(snaps[-1][0]+1 if snaps else 0, stat['size'], None)]
+            total_used_bytes, snaps_used_bytes = self._rbd_disk_usage(img, snaps)
+            stat['total_disk_usage'] = total_used_bytes
+            for snap, used_bytes in snaps_used_bytes.items():
+                if snap is None:
+                    stat['disk_usage'] = used_bytes
+                    continue
+                for ss in stat['snapshots']:
+                    if ss['name'] == snap:
+                        ss['disk_usage'] = used_bytes
+                        break
+        else:
+            stat['total_disk_usage'] = None
+            stat['disk_usage'] = None
 
         return stat
 
