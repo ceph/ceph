@@ -15,7 +15,9 @@ Concepts:
                          as an MDS, RGW, nfs-ganesha, iSCSI gateway.
     "Label": arbitrary string tags that may be applied by administrators
              to nodes.  Typically administrators use labels to indicate
-             which nodes
+             which nodes should run which kinds of service.  Labels are
+             advisory (from human input) and do not guarantee that nodes
+             have particular physical capabilities.
 
 Constraints:
     1. The orchestrator is to be the source of truth for
@@ -26,9 +28,9 @@ Constraints:
     3. The orchestrator accepts explicit placement of individual stateful
        services, and optionally also accepts label-based automatic placement.
        (i.e. it *must* support "create OSD at host1:/dev/sdb", and it *may*
-        support "create OSDs on hosts with label=ceph-osd")
+        support "create OSDs on nodes with label=ceph-osd")
     4. Ceph is not responsible for installing anything on nodes, or hooking
-       up hosts to the orchestrator: nodes and drives only exist to Ceph
+       up nodes to the orchestrator: nodes and drives only exist to Ceph
        once they're exposed by the orchestrator.
 
 Flexible features:
@@ -41,8 +43,13 @@ Flexible features:
 
 Excluded functionality:
     1. No support for multipathed drives: all block devices are to be
-    reported from one host only.
-    2. No networking inventory or configuration.
+       reported from one node only.
+    2. No networking inventory or configuration.  Network configuration
+       is not Ceph-specific functionality, and by the time ceph-mgr
+       starts, we know that some external entity has already taken
+       care of at least the public network configuration.  This does
+       not preclude orchestrators implementing smart networking functionality
+       internally, it just isn't exposed up into ceph-mgr.
 
 This is a DRAFT for discussion.
 """
@@ -50,15 +57,29 @@ This is a DRAFT for discussion.
 
 class Orchestrator(object):
     """
-    All calls in this class are blocking on network IO and may
-    take noticeable length of time to run.  Wrap calls appropriately
-    in long-running task infrastructure when calling from interactive
-    code.
+    Calls in this class are assumed to do network IO and may
+    take noticeable length of time to run.
+
+    TBD: these calls could either be blocking (non-blocking implementations
+    handle their own waiting, and callers handle their own threading) or
+    async (blocking implementations handle their own threading).  We can
+    go with whichever is most convenient.
     """
 
-    # >>> From 21 March meeting
     def get_inventory(self, node_filter=None):
         # Return list of InventoryHost
+        raise NotImplementedError()
+
+    def describe_service(self, service_type, service_id):
+        """
+        Describe a service (of any kind) that is already configured in
+        the orchestrator.  For example, when viewing an OSD in the dashboard
+        we might like to also display information about the orchestrator's
+        view of the service (like the kubernetes pod ID).
+
+        When viewing a CephFS filesystem in the dashboard, we would use this
+        to display the pods being currently run for MDS daemons.
+        """
         raise NotImplementedError()
 
     def add_stateful_service(self, service_type, spec):
@@ -102,9 +123,7 @@ class Orchestrator(object):
         :return: List of strings
         """
         raise NotImplementedError()
-    # <<< from 21 March meeting
 
-    # >>> additional to 21mar: auto-placement of stateful services
     def add_stateful_service_rule(self, service_type, stateful_service_spec,
                                   placement_spec):
         """
@@ -135,7 +154,6 @@ class Orchestrator(object):
         if desired.
         """
         raise NotImplementedError()
-    # <<<
 
 
 class UpgradeSpec(object):
@@ -173,7 +191,7 @@ class StatefulServiceSpec(object):
 
         self.format = None  # filestore, bluestore (meaningful for OSD only)
 
-        self.hostname = None
+        self.node = None  # name of a node
 
         # Map role to device ID:
         #   Valid keys: data (mon)
@@ -221,7 +239,7 @@ class InventoryFilter(object):
     When fetching inventory, use this filter to avoid unnecessarily
     scanning the whole estate.
 
-    Typical use: filter by host when presenting UI workflow for configuring
+    Typical use: filter by node when presenting UI workflow for configuring
                  a particular server.
                  filter by label when not all of estate is Ceph servers,
                  and we want to only learn about the Ceph servers.
@@ -231,7 +249,7 @@ class InventoryFilter(object):
     """
     def __init__(self):
         self.labels = None  # Optional: get info about nodes matching labels
-        self.hostnames = None  # Optional: get info about certain hosts only
+        self.nodes = None  # Optional: get info about certain named nodes only
 
 
 class InventoryBlockDevice(object):
@@ -239,7 +257,9 @@ class InventoryBlockDevice(object):
     When fetching inventory, block devices are reported in this format.
 
     Note on device identifiers: the format of this is up to the orchestrator,
-    but the same identifier must also work when passed into StatefulServiceSpec
+    but the same identifier must also work when passed into StatefulServiceSpec.
+    The identifier should be something meaningful like a device WWID or
+    stable device node path -- not something made up by the orchestrator.
 
     "Extended" is for reporting any special configuration that may have
     already been done out of band on the block device.  For example, if
@@ -256,11 +276,13 @@ class InventoryBlockDevice(object):
         self.size = None  # byte integer.
         self.extended = None  # arbitrary JSON-serializable object
 
-        # TODO: should we report a "size_avail" to indicate a partially
-        # used device (has some journal partitions but also room for more?)
+        # If this drive is not empty, but is suitable for appending
+        # additional journals, wals, or bluestore dbs, then report
+        # how much space is available.
+        self.metadata_space_free = None
 
 
 class InventoryNode(object):
     def __init__(self):
-        self.hostname = None  # unique within cluster
+        self.name = None  # unique within cluster.  For example a hostname.
         self.devices = []  # list of InventoryBlockDevice
