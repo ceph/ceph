@@ -1427,9 +1427,12 @@ bool DaemonServer::handle_command(MCommand *m)
 	      for (--j; j != i.second.rbegin(); --j) {
 		if (j->second == i.second.rbegin()->second) {
 		  ov.push_front(string("(") + ceph_conf_level_name(j->first) +
+				string("[") + j->second + string("]") +
 				string(")"));
 		} else {
-		  ov.push_front(ceph_conf_level_name(j->first));
+                  ov.push_front(ceph_conf_level_name(j->first) +
+                                string("[") + j->second + string("]"));
+
 		}
 	      }
 	      tbl << ov;
@@ -1481,9 +1484,11 @@ bool DaemonServer::handle_command(MCommand *m)
 		for (--k; k != j->second.rbegin(); --k) {
 		  if (k->second == j->second.rbegin()->second) {
 		    ov.push_front(string("(") + ceph_conf_level_name(k->first) +
+				  string("[") + k->second + string("]") +
 				  string(")"));
 		  } else {
-		    ov.push_front(ceph_conf_level_name(k->first));
+                    ov.push_front(ceph_conf_level_name(k->first) +
+                                  string("[") + k->second + string("]"));
 		  }
 		}
 		tbl << ov;
