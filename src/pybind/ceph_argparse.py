@@ -53,6 +53,13 @@ class ArgumentFormat(ArgumentError):
     pass
 
 
+class ArgumentMissing(ArgumentError):
+    """
+    Argument value missing in a command
+    """
+    pass
+
+
 class ArgumentValid(ArgumentError):
     """
     Argument value is otherwise invalid (doesn't match choices, for instance)
@@ -944,7 +951,7 @@ def validate(args, signature, flags=0, partial=False):
                         return d
                     # special-case the "0 expected 1" case
                     if desc.numseen == 0 and desc.n == 1:
-                        raise ArgumentNumber(
+                        raise ArgumentMissing(
                             'missing required parameter {0}'.format(desc)
                         )
                     raise ArgumentNumber(
@@ -1042,6 +1049,7 @@ def validate_command(sigdict, args, verbose=False):
             print("bestcmds_sorted: ", file=sys.stderr)
             pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
 
+        e = None
         # for everything in bestcmds, look for a true match
         for cmdsig in bestcmds_sorted:
             for cmd in cmdsig.values():
@@ -1054,6 +1062,10 @@ def validate_command(sigdict, args, verbose=False):
                     # ignore prefix mismatches; we just haven't found
                     # the right command yet
                     pass
+                except ArgumentMissing as e:
+                    if len(bestcmds) == 1:
+                        found = cmd
+                    break
                 except ArgumentTooFew:
                     # It looked like this matched the beginning, but it
                     # didn't have enough args supplied.  If we're out of
@@ -1066,20 +1078,23 @@ def validate_command(sigdict, args, verbose=False):
                     # Solid mismatch on an arg (type, range, etc.)
                     # Stop now, because we have the right command but
                     # some other input is invalid
-                    print("Invalid command: ", e, file=sys.stderr)
-                    print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
-                    return {}
-            if found:
+                    found = cmd
+                    break
+            if found or e:
                 break
 
-        if not found:
-            print('no valid command found; 10 closest matches:', file=sys.stderr)
-            for cmdsig in bestcmds[:10]:
+        if found:
+            if not valid_dict:
+                print("Invalid command:", e, file=sys.stderr)
+                print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
+        else:
+            bestcmds = bestcmds[:10]
+            print('no valid command found; {0} closest matches:'.format(len(bestcmds)), file=sys.stderr)
+            for cmdsig in bestcmds:
                 for (cmdtag, cmd) in cmdsig.items():
                     print(concise_sig(cmd['sig']), file=sys.stderr)
-            return None
-
         return valid_dict
+
 
 
 def find_cmd_target(childargs):
