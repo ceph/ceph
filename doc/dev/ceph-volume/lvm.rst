@@ -40,7 +40,7 @@ LVM volume:
 
 ``type``
 --------
-Describes if the device is a an OSD or Journal, with the ability to expand to
+Describes if the device is an OSD or Journal, with the ability to expand to
 other types when supported (for example a lockbox)
 
 Example::
