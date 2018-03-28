@@ -1101,6 +1101,34 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("mon_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("enable/disable MON op tracking"),
+
+    Option("mon_op_complaint_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_description("time in seconds to consider a MON OP blocked after no updates"),
+
+    Option("mon_op_log_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("max number of slow ops to display"),
+
+    Option("mon_op_history_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(20)
+    .set_description("max number of completed ops to track"),
+
+    Option("mon_op_history_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(600)
+    .set_description("expiration time in seconds of historical MON OPS"),
+
+    Option("mon_op_history_slow_op_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(20)
+    .set_description("max number of slow historical MON OPS to keep"),
+
+    Option("mon_op_history_slow_op_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(10.0)
+    .set_description("duration time in seconds of an op to be considered as a historical slow op"),
+
     Option("mon_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_default("/var/lib/ceph/mon/$cluster-$id")
