@@ -85,6 +85,7 @@ class RbdTest(DashboardTestCase):
         self.assertIn('parent', img)
         self.assertIn('data_pool', img)
         self.assertIn('snapshots', img)
+        self.assertIn('disk_usage', img)
 
         for k, v in kwargs.items():
             if isinstance(v, list):
@@ -227,3 +228,16 @@ class RbdTest(DashboardTestCase):
                                             'fast-diff', 'layering',
                                             'object-map'])
         self._rbd_cmd(['rm', 'rbd_iscsi/img1_clone'])
+
+    def test_disk_usage(self):
+        self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '50M', 'rbd/img2'])
+        self._rbd_cmd(['snap', 'create', 'rbd/img2@snap1'])
+        self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '20M', 'rbd/img2'])
+        self._rbd_cmd(['snap', 'create', 'rbd/img2@snap2'])
+        self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '10M', 'rbd/img2'])
+        self._rbd_cmd(['snap', 'create', 'rbd/img2@snap3'])
+        self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M', 'rbd/img2'])
+        img = self._get('/api/rbd/rbd/img2')
+        self.assertStatus(200)
+        self._validate_image(img, name='img2', size=2147483648,
+                             total_disk_usage=268435456, disk_usage=67108864)
