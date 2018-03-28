@@ -2707,13 +2707,13 @@ public:
       assert(min_alloc_size && isp2(min_alloc_size));
       assert(mem_cap);
       
-      total = ROUND_UP_TO(total, min_alloc_size);
+      total = round_up_to(total, min_alloc_size);
       granularity = total * BLOOM_FILTER_TABLE_SIZE * 2 / mem_cap;
 
       if (!granularity) {
 	granularity = min_alloc_size;
       } else {
-	granularity = ROUND_UP_TO(granularity, min_alloc_size);
+	granularity = round_up_to(granularity, min_alloc_size);
       }
 
       uint64_t entries = p2roundup(total, granularity) / granularity;

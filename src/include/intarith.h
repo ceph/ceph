@@ -17,28 +17,16 @@
 
 #include <type_traits>
 
-#ifndef DIV_ROUND_UP
-#define DIV_ROUND_UP(n, d)  (((n) + (d) - 1) / (d))
-#endif
-
 template<typename T, typename U>
 constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> div_round_up(T n, U d) {
   return (n + d - 1) / d;
 }
 
 
-#ifndef ROUND_UP_TO
-#define ROUND_UP_TO(n, d) ((n)%(d) ? ((n)+(d)-(n)%(d)) : (n))
-#endif
-
 template<typename T, typename U>
 constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> round_up_to(T n, U d) {
   return (n % d ? (n + d - n % d) : n);
 }
-
-#ifndef SHIFT_ROUND_UP
-#define SHIFT_ROUND_UP(x,y) (((x)+(1<<(y))-1) >> (y))
-#endif
 
 template<typename T, typename U>
 constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> shift_round_up(T x, U y) {
