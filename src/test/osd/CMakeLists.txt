@@ -22,6 +22,7 @@ add_ceph_test(osd-reactivate.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reactivate.sh)
 add_ceph_test(osd-reuse-id.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-reuse-id.sh)
 add_ceph_test(osd-scrub-repair.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-repair.sh) 
 add_ceph_test(osd-scrub-snaps.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-snaps.sh)
+add_ceph_test(osd-scrub-test.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-scrub-test.sh)
 add_ceph_test(osd-recovery-scrub.sh ${CMAKE_CURRENT_SOURCE_DIR}/osd-recovery-scrub.sh) 
 
 #osd-copy-from.sh needs to be run out of ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
