@@ -23,7 +23,8 @@ MDSUtility::MDSUtility() :
   lock("MDSUtility::lock"),
   timer(g_ceph_context, lock),
   finisher(g_ceph_context, "MDSUtility", "fn_mds_utility"),
-  waiting_for_mds_map(NULL)
+  waiting_for_mds_map(NULL),
+  inited(false)
 {
   monc = new MonClient(g_ceph_context);
   messenger = Messenger::create_client_messenger(g_ceph_context, "mds");
@@ -34,6 +35,9 @@ MDSUtility::MDSUtility() :
 
 MDSUtility::~MDSUtility()
 {
+  if (inited) {
+    shutdown();
+  }
   delete objecter;
   delete monc;
   delete messenger;
@@ -108,6 +112,7 @@ int MDSUtility::init()
 
   finisher.start();
 
+  inited = true;
   return 0;
 }
 
