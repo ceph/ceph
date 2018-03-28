@@ -5129,7 +5129,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     gift = p2roundup(gift, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
-    gift = std::min<uint64_t>(gift, 1 << 31);
+    gift = std::min<uint64_t>(gift, 1ull << 31);
     dout(10) << __func__ << " gifting " << gift
 	     << " (" << pretty_si_t(gift) << ")" << dendl;
 
@@ -5166,7 +5166,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     reclaim = p2roundup(reclaim, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
-    reclaim = std::min<uint64_t>(reclaim, 1 << 31);
+    reclaim = std::min<uint64_t>(reclaim, 1ull << 31);
     dout(10) << __func__ << " reclaiming " << reclaim
 	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
 
