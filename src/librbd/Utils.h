@@ -7,10 +7,10 @@
 #include "include/rados/librados.hpp"
 #include "include/rbd_types.h"
 #include "include/Context.h"
+#include "common/RefCountedObj.h"
 #include "common/zipkin_trace.h"
 
 #include <atomic>
-#include <type_traits>
 
 namespace librbd {
 
@@ -58,6 +58,25 @@ protected:
   }
 };
 
+template <typename T, void (T::*MF)(int), typename R>
+class C_RefCallbackAdapter : public Context {
+  R *refptr;
+  Context *on_finish;
+
+public:
+  C_RefCallbackAdapter(T *obj, R *refptr)
+    : refptr(refptr),
+      on_finish(new C_CallbackAdapter<T, MF>(obj)) {
+    refptr->get();
+  }
+
+protected:
+  void finish(int r) override {
+    on_finish->complete(r);
+    refptr->put();
+  }
+};
+
 template <typename T, Context*(T::*MF)(int*), bool destroy>
 class C_StateCallbackAdapter : public Context {
   T *obj;
@@ -77,6 +96,25 @@ protected:
     Context::complete(r);
   }
   void finish(int r) override {
+  }
+};
+
+template <typename T, Context*(T::*MF)(int*), typename R, bool destroy>
+class C_RefStateCallbackAdapter : public Context {
+  R *refptr;
+  Context *on_finish;
+
+public:
+  C_RefStateCallbackAdapter(T *obj, R *refptr)
+    : refptr(refptr),
+      on_finish(new C_StateCallbackAdapter<T, MF, destroy>(obj)) {
+    refptr->get();
+  }
+
+protected:
+  void finish(int r) override {
+    on_finish->complete(r);
+    refptr->put();
   }
 };
 
@@ -133,9 +171,19 @@ Context *create_context_callback(T *obj) {
   return new detail::C_CallbackAdapter<T, MF>(obj);
 }
 
+template <typename T, void(T::*MF)(int) = &T::complete, typename R>
+Context *create_context_callback(T *obj, R *refptr) {
+  return new detail::C_RefCallbackAdapter<T, MF, R>(obj, refptr);
+}
+
 template <typename T, Context*(T::*MF)(int*), bool destroy=true>
 Context *create_context_callback(T *obj) {
   return new detail::C_StateCallbackAdapter<T, MF, destroy>(obj);
+}
+
+template <typename T, Context*(T::*MF)(int*), typename R, bool destroy=true>
+Context *create_context_callback(T *obj, R *refptr) {
+  return new detail::C_RefStateCallbackAdapter<T, MF, R, destroy>(obj, refptr);
 }
 
 template <typename I>
