@@ -405,7 +405,7 @@ public:
   /**
    * A daemon has informed us of its offload targets
    */
-  void update_export_targets(mds_gid_t who, const std::set<mds_rank_t> targets)
+  void update_export_targets(mds_gid_t who, const std::set<mds_rank_t> &targets)
   {
     auto fscid = mds_roles.at(who);
     modify_filesystem(fscid, [who, &targets](std::shared_ptr<Filesystem> fs) {

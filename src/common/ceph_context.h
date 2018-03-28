@@ -197,7 +197,7 @@ public:
     return _set_gid;
   }
 
-  void set_uid_gid_strings(std::string u, std::string g) {
+  void set_uid_gid_strings(const std::string &u, const std::string &g) {
     _set_uid_string = u;
     _set_gid_string = g;
   }

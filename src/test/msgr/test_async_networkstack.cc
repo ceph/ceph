@@ -940,7 +940,7 @@ class StressFactory {
   bool zero_copy_read;
   SocketOptions options;
 
-  explicit StressFactory(std::shared_ptr<NetworkStack> s, const string &addr,
+  explicit StressFactory(const std::shared_ptr<NetworkStack> &s, const string &addr,
                          size_t cli, size_t qd, size_t mc, size_t l, bool zero_copy)
       : stack(s), rs(128), client_num(cli), queue_depth(qd),
         max_message_length(l), message_count(mc), message_left(mc),

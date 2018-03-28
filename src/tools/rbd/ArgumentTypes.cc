@@ -61,7 +61,7 @@ std::string get_description_prefix(ArgumentModifier modifier) {
 }
 
 void add_special_pool_option(po::options_description *opt,
-			     std::string prefix) {
+			     const std::string &prefix) {
   std::string name = prefix + "-" + POOL_NAME;
   std::string description = prefix + " pool name";
 

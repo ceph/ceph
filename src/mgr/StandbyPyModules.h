@@ -89,7 +89,7 @@ class StandbyPyModule : public PyModuleRunner
 
   StandbyPyModule(
       StandbyPyModuleState &state_,
-      PyModuleRef py_module_,
+      const PyModuleRef &py_module_,
       LogChannelRef clog_)
     :
       PyModuleRunner(py_module_, clog_),

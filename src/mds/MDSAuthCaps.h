@@ -76,11 +76,11 @@ struct MDSCapMatch {
 
   MDSCapMatch() : uid(MDS_AUTH_UID_ANY) {}
   MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) : uid(uid_), gids(gids_) {}
-  explicit MDSCapMatch(std::string path_)
+  explicit MDSCapMatch(const std::string &path_)
     : uid(MDS_AUTH_UID_ANY), path(path_) {
     normalize_path();
   }
-  MDSCapMatch(std::string path_, int64_t uid_, std::vector<gid_t>& gids_)
+  MDSCapMatch(const std::string& path_, int64_t uid_, std::vector<gid_t>& gids_)
     : uid(uid_), gids(gids_), path(path_) {
     normalize_path();
   }

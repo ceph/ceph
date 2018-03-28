@@ -1207,7 +1207,7 @@ public:
       _op->cid = _get_coll_id(cid);
       data.ops++;
     }
-    void collection_move(const coll_t& cid, coll_t oldcid, const ghobject_t& oid)
+    void collection_move(const coll_t& cid, const coll_t &oldcid, const ghobject_t& oid)
       __attribute__ ((deprecated)) {
 	// NOTE: we encode this as a fixed combo of ADD + REMOVE.  they
 	// always appear together, so this is effectively a single MOVE.
@@ -1225,7 +1225,7 @@ public:
 	data.ops++;
       }
     void collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
-				coll_t cid, const ghobject_t& oid) {
+				const coll_t &cid, const ghobject_t& oid) {
       Op* _op = _get_next_op();
       _op->op = OP_COLL_MOVE_RENAME;
       _op->cid = _get_coll_id(oldcid);
@@ -1234,7 +1234,7 @@ public:
       _op->dest_oid = _get_object_id(oid);
       data.ops++;
     }
-    void try_rename(coll_t cid, const ghobject_t& oldoid,
+    void try_rename(const coll_t &cid, const ghobject_t& oldoid,
                     const ghobject_t& oid) {
       Op* _op = _get_next_op();
       _op->op = OP_TRY_RENAME;
@@ -1246,7 +1246,7 @@ public:
 
     /// Remove omap from oid
     void omap_clear(
-      coll_t cid,           ///< [in] Collection containing oid
+      const coll_t &cid,           ///< [in] Collection containing oid
       const ghobject_t &oid  ///< [in] Object from which to remove omap
       ) {
       Op* _op = _get_next_op();
@@ -1272,7 +1272,7 @@ public:
 
     /// Set keys on an oid omap (bufferlist variant).
     void omap_setkeys(
-      coll_t cid,                           ///< [in] Collection containing oid
+      const coll_t &cid,                           ///< [in] Collection containing oid
       const ghobject_t &oid,                ///< [in] Object to update
       const bufferlist &attrset_bl          ///< [in] Replacement keys and values
       ) {
@@ -1286,7 +1286,7 @@ public:
 
     /// Remove keys from oid omap
     void omap_rmkeys(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
       const set<string> &keys ///< [in] Keys to clear
       ) {
@@ -1301,7 +1301,7 @@ public:
 
     /// Remove keys from oid omap
     void omap_rmkeys(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
       const bufferlist &keys_bl ///< [in] Keys to clear
       ) {
@@ -1315,7 +1315,7 @@ public:
 
     /// Remove key range from oid omap
     void omap_rmkeyrange(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap keys
       const string& first,    ///< [in] first key in range
       const string& last      ///< [in] first key past range, range is [first,last)
@@ -1332,7 +1332,7 @@ public:
 
     /// Set omap header
     void omap_setheader(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object
       const bufferlist &bl    ///< [in] Header value
       ) {
@@ -1348,10 +1348,10 @@ public:
     /// Split collection based on given prefixes, objects matching the specified bits/rem are
     /// moved to the new collection
     void split_collection(
-      coll_t cid,
+      const coll_t &cid,
       uint32_t bits,
       uint32_t rem,
-      coll_t destination) {
+      const coll_t &destination) {
       Op* _op = _get_next_op();
       _op->op = OP_SPLIT_COLLECTION2;
       _op->cid = _get_coll_id(cid);
@@ -1362,7 +1362,7 @@ public:
     }
 
     void collection_set_bits(
-      coll_t cid,
+      const coll_t &cid,
       int bits) {
       Op* _op = _get_next_op();
       _op->op = OP_COLL_SET_BITS;
@@ -1374,7 +1374,7 @@ public:
     /// Set allocation hint for an object
     /// make 0 values(expected_object_size, expected_write_size) noops for all implementations
     void set_alloc_hint(
-      coll_t cid,
+      const coll_t &cid,
       const ghobject_t &oid,
       uint64_t expected_object_size,
       uint64_t expected_write_size,

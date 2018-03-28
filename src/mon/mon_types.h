@@ -539,7 +539,7 @@ namespace ceph {
           );
       }
 
-      static inline mon_feature_t get_feature_by_name(std::string n);
+      static inline mon_feature_t get_feature_by_name(const std::string &n);
     }
   }
 }
@@ -561,7 +561,7 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
   return "unknown";
 }
 
-inline mon_feature_t ceph::features::mon::get_feature_by_name(std::string n) {
+inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string &n) {
 
   if (n == "kraken") {
     return FEATURE_KRAKEN;

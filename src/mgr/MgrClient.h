@@ -104,10 +104,10 @@ public:
   bool handle_command_reply(MCommandReply *m);
 
   void send_pgstats();
-  void set_pgstats_cb(std::function<MPGStats*()> cb_)
+  void set_pgstats_cb(std::function<MPGStats*()>&& cb_)
   {
     Mutex::Locker l(lock);
-    pgstats_cb = cb_;
+    pgstats_cb = std::move(cb_);
   }
 
   int start_command(const vector<string>& cmd, const bufferlist& inbl,

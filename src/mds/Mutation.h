@@ -89,7 +89,7 @@ public:
   // keep our default values synced with MDRequestParam's
   MutationImpl() : TrackedOp(nullptr, utime_t()) {}
   MutationImpl(OpTracker *tracker, utime_t initiated,
-	       metareqid_t ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
+	       const metareqid_t &ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
     : TrackedOp(tracker, initiated),
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
