@@ -2716,7 +2716,7 @@ public:
 	granularity = ROUND_UP_TO(granularity, min_alloc_size);
       }
 
-      uint64_t entries = P2ROUNDUP(total, granularity) / granularity;
+      uint64_t entries = p2roundup(total, granularity) / granularity;
       collections_bfs.resize(entries,
         bloom_filter(BLOOM_FILTER_SALT_COUNT,
                      BLOOM_FILTER_TABLE_SIZE,
