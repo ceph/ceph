@@ -80,7 +80,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 
 static void dump_account_metadata(struct req_state * const s,
                                   const RGWUsageStats& global_stats,
-                                  const std::map<std::string, RGWUsageStats> policies_stats,
+                                  const std::map<std::string, RGWUsageStats> &policies_stats,
                                   /* const */map<string, bufferlist>& attrs,
                                   const RGWQuotaInfo& quota,
                                   const RGWAccessControlPolicy_SWIFTAcct &policy)

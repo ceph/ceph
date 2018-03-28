@@ -2624,7 +2624,7 @@ bool CDir::contains(CDir *x)
 
 /** set_dir_auth
  */
-void CDir::set_dir_auth(mds_authority_t a)
+void CDir::set_dir_auth(const mds_authority_t &a)
 { 
   dout(10) << "setting dir_auth=" << a
 	   << " from " << dir_auth

@@ -128,7 +128,7 @@ std::string get_description_prefix(ArgumentModifier modifier);
 
 
 void add_special_pool_option(boost::program_options::options_description *opt,
-			     std::string prefix);
+			     const std::string &prefix);
 
 void add_all_option(boost::program_options::options_description *opt,
 		    std::string description);

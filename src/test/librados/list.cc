@@ -142,7 +142,7 @@ TEST_F(LibRadosListPP, ListObjectsEndIter) {
 static void check_list(
   std::set<std::string>& myset,
   rados_list_ctx_t& ctx,
-  std::string check_nspace)
+  const std::string &check_nspace)
 {
   const char *entry, *nspace;
   cout << "myset " << myset << std::endl;
@@ -227,7 +227,7 @@ TEST_F(LibRadosList, ListObjectsNS) {
   rados_nobjects_list_close(ctx);
 }
 
-static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx, std::string check_nspace)
+static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx, const std::string &check_nspace)
 {
   NObjectIterator iter(ioctx.nobjects_begin());
   std::set<std::string> orig_set(myset);

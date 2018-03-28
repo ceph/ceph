@@ -2289,7 +2289,7 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
   }
 }
 
-static int check_pool_support_omap(rgw_pool pool) 
+static int check_pool_support_omap(const rgw_pool& pool)
 {
   librados::IoCtx io_ctx;
   int ret = store->get_rados_handle()->ioctx_create(pool.to_str().c_str(), io_ctx);

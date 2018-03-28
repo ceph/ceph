@@ -100,7 +100,7 @@ static void log_subop_stats(
 
 ReplicatedBackend::ReplicatedBackend(
   PGBackend::Listener *pg,
-  coll_t coll,
+  const coll_t &coll,
   ObjectStore::CollectionHandle &c,
   ObjectStore *store,
   CephContext *cct) :

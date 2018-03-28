@@ -143,7 +143,7 @@ public:
   typedef std::set<header_name_t, ltstr_nocase> header_spec_t;
 
   RGWHTTPHeadersCollector(CephContext * const cct,
-                          const header_spec_t relevant_headers)
+                          const header_spec_t &relevant_headers)
     : RGWHTTPClient(cct),
       relevant_headers(relevant_headers) {
   }

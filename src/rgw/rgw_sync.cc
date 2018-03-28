@@ -1875,7 +1875,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
   int ret{0};
 
 public:
-  RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, RGWPeriodHistory::Cursor cursor,
+  RGWMetaSyncCR(RGWMetaSyncEnv *_sync_env, const RGWPeriodHistory::Cursor &cursor,
                 const rgw_meta_sync_status& _sync_status, RGWSyncTraceNodeRef& _tn)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       pool(sync_env->store->get_zone_params().log_pool),

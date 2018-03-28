@@ -88,7 +88,7 @@ private:
 
 class AnonymizedImage {
 public:
-  void init(string image_name, int index) {
+  void init(const string &image_name, int index) {
     assert(m_image_name == "");
     m_image_name = image_name;
     ostringstream oss;
@@ -119,14 +119,14 @@ private:
   map<string, string> m_snaps;
 };
 
-static void usage(string prog) {
+static void usage(const string &prog) {
   std::stringstream str;
   str << "Usage: " << prog << " ";
   std::cout << str.str() << "[ --window <seconds> ] [ --anonymize ] [ --verbose ]" << std::endl
             << std::string(str.str().size(), ' ') << "<trace-input> <replay-output>" << endl;
 }
 
-__attribute__((noreturn)) static void usage_exit(string prog, string msg) {
+__attribute__((noreturn)) static void usage_exit(const string &prog, const string &msg) {
   cerr << msg << endl;
   usage(prog);
   exit(1);

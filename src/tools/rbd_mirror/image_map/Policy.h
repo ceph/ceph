@@ -158,7 +158,7 @@ protected:
   RWLock m_map_lock;        // protects m_map, m_shuffled_timestamp
   InstanceToImageMap m_map; // instance_id -> global_id map
 
-  bool is_dead_instance(const std::string instance_id) {
+  bool is_dead_instance(const std::string &instance_id) {
     assert(m_map_lock.is_locked());
     return m_dead_instances.find(instance_id) != m_dead_instances.end();
   }
