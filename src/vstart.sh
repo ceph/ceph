@@ -177,7 +177,7 @@ usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
 usage=$usage"\t--nolockdep disable lockdep\n"
 usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
-usage=$usage"\t--without-dashboard: do not run using mgr dashboard"
+usage=$usage"\t--without-dashboard: do not run using mgr dashboard\n"
 
 usage_exit() {
 	printf "$usage"
