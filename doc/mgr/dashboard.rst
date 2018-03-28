@@ -99,8 +99,8 @@ Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
 
 You can now access the dashboard using your (JavaScript-enabled) web browser, by
-pointing it to the selected TCP port and any of the host names or IP addresses
-where a manager instance runs on, e.g. ``http://<$IP>:<$PORT>/``.
+pointing it to any of the host names or IP addresses and the selected TCP port
+where a manager instance is running: e.g., ``http://<$IP>:<$PORT>/``.
 
 You should then be greeted by the dashboard login page, requesting your
 previously defined username and password. Select the **Keep me logged in**
