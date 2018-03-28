@@ -65,7 +65,8 @@
     <!-- end show hide columns -->
 
     <!-- refresh button -->
-    <div class="widget-toolbar tc_refreshBtn">
+    <div class="widget-toolbar tc_refreshBtn"
+         *ngIf="fetchData.observers.length > 0">
       <a (click)="refreshBtn()">
         <i class="fa fa-lg fa-refresh"
            [class.fa-spin]="updating || loadingIndicator"></i>
