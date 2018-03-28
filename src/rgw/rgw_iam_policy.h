@@ -97,11 +97,20 @@ static constexpr std::uint64_t s3PutObjectVersionTagging = 1ULL << 52;
 static constexpr std::uint64_t s3DeleteObjectVersionTagging = 1ULL << 53;
 static constexpr std::uint64_t s3Count = 54;
 static constexpr std::uint64_t s3All = (1ULL << s3Count) - 1;
-
 static constexpr std::uint64_t iamPutUserPolicy = 1ULL << 56;
 static constexpr std::uint64_t iamGetUserPolicy = 1ULL << 57;
 static constexpr std::uint64_t iamDeleteUserPolicy = 1ULL << 58;
 static constexpr std::uint64_t iamListUserPolicies = 1ULL << 59;
+
+static constexpr std::uint64_t iamCreateRole = 1ULL << 60;
+static constexpr std::uint64_t iamDeleteRole = 1ULL << 61;
+static constexpr std::uint64_t iamModifyRole = 1ULL << 62;
+static constexpr std::uint64_t iamGetRole = 1ULL << 63;
+static constexpr std::uint64_t iamListRoles = 3ULL;
+static constexpr std::uint64_t iamPutRolePolicy = 5ULL;
+static constexpr std::uint64_t iamGetRolePolicy = 6ULL;
+static constexpr std::uint64_t iamListRolePolicies = 7ULL;
+static constexpr std::uint64_t iamDeleteRolePolicy = 9ULL;
 
 namespace {
 inline int op_to_perm(std::uint64_t op) {

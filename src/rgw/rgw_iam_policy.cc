@@ -456,7 +456,18 @@ static const actpair actpairs[] =
  { "s3:RestoreObject", s3RestoreObject },
  { "iam:PutUserPolicy", iamPutUserPolicy },
  { "iam:GetUserPolicy", iamGetUserPolicy },
- { "iam:DeleteUserPolicy", iamDeleteUserPolicy }};
+ { "iam:DeleteUserPolicy", iamDeleteUserPolicy },
+ { "iam:ListUserPolicies", iamListUserPolicies },
+ { "iam:CreateRole", iamCreateRole},
+ { "iam:DeleteRole", iamDeleteRole},
+ { "iam:GetRole", iamGetRole},
+ { "iam:ModifyRole", iamModifyRole},
+ { "iam:ListRoles", iamListRoles},
+ { "iam:PutRolePolicy", iamPutRolePolicy},
+ { "iam:GetRolePolicy", iamGetRolePolicy},
+ { "iam:ListRolePolicies", iamListRolePolicies},
+ { "iam:DeleteRolePolicy", iamDeleteRolePolicy},
+};
 
 struct PolicyParser;
 
