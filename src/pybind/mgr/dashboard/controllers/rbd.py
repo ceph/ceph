@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-arguments
 from __future__ import absolute_import
 
 import math
@@ -8,7 +9,7 @@ import rbd
 from . import ApiController, AuthRequired, RESTController
 from .. import mgr
 from ..services.ceph_service import CephService
-from ..tools import ViewCache
+from ..tools import ViewCache, TaskManager
 
 
 @ApiController('rbd')
@@ -52,7 +53,7 @@ class Rbd(RESTController):
         >>> Rbd._format_features('not a list') is None
         True
         """
-        if not features or not isinstance(features, list):
+        if not isinstance(features, list):
             return None
 
         res = 0
@@ -151,19 +152,11 @@ class Rbd(RESTController):
         except rbd.ImageNotFound:
             raise cherrypy.HTTPError(404)
 
-    def create(self, data):
+    @classmethod
+    def _create_image(cls, name, pool_name, size, obj_size=None, features=None,
+                      stripe_unit=None, stripe_count=None, data_pool=None):
         # pylint: disable=too-many-locals
         rbd_inst = rbd.RBD()
-
-        # Get input values
-        name = data.get('name')
-        pool_name = data.get('pool_name')
-        size = data.get('size')
-        obj_size = data.get('obj_size')
-        features = data.get('features')
-        stripe_unit = data.get('stripe_unit')
-        stripe_count = data.get('stripe_count')
-        data_pool = data.get('data_pool')
 
         # Set order
         order = None
@@ -171,7 +164,7 @@ class Rbd(RESTController):
             order = int(round(math.log(float(obj_size), 2)))
 
         # Set features
-        feature_bitmask = self._format_features(features)
+        feature_bitmask = cls._format_features(features)
 
         ioctx = mgr.rados.open_ioctx(pool_name)
 
@@ -180,6 +173,16 @@ class Rbd(RESTController):
                             features=feature_bitmask, stripe_unit=stripe_unit,
                             stripe_count=stripe_count, data_pool=data_pool)
         except rbd.OSError as e:
-            cherrypy.response.status = 400
             return {'success': False, 'detail': str(e), 'errno': e.errno}
         return {'success': True}
+
+    @RESTController.args_from_json
+    def create(self, name, pool_name, size, obj_size=None, features=None,
+               stripe_unit=None, stripe_count=None, data_pool=None):
+        task = TaskManager.run('rbd/create',
+                               {'pool_name': pool_name, 'image_name': name},
+                               self._create_image,
+                               [name, pool_name, size, obj_size, features,
+                                stripe_unit, stripe_count, data_pool])
+        status, value = task.wait(1.0)
+        return {'status': status, 'value': value}
