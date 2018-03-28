@@ -52,7 +52,7 @@ namespace crimson {
 
     template<typename D>
     RunEvery(D                     _wait_period,
-	     std::function<void()> _body) :
+	     const std::function<void()>& _body) :
       wait_period(duration_cast<milliseconds>(_wait_period)),
       body(_body)
     {
