@@ -52,10 +52,10 @@ Restart the ceph-mgr daemon after modifying the setting to load the module.
 Configuration
 -------------
 
-Two configuration keys are mandatory for the module to work:
+Two configuration keys are vital for the module to work:
 
-- mgr/zabbix/zabbix_host
-- mgr/zabbix/identifier
+- zabbix_host
+- identifier (optional)
 
 The parameter *zabbix_host* controls the hostname of the Zabbix server to which
 *zabbix_sender* will send the items. This can be a IP-Address if required by
@@ -64,6 +64,11 @@ your installation.
 The *identifier* parameter controls the identifier/hostname to use as source
 when sending items to Zabbix. This should match the name of the *Host* in
 your Zabbix server.
+
+When the *identifier* parameter is not configured the ceph-<fsid> of the cluster
+will be used when sending data to Zabbix.
+
+This would for example be *ceph-c4d32a99-9e80-490f-bd3a-1d22d8a7d354*
 
 Additional configuration keys which can be configured and their default values:
 
