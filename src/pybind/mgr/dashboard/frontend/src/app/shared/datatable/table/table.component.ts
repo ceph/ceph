@@ -142,7 +142,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       // Also if nothing is bound to fetchData nothing will be triggered
       // Force showing the loading indicator because it has been set to False in
       // useData() when this method was triggered by ngOnChanges().
-      this.loadingIndicator = true;
+      if (this.fetchData.observers.length > 0) {
+        this.loadingIndicator = true;
+      }
       this.ngZone.runOutsideAngular(() => {
         this.subscriber = Observable.timer(0, this.autoReload).subscribe(x => {
           this.ngZone.run(() => {
