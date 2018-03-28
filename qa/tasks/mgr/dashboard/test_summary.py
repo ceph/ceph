@@ -17,6 +17,8 @@ class SummaryTest(DashboardTestCase):
         self.assertIn('mgr_id', data)
         self.assertIn('have_mon_connection', data)
         self.assertIn('rbd_mirroring', data)
+        self.assertIn('executing_tasks', data)
+        self.assertIn('finished_tasks', data)
         self.assertIsNotNone(data['filesystems'])
         self.assertIsNotNone(data['health_status'])
         self.assertIsNotNone(data['rbd_pools'])
