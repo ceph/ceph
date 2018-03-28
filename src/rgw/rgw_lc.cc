@@ -294,6 +294,10 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
   RGWBucketInfo& bucket_info = target->get_bucket_info();
   RGWRados::Bucket::List list_op(target);
   list_op.params.list_versions = false;
+  /* lifecycle processing does not depend on total order, so can
+   * take advantage of unorderd listing optimizations--such as
+   * operating on one shard at a time */
+  list_op.params.allow_unordered = true;
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
   list_op.params.filter = &mp_filter;
   for (auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
@@ -396,7 +400,11 @@ int RGWLC::bucket_lc_process(string& shard_id)
         ceph_clock_now() < ceph::real_clock::to_time_t(*prefix_iter->second.expiration_date)) {
         continue;
       }
+      /* lifecycle processing does not depend on total order, so can
+       * take advantage of unorderd listing optimizations--such as
+       * operating on one shard at a time */
       list_op.params.prefix = prefix_iter->first;
+      list_op.params.allow_unordered = true;
       do {
         objs.clear();
         list_op.params.marker = list_op.get_next_marker();
