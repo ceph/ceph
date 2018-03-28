@@ -15,13 +15,13 @@ set(java_srcs
   java/com/ceph/fs/CephStat.java
   java/com/ceph/fs/CephStatVFS.java)
 
-# note: for the -source 1.5 builds, we add
+# note: for the -source 1.7 builds, we add
 #   -Xlint:-options
 # to get rid of the warning
-#   warning: [options] bootstrap class path not set in conjunction with -source 1.5
+#   warning: [options] bootstrap class path not set in conjunction with -source 1.7
 # as per
 #   https://blogs.oracle.com/darcy/entry/bootclasspath_older_source
-set(CMAKE_JAVA_COMPILE_FLAGS "-source" "1.5" "-target" "1.5" "-Xlint:-options")
+set(CMAKE_JAVA_COMPILE_FLAGS "-source" "1.7" "-target" "1.7" "-Xlint:-options")
 add_jar(libcephfs ${java_srcs})
 install_jar(libcephfs share/java)
 get_property(libcephfs_jar TARGET libcephfs PROPERTY JAR_FILE)
