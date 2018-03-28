@@ -19,7 +19,7 @@ import cherrypy
 from six import add_metaclass
 
 from .settings import Settings
-from . import logger
+from . import logger, mgr
 
 
 def ApiController(path):
@@ -463,6 +463,18 @@ class RESTController(BaseController):
 
     @cherrypy.expose
     def default(self, *vpath, **params):
+        if cherrypy.request.path_info.startswith(
+                '{}/api/{}/default'.format(mgr.url_prefix, self._cp_path_)) or \
+                cherrypy.request.path_info.startswith('/{}/default'.format(self._cp_path_)):
+            # These two calls to default() are identical: `vpath` and
+            # params` are both empty:
+            # $ curl 'http://localhost/api/cp_path/'
+            # and
+            # $ curl 'http://localhost/api/cp_path/default'
+            # But we need to distinguish them. To fix this, we need
+            # to add the missing `default`
+            vpath = ['default'] + list(vpath)
+
         method, status_code = self._get_method(vpath)
 
         if cherrypy.request.method not in ['GET', 'DELETE']:
