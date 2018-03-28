@@ -8,7 +8,8 @@
           (fetchData)="getOsdList()"
           [columns]="columns"
           selectionType="single"
-          (updateSelection)="updateSelection($event)">
+          (updateSelection)="updateSelection($event)"
+          [updateSelectionOnRefresh]="false">
   <cd-osd-details cdTableDetail
                   [selection]="selection">
   </cd-osd-details>
