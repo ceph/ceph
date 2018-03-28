@@ -17,7 +17,7 @@
 #include "msg/Connection.h"
 #include "msg/Dispatcher.h"
 #include "mon/MgrMap.h"
-#include "osd/OSDHealthMetric.h"
+#include "mgr/DaemonHealthMetric.h"
 
 #include "common/perf_counters.h"
 #include "common/Timer.h"
@@ -81,7 +81,7 @@ protected:
   std::string service_name, daemon_name;
   std::map<std::string,std::string> daemon_metadata;
   std::map<std::string,std::string> daemon_status;
-  std::vector<OSDHealthMetric> osd_health_metrics;
+  std::vector<DaemonHealthMetric> daemon_health_metrics;
 
   void reconnect();
   void _send_open();
@@ -120,7 +120,7 @@ public:
     const std::map<std::string,std::string>& metadata);
   int service_daemon_update_status(
     std::map<std::string,std::string>&& status);
-  void update_osd_health(std::vector<OSDHealthMetric>&& metrics);
+  void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
 private:
   void _send_stats();
