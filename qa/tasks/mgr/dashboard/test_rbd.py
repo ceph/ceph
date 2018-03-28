@@ -19,8 +19,11 @@ class RbdTest(DashboardTestCase):
                                 'application_metadata': application})
 
     @classmethod
-    def create_image(cls, name, pool, size):
-        cls._post('/api/rbd', {'name': name, 'pool_name': pool, 'size': size})
+    def create_image(cls, name, pool, size, **kwargs):
+        data = {'name': name, 'pool_name': pool, 'size': size}
+        data.update(kwargs)
+        return cls._task_post('/api/rbd', 'rbd/create',
+                              {'pool_name': pool, 'image_name': name}, data)
 
     @classmethod
     def setUpClass(cls):
@@ -104,7 +107,7 @@ class RbdTest(DashboardTestCase):
                 self.assertEqual(snap[k], v)
 
     def test_list(self):
-        data = self._get_view_cache('/api/rbd')
+        data = self._view_cache_get('/api/rbd')
         self.assertStatus(200)
         self.assertEqual(len(data), 2)
 
@@ -141,12 +144,8 @@ class RbdTest(DashboardTestCase):
 
     def test_create(self):
         rbd_name = 'test_rbd'
-        data = {'pool_name': 'rbd',
-                'name': rbd_name,
-                'size': 10240}
-        self._post('/api/rbd', data)
-        self.assertStatus(201)
-        self.assertJsonBody({"success": True})
+        res = self.create_image(rbd_name, 'rbd', 10240)
+        self.assertEqual(res, {"success": True})
 
         img = self._get('/api/rbd/rbd/test_rbd')
         self.assertStatus(200)
@@ -169,13 +168,8 @@ class RbdTest(DashboardTestCase):
         self._ceph_cmd(['osd', 'pool', 'set', 'data_pool', 'allow_ec_overwrites', 'true'])
 
         rbd_name = 'test_rbd_in_data_pool'
-        data = {'pool_name': 'rbd',
-                'name': rbd_name,
-                'size': 10240,
-                'data_pool': 'data_pool'}
-        self._post('/api/rbd', data)
-        self.assertStatus(201)
-        self.assertJsonBody({"success": True})
+        res = self.create_image(rbd_name, 'rbd', 10240, data_pool='data_pool')
+        self.assertEqual(res, {"success": True})
 
         img = self._get('/api/rbd/rbd/test_rbd_in_data_pool')
         self.assertStatus(200)
@@ -193,16 +187,11 @@ class RbdTest(DashboardTestCase):
                         '--yes-i-really-really-mean-it'])
 
     def test_create_rbd_twice(self):
-        data = {'pool_name': 'rbd',
-                'name': 'test_rbd_twice',
-                'size': 10240}
-        self._post('/api/rbd', data)
-        self.assertStatus(201)
+        res = self.create_image('test_rbd_twice', 'rbd', 10240)
 
-        self._post('/api/rbd', data)
-        self.assertStatus(400)
-        self.assertJsonBody({"success": False, "errno": 17,
-                             "detail": "[errno 17] error creating image"})
+        res = self.create_image('test_rbd_twice', 'rbd', 10240)
+        self.assertEqual(res, {"success": False, "errno": 17,
+                               "detail": "[errno 17] error creating image"})
         self._rbd_cmd(['rm', 'rbd/test_rbd_twice'])
 
     def test_snapshots_and_clone_info(self):
