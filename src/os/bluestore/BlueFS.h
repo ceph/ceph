@@ -268,7 +268,7 @@ private:
   void _drop_link(FileRef f);
 
   int _allocate(uint8_t bdev, uint64_t len,
-		mempool::bluefs::vector<bluefs_extent_t> *ev);
+		bluefs_fnode_t* node);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
   int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);

@@ -51,7 +51,24 @@ struct bluefs_fnode_t {
       allocated += p.length;
   }
 
-  DENC(bluefs_fnode_t, v, p) {
+  DENC_HELPERS
+  void bound_encode(size_t& p) const {
+    _denc_friend(*this, p);
+  }
+  void encode(bufferlist::contiguous_appender& p) const {
+    DENC_DUMP_PRE(bluefs_fnode_t);
+    _denc_friend(*this, p);
+    DENC_DUMP_POST(bluefs_fnode_t);
+  }
+  void decode(buffer::ptr::iterator& p) {
+    _denc_friend(*this, p);
+    recalc_allocated();
+  }
+  template<typename T, typename P>
+  friend typename std::enable_if<
+    boost::is_same<T,bluefs_fnode_t>::value ||
+    boost::is_same<T,const bluefs_fnode_t>::value>::type
+  _denc_friend(T& v, P& p) {
     DENC_START(1, 1, p);
     denc_varint(v.ino, p);
     denc_varint(v.size, p);
@@ -61,11 +78,36 @@ struct bluefs_fnode_t {
     DENC_FINISH(p);
   }
 
+  void append_extent(const bluefs_extent_t& ext) {
+    extents.push_back(ext);
+    allocated += ext.length;
+  }
+
+  void pop_front_extent() {
+    auto it = extents.begin();
+    allocated -= it->length;
+    extents.erase(it);
+  }
+  
+  void swap_extents(bluefs_fnode_t& other) {
+    other.extents.swap(extents);
+    std::swap(allocated, other.allocated);
+  }
+  void swap_extents(mempool::bluefs::vector<bluefs_extent_t>& swap_to, uint64_t& new_allocated) {
+    swap_to.swap(extents);
+    std::swap(allocated, new_allocated);
+  }
+  void clear_extents() {
+    extents.clear();
+    allocated = 0;
+  }
+
   mempool::bluefs::vector<bluefs_extent_t>::iterator seek(
     uint64_t off, uint64_t *x_off);
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<bluefs_fnode_t*>& ls);
+
 };
 WRITE_CLASS_DENC(bluefs_fnode_t)
 
