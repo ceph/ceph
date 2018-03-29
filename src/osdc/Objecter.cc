@@ -3355,17 +3355,6 @@ int Objecter::take_linger_budget(LingerOp *info)
   return 1;
 }
 
-void Objecter::unregister_op(Op *op)
-{
-  OSDSession::unique_lock sl(op->session->lock);
-  op->session->ops.erase(op->tid);
-  sl.unlock();
-  put_session(op->session);
-  op->session = NULL;
-
-  inflight_ops--;
-}
-
 /* This function DOES put the passed message before returning */
 void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 {
