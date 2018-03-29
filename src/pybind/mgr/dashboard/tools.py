@@ -828,7 +828,7 @@ class TaskManager(object):
             'progress': t.progress,
             'success': not t.exception,
             'ret_value': t.ret_value,
-            'exception': t.exception
+            'exception': str(t.exception) if t.exception else None
         } for t in fn_t]
 
 
