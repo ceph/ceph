@@ -4,9 +4,9 @@ import { ActivatedRoute } from '@angular/router';
 import * as _ from 'lodash';
 import { Subscription } from 'rxjs/Subscription';
 
+import { CephfsService } from '../../../shared/api/cephfs.service';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { CephfsService } from '../cephfs.service';
 
 @Component({
   selector: 'cd-cephfs',
