@@ -105,7 +105,9 @@ void RGWRealmReloader::reload()
                                          cct->_conf->rgw_enable_lc_threads,
                                          cct->_conf->rgw_enable_quota_threads,
                                          cct->_conf->rgw_run_sync_thread,
-                                         cct->_conf->rgw_dynamic_resharding);
+                                         cct->_conf->rgw_dynamic_resharding,
+					 cct->_conf->rgw_cache_enabled
+      );
 
     ldout(cct, 1) << "Creating new store" << dendl;
 
