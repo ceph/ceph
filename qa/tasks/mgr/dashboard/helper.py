@@ -212,6 +212,11 @@ class DashboardTestCase(MgrTestCase):
                                  timeout)
 
     @classmethod
+    def _task_put(cls, url, task_name, task_metadata, data=None, timeout=60):
+        return cls._task_request('PUT', url, task_name, task_metadata, data,
+                                 timeout)
+
+    @classmethod
     def cookies(cls):
         return cls._resp.cookies
 
