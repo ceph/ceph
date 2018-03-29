@@ -173,11 +173,14 @@ def call(command, **kw):
     :param terminal_verbose: Log command output to terminal, defaults to False, and
                              it is forcefully set to True if a return code is non-zero
     :param logfile_verbose: Log stderr/stdout output to log file. Defaults to True
+    :param verbose_on_failure: On a non-zero exit status, it will forcefully set logging ON for
+                               the terminal. Defaults to True
     """
     executable = which(command.pop(0))
     command.insert(0, executable)
     terminal_verbose = kw.pop('terminal_verbose', False)
     logfile_verbose = kw.pop('logfile_verbose', True)
+    verbose_on_failure = kw.pop('verbose_on_failure', True)
     show_command = kw.pop('show_command', False)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
@@ -208,8 +211,11 @@ def call(command, **kw):
 
     if returncode != 0:
         # set to true so that we can log the stderr/stdout that callers would
-        # do anyway
-        terminal_verbose = True
+        # do anyway as long as verbose_on_failure is set (defaults to True)
+        if verbose_on_failure:
+            terminal_verbose = True
+        # logfiles aren't disruptive visually, unlike the terminal, so this
+        # should always be on when there is a failure
         logfile_verbose = True
 
     # the following can get a messed up order in the log if the system call
