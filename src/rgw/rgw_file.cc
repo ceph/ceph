@@ -1767,7 +1767,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     if (unlikely((strcmp(path, "..") == 0))) {
       rgw_fh = parent;
       lsubdout(fs->get_context(), rgw, 17)
-	<< __func__ << "BANG"<< *rgw_fh
+	<< __func__ << " BANG"<< *rgw_fh
 	<< dendl;
       fs->ref(rgw_fh);
     } else {

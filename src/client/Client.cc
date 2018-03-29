@@ -10105,9 +10105,9 @@ int Client::_sync_fs()
 
   if (nullptr != cond) {
     client_lock.Unlock();
-    ldout(cct, 15) << __func__ << "waiting on data to flush" << dendl;
+    ldout(cct, 15) << __func__ << " waiting on data to flush" << dendl;
     cond->wait();
-    ldout(cct, 15) << __func__ << "flush finished" << dendl;
+    ldout(cct, 15) << __func__ << " flush finished" << dendl;
     client_lock.Lock();
   }
 
@@ -10422,7 +10422,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   int rc;
   unsigned mask = statx_to_mask(flags, want);
 
-  ldout(cct, 3) << __func__ << name << dendl;
+  ldout(cct, 3) << __func__ << " " << name << dendl;
   tout(cct) << __func__ << std::endl;
   tout(cct) << name << std::endl;
 
