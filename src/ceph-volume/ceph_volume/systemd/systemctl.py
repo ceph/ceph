@@ -24,6 +24,14 @@ def mask(unit):
     process.run(['systemctl', 'mask', unit])
 
 
+def is_active(unit):
+    out, err, rc = process.call(
+        ['systemctl', 'is-active', unit],
+        verbose_on_failure=False
+    )
+    return rc == 0
+
+
 def start_osd(id_):
     return start(osd_unit % id_)
 
@@ -38,6 +46,10 @@ def enable_osd(id_):
 
 def disable_osd(id_):
     return disable(osd_unit % id_)
+
+
+def osd_is_active(id_):
+    return is_active(osd_unit % id_)
 
 
 def enable_volume(id_, fsid, device_type='lvm'):
