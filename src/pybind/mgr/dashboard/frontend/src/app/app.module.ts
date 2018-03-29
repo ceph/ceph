@@ -30,15 +30,12 @@ export class CustomOption extends ToastOptions {
     BrowserAnimationsModule,
     ToastModule.forRoot(),
     AppRoutingModule,
-    HttpClientModule,
     CoreModule,
     SharedModule,
     CephModule,
     AccordionModule.forRoot(),
     BsDropdownModule.forRoot(),
-    TabsModule.forRoot(),
-    HttpClientModule,
-    BrowserAnimationsModule
+    TabsModule.forRoot()
   ],
   exports: [SharedModule],
   providers: [
