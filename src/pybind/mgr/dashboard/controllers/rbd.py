@@ -247,3 +247,48 @@ class Rbd(RESTController):
         status, value = task.wait(2.0)
         cherrypy.response.status = 200
         return {'status': status, 'value': value}
+
+
+@ApiController('rbd/:pool_name/:image_name/snap')
+class RbdSnapshot(RESTController):
+
+    @classmethod
+    def _create_snapshot(cls, pool_name, image_name, snapshot_name):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        img = rbd.Image(ioctx, image_name)
+        try:
+            img.create_snap(snapshot_name)
+        except rbd.OSError as e:
+            return {'success': False, 'detail': str(e), 'errno': e.errno}
+        return {'success': True}
+
+    @RESTController.args_from_json
+    def create(self, pool_name, image_name, snapshot_name):
+        task = TaskManager.run('rbd/snap/create',
+                               {'pool_name': pool_name, 'image_name': image_name,
+                                'snapshot_name': snapshot_name},
+                               self._create_snapshot,
+                               [pool_name, image_name, snapshot_name])
+        status, value = task.wait(1.0)
+        return {'status': status, 'value': value}
+
+    @classmethod
+    def _remove_snapshot(cls, pool_name, image_name, snapshot_name):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        img = rbd.Image(ioctx, image_name)
+        try:
+            img.remove_snap(snapshot_name)
+        except rbd.OSError as e:
+            return {'success': False, 'detail': str(e), 'errno': e.errno}
+        return {'success': True}
+
+    def delete(self, pool_name, image_name, snapshot_name):
+        task = TaskManager.run('rbd/snap/delete',
+                               {'pool_name': pool_name,
+                                'image_name': image_name,
+                                'snapshot_name': snapshot_name},
+                               self._remove_snapshot,
+                               [pool_name, image_name, snapshot_name])
+        status, value = task.wait(1.0)
+        cherrypy.response.status = 200
+        return {'status': status, 'value': value}
