@@ -409,8 +409,7 @@ class RESTController(BaseController):
         if cherrypy.request.method not in ['GET', 'DELETE']:
             method = RESTController._takes_json(method)
 
-        if cherrypy.request.method != 'DELETE':
-            method = RESTController._returns_json(method)
+        method = RESTController._returns_json(method)
 
         cherrypy.response.status = status_code
 
