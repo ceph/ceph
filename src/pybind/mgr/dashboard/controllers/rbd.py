@@ -229,3 +229,21 @@ class Rbd(RESTController):
                                 stripe_unit, stripe_count, data_pool])
         status, value = task.wait(1.0)
         return {'status': status, 'value': value}
+
+    @classmethod
+    def _remove_image(cls, pool_name, image_name):
+        rbd_inst = rbd.RBD()
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        try:
+            rbd_inst.remove(ioctx, image_name)
+        except rbd.OSError as e:
+            return {'success': False, 'detail': str(e), 'errno': e.errno}
+        return {'success': True}
+
+    def delete(self, pool_name, image_name):
+        task = TaskManager.run('rbd/delete',
+                               {'pool_name': pool_name, 'image_name': image_name},
+                               self._remove_image, [pool_name, image_name])
+        status, value = task.wait(2.0)
+        cherrypy.response.status = 200
+        return {'status': status, 'value': value}
