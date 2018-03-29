@@ -5867,11 +5867,15 @@ next:
     RGWBucketReshard br(store, bucket_info, attrs);
     int ret = br.cancel();
     if (ret < 0) {
-      cerr << "Error canceling bucket " << bucket_name << " resharding: " << cpp_strerror(-ret) <<
-	std::endl;
+      if (ret == -EBUSY) {
+	cerr << "There is ongoing resharding, please retry after " << g_conf->rgw_reshard_bucket_lock_duration <<
+	     " seconds " << std::endl;
+      } else {
+	cerr << "Error canceling bucket " << bucket_name << " resharding: " << cpp_strerror(-ret) <<
+	  std::endl;
+      }
       return ret;
     }
-
     RGWReshard reshard(store);
 
     cls_rgw_reshard_entry entry;
