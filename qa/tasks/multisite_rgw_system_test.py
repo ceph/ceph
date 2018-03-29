@@ -38,20 +38,20 @@ class Test(object):
 
         log.info('copying yaml to the client node')
         destination_location = \
-            'rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/' + temp_yaml_file
+            'rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/yamls/' + temp_yaml_file
         mclient.put_file(local_file,  destination_location)
         mclient.run(args=['ls', '-lt',
-                             'rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/'])
+                             'rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/yamls/'])
         mclient.run(args=['cat',
-                             'rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/' + temp_yaml_file])
+                             'rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/yamls/' + temp_yaml_file])
 
 #        mclient.run(args=['sudo', 'rm', '-f', run.Raw('%s' % local_file)], check_status=False)
 
         mclient.run(
             args=[
                 run.Raw(
-                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/tests/multisite/%s '
-                    '-c rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/%s ' % ('user_create.py', temp_yaml_file))])
+                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/%s '
+                    '-c rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/yamls/%s ' % ('user_create.py', temp_yaml_file))])
 
         log.info('copy user_details file from source client into local dir')
 
@@ -82,20 +82,20 @@ class Test(object):
 
         log.info('copying yaml to the client node')
         destination_location = \
-            'rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/' + self.yaml_fname
+            'rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/yamls/' + self.yaml_fname
         tclient.put_file(local_file,  destination_location)
         tclient.run(args=['ls', '-lt',
-                             'rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/'])
+                             'rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/yamls/'])
         tclient.run(args=['cat',
-                             'rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/' + self.yaml_fname])
+                             'rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/yamls/' + self.yaml_fname])
 
         tclient.run(args=['sudo', 'rm', '-f', run.Raw('%s' % local_file)], check_status=False)
 
         tclient.run(
             args=[
                 run.Raw(
-                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/tests/multisite/%s '
-                    '-c rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/%s ' % (self.script_fname, self.yaml_fname))])
+                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/%s '
+                    '-c rgw-tests/ceph-qe-scripts/rgw/v1/tests/multisite/yamls/%s ' % (self.script_fname, self.yaml_fname))])
 
 
 def copy_file_from(src_node, dest_node, file_name = 'io_info.yaml'):
@@ -151,7 +151,7 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
         mclient.run(
             args=[
                 run.Raw(
-                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/lib/read_io_info.py')])
+                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/v1/lib/read_io_info.py')])
 
 
 @contextlib.contextmanager

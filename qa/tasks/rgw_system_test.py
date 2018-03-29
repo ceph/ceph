@@ -34,20 +34,20 @@ class Test(object):
 
         log.info('copying yaml to the client node')
         destination_location = \
-            'rgw-tests/ceph-qe-scripts/rgw/tests/s3/yamls/' + self.yaml_fname
+            'rgw-tests/ceph-qe-scripts/rgw/v1/tests/s3/yamls/' + self.yaml_fname
         clients[0].put_file(local_file,  destination_location)
         clients[0].run(args=['ls', '-lt',
-                             'rgw-tests/ceph-qe-scripts/rgw/tests/s3/yamls/'])
+                             'rgw-tests/ceph-qe-scripts/rgw/v1/tests/s3/yamls/'])
         clients[0].run(args=['cat',
-                             'rgw-tests/ceph-qe-scripts/rgw/tests/s3/yamls/' + self.yaml_fname])
+                             'rgw-tests/ceph-qe-scripts/rgw/v1/tests/s3/yamls/' + self.yaml_fname])
 
         clients[0].run(args=['sudo', 'rm', '-f', run.Raw('%s' % local_file)], check_status=False)
 
         clients[0].run(
             args=[
                 run.Raw(
-                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/tests/s3/%s '
-                    '-c rgw-tests/ceph-qe-scripts/rgw/tests/s3/yamls/%s ' % (self.script_fname, self.yaml_fname))])
+                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/v1/tests/s3/%s '
+                    '-c rgw-tests/ceph-qe-scripts/rgw/v1/tests/s3/yamls/%s ' % (self.script_fname, self.yaml_fname))])
 
 
 def test_exec(config, data, clients):
