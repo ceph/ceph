@@ -5,7 +5,7 @@ import { BsDropdownModule, TabsModule } from 'ngx-bootstrap';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { Observable } from 'rxjs/Observable';
 
-import { RbdMirroringService } from '../../../shared/services/rbd-mirroring.service';
+import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
 import { MirroringComponent } from './mirroring.component';

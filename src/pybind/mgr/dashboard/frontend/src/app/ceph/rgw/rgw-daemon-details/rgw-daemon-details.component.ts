@@ -2,8 +2,8 @@ import { Component, Input, OnChanges } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { RgwDaemonService } from '../services/rgw-daemon.service';
 
 @Component({
   selector: 'cd-rgw-daemon-details',

@@ -5,11 +5,11 @@ import { TabsModule } from 'ngx-bootstrap';
 
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { SharedModule } from '../../../../shared/shared.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
 import {
   OsdPerformanceHistogramComponent
 } from '../osd-performance-histogram/osd-performance-histogram.component';
-import { OsdService } from '../osd.service';
 import { OsdDetailsComponent } from './osd-details.component';
 
 describe('OsdDetailsComponent', () => {
@@ -22,13 +22,13 @@ describe('OsdDetailsComponent', () => {
         HttpClientModule,
         TabsModule.forRoot(),
         PerformanceCounterModule,
-        DataTableModule
+        DataTableModule,
+        SharedModule
       ],
       declarations: [
         OsdDetailsComponent,
         OsdPerformanceHistogramComponent
-      ],
-      providers: [OsdService]
+      ]
     })
     .compileComponents();
   }));

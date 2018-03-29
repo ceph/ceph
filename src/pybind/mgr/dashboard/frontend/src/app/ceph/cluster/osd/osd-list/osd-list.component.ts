@@ -1,10 +1,10 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { OsdService } from '../../../../shared/api/osd.service';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
-import { OsdService } from '../osd.service';
 
 @Component({
   selector: 'cd-osd-list',

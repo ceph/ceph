@@ -1,9 +1,9 @@
 import { Component } from '@angular/core';
 
+import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { RgwDaemonService } from '../services/rgw-daemon.service';
 
 @Component({
   selector: 'cd-rgw-daemon-list',
