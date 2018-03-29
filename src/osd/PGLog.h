@@ -1455,7 +1455,7 @@ public:
 	      bv);
 	    if (r >= 0) {
 	      object_info_t oi(bv);
-	      assert(oi.version == i.second.have);
+	      assert(oi.version == i.second.have || eversion_t() == i.second.have);
 	    } else {
 	      assert(i.second.is_delete() || eversion_t() == i.second.have);
 	    }
