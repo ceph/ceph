@@ -19,7 +19,7 @@ class RbdTest(DashboardTestCase):
                                 'application_metadata': application})
 
     @classmethod
-    def create_image(cls, name, pool, size, **kwargs):
+    def create_image(cls, pool, name, size, **kwargs):
         data = {'name': name, 'pool_name': pool, 'size': size}
         data.update(kwargs)
         return cls._task_post('/api/rbd', 'rbd/create',
@@ -32,16 +32,30 @@ class RbdTest(DashboardTestCase):
                                 {'pool_name': pool, 'image_name': image})
 
     @classmethod
+    def create_snapshot(cls, pool, image, snapshot):
+        data = {'pool_name': pool, 'image_name': image, 'snapshot_name': snapshot}
+        return cls._task_post('/api/rbd/{}/{}/snap'.format(pool, image),
+                              'rbd/snap/create', data,
+                              {'snapshot_name': snapshot})
+
+    @classmethod
+    def remove_snapshot(cls, pool, image, snapshot):
+        return cls._task_delete('/api/rbd//{}/{}/snap/{}'.format(pool, image, snapshot),
+                                'rbd/snap/delete',
+                                {'pool_name': pool, 'image_name': image,
+                                 'snapshot_name': snapshot})
+
+    @classmethod
     def setUpClass(cls):
         super(RbdTest, cls).setUpClass()
         cls.authenticate()
         cls.create_pool('rbd', 10, 'replicated')
         cls.create_pool('rbd_iscsi', 10, 'replicated')
 
-        cls.create_image('img1', 'rbd', 2**30)
-        cls.create_image('img2', 'rbd', 2*2**30)
-        cls.create_image('img1', 'rbd_iscsi', 2**30)
-        cls.create_image('img2', 'rbd_iscsi', 2*2**30)
+        cls.create_image('rbd', 'img1', 2**30)
+        cls.create_image('rbd', 'img2', 2*2**30)
+        cls.create_image('rbd_iscsi', 'img1', 2**30)
+        cls.create_image('rbd_iscsi', 'img2', 2*2**30)
 
         osd_metadata = cls.ceph_cluster.mon_manager.get_osd_metadata()
         cls.bluestore_support = True
@@ -151,7 +165,7 @@ class RbdTest(DashboardTestCase):
 
     def test_create(self):
         rbd_name = 'test_rbd'
-        res = self.create_image(rbd_name, 'rbd', 10240)
+        res = self.create_image('rbd', rbd_name, 10240)
         self.assertEqual(res, {"success": True})
 
         img = self._get('/api/rbd/rbd/test_rbd')
@@ -175,7 +189,7 @@ class RbdTest(DashboardTestCase):
         self._ceph_cmd(['osd', 'pool', 'set', 'data_pool', 'allow_ec_overwrites', 'true'])
 
         rbd_name = 'test_rbd_in_data_pool'
-        res = self.create_image(rbd_name, 'rbd', 10240, data_pool='data_pool')
+        res = self.create_image('rbd', rbd_name, 10240, data_pool='data_pool')
         self.assertEqual(res, {"success": True})
 
         img = self._get('/api/rbd/rbd/test_rbd_in_data_pool')
@@ -194,16 +208,16 @@ class RbdTest(DashboardTestCase):
                         '--yes-i-really-really-mean-it'])
 
     def test_create_rbd_twice(self):
-        res = self.create_image('test_rbd_twice', 'rbd', 10240)
+        res = self.create_image('rbd', 'test_rbd_twice', 10240)
 
-        res = self.create_image('test_rbd_twice', 'rbd', 10240)
+        res = self.create_image('rbd', 'test_rbd_twice', 10240)
         self.assertEqual(res, {"success": False, "errno": 17,
                                "detail": "[errno 17] error creating image"})
         self.remove_image('rbd', 'test_rbd_twice')
 
     def test_snapshots_and_clone_info(self):
-        self._rbd_cmd(['snap', 'create', 'rbd/img1@snap1'])
-        self._rbd_cmd(['snap', 'create', 'rbd/img1@snap2'])
+        self.create_snapshot('rbd', 'img1', 'snap1')
+        self.create_snapshot('rbd', 'img1', 'snap2')
         self._rbd_cmd(['snap', 'protect', 'rbd/img1@snap1'])
         self._rbd_cmd(['clone', 'rbd/img1@snap1', 'rbd_iscsi/img1_clone'])
 
@@ -237,11 +251,11 @@ class RbdTest(DashboardTestCase):
 
     def test_disk_usage(self):
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '50M', 'rbd/img2'])
-        self._rbd_cmd(['snap', 'create', 'rbd/img2@snap1'])
+        self.create_snapshot('rbd', 'img2', 'snap1')
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '20M', 'rbd/img2'])
-        self._rbd_cmd(['snap', 'create', 'rbd/img2@snap2'])
+        self.create_snapshot('rbd', 'img2', 'snap2')
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '10M', 'rbd/img2'])
-        self._rbd_cmd(['snap', 'create', 'rbd/img2@snap3'])
+        self.create_snapshot('rbd', 'img2', 'snap3')
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M', 'rbd/img2'])
         img = self._get('/api/rbd/rbd/img2')
         self.assertStatus(200)
@@ -252,3 +266,29 @@ class RbdTest(DashboardTestCase):
         res = self.remove_image('rbd', 'i_dont_exist')
         self.assertEqual(res, {"success": False, "errno": 2,
                                "detail": "[errno 2] error removing image"})
+
+    def test_delete(self):
+        res = self.create_image('rbd', 'delete_me', 2**30)
+        self.assertTrue(res['success'])
+        res = self.create_snapshot('rbd', 'delete_me', 'snap1')
+        self.assertTrue(res['success'])
+        res = self.create_snapshot('rbd', 'delete_me', 'snap2')
+        self.assertTrue(res['success'])
+
+        img = self._get('/api/rbd/rbd/delete_me')
+        self.assertStatus(200)
+        self._validate_image(img, name='delete_me', size=2**30)
+        self.assertEqual(len(img['snapshots']), 2)
+
+        res = self.remove_snapshot('rbd', 'delete_me', 'snap1')
+        self.assertTrue(res['success'])
+        res = self.remove_snapshot('rbd', 'delete_me', 'snap2')
+        self.assertTrue(res['success'])
+
+        img = self._get('/api/rbd/rbd/delete_me')
+        self.assertStatus(200)
+        self._validate_image(img, name='delete_me', size=2**30)
+        self.assertEqual(len(img['snapshots']), 0)
+
+        res = self.remove_image('rbd', 'delete_me')
+        self.assertTrue(res['success'])
