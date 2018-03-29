@@ -881,7 +881,7 @@ void ECBackend::handle_sub_write(
   const ZTracer::Trace &trace)
 {
   if (msg)
-    msg->mark_started();
+    msg->mark_event("sub_op_started");
   trace.event("handle_sub_write");
   if (!get_parent()->pgb_is_primary())
     get_parent()->update_stats(op.stats);
