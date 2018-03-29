@@ -14,9 +14,15 @@ class RbdTest(DashboardTestCase):
 
     @classmethod
     def create_pool(cls, name, pg_num, pool_type, application='rbd'):
-        cls._post("/api/pool", {'pool': name, 'pg_num': pg_num,
-                                'pool_type': pool_type,
-                                'application_metadata': application})
+        data = {
+            'pool': name,
+            'pg_num': pg_num,
+            'pool_type': pool_type,
+            'application_metadata': application
+        }
+        if pool_type == 'erasure':
+            data['flags'] = ['ec_overwrites']
+        cls._post("/api/pool", data)
 
     @classmethod
     def create_image(cls, pool, name, size, **kwargs):
@@ -191,9 +197,7 @@ class RbdTest(DashboardTestCase):
         if not self.bluestore_support:
             self.skipTest('requires bluestore cluster')
 
-        self._ceph_cmd(['osd', 'pool', 'create', 'data_pool', '12', '12', 'erasure'])
-        self._ceph_cmd(['osd', 'pool', 'application', 'enable', 'data_pool', 'rbd'])
-        self._ceph_cmd(['osd', 'pool', 'set', 'data_pool', 'allow_ec_overwrites', 'true'])
+        self.create_pool('data_pool', 12, 'erasure')
 
         rbd_name = 'test_rbd_in_data_pool'
         res = self.create_image('rbd', rbd_name, 10240, data_pool='data_pool')
