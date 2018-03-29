@@ -2030,11 +2030,8 @@ struct pg_stat_t {
     stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
-    if (((uint64_t)snaptrimq_len + (uint64_t)o.snaptrimq_len) > (uint64_t)(1 << 31)) {
-      snaptrimq_len = 1 << 31;
-    } else {
-      snaptrimq_len += o.snaptrimq_len;
-    }
+    snaptrimq_len = std::min((uint64_t)snaptrimq_len + o.snaptrimq_len,
+                             (uint64_t)(1ull << 31));
   }
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
