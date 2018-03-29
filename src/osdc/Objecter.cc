@@ -1568,6 +1568,7 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 		     << " concluding pool " << op->target.base_pgid.pool()
 		     << " dne" << dendl;
       if (op->onfinish) {
+	num_in_flight--;
 	op->onfinish->complete(-ENOENT);
       }
 
