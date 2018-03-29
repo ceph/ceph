@@ -5871,41 +5871,48 @@ void MDCache::open_snaprealms()
     }
   }
 
+  if (gather.has_subs()) {
+    if (gather.num_subs_remaining() == 0) {
+      // cleanup gather
+      gather.set_finisher(new C_MDSInternalNoop);
+      gather.activate();
+    } else {
+      // for multimds, must succeed the first time
+      assert(recovery_set.empty());
+
+      dout(10) << "open_snaprealms - waiting for "
+	       << gather.num_subs_remaining() << dendl;
+      gather.set_finisher(new C_MDC_OpenSnapRealms(this));
+      gather.activate();
+      return;
+    }
+  }
+
   notify_global_snaprealm_update(CEPH_SNAP_OP_UPDATE);
 
-  if (gather.has_subs()) {
-    // for multimds, must succeed the first time
-    assert(recovery_set.empty());
-
-    dout(10) << "open_snaprealms - waiting for "
-	     << gather.num_subs_remaining() << dendl;
-    gather.set_finisher(new C_MDC_OpenSnapRealms(this));
-    gather.activate();
-  } else {
-    if (!reconnected_snaprealms.empty()) {
-      dout(5) << "open_snaprealms has unconnected snaprealm:" << dendl;
-      for (auto& p : reconnected_snaprealms) {
-	stringstream warn_str;
-	warn_str << " " << p.first << " {";
-	bool first = true;
-	for (auto& q : p.second) {
-	  if (!first)
-	    warn_str << ", ";
-	  warn_str << "client." << q.first << "/" << q.second;
-	}
-	warn_str << "}";
-	dout(5) << warn_str.str() << dendl;
+  if (!reconnected_snaprealms.empty()) {
+    dout(5) << "open_snaprealms has unconnected snaprealm:" << dendl;
+    for (auto& p : reconnected_snaprealms) {
+      stringstream warn_str;
+      warn_str << " " << p.first << " {";
+      bool first = true;
+      for (auto& q : p.second) {
+        if (!first)
+          warn_str << ", ";
+        warn_str << "client." << q.first << "/" << q.second;
       }
+      warn_str << "}";
+      dout(5) << warn_str.str() << dendl;
     }
-    assert(rejoin_waiters.empty());
-    assert(rejoin_pending_snaprealms.empty());
-    dout(10) << "open_snaprealms - all open" << dendl;
-    do_delayed_cap_imports();
-
-    assert(rejoin_done);
-    rejoin_done.release()->complete(0);
-    reconnected_caps.clear();
   }
+  assert(rejoin_waiters.empty());
+  assert(rejoin_pending_snaprealms.empty());
+  dout(10) << "open_snaprealms - all open" << dendl;
+  do_delayed_cap_imports();
+
+  assert(rejoin_done);
+  rejoin_done.release()->complete(0);
+  reconnected_caps.clear();
 }
 
 bool MDCache::open_undef_inodes_dirfrags()
