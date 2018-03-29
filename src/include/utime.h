@@ -40,7 +40,8 @@
 class utime_t {
 public:
   struct {
-    __u32 tv_sec, tv_nsec;
+    time_t tv_sec;
+    long tv_nsec;
   } tv;
 
  public:
@@ -48,15 +49,15 @@ public:
     return (tv.tv_sec == 0) && (tv.tv_nsec == 0);
   }
   void normalize() {
-    if (tv.tv_nsec > 1000000000ul) {
-      tv.tv_sec += tv.tv_nsec / (1000000000ul);
-      tv.tv_nsec %= 1000000000ul;
+    if (tv.tv_nsec > 1000000000) {
+      tv.tv_sec += tv.tv_nsec / (1000000000);
+      tv.tv_nsec %= 1000000000;
     }
   }
 
   // cons
   utime_t() { tv.tv_sec = 0; tv.tv_nsec = 0; }
-  utime_t(time_t s, int n) { tv.tv_sec = s; tv.tv_nsec = n; normalize(); }
+  utime_t(time_t s, long n) { tv.tv_sec = s; tv.tv_nsec = n; normalize(); }
   utime_t(const struct ceph_timespec &v) {
     decode_timeval(&v);
   }
@@ -82,8 +83,8 @@ public:
     ts->tv_nsec = tv.tv_nsec;
   }
   void set_from_double(double d) { 
-    tv.tv_sec = (__u32)trunc(d);
-    tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * 1000000000.0);
+    tv.tv_sec = (time_t)trunc(d);
+    tv.tv_nsec = (long)((d - (double)tv.tv_sec) * 1000000000.0);
   }
 
   real_time to_real_time() const {
@@ -95,17 +96,17 @@ public:
   // accessors
   time_t        sec()  const { return tv.tv_sec; } 
   long          usec() const { return tv.tv_nsec/1000; }
-  int           nsec() const { return tv.tv_nsec; }
+  long          nsec() const { return tv.tv_nsec; }
 
   // ref accessors/modifiers
-  __u32&         sec_ref()  { return tv.tv_sec; }
-  __u32&         nsec_ref() { return tv.tv_nsec; }
+  time_t&         sec_ref()  { return tv.tv_sec; }
+  long&           nsec_ref() { return tv.tv_nsec; }
 
   uint64_t to_nsec() const {
-    return (uint64_t)tv.tv_nsec + (uint64_t)tv.tv_sec * 1000000000ull;
+    return (uint64_t)tv.tv_nsec + (uint64_t)tv.tv_sec * 1000000000;
   }
   uint64_t to_msec() const {
-    return (uint64_t)tv.tv_nsec / 1000000ull + (uint64_t)tv.tv_sec * 1000ull;
+    return (uint64_t)tv.tv_nsec / 1000000 + (uint64_t)tv.tv_sec * 1000;
   }
 
   void copy_to_timeval(struct timeval *v) const {
@@ -126,7 +127,7 @@ public:
   }
   void encode(bufferlist &bl) const {
 #if defined(CEPH_LITTLE_ENDIAN)
-    bl.append((char *)(this), sizeof(__u32) + sizeof(__u32));
+    bl.append((char *)(this), sizeof(time_t) + sizeof(long));
 #else
     using ceph::encode;
     encode(tv.tv_sec, bl);
@@ -135,7 +136,7 @@ public:
   }
   void decode(bufferlist::iterator &p) {
 #if defined(CEPH_LITTLE_ENDIAN)
-    p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
+    p.copy(sizeof(time_t) + sizeof(long), (char *)(this));
 #else
     using ceph::decode;
     decode(tv.tv_sec, p);
