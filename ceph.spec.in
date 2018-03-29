@@ -1653,6 +1653,10 @@ fi
 
 %files -n librgw2
 %{_libdir}/librgw.so.*
+%if %{with lttng}
+%{_libdir}/librgw_op_tp.so*
+%{_libdir}/librgw_rados_tp.so*
+%endif
 
 %post -n librgw2 -p /sbin/ldconfig
 

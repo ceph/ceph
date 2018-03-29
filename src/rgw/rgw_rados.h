@@ -2192,13 +2192,13 @@ void RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState>::invalidate(rgw_raw_obj& obj)
 
 struct RGWObjectCtx {
   RGWRados *store;
-  void *user_ctx;
+  req_state *s;
 
   RGWObjectCtxImpl<rgw_obj, RGWObjState> obj;
   RGWObjectCtxImpl<rgw_raw_obj, RGWRawObjState> raw;
 
-  explicit RGWObjectCtx(RGWRados *_store) : store(_store), user_ctx(NULL), obj(store), raw(store) { }
-  RGWObjectCtx(RGWRados *_store, void *_user_ctx) : store(_store), user_ctx(_user_ctx), obj(store), raw(store) { }
+  explicit RGWObjectCtx(RGWRados *_store) : store(_store), s(NULL), obj(store), raw(store) { }
+  explicit RGWObjectCtx(RGWRados *_store, req_state *_s) : store(_store), s(_s), obj(store), raw(store) { }
 };
 
 class Finisher;
@@ -2873,6 +2873,9 @@ public:
       int write_meta(uint64_t size, uint64_t accounted_size,
                      map<std::string, bufferlist>& attrs);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
+      const req_state* get_req_state() {
+        return target->get_ctx().s;
+      }
     };
 
     struct Delete {

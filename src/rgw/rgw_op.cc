@@ -49,6 +49,16 @@
 
 #include "compressor/Compressor.h"
 
+#ifdef WITH_LTTNG
+#define TRACEPOINT_DEFINE
+#define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#include "tracing/rgw_op.h"
+#undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
+#undef TRACEPOINT_DEFINE
+#else
+#define tracepoint(...)
+#endif
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -3532,6 +3542,7 @@ void RGWPutObj::execute()
     }
   }
 
+  tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
   do {
     bufferlist data;
     if (fst > lst)
@@ -3622,6 +3633,7 @@ void RGWPutObj::execute()
 
     ofs += len;
   } while (len > 0);
+  tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
   {
     bufferlist flush;
@@ -3729,9 +3741,11 @@ void RGWPutObj::execute()
     emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
   }
 
+  tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                (user_data.empty() ? nullptr : &user_data));
+  tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
 
   // only atomic upload will upate version_id here
   if (!multipart) 
