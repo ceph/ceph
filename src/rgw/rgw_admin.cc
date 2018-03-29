@@ -2990,15 +2990,69 @@ int main(int argc, const char **argv)
 			 OPT_REALM_RENAME, OPT_REALM_SET,
 			 OPT_REALM_DEFAULT, OPT_REALM_PULL};
 
+  std::set<int> readonly_ops_list = {
+                         OPT_USER_INFO,
+			 OPT_USER_STATS,
+			 OPT_BUCKETS_LIST,
+			 OPT_BUCKET_LIMIT_CHECK,
+			 OPT_BUCKET_STATS,
+			 OPT_BUCKET_SYNC_STATUS,
+			 OPT_LOG_LIST,
+			 OPT_LOG_SHOW,
+			 OPT_USAGE_SHOW,
+			 OPT_OBJECT_STAT,
+			 OPT_BI_GET,
+			 OPT_BI_LIST,
+			 OPT_OLH_GET,
+			 OPT_OLH_READLOG,
+			 OPT_GC_LIST,
+			 OPT_LC_LIST,
+			 OPT_ORPHANS_LIST_JOBS,
+			 OPT_ZONEGROUP_GET,
+			 OPT_ZONEGROUP_LIST,
+			 OPT_ZONEGROUP_PLACEMENT_LIST,
+			 OPT_ZONE_GET,
+			 OPT_ZONE_LIST,
+			 OPT_ZONE_PLACEMENT_LIST,
+			 OPT_METADATA_GET,
+			 OPT_METADATA_LIST,
+			 OPT_METADATA_SYNC_STATUS,
+			 OPT_MDLOG_LIST,
+			 OPT_MDLOG_STATUS,
+			 OPT_SYNC_ERROR_LIST,
+			 OPT_BILOG_LIST,
+			 OPT_BILOG_STATUS,
+			 OPT_DATA_SYNC_STATUS,
+			 OPT_DATALOG_LIST,
+			 OPT_DATALOG_STATUS,
+			 OPT_OPSTATE_LIST,
+			 OPT_REPLICALOG_GET,
+			 OPT_REALM_GET,
+			 OPT_REALM_GET_DEFAULT,
+			 OPT_REALM_LIST,
+			 OPT_REALM_LIST_PERIODS,
+			 OPT_PERIOD_GET,
+			 OPT_PERIOD_GET_CURRENT,
+			 OPT_PERIOD_LIST,
+			 OPT_GLOBAL_QUOTA_GET,
+			 OPT_SYNC_STATUS,
+			 OPT_ROLE_GET,
+			 OPT_ROLE_LIST,
+			 OPT_ROLE_POLICY_LIST,
+			 OPT_ROLE_POLICY_GET,
+			 OPT_RESHARD_LIST,
+			 OPT_RESHARD_STATUS,
+  };
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
                          raw_period_update);
+  bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
 
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
     store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false,
-      g_conf->rgw_cache_enabled);
+      need_cache && g_conf->rgw_cache_enabled);
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
