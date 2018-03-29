@@ -675,7 +675,10 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
 
   int ret = cls_rgw_reshard_get(store->reshard_pool_ctx, logshard_oid, entry);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
+    if (ret != -ENOENT) {
+      lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
+	" bucket=" << entry.bucket_name << dendl;
+    }
     return ret;
   }
 

@@ -5879,17 +5879,10 @@ next:
     entry.bucket_name = bucket_name;
     //entry.bucket_id = bucket_id;
 
-    ret = reshard.get(entry);
+    ret = reshard.remove(entry);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
       return ret;
-    } else if (ret != -ENOENT) {
-      ret = reshard.remove(entry);
-      if (ret < 0) {
-	cerr << "Error removing bucket " << bucket_name << " from resharding queue: " << cpp_strerror(-ret) <<
-	  std::endl;
-	return ret;
-      }
     }
   }
 
