@@ -174,6 +174,83 @@ class TestBuildMatrix(object):
             assert 'd0_0/d1_2/d1_2_2.yaml' in i[1]
             assert 'd0_0/d1_2/d1_2_3.yaml' in i[1]
 
+    def test_random_dollar_sign_2x2x3(self):
+        fake_fs = {
+            'd0_0': {
+                '$': None,
+                'd1_0': {
+                    'd1_0_0.yaml': None,
+                    'd1_0_1.yaml': None,
+                },
+                'd1_1': {
+                    'd1_1_0.yaml': None,
+                    'd1_1_1.yaml': None,
+                },
+                'd1_2': {
+                    'd1_2_0.yaml': None,
+                    'd1_2_1.yaml': None,
+                    'd1_2_2.yaml': None,
+                },
+            },
+        }
+        self.start_patchers(fake_fs)
+        result = build_matrix.build_matrix('d0_0')
+        assert len(result) == 1
+
+    def test_random_dollar_sign_with_concat(self):
+        fake_fs = {
+            'd0_0': {
+                '$': None,
+                'd1_0': {
+                    'd1_0_0.yaml': None,
+                },
+                'd1_1': {
+                    'd1_1_0.yaml': None,
+                    'd1_1_1.yaml': None,
+                },
+                'd1_2': {
+                    '+': None,
+                    'd1_2_0.yaml': None,
+                    'd1_2_1.yaml': None,
+                    'd1_2_2.yaml': None,
+                    'd1_2_3.yaml': None,
+                },
+            },
+        }
+        self.start_patchers(fake_fs)
+        result = build_matrix.build_matrix('d0_0')
+        assert len(result) == 1
+        if result[0][0][1:].startswith('d1_2'):
+            for i in result:
+                assert 'd0_0/d1_2/d1_2_0.yaml' in i[1]
+                assert 'd0_0/d1_2/d1_2_1.yaml' in i[1]
+                assert 'd0_0/d1_2/d1_2_2.yaml' in i[1]
+                assert 'd0_0/d1_2/d1_2_3.yaml' in i[1]
+
+    def test_random_dollar_sign_with_convolve(self):
+        fake_fs = {
+            'd0_0': {
+                '%': None,
+                'd1_0': {
+                    'd1_0_0.yaml': None,
+                    'd1_0_1.yaml': None,
+                },
+                'd1_1': {
+                    'd1_1_0.yaml': None,
+                    'd1_1_1.yaml': None,
+                },
+                'd1_2': {
+                    '$': None,
+                    'd1_2_0.yaml': None,
+                    'd1_2_1.yaml': None,
+                    'd1_2_2.yaml': None,
+                },
+            },
+        }
+        self.start_patchers(fake_fs)
+        result = build_matrix.build_matrix('d0_0')
+        assert len(result) == 4
+
     def test_emulate_teuthology_noceph(self):
         fake_fs = {
             'teuthology': {

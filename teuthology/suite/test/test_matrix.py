@@ -72,3 +72,11 @@ class TestMatrix(object):
                             mbs(5, range(4))])
                     ]
                 ))
+
+    def test_product_with_pick_random(self):
+        verify_matrix_output_diversity(matrix.PickRandom(1, [
+                    mbs(1, range(6)),
+                    mbs(3, range(3)),
+                    mbs(2, range(2)),
+                    mbs(4, range(9)),
+                    ]))

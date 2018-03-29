@@ -1,4 +1,5 @@
 import os
+import random
 import heapq
 from fractions import gcd
 
@@ -195,6 +196,30 @@ class Concat(Matrix):
 
     def tostr(self, depth):
         ret = '\t'*depth + "Concat({item}):\n".format(item=self.item)
+        return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
+
+class PickRandom(Matrix):
+    """
+    Select a random item from the child matrices.
+    """
+    def __init__(self, item, submats):
+        self.submats = submats
+        self.item = item
+
+    def size(self):
+        return 1
+
+    def minscanlen(self):
+        return 1
+
+    def index(self, i):
+        indx = random.randint(0, len(self.submats) - 1)
+        submat = self.submats[indx]
+        out = frozenset([submat.index(indx)])
+        return (self.item, out)
+
+    def tostr(self, depth):
+        ret = '\t'*depth + "PickRandom({item}):\n".format(item=self.item)
         return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
 
 class Sum(Matrix):

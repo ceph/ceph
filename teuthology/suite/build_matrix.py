@@ -34,6 +34,9 @@ def build_matrix(path, subset=None):
     for each item in the directory, and then do a product to generate
     a result list with all combinations (A Product).
 
+    For a directory with a magic '$' file, we generate a list of all
+    items that we will randomly choose from.
+
     The final description (after recursion) for each item will look
     like a relative path.  If there was a % product, that path
     component will appear as a file with braces listing the selection
@@ -112,6 +115,18 @@ def _build_matrix(path, mincyclicity=0, item=''):
                     (mincyclicity + mat.cyclicity() - 1) / mat.cyclicity(), mat
                 )
             return mat
+        elif '$' in files:
+            # pick a random item
+            files.remove('$')
+            submats = []
+            for fn in sorted(files):
+                submat = _build_matrix(
+                    os.path.join(path, fn),
+                    mincyclicity,
+                    fn)
+                if submat is not None:
+                    submats.append(submat)
+            return matrix.PickRandom(item, submats)
         else:
             # list items
             submats = []
