@@ -117,8 +117,7 @@ void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters)
   f->dump_int("duration", history_duration);
   {
     f->open_array_section("ops");
-    for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
-	   arrived.begin();
+    for (auto i = arrived.begin();
 	 i != arrived.end();
 	 ++i) {
       if (!i->second->filter_out(filters))
@@ -141,26 +140,12 @@ void OpHistory::dump_ops_by_duration(utime_t now, Formatter *f, set<string> filt
   f->dump_int("duration", history_duration);
   {
     f->open_array_section("ops");
-    if (arrived.size()) {
-      vector<pair<double, TrackedOpRef> > durationvec;
-      durationvec.reserve(arrived.size());
-
-      for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
-	     arrived.begin();
-	   i != arrived.end();
-	   ++i) {
-	if (!i->second->filter_out(filters))
-	  continue;
-	durationvec.push_back(pair<double, TrackedOpRef>(i->second->get_duration(), i->second));
-      }
-
-      sort(durationvec.begin(), durationvec.end());
-
-      for (auto i = durationvec.rbegin(); i != durationvec.rend(); ++i) {
-	f->open_object_section("op");
-	i->second->dump(now, f);
-	f->close_section();
-      }
+    for (auto i = duration.rbegin(); i != duration.rend(); ++i) {
+      f->open_object_section("op");
+      if (!i->second->filter_out(filters))
+        continue;
+      i->second->dump(now, f);
+      f->close_section();
     }
     f->close_section();
   }
