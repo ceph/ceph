@@ -4785,7 +4785,7 @@ std::vector<Option> get_global_options() {
                           "failures about managers that aren't online yet"),
 
     Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(60)
+    .set_default(120)
     .add_service("mon")
     .set_description("Period in seconds that the cluster may have no active "
                      "manager before this is reported as an ERR rather than "
