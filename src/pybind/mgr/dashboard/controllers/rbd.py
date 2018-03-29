@@ -27,6 +27,14 @@ class Rbd(RESTController):
         rbd.RBD_FEATURE_DATA_POOL: "data-pool",
     }
 
+    # set of image features that can be enable on existing images
+    ALLOW_ENABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
+                                 "journaling"])
+
+    # set of image features that can be disabled on existing images
+    ALLOW_DISABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
+                                  "deep-flatten", "journaling"])
+
     @staticmethod
     def _format_bitmask(features):
         """
@@ -246,6 +254,72 @@ class Rbd(RESTController):
                                self._remove_image, [pool_name, image_name])
         status, value = task.wait(2.0)
         cherrypy.response.status = 200
+        return {'status': status, 'value': value}
+
+    @classmethod
+    def _sort_features(cls, features, enable=True):
+        """
+        Sorts image features according to feature dependencies:
+
+        object-map depends on exclusive-lock
+        journaling depends on exclusive-lock
+        fast-diff depends on object-map
+        """
+        ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']
+
+        def key_func(feat):
+            try:
+                return ORDER.index(feat)
+            except ValueError:
+                return id(feat)
+
+        features.sort(key=key_func, reverse=not enable)
+
+    @classmethod
+    def _edit_image(cls, pool_name, image_name, name, size, features):
+        rbd_inst = rbd.RBD()
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        image = rbd.Image(ioctx, image_name)
+
+        # check rename image
+        if name and name != image_name:
+            try:
+                rbd_inst.rename(ioctx, image_name, name)
+            except rbd.OSError as e:
+                return {'success': False, 'detail': str(e), 'errno': e.errno}
+
+        # check resize
+        if size and size != image.size():
+            try:
+                image.resize(size)
+            except rbd.OSError as e:
+                return {'success': False, 'detail': str(e), 'errno': e.errno}
+
+        # check enable/disable features
+        if features is not None:
+            curr_features = cls._format_bitmask(image.features())
+            # check disabled features
+            cls._sort_features(curr_features, enable=False)
+            for feature in curr_features:
+                if feature not in features and feature in cls.ALLOW_DISABLE_FEATURES:
+                    f_bitmask = cls._format_features([feature])
+                    image.update_features(f_bitmask, False)
+            # check enabled features
+            cls._sort_features(features)
+            for feature in features:
+                if feature not in curr_features and feature in cls.ALLOW_ENABLE_FEATURES:
+                    f_bitmask = cls._format_features([feature])
+                    image.update_features(f_bitmask, True)
+
+        return {'success': True}
+
+    @RESTController.args_from_json
+    def set(self, pool_name, image_name, name=None, size=None, features=None):
+        task = TaskManager.run('rbd/edit',
+                               {'pool_name': pool_name, 'image_name': image_name},
+                               self._edit_image,
+                               [pool_name, image_name, name, size, features])
+        status, value = task.wait(4.0)
         return {'status': status, 'value': value}
 
 
