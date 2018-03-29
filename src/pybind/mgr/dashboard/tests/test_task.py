@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import json
 import unittest
 import threading
 import time
@@ -263,6 +264,17 @@ class TaskTest(unittest.TestCase):
         ex_t, fn_t = TaskManager.list_serializable('test8/*')
         self.assertEqual(len(ex_t), 1)
         self.assertEqual(len(fn_t), 1)
+
+        try:
+            json.dumps(ex_t)
+        except ValueError as ex:
+            self.fail("Failed to serialize executing tasks: {}".format(str(ex)))
+
+        try:
+            json.dumps(fn_t)
+        except ValueError as ex:
+            self.fail("Failed to serialize finished tasks: {}".format(str(ex)))
+
         # validate executing tasks attributes
         self.assertEqual(len(ex_t[0].keys()), 4)
         self.assertEqual(ex_t[0]['name'], 'test8/task1')
@@ -345,3 +357,28 @@ class TaskTest(unittest.TestCase):
         self.assertEqual(len(fn_t), 1)
         self.assertIsNone(fn_t[0].ret_value)
         self.assertEqual(str(fn_t[0].exception), "Task Unexpected Exception")
+
+    def test_task_serialization_format_on_failure(self):
+        task1 = MyTask(1, fail=True)
+        task1.run('test14/task1', 0.5)
+        self.wait_for_task('test14/task1')
+        ex_t, fn_t = TaskManager.list_serializable('test14/*')
+        self.assertEqual(len(ex_t), 0)
+        self.assertEqual(len(fn_t), 1)
+        # validate finished tasks attributes
+
+        try:
+            json.dumps(fn_t)
+        except TypeError as ex:
+            self.fail("Failed to serialize finished tasks: {}".format(str(ex)))
+
+        self.assertEqual(len(fn_t[0].keys()), 9)
+        self.assertEqual(fn_t[0]['name'], 'test14/task1')
+        self.assertEqual(fn_t[0]['metadata'], task1.metadata())
+        self.assertIsNotNone(fn_t[0]['begin_time'])
+        self.assertIsNotNone(fn_t[0]['end_time'])
+        self.assertGreaterEqual(fn_t[0]['duration'], 1.0)
+        self.assertEqual(fn_t[0]['progress'], 50)
+        self.assertFalse(fn_t[0]['success'])
+        self.assertIsNotNone(fn_t[0]['exception'])
+        self.assertEqual(fn_t[0]['exception'], "Task Unexpected Exception")
