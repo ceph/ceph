@@ -48,6 +48,7 @@ public:
 	{ "none",	COMP_ALG_NONE },
 	{ "snappy",	COMP_ALG_SNAPPY },
 	{ "zlib",	COMP_ALG_ZLIB },
+	{ "zstd",	COMP_ALG_ZSTD },
 #ifdef HAVE_LZ4
 	{ "lz4",	COMP_ALG_LZ4 },
 #endif
