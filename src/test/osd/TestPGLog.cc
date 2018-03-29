@@ -1205,27 +1205,6 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(dirty_big_info);
   }
 
-  // If our log is empty, the incoming log needs to have not been trimmed.
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_log_t olog;
-    pg_info_t oinfo;
-    pg_shard_t fromosd;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    bool dirty_info = false;
-    bool dirty_big_info = false;
-
-    // olog has been trimmed
-    olog.tail = eversion_t(1, 1);
-
-    TestHandler h(remove_snap);
-    ASSERT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
-			   dirty_info, dirty_big_info), "");
-  }
-
 }
 
 TEST_F(PGLogTest, proc_replica_log) {
