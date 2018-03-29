@@ -1242,6 +1242,14 @@ def restart(ctx, config):
         ctx.daemons.get_daemon(type_, id_, cluster).restart()
         clusters.add(cluster)
 
+    manager = ctx.managers['ceph']
+    for dmon in daemons:
+        if '.' in dmon:
+            dm_parts = dmon.split('.')
+            if dm_parts[1].isdigit():
+                if dm_parts[0] == 'osd':
+                    manager.mark_down_osd(int(dm_parts[1]))
+
     if config.get('wait-for-healthy', True):
         for cluster in clusters:
             healthy(ctx=ctx, config=dict(cluster=cluster))
