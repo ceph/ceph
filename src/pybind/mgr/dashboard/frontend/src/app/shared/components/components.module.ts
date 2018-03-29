@@ -2,11 +2,13 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
-import { AlertModule, PopoverModule } from 'ngx-bootstrap';
+import { AlertModule, PopoverModule, TooltipModule } from 'ngx-bootstrap';
 
+import { PipesModule } from '../pipes/pipes.module';
 import { HelperComponent } from './helper/helper.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
+import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { ViewCacheComponent } from './view-cache/view-cache.component';
 
 @NgModule({
@@ -14,20 +16,24 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     CommonModule,
     AlertModule.forRoot(),
     PopoverModule.forRoot(),
-    ChartsModule
+    TooltipModule.forRoot(),
+    ChartsModule,
+    PipesModule
   ],
   declarations: [
     ViewCacheComponent,
     SparklineComponent,
     HelperComponent,
-    SubmitButtonComponent
+    SubmitButtonComponent,
+    UsageBarComponent
   ],
   providers: [],
   exports: [
     ViewCacheComponent,
     SparklineComponent,
     HelperComponent,
-    SubmitButtonComponent
+    SubmitButtonComponent,
+    UsageBarComponent
   ]
 })
 export class ComponentsModule { }
