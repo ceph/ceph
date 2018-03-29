@@ -26,6 +26,12 @@ class RbdTest(DashboardTestCase):
                               {'pool_name': pool, 'image_name': name}, data)
 
     @classmethod
+    def remove_image(cls, pool, image):
+        return cls._task_delete('/api/rbd/{}/{}'.format(pool, image),
+                                'rbd/delete',
+                                {'pool_name': pool, 'image_name': image})
+
+    @classmethod
     def setUpClass(cls):
         super(RbdTest, cls).setUpClass()
         cls.authenticate()
@@ -158,7 +164,7 @@ class RbdTest(DashboardTestCase):
                                             'fast-diff', 'layering',
                                             'object-map'])
 
-        self._rbd_cmd(['rm', 'rbd/{}'.format(rbd_name)])
+        self.remove_image('rbd', rbd_name)
 
     def test_create_rbd_in_data_pool(self):
         if not self.bluestore_support:
@@ -183,7 +189,7 @@ class RbdTest(DashboardTestCase):
                                             'fast-diff', 'layering',
                                             'object-map'])
 
-        self._rbd_cmd(['rm', 'rbd/{}'.format(rbd_name)])
+        self.remove_image('rbd', rbd_name)
         self._ceph_cmd(['osd', 'pool', 'delete', 'data_pool', 'data_pool',
                         '--yes-i-really-really-mean-it'])
 
@@ -193,7 +199,7 @@ class RbdTest(DashboardTestCase):
         res = self.create_image('test_rbd_twice', 'rbd', 10240)
         self.assertEqual(res, {"success": False, "errno": 17,
                                "detail": "[errno 17] error creating image"})
-        self._rbd_cmd(['rm', 'rbd/test_rbd_twice'])
+        self.remove_image('rbd', 'test_rbd_twice')
 
     def test_snapshots_and_clone_info(self):
         self._rbd_cmd(['snap', 'create', 'rbd/img1@snap1'])
@@ -227,7 +233,7 @@ class RbdTest(DashboardTestCase):
                              features_name=['deep-flatten', 'exclusive-lock',
                                             'fast-diff', 'layering',
                                             'object-map'])
-        self._rbd_cmd(['rm', 'rbd_iscsi/img1_clone'])
+        self.remove_image('rbd_iscsi', 'img1_clone')
 
     def test_disk_usage(self):
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '50M', 'rbd/img2'])
@@ -241,3 +247,8 @@ class RbdTest(DashboardTestCase):
         self.assertStatus(200)
         self._validate_image(img, name='img2', size=2147483648,
                              total_disk_usage=268435456, disk_usage=67108864)
+
+    def test_delete_non_existent_image(self):
+        res = self.remove_image('rbd', 'i_dont_exist')
+        self.assertEqual(res, {"success": False, "errno": 2,
+                               "detail": "[errno 2] error removing image"})

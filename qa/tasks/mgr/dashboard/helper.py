@@ -150,10 +150,9 @@ class DashboardTestCase(MgrTestCase):
 
     # pylint: disable=too-many-arguments
     @classmethod
-    def _task_post(cls, url, task_name, task_metadata, data=None,
-                   timeout=60):
-        res = cls._post(url, data)
-        cls._assertIn(cls._resp.status_code, [200, 201])
+    def _task_request(cls, method, url, task_name, task_metadata, data, timeout):
+        res = cls._request(url, method, data)
+        cls._assertIn(cls._resp.status_code, [200, 201, 204])
         cls._assertIsInst(res, dict)
         cls._assertIn('status', res)
         cls._assertIn(res['status'], ['done', 'executing'])
@@ -199,6 +198,18 @@ class DashboardTestCase(MgrTestCase):
         if thread.res_task['success']:
             return thread.res_task['ret_value']
         raise Exception(thread.res_task['exception'])
+
+    @classmethod
+    def _task_post(cls, url, task_name, task_metadata, data=None,
+                   timeout=60):
+        return cls._task_request('POST', url, task_name, task_metadata, data,
+                                 timeout)
+
+    @classmethod
+    def _task_delete(cls, url, task_name, task_metadata, data=None,
+                     timeout=60):
+        return cls._task_request('DELETE', url, task_name, task_metadata, data,
+                                 timeout)
 
     @classmethod
     def cookies(cls):
