@@ -178,15 +178,44 @@ class Activate(object):
         self.argv = argv
 
     @decorators.needs_root
-    def activate(self, args):
+    def activate_all(self, args):
+        listed_osds = direct_report()
+        osds = {}
+        for osd_id, devices in listed_osds.items():
+            # the metadata for all devices in each OSD will contain
+            # the FSID which is required for activation
+            for device in devices:
+                fsid = device.get('tags', {}).get('ceph.osd_fsid')
+                if fsid:
+                    osds[fsid] = osd_id
+                    break
+        for osd_fsid, osd_id in osds.items():
+            if systemctl.osd_is_active(osd_id):
+                terminal.warning(
+                    'OSD ID %s FSID %s process is active. Skipping activation' % (osd_id, osd_fsid)
+                )
+            else:
+                terminal.info('Activating OSD ID %s FSID %s' % (osd_id, osd_fsid))
+                self.activate(args, osd_id=osd_id, osd_fsid=osd_fsid)
+
+    @decorators.needs_root
+    def activate(self, args, osd_id=None, osd_fsid=None):
+        """
+        :param args: The parsed arguments coming from the CLI
+        :param osd_id: When activating all, this gets populated with an existing OSD ID
+        :param osd_fsid: When activating all, this gets populated with an existing OSD FSID
+        """
+        osd_id = osd_id if osd_id is not None else args.osd_id
+        osd_fsid = osd_fsid if osd_fsid is not None else args.osd_fsid
+
         lvs = api.Volumes()
         # filter them down for the OSD ID and FSID we need to activate
-        if args.osd_id and args.osd_fsid:
-            lvs.filter(lv_tags={'ceph.osd_id': args.osd_id, 'ceph.osd_fsid': args.osd_fsid})
-        elif args.osd_fsid and not args.osd_id:
-            lvs.filter(lv_tags={'ceph.osd_fsid': args.osd_fsid})
+        if osd_id and osd_fsid:
+            lvs.filter(lv_tags={'ceph.osd_id': osd_id, 'ceph.osd_fsid': osd_fsid})
+        elif osd_fsid and not osd_id:
+            lvs.filter(lv_tags={'ceph.osd_fsid': osd_fsid})
         if not lvs:
-            raise RuntimeError('could not find osd.%s with fsid %s' % (args.osd_id, args.osd_fsid))
+            raise RuntimeError('could not find osd.%s with fsid %s' % (osd_id, osd_fsid))
         # This argument is only available when passed in directly or via
         # systemd, not when ``create`` is being used
         if getattr(args, 'auto_detect_objectstore', False):
@@ -255,6 +284,7 @@ class Activate(object):
         )
         parser.add_argument(
             '--all',
+            dest='activate_all',
             action='store_true',
             help='Activate all OSDs found in the system',
         )
@@ -266,4 +296,7 @@ class Activate(object):
         # cause both to be True
         if not args.bluestore and not args.filestore:
             args.bluestore = True
-        self.activate(args)
+        if args.activate_all:
+            self.activate_all(args)
+        else:
+            self.activate(args)
