@@ -3,9 +3,9 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { RbdMirroringService } from '../../../shared/services/rbd-mirroring.service';
 
 @Component({
   selector: 'cd-mirroring',

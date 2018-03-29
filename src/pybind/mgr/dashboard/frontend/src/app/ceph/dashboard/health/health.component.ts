@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import * as _ from 'lodash';
 
-import { DashboardService } from '../dashboard.service';
+import { DashboardService } from '../../../shared/api/dashboard.service';
 
 @Component({
   selector: 'cd-health',

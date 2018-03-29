@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import { Credentials } from '../models/credentials';
-import { AuthStorageService } from './auth-storage.service';
+import { AuthStorageService } from '../services/auth-storage.service';
 
 @Injectable()
 export class AuthService {
