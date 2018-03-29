@@ -383,7 +383,7 @@ void Accepter::stop()
   char ch = 0x0;
   int ret = safe_write(shutdown_wr_fd, &ch, sizeof(ch));
   if (ret < 0) {
-    ldout(msgr->cct,1) << __func__ << "close failed: "
+    ldout(msgr->cct,1) << __func__ << " close failed: "
              << " errno " << errno << " " << cpp_strerror(errno) << dendl;
   } else {
     ldout(msgr->cct,15) << __func__ << " signaled poll" << dendl;
@@ -400,14 +400,14 @@ void Accepter::stop()
 
   if (listen_sd >= 0) {
     if (::close(listen_sd) < 0) {
-      ldout(msgr->cct,1) << __func__ << "close listen_sd failed: "
+      ldout(msgr->cct,1) << __func__ << " close listen_sd failed: "
 	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
     }
     listen_sd = -1;
   }
   if (shutdown_rd_fd >= 0) {
     if (::close(shutdown_rd_fd) < 0) {
-      ldout(msgr->cct,1) << __func__ << "close shutdown_rd_fd failed: "
+      ldout(msgr->cct,1) << __func__ << " close shutdown_rd_fd failed: "
 	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
     }
     shutdown_rd_fd = -1;

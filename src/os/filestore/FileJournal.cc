@@ -1749,7 +1749,7 @@ void FileJournal::commit_start(uint64_t seq)
  */
 void FileJournal::do_discard(int64_t offset, int64_t end)
 {
-  dout(10) << __func__ << "trim(" << offset << ", " << end << dendl;
+  dout(10) << __func__ << " trim(" << offset << ", " << end << dendl;
 
   offset = round_up_to(offset, block_size);
   if (offset >= end)
@@ -1758,7 +1758,7 @@ void FileJournal::do_discard(int64_t offset, int64_t end)
   assert(end >= offset);
   if (offset < end)
     if (block_device_discard(fd, offset, end - offset) < 0)
-	dout(1) << __func__ << "ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
+	dout(1) << __func__ << " ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
 }
 
 void FileJournal::committed_thru(uint64_t seq)

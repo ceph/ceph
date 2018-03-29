@@ -12331,7 +12331,7 @@ void MDCache::enqueue_scrub(
     bool force, bool recursive, bool repair,
     Formatter *f, Context *fin)
 {
-  dout(10) << __func__ << path << dendl;
+  dout(10) << __func__ << " " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
   filepath fp(path);
   mdr->set_filepath(fp);

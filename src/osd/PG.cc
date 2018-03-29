@@ -1490,7 +1490,7 @@ bool PG::recoverable_and_ge_min_size(const vector<int> &want) const
   boost::scoped_ptr<IsPGRecoverablePredicate> recoverable_predicate(
       get_pgbackend()->get_is_recoverable_predicate());
   if (!(*recoverable_predicate)(have)) {
-    dout(10) << __func__ << "failed, not recoverable" << dendl;
+    dout(10) << __func__ << " failed, not recoverable" << dendl;
     return false;
   }
 
@@ -5571,7 +5571,7 @@ bool PG::append_log_entries_update_missing(
   }
   info.stats.stats_invalid = info.stats.stats_invalid || invalidate_stats;
 
-  dout(20) << __func__ << "trim_to bool = " << bool(trim_to) << " trim_to = " << (trim_to ? *trim_to : eversion_t()) << dendl;
+  dout(20) << __func__ << " trim_to bool = " << bool(trim_to) << " trim_to = " << (trim_to ? *trim_to : eversion_t()) << dendl;
   if (trim_to)
     pg_log.trim(*trim_to, info);
   dirty_info = true;

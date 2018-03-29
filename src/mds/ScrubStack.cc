@@ -128,7 +128,7 @@ void ScrubStack::scrub_dir_inode(CInode *in,
                                  bool *terminal,
                                  bool *done)
 {
-  dout(10) << __func__ << *in << dendl;
+  dout(10) << __func__ << " " << *in << dendl;
 
   *added_children = false;
   bool all_frags_terminal = true;
@@ -266,7 +266,7 @@ class C_InodeValidated : public MDSInternalContext
 
 void ScrubStack::scrub_dir_inode_final(CInode *in)
 {
-  dout(20) << __func__ << *in << dendl;
+  dout(20) << __func__ << " " << *in << dendl;
 
   // Two passes through this function.  First one triggers inode validation,
   // second one sets finally_done

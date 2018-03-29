@@ -4073,7 +4073,7 @@ int RGWRados::replace_region_with_zonegroup()
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
-    ldout(cct, 0) << __func__ << "Converting  " << *iter << dendl;
+    ldout(cct, 0) << __func__ << " Converting  " << *iter << dendl;
     /* check to see if we don't have already a zonegroup with this name */
     RGWZoneGroup new_zonegroup(*iter);
     ret = new_zonegroup.init(cct , this);

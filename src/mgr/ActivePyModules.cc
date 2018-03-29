@@ -420,7 +420,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
   const std::string global_key = PyModuleRegistry::config_prefix
     + module_name + "/" + key;
 
-  dout(4) << __func__ << "key: " << global_key << dendl;
+  dout(4) << __func__ << " key: " << global_key << dendl;
 
   if (config_cache.count(global_key)) {
     *val = config_cache.at(global_key);
@@ -440,7 +440,7 @@ PyObject *ActivePyModules::get_config_prefix(const std::string &module_name,
   const std::string base_prefix = PyModuleRegistry::config_prefix
                                     + module_name + "/";
   const std::string global_prefix = base_prefix + prefix;
-  dout(4) << __func__ << "prefix: " << global_prefix << dendl;
+  dout(4) << __func__ << " prefix: " << global_prefix << dendl;
 
   PyFormatter f;
   for (auto p = config_cache.lower_bound(global_prefix);
