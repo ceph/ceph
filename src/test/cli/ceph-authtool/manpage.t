@@ -22,6 +22,8 @@
     --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem
     --caps CAPSFILE               will set all of capabilities associated with a
                                   given key, for all subsystems
+    --mode MODE                   will set the desired file mode to the keyring
+                                  e.g: '0644', defaults to '0600'
   [1]
 
 # demonstrate that manpage examples fail without config
