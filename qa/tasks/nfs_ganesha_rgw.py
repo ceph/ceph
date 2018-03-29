@@ -21,7 +21,7 @@ def NFS_Ganesh_RGW_config_gen(sys_conf):
                         Pseudo = "/";
                         Access_Type = RW;
                         SecType = "sys";
-                        NFS_Protocols = 4;
+                        NFS_Protocols = %s;
                         Transport_Protocols = TCP;
 
                         FSAL {
@@ -47,13 +47,13 @@ def NFS_Ganesh_RGW_config_gen(sys_conf):
                     init_args = "-d --debug-rgw=16";
                 }
 
-        ''' % (sys_conf['user_id'],
+        ''' % (sys_conf['nfs_version'],
+               sys_conf['user_id'],
                sys_conf['access_key'],
                sys_conf['secret_key'],
                sys_conf['rgw_hostname'])
 
     return ganesha_conf
-
 
 
 @contextlib.contextmanager
@@ -69,8 +69,10 @@ def task(ctx, config):
         "task set-repo only supports a dictionary for configuration"
 
     test_name = config['test-name'] + ".py"
+    nfs_version = config['nfs_version']
 
     log.info('got test_name: %s' % test_name)
+    log.info('got nfs version: %s' % nfs_version)
 
     remotes = ctx.cluster.only(teuthology.is_type('mon'))
     mon = [
@@ -118,6 +120,8 @@ def task(ctx, config):
 
     sys_conf['secret_key'] = v_as_json['keys'][0]['secret_key']
 
+    sys_conf['nfs_version'] = nfs_version
+
     ganesha_config = NFS_Ganesh_RGW_config_gen(sys_conf)
 
     log.info('ganesha_config: %s' % ganesha_config)
@@ -156,7 +160,7 @@ def task(ctx, config):
     rgw[0].run(
         args=[
             run.Raw(
-                'sudo venv/bin/python2.7 nfs-ganesha-rgw/ceph-qe-scripts/rgw/lib/process_manage.py')])
+                'sudo venv/bin/python2.7 nfs-ganesha-rgw/ceph-qe-scripts/rgw/v1/lib/process_manage.py')])
     
     """
 
@@ -170,7 +174,7 @@ def task(ctx, config):
 
     # mount NFS_Ganesha
 
-    rgw[0].run(args=[run.Raw('sudo mount -v -t nfs -o nfsvers=4.1,sync,rw,noauto,soft,proto=tcp %s:/  %s' % (
+    rgw[0].run(args=[run.Raw('sudo mount -v -t nfs -o nfsvers=%s,sync,rw,noauto,soft,proto=tcp %s:/  %s' % ( nfs_version,
         rgw[0].shortname, '~/ganesha-mount'))])
 
     # copy rgw user details (yaml format) to nfs node or ganesha node
@@ -180,7 +184,8 @@ def task(ctx, config):
                            secret_key=sys_conf['secret_key'],
                            rgw_hostname=rgw[0].shortname,
                            ganesha_config_exists=True,
-                           already_mounted=True
+                           already_mounted=True,
+                           nfs_version=nfs_version
                            )
 
     yaml_fname = 'rgw_user.yaml'
@@ -193,7 +198,7 @@ def task(ctx, config):
         outfile.write(yaml.dump(rgw_user_config, default_flow_style=False))
 
     log.info('copying yaml to the client node')
-    destination_location = 'nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/yaml/' + yaml_fname
+    destination_location = 'nfs-ganesha-rgw/ceph-qe-scripts/rgw/v1/tests/nfs-ganesha/yaml/' + yaml_fname
     rgw[0].put_file(local_file, destination_location)
 
     rgw[0].run(args=[run.Raw('sudo rm -rf %s' % local_file)], check_status=False)
@@ -202,8 +207,8 @@ def task(ctx, config):
 
     rgw[0].run(
         args=[run.Raw(
-            'sudo venv/bin/python2.7 nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/%s  -c '
-            'nfs-ganesha-rgw/ceph-qe-scripts/rgw/tests/nfs-ganesha/yaml/rgw_user.yaml' % test_name)])
+            'sudo venv/bin/python2.7 nfs-ganesha-rgw/ceph-qe-scripts/rgw/v1/tests/nfs-ganesha/%s  -c '
+            'nfs-ganesha-rgw/ceph-qe-scripts/rgw/v1/tests/nfs-ganesha/yaml/rgw_user.yaml' % test_name)])
 
     try:
         yield
@@ -218,4 +223,3 @@ def task(ctx, config):
                 '*.key.*']
 
         map(cleanup, soot)
-
