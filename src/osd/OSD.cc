@@ -874,7 +874,8 @@ bool OSDService::_check_full(DoutPrefixProvider *dpp, s_names type) const
              << dendl;
     return true;
   }
-  ldpp_dout(dpp, 10) << __func__ << " current usage is " << cur_ratio << dendl;
+  if (cur_state >= type)
+    ldpp_dout(dpp, 10) << __func__ << " current usage is " << cur_ratio << dendl;
 
   return cur_state >= type;
 }
