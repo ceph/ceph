@@ -2349,8 +2349,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
             ictx->owner_lock.get_read();
           }
         } else {
-          r = ictx->operations->prepare_image_update();
-          if (r < 0 || !ictx->exclusive_lock->is_lock_owner()) {
+          r = ictx->operations->prepare_image_update(false);
+          if (r < 0) {
 	    lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
 	    ictx->owner_lock.put_read();
 	    ictx->state->close();
