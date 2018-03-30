@@ -377,6 +377,15 @@ TEST_F(TestLibRBD, GetId)
     ASSERT_EQ(-ERANGE, rbd_get_id(image, id, 0));
     ASSERT_EQ(0, rbd_get_id(image, id, sizeof(id)));
     ASSERT_LT(0U, strlen(id));
+
+    ASSERT_EQ(0, rbd_close(image));
+    ASSERT_EQ(0, rbd_open_by_id(ioctx, id, &image, NULL));
+    size_t name_len = 0;
+    ASSERT_EQ(-ERANGE, rbd_get_name(image, NULL, &name_len));
+    ASSERT_EQ(name_len, name.size() + 1);
+    char image_name[name_len];
+    ASSERT_EQ(0, rbd_get_name(image, image_name, &name_len));
+    ASSERT_STREQ(name.c_str(), image_name);
   }
 
   ASSERT_EQ(0, rbd_close(image));
@@ -402,6 +411,12 @@ TEST_F(TestLibRBD, GetIdPP)
   } else {
     ASSERT_EQ(0, image.get_id(&id));
     ASSERT_LT(0U, id.size());
+
+    ASSERT_EQ(0, image.close());
+    ASSERT_EQ(0, rbd.open_by_id(ioctx, image, id.c_str(), NULL));
+    std::string image_name;
+    ASSERT_EQ(0, image.get_name(&image_name));
+    ASSERT_EQ(name, image_name);
   }
 }
 

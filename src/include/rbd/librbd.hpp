@@ -290,6 +290,7 @@ public:
   int resize2(uint64_t size, bool allow_shrink, ProgressContext& pctx);
   int resize_with_progress(uint64_t size, ProgressContext& pctx);
   int stat(image_info_t &info, size_t infosize);
+  int get_name(std::string *name);
   int get_id(std::string *id);
   std::string get_block_name_prefix();
   int64_t get_data_pool_id();
