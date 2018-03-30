@@ -240,6 +240,8 @@ private:
   void send_acquire_lock();
   void handle_pre_acquire_lock(int r);
   void handle_acquire_lock(int r);
+  void handle_no_op_reacquire_lock(int r);
+
   void handle_post_acquire_lock(int r);
   void revert_to_unlock_state(int r);
 
