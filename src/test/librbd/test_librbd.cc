@@ -2197,9 +2197,10 @@ TEST_F(TestLibRBD, ListChildren)
 
 TEST_F(TestLibRBD, ListChildrenTiered)
 {
-  string pool_name1 = m_pool_name;
+  string pool_name1 = create_pool(true);
   string pool_name2 = create_pool(true);
   string pool_name3 = create_pool(true);
+  ASSERT_NE("", pool_name1);
   ASSERT_NE("", pool_name2);
   ASSERT_NE("", pool_name3);
 
