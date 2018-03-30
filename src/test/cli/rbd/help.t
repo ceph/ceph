@@ -266,7 +266,8 @@
                     [--stripe-count <stripe-count>] [--data-pool <data-pool>] 
                     [--journal-splay-width <journal-splay-width>] 
                     [--journal-object-size <journal-object-size>] 
-                    [--journal-pool <journal-pool>] --size <size> 
+                    [--journal-pool <journal-pool>] 
+                    [--thick-provision] --size <size> [--no-progress] 
                     <image-spec> 
   
   Create an empty image.
@@ -293,7 +294,9 @@
     --journal-splay-width arg number of active journal objects
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
+    --thick-provision         fully allocate storage and zero image
     -s [ --size ] arg         image size (in M/G/T) [default: M]
+    --no-progress             disable progress output
   
   Image Features:
     (*) supports enabling/disabling on existing images

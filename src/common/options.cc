@@ -6376,6 +6376,10 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_qos_iops_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("the desired limit of IO operations per second"),
+
+    Option("rbd_discard_on_zeroed_write_same", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("discard data on zeroed write same instead of writing zero"),
   });
 }
 

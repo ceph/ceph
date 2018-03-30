@@ -197,9 +197,12 @@ Commands
   Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.
 
-:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
+:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--thick-provision] [--no-progress] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
+  If the --thick-provision is enabled, it will fully allocate storage for
+  the image at creation time. It will take a long time to do.
+  Note: thick provisioning requires zeroing the contents of the entire image.
 
 :command:`deep cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Deep copy the content of a src-image into the newly created dest-image.
