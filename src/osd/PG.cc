@@ -4540,7 +4540,6 @@ int PG::build_scrub_map_chunk(
     pos.ret = get_pgbackend()->objects_list_range(
       start,
       end,
-      0,
       &pos.ls,
       &rollback_obs);
     if (pos.ret < 0) {
