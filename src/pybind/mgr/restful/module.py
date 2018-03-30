@@ -506,14 +506,15 @@ class Module(MgrModule):
     def get_osd_pools(self):
         osds = dict(map(lambda x: (x['osd'], []), self.get('osd_map')['osds']))
         pools = dict(map(lambda x: (x['pool'], x), self.get('osd_map')['pools']))
-        crush_rules = self.get('osd_map_crush')['rules']
+        crush = self.get('osd_map_crush')
+        crush_rules = crush['rules']
 
         osds_by_pool = {}
         for pool_id, pool in pools.items():
             pool_osds = None
             for rule in [r for r in crush_rules if r['rule_id'] == pool['crush_rule']]:
                 if rule['min_size'] <= pool['size'] <= rule['max_size']:
-                    pool_osds = common.crush_rule_osds(self.get('osd_map_tree')['nodes'], rule)
+                    pool_osds = common.crush_rule_osds(crush['buckets'], rule)
 
             osds_by_pool[pool_id] = pool_osds
 
