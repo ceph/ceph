@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class Create(object):
 
-    help = 'Create a new OSD from  an LVM device'
+    help = 'Create a new OSD from an LVM device'
 
     def __init__(self, argv):
         self.argv = argv
