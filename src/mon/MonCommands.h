@@ -545,12 +545,12 @@ COMMAND("osd crush set-device-class " \
         "name=class,type=CephString " \
 	"name=ids,type=CephString,n=N", \
 	"set the <class> of the osd(s) <id> [<id>...]," \
-        "or use <all|any|*> to set all.", \
+        "or use <all|any> to set all.", \
 	"osd", "rw", "cli,rest")
 COMMAND("osd crush rm-device-class " \
         "name=ids,type=CephString,n=N", \
         "remove class of the osd(s) <id> [<id>...]," \
-        "or use <all|any|*> to remove all.", \
+        "or use <all|any> to remove all.", \
         "osd", "rw", "cli,rest")
 COMMAND("osd crush class rename " \
         "name=srcname,type=CephString,goodchars=[A-Za-z0-9-_] " \
@@ -752,66 +752,66 @@ COMMAND("osd cluster_snap", "take cluster snapshot (disabled)", \
 COMMAND("osd down " \
 	"type=CephString,name=ids,n=N", \
 	"set osd(s) <id> [<id>...] down, " \
-        "or use <any|all|*> to set all osds down", \
+        "or use <any|all> to set all osds down", \
         "osd", "rw", "cli,rest")
 COMMAND("osd out " \
 	"name=ids,type=CephString,n=N", \
 	"set osd(s) <id> [<id>...] out, " \
-        "or use <any|all|*> to set all osds out", \
+        "or use <any|all> to set all osds out", \
         "osd", "rw", "cli,rest")
 COMMAND("osd in " \
 	"name=ids,type=CephString,n=N", \
 	"set osd(s) <id> [<id>...] in, "
-        "can use <any|all|*> to automatically set all previously out osds in", \
+        "can use <any|all> to automatically set all previously out osds in", \
         "osd", "rw", "cli,rest")
 COMMAND("osd rm " \
 	"name=ids,type=CephString,n=N", \
 	"remove osd(s) <id> [<id>...], "
-        "or use <any|all|*> to remove all osds", \
+        "or use <any|all> to remove all osds", \
         "osd", "rw", "cli,rest")
 COMMAND("osd add-noup " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noup, " \
-        "or use <all|any|*> to mark all osds as noup", \
+        "or use <all|any> to mark all osds as noup", \
         "osd", "rw", "cli,rest")
 COMMAND("osd add-nodown " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as nodown, " \
-        "or use <all|any|*> to mark all osds as nodown", \
+        "or use <all|any> to mark all osds as nodown", \
         "osd", "rw", "cli,rest")
 COMMAND("osd add-noin " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noin, " \
-        "or use <all|any|*> to mark all osds as noin", \
+        "or use <all|any> to mark all osds as noin", \
         "osd", "rw", "cli,rest")
 COMMAND("osd add-noout " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noout, " \
-        "or use <all|any|*> to mark all osds as noout", \
+        "or use <all|any> to mark all osds as noout", \
         "osd", "rw", "cli,rest")
 COMMAND("osd rm-noup " \
         "name=ids,type=CephString,n=N", \
         "allow osd(s) <id> [<id>...] to be marked up " \
         "(if they are currently marked as noup), " \
-        "can use <all|any|*> to automatically filter out all noup osds", \
+        "can use <all|any> to automatically filter out all noup osds", \
         "osd", "rw", "cli,rest")
 COMMAND("osd rm-nodown " \
         "name=ids,type=CephString,n=N", \
         "allow osd(s) <id> [<id>...] to be marked down " \
         "(if they are currently marked as nodown), " \
-        "can use <all|any|*> to automatically filter out all nodown osds", \
+        "can use <all|any> to automatically filter out all nodown osds", \
         "osd", "rw", "cli,rest")
 COMMAND("osd rm-noin " \
         "name=ids,type=CephString,n=N", \
         "allow osd(s) <id> [<id>...] to be marked in " \
         "(if they are currently marked as noin), " \
-        "can use <all|any|*> to automatically filter out all noin osds", \
+        "can use <all|any> to automatically filter out all noin osds", \
         "osd", "rw", "cli,rest")
 COMMAND("osd rm-noout " \
         "name=ids,type=CephString,n=N", \
         "allow osd(s) <id> [<id>...] to be marked out " \
         "(if they are currently marked as noout), " \
-        "can use <all|any|*> to automatically filter out all noout osds", \
+        "can use <all|any> to automatically filter out all noout osds", \
         "osd", "rw", "cli,rest")
 COMMAND("osd reweight " \
 	"name=id,type=CephOsdName " \
