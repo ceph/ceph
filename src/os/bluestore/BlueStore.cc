@@ -3826,6 +3826,8 @@ void BlueStore::_set_compression()
  
   dout(10) << __func__ << " mode " << Compressor::get_comp_mode_name(comp_mode)
 	   << " alg " << (compressor ? compressor->get_type_name() : "(none)")
+	   << " min_blob " << comp_min_blob_size
+	   << " max_blob " << comp_max_blob_size
 	   << dendl;
 }
 
