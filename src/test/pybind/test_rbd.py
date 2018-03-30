@@ -290,6 +290,18 @@ def test_open_readonly_dne():
         assert_raises(ImageNotFound, Image, ioctx, image_name, 'snap',
                       read_only=True)
 
+@require_new_format()
+def test_open_by_id():
+    with Rados(conffile='') as cluster:
+        with cluster.open_ioctx(pool_name) as ioctx:
+            image_name = get_temp_image_name()
+            RBD().create(ioctx, image_name, IMG_SIZE)
+            with Image(ioctx, image_name) as image:
+                image_id = image.id()
+            with Image(ioctx, image_id=image_id) as image:
+                eq(image.get_name(), image_name)
+            RBD().remove(ioctx, image_name)
+
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
 
