@@ -92,10 +92,10 @@ class NotificationQueueTest(unittest.TestCase):
         self.assertEqual(self.listener.all, [1, 2, 3])
 
         # validate priorities
-        self.assertLess(self.listener.type1_3_ts[0], self.listener.all_ts[0])
-        self.assertLess(self.listener.all_ts[0], self.listener.type1_ts[0])
-        self.assertLess(self.listener.type2_ts[0], self.listener.all_ts[1])
-        self.assertLess(self.listener.type1_3_ts[1], self.listener.all_ts[2])
+        self.assertLessEqual(self.listener.type1_3_ts[0], self.listener.all_ts[0])
+        self.assertLessEqual(self.listener.all_ts[0], self.listener.type1_ts[0])
+        self.assertLessEqual(self.listener.type2_ts[0], self.listener.all_ts[1])
+        self.assertLessEqual(self.listener.type1_3_ts[1], self.listener.all_ts[2])
 
     def test_notifications2(self):
         NotificationQueue.start_queue()
