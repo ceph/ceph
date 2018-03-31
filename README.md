@@ -189,7 +189,7 @@ over manual test execution. To view these options run:
 	man ctest
 
 
-## Building the Documentation
+## Build instructions 
 
 ### Prerequisites
 
@@ -198,7 +198,7 @@ found in `doc_deps.deb.txt`:
 
 	sudo apt-get install `cat doc_deps.deb.txt`
 
-### Documentation
+### Build documentation
 
 To build the documentation, ensure that you are in the top-level
 `/ceph` directory, and execute the build script. For example:
