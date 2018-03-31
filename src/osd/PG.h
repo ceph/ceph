@@ -1728,9 +1728,7 @@ protected:
   void scrub_clear_state();
   void _scan_snaps(ScrubMap &map);
   void _repair_oinfo_oid(ScrubMap &map);
-  void _scan_rollback_obs(
-    const vector<ghobject_t> &rollback_obs,
-    ThreadPool::TPHandle &handle);
+  void _scan_rollback_obs(const vector<ghobject_t> &rollback_obs);
   void _request_scrub_map(pg_shard_t replica, eversion_t version,
                           hobject_t start, hobject_t end, bool deep,
 			  bool allow_preemption);

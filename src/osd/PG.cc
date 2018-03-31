@@ -4361,9 +4361,7 @@ void PG::scrub_unreserve_replicas()
   }
 }
 
-void PG::_scan_rollback_obs(
-  const vector<ghobject_t> &rollback_obs,
-  ThreadPool::TPHandle &handle)
+void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
 {
   ObjectStore::Transaction t;
   eversion_t trimmed_to = last_rollback_info_trimmed_to_applied;
@@ -4549,7 +4547,7 @@ int PG::build_scrub_map_chunk(
     if (pos.ls.empty()) {
       break;
     }
-    _scan_rollback_obs(rollback_obs, handle);
+    _scan_rollback_obs(rollback_obs);
     pos.pos = 0;
     return -EINPROGRESS;
   }
