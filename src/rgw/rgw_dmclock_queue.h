@@ -79,6 +79,8 @@ class PriorityQueue : public md_config_obs_t {
   auto async_request(const client_id& client, const ReqParams& params,
                      const Time& time, Cost cost, CompletionToken&& token);
 
+  void request_complete();
+
   /// cancel all queued requests, invoking their completion handlers with an
   /// operation_aborted error and default-constructed result
   void cancel();
@@ -112,6 +114,10 @@ class PriorityQueue : public md_config_obs_t {
   md_config_obs_t *const observer; //< observer to update ClientInfoFunc
   GetClientCounters counters; //< provides per-client perf counters
 
+  /// max request throttle
+  std::atomic<int64_t> max_requests;
+  std::atomic<int64_t> outstanding_requests = 0;
+
   /// set a timer to process the next request
   void schedule(const Time& time);
 
@@ -126,8 +132,12 @@ PriorityQueue::PriorityQueue(CephContext *cct, boost::asio::io_context& context,
                              md_config_obs_t *observer, Args&& ...args)
   : queue(std::forward<Args>(args)...),
     timer(context), cct(cct), observer(observer),
-    counters(std::move(counters))
+    counters(std::move(counters)),
+    max_requests(cct->_conf->get_val<int64_t>("rgw_max_concurrent_requests"))
 {
+  if (max_requests <= 0) {
+    max_requests = std::numeric_limits<int64_t>::max();
+  }
   if (observer) {
     cct->_conf->add_observer(this);
   }

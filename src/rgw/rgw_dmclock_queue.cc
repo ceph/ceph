@@ -40,7 +40,8 @@ void PriorityQueue::handle_conf_change(const md_config_t *conf,
     observer->handle_conf_change(conf, changed);
   }
   if (changed.count("rgw_max_concurrent_requests")) {
-    max_requests = cct->_conf->get_val<int64_t>("rgw_max_concurrent_requests");
+    auto new_max = conf->get_val<int64_t>("rgw_max_concurrent_requests");
+    max_requests = new_max > 0 ? new_max : std::numeric_limits<int64_t>::max();
   }
   queue.update_client_infos();
   schedule(crimson::dmclock::TimeZero);
@@ -62,6 +63,12 @@ void inc(ClientSums& sums, client_id client, Cost cost)
 
 void on_cancel(PerfCounters *c, const ClientSum& sum);
 void on_process(PerfCounters* c, const ClientSum& rsum, const ClientSum& psum);
+
+void PriorityQueue::request_complete()
+{
+  --outstanding_requests;
+  schedule(crimson::dmclock::TimeZero);
+}
 
 void PriorityQueue::cancel()
 {
@@ -122,7 +129,7 @@ void PriorityQueue::process(const Time& now)
 
   ClientSums rsums, psums;
 
-  for (;;) {
+  while (outstanding_requests < max_requests) {
     auto pull = queue.pull_request(now);
 
     if (pull.is_none()) {
@@ -135,6 +142,7 @@ void PriorityQueue::process(const Time& now)
       schedule(pull.getTime());
       break;
     }
+    ++outstanding_requests;
 
     // complete the request
     auto& r = pull.get_retn();

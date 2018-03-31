@@ -43,6 +43,7 @@ const char** ClientConfig::get_tracked_conf_keys() const
     "rgw_dmclock_metadata_res",
     "rgw_dmclock_metadata_wgt",
     "rgw_dmclock_metadata_lim",
+    "rgw_max_concurrent_requests",
     nullptr
   };
   return keys;
