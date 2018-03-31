@@ -36,6 +36,8 @@ set(mds_srcs
   MDLog.cc
   MDSCacheObject.cc
   Mantle.cc
+  Anchor.cc
+  OpenFileTable.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc)

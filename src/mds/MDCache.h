@@ -31,6 +31,7 @@
 #include "events/EMetaBlob.h"
 #include "RecoveryQueue.h"
 #include "StrayManager.h"
+#include "OpenFileTable.h"
 #include "MDSContext.h"
 #include "MDSMap.h"
 #include "Mutation.h"
@@ -596,6 +597,12 @@ public:
 			     mds_rank_t frommds=MDS_RANK_NONE) {
     cap_imports[ino][client][frommds] = icr;
   }
+  bool rejoin_has_cap_reconnect(inodeno_t ino) const {
+    return cap_imports.count(ino);
+  }
+  void add_replay_ino_alloc(inodeno_t ino) {
+    cap_imports_missing.insert(ino); // avoid opening ino during cache rejoin
+  }
   const cap_reconnect_t *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
 	cap_imports[ino].count(client) &&
@@ -643,6 +650,7 @@ public:
   friend class C_MDC_RejoinOpenInoFinish;
   friend class C_MDC_RejoinSessionsOpened;
   void rejoin_open_ino_finish(inodeno_t ino, int ret);
+  void rejoin_prefetch_ino_finish(inodeno_t ino, int ret);
   void rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map,
 				   map<client_t,uint64_t>& sseqmap);
   bool process_imported_caps();
@@ -1225,6 +1233,8 @@ public:
 public:
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
+
+  OpenFileTable open_file_table;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

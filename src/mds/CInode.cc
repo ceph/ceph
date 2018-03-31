@@ -2730,7 +2730,7 @@ client_t CInode::calc_ideal_loner()
 {
   if (mdcache->is_readonly())
     return -1;
-  if (!mds_caps_wanted.empty())
+  if (!get_mds_caps_wanted().empty())
     return -1;
   
   int n = 0;
@@ -2844,6 +2844,43 @@ void CInode::choose_lock_states(int dirty_caps)
   choose_lock_state(&linklock, issued);
 }
 
+void CInode::set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m)
+{
+  bool old_empty = mds_caps_wanted.empty();
+  mds_caps_wanted.swap(m);
+  if (old_empty != (bool)mds_caps_wanted.empty()) {
+    if (old_empty)
+      adjust_num_caps_wanted(1);
+    else
+      adjust_num_caps_wanted(-1);
+  }
+}
+
+void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
+{
+  bool old_empty = mds_caps_wanted.empty();
+  if (wanted) {
+    mds_caps_wanted[mds] = wanted;
+    if (old_empty)
+      adjust_num_caps_wanted(1);
+  } else if (!old_empty) {
+    mds_caps_wanted.erase(mds);
+    if (mds_caps_wanted.empty())
+      adjust_num_caps_wanted(-1);
+  }
+}
+
+void CInode::adjust_num_caps_wanted(int d)
+{
+  if (!num_caps_wanted && d > 0)
+    mdcache->open_file_table.add_inode(this);
+  else if (num_caps_wanted > 0 && num_caps_wanted == -d)
+    mdcache->open_file_table.remove_inode(this);
+
+  num_caps_wanted +=d;
+  assert(num_caps_wanted >= 0);
+}
+
 Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
 {
   assert(last == CEPH_NOSNAP);
@@ -2855,10 +2892,11 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
       containing_realm = find_snaprealm();
     containing_realm->inodes_with_caps.push_back(&item_caps);
     dout(10) << __func__ << " first cap, joining realm " << *containing_realm << dendl;
-  }
 
-  if (client_caps.empty())
     mdcache->num_inodes_with_caps++;
+    if (parent)
+      parent->dir->adjust_num_inodes_with_caps(1);
+  }
   
   Capability *cap = new Capability(this, ++mdcache->last_cap_id, client);
   assert(client_caps.count(client) == 0);
@@ -2888,6 +2926,9 @@ void CInode::remove_client_cap(client_t client)
   if (client == loner_cap)
     loner_cap = -1;
 
+  if (cap->wanted())
+    adjust_num_caps_wanted(-1);
+
   delete cap;
   client_caps.erase(client);
   if (client_caps.empty()) {
@@ -2895,8 +2936,9 @@ void CInode::remove_client_cap(client_t client)
     put(PIN_CAPS);
     item_caps.remove_myself();
     containing_realm = NULL;
-    item_open_file.remove_myself();  // unpin logsegment
     mdcache->num_inodes_with_caps--;
+    if (parent)
+      parent->dir->adjust_num_inodes_with_caps(-1);
   }
 
   //clean up advisory locks
@@ -2947,7 +2989,10 @@ void CInode::clear_client_caps_after_export()
     remove_client_cap(client_caps.begin()->first);
   loner_cap = -1;
   want_loner_cap = -1;
-  mds_caps_wanted.clear();
+  if (!get_mds_caps_wanted().empty()) {
+    mempool::mds_co::compact_map<int32_t,int32_t> empty;
+    set_mds_caps_wanted(empty);
+  }
 }
 
 void CInode::export_client_caps(map<client_t,Capability::Export>& cl)

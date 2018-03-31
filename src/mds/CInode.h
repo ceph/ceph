@@ -215,31 +215,33 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int DUMP_DEFAULT = DUMP_ALL & (~DUMP_PATH) & (~DUMP_DIRFRAGS);
 
   // -- state --
-  static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
-  static const int STATE_OPENINGDIR =  (1<<5);
-  static const int STATE_FREEZING =    (1<<7);
-  static const int STATE_FROZEN =      (1<<8);
-  static const int STATE_AMBIGUOUSAUTH = (1<<9);
-  static const int STATE_EXPORTINGCAPS = (1<<10);
-  static const int STATE_NEEDSRECOVER = (1<<11);
-  static const int STATE_RECOVERING =   (1<<12);
-  static const int STATE_PURGING =     (1<<13);
-  static const int STATE_DIRTYPARENT =  (1<<14);
-  static const int STATE_DIRTYRSTAT =  (1<<15);
-  static const int STATE_STRAYPINNED = (1<<16);
-  static const int STATE_FROZENAUTHPIN = (1<<17);
-  static const int STATE_DIRTYPOOL =   (1<<18);
-  static const int STATE_REPAIRSTATS = (1<<19);
-  static const int STATE_MISSINGOBJS = (1<<20);
-  static const int STATE_EVALSTALECAPS = (1<<21);
-  static const int STATE_QUEUEDEXPORTPIN = (1<<22);
+  static const int STATE_EXPORTING 		= (1<<0);   // on nonauth bystander.
+  static const int STATE_OPENINGDIR		= (1<<1);
+  static const int STATE_FREEZING		= (1<<2);
+  static const int STATE_FROZEN			= (1<<3);
+  static const int STATE_AMBIGUOUSAUTH		= (1<<4);
+  static const int STATE_EXPORTINGCAPS		= (1<<5);
+  static const int STATE_NEEDSRECOVER		= (1<<6);
+  static const int STATE_RECOVERING		= (1<<7);
+  static const int STATE_PURGING		= (1<<8);
+  static const int STATE_DIRTYPARENT		= (1<<9);
+  static const int STATE_DIRTYRSTAT		= (1<<10);
+  static const int STATE_STRAYPINNED		= (1<<11);
+  static const int STATE_FROZENAUTHPIN		= (1<<12);
+  static const int STATE_DIRTYPOOL		= (1<<13);
+  static const int STATE_REPAIRSTATS		= (1<<14);
+  static const int STATE_MISSINGOBJS		= (1<<15);
+  static const int STATE_EVALSTALECAPS		= (1<<16);
+  static const int STATE_QUEUEDEXPORTPIN	= (1<<17);
+  static const int STATE_TRACKEDBYOFT		= (1<<18);  // tracked by open file table
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
   static const int MASK_STATE_EXPORTED =
     (STATE_DIRTY|STATE_NEEDSRECOVER|STATE_DIRTYPARENT|STATE_DIRTYPOOL);
   static const int MASK_STATE_EXPORT_KEPT =
-    (STATE_FROZEN|STATE_AMBIGUOUSAUTH|STATE_EXPORTINGCAPS|STATE_QUEUEDEXPORTPIN);
+    (STATE_FROZEN|STATE_AMBIGUOUSAUTH|STATE_EXPORTINGCAPS|
+     STATE_QUEUEDEXPORTPIN|STATE_TRACKEDBYOFT);
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);
@@ -565,7 +567,8 @@ protected:
   using cap_map = mempool::mds_co::map<client_t, Capability*>;
   cap_map client_caps;         // client -> caps
   mempool::mds_co::compact_map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
-  int                   replica_caps_wanted = 0; // [replica] what i've requested from auth
+  int replica_caps_wanted = 0; // [replica] what i've requested from auth
+  int num_caps_wanted = 0;
 
 public:
   mempool::mds_co::compact_map<int, mempool::mds_co::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
@@ -690,6 +693,7 @@ public:
     clear_file_locks();
     assert(num_projected_xattrs == 0);
     assert(num_projected_srnodes == 0);
+    assert(num_caps_wanted == 0);
   }
   
 
@@ -974,7 +978,8 @@ public:
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
   const mempool::mds_co::compact_map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
-  mempool::mds_co::compact_map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
+  void set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m);
+  void set_mds_caps_wanted(mds_rank_t mds, int32_t wanted);
 
   const cap_map& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
@@ -991,6 +996,9 @@ public:
       return 0;
     }
   }
+
+  int get_num_caps_wanted() const { return num_caps_wanted; }
+  void adjust_num_caps_wanted(int d);
 
   Capability *add_client_cap(client_t client, Session *session, SnapRealm *conrealm=0);
   void remove_client_cap(client_t client);

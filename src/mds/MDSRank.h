@@ -71,6 +71,9 @@ enum {
   l_mds_exported_inodes,
   l_mds_imported,
   l_mds_imported_inodes,
+  l_mds_openino_dir_fetch,
+  l_mds_openino_backtrace_fetch,
+  l_mds_openino_peer_discover,
   l_mds_last,
 };
 

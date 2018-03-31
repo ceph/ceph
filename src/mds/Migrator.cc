@@ -1553,8 +1553,6 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, mds_rank_t peer,
   if (!in->has_subtree_root_dirfrag(mds->get_nodeid()))
     in->clear_scatter_dirty();
 
-  in->item_open_file.remove_myself();
-
   in->clear_dirty_parent();
 
   in->clear_file_locks();
@@ -3047,7 +3045,12 @@ void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,
   map<client_t,Capability::Export> cap_map;
   decode(cap_map, blp);
   if (auth_cap)
-    decode(in->get_mds_caps_wanted(), blp);
+  if (auth_cap) {
+    mempool::mds_co::compact_map<int32_t,int32_t> mds_wanted;
+    decode(mds_wanted, blp);
+    mds_wanted.erase(mds->get_nodeid());
+    in->set_mds_caps_wanted(mds_wanted);
+  }
   if (!cap_map.empty() ||
       (auth_cap && (in->get_caps_wanted() & ~CEPH_CAP_PIN))) {
     peer_exports[in].swap(cap_map);

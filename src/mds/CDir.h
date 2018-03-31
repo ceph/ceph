@@ -73,25 +73,26 @@ public:
   }
 
   // -- state --
-  static const unsigned STATE_COMPLETE =      (1<< 1);   // the complete contents are in cache
-  static const unsigned STATE_FROZENTREE =    (1<< 2);   // root of tree (bounded by exports)
-  static const unsigned STATE_FREEZINGTREE =  (1<< 3);   // in process of freezing 
-  static const unsigned STATE_FROZENDIR =     (1<< 4);
-  static const unsigned STATE_FREEZINGDIR =   (1<< 5);
-  static const unsigned STATE_COMMITTING =    (1<< 6);   // mid-commit
-  static const unsigned STATE_FETCHING =      (1<< 7);   // currenting fetching
-  static const unsigned STATE_CREATING =      (1<< 8);
-  static const unsigned STATE_IMPORTBOUND =   (1<<10);
-  static const unsigned STATE_EXPORTBOUND =   (1<<11);
-  static const unsigned STATE_EXPORTING =     (1<<12);
-  static const unsigned STATE_IMPORTING =     (1<<13);
-  static const unsigned STATE_FRAGMENTING =   (1<<14);
-  static const unsigned STATE_STICKY =        (1<<15);  // sticky pin due to inode stickydirs
-  static const unsigned STATE_DNPINNEDFRAG =  (1<<16);  // dir is refragmenting
-  static const unsigned STATE_ASSIMRSTAT =    (1<<17);  // assimilating inode->frag rstats
-  static const unsigned STATE_DIRTYDFT =      (1<<18);  // dirty dirfragtree
-  static const unsigned STATE_BADFRAG =       (1<<19);  // bad dirfrag
-  static const unsigned STATE_AUXSUBTREE =    (1<<20);  // no subtree merge
+  static const unsigned STATE_COMPLETE =      (1<< 0);   // the complete contents are in cache
+  static const unsigned STATE_FROZENTREE =    (1<< 1);   // root of tree (bounded by exports)
+  static const unsigned STATE_FREEZINGTREE =  (1<< 2);   // in process of freezing
+  static const unsigned STATE_FROZENDIR =     (1<< 3);
+  static const unsigned STATE_FREEZINGDIR =   (1<< 4);
+  static const unsigned STATE_COMMITTING =    (1<< 5);   // mid-commit
+  static const unsigned STATE_FETCHING =      (1<< 6);   // currenting fetching
+  static const unsigned STATE_CREATING =      (1<< 7);
+  static const unsigned STATE_IMPORTBOUND =   (1<< 8);
+  static const unsigned STATE_EXPORTBOUND =   (1<< 9);
+  static const unsigned STATE_EXPORTING =     (1<<10);
+  static const unsigned STATE_IMPORTING =     (1<<11);
+  static const unsigned STATE_FRAGMENTING =   (1<<12);
+  static const unsigned STATE_STICKY =        (1<<13);  // sticky pin due to inode stickydirs
+  static const unsigned STATE_DNPINNEDFRAG =  (1<<14);  // dir is refragmenting
+  static const unsigned STATE_ASSIMRSTAT =    (1<<15);  // assimilating inode->frag rstats
+  static const unsigned STATE_DIRTYDFT =      (1<<16);  // dirty dirfragtree
+  static const unsigned STATE_BADFRAG =       (1<<17);  // bad dirfrag
+  static const unsigned STATE_TRACKEDBYOFT =  (1<<18);  // tracked by open file table
+  static const unsigned STATE_AUXSUBTREE =    (1<<19);  // no subtree merge
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -102,18 +103,22 @@ public:
   (STATE_COMPLETE|STATE_DIRTY|STATE_DIRTYDFT|STATE_BADFRAG);
   static const unsigned MASK_STATE_IMPORT_KEPT = 
   (						  
-   STATE_IMPORTING
-   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
-   |STATE_FROZENTREE
-   |STATE_STICKY);
+   STATE_IMPORTING |
+   STATE_IMPORTBOUND |
+   STATE_EXPORTBOUND |
+   STATE_FROZENTREE |
+   STATE_STICKY |
+   STATE_TRACKEDBYOFT);
   static const unsigned MASK_STATE_EXPORT_KEPT = 
-  (STATE_EXPORTING
-   |STATE_IMPORTBOUND|STATE_EXPORTBOUND
-   |STATE_FROZENTREE
-   |STATE_FROZENDIR
-   |STATE_STICKY);
+  (STATE_EXPORTING |
+   STATE_IMPORTBOUND |
+   STATE_EXPORTBOUND |
+   STATE_FROZENTREE |
+   STATE_FROZENDIR |
+   STATE_STICKY |
+   STATE_TRACKEDBYOFT);
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
-  (STATE_DIRTY|
+  (STATE_DIRTY |
    STATE_EXPORTBOUND |
    STATE_IMPORTBOUND |
    STATE_AUXSUBTREE |
@@ -345,6 +350,8 @@ protected:
 
   int num_dirty;
 
+  int num_inodes_with_caps = 0;
+
   // state
   version_t committing_version;
   version_t committed_version;
@@ -436,6 +443,8 @@ protected:
   int get_num_dirty() const {
     return num_dirty;
   }
+
+  void adjust_num_inodes_with_caps(int d);
 
   int64_t get_frag_size() const {
     return get_projected_fnode()->fragstat.size();
