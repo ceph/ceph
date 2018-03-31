@@ -31,12 +31,13 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
   while (*plen < pos + len2 + 1) {
     *plen += BUF_SIZE;
 
-    void *_realloc = NULL;
-    if ((_realloc = realloc(*pstr, (size_t)*plen)) == NULL) {
+    void *_realloc = realloc(*pstr, (size_t)*plen);
+
+    if (!_realloc) {
       printf("Out of memory\n");
       exit(1);
     } else {
-      *pstr = (char *)_realloc;
+      *pstr = _realloc;
     }
     //printf("safe_cat '%s' max %d pos %d '%s' len %d\n", *pstr, *plen, pos, str2, len2);
   }
@@ -49,22 +50,20 @@ int safe_cat(char **pstr, int *plen, int pos, const char *str2)
 
 char *resolve_addrs(const char *orig_str)
 {
-  char *new_str;
-  char *tok, *saveptr = NULL;
-  int len, pos;
-  char *buf = strdup(orig_str);
-  const char *delim = ",; ";
+  int len = BUF_SIZE;
+  char *new_str = (char *)malloc(len);
 
-  len = BUF_SIZE;
-  new_str = (char *)malloc(len);
   if (!new_str) {
-    free(buf);
     return NULL;
   }
 
-  pos = 0;
+  char *saveptr = NULL;
+  char *buf = strdup(orig_str);
+  const char *delim = ",; ";
 
-  tok = strtok_r(buf, delim, &saveptr);
+  char *tok = strtok_r(buf, delim, &saveptr);
+
+  int pos = 0;
 
   while (tok) {
     struct addrinfo hint;
