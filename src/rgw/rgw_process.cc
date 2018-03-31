@@ -36,8 +36,17 @@ void RGWProcess::RGWWQ::_dump_queue()
   }
 } /* RGWProcess::RGWWQ::_dump_queue */
 
+struct Completer {
+  rgw::dmclock::PriorityQueue *queue = nullptr;
+  ~Completer() {
+    if (queue) {
+      queue->request_complete();
+    }
+  }
+};
+
 static int wait_for_dmclock(rgw::dmclock::PriorityQueue *dmclock_queue,
-                            req_state *s, RGWOp *op)
+                            req_state *s, RGWOp *op, Completer& completer)
 {
   if (!dmclock_queue || !s->yield) {
     return 0;
@@ -61,6 +70,7 @@ static int wait_for_dmclock(rgw::dmclock::PriorityQueue *dmclock_queue,
     lderr(s->cct) << "dmclock queue failed with " << ec.message() << dendl;
     return -ec.value();
   }
+  completer.queue = dmclock_queue;
   return 0;
 }
 
@@ -191,6 +201,7 @@ int process_request(RGWRados* const store,
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
 
+  Completer dmclock_scoped_completer;
   RGWOp* op = nullptr;
   int init_error = 0;
   bool should_log = false;
@@ -214,7 +225,7 @@ int process_request(RGWRados* const store,
     goto done;
   }
 
-  ret = wait_for_dmclock(dmclock_queue, s, op);
+  ret = wait_for_dmclock(dmclock_queue, s, op, dmclock_scoped_completer);
   if (ret < 0) {
     abort_early(s, op, ret, handler);
     goto done;
