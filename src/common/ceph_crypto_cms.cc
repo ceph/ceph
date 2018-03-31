@@ -62,7 +62,6 @@ DigestFile(PLArenaPool *poolp, SECItem ***digests, SECItem *input,
            SECAlgorithmID **algids)
 {
     NSSCMSDigestContext *digcx;
-    SECStatus rv;
 
     digcx = NSS_CMSDigestContext_StartMultiple(algids);
     if (digcx == NULL)
@@ -70,8 +69,7 @@ DigestFile(PLArenaPool *poolp, SECItem ***digests, SECItem *input,
 
     NSS_CMSDigestContext_Update(digcx, input->data, input->len);
 
-    rv = NSS_CMSDigestContext_FinishMultiple(digcx, poolp, digests);
-    return rv;
+    return NSS_CMSDigestContext_FinishMultiple(digcx, poolp, digests);
 }
 
 

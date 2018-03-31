@@ -2362,8 +2362,7 @@ static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen
 #else
     r = ::lseek64(fd, offset, SEEK_SET);
     if (r != offset) {
-      r = -errno;
-      return r;
+      return -errno;
     }
     r = ::writev(fd, vec, veclen);
 #endif
