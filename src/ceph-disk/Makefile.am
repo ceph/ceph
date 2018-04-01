@@ -35,7 +35,7 @@ export CEPH_DISK_VIRTUALENV = ${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv
 ceph-disk-all: ${CEPH_DISK_VIRTUALENV}
 
 ${CEPH_DISK_VIRTUALENV}:
-	cd $(srcdir)/ceph-disk ; ../tools/setup-virtualenv.sh ${CEPH_DISK_VIRTUALENV} ; test -d wheelhouse && export NO_INDEX=--no-index ; ${CEPH_DISK_VIRTUALENV}/bin/pip install $$NO_INDEX --use-wheel --find-links=file://$$(pwd)/wheelhouse -e .
+	cd $(srcdir)/ceph-disk ; ../tools/setup-virtualenv.sh ${CEPH_DISK_VIRTUALENV} ; test -d wheelhouse && export NO_INDEX=--no-index ; ${CEPH_DISK_VIRTUALENV}/bin/pip install $$NO_INDEX --find-links=file://$$(pwd)/wheelhouse -e .
 
 ceph-disk-clean:
 	cd $(srcdir)/ceph-disk ; python setup.py clean ; rm -fr wheelhouse .tox build ${CEPH_DISK_VIRTUALENV} .coverage *.egg-info
