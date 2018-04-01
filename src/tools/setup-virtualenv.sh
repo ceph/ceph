@@ -44,7 +44,7 @@ if test -d wheelhouse ; then
     export NO_INDEX=--no-index
 fi
 
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse 'tox >=1.9'
+pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse 'tox >=1.9'
 if test -f requirements.txt ; then
-    pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse -r requirements.txt
+    pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse -r requirements.txt
 fi
