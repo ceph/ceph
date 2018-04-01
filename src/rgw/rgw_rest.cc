@@ -314,7 +314,11 @@ void dump_errno(const struct rgw_err &err, string& out) {
 
 void dump_errno(struct req_state *s)
 {
-  dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);
+  if (!s->err.err_code.empty()) {
+    dump_status(s, s->err.http_ret, s->err.err_code.c_str());
+  } else {
+    dump_status(s, s->err.http_ret, http_status_names[s->err.http_ret]);
+  }
 }
 
 void dump_errno(struct req_state *s, int http_ret)
