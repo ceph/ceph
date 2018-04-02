@@ -9523,7 +9523,7 @@ void OSDShard::_prime_splits(set<spg_t> *pgids)
 	dout(10) << "priming slot " << *p << dendl;
 	r.first->second->waiting_for_split = true;
       } else {
-	auto q = pg_slots.find(*p);
+	auto q = r.first;
 	assert(q != pg_slots.end());
 	if (q->second->waiting_for_split) {
 	  dout(10) << "slot " << *p << " already primed" << dendl;
@@ -9718,7 +9718,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   auto qi = std::move(slot->to_process.front());
   slot->to_process.pop_front();
   dout(20) << __func__ << " " << qi << " pg " << pg << dendl;
-  unsigned pushes_to_free = 0;
   set<spg_t> new_children;
   OSDMapRef osdmap;
 
@@ -9809,9 +9808,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       _add_slot_waiter(token, slot, std::move(qi));
       sdata->sdata_op_ordering_lock.Unlock();
       pg->unlock();
-      if (pushes_to_free) {
-	osd->service.release_reserved_pushes(pushes_to_free);
-      }
       return;
     }
   }
@@ -9822,9 +9818,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       shard->prime_splits(osdmap, &new_children);
     }
     assert(new_children.empty());
-  }
-  if (pushes_to_free) {
-    osd->service.release_reserved_pushes(pushes_to_free);
   }
 
   // osd_opwq_process marks the point at which an operation has been dequeued
