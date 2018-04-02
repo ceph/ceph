@@ -1121,8 +1121,8 @@ struct OSDShard {
     return shard_osdmap;
   }
 
-  string sdata_op_ordering_lock_name;
-  Mutex sdata_op_ordering_lock;   ///< protects remaining members below
+  string shard_lock_name;
+  Mutex shard_lock;   ///< protects remaining members below
 
   /// map of slots for each spg_t.  maintains ordering of items dequeued
   /// from pqueue while _process thread drops shard lock to acquire the
@@ -1201,8 +1201,8 @@ struct OSDShard {
       sdata_wait_lock(sdata_wait_lock_name.c_str(), false, true, false, cct),
       osdmap_lock_name(shard_name + "::osdmap_lock"),
       osdmap_lock(osdmap_lock_name.c_str(), false, false),
-      sdata_op_ordering_lock_name(shard_name + "::sdata_op_ordering_lock"),
-      sdata_op_ordering_lock(sdata_op_ordering_lock_name.c_str(), false, true,
+      shard_lock_name(shard_name + "::shard_lock"),
+      shard_lock(shard_lock_name.c_str(), false, true,
 			     false, cct) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
@@ -1730,11 +1730,11 @@ protected:
 	snprintf(queue_name, sizeof(queue_name), "%s%d", "OSD:ShardedOpWQ:", i);
 	assert(NULL != sdata);
 
-	sdata->sdata_op_ordering_lock.Lock();
+	sdata->shard_lock.Lock();
 	f->open_object_section(queue_name);
 	sdata->pqueue->dump(f);
 	f->close_section();
-	sdata->sdata_op_ordering_lock.Unlock();
+	sdata->shard_lock.Unlock();
       }
     }
 
@@ -1770,7 +1770,7 @@ protected:
       uint32_t shard_index = thread_index % osd->num_shards;
       auto &&sdata = osd->shards[shard_index];
       assert(sdata);
-      Mutex::Locker l(sdata->sdata_op_ordering_lock);
+      Mutex::Locker l(sdata->shard_lock);
       return sdata->pqueue->empty();
     }
   } op_shardedwq;
