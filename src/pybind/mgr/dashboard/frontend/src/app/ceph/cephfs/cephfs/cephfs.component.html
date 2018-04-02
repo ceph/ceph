@@ -55,11 +55,9 @@
 </div>
 
 <!-- templates -->
-<ng-template #poolProgressTmpl
+<ng-template #poolUsageTpl
              let-row="row">
-  <progressbar type="danger"
-               [value]="row.used * 100.0 / row.avail">
-  </progressbar>
+    <cd-usage-bar [totalBytes]="row.size" [usedBytes]="row.used"></cd-usage-bar>
 </ng-template>
 
 <ng-template #activityTmpl
