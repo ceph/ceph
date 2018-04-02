@@ -2524,7 +2524,7 @@ int OSD::init()
 
   // initialize osdmap references in sharded wq
   for (auto& shard : shards) {
-    shard->osdmap = osdmap;
+    shard->shard_osdmap = osdmap;
   }
 
   // load up pgs (as they previously existed)
@@ -3388,7 +3388,7 @@ int OSD::shutdown()
 
   osdmap = OSDMapRef();
   for (auto s : shards) {
-    s->osdmap = OSDMapRef();
+    s->shard_osdmap = OSDMapRef();
   }
   service.shutdown();
   op_tracker.on_shutdown();
@@ -9370,8 +9370,8 @@ void OSDShard::consume_map(
   OSDMapRef old_osdmap;
   {
     Mutex::Locker l(osdmap_lock);
-    old_osdmap = std::move(osdmap);
-    osdmap = new_osdmap;
+    old_osdmap = std::move(shard_osdmap);
+    shard_osdmap = new_osdmap;
   }
   dout(10) << new_osdmap->get_epoch()
            << " (was " << (old_osdmap ? old_osdmap->get_epoch() : 0) << ")"
@@ -9392,10 +9392,10 @@ void OSDShard::consume_map(
     }
     if (!slot->waiting_peering.empty()) {
       epoch_t first = slot->waiting_peering.begin()->first;
-      if (first <= osdmap->get_epoch()) {
+      if (first <= new_osdmap->get_epoch()) {
 	dout(20) << __func__ << "  " << pgid
 		 << " pending_peering first epoch " << first
-		 << " <= " << osdmap->get_epoch() << ", requeueing" << dendl;
+		 << " <= " << new_osdmap->get_epoch() << ", requeueing" << dendl;
 	_wake_pg_slot(pgid, slot);
 	queued = true;
       }
@@ -9403,21 +9403,21 @@ void OSDShard::consume_map(
       continue;
     }
     if (!slot->waiting.empty()) {
-      if (osdmap->is_up_acting_osd_shard(pgid, osd->get_nodeid())) {
+      if (new_osdmap->is_up_acting_osd_shard(pgid, osd->get_nodeid())) {
 	dout(20) << __func__ << "  " << pgid << " maps to us, keeping"
 		 << dendl;
 	++p;
 	continue;
       }
       while (!slot->waiting.empty() &&
-	     slot->waiting.front().get_map_epoch() <= osdmap->get_epoch()) {
+	     slot->waiting.front().get_map_epoch() <= new_osdmap->get_epoch()) {
 	auto& qi = slot->waiting.front();
 	dout(20) << __func__ << "  " << pgid
 		 << " waiting item " << qi
 		 << " epoch " << qi.get_map_epoch()
-		 << " <= " << osdmap->get_epoch()
+		 << " <= " << new_osdmap->get_epoch()
 		 << ", "
-		 << (qi.get_map_epoch() < osdmap->get_epoch() ? "stale" :
+		 << (qi.get_map_epoch() < new_osdmap->get_epoch() ? "stale" :
 		     "misdirected")
 		 << ", dropping" << dendl;
         *pushes_to_free += qi.get_reserved_pushes();
@@ -9477,12 +9477,13 @@ void OSDShard::_wake_pg_slot(
 void OSDShard::identify_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids)
 {
   Mutex::Locker l(sdata_op_ordering_lock);
-  if (osdmap) {
+  if (shard_osdmap) {
     for (auto& i : pg_slots) {
       const spg_t& pgid = i.first;
       auto *slot = i.second.get();
       if (slot->pg || slot->waiting_for_split) {
-	osd->service.identify_split_children(osdmap, as_of_osdmap, pgid, pgids);
+	osd->service.identify_split_children(shard_osdmap, as_of_osdmap, pgid,
+					     pgids);
       } else {
 	dout(20) << __func__ << " slot " << pgid
 		 << " has no pg and !waiting_for_split" << dendl;
@@ -9495,15 +9496,15 @@ void OSDShard::prime_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids)
 {
   Mutex::Locker l(sdata_op_ordering_lock);
   _prime_splits(pgids);
-  if (osdmap->get_epoch() > as_of_osdmap->get_epoch()) {
+  if (shard_osdmap->get_epoch() > as_of_osdmap->get_epoch()) {
     set<spg_t> newer_children;
     for (auto pgid : *pgids) {
-      osd->service.identify_split_children(as_of_osdmap, osdmap, pgid,
+      osd->service.identify_split_children(as_of_osdmap, shard_osdmap, pgid,
 					   &newer_children);
     }
     newer_children.insert(pgids->begin(), pgids->end());
     dout(10) << "as_of_osdmap " << as_of_osdmap->get_epoch() << " < shard "
-	     << osdmap->get_epoch() << ", new children " << newer_children
+	     << shard_osdmap->get_epoch() << ", new children " << newer_children
 	     << dendl;
     _prime_splits(&newer_children);
     // note: we don't care what is left over here for other shards.
@@ -9729,7 +9730,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   while (!pg) {
     // should this pg shard exist on this osd in this (or a later) epoch?
-    osdmap = sdata->osdmap;
+    osdmap = sdata->shard_osdmap;
     const PGCreateInfo *create_info = qi.creates_pg();
     if (slot->waiting_for_split) {
       dout(20) << __func__ << " " << token
@@ -9794,7 +9795,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	Session *session = static_cast<Session *>(
 	  (*_op)->get_req()->get_connection()->get_priv());
 	if (session) {
-	  osd->maybe_share_map(session, *_op, sdata->osdmap);
+	  osd->maybe_share_map(session, *_op, sdata->shard_osdmap);
 	  session->put();
 	}
       }
@@ -9809,7 +9810,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     return;
   }
   if (qi.is_peering()) {
-    OSDMapRef osdmap = sdata->osdmap;
+    OSDMapRef osdmap = sdata->shard_osdmap;
     if (qi.get_map_epoch() > osdmap->get_epoch()) {
       _add_slot_waiter(token, slot, std::move(qi));
       sdata->sdata_op_ordering_lock.Unlock();
