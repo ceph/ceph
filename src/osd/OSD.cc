@@ -7850,6 +7850,8 @@ void OSD::consume_map()
 
   service.maybe_inject_dispatch_delay();
 
+  service.release_reserved_pushes(pushes_to_free);
+
   // queue null events to push maps down to individual PGs
   for (auto pgid : pgids) {
     enqueue_peering_evt(
