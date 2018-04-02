@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.12)
 
 project(ceph CXX C ASM)
-set(VERSION 13.0.1)
+set(VERSION 13.0.2)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
