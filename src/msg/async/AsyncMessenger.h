@@ -373,21 +373,6 @@ public:
   }
 
   /**
-   * This wraps ms_deliver_get_authorizer. We use it for AsyncConnection.
-   */
-  AuthAuthorizer *get_authorizer(int peer_type, bool force_new) {
-    return ms_deliver_get_authorizer(peer_type, force_new);
-  }
-
-  /**
-   * This wraps ms_deliver_verify_authorizer; we use it for AsyncConnection.
-   */
-  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth, bufferlist& auth_reply,
-                         bool& isvalid, CryptoKey& session_key) {
-    return ms_deliver_verify_authorizer(con, peer_type, protocol, auth,
-                                        auth_reply, isvalid, session_key);
-  }
-  /**
    * Increment the global sequence for this AsyncMessenger and return it.
    * This is for the connect protocol, although it doesn't hurt if somebody
    * else calls it.
