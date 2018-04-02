@@ -7800,7 +7800,7 @@ bool MDCache::shutdown_export_strays()
     
     for (auto &p : dir->items) {
       CDentry *dn = p.second;
-      CDentry::linkage_t *dnl = dn->get_linkage();
+      CDentry::linkage_t *dnl = dn->get_projected_linkage();
       if (dnl->is_null())
 	continue;
       done = false;
