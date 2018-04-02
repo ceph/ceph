@@ -7354,6 +7354,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     dout(10) << "prepare_command setting new crush map" << dendl;
     bufferlist data(m->get_data());
+    if (data.length() == 0) {
+      ss << "osd setcrushmap: no data supplied";
+      err = -EINVAL;
+      goto reply;
+    }
     CrushWrapper crush;
     try {
       bufferlist::iterator bl(data.begin());
