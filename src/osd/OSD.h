@@ -1113,7 +1113,7 @@ struct OSDShard {
   Cond sdata_cond;
 
   string osdmap_lock_name;
-  Mutex osdmap_lock;
+  Mutex osdmap_lock;  ///< protect shard_osdmap updates vs users w/o shard_lock
   OSDMapRef shard_osdmap;
 
   OSDMapRef get_osdmap() {

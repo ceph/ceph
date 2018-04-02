@@ -2524,6 +2524,7 @@ int OSD::init()
 
   // initialize osdmap references in sharded wq
   for (auto& shard : shards) {
+    Mutex::Locker l(shard->osdmap_lock);
     shard->shard_osdmap = osdmap;
   }
 
@@ -3388,6 +3389,7 @@ int OSD::shutdown()
 
   osdmap = OSDMapRef();
   for (auto s : shards) {
+    Mutex::Locker l(s->osdmap_lock);
     s->shard_osdmap = OSDMapRef();
   }
   service.shutdown();
