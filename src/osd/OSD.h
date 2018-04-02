@@ -1183,7 +1183,7 @@ struct OSDShard {
 
   void identify_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids);
   void _prime_splits(set<spg_t> *pgids);
-  void prime_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids);
+  void prime_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids);
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
 

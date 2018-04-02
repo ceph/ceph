@@ -9485,7 +9485,7 @@ void OSDShard::identify_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids)
   }
 }
 
-void OSDShard::prime_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids)
+void OSDShard::prime_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids)
 {
   Mutex::Locker l(sdata_op_ordering_lock);
   _prime_splits(pgids);
