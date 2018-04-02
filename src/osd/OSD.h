@@ -1738,34 +1738,6 @@ protected:
       }
     }
 
-    /// Must be called on ops queued back to front
-    struct Pred {
-      spg_t pgid;
-      list<OpRequestRef> *out_ops;
-      uint64_t reserved_pushes_to_free;
-      Pred(spg_t pg, list<OpRequestRef> *out_ops = 0)
-	: pgid(pg), out_ops(out_ops), reserved_pushes_to_free(0) {}
-      void accumulate(const OpQueueItem &op) {
-	reserved_pushes_to_free += op.get_reserved_pushes();
-	if (out_ops) {
-	  boost::optional<OpRequestRef> mop = op.maybe_get_op();
-	  if (mop)
-	    out_ops->push_front(*mop);
-	}
-      }
-      bool operator()(const OpQueueItem &op) {
-	if (op.get_ordering_token() == pgid) {
-	  accumulate(op);
-	  return true;
-	} else {
-	  return false;
-	}
-      }
-      uint64_t get_reserved_pushes_to_free() const {
-	return reserved_pushes_to_free;
-      }
-    };
-
     bool is_shard_empty(uint32_t thread_index) override {
       uint32_t shard_index = thread_index % osd->num_shards;
       auto &&sdata = osd->shards[shard_index];
