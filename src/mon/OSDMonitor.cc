@@ -7346,8 +7346,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   // this is the expected behavior.
    
  
-  if (prefix == "osd setcrushmap" ||
-      (prefix == "osd crush set" && !osdid_present)) {
+  if (prefix == "osd setcrushmap") {
     if (pending_inc.crush.length()) {
       dout(10) << __func__ << " waiting for pending crush update " << dendl;
       wait_for_finished_proposal(op, new C_RetryMessage(this, op));

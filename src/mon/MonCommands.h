@@ -511,9 +511,6 @@ COMMAND("osd crush dump", \
 COMMAND("osd setcrushmap name=prior_version,type=CephInt,req=false", \
 	"set crush map from input file",	\
 	"osd", "rw", "cli,rest")
-COMMAND("osd crush set name=prior_version,type=CephInt,req=false", \
-	"set crush map from input file",	\
-	"osd", "rw", "cli,rest")
 COMMAND("osd crush add-bucket " \
 	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] " \
         "name=type,type=CephString " \
