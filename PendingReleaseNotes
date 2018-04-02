@@ -104,3 +104,7 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
   now reflects the source of each config option (e.g., default, config file,
   command line) as well as the final (active) value.
 
+* The `pg force-recovery` command will not work for erasure-coded
+  PGs when a Luminous monitor is running along with a Mimic OSD.
+  Please use the recommended upgrade order of monitors before OSDs to
+  avoid this issue.
