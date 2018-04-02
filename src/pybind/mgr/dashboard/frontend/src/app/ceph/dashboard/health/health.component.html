@@ -147,7 +147,7 @@
                   {{ pool.pg_status | pgStatus }}
                 </td>
                 <td>
-                  {{ pool.stats.bytes_used.latest | dimlessBinary }} / {{ pool.stats.max_avail.latest | dimlessBinary }}
+                  <cd-usage-bar [totalBytes]="pool.stats.bytes_used.latest +  pool.stats.max_avail.latest" [usedBytes]="pool.stats.bytes_used.latest"></cd-usage-bar>
                 </td>
                 <td>
                   {{ pool.stats.rd_bytes.rate | dimless }}
