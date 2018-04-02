@@ -545,13 +545,13 @@ class PermissionError(OSError):
 class ImageNotFound(OSError):
     pass
 
-class ObjectNotFound(Error):
+class ObjectNotFound(OSError):
     pass
 
 class ImageExists(OSError):
     pass
 
-class ObjectExists(Error):
+class ObjectExists(OSError):
     pass
 
 
@@ -651,8 +651,8 @@ cdef make_ex(ret, msg, exception_map=errno_to_exception):
     :returns: a subclass of :class:`Error`
     """
     ret = abs(ret)
-    if ret in errno_to_exception:
-        return errno_to_exception[ret](msg, errno=ret)
+    if ret in exception_map:
+        return exception_map[ret](msg, errno=ret)
     else:
         return OSError(msg, errno=ret)
 
@@ -1643,7 +1643,6 @@ cdef class Group(object):
         :type name: str
 
         :raises: :class:`ObjectNotFound`
-        :raises: :class:`ObjectExists`
         :raises: :class:`InvalidArgument`
         :raises: :class:`FunctionNotSupported`
         """
@@ -1693,7 +1692,6 @@ cdef class Group(object):
         :type name: str
 
         :raises: :class:`ObjectNotFound`
-        :raises: :class:`ObjectExists`
         :raises: :class:`InvalidArgument`
         :raises: :class:`FunctionNotSupported`
         """
