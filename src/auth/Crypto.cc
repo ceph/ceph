@@ -185,15 +185,14 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 }
 
 class CryptoAESKeyHandler : public CryptoKeyHandler {
-  CK_MECHANISM_TYPE mechanism;
+  static constexpr CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
   PK11SlotInfo *slot;
   PK11SymKey *key;
   SECItem *param;
 
 public:
   CryptoAESKeyHandler()
-    : mechanism(CKM_AES_CBC_PAD),
-      slot(NULL),
+    : slot(NULL),
       key(NULL),
       param(NULL) {}
   ~CryptoAESKeyHandler() override {

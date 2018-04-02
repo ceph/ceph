@@ -26,35 +26,54 @@ namespace ceph {
     void assert_init();
     void init(CephContext *cct);
     void shutdown(bool shared=true);
+
+    struct ScopedPK11Context {
+      PK11Context* ctx;
+      ScopedPK11Context(PK11Context *c = nullptr)
+      : ctx(c)
+      {}
+      ~ScopedPK11Context() {
+        PK11_DestroyContext(ctx, PR_TRUE);
+      }
+      void reset(PK11Context* c) noexcept {
+	ctx = c;
+      }
+      PK11Context* get() const noexcept {
+        return ctx;
+      }
+      explicit operator bool() const noexcept {
+	return get() != nullptr;
+      }
+    };
+
     class Digest {
     private:
-      PK11Context *ctx;
+      ScopedPK11Context ctx;
       size_t digest_size;
     public:
-      Digest (SECOidTag _type, size_t _digest_size) : digest_size(_digest_size) {
-	ctx = PK11_CreateDigestContext(_type);
+      Digest (SECOidTag _type, size_t _digest_size)
+	: ctx{PK11_CreateDigestContext(_type)},
+          digest_size(_digest_size)
+      {
 	assert(ctx);
 	Restart();
       }
-      ~Digest () {
-	PK11_DestroyContext(ctx, PR_TRUE);
-      }
       void Restart() {
 	SECStatus s;
-	s = PK11_DigestBegin(ctx);
+	s = PK11_DigestBegin(ctx.get());
 	assert(s == SECSuccess);
       }
       void Update (const unsigned char *input, size_t length) {
         if (length) {
 	  SECStatus s;
-	  s = PK11_DigestOp(ctx, input, length);
+	  s = PK11_DigestOp(ctx.get(), input, length);
 	  assert(s == SECSuccess);
         }
       }
       void Final (unsigned char *digest) {
 	SECStatus s;
 	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
+	s = PK11_DigestFinal(ctx.get(), digest, &dummy, digest_size);
 	assert(s == SECSuccess);
 	assert(dummy == digest_size);
 	Restart();
@@ -79,7 +98,7 @@ namespace ceph {
     private:
       PK11SlotInfo *slot;
       PK11SymKey *symkey;
-      PK11Context *ctx;
+      ScopedPK11Context ctx;
       unsigned int digest_size;
     public:
       HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const unsigned char *key, size_t length) {
@@ -97,25 +116,25 @@ namespace ceph {
 	param.type = siBuffer;
 	param.data = NULL;
 	param.len = 0;
-	ctx = PK11_CreateContextBySymKey(cktype, CKA_SIGN, symkey, &param);
+	ctx.reset(PK11_CreateContextBySymKey(cktype, CKA_SIGN, symkey, &param));
 	assert(ctx);
 	Restart();
       }
       ~HMAC ();
       void Restart() {
 	SECStatus s;
-	s = PK11_DigestBegin(ctx);
+	s = PK11_DigestBegin(ctx.get());
 	assert(s == SECSuccess);
       }
       void Update (const unsigned char *input, size_t length) {
 	SECStatus s;
-	s = PK11_DigestOp(ctx, input, length);
+	s = PK11_DigestOp(ctx.get(), input, length);
 	assert(s == SECSuccess);
       }
       void Final (unsigned char *digest) {
 	SECStatus s;
 	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
+	s = PK11_DigestFinal(ctx.get(), digest, &dummy, digest_size);
 	assert(s == SECSuccess);
 	assert(dummy == digest_size);
 	Restart();

@@ -70,7 +70,6 @@ void ceph::crypto::shutdown(bool shared)
 
 ceph::crypto::HMAC::~HMAC()
 {
-  PK11_DestroyContext(ctx, PR_TRUE);
   PK11_FreeSymKey(symkey);
   PK11_FreeSlot(slot);
 }
