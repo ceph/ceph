@@ -1858,10 +1858,17 @@ public:
   vector<OSDShard*> shards;
   uint32_t num_shards = 0;
 
+  void inc_num_pgs() {
+    ++num_pgs;
+  }
+  void dec_num_pgs() {
+    --num_pgs;
+  }
+
+protected:
   // -- placement groups --
   std::atomic<size_t> num_pgs = {0};
 
-protected:
   std::mutex pending_creates_lock;
   using create_from_osd_t = std::pair<pg_t, bool /* is primary*/>;
   std::set<create_from_osd_t> pending_creates_from_osd;

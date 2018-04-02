@@ -9290,7 +9290,7 @@ void OSDShard::_attach_pg(OSDShardPGSlot *slot, PG *pg)
   slot->pg = pg;
   pg->osd_shard = this;
   pg->pg_slot = slot;
-  ++osd->num_pgs;
+  osd->inc_num_pgs();
 
   slot->epoch = pg->get_osdmap_epoch();
   pg_slots_by_epoch.insert(*slot);
@@ -9302,7 +9302,7 @@ void OSDShard::_detach_pg(OSDShardPGSlot *slot)
   slot->pg->osd_shard = nullptr;
   slot->pg->pg_slot = nullptr;
   slot->pg = nullptr;
-  --osd->num_pgs;
+  osd->dec_num_pgs();
 
   pg_slots_by_epoch.erase(pg_slots_by_epoch.iterator_to(*slot));
   slot->epoch = 0;
