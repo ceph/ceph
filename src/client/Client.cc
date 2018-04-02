@@ -13895,13 +13895,6 @@ void Client::handle_conf_change(const struct md_config_t *conf,
   }
 }
 
-void Client::init_groups(UserPerm *perms)
-{
-  gid_t *sgids;
-  int count = _getgrouplist(&sgids, perms->uid(), perms->gid());
-  perms->init_gids(sgids, count);
-}
-
 void intrusive_ptr_add_ref(Inode *in)
 {
   in->get();
