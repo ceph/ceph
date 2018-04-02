@@ -1108,8 +1108,8 @@ struct OSDShard {
 
   string shard_name;
 
-  string sdata_lock_name;
-  Mutex sdata_lock;
+  string sdata_wait_lock_name;
+  Mutex sdata_wait_lock;
   Cond sdata_cond;
 
   string osdmap_lock_name;
@@ -1197,8 +1197,8 @@ struct OSDShard {
       cct(cct),
       osd(osd),
       shard_name(string("OSDShard.") + stringify(id)),
-      sdata_lock_name(shard_name + "::sdata_lock"),
-      sdata_lock(sdata_lock_name.c_str(), false, true, false, cct),
+      sdata_wait_lock_name(shard_name + "::sdata_wait_lock"),
+      sdata_wait_lock(sdata_wait_lock_name.c_str(), false, true, false, cct),
       osdmap_lock_name(shard_name + "::osdmap_lock"),
       osdmap_lock(osdmap_lock_name.c_str(), false, false),
       sdata_op_ordering_lock_name(shard_name + "::sdata_op_ordering_lock"),
@@ -1705,10 +1705,10 @@ protected:
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata); 
-	sdata->sdata_lock.Lock();
+	sdata->sdata_wait_lock.Lock();
 	sdata->stop_waiting = true;
 	sdata->sdata_cond.Signal();
-	sdata->sdata_lock.Unlock();
+	sdata->sdata_wait_lock.Unlock();
       }
     }
 
@@ -1716,9 +1716,9 @@ protected:
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata);
-	sdata->sdata_lock.Lock();
+	sdata->sdata_wait_lock.Lock();
 	sdata->stop_waiting = false;
-	sdata->sdata_lock.Unlock();
+	sdata->sdata_wait_lock.Unlock();
       }
     }
 
