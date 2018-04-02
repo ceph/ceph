@@ -1883,7 +1883,8 @@ public:
 protected:
   PG* _make_pg(OSDMapRef createmap, spg_t pgid);
 
-  bool maybe_wait_for_max_pg(OSDMapRef osdmap, spg_t pgid, bool is_mon_create);
+  bool maybe_wait_for_max_pg(const OSDMapRef& osdmap,
+			     spg_t pgid, bool is_mon_create);
   void resume_creating_pg();
 
   void load_pgs();
@@ -2018,7 +2019,7 @@ protected:
   void handle_fast_pg_info(MOSDPGInfo *m);
   void handle_fast_pg_remove(MOSDPGRemove *m);
 
-  PGRef handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info);
+  PGRef handle_pg_create_info(const OSDMapRef& osdmap, const PGCreateInfo *info);
 
   void handle_fast_force_recovery(MOSDForceRecovery *m);
 
