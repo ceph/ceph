@@ -108,3 +108,6 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
   PGs when a Luminous monitor is running along with a Mimic OSD.
   Please use the recommended upgrade order of monitors before OSDs to
   avoid this issue.
+
+* It is no longer possible to adjust ``pg_num`` on a pool that is
+  still being created.
