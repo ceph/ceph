@@ -9314,13 +9314,13 @@ void OSDShard::_detach_pg(OSDShardPGSlot *slot)
 void OSDShard::update_pg_epoch(OSDShardPGSlot *slot, epoch_t e)
 {
   Mutex::Locker l(sdata_op_ordering_lock);
-  dout(20) << "min was " << pg_slots_by_epoch.begin()->epoch
+  dout(30) << "min was " << pg_slots_by_epoch.begin()->epoch
 	   << " on " << pg_slots_by_epoch.begin()->pg->pg_id << dendl;
   pg_slots_by_epoch.erase(pg_slots_by_epoch.iterator_to(*slot));
   dout(20) << slot->pg->pg_id << " " << slot->epoch << " -> " << e << dendl;
   slot->epoch = e;
   pg_slots_by_epoch.insert(*slot);
-  dout(20) << "min is now " << pg_slots_by_epoch.begin()->epoch
+  dout(30) << "min is now " << pg_slots_by_epoch.begin()->epoch
 	   << " on " << pg_slots_by_epoch.begin()->pg->pg_id << dendl;
   if (waiting_for_min_pg_epoch) {
     min_pg_epoch_cond.Signal();
