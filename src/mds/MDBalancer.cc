@@ -962,13 +962,17 @@ void MDBalancer::find_exports(CDir *dir,
   dout(7) << " find_exports in " << dir_pop << " " << *dir << " need " << need << " (" << needmin << " - " << needmax << ")" << dendl;
 
   double subdir_sum = 0;
-  for (auto it = dir->begin(); it != dir->end(); ++it) {
-    CInode *in = it->second->get_linkage()->get_inode();
-    if (!in) continue;
-    if (!in->is_dir()) continue;
+  for (elist<CInode*>::iterator it = dir->pop_lru_subdirs.begin_use_current();
+       !it.end(); ) {
+    CInode *in = *it;
+    ++it;
+
+    assert(in->is_dir());
 
     list<CDir*> dfls;
     in->get_nested_dirfrags(dfls);
+
+    size_t num_idle_frags = 0;
     for (list<CDir*>::iterator p = dfls.begin();
 	 p != dfls.end();
 	 ++p) {
@@ -987,7 +991,10 @@ void MDBalancer::find_exports(CDir *dir,
       subdir_sum += pop;
       dout(15) << "   subdir pop " << pop << " " << *subdir << dendl;
 
-      if (pop < minchunk) continue;
+      if (pop < minchunk) {
+	num_idle_frags++;
+	continue;
+      }
 
       // lucky find?
       if (pop > needmin && pop < needmax) {
@@ -1005,6 +1012,8 @@ void MDBalancer::find_exports(CDir *dir,
       } else
 	smaller.insert(pair<double,CDir*>(pop, subdir));
     }
+    if (dfls.size() == num_idle_frags)
+      in->item_pop_lru.remove_myself();
   }
   dout(15) << "   sum " << subdir_sum << " / " << dir_pop << dendl;
 
@@ -1172,14 +1181,21 @@ void MDBalancer::hit_dir(const utime_t& now, CDir *dir, int type, int who, doubl
   bool hit_subtree_nested = dir->is_auth();  // all nested auth subtrees
 
   while (true) {
+    CDir *pdir = dir->inode->get_parent_dir();
     dir->pop_nested.get(type).hit(now, mds->mdcache->decayrate, amount);
     if (rd_adj != 0.0)
       dir->pop_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
 
     if (hit_subtree) {
       dir->pop_auth_subtree.get(type).hit(now, mds->mdcache->decayrate, amount);
+
       if (rd_adj != 0.0)
 	dir->pop_auth_subtree.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
+
+      if (dir->is_subtree_root())
+	hit_subtree = false;                // end of auth domain, stop hitting auth counters.
+      else if (pdir)
+	pdir->pop_lru_subdirs.push_front(&dir->get_inode()->item_pop_lru);
     }
 
     if (hit_subtree_nested) {
@@ -1187,12 +1203,8 @@ void MDBalancer::hit_dir(const utime_t& now, CDir *dir, int type, int who, doubl
       if (rd_adj != 0.0)
 	dir->pop_auth_subtree_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
     }
-
-    if (dir->is_subtree_root())
-      hit_subtree = false;                // end of auth domain, stop hitting auth counters.
-
-    if (dir->inode->get_parent_dn() == 0) break;
-    dir = dir->inode->get_parent_dn()->get_dir();
+    if (!pdir) break;
+    dir = pdir;
   }
 }
 

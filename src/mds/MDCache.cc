@@ -943,10 +943,13 @@ void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval)
     // adjust popularity?
     if (dir->is_auth()) {
       utime_t now = ceph_clock_now();
+      CDir *cur = dir;
       CDir *p = dir->get_parent_dir();
       while (p) {
 	p->pop_auth_subtree.add(now, decayrate, dir->pop_auth_subtree);
+	p->pop_lru_subdirs.push_front(&cur->get_inode()->item_pop_lru);
 	if (p->is_subtree_root()) break;
+	cur = p;
 	p = p->inode->get_parent_dir();
       }
     }
