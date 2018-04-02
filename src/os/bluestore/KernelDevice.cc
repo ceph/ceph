@@ -408,7 +408,7 @@ void KernelDevice::_aio_thread()
 	// later flush() occurs.
 	io_since_flush.store(true);
 
-	int r = aio[i]->get_return_value();
+	long r = aio[i]->get_return_value();
         if (r < 0) {
           derr << __func__ << " got " << cpp_strerror(r) << dendl;
           if (ioc->allow_eio && r == -EIO) {
