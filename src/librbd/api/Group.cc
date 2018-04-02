@@ -398,6 +398,10 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
 
   std::vector<cls::rbd::GroupSnapshot> snaps;
   r = group_snap_list(io_ctx, group_name, &snaps);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "error listing group snapshots" << dendl;
+    return r;
+  }
 
   for (auto &snap : snaps) {
     r = group_snap_remove_by_record(io_ctx, snap, group_id, group_header_oid);
