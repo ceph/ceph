@@ -3003,6 +3003,9 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
     assert(!dn->get_linkage()->get_inode());
     dn->dir->link_primary_inode(dn, in);
   }
+
+  if (in->is_dir())
+    dn->dir->pop_lru_subdirs.push_back(&in->item_pop_lru);
  
   // add inode?
   if (added) {
