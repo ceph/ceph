@@ -24,6 +24,7 @@ librados::RadosXattrsIter::RadosXattrsIter()
 
 librados::RadosXattrsIter::~RadosXattrsIter()
 {
-  free(val);
-  val = NULL;
+  if (val) {
+    free(val);
+  }
 }
