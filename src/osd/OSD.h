@@ -1114,11 +1114,11 @@ struct OSDShard {
 
   string osdmap_lock_name;
   Mutex osdmap_lock;
-  OSDMapRef osdmap;
+  OSDMapRef shard_osdmap;
 
   OSDMapRef get_osdmap() {
     Mutex::Locker l(osdmap_lock);
-    return osdmap;
+    return shard_osdmap;
   }
 
   string sdata_op_ordering_lock_name;
@@ -1199,11 +1199,11 @@ struct OSDShard {
       shard_name(string("OSDShard.") + stringify(id)),
       sdata_lock_name(shard_name + "::sdata_lock"),
       sdata_lock(sdata_lock_name.c_str(), false, true, false, cct),
+      osdmap_lock_name(shard_name + "::osdmap_lock"),
+      osdmap_lock(osdmap_lock_name.c_str(), false, false),
       sdata_op_ordering_lock_name(shard_name + "::sdata_op_ordering_lock"),
       sdata_op_ordering_lock(sdata_op_ordering_lock_name.c_str(), false, true,
-			     false, cct),
-      osdmap_lock_name(shard_name + "::osdmap_lock"),
-      osdmap_lock(osdmap_lock_name.c_str(), false, false) {
+			     false, cct) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
 	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
