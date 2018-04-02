@@ -875,7 +875,6 @@ private:
   int may_hardlink(Inode *in, const UserPerm& perms);
 
   int _getattr_for_perm(Inode *in, const UserPerm& perms);
-  int _getgrouplist(gid_t **sgids, uid_t uid, gid_t gid);
 
   vinodeno_t _get_vino(Inode *in);
   inodeno_t _get_inodeno(Inode *in);
