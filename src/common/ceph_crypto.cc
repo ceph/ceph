@@ -68,12 +68,6 @@ void ceph::crypto::shutdown(bool shared)
   pthread_mutex_unlock(&crypto_init_mutex);
 }
 
-ceph::crypto::HMAC::~HMAC()
-{
-  PK11_FreeSymKey(symkey);
-  PK11_FreeSlot(slot);
-}
-
 #else
 # error "No supported crypto implementation found."
 #endif

@@ -1,3 +1,4 @@
+// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #ifndef CEPH_CRYPTO_H
 #define CEPH_CRYPTO_H
 
@@ -96,31 +97,33 @@ namespace ceph {
 
     class HMAC {
     private:
-      PK11SlotInfo *slot;
-      PK11SymKey *symkey;
       ScopedPK11Context ctx;
-      unsigned int digest_size;
+      const unsigned int digest_size;
     public:
-      HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const unsigned char *key, size_t length) {
-        digest_size = digestsize;
+      HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const unsigned char *key, size_t length)
+	: digest_size(digestsize)
+      {
+	PK11SlotInfo *slot;
 	slot = PK11_GetBestSlot(cktype, NULL);
 	assert(slot);
 	SECItem keyItem;
 	keyItem.type = siBuffer;
 	keyItem.data = (unsigned char*)key;
 	keyItem.len = length;
+	PK11SymKey *symkey;
 	symkey = PK11_ImportSymKey(slot, cktype, PK11_OriginUnwrap,
 				   CKA_SIGN,  &keyItem, NULL);
+	PK11_FreeSlot(slot);
 	assert(symkey);
 	SECItem param;
 	param.type = siBuffer;
 	param.data = NULL;
 	param.len = 0;
 	ctx.reset(PK11_CreateContextBySymKey(cktype, CKA_SIGN, symkey, &param));
+	PK11_FreeSymKey(symkey);
 	assert(ctx);
 	Restart();
       }
-      ~HMAC ();
       void Restart() {
 	SECStatus s;
 	s = PK11_DigestBegin(ctx.get());
