@@ -9416,8 +9416,11 @@ void OSDShard::consume_map(
 		 << " waiting item " << qi
 		 << " epoch " << qi.get_map_epoch()
 		 << " <= " << osdmap->get_epoch()
-		 << ", stale, dropping" << dendl;
-	*pushes_to_free += qi.get_reserved_pushes();
+		 << ", "
+		 << (qi.get_map_epoch() < osdmap->get_epoch() ? "stale" :
+		     "misdirected")
+		 << ", dropping" << dendl;
+        *pushes_to_free += qi.get_reserved_pushes();
 	slot->waiting.pop_front();
       }
       if (slot->waiting.empty() &&
