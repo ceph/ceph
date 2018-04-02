@@ -14,6 +14,7 @@ protected:
 
 public:
   int verify_permission() override;
+  virtual uint64_t get_op() = 0;
   void send_response() override;
   void dump(Formatter *f) const;
 };
@@ -36,6 +37,7 @@ public:
   void execute() override;
   int get_params();
   const char* name() const override { return "put_user-policy"; }
+  uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_PUT_USER_POLICY; }
 };
 
@@ -45,6 +47,7 @@ public:
   void execute() override;
   int get_params();
   const char* name() const override { return "get_user_policy"; }
+  uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_GET_USER_POLICY; }
 };
 
@@ -54,6 +57,7 @@ public:
   void execute() override;
   int get_params();
   const char* name() const override { return "list_user_policies"; }
+  uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_LIST_USER_POLICIES; }
 };
 
@@ -63,6 +67,7 @@ public:
   void execute() override;
   int get_params();
   const char* name() const override { return "delete_user_policy"; }
+  uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_DELETE_USER_POLICY; }
 };
 

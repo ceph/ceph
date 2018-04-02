@@ -1069,12 +1069,23 @@ bool verify_user_permission(struct req_state * const s,
                             const uint64_t op)
 {
   auto usr_policy_res = eval_user_policies(user_policies, s->env, boost::none, op, res);
-  if (usr_policy_res == Effect::Deny)
+  if (usr_policy_res == Effect::Deny) {
     return false;
+  }
 
-  auto perm = op_to_perm(op);
+  if (op == rgw::IAM::s3CreateBucket || op == rgw::IAM::s3ListAllMyBuckets) {
+    auto perm = op_to_perm(op);
 
-  return verify_user_permission_no_policy(s, user_acl, perm);
+    return verify_user_permission_no_policy(s, user_acl, perm);
+  }
+
+  if (usr_policy_res == Effect::Pass) {
+    return false;
+  }
+  else if (usr_policy_res == Effect::Allow) {
+    return true;
+  }
+  return false;
 }
 
 bool verify_user_permission_no_policy(struct req_state * const s,
