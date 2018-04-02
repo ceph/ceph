@@ -504,7 +504,7 @@ int Pipe::accept()
 
     pipe_lock.Unlock();
 
-    if (!msgr->verify_authorizer(connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
+    if (!msgr->ms_deliver_verify_authorizer(connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
 				 authorizer_reply, authorizer_valid, session_key) ||
 	!authorizer_valid) {
       ldout(msgr->cct,0) << "accept: got bad authorizer" << dendl;
@@ -1118,7 +1118,7 @@ int Pipe::connect()
 
   while (1) {
     delete authorizer;
-    authorizer = msgr->get_authorizer(peer_type, false);
+    authorizer = msgr->ms_deliver_get_authorizer(peer_type, false);
     bufferlist authorizer_reply;
 
     ceph_msg_connect connect;
@@ -1227,7 +1227,7 @@ int Pipe::connect()
       got_bad_auth = true;
       pipe_lock.Unlock();
       delete authorizer;
-      authorizer = msgr->get_authorizer(peer_type, true);  // try harder
+      authorizer = msgr->ms_deliver_get_authorizer(peer_type, true);  // try harder
       continue;
     }
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
