@@ -23,3 +23,8 @@
     <!-- Has to be on the same line to prevent a space between state and comma. -->
   </span>
 </ng-template>
+
+<ng-template #osdUsageTpl
+             let-row="row">
+  <cd-usage-bar [totalBytes]="row.stats.stat_bytes" [usedBytes]="row.stats.stat_bytes_used"></cd-usage-bar>
+</ng-template>
