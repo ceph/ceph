@@ -4176,7 +4176,9 @@ int PrimaryLogPG::trim_object(
     assert(p != snapset.clones.end());
   
     snapid_t last = coid.snap;
-    ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
+    uint64_t bytes = snapset.get_clone_bytes(last);
+    dout(20) << __func__ << " num_bytes -= " << bytes << " get_clone_bytes" << dendl;
+    ctx->delta_stats.num_bytes -= bytes;
 
     if (p != snapset.clones.begin()) {
       // not the oldest... merge overlap into next older clone
@@ -4185,14 +4187,20 @@ int PrimaryLogPG::trim_object(
       prev_coid.snap = *n;
       bool adjust_prev_bytes = is_present_clone(prev_coid);
 
-      if (adjust_prev_bytes)
+      if (adjust_prev_bytes) {
+	dout(20) << __func__ << " num_bytes -= " << snapset.get_clone_bytes(*n)
+		 << " adjust_prev_bytes" << dendl;
 	ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(*n);
+      }
 
       snapset.clone_overlap[*n].intersection_of(
 	snapset.clone_overlap[*p]);
 
-      if (adjust_prev_bytes)
+      if (adjust_prev_bytes) {
+	dout(20) << __func__ << " num_bytes += " << snapset.get_clone_bytes(*n)
+		 << " adjust_prev_bytes" << dendl;
 	ctx->delta_stats.num_bytes += snapset.get_clone_bytes(*n);
+      }
     }
     ctx->delta_stats.num_objects--;
     if (coi.is_dirty())
@@ -6585,6 +6593,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  obs.oi.clear_omap_digest();
 	  obs.oi.clear_flag(object_info_t::FLAG_OMAP);
 	}
+	dout(20) << __func__ << " num_bytes -= " << oi.size << " io.size" << dendl;
         ctx->delta_stats.num_bytes -= oi.size;
 	oi.size = 0;
 	oi.new_object();
@@ -7422,8 +7431,10 @@ inline int PrimaryLogPG::_delete_oid(
   ctx->delta_stats.num_wr++;
   if (soid.is_snap()) {
     assert(ctx->obc->ssc->snapset.clone_overlap.count(soid.snap));
+    dout(20) << __func__ << " num_bytes -= " << ctx->obc->ssc->snapset.get_clone_bytes(soid.snap) << " get_clone_bytes" << dendl;
     ctx->delta_stats.num_bytes -= ctx->obc->ssc->snapset.get_clone_bytes(soid.snap);
   } else {
+    dout(20) << __func__ << " num_bytes -= " << oi.size << " oi.size" << dendl;
     ctx->delta_stats.num_bytes -= oi.size;
   }
   oi.size = 0;
@@ -7587,7 +7598,9 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
       // Adjust the cached objectcontext
       maybe_create_new_object(ctx, true);
+      dout(20) << __func__ << " num_bytes -= " << obs.oi.size << " obs.oi.size" << dendl;
       ctx->delta_stats.num_bytes -= obs.oi.size;
+      dout(20) << __func__ << " num_bytes += " << rollback_to->obs.oi.size << " rollback_to->obs.oi.size" << dendl;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
       obs.oi.size = rollback_to->obs.oi.size;
       if (rollback_to->obs.oi.is_data_digest())
@@ -7768,6 +7781,8 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 	ctx->new_snapset.clone_overlap.rbegin()->second;
       ctx->modified_ranges.intersection_of(newest_overlap);
       // modified_ranges is still in use by the clone
+      dout(20) << __func__ << " num_bytes += " << ctx->modified_ranges.size()
+	       << " modified_ranges.size()" << dendl;
       ctx->delta_stats.num_bytes += ctx->modified_ranges.size();
       newest_overlap.subtract(ctx->modified_ranges);
     }
@@ -7796,7 +7811,9 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
   modified.union_of(ch);
   if (write_full || offset + length > oi.size) {
     uint64_t new_size = offset + length;
+    dout(20) << __func__ << " num_bytes -= " << oi.size << " oi.size" << dendl;
     delta_stats.num_bytes -= oi.size;
+    dout(20) << __func__ << " num_bytes -= " << new_size << " new_size" << dendl;
     delta_stats.num_bytes += new_size;
     oi.size = new_size;
   }
@@ -7819,7 +7836,9 @@ void PrimaryLogPG::truncate_update_size_and_usage(
   uint64_t truncate_size)
 {
   if (oi.size != truncate_size) {
+    dout(20) << __func__ << " num_bytes -= " << oi.size << " oi.size" << dendl;
     delta_stats.num_bytes -= oi.size;
+    dout(20) << __func__ << " num_bytes -= " << truncate_size << " truncate_size" << dendl;
     delta_stats.num_bytes += truncate_size;
     oi.size = truncate_size;
   }
@@ -9100,8 +9119,10 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   ctx->modified_ranges.union_of(ch);
 
   if (cb->get_data_size() != obs.oi.size) {
+    dout(20) << __func__ << " num_bytes -= " << obs.oi.size << " obs.oi.size" << dendl;
     ctx->delta_stats.num_bytes -= obs.oi.size;
     obs.oi.size = cb->get_data_size();
+    dout(20) << __func__ << " num_bytes += " << obs.oi.size << " obs.oi.size" << dendl;    
     ctx->delta_stats.num_bytes += obs.oi.size;
   }
   ctx->delta_stats.num_wr++;
@@ -9281,9 +9302,10 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
       assert(obc->ssc->snapset.clone_size[soid.snap] ==
 	     results->object_size);
       assert(obc->ssc->snapset.clone_overlap.count(soid.snap));
-
+      dout(20) << __func__ << " num_bytes += " << obc->ssc->snapset.get_clone_bytes(soid.snap) << " obc->ssc->snapset.get_clone_bytes(soid.snap)" << dendl;
       tctx->delta_stats.num_bytes += obc->ssc->snapset.get_clone_bytes(soid.snap);
     } else {
+      dout(20) << __func__ << " num_bytes += " << results->object_size << " results->object_size" << dendl;
       tctx->delta_stats.num_bytes += results->object_size;
     }
   }
@@ -13274,6 +13296,7 @@ void PrimaryLogPG::hit_set_persist()
   ctx->delta_stats.num_objects++;
   ctx->delta_stats.num_objects_hit_set_archive++;
 
+  dout(20) << __func__ << " num_bytes += " << bl.length() << " bl.length()" << dendl;
   ctx->delta_stats.num_bytes += bl.length();
   ctx->delta_stats.num_bytes_hit_set_archive += bl.length();
 
@@ -13339,6 +13362,7 @@ void PrimaryLogPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
     assert(obc);
     --ctx->delta_stats.num_objects;
     --ctx->delta_stats.num_objects_hit_set_archive;
+    dout(20) << __func__ << " num_bytes -= " << obc->obs.oi.size << " obc->obs.oi.size" << dendl;
     ctx->delta_stats.num_bytes -= obc->obs.oi.size;
     ctx->delta_stats.num_bytes_hit_set_archive -= obc->obs.oi.size;
   }
