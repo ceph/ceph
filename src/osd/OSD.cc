@@ -3849,7 +3849,7 @@ void OSD::load_pgs()
       continue;
     }
 
-    // there can be no waiters here, so we don't call wake_pg_waiters
+    // there can be no waiters here, so we don't call _wake_pg_slot
 
     pg->lock();
     pg->ch = store->open_collection(pg->coll);
@@ -9690,7 +9690,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     }
 
     if (slot->to_process.empty()) {
-      // raced with wake_pg_waiters or consume_map
+      // raced with _wake_pg_slot or consume_map
       dout(20) << __func__ << " " << token
 	       << " nothing queued" << dendl;
       if (pg) {
@@ -9702,7 +9702,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     if (requeue_seq != slot->requeue_seq) {
       dout(20) << __func__ << " " << token
 	       << " requeue_seq " << slot->requeue_seq << " > our "
-	       << requeue_seq << ", we raced with wake_pg_waiters"
+	       << requeue_seq << ", we raced with _wake_pg_slot"
 	       << dendl;
       if (pg) {
 	pg->unlock();
