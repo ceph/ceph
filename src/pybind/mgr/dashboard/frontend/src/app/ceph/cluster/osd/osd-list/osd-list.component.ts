@@ -3,7 +3,7 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { DimlessPipe } from '../../../../shared/pipes/dimless.pipe';
+import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { OsdService } from '../osd.service';
 
 @Component({
@@ -14,6 +14,7 @@ import { OsdService } from '../osd.service';
 
 export class OsdListComponent implements OnInit {
   @ViewChild('statusColor') statusColor: TemplateRef<any>;
+  @ViewChild('osdUsageTpl') osdUsageTpl: TemplateRef<any>;
 
   osds = [];
   columns: CdTableColumn[];
@@ -21,7 +22,7 @@ export class OsdListComponent implements OnInit {
 
   constructor(
     private osdService: OsdService,
-    private dimlessPipe: DimlessPipe
+    private dimlessBinaryPipe: DimlessBinaryPipe
   ) { }
 
   ngOnInit() {
@@ -30,7 +31,8 @@ export class OsdListComponent implements OnInit {
       {prop: 'id', name: 'ID', cellTransformation: CellTemplate.bold},
       {prop: 'collectedStates', name: 'Status', cellTemplate: this.statusColor},
       {prop: 'stats.numpg', name: 'PGs'},
-      {prop: 'usedPercent', name: 'Usage'},
+      {prop: 'stats.stat_bytes', name: 'Size', pipe: this.dimlessBinaryPipe},
+      {name: 'Usage', cellTemplate: this.osdUsageTpl},
       {
         prop: 'stats_history.out_bytes',
         name: 'Read bytes',
@@ -57,8 +59,6 @@ export class OsdListComponent implements OnInit {
         osd.collectedStates = this.collectStates(osd);
         osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map(i => i[1]);
         osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map(i => i[1]);
-        osd.usedPercent = this.dimlessPipe.transform(osd.stats.stat_bytes_used) + ' / ' +
-          this.dimlessPipe.transform(osd.stats.stat_bytes);
         return osd;
       });
     });
