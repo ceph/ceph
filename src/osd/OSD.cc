@@ -3669,10 +3669,20 @@ PG* OSD::_make_pg(
     ghobject_t oid = make_final_pool_info_oid(pgid.pool());
     bufferlist bl;
     int r = store->read(service.meta_ch, oid, 0, 0, bl);
+    if (r < 0) {
+      derr << __func__ << " missing pool " << pgid.pool() << " tombstone"
+	   << dendl;
+      return nullptr;
+    }
     ceph_assert(r >= 0);
     auto p = bl.begin();
     decode(pi, p);
     decode(name, p);
+    if (p.end()) { // dev release v13.0.2 did not include ec_profile
+      derr << __func__ << " missing ec_profile from pool " << pgid.pool()
+	   << " tombstone" << dendl;
+      return nullptr;
+    }
     decode(ec_profile, p);
   }
   PGPool pool(cct, createmap, pgid.pool(), pi, name);
@@ -3834,6 +3844,11 @@ void OSD::load_pgs()
     } else {
       pg = _make_pg(osdmap, pgid);
     }
+    if (!pg) {
+      recursive_remove_collection(cct, store, pgid, *it);
+      continue;
+    }
+
     // there can be no waiters here, so we don't call wake_pg_waiters
 
     pg->lock();
