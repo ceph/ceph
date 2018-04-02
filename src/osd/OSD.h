@@ -1112,9 +1112,6 @@ struct OSDShard {
   Mutex sdata_lock;
   Cond sdata_cond;
 
-  string sdata_op_ordering_lock_name;
-  Mutex sdata_op_ordering_lock;   ///< protects all members below
-
   string osdmap_lock_name;
   Mutex osdmap_lock;
   OSDMapRef osdmap;
@@ -1123,6 +1120,9 @@ struct OSDShard {
     Mutex::Locker l(osdmap_lock);
     return osdmap;
   }
+
+  string sdata_op_ordering_lock_name;
+  Mutex sdata_op_ordering_lock;   ///< protects remaining members below
 
   /// map of slots for each spg_t.  maintains ordering of items dequeued
   /// from pqueue while _process thread drops shard lock to acquire the
