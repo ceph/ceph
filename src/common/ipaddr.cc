@@ -89,10 +89,9 @@ const struct ifaddrs *find_ipv6_in_subnet(const struct ifaddrs *addrs,
     if (addrs->ifa_addr->sa_family != net->sin6_family)
       continue;
 
-    if (IN6_IS_ADDR_LINKLOCAL(addrs->ifa_addr))
-      continue;
-
     struct in6_addr *cur = &((struct sockaddr_in6*)addrs->ifa_addr)->sin6_addr;
+    if (IN6_IS_ADDR_LINKLOCAL(cur))
+      continue;
     netmask_ipv6(cur, prefix_len, &temp);
 
     if (IN6_ARE_ADDR_EQUAL(&temp, &want))
