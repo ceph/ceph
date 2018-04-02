@@ -7517,7 +7517,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           if (!stop) {
             // for single osd only, wildcard makes too much noise
             ss << "set-device-class item id " << osd << " name '" << name
-               << "' device_class '" << device_class << "': no change";
+               << "' device_class '" << device_class << "': no change. ";
           }
         } else {
           updated.insert(osd);
