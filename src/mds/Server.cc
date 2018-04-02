@@ -239,8 +239,7 @@ void Server::dispatch(Message *m)
 
     bool wait_for_active = true;
     if (mds->is_stopping()) {
-      if (m->get_source().is_mds())
-	wait_for_active = false;
+      wait_for_active = false;
     } else if (mds->is_clientreplay()) {
       if (req->is_queued_for_replay()) {
 	wait_for_active = false;
@@ -336,7 +335,8 @@ void Server::handle_client_session(MClientSession *m)
     if (session->is_opening() ||
 	session->is_open() ||
 	session->is_stale() ||
-	session->is_killing()) {
+	session->is_killing() ||
+	terminating_sessions) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
       // set client metadata for session opened by prepare_force_open_sessions
       if (!m->client_meta.empty())
