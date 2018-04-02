@@ -7613,20 +7613,7 @@ bool MDCache::shutdown_pass()
   }
 
   // empty stray dir
-  if (!shutdown_export_strays()) {
-    dout(7) << "waiting for strays to migrate" << dendl;
-    return false;
-  }
-  
-  // drop our reference to our stray dir inode
-  for (int i = 0; i < NUM_STRAY; ++i) {
-    if (strays[i] &&
-	strays[i]->state_test(CInode::STATE_STRAYPINNED)) {
-      strays[i]->state_clear(CInode::STATE_STRAYPINNED);
-      strays[i]->put(CInode::PIN_STRAY);
-      strays[i]->put_stickydirs();
-    }
-  }
+  bool strays_all_exported = shutdown_export_strays();
 
   // trim cache
   trim(UINT64_MAX);
@@ -7665,6 +7652,11 @@ bool MDCache::shutdown_pass()
     }
   }
 
+  if (!strays_all_exported) {
+    dout(7) << "waiting for strays to migrate" << dendl;
+    return false;
+  }
+
   if (num_auth_subtree > 0) {
     dout(7) << "still have " << num_auth_subtree << " auth subtrees" << dendl;
     show_subtrees();
@@ -7676,6 +7668,16 @@ bool MDCache::shutdown_pass()
     if (!mds->server->terminating_sessions)
       mds->server->terminate_sessions();
     return false;
+  }
+
+  // drop our reference to our stray dir inode
+  for (int i = 0; i < NUM_STRAY; ++i) {
+    if (strays[i] &&
+	strays[i]->state_test(CInode::STATE_STRAYPINNED)) {
+      strays[i]->state_clear(CInode::STATE_STRAYPINNED);
+      strays[i]->put(CInode::PIN_STRAY);
+      strays[i]->put_stickydirs();
+    }
   }
 
   CDir *mydir = myin ? myin->get_dirfrag(frag_t()) : NULL;
@@ -7780,9 +7782,9 @@ bool MDCache::shutdown_export_strays()
 
   list<CDir*> dfs;
   for (int i = 0; i < NUM_STRAY; ++i) {
-    if (!strays[i]) {
+    if (!strays[i] ||
+	!strays[i]->state_test(CInode::STATE_STRAYPINNED))
       continue;
-    }
     strays[i]->get_dirfrags(dfs);
   }
 
