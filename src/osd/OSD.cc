@@ -3888,7 +3888,8 @@ void OSD::load_pgs()
 }
 
 
-PGRef OSD::handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info)
+PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
+				 const PGCreateInfo *info)
 {
   spg_t pgid = info->pgid;
 
@@ -3949,7 +3950,9 @@ PGRef OSD::handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info)
   return pg;
 }
 
-bool OSD::maybe_wait_for_max_pg(OSDMapRef osdmap, spg_t pgid, bool is_mon_create)
+bool OSD::maybe_wait_for_max_pg(const OSDMapRef& osdmap,
+				spg_t pgid,
+				bool is_mon_create)
 {
   const auto max_pgs_per_osd =
     (cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd") *
