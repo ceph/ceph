@@ -79,8 +79,8 @@ public:
   void init_gids(gid_t* _gids, int count) {
     gids = _gids;
     gid_count = count;
+    alloced_gids = true;
   }
-  void take_gids() { alloced_gids = true; }
   void shallow_copy(const UserPerm& o) {
     m_uid = o.m_uid;
     m_gid = o.m_gid;
