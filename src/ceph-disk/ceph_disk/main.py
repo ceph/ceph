@@ -3948,6 +3948,7 @@ def main_deactivate_locked(args):
     osd_id = args.deactivate_by_id
     path = args.path
     target_dev = None
+    data_dev = None
     dmcrypt = False
     devices = list_devices()
 
@@ -3962,7 +3963,19 @@ def main_deactivate_locked(args):
                 elif (path and
                         'path' in dev_part and
                         dev_part['path'] == path):
-                    target_dev = dev_part
+                    if ('type' in dev_part and
+                            dev_part['type'] == 'data'):
+                        target_dev = dev_part
+                    elif ('type' in dev_part and
+                            (dev_part['type'] + '_for') in dev_part):
+                        data_dev = dev_part[dev_part['type'] + '_for']
+    if data_dev:
+        for device in devices:
+            if 'partitions' in device:
+                for dev_part in device.get('partitions'):
+                    if ('path' in dev_part and
+                            dev_part['path'] == data_dev):
+                        target_dev = dev_part
     if not target_dev:
         raise Error('Cannot find any match device!!')
 
