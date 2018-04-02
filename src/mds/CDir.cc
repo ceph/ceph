@@ -203,6 +203,7 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   pop_nested(ceph_clock_now()),
   pop_auth_subtree(ceph_clock_now()),
   pop_auth_subtree_nested(ceph_clock_now()),
+  pop_lru_subdirs(member_offset(CInode, item_pop_lru)),
   num_dentries_nested(0), num_dentries_auth_subtree(0),
   num_dentries_auth_subtree_nested(0),
   dir_auth(CDIR_AUTH_DEFAULT)
@@ -406,7 +407,6 @@ CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
   items[dn->key()] = dn;
 
   dn->get_linkage()->inode = in;
-  in->set_primary_parent(dn);
 
   link_inode_work(dn, in);
 
@@ -553,7 +553,6 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
   assert(dn->get_linkage()->is_null());
 
   dn->get_linkage()->inode = in;
-  in->set_primary_parent(dn);
 
   link_inode_work(dn, in);
 
@@ -578,7 +577,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
   assert(dn->get_linkage()->get_inode() == in);
-  assert(in->get_parent_dn() == dn);
+  in->set_primary_parent(dn);
 
   // set inode version
   //in->inode.version = dn->get_version();
@@ -676,9 +675,11 @@ void CDir::unlink_inode_work( CDentry *dn )
     // unlink auth_pin count
     if (in->auth_pins + in->nested_auth_pins)
       dn->adjust_nested_auth_pins(0 - (in->auth_pins + in->nested_auth_pins), 0 - in->auth_pins, NULL);
-    
+
     // detach inode
     in->remove_primary_parent(dn);
+    if (in->is_dir())
+      in->item_pop_lru.remove_myself();
     dn->get_linkage()->inode = 0;
   } else {
     assert(!dn->get_linkage()->is_null());
@@ -853,10 +854,13 @@ void CDir::steal_dentry(CDentry *dn)
     if (dn->get_linkage()->is_primary()) {
       CInode *in = dn->get_linkage()->get_inode();
       auto pi = in->get_projected_inode();
-      if (dn->get_linkage()->get_inode()->is_dir())
+      if (in->is_dir()) {
 	fnode.fragstat.nsubdirs++;
-      else
+	if (in->item_pop_lru.is_on_list())
+	  pop_lru_subdirs.push_back(&in->item_pop_lru);
+      } else {
 	fnode.fragstat.nfiles++;
+      }
       fnode.rstat.rbytes += pi->accounted_rstat.rbytes;
       fnode.rstat.rfiles += pi->accounted_rstat.rfiles;
       fnode.rstat.rsubdirs += pi->accounted_rstat.rsubdirs;

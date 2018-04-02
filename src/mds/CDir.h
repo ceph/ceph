@@ -379,6 +379,8 @@ protected:
 
   load_spread_t pop_spread;
 
+  elist<CInode*> pop_lru_subdirs;
+
   // and to provide density
   int num_dentries_nested;
   int num_dentries_auth_subtree;
