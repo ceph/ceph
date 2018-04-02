@@ -1181,7 +1181,7 @@ struct OSDShard {
 
   void _wake_pg_slot(spg_t pgid, OSDShardPGSlot *slot);
 
-  void identify_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids);
+  void identify_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids);
   void _prime_splits(set<spg_t> *pgids);
   void prime_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids);
   void register_and_wake_split_child(PG *pg);

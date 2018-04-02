@@ -9468,7 +9468,7 @@ void OSDShard::_wake_pg_slot(
   ++slot->requeue_seq;
 }
 
-void OSDShard::identify_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids)
+void OSDShard::identify_splits(const OSDMapRef& as_of_osdmap, set<spg_t> *pgids)
 {
   Mutex::Locker l(sdata_op_ordering_lock);
   if (osdmap) {
