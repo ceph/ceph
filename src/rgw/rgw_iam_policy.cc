@@ -1446,6 +1446,45 @@ const char* action_bit_string(uint64_t action) {
 
   case s3DeleteObjectVersionTagging:
     return "s3:DeleteObjectVersionTagging";
+
+  case iamPutUserPolicy:
+    return "iam:PutUserPolicy";
+
+  case iamGetUserPolicy:
+    return "iam:GetUserPolicy";
+
+  case iamListUserPolicies:
+    return "iam:ListUserPolicies";
+
+  case iamDeleteUserPolicy:
+    return "iam:DeleteUserPolicy";
+
+  case iamCreateRole:
+    return "iam:CreateRole";
+
+  case iamDeleteRole:
+    return "iam:DeleteRole";
+
+  case iamGetRole:
+    return "iam:GetRole";
+
+  case iamModifyRole:
+    return "iam:ModifyRole";
+
+  case iamListRoles:
+    return "iam:ListRoles";
+
+  case iamPutRolePolicy:
+    return "iam:PutRolePolicy";
+
+  case iamGetRolePolicy:
+    return "iam:GetRolePolicy";
+
+  case iamListRolePolicies:
+    return "iam:ListRolePolicies";
+
+  case iamDeleteRolePolicy:
+    return "iam:DeleteRolePolicy";
   }
   return "s3Invalid";
 }

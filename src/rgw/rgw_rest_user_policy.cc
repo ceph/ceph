@@ -37,9 +37,23 @@ void RGWRestUserPolicy::send_response()
 
 int RGWRestUserPolicy::verify_permission()
 {
-  int ret = check_caps(s->user->caps);
-  ldout(s->cct, 0) << "INFO: verify_permissions ret" << ret << dendl;
-  return ret;
+  if (s->auth.identity->is_anonymous()) {
+    return -EACCES;
+  }
+
+  if(int ret = check_caps(s->user->caps); ret == 0) {
+    return ret;
+  }
+
+  uint64_t op = get_op();
+  string user_name = s->info.args.get("UserName");
+  rgw_user user_id(user_name);
+  if (! verify_user_permission(s, rgw::IAM::ARN(rgw::IAM::ARN(user_id.id,
+                                                "user",
+                                                 user_id.tenant)), op)) {
+    return -EACCES;
+  }
+  return 0;
 }
 
 bool RGWRestUserPolicy::validate_input()
@@ -66,6 +80,11 @@ int RGWUserPolicyRead::check_caps(RGWUserCaps& caps)
 int RGWUserPolicyWrite::check_caps(RGWUserCaps& caps)
 {
     return caps.check_cap("user-policy", RGW_CAP_WRITE);
+}
+
+uint64_t RGWPutUserPolicy::get_op()
+{
+  return rgw::IAM::iamPutUserPolicy;
 }
 
 int RGWPutUserPolicy::get_params()
@@ -95,8 +114,6 @@ void RGWPutUserPolicy::execute()
   }
 
   bufferlist bl = bufferlist::static_from_string(policy);
-  ldout(s->cct, 0) << "policy: " << policy << dendl;
-  ldout(s->cct, 0) << "bufferlist: " << bl.c_str() << dendl;
 
   RGWUserInfo info;
   rgw_user user_id(user_name);
@@ -134,7 +151,11 @@ void RGWPutUserPolicy::execute()
     ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -ERR_MALFORMED_DOC;
   }
-  ldout(s->cct, 20) << "op_ret is : " << op_ret << dendl;
+}
+
+uint64_t RGWGetUserPolicy::get_op()
+{
+  return rgw::IAM::iamGetUserPolicy;
 }
 
 int RGWGetUserPolicy::get_params()
@@ -193,6 +214,11 @@ void RGWGetUserPolicy::execute()
   }
 }
 
+uint64_t RGWListUserPolicies::get_op()
+{
+  return rgw::IAM::iamListUserPolicies;
+}
+
 int RGWListUserPolicies::get_params()
 {
   user_name = s->info.args.get("UserName");
@@ -240,6 +266,11 @@ void RGWListUserPolicies::execute()
   if (op_ret < 0) {
     op_ret = -ERR_INTERNAL_ERROR;
   }
+}
+
+uint64_t RGWDeleteUserPolicy::get_op()
+{
+  return rgw::IAM::iamDeleteUserPolicy;
 }
 
 int RGWDeleteUserPolicy::get_params()
