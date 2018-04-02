@@ -863,8 +863,6 @@ private:
     MAY_READ = 4,
   };
 
-  void init_groups(UserPerm *groups);
-
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
