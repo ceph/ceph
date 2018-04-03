@@ -342,8 +342,15 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0,
 			  gather.new_sub());
 
+#if !defined(__FreeBSD__)
     ctl.journaled_update.merge(ctl.to_update);
     ctl.journaled_remove.merge(ctl.to_remove);
+#else
+    // XXX FreeBSD does not seem to support std::map::merge for C++17
+    // So work around it until it does.
+    ctl.journaled_update.insert(ctl.to_update.begin(), ctl.to_update.end());
+    ctl.journaled_remove.insert(ctl.to_remove.begin(), ctl.to_remove.end());
+#endif
     ctl.to_update.clear();
     ctl.to_remove.clear();
   };
