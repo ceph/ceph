@@ -522,6 +522,12 @@ public:
       register_on_applied(new ContainerContext<RunOnDeleteRef>(_complete));
       register_on_commit(new ContainerContext<RunOnDeleteRef>(_complete));
     }
+    bool has_contexts() const {
+      return
+	!on_commit.empty() ||
+	!on_applied.empty() ||
+	!on_applied_sync.empty();
+    }
 
     static void collect_contexts(
       vector<Transaction>& t,
