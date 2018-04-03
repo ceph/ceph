@@ -918,6 +918,8 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     for (auto dir : fullauthsubs) {
       if (dir->get_inode()->is_mdsdir())
 	continue;
+      if (dir->is_freezing() || dir->is_frozen())
+	continue;  // export pbly already in progress
       find_exports(dir, amount, exports, have, already_exporting);
       if (have > amount-MIN_OFFLOAD)
 	break;
@@ -971,7 +973,7 @@ void MDBalancer::find_exports(CDir *dir,
       if (!subdir->is_auth()) continue;
       if (already_exporting.count(subdir)) continue;
 
-      if (subdir->is_frozen()) continue;  // can't export this right now!
+      if (subdir->is_frozen() || subdir->is_freezing()) continue;  // can't export this right now!
 
       // how popular?
       double pop = subdir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
