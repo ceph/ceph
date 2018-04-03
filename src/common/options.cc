@@ -7071,6 +7071,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description("big_writes is deprecated in libfuse 3.0.0"),
 
+    Option("fuse_max_write", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Set the maximum number of bytes in a single write operation.  Because the FUSE default is 128kbytes, SO fuse_max_write default set to 0(The default does not take effect)"),
+
     Option("fuse_atomic_o_trunc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
