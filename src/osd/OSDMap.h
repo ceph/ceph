@@ -1475,6 +1475,9 @@ public:
   int parse_osd_id_list(const vector<string>& ls,
 			set<int> *out,
 			ostream *ss) const;
+
+  float pool_raw_used_rate(int64_t poolid) const;
+
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)

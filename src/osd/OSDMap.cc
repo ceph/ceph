@@ -5348,3 +5348,35 @@ void OSDMap::get_random_up_osds_by_subtree(int n,     // whoami
   }
 }
 
+float OSDMap::pool_raw_used_rate(int64_t poolid) const
+{
+  const pg_pool_t *pool = get_pg_pool(poolid);
+  assert(pool != nullptr);
+
+  switch (pool->get_type()) {
+  case pg_pool_t::TYPE_REPLICATED:
+    return pool->get_size();
+    break;
+  case pg_pool_t::TYPE_ERASURE:
+  {
+    auto& ecp =
+      get_erasure_code_profile(pool->erasure_code_profile);
+    auto pm = ecp.find("m");
+    auto pk = ecp.find("k");
+    if (pm != ecp.end() && pk != ecp.end()) {
+      int k = atoi(pk->second.c_str());
+      int m = atoi(pm->second.c_str());
+      int mk = m + k;
+      ceph_assert(mk != 0);
+      ceph_assert(k != 0);
+      return (float)mk / k;
+    } else {
+      return 0.0;
+    }
+  }
+  break;
+  default:
+    ceph_abort_msg("unrecognized pool type");
+  }
+}
+

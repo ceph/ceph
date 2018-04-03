@@ -137,6 +137,9 @@ class OSDMap(ceph_module.BasePyOSDMap):
     def pg_to_up_acting_osds(self, pool_id, ps):
         return self._pg_to_up_acting_osds(pool_id, ps)
 
+    def pool_raw_used_rate(self, pool_id):
+        return self._pool_raw_used_rate(pool_id)
+
 
 class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
     def get_epoch(self):
