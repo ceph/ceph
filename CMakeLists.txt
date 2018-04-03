@@ -423,3 +423,7 @@ add_subdirectory(src)
 
 # man pages must be preprocessed, not supported yet
 #add_subdirectory(man)
+
+if(LINUX)
+  add_subdirectory(etc/sysctl)
+endif()
