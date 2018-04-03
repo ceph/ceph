@@ -236,7 +236,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     remount_cb(NULL),
     ino_invalidate_cb(NULL),
     dentry_invalidate_cb(NULL),
-    getgroups_cb(NULL),
     umask_cb(NULL),
     can_invalidate_dentries(false),
     async_ino_invalidator(m->cct),
@@ -10001,7 +10000,6 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
   ldout(cct, 10) << "ll_register_callbacks cb " << args->handle
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
-		 << " getgroups_cb" << args->getgroups_cb
 		 << " switch_interrupt_cb " << args->switch_intr_cb
 		 << " remount_cb " << args->remount_cb
 		 << dendl;
@@ -10022,7 +10020,6 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
     remount_cb = args->remount_cb;
     remount_finisher.start();
   }
-  getgroups_cb = args->getgroups_cb;
   umask_cb = args->umask_cb;
 }
 
