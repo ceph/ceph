@@ -13,6 +13,7 @@ import { RbdMirroringService } from './rbd-mirroring.service';
 import { RgwDaemonService } from './rgw-daemon.service';
 import { TablePerformanceCounterService } from './table-performance-counter.service';
 import { TcmuIscsiService } from './tcmu-iscsi.service';
+import { UserService } from './user.service';
 
 @NgModule({
   imports: [CommonModule],
@@ -29,7 +30,8 @@ import { TcmuIscsiService } from './tcmu-iscsi.service';
     RbdMirroringService,
     RgwDaemonService,
     TablePerformanceCounterService,
-    TcmuIscsiService
+    TcmuIscsiService,
+    UserService
   ]
 })
 export class ApiModule {}
