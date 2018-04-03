@@ -78,14 +78,19 @@ class DashboardTestCase(MgrTestCase):
         log.info("request %s to %s", method, url)
         if method == 'GET':
             self._resp = self._session.get(url)
-            return self._resp.json()
+            try:
+                return self._resp.json()
+            except ValueError as ex:
+                log.exception("Failed to decode response: %s", self._resp.text)
+                raise ex
         elif method == 'POST':
             self._resp = self._session.post(url, json=data)
         elif method == 'DELETE':
             self._resp = self._session.delete(url, json=data)
         elif method == 'PUT':
             self._resp = self._session.put(url, json=data)
-        return None
+        else:
+            assert False
 
     def _get(self, url):
         return self._request(url, 'GET')

@@ -6,10 +6,11 @@ from cherrypy.lib.sessions import RamSession
 from mock import patch
 
 from .helper import ControllerTestCase
-from ..tools import RESTController
+from ..tools import RESTController, ApiController
 
 
 # pylint: disable=W0613
+@ApiController('foo')
 class FooResource(RESTController):
     elems = []
 
@@ -21,9 +22,7 @@ class FooResource(RESTController):
         return data
 
     def get(self, key, *args, **kwargs):
-        if args:
-            return {'detail': (key, args)}
-        return FooResource.elems[int(key)]
+        return {'detail': (key, args)}
 
     def delete(self, key):
         del FooResource.elems[int(key)]
@@ -36,10 +35,11 @@ class FooResource(RESTController):
         return dict(key=key, **data)
 
 
+@ApiController('fooargs')
 class FooArgs(RESTController):
     @RESTController.args_from_json
-    def set(self, code, name):
-        return {'code': code, 'name': name}
+    def set(self, code, name, opt1=None, opt2=None):
+        return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
 
 
 # pylint: disable=C0102
@@ -93,11 +93,41 @@ class RESTControllerTest(ControllerTestCase):
 
     def test_args_from_json(self):
         self._put("/fooargs/hello", {'name': 'world'})
-        self.assertJsonBody({'code': 'hello', 'name': 'world'})
+        self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': None})
+
+        self._put("/fooargs/hello", {'name': 'world', 'opt1': 'opt1'})
+        self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': 'opt1', 'opt2': None})
+
+        self._put("/fooargs/hello", {'name': 'world', 'opt2': 'opt2'})
+        self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': 'opt2'})
 
     def test_detail_route(self):
+        self._get('/foo/default')
+        self.assertJsonBody({'detail': ['default', []]})
+
+        self._get('/foo/default/default')
+        self.assertJsonBody({'detail': ['default', ['default']]})
+
         self._get('/foo/1/detail')
         self.assertJsonBody({'detail': ['1', ['detail']]})
 
         self._post('/foo/1/detail', 'post-data')
         self.assertStatus(405)
+
+    def test_developer_page(self):
+        self.getPage('/foo', headers=[('Accept', 'text/html')])
+        self.assertIn('<p>GET', self.body.decode('utf-8'))
+        self.assertIn('Content-Type: text/html', self.body.decode('utf-8'))
+        self.assertIn('<form action="/api/foo/" method="post">', self.body.decode('utf-8'))
+        self.assertIn('<input type="hidden" name="_method" value="post" />',
+                      self.body.decode('utf-8'))
+
+    def test_developer_exception_page(self):
+        self.getPage('/foo',
+                     headers=[('Accept', 'text/html'), ('Content-Length', '0')],
+                     method='put')
+        assert '<p>PUT' in self.body.decode('utf-8')
+        assert 'Exception' in self.body.decode('utf-8')
+        assert 'Content-Type: text/html' in self.body.decode('utf-8')
+        assert '<form action="/api/foo/" method="post">' in self.body.decode('utf-8')
+        assert '<input type="hidden" name="_method" value="post" />' in self.body.decode('utf-8')

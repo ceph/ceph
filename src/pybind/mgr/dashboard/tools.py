@@ -3,7 +3,8 @@
 from __future__ import absolute_import
 
 import collections
-import datetime
+from datetime import datetime, timedelta
+import fnmatch
 import importlib
 import inspect
 import json
@@ -12,10 +13,13 @@ import pkgutil
 import sys
 import time
 import threading
+import types  # pylint: disable=import-error
 
 import cherrypy
+from six import add_metaclass
 
-from . import logger
+from .settings import Settings
+from . import logger, mgr
 
 
 def ApiController(path):
@@ -76,10 +80,137 @@ def json_error_page(status, message, traceback, version):
                            version=version))
 
 
+# pylint: disable=too-many-locals
+def browsable_api_view(meth):
+    def wrapper(self, *vpath, **kwargs):
+        assert isinstance(self, BaseController)
+        if not Settings.ENABLE_BROWSABLE_API:
+            return meth(self, *vpath, **kwargs)
+        if 'text/html' not in cherrypy.request.headers.get('Accept', ''):
+            return meth(self, *vpath, **kwargs)
+        if '_method' in kwargs:
+            cherrypy.request.method = kwargs.pop('_method').upper()
+        if '_raw' in kwargs:
+            kwargs.pop('_raw')
+            return meth(self, *vpath, **kwargs)
+
+        template = """
+        <html>
+        <h1>Browsable API</h1>
+        {docstring}
+        <h2>Request</h2>
+        <p>{method} {breadcrump}</p>
+        <h2>Response</h2>
+        <p>Status: {status_code}<p>
+        <pre>{reponse_headers}</pre>
+        <form action="/api/{path}/{vpath}" method="get">
+        <input type="hidden" name="_raw" value="true" />
+        <button type="submit">GET raw data</button>
+        </form>
+        <h2>Data</h2>
+        <pre>{data}</pre>
+        {create_form}
+        <h2>Note</h2>
+        <p>Please note that this API is not an official Ceph REST API to be
+        used by third-party applications. It's primary purpose is to serve
+        the requirements of the Ceph Dashboard and is subject to change at
+        any time. Use at your own risk.</p>
+        """
+
+        create_form_template = """
+        <h2>Create Form</h2>
+        <form action="/api/{path}/{vpath}" method="post">
+        {fields}<br>
+        <input type="hidden" name="_method" value="post" />
+        <button type="submit">Create</button>
+        </form>
+        """
+
+        try:
+            data = meth(self, *vpath, **kwargs)
+        except Exception as e:  # pylint: disable=broad-except
+            except_template = """
+            <h2>Exception: {etype}: {tostr}</h2>
+            <pre>{trace}</pre>
+            Params: {kwargs}
+            """
+            import traceback
+            tb = sys.exc_info()[2]
+            cherrypy.response.headers['Content-Type'] = 'text/html'
+            data = except_template.format(
+                etype=e.__class__.__name__,
+                tostr=str(e),
+                trace='\n'.join(traceback.format_tb(tb)),
+                kwargs=kwargs
+            )
+
+        if cherrypy.response.headers['Content-Type'] == 'application/json':
+            data = json.dumps(json.loads(data), indent=2, sort_keys=True)
+
+        try:
+            create = getattr(self, 'create')
+            f_args = RESTController._function_args(create)
+            input_fields = ['{name}:<input type="text" name="{name}">'.format(name=name) for name in
+                            f_args]
+            create_form = create_form_template.format(
+                fields='<br>'.join(input_fields),
+                path=self._cp_path_,
+                vpath='/'.join(vpath)
+            )
+        except AttributeError:
+            create_form = ''
+
+        def mk_breadcrump(elems):
+            return '/'.join([
+                '<a href="/{}">{}</a>'.format('/'.join(elems[0:i+1]), e)
+                for i, e in enumerate(elems)
+            ])
+
+        cherrypy.response.headers['Content-Type'] = 'text/html'
+        return template.format(
+            docstring='<pre>{}</pre>'.format(self.__doc__) if self.__doc__ else '',
+            method=cherrypy.request.method,
+            path=self._cp_path_,
+            vpath='/'.join(vpath),
+            breadcrump=mk_breadcrump(['api', self._cp_path_] + list(vpath)),
+            status_code=cherrypy.response.status,
+            reponse_headers='\n'.join(
+                '{}: {}'.format(k, v) for k, v in cherrypy.response.headers.items()),
+            data=data,
+            create_form=create_form
+        )
+
+    wrapper.exposed = True
+    if hasattr(meth, '_cp_config'):
+        wrapper._cp_config = meth._cp_config
+    return wrapper
+
+
+class BaseControllerMeta(type):
+    def __new__(mcs, name, bases, dct):
+        new_cls = type.__new__(mcs, name, bases, dct)
+
+        for a_name in new_cls.__dict__:
+            thing = new_cls.__dict__[a_name]
+            if isinstance(thing, (types.FunctionType, types.MethodType))\
+                    and getattr(thing, 'exposed', False):
+
+                # @cherrypy.tools.json_out() is incompatible with our browsable_api_view decorator.
+                cp_config = getattr(thing, '_cp_config', {})
+                if not cp_config.get('tools.json_out.on', False):
+                    setattr(new_cls, a_name, browsable_api_view(thing))
+        return new_cls
+
+
+@add_metaclass(BaseControllerMeta)
 class BaseController(object):
     """
     Base class for all controllers providing API endpoints.
     """
+
+    @cherrypy.expose
+    def default(self, *_vpath, **_params):
+        raise cherrypy.NotFound()
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -123,6 +254,12 @@ class RequestLoggingTool(cherrypy.Tool):
 
     def _format_bytes(self, num):
         units = ['B', 'K', 'M', 'G']
+
+        if isinstance(num, str):
+            try:
+                num = int(num)
+            except ValueError:
+                return "n/a"
 
         format_str = "{:.0f}{}"
         for i, unit in enumerate(units):
@@ -191,7 +328,7 @@ class ViewCache(object):
                 with self._view.lock:
                     self._view.latency = t1 - t0
                     self._view.value = val
-                    self._view.value_when = datetime.datetime.now()
+                    self._view.value_when = datetime.now()
                     self._view.getter_thread = None
                     self._view.exception = None
 
@@ -227,8 +364,8 @@ class ViewCache(object):
             :return: 2-tuple of value status code, value
             """
             with self.lock:
-                now = datetime.datetime.now()
-                if self.value_when and now - self.value_when < datetime.timedelta(
+                now = datetime.now()
+                if self.value_when and now - self.value_when < timedelta(
                         seconds=self.STALE_PERIOD):
                     return ViewCache.VALUE_OK, self.value
 
@@ -326,6 +463,18 @@ class RESTController(BaseController):
 
     @cherrypy.expose
     def default(self, *vpath, **params):
+        if cherrypy.request.path_info.startswith(
+                '{}/api/{}/default'.format(mgr.url_prefix, self._cp_path_)) or \
+                cherrypy.request.path_info.startswith('/{}/default'.format(self._cp_path_)):
+            # These two calls to default() are identical: `vpath` and
+            # params` are both empty:
+            # $ curl 'http://localhost/api/cp_path/'
+            # and
+            # $ curl 'http://localhost/api/cp_path/default'
+            # But we need to distinguish them. To fix this, we need
+            # to add the missing `default`
+            vpath = ['default'] + list(vpath)
+
         method, status_code = self._get_method(vpath)
 
         if cherrypy.request.method not in ['GET', 'DELETE']:
@@ -343,10 +492,24 @@ class RESTController(BaseController):
         func._args_from_json_ = True
         return func
 
+    @staticmethod
+    def _function_args(func):
+        if sys.version_info > (3, 0):  # pylint: disable=no-else-return
+            return list(inspect.signature(func).parameters.keys())
+        else:
+            return inspect.getargspec(func).args[1:]  # pylint: disable=deprecated-method
+
     # pylint: disable=W1505
     @staticmethod
     def _takes_json(func):
         def inner(*args, **kwargs):
+            if cherrypy.request.headers.get('Content-Type',
+                                            '') == 'application/x-www-form-urlencoded':
+                if hasattr(func, '_args_from_json_'):  # pylint: disable=no-else-return
+                    return func(*args, **kwargs)
+                else:
+                    return func(kwargs)
+
             content_length = int(cherrypy.request.headers['Content-Length'])
             body = cherrypy.request.body.read(content_length)
             if not body:
@@ -358,19 +521,8 @@ class RESTController(BaseController):
                 raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
                                          .format(str(e)))
             if hasattr(func, '_args_from_json_'):
-                if sys.version_info > (3, 0):
-                    f_args = list(inspect.signature(func).parameters.keys())
-                else:
-                    f_args = inspect.getargspec(func).args[1:]
-                n_args = []
-                for arg in args:
-                    n_args.append(arg)
-                for arg in f_args:
-                    if arg in data:
-                        n_args.append(data[arg])
-                        data.pop(arg)
-                kwargs.update(data)
-                return func(*n_args, **kwargs)
+                kwargs.update(data.items())
+                return func(*args, **kwargs)
 
             return func(data, *args, **kwargs)
         return inner
@@ -473,43 +625,84 @@ class NotificationQueue(threading.Thread):
         logger.debug("notification queue stopped")
 
     @classmethod
-    def register(cls, func, types=None):
+    def _registered_handler(cls, func, n_types):
+        for _, reg_func in cls._listeners[n_types]:
+            if reg_func == func:
+                return True
+        return False
+
+    @classmethod
+    def register(cls, func, n_types=None, priority=1):
         """Registers function to listen for notifications
 
-        If the second parameter `types` is omitted, the function in `func`
+        If the second parameter `n_types` is omitted, the function in `func`
         parameter will be called for any type of notifications.
 
         Args:
             func (function): python function ex: def foo(val)
-            types (str|list): the single type to listen, or a list of types
+            n_types (str|list): the single type to listen, or a list of types
+            priority (int): the priority level (1=max, +inf=min)
         """
         with cls._lock:
-            if not types:
-                cls._listeners[cls._ALL_TYPES_].add(func)
-                return
-            if isinstance(types, str):
-                cls._listeners[types].add(func)
-            elif isinstance(types, list):
-                for typ in types:
-                    cls._listeners[typ].add(func)
-            else:
-                raise Exception("types param is neither a string nor a list")
+            if not n_types:
+                n_types = [cls._ALL_TYPES_]
+            elif isinstance(n_types, str):
+                n_types = [n_types]
+            elif not isinstance(n_types, list):
+                raise Exception("n_types param is neither a string nor a list")
+            for ev_type in n_types:
+                if not cls._registered_handler(func, ev_type):
+                    cls._listeners[ev_type].add((priority, func))
+                    logger.debug("NQ: function %s was registered for events of"
+                                 " type %s", func, ev_type)
+
+    @classmethod
+    def deregister(cls, func, n_types=None):
+        """Removes the listener function from this notification queue
+
+        If the second parameter `n_types` is ommitted, the function is removed
+        from all event types, otherwise the function is removed only for the
+        specified event types.
+
+        Args:
+            func (function): python function
+            n_types (str|list): the single event type, or a list of event types
+        """
+        with cls._lock:
+            if not n_types:
+                n_types = list(cls._listeners.keys())
+            elif isinstance(n_types, str):
+                n_types = [n_types]
+            elif not isinstance(n_types, list):
+                raise Exception("n_types param is neither a string nor a list")
+            for ev_type in n_types:
+                listeners = cls._listeners[ev_type]
+                toRemove = None
+                for pr, fn in listeners:
+                    if fn == func:
+                        toRemove = (pr, fn)
+                        break
+                if toRemove:
+                    listeners.discard(toRemove)
+                    logger.debug("NQ: function %s was deregistered for events "
+                                 "of type %s", func, ev_type)
 
     @classmethod
     def new_notification(cls, notify_type, notify_value):
-        cls._queue.append((notify_type, notify_value))
         with cls._cond:
+            cls._queue.append((notify_type, notify_value))
             cls._cond.notify()
 
     @classmethod
-    def notify_listeners(cls, events):
+    def _notify_listeners(cls, events):
         for ev in events:
             notify_type, notify_value = ev
             with cls._lock:
                 listeners = list(cls._listeners[notify_type])
                 listeners.extend(cls._listeners[cls._ALL_TYPES_])
+            listeners.sort(key=lambda lis: lis[0])
             for listener in listeners:
-                listener(notify_value)
+                listener[1](notify_value)
 
     def run(self):
         logger.debug("notification queue started")
@@ -521,11 +714,254 @@ class NotificationQueue(threading.Thread):
                     private_buffer.append(self._queue.popleft())
             except IndexError:
                 pass
-            self.notify_listeners(private_buffer)
+            self._notify_listeners(private_buffer)
             with self._cond:
-                self._cond.wait(1.0)
+                while self._running and not self._queue:
+                    self._cond.wait()
         # flush remaining events
         logger.debug("NQ: flush remaining events: %s", len(self._queue))
-        self.notify_listeners(self._queue)
+        self._notify_listeners(self._queue)
         self._queue.clear()
         logger.debug("notification queue finished")
+
+
+# pylint: disable=too-many-arguments
+class TaskManager(object):
+    FINISHED_TASK_SIZE = 10
+    FINISHED_TASK_TTL = 60.0
+
+    VALUE_DONE = "done"
+    VALUE_EXECUTING = "executing"
+
+    _executing_tasks = set()
+    _finished_tasks = set()
+    _lock = threading.Lock()
+
+    _task_local_data = threading.local()
+
+    @classmethod
+    def init(cls):
+        NotificationQueue.register(cls._handle_finished_task, 'cd_task_finished')
+
+    @classmethod
+    def _handle_finished_task(cls, task):
+        logger.info("TM: finished %s", task)
+        with cls._lock:
+            cls._executing_tasks.remove(task)
+            cls._finished_tasks.add(task)
+
+    @classmethod
+    def run(cls, name, metadata, fn, args=None, kwargs=None, executor=None):
+        if not args:
+            args = []
+        if not kwargs:
+            kwargs = {}
+        if not executor:
+            executor = ThreadedExecutor()
+        task = Task(name, metadata, fn, args, kwargs, executor)
+        with cls._lock:
+            if task in cls._executing_tasks:
+                logger.debug("TM: task already executing: %s", task)
+                for t in cls._executing_tasks:
+                    if t == task:
+                        return t
+            logger.debug("TM: created %s", task)
+            cls._executing_tasks.add(task)
+        logger.info("TM: running %s", task)
+        task._run()
+        return task
+
+    @classmethod
+    def current_task(cls):
+        """
+        Returns the current task object.
+        This method should only be called from a threaded task operation code.
+        """
+        return cls._task_local_data.task
+
+    @classmethod
+    def _cleanup_old_tasks(cls, task_list):
+        """
+        The cleanup rule is: maintain the FINISHED_TASK_SIZE more recent
+        finished tasks, and the rest is maintained up to the FINISHED_TASK_TTL
+        value.
+        """
+        now = datetime.now()
+        # list of finished tasks that are older than TTL
+        to_remove = [t for t in task_list
+                     if now - datetime.fromtimestamp(t.end_time) >
+                     timedelta(seconds=cls.FINISHED_TASK_TTL)]
+        to_remove.sort(key=lambda t: t.end_time, reverse=True)
+        for task in to_remove[cls.FINISHED_TASK_SIZE:]:
+            cls._finished_tasks.remove(task)
+
+    @classmethod
+    def list(cls, name_glob=None):
+        executing_tasks = []
+        finished_tasks = []
+        with cls._lock:
+            for task in cls._executing_tasks:
+                if not name_glob or fnmatch.fnmatch(task.name, name_glob):
+                    executing_tasks.append(task)
+            for task in cls._finished_tasks:
+                if not name_glob or fnmatch.fnmatch(task.name, name_glob):
+                    finished_tasks.append(task)
+            cls._cleanup_old_tasks(finished_tasks)
+        executing_tasks.sort(key=lambda t: t.begin_time, reverse=True)
+        finished_tasks.sort(key=lambda t: t.end_time, reverse=True)
+        return executing_tasks, finished_tasks
+
+    @classmethod
+    def list_serializable(cls, ns_glob=None):
+        ex_t, fn_t = cls.list(ns_glob)
+        return [{
+            'name': t.name,
+            'metadata': t.metadata,
+            'begin_time': "{}Z".format(datetime.fromtimestamp(t.begin_time).isoformat()),
+            'progress': t.progress
+        } for t in ex_t if t.begin_time], [{
+            'name': t.name,
+            'metadata': t.metadata,
+            'begin_time': "{}Z".format(datetime.fromtimestamp(t.begin_time).isoformat()),
+            'end_time': "{}Z".format(datetime.fromtimestamp(t.end_time).isoformat()),
+            'duration': t.duration,
+            'progress': t.progress,
+            'success': not t.exception,
+            'ret_value': t.ret_value,
+            'exception': t.exception
+        } for t in fn_t]
+
+
+class TaskExecutor(object):
+    def __init__(self):
+        self.task = None
+
+    def init(self, task):
+        self.task = task
+
+    # pylint: disable=broad-except
+    def start(self):
+        logger.debug("EX: executing task %s", self.task)
+        try:
+            self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)
+        except Exception as ex:
+            logger.exception("Error while calling %s", self.task)
+            self.finish(None, ex)
+
+    def finish(self, ret_value, exception):
+        if not exception:
+            logger.debug("EX: successfully finished task: %s", self.task)
+        else:
+            logger.debug("EX: task finished with exception: %s", self.task)
+        self.task._complete(ret_value, exception)
+
+
+class ThreadedExecutor(TaskExecutor):
+    def __init__(self):
+        super(ThreadedExecutor, self).__init__()
+        self._thread = threading.Thread(target=self._run)
+
+    def start(self):
+        self._thread.start()
+
+    # pylint: disable=broad-except
+    def _run(self):
+        TaskManager._task_local_data.task = self.task
+        try:
+            logger.debug("TEX: executing task %s", self.task)
+            val = self.task.fn(*self.task.fn_args, **self.task.fn_kwargs)
+        except Exception as ex:
+            logger.exception("Error while calling %s", self.task)
+            self.finish(None, ex)
+        else:
+            self.finish(val, None)
+
+
+class Task(object):
+    def __init__(self, name, metadata, fn, args, kwargs, executor):
+        self.name = name
+        self.metadata = metadata
+        self.fn = fn
+        self.fn_args = args
+        self.fn_kwargs = kwargs
+        self.executor = executor
+        self.running = False
+        self.event = threading.Event()
+        self.progress = None
+        self.ret_value = None
+        self.begin_time = None
+        self.end_time = None
+        self.duration = 0
+        self.exception = None
+        self.lock = threading.Lock()
+
+    def __hash__(self):
+        return hash((self.name, tuple(sorted(self.metadata.items()))))
+
+    def __eq__(self, other):
+        return self.name == self.name and self.metadata == self.metadata
+
+    def __str__(self):
+        return "Task(ns={}, md={})" \
+               .format(self.name, self.metadata)
+
+    def _run(self):
+        with self.lock:
+            assert not self.running
+            self.executor.init(self)
+            self.set_progress(0, in_lock=True)
+            self.begin_time = time.time()
+            self.running = True
+        self.executor.start()
+
+    def _complete(self, ret_value, exception=None):
+        now = time.time()
+        with self.lock:
+            assert self.running, "_complete cannot be called before _run"
+            self.end_time = now
+            self.ret_value = ret_value
+            self.exception = exception
+            self.duration = now - self.begin_time
+            if not self.exception:
+                self.set_progress(100, True)
+        NotificationQueue.new_notification('cd_task_finished', self)
+        self.event.set()
+        logger.debug("TK: execution of %s finished in: %s s", self,
+                     self.duration)
+
+    def wait(self, timeout=None):
+        with self.lock:
+            assert self.running, "wait cannot be called before _run"
+            ev = self.event
+
+        success = ev.wait(timeout=timeout)
+        with self.lock:
+            if success:
+                # the action executed within the timeout
+                if self.exception:
+                    # pylint: disable=raising-bad-type
+                    # execution raised an exception
+                    raise self.exception
+                return TaskManager.VALUE_DONE, self.ret_value
+            # the action is still executing
+            return TaskManager.VALUE_EXECUTING, None
+
+    def inc_progress(self, delta, in_lock=False):
+        if not isinstance(delta, int) or delta < 0:
+            raise Exception("Progress delta value must be a positive integer")
+        if not in_lock:
+            self.lock.acquire()
+        prog = self.progress + delta
+        self.progress = prog if prog <= 100 else 100
+        if not in_lock:
+            self.lock.release()
+
+    def set_progress(self, percentage, in_lock=False):
+        if not isinstance(percentage, int) or percentage < 0 or percentage > 100:
+            raise Exception("Progress value must be in percentage "
+                            "(0 <= percentage <= 100)")
+        if not in_lock:
+            self.lock.acquire()
+        self.progress = percentage
+        if not in_lock:
+            self.lock.release()

@@ -45,7 +45,9 @@ void usage()
        << "  -a BASE64, --add-key BASE64   will add an encoded key to the keyring\n"
        << "  --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem\n"
        << "  --caps CAPSFILE               will set all of capabilities associated with a\n"
-       << "                                given key, for all subsystems"
+       << "                                given key, for all subsystems\n"
+       << "  --mode MODE                   will set the desired file mode to the keyring\n"
+       << "                                e.g: '0644', defaults to '0600'"
        << std::endl;
   exit(1);
 }
@@ -62,6 +64,15 @@ int main(int argc, const char **argv)
   map<string,bufferlist> caps;
   std::string fn;
 
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
+
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
@@ -72,6 +83,7 @@ int main(int argc, const char **argv)
   bool print_key = false;
   bool create_keyring = false;
   bool set_auid = false;
+  int mode = 0600; // keyring file mode
   std::vector<const char*>::iterator i;
 
   /* Handle options unique to ceph-authtool
@@ -118,6 +130,13 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       set_auid = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--mode", (char*)NULL)) {
+      std::string err;
+      mode = strict_strtoll(val.c_str(), 8, &err);
+      if (!err.empty()) {
+        cerr << "Option --mode requires an argument" << std::endl;
+        exit(1);
+      }
     } else if (fn.empty()) {
       fn = *i++;
     } else {
@@ -298,7 +317,7 @@ int main(int argc, const char **argv)
   if (modified) {
     bufferlist bl;
     keyring.encode_plaintext(bl);
-    r = bl.write_file(fn.c_str(), 0600);
+    r = bl.write_file(fn.c_str(), mode);
     if (r < 0) {
       cerr << "could not write " << fn << std::endl;
       exit(1);

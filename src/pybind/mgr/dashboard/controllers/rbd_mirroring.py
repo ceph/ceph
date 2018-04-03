@@ -161,7 +161,7 @@ class RbdMirror(BaseController):
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def default(self):
+    def default(self, *_vpath, **_params):
         status, content_data = self._get_content_data()
         return {'status': status, 'content_data': content_data}
 

@@ -171,7 +171,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   filer(m->objecter, m->finisher),
   exceeded_size_limit(false),
   recovery_queue(m),
-  stray_manager(m, purge_queue_)
+  stray_manager(m, purge_queue_),
+  open_file_table(m)
 {
   migrator.reset(new Migrator(mds, this));
   root = NULL;
@@ -4803,7 +4804,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 
     // caps_wanted
     if (is.caps_wanted) {
-      in->mds_caps_wanted[from] = is.caps_wanted;
+      in->set_mds_caps_wanted(from, is.caps_wanted);
       dout(15) << " inode caps_wanted " << ccap_string(is.caps_wanted)
 	       << " on " << *in << dendl;
     }
@@ -5293,9 +5294,40 @@ void MDCache::rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map
     rejoin_gather_finish();
 }
 
+void MDCache::rejoin_prefetch_ino_finish(inodeno_t ino, int ret)
+{
+  auto p = cap_imports.find(ino);
+  if (p != cap_imports.end()) {
+    dout(10) << __func__ << " ino " << ino << " ret " << ret << dendl;
+    if (ret < 0) {
+      cap_imports_missing.insert(ino);
+    } else if (ret != mds->get_nodeid()) {
+      for (auto q = p->second.begin(); q != p->second.end(); ++q) {
+	assert(q->second.count(MDS_RANK_NONE));
+	assert(q->second.size() == 1);
+	rejoin_export_caps(p->first, q->first, q->second[MDS_RANK_NONE], ret);
+      }
+      cap_imports.erase(p);
+    }
+  }
+}
+
 bool MDCache::process_imported_caps()
 {
   dout(10) << "process_imported_caps" << dendl;
+
+  if (!open_file_table.is_prefetched() &&
+      open_file_table.prefetch_inodes()) {
+    open_file_table.wait_for_prefetch(
+	new MDSInternalContextWrapper(mds,
+	  new FunctionContext([this](int r) {
+	    assert(rejoin_gather.count(mds->get_nodeid()));
+	    process_imported_caps();
+	    })
+	  )
+	);
+    return true;
+  }
 
   for (auto p = cap_imports.begin(); p != cap_imports.end(); ++p) {
     CInode *in = get_inode(p->first);
@@ -5602,10 +5634,8 @@ void MDCache::clean_open_file_lists()
       CInode *in = *q;
       ++q;
       if (in->last == CEPH_NOSNAP) {
-	if (!in->is_any_caps_wanted()) {
-	  dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
-	  in->item_open_file.remove_myself();
-	}
+	dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
+	in->item_open_file.remove_myself();
       } else {
 	if (in->client_snap_caps.empty()) {
 	  dout(10) << " unlisting flushed snap inode " << *in << dendl;
@@ -7413,7 +7443,7 @@ void MDCache::inode_remove_replica(CInode *in, mds_rank_t from, bool rejoin,
 				   set<SimpleLock *>& gather_locks)
 {
   in->remove_replica(from);
-  in->mds_caps_wanted.erase(from);
+  in->set_mds_caps_wanted(from, 0);
   
   // note: this code calls _eval more often than it needs to!
   // fix lock
@@ -8379,8 +8409,8 @@ struct C_MDC_OpenInoTraverseDir : public MDCacheContext {
       mdcache->handle_open_ino(msg, r);
       return;
     }
-    assert(mdcache->opening_inodes.count(ino));
-    mdcache->_open_ino_traverse_dir(ino, mdcache->opening_inodes[ino], r);
+    auto& info = mdcache->opening_inodes.at(ino);
+    mdcache->_open_ino_traverse_dir(ino, info, r);
   }
 };
 
@@ -8397,8 +8427,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
 {
   dout(10) << "_open_ino_backtrace_fetched ino " << ino << " errno " << err << dendl;
 
-  assert(opening_inodes.count(ino));
-  open_ino_info_t& info = opening_inodes[ino];
+  open_ino_info_t& info = opening_inodes.at(ino);
 
   CInode *in = get_inode(ino);
   if (in) {
@@ -8473,8 +8502,7 @@ void MDCache::_open_ino_parent_opened(inodeno_t ino, int ret)
 {
   dout(10) << "_open_ino_parent_opened ino " << ino << " ret " << ret << dendl;
 
-  assert(opening_inodes.count(ino));
-  open_ino_info_t& info = opening_inodes[ino];
+  open_ino_info_t& info = opening_inodes.at(ino);
 
   CInode *in = get_inode(ino);
   if (in) {
@@ -8527,6 +8555,8 @@ void MDCache::_open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir, bool
   if (dir->state_test(CDir::STATE_REJOINUNDEF))
     assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
   dir->fetch(new C_MDC_OpenInoTraverseDir(this, ino, m, parent));
+  if (mds->logger)
+    mds->logger->inc(l_mds_openino_dir_fetch);
 }
 
 int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
@@ -8688,21 +8718,22 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
   dout(10) << "do_open_ino_peer " << ino << " active " << active
 	   << " all " << all << " checked " << info.checked << dendl;
 
+  mds_rank_t whoami = mds->get_nodeid();
   mds_rank_t peer = MDS_RANK_NONE;
-  if (info.auth_hint >= 0) {
+  if (info.auth_hint >= 0 && info.auth_hint != whoami) {
     if (active.count(info.auth_hint)) {
       peer = info.auth_hint;
       info.auth_hint = MDS_RANK_NONE;
     }
   } else {
     for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p)
-      if (*p != mds->get_nodeid() && info.checked.count(*p) == 0) {
+      if (*p != whoami && info.checked.count(*p) == 0) {
 	peer = *p;
 	break;
       }
   }
   if (peer < 0) {
-    all.erase(mds->get_nodeid());
+    all.erase(whoami);
     if (all != info.checked) {
       dout(10) << " waiting for more peers to be active" << dendl;
     } else {
@@ -8716,6 +8747,8 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
     if (info.discover || !info.fetch_backtrace)
       pa = &info.ancestors;
     mds->send_message_mds(new MMDSOpenIno(info.tid, ino, pa), peer);
+    if (mds->logger)
+      mds->logger->inc(l_mds_openino_peer_discover);
   }
 }
 
@@ -8830,8 +8863,9 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase* fin,
   dout(10) << "open_ino " << ino << " pool " << pool << " want_replica "
 	   << want_replica << dendl;
 
-  if (opening_inodes.count(ino)) {
-    open_ino_info_t& info = opening_inodes[ino];
+  auto it = opening_inodes.find(ino);
+  if (it != opening_inodes.end()) {
+    open_ino_info_t& info = it->second;
     if (want_replica) {
       info.want_replica = true;
       if (want_xlocked && !info.want_xlocked) {
@@ -8857,7 +8891,14 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase* fin,
     info.tid = ++open_ino_last_tid;
     info.pool = pool >= 0 ? pool : default_file_layout.pool_id;
     info.waiters.push_back(fin);
-    do_open_ino(ino, info, 0);
+    if (mds->is_rejoin() &&
+	open_file_table.get_ancestors(ino, info.ancestors, info.auth_hint)) {
+      info.fetch_backtrace = false;
+      info.checking = mds->get_nodeid();
+      _open_ino_traverse_dir(ino, info, 0);
+    } else {
+      do_open_ino(ino, info, 0);
+    }
   }
 }
 
@@ -9588,6 +9629,8 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
 {
   object_t oid = CInode::get_object_name(ino, frag_t(), "");
   mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
+  if (mds->logger)
+    mds->logger->inc(l_mds_openino_backtrace_fetch);
 }
 
 

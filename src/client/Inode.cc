@@ -46,7 +46,9 @@ ostream& operator<<(ostream &out, const Inode &in)
       << " open=" << in.open_by_mode
       << " mode=" << oct << in.mode << dec
       << " size=" << in.size << "/" << in.max_size
+      << " btime=" << in.btime
       << " mtime=" << in.mtime
+      << " ctime=" << in.ctime
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";

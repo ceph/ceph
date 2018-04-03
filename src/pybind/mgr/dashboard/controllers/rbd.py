@@ -34,11 +34,11 @@ class Rbd(RESTController):
         Formats the bitmask:
 
         >>> Rbd._format_bitmask(45)
-        'deep-flatten, exclusive-lock, layering, object-map'
+        ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
         """
         names = [val for key, val in Rbd.RBD_FEATURES_NAME_MAPPING.items()
                  if key & features == key]
-        return ', '.join(sorted(names))
+        return sorted(names)
 
     @staticmethod
     def _format_features(features):
@@ -73,9 +73,14 @@ class Rbd(RESTController):
             i = rbd.Image(ioctx, name)
             stat = i.stat()
             stat['name'] = name
+            stat['id'] = i.id()
             features = i.features()
             stat['features'] = features
             stat['features_name'] = self._format_bitmask(features)
+
+            # the following keys are deprecated
+            del stat['parent_pool']
+            del stat['parent_name']
 
             try:
                 parent_info = i.parent_info()

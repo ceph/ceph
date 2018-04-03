@@ -51,7 +51,8 @@ RGWCivetWeb::RGWCivetWeb(mg_connection* const conn)
 
 size_t RGWCivetWeb::read_data(char *buf, size_t len)
 {
-  int c, ret;
+  size_t c;
+  int ret;
   if (got_eof_on_read) {
     return 0;
   }

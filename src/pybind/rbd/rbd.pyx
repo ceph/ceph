@@ -287,6 +287,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count)
     int rbd_get_create_timestamp(rbd_image_t image, timespec *timestamp)
     int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
+    int rbd_get_name(rbd_image_t image, char *name, size_t *name_len)
     int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
     int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
                                   size_t prefix_len)
@@ -544,13 +545,13 @@ class PermissionError(OSError):
 class ImageNotFound(OSError):
     pass
 
-class ObjectNotFound(Error):
+class ObjectNotFound(OSError):
     pass
 
 class ImageExists(OSError):
     pass
 
-class ObjectExists(Error):
+class ObjectExists(OSError):
     pass
 
 
@@ -650,8 +651,8 @@ cdef make_ex(ret, msg, exception_map=errno_to_exception):
     :returns: a subclass of :class:`Error`
     """
     ret = abs(ret)
-    if ret in errno_to_exception:
-        return errno_to_exception[ret](msg, errno=ret)
+    if ret in exception_map:
+        return exception_map[ret](msg, errno=ret)
     else:
         return OSError(msg, errno=ret)
 
@@ -1642,7 +1643,6 @@ cdef class Group(object):
         :type name: str
 
         :raises: :class:`ObjectNotFound`
-        :raises: :class:`ObjectExists`
         :raises: :class:`InvalidArgument`
         :raises: :class:`FunctionNotSupported`
         """
@@ -1692,7 +1692,6 @@ cdef class Group(object):
         :type name: str
 
         :raises: :class:`ObjectNotFound`
-        :raises: :class:`ObjectExists`
         :raises: :class:`InvalidArgument`
         :raises: :class:`FunctionNotSupported`
         """
@@ -1810,6 +1809,8 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error opening image %s at snapshot %s' % (self.name, snapshot))
         self.closed = False
+        if name is None:
+            self.name = self.get_name()
 
     def __enter__(self):
         return self
@@ -1919,6 +1920,28 @@ cdef class Image(object):
             'parent_pool'       : info.parent_pool,
             'parent_name'       : info.parent_name
             }
+
+    def get_name(self):
+        """
+        Get the RBD image name
+
+        :returns: str - image name
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 64
+            char *image_name = NULL
+        try:
+            while ret == -errno.ERANGE:
+                image_name =  <char *>realloc_chk(image_name, size)
+                with nogil:
+                    ret = rbd_get_name(self.image, image_name, &size)
+
+            if ret != 0:
+                raise make_ex(ret, 'error getting name for image %s' % (self.name,))
+            return decode_cstr(image_name)
+        finally:
+            free(image_name)
 
     def id(self):
         """

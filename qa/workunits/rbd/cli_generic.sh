@@ -1,5 +1,7 @@
 #!/bin/sh -ex
 
+export RBD_FORCE_ALLOW_V1=1
+
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
@@ -419,7 +421,7 @@ test_trash() {
 
     rbd trash mv test2
     ID=`rbd trash ls | cut -d ' ' -f 1`
-    rbd info --image-id $ID | grep "rbd image '$ID'"
+    rbd info --image-id $ID | grep "rbd image 'test2'"
 
     rbd trash restore $ID
     rbd ls | grep test2
@@ -540,6 +542,58 @@ test_clone_v2() {
     rbd rm test2
 }
 
+test_thick_provision() {
+    echo "testing thick provision..."
+    remove_images
+
+    # Try to create small and large thick-pro image and
+    # check actual size. (64M and 4G)
+
+    # Small thick-pro image test
+    rbd create $RBD_CREATE_ARGS --thick-provision -s 64M test1
+    count=0
+    ret=""
+    while [ $count -lt 10 ]
+    do
+        rbd du|grep test1|tr -s " "|cut -d " " -f 3|grep '^64M' && ret=$?
+        if [ "$ret" = "0" ]
+        then
+            break;
+        fi
+        count=`expr $count + 1`
+        sleep 2
+    done
+    rbd du
+    if [ "$ret" != "0" ]
+    then
+        exit 1
+    fi
+    rbd rm test1
+    rbd ls | grep test1 | wc -l | grep '^0$'
+
+    # Large thick-pro image test
+    rbd create $RBD_CREATE_ARGS --thick-provision -s 4G test1
+    count=0
+    ret=""
+    while [ $count -lt 10 ]
+    do
+        rbd du|grep test1|tr -s " "|cut -d " " -f 3|grep '^4G' && ret=$?
+        if [ "$ret" = "0" ]
+        then
+            break;
+        fi
+        count=`expr $count + 1`
+        sleep 2
+    done
+    rbd du
+    if [ "$ret" != "0" ]
+    then
+        exit 1
+    fi
+    rbd rm test1
+    rbd ls | grep test1 | wc -l | grep '^0$'
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -547,6 +601,7 @@ test_remove
 RBD_CREATE_ARGS=""
 test_others
 test_locking
+test_thick_provision
 RBD_CREATE_ARGS="--image-format 2"
 test_others
 test_locking
@@ -555,5 +610,6 @@ test_trash
 test_purge
 test_deep_copy_clone
 test_clone_v2
+test_thick_provision
 
 echo OK

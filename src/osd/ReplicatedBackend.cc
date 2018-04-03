@@ -733,9 +733,8 @@ void ReplicatedBackend::_do_push(OpRequestRef op)
 
   vector<PushReplyOp> replies;
   ObjectStore::Transaction t;
-  ostringstream ss;
-  if (get_parent()->check_failsafe_full(ss)) {
-    dout(10) << __func__ << " Out of space (failsafe) processing push request: " << ss.str() << dendl;
+  if (get_parent()->check_failsafe_full()) {
+    dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
     ceph_abort();
   }
   for (vector<PushOp>::const_iterator i = m->pushes.begin();
@@ -799,10 +798,8 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
   op->mark_started();
 
   vector<PullOp> replies(1);
-
-  ostringstream ss;
-  if (get_parent()->check_failsafe_full(ss)) {
-    dout(10) << __func__ << " Out of space (failsafe) processing pull response (push): " << ss.str() << dendl;
+  if (get_parent()->check_failsafe_full()) {
+    dout(10) << __func__ << " Out of space (failsafe) processing pull response (push)." << dendl;
     ceph_abort();
   }
 

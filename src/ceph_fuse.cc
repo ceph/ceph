@@ -75,7 +75,12 @@ int main(int argc, const char **argv, const char *envp[]) {
   std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
   if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
     usage();
+    exit(0);
   }
 
   std::map<std::string,std::string> defaults = {
@@ -87,16 +92,25 @@ int main(int argc, const char **argv, const char *envp[]) {
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
-  auto i = args.begin();
-  auto end = args.end();
-  for (; i != end;) {
+  for (auto i = args.begin(); i != args.end();) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)nullptr)) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)nullptr)) {
-      usage();
+    } else if (ceph_argparse_flag(args, i, "-V", (char*)nullptr)) {
+      const char* tmpargv[] = {
+	"ceph-fuse",
+	"-V"
+      };
+
+      struct fuse_args fargs = FUSE_ARGS_INIT(2, (char**)tmpargv);
+      if (fuse_parse_cmdline(&fargs, nullptr, nullptr, nullptr) == -1) {
+       derr << "fuse_parse_cmdline failed." << dendl;
+      }
+      assert(fargs.allocated);
+      fuse_opt_free_args(&fargs);
+      exit(0);
     } else {
       ++i;
     }
@@ -210,8 +224,10 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     MonClient *mc = new MonClient(g_ceph_context);
     int r = mc->build_initial_monmap();
-    if (r == -EINVAL)
-      usage();
+    if (r == -EINVAL) {
+      cerr << "failed to generate initial mon list" << std::endl;
+      exit(1);
+    }
     if (r < 0)
       goto out_mc_start_failed;
 

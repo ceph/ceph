@@ -11,6 +11,8 @@
 #include "messages/MStatfsReply.h"
 #include "messages/MServiceMap.h"
 
+#include "include/assert.h"	// re-clobber assert
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon)
@@ -173,6 +175,7 @@ bool MgrStatMonitor::prepare_update(MonOpRequestRef op)
 
 bool MgrStatMonitor::preprocess_report(MonOpRequestRef op)
 {
+  mon->no_reply(op);
   return false;
 }
 

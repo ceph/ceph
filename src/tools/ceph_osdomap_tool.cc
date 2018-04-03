@@ -70,6 +70,11 @@ int main(int argc, char **argv) {
 
   if (vm.count("debug")) debug = true;
 
+  if (vm.count("help")) {
+    std::cerr << desc << std::endl;
+    return 1;
+  }
+
   auto cct = global_init(
     NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
@@ -81,11 +86,6 @@ int main(int argc, char **argv) {
     g_conf->set_val_or_die("err_to_stderr", "true");
   }
   g_conf->apply_changes(NULL);
-
-  if (vm.count("help")) {
-    std::cerr << desc << std::endl;
-    return 1;
-  }
 
   if (vm.count("omap-path") == 0) {
     std::cerr << "Required argument --omap-path" << std::endl;

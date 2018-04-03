@@ -2106,6 +2106,7 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
       mon->clog->debug() << m->get_target() << " reported immediately failed by "
             << m->get_orig_source_inst();
       force_failure(target_osd, reporter);
+      mon->no_reply(op);
       return true;
     }
     mon->clog->debug() << m->get_target() << " reported failed by "
@@ -2931,7 +2932,7 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
   if (!src.is_osd() ||
       !osdmap.is_up(from) ||
       beacon->get_orig_source_inst() != osdmap.get_inst(from)) {
-    dout(1) << " ignoring beacon from non-active osd." << dendl;
+    dout(1) << " ignoring beacon from non-active osd." << from << dendl;
     return false;
   }
 

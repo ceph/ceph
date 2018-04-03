@@ -214,6 +214,10 @@ void Server::dispatch(Message *m)
       if (req->is_replay()) {
 	dout(3) << "queuing replayed op" << dendl;
 	queue_replay = true;
+	if (req->head.ino &&
+	    !session->have_completed_request(req->get_reqid().tid, nullptr)) {
+	  mdcache->add_replay_ino_alloc(inodeno_t(req->head.ino));
+	}
       } else if (req->get_retry_attempt()) {
 	// process completed request in clientreplay stage. The completed request
 	// might have created new file/directorie. This guarantees MDS sends a reply
@@ -3441,12 +3445,10 @@ void Server::handle_client_open(MDRequestRef& mdr)
 
   // make sure this inode gets into the journal
   if (cur->is_auth() && cur->last == CEPH_NOSNAP &&
-      !cur->item_open_file.is_on_list()) {
-    LogSegment *ls = mds->mdlog->get_current_segment();
+      mdcache->open_file_table.should_log_open(cur)) {
     EOpen *le = new EOpen(mds->mdlog);
     mdlog->start_entry(le);
     le->add_clean_inode(cur);
-    ls->open_files.push_back(&cur->item_open_file);
     mdlog->submit_entry(le);
   }
   
@@ -3661,8 +3663,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(in->ino());
-  LogSegment *ls = mds->mdlog->get_current_segment();
-  ls->open_files.push_back(&in->item_open_file);
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, in, follows);
 
@@ -4297,8 +4297,6 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   
   // make sure ino gets into the journal
   le->metablob.add_opened_ino(in->ino());
-  LogSegment *ls = mds->mdlog->get_current_segment();
-  ls->open_files.push_back(&in->item_open_file);
   
   mdr->o_trunc = true;
 
@@ -5286,8 +5284,6 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 
   // make sure this inode gets into the journal
   le->metablob.add_opened_ino(newi->ino());
-  LogSegment *ls = mds->mdlog->get_current_segment();
-  ls->open_files.push_back(&newi->item_open_file);
 
   journal_and_reply(mdr, newi, dn, le, new C_MDS_mknod_finish(this, mdr, dn, newi));
 }

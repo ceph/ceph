@@ -1669,9 +1669,36 @@ CEPH_RADOS_API void rados_getxattrs_end(rados_xattrs_iter_t iter);
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_omap_get_next(rados_omap_iter_t iter,
-	      		               char **key,
-			               char **val,
-			               size_t *len);
+                                       char **key,
+                                       char **val,
+                                       size_t *len);
+
+/**
+ * Get the next omap key/value pair on the object. Note that it's
+ * perfectly safe to mix calls to rados_omap_get_next and
+ * rados_omap_get_next2.
+ *
+ * @pre iter is a valid iterator
+ *
+ * @post key and val are the next key/value pair. key has length
+ * keylen and val has length vallen. If the end of the list has
+ * been reached, key and val are NULL, and keylen and vallen is 0.
+ * key and val will not be accessible after rados_omap_get_end()
+ * is called on iter, so if they are needed after that they
+ * should be copied.
+ *
+ * @param iter iterator to advance
+ * @param key where to store the key of the next omap entry
+ * @param val where to store the value of the next omap entry
+ * @param key_len where to store the number of bytes in key
+ * @param val_len where to store the number of bytes in val
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_omap_get_next2(rados_omap_iter_t iter,
+                                       char **key,
+                                       char **val,
+                                       size_t *key_len,
+                                       size_t *val_len);
 
 /**
  * Close the omap iterator.
@@ -2828,11 +2855,33 @@ CEPH_RADOS_API void rados_write_op_cmpxattr(rados_write_op_t write_op,
  * @param prval where to store the return value from this action
  */
 CEPH_RADOS_API void rados_write_op_omap_cmp(rados_write_op_t write_op,
-			                    const char *key,
-			                    uint8_t comparison_operator,
-			                    const char *val,
-			                    size_t val_len,
-			                    int *prval);
+                                            const char *key,
+                                            uint8_t comparison_operator,
+                                            const char *val,
+                                            size_t val_len,
+                                            int *prval);
+
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param write_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBRADOS_CMPXATTR_OP_EQ,
+   LIBRADOS_CMPXATTR_OP_LT, or LIBRADOS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param key_len length of key in bytes
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+CEPH_RADOS_API void rados_write_op_omap_cmp2(rados_write_op_t write_op,
+                                            const char *key,
+                                            uint8_t comparison_operator,
+                                            const char *val,
+                                            size_t key_len,
+                                            size_t val_len,
+                                            int *prval);
 
 /**
  * Set an xattr
@@ -2963,10 +3012,27 @@ CEPH_RADOS_API void rados_write_op_exec(rados_write_op_t write_op,
  * @param num number of key/value pairs to set
  */
 CEPH_RADOS_API void rados_write_op_omap_set(rados_write_op_t write_op,
-			                    char const* const* keys,
-			                    char const* const* vals,
-			                    const size_t *lens,
-			                    size_t num);
+                                            char const* const* keys,
+                                            char const* const* vals,
+                                            const size_t *lens,
+                                            size_t num);
+
+/**
+ * Set key/value pairs on an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of null-terminated char arrays representing keys to set
+ * @param vals array of pointers to values to set
+ * @param key_lens array of lengths corresponding to each key
+ * @param val_lens array of lengths corresponding to each value
+ * @param num number of key/value pairs to set
+ */
+CEPH_RADOS_API void rados_write_op_omap_set2(rados_write_op_t write_op,
+                                            char const* const* keys,
+                                            char const* const* vals,
+                                            const size_t *key_lens,
+                                            const size_t *val_lens,
+                                            size_t num);
 
 /**
  * Remove key/value pairs from an object
@@ -2976,8 +3042,21 @@ CEPH_RADOS_API void rados_write_op_omap_set(rados_write_op_t write_op,
  * @param keys_len number of key/value pairs to remove
  */
 CEPH_RADOS_API void rados_write_op_omap_rm_keys(rados_write_op_t write_op,
-				                char const* const* keys,
-				                size_t keys_len);
+                                                char const* const* keys,
+                                                size_t keys_len);
+
+/**
+ * Remove key/value pairs from an object
+ *
+ * @param write_op operation to add this action to
+ * @param keys array of char arrays representing keys to remove
+ * @param key_lens array of size_t values representing length of each key
+ * @param keys_len number of key/value pairs to remove
+ */
+CEPH_RADOS_API void rados_write_op_omap_rm_keys2(rados_write_op_t write_op,
+                                                char const* const* keys,
+                                                const size_t* key_lens,
+                                                size_t keys_len);
 
 /**
  * Remove all key/value pairs from an object
@@ -3156,11 +3235,33 @@ CEPH_RADOS_API void rados_read_op_getxattrs(rados_read_op_t read_op,
  * @param prval where to store the return value from this action
  */
 CEPH_RADOS_API void rados_read_op_omap_cmp(rados_read_op_t read_op,
-			                   const char *key,
-			                   uint8_t comparison_operator,
-			                   const char *val,
-			                   size_t val_len,
-			                   int *prval);
+                                           const char *key,
+                                           uint8_t comparison_operator,
+                                           const char *val,
+                                           size_t val_len,
+                                           int *prval);
+
+/**
+ * Ensure that the an omap value satisfies a comparison,
+ * with the supplied value on the right hand side (i.e.
+ * for OP_LT, the comparison is actual_value < value.
+ *
+ * @param read_op operation to add this action to
+ * @param key which omap value to compare
+ * @param comparison_operator one of LIBRADOS_CMPXATTR_OP_EQ,
+   LIBRADOS_CMPXATTR_OP_LT, or LIBRADOS_CMPXATTR_OP_GT
+ * @param val value to compare with
+ * @param key_len length of key in bytes
+ * @param val_len length of value in bytes
+ * @param prval where to store the return value from this action
+ */
+CEPH_RADOS_API void rados_read_op_omap_cmp2(rados_read_op_t read_op,
+                                           const char *key,
+                                           uint8_t comparison_operator,
+                                           const char *val,
+                                           size_t key_len,
+                                           size_t val_len,
+                                           int *prval);
 
 /**
  * Get object size and mtime
@@ -3364,10 +3465,29 @@ CEPH_RADOS_API void rados_read_op_omap_get_keys2(rados_read_op_t read_op,
  * @param prval where to store the return value from this action
  */
 CEPH_RADOS_API void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
-					                char const* const* keys,
-					                size_t keys_len,
-					                rados_omap_iter_t *iter,
-					                int *prval);
+                                                        char const* const* keys,
+                                                        size_t keys_len,
+                                                        rados_omap_iter_t *iter,
+                                                        int *prval);
+
+/**
+ * Start iterating over specific key/value pairs
+ *
+ * They will be returned sorted by key.
+ *
+ * @param read_op operation to add this action to
+ * @param keys array of pointers to keys to get
+ * @param num_keys the number of strings in keys
+ * @param keys_len array of size_t's describing each key len (in bytes)
+ * @param iter where to store the iterator
+ * @param prval where to store the return value from this action
+ */
+CEPH_RADOS_API void rados_read_op_omap_get_vals_by_keys2(rados_read_op_t read_op,
+                                                        char const* const* keys,
+                                                        size_t num_keys,
+                                                        const size_t* key_lens,
+                                                        rados_omap_iter_t *iter,
+                                                        int *prval);
 
 /**
  * Perform a read operation synchronously

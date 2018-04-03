@@ -8744,6 +8744,10 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
 
 int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
+  int have = 0;
+  bool movepos = false;
+  std::unique_ptr<C_SaferCond> onuninline;
+  int64_t r;
   const md_config_t *conf = cct->_conf;
   Inode *in = f->inode.get();
 
@@ -8751,7 +8755,6 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
     return -EBADF;
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
 
-  bool movepos = false;
   if (offset < 0) {
     lock_fh_pos(f);
     offset = f->pos;
@@ -8762,25 +8765,19 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
     if (r < 0) {
-      if (movepos)
-        unlock_fh_pos(f);
-      return r;
+      goto done;
     }
     assert(in->inline_version > 0);
   }
 
 retry:
-  int have;
-  int r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
+  have = 0;
+  r = get_caps(in, CEPH_CAP_FILE_RD, CEPH_CAP_FILE_CACHE, &have, -1);
   if (r < 0) {
-    if (movepos)
-        unlock_fh_pos(f);
-    return r;
+    goto done;
   }
   if (f->flags & O_DIRECT)
     have &= ~CEPH_CAP_FILE_CACHE;
-
-  std::unique_ptr<C_SaferCond> onuninline = nullptr;
 
   if (in->inline_version < CEPH_INLINE_NONE) {
     if (!(have & CEPH_CAP_FILE_CACHE)) {
@@ -8788,7 +8785,6 @@ retry:
       uninline_data(in, onuninline.get());
     } else {
       uint32_t len = in->inline_data.length();
-
       uint64_t endoff = offset + size;
       if (endoff > in->size)
         endoff = in->size;
@@ -8803,7 +8799,7 @@ retry:
       } else if ((uint64_t)offset < endoff) {
         bl->append_zero(endoff - offset);
       }
-
+      r = endoff - offset;
       goto success;
     }
   }
@@ -8843,16 +8839,16 @@ retry:
   }
 
 success:
+  assert(r >= 0);
   if (movepos) {
     // adjust fd pos
-    f->pos = start_pos + bl->length();
-    unlock_fh_pos(f);
+    f->pos = start_pos + r;
   }
 
 done:
   // done!
 
-  if (nullptr != onuninline) {
+  if (onuninline) {
     client_lock.Unlock();
     int ret = onuninline->wait();
     client_lock.Lock();
@@ -8864,15 +8860,13 @@ done:
     } else
       r = ret;
   }
-
-  if (have)
+  if (have) {
     put_cap_ref(in, CEPH_CAP_FILE_RD);
-  if (r < 0) {
-    if (movepos)
-        unlock_fh_pos(f);
-    return r;
-  } else
-    return bl->length();
+  }
+  if (movepos) {
+    unlock_fh_pos(f);
+  }
+  return r;
 }
 
 Client::C_Readahead::C_Readahead(Client *c, Fh *f) :
@@ -12955,6 +12949,19 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
     fh->take_async_err();
   }
   return r;
+}
+
+int Client::ll_sync_inode(Inode *in, bool syncdataonly)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_sync_inode " << *in << " " << dendl;
+  tout(cct) << "ll_sync_inode" << std::endl;
+  tout(cct) << (unsigned long)in << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
+  return _fsync(in, syncdataonly);
 }
 
 #ifdef FALLOC_FL_PUNCH_HOLE
