@@ -81,7 +81,7 @@ TYPED_TEST(ErasureCodeTest, encode_decode)
       "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     in_ptr.append(payload, strlen(payload));
     bufferlist in;
-    in.push_front(in_ptr);
+    in.push_back(in_ptr);
     int want_to_encode[] = { 0, 1, 2, 3 };
     map<int, bufferlist> encoded;
     EXPECT_EQ(0, jerasure.encode(set<int>(want_to_encode, want_to_encode+4),
