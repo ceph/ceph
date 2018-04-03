@@ -14,7 +14,7 @@ from ..tools import ApiController, AuthRequired, BaseController
 class Monitor(BaseController):
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def default(self, *_vpath, **_params):
+    def __call__(self):
         in_quorum, out_quorum = [], []
 
         counters = ['mon.num_sessions']
