@@ -157,11 +157,12 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 class RbdMirror(BaseController):
 
     def __init__(self):
+        super(RbdMirror, self).__init__()
         self.pool_data = {}
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def default(self, *_vpath, **_params):
+    def __call__(self):
         status, content_data = self._get_content_data()
         return {'status': status, 'content_data': content_data}
 

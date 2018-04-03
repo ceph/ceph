@@ -8,10 +8,23 @@ import cherrypy
 from cherrypy.test import helper
 
 from ..controllers.auth import Auth
-from ..tools import json_error_page, SessionExpireAtBrowserCloseTool
+from ..tools import json_error_page, SessionExpireAtBrowserCloseTool, \
+                    generate_controller_routes
 
 
 class ControllerTestCase(helper.CPWebCase):
+    @classmethod
+    def setup_controllers(cls, ctrl_classes, base_url=''):
+        if not isinstance(ctrl_classes, list):
+            ctrl_classes = [ctrl_classes]
+        mapper = cherrypy.dispatch.RoutesDispatcher()
+        for ctrl in ctrl_classes:
+            generate_controller_routes(ctrl, mapper, base_url)
+        if base_url == '':
+            base_url = '/'
+        cherrypy.tree.mount(None, config={
+            base_url: {'request.dispatch': mapper}})
+
     def __init__(self, *args, **kwargs):
         cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
         cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()

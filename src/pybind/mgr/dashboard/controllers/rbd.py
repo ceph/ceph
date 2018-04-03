@@ -26,6 +26,7 @@ class Rbd(RESTController):
     }
 
     def __init__(self):
+        super(Rbd, self).__init__()
         self.rbd = None
 
     @staticmethod

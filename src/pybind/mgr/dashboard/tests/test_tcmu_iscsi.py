@@ -1,7 +1,5 @@
 from __future__ import absolute_import
 
-import cherrypy
-
 from .. import mgr
 from ..controllers.tcmu_iscsi import TcmuIscsi
 from .helper import ControllerTestCase
@@ -73,10 +71,10 @@ class TcmuIscsiControllerTest(ControllerTestCase):
         mgr.url_prefix = ''
         TcmuIscsi._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
-        cherrypy.tree.mount(TcmuIscsi(), "/api/test/tcmu")
+        cls.setup_controllers(TcmuIscsi, "/api/test")
 
     def test_list(self):
-        self._get('/api/test/tcmu')
+        self._get('/api/test/tcmuiscsi')
         self.assertStatus(200)
         self.assertJsonBody({
             'daemons': [

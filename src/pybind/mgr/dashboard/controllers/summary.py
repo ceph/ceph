@@ -58,7 +58,7 @@ class Summary(BaseController):
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def default(self, *_vpath, **_params):
+    def __call__(self):
         executing_t, finished_t = TaskManager.list_serializable()
         return {
             'rbd_pools': self._rbd_pool_data(),

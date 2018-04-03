@@ -27,7 +27,7 @@ if 'COVERAGE_ENABLED' in os.environ:
 # pylint: disable=wrong-import-position
 from . import logger, mgr
 from .controllers.auth import Auth
-from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool, \
+from .tools import generate_routes, json_error_page, SessionExpireAtBrowserCloseTool, \
                    NotificationQueue, RequestLoggingTool, TaskManager
 from .settings import options_command_list, handle_option_command
 
@@ -97,6 +97,7 @@ class Module(MgrModule):
         return os.path.join(current_dir, 'frontend/dist')
 
     def configure_cherrypy(self):
+        # pylint: disable=too-many-locals
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '8080')
         if server_addr is None:
@@ -125,14 +126,6 @@ class Module(MgrModule):
         }
         cherrypy.config.update(config)
 
-        config = {
-            '/': {
-                'tools.staticdir.on': True,
-                'tools.staticdir.dir': self.get_frontend_path(),
-                'tools.staticdir.index': 'index.html'
-            }
-        }
-
         # Publish the URI that others may use to access the service we're
         # about to start serving
         self.set_uri("http://{0}:{1}{2}/".format(
@@ -141,8 +134,17 @@ class Module(MgrModule):
             self.url_prefix
         ))
 
-        cherrypy.tree.mount(Module.ApiRoot(self), '{}/api'.format(self.url_prefix))
-        cherrypy.tree.mount(Module.StaticRoot(), '{}/'.format(self.url_prefix), config=config)
+        mapper = generate_routes(self.url_prefix)
+
+        config = {
+            '{}/'.format(self.url_prefix): {
+                'tools.staticdir.on': True,
+                'tools.staticdir.dir': self.get_frontend_path(),
+                'tools.staticdir.index': 'index.html'
+            },
+            '{}/api'.format(self.url_prefix): {'request.dispatch': mapper}
+        }
+        cherrypy.tree.mount(None, config=config)
 
     def serve(self):
         if 'COVERAGE_ENABLED' in os.environ:
@@ -182,55 +184,6 @@ class Module(MgrModule):
 
     def notify(self, notify_type, notify_id):
         NotificationQueue.new_notification(notify_type, notify_id)
-
-    class ApiRoot(object):
-
-        _cp_config = {
-            'tools.sessions.on': True,
-            'tools.authenticate.on': True
-        }
-
-        def __init__(self, mgrmod):
-            self.ctrls = load_controllers()
-            logger.debug('Loaded controllers: %s', self.ctrls)
-
-            first_level_ctrls = [ctrl for ctrl in self.ctrls
-                                 if '/' not in ctrl._cp_path_]
-            multi_level_ctrls = set(self.ctrls).difference(first_level_ctrls)
-
-            for ctrl in first_level_ctrls:
-                logger.info('Adding controller: %s -> /api/%s', ctrl.__name__,
-                            ctrl._cp_path_)
-                inst = ctrl()
-                setattr(Module.ApiRoot, ctrl._cp_path_, inst)
-
-            for ctrl in multi_level_ctrls:
-                path_parts = ctrl._cp_path_.split('/')
-                path = '/'.join(path_parts[:-1])
-                key = path_parts[-1]
-                parent_ctrl_classes = [c for c in self.ctrls
-                                       if c._cp_path_ == path]
-                if len(parent_ctrl_classes) != 1:
-                    logger.error('No parent controller found for %s! '
-                                 'Please check your path in the ApiController '
-                                 'decorator!', ctrl)
-                else:
-                    inst = ctrl()
-                    setattr(parent_ctrl_classes[0], key, inst)
-
-        @cherrypy.expose
-        def index(self):
-            tpl = """API Endpoints:<br>
-            <ul>
-            {lis}
-            </ul>
-            """
-            endpoints = ['<li><a href="{}">{}</a></li>'.format(ctrl._cp_path_, ctrl.__name__) for
-                         ctrl in self.ctrls]
-            return tpl.format(lis='\n'.join(endpoints))
-
-    class StaticRoot(object):
-        pass
 
 
 class StandbyModule(MgrStandbyModule):
