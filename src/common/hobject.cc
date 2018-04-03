@@ -336,9 +336,9 @@ int cmp(const hobject_t& l, const hobject_t& r)
     return -1;
   if (l.nspace > r.nspace)
     return 1;
-  if (l.get_effective_key() < r.get_effective_key())
+  if (l.get_key() < r.get_key())
     return -1;
-  if (l.get_effective_key() > r.get_effective_key())
+  if (l.get_key() > r.get_key())
     return 1;
   if (l.oid < r.oid)
     return -1;

@@ -3,7 +3,7 @@ set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
 add_custom_target(mgr-dashboard-test-venv
   COMMAND
   ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=python2.7 ${MGR_DASHBOARD_VIRTUALENV} &&
-  ${MGR_DASHBOARD_VIRTUALENV}/bin/pip install --no-index --use-wheel --find-links=file:${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/wheelhouse -r requirements.txt
+  ${MGR_DASHBOARD_VIRTUALENV}/bin/pip install --no-index --find-links=file:${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/wheelhouse -r requirements.txt
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard
   COMMENT "dashboard tests virtualenv is being created")
 add_dependencies(tests mgr-dashboard-test-venv)

@@ -2707,16 +2707,16 @@ public:
       assert(min_alloc_size && isp2(min_alloc_size));
       assert(mem_cap);
       
-      total = ROUND_UP_TO(total, min_alloc_size);
+      total = round_up_to(total, min_alloc_size);
       granularity = total * BLOOM_FILTER_TABLE_SIZE * 2 / mem_cap;
 
       if (!granularity) {
 	granularity = min_alloc_size;
       } else {
-	granularity = ROUND_UP_TO(granularity, min_alloc_size);
+	granularity = round_up_to(granularity, min_alloc_size);
       }
 
-      uint64_t entries = P2ROUNDUP(total, granularity) / granularity;
+      uint64_t entries = p2roundup(total, granularity) / granularity;
       collections_bfs.resize(entries,
         bloom_filter(BLOOM_FILTER_SALT_COUNT,
                      BLOOM_FILTER_TABLE_SIZE,
@@ -2815,7 +2815,7 @@ public:
   unsigned apply(KeyValueDB* db);
 
   void note_misreference(uint64_t offs, uint64_t len, bool inc_error) {
-    misreferenced_extents.insert(offs, len);
+    misreferenced_extents.union_insert(offs, len);
     if (inc_error) {
       ++to_repair_cnt;
     }

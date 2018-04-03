@@ -1,6 +1,7 @@
 astroid==1.6.1
 attrs==17.4.0
 backports.functools-lru-cache==1.4
+bcrypt==3.1.4
 cheroot==6.0.0
 CherryPy==13.1.0
 configparser==3.5.0
@@ -21,7 +22,6 @@ pycparser==2.18
 pylint==1.8.2
 pytest==3.3.2
 pytest-cov==2.5.1
-python-bcrypt==0.3.2
 pytz==2017.3
 requests==2.18.4
 singledispatch==3.4.0.3

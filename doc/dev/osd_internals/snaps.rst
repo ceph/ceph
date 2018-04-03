@@ -6,7 +6,7 @@ Overview
 --------
 Rados supports two related snapshotting mechanisms:
 
-  1. *pool snaps*: snapshots are implicitely applied to all objects
+  1. *pool snaps*: snapshots are implicitly applied to all objects
      in a pool
   2. *self managed snaps*: the user must provide the current *SnapContext*
      on each write.

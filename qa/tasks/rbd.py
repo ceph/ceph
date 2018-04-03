@@ -16,6 +16,9 @@ from teuthology.task.common_fs_utils import generic_mkfs
 from teuthology.task.common_fs_utils import generic_mount
 from teuthology.task.common_fs_utils import default_image_name
 
+#V1 image unsupported but required for testing purposes
+os.environ["RBD_FORCE_ALLOW_V1"] = "1"
+
 log = logging.getLogger(__name__)
 
 @contextlib.contextmanager

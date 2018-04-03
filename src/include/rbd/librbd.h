@@ -402,6 +402,7 @@ CEPH_RBD_API int rbd_get_create_timestamp(rbd_image_t image,
                                           struct timespec *timestamp);
 
 CEPH_RBD_API int rbd_get_overlap(rbd_image_t image, uint64_t *overlap);
+CEPH_RBD_API int rbd_get_name(rbd_image_t image, char *name, size_t *name_len);
 CEPH_RBD_API int rbd_get_id(rbd_image_t image, char *id, size_t id_len);
 CEPH_RBD_API int rbd_get_block_name_prefix(rbd_image_t image,
                                            char *prefix, size_t prefix_len);
@@ -546,11 +547,8 @@ CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_set_by_id(rbd_image_t image, uint64_t snap_id);
 
 CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
-					     uint64_t snap_id,
-					     rbd_snap_namespace_type_t *namespace_type);
-CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
-					     uint64_t snap_id,
-					     rbd_snap_namespace_type_t *namespace_type);
+                                             uint64_t snap_id,
+                                             rbd_snap_namespace_type_t *namespace_type);
 CEPH_RBD_API int rbd_snap_get_group_namespace(rbd_image_t image,
                                               uint64_t snap_id,
                                               rbd_snap_group_namespace_t *group_snap,

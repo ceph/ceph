@@ -98,7 +98,7 @@ class DaemonState
   std::map<std::string, std::string> metadata;
 
   // TODO: this can be generalized to other daemons
-  std::vector<OSDHealthMetric> osd_health_metrics;
+  std::vector<DaemonHealthMetric> daemon_health_metrics;
 
   // Ephemeral state
   bool service_daemon = false;

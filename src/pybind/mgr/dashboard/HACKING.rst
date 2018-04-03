@@ -212,7 +212,7 @@ Start all dashboard tests by running::
 
 Or, start one or multiple specific tests by specifying the test name::
 
-  $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.DashboardTest
+  $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.PoolTest
 
 Or, ``source`` the script and run the tests manually::
 
@@ -536,4 +536,283 @@ class and access it like this::
 The settings management implementation will make sure that if you change a
 setting value from the Python code you will see that change when accessing
 that setting from the CLI and vice-versa.
+
+
+How to run a controller read-write operation asynchronously?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Some controllers might need to execute operations that alter the state of the
+Ceph cluster. These operations might take some time to execute and to maintain
+a good user experience in the Web UI, we need to run those operations
+asynchronously and return immediately to frontend some information that the
+operations are running in the background.
+
+To help in the development of the above scenario we added the support for
+asynchronous tasks. To trigger the execution of an asynchronous task we must
+use the following class method of the ``TaskManager`` class::
+
+  from ..tools import TaskManager
+  # ...
+  TaskManager.run(name, metadata, func, args, kwargs)
+
+* ``name`` is a string that can be used to group tasks. For instance
+  for RBD image creation tasks we could specify ``"rbd/create"`` as the
+  name, or similarly ``"rbd/remove"`` for RBD image removal tasks.
+
+* ``metadata`` is a dictionary where we can store key-value pairs that
+  characterize the task. For instance, when creating a task for creating
+  RBD images we can specify the metadata argument as
+  ``{'pool_name': "rbd", image_name': "test-img"}``.
+
+* ``func`` is the python function that implements the operation code, which
+  will be executed asynchronously.
+
+* ``args`` and ``kwargs`` are the positional and named arguments that will be
+  passed to ``func`` when the task manager starts its execution.
+
+The ``TaskManager.run`` method triggers the asynchronous execution of function
+``func`` and returns a ``Task`` object.
+The ``Task`` provides the public method ``Task.wait(timeout)``, which can be
+used to wait for the task to complete up to a timeout defined in seconds and
+provided as an argument. If no argument is provided the ``wait`` method
+blocks until the task is finished.
+
+The ``Task.wait`` is very useful for tasks that usually are fast to execute but
+that sometimes may take a long time to run.
+The return value of the ``Task.wait`` method is a pair ``(state, value)``
+where ``state`` is a string with following possible values:
+
+* ``VALUE_DONE = "done"``
+* ``VALUE_EXECUTING = "executing"``
+
+The ``value`` will store the result of the execution of function ``func`` if
+``state == VALUE_DONE``. If ``state == VALUE_EXECUTING`` then
+``value == None``.
+
+The pair ``(name, metadata)`` should unequivocally identify the task being
+run, which means that if you try to trigger a new task that matches the same
+``(name, metadata)`` pair of the currently running task, then the new task
+is not created and you get the task object of the current running task.
+
+For instance, consider the following example:
+
+.. code-block:: python
+
+  task1 = TaskManager.run("dummy/task", {'attr': 2}, func)
+  task2 = TaskManager.run("dummy/task", {'attr': 2}, func)
+
+If the second call to ``TaskManager.run`` executes while the first task is
+still executing then it will return the same task object:
+``assert task1 == task2``.
+
+
+How to get the list of executing and finished asynchronous tasks?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The list of executing and finished tasks is included in the ``Summary``
+controller, which is already polled every 5 seconds by the dashboard frontend.
+But we also provide a dedicated controller to get the same list of executing
+and finished tasks.
+
+The ``Task`` controller exposes the ``/api/task`` endpoint that returns the
+list of executing and finished tasks. This endpoint accepts the ``name``
+parameter that accepts a glob expression as its value.
+For instance, an HTTP GET request of the URL ``/api/task?name=rbd/*``
+will return all executing and finished tasks which name starts with ``rbd/``.
+
+To prevent the finished tasks list from growing unbounded, we will always
+maintain the 10 most recent finished tasks, and the remaining older finished
+tasks will be removed when reaching a TTL of 1 minute. The TTL is calculated
+using the timestamp when the task finished its execution. After a minute, when
+the finished task information is retrieved, either by the summary controller or
+by the task controller, it is automatically deleted from the list and it will
+not be included in further task queries.
+
+Each executing task is represented by the following dictionary::
+
+  {
+    'name': "name",  # str
+    'metadata': { },  # dict
+    'begin_time': "2018-03-14T15:31:38.423605Z",  # str (ISO 8601 format)
+    'progress': 0  # int (percentage)
+  }
+
+Each finished task is represented by the following dictionary::
+
+  {
+    'name': "name",  # str
+    'metadata': { },  # dict
+    'begin_time': "2018-03-14T15:31:38.423605Z",  # str (ISO 8601 format)
+    'end_time': "2018-03-14T15:31:39.423605Z",  # str (ISO 8601 format)
+    'duration': 0.0,  # float
+    'progress': 0  # int (percentage)
+    'success': True,  # bool
+    'ret_value': None,  # object, populated only if 'success' == True
+    'exception': None,  # str, populated only if 'success' == False
+  }
+
+
+How to use asynchronous APIs with asynchronous tasks?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The ``TaskManager.run`` method as described in a previous section, is well
+suited for calling blocking functions, as it runs the function inside a newly
+created thread. But sometimes we want to call some function of an API that is
+already asynchronous by nature.
+
+For these cases we want to avoid creating a new thread for just running a
+non-blocking function, and want to leverage the asynchronous nature of the
+function. The ``TaskManager.run`` is already prepared to be used with
+non-blocking functions by passing an object of the type ``TaskExecutor`` as an
+additional parameter called ``executor``. The full method signature of
+``TaskManager.run``::
+
+  TaskManager.run(name, metadata, func, args=None, kwargs=None, executor=None)
+
+
+The ``TaskExecutor`` class is responsible for code that executes a given task
+function, and defines three methods that can be overriden by
+subclasses::
+
+  def init(self, task)
+  def start(self)
+  def finish(self, ret_value, exception)
+
+The ``init`` method is called before the running the task function, and
+receives the task object (of class ``Task``).
+
+The ``start`` method runs the task function. The default implementation is to
+run the task function in the current thread context.
+
+The ``finish`` method should be called when the task function finishes with
+either the ``ret_value`` populated with the result of the execution, or with
+an exception object in the case that execution raised an exception.
+
+To leverage the asynchronous nature of a non-blocking function, the developer
+should implement a custom executor by creating a subclass of the
+``TaskExecutor`` class, and provide an instance of the custom executor class
+as the ``executor`` parameter of the ``TaskManager.run``.
+
+To better understand the expressive power of executors, we write a full example
+of use a custom executor to execute the ``MgrModule.send_command`` asynchronous
+function:
+
+.. code-block:: python
+
+  import json
+  from mgr_module import CommandResult
+  from .. import mgr
+  from ..tools import ApiController, RESTController, NotificationQueue, \
+                      TaskManager, TaskExecutor
+
+
+  class SendCommandExecutor(TaskExecutor):
+      def __init__(self):
+          super(SendCommandExecutor, self).__init__()
+          self.tag = None
+          self.result = None
+
+      def init(self, task):
+          super(SendCommandExecutor, self).init(task)
+
+          # we need to listen for 'command' events to know when the command
+          # finishes
+          NotificationQueue.register(self._handler, 'command')
+
+          # store the CommandResult object to retrieve the results
+          self.result = self.task.fn_args[0]
+          if len(self.task.fn_args) > 4:
+              # the user specified a tag for the command, so let's use it
+              self.tag = self.task.fn_args[4]
+          else:
+              # let's generate a unique tag for the command
+              self.tag = 'send_command_{}'.format(id(self))
+              self.task.fn_args.append(self.tag)
+
+      def _handler(self, data):
+          if data == self.tag:
+              # the command has finished, notifying the task with the result
+              self.finish(self.result.wait(), None)
+              # deregister listener to avoid memory leaks
+              NotificationQueue.deregister(self._handler, 'command')
+
+
+  @ApiController('test')
+  class Test(RESTController):
+
+      def _run_task(self, osd_id):
+          task = TaskManager.run("test/task", {}, mgr.send_command,
+                                 [CommandResult(''), 'osd', osd_id,
+                                  json.dumps({'prefix': 'perf histogram dump'})],
+                                 executor=SendCommandExecutor())
+          return task.wait(1.0)
+
+      def get(self, osd_id):
+          status, value = self._run_task(osd_id)
+          return {'status': status, 'value': value}
+
+
+The above ``SendCommandExecutor`` executor class can be used for any call to
+``MgrModule.send_command``. This means that we should need just one custom
+executor class implementation for each non-blocking API that we use in our
+controllers.
+
+The default executor, used when no executor object is passed to
+``TaskManager.run``, is the ``ThreadedExecutor``. You can check its
+implementation in the ``tools.py`` file.
+
+
+How to update the execution progress of an asynchronous task?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The asynchronous tasks infrastructure provides support for updating the
+execution progress of an executing task.
+The progress can be updated from within the code the task is executing, which
+usually is the place where we have the progress information available.
+
+To update the progress from within the task code, the ``TaskManager`` class
+provides a method to retrieve the current task object::
+
+  TaskManager.current_task()
+
+The above method is only available when using the default executor
+``ThreadedExecutor`` for executing the task.
+The ``current_task()`` method returns the current ``Task`` object. The
+``Task`` object provides two public methods to update the execution progress
+value: the ``set_progress(percentage)``, and the ``inc_progress(delta)``
+methods.
+
+The ``set_progress`` method receives as argument an integer value representing
+the absolute percentage that we want to set to the task.
+
+The ``inc_progress`` method receives as argument an integer value representing
+the delta we want to increment to the current execution progress percentage.
+
+Take the following example of a controller that triggers a new task and
+updates its progress:
+
+.. code-block:: python
+
+  from __future__ import absolute_import
+  import random
+  import time
+  import cherrypy
+  from ..tools import TaskManager, ApiController, BaseController
+
+
+  @ApiController('dummy_task')
+  class DummyTask(BaseController):
+      def _dummy(self):
+          top = random.randrange(100)
+          for i in range(top):
+              TaskManager.current_task().set_progress(i*100/top)
+              # or TaskManager.current_task().inc_progress(100/top)
+              time.sleep(1)
+          return "finished"
+
+      @cherrypy.expose
+      @cherrypy.tools.json_out()
+      def default(self):
+          task = TaskManager.run("dummy/task", {}, self._dummy)
+          return task.wait(5)  # wait for five seconds
 

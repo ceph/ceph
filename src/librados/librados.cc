@@ -5579,26 +5579,43 @@ static void rados_c_omap_cmp(ObjectOperation *op,
 			     const char *key,
 			     uint8_t comparison_operator,
 			     const char *val,
+                             size_t key_len,
 			     size_t val_len,
 			     int *prval)
 {
   bufferlist bl;
   bl.append(val, val_len);
   std::map<std::string, pair<bufferlist, int> > assertions;
-  assertions[key] = std::make_pair(bl, comparison_operator);
+  string lkey = string(key, key_len);
+
+  assertions[lkey] = std::make_pair(bl, comparison_operator);
   op->omap_cmp(assertions, prval);
 }
 
 extern "C" void rados_write_op_omap_cmp(rados_write_op_t write_op,
-					const char *key,
-					uint8_t comparison_operator,
-					const char *val,
-					size_t val_len,
-					int *prval)
+                                        const char *key,
+                                        uint8_t comparison_operator,
+                                        const char *val,
+                                        size_t val_len,
+                                        int *prval)
 {
   tracepoint(librados, rados_write_op_omap_cmp_enter, write_op, key, comparison_operator, val, val_len, prval);
   rados_c_omap_cmp((::ObjectOperation *)write_op, key, comparison_operator,
-		   val, val_len, prval);
+                   val, strlen(key), val_len, prval);
+  tracepoint(librados, rados_write_op_omap_cmp_exit);
+}
+
+extern "C" void rados_write_op_omap_cmp2(rados_write_op_t write_op,
+                                        const char *key,
+                                        uint8_t comparison_operator,
+                                        const char *val,
+                                        size_t key_len,
+                                        size_t val_len,
+                                        int *prval)
+{
+  tracepoint(librados, rados_write_op_omap_cmp_enter, write_op, key, comparison_operator, val, val_len, prval);
+  rados_c_omap_cmp((::ObjectOperation *)write_op, key, comparison_operator,
+                   val, key_len, val_len, prval);
   tracepoint(librados, rados_write_op_omap_cmp_exit);
 }
 
@@ -5718,10 +5735,10 @@ extern "C" void rados_write_op_exec(rados_write_op_t write_op,
 }
 
 extern "C" void rados_write_op_omap_set(rados_write_op_t write_op,
-					char const* const* keys,
-					char const* const* vals,
-					const size_t *lens,
-					size_t num)
+                                        char const* const* keys,
+                                        char const* const* vals,
+                                        const size_t *lens,
+                                        size_t num)
 {
   tracepoint(librados, rados_write_op_omap_set_enter, write_op, num);
   std::map<std::string, bufferlist> entries;
@@ -5735,15 +5752,48 @@ extern "C" void rados_write_op_omap_set(rados_write_op_t write_op,
   tracepoint(librados, rados_write_op_omap_set_exit);
 }
 
+extern "C" void rados_write_op_omap_set2(rados_write_op_t write_op,
+                                        char const* const* keys,
+                                        char const* const* vals,
+                                        const size_t *key_lens,
+                                        const size_t *val_lens,
+                                        size_t num)
+{
+  tracepoint(librados, rados_write_op_omap_set_enter, write_op, num);
+  std::map<std::string, bufferlist> entries;
+  for (size_t i = 0; i < num; ++i) {
+    bufferlist bl(val_lens[i]);
+    bl.append(vals[i], val_lens[i]);
+    string key(keys[i], key_lens[i]);
+    entries[key] = bl;
+  }
+  ((::ObjectOperation *)write_op)->omap_set(entries);
+  tracepoint(librados, rados_write_op_omap_set_exit);
+}
+
 extern "C" void rados_write_op_omap_rm_keys(rados_write_op_t write_op,
-					    char const* const* keys,
-					    size_t keys_len)
+                                            char const* const* keys,
+                                            size_t keys_len)
 {
   tracepoint(librados, rados_write_op_omap_rm_keys_enter, write_op, keys_len);
   for(size_t i = 0; i < keys_len; i++) {
     tracepoint(librados, rados_write_op_omap_rm_keys_entry, keys[i]);
   }
   std::set<std::string> to_remove(keys, keys + keys_len);
+  ((::ObjectOperation *)write_op)->omap_rm_keys(to_remove);
+  tracepoint(librados, rados_write_op_omap_rm_keys_exit);
+}
+
+extern "C" void rados_write_op_omap_rm_keys2(rados_write_op_t write_op,
+                                            char const* const* keys,
+                                            const size_t* key_lens,
+                                            size_t keys_len)
+{
+  tracepoint(librados, rados_write_op_omap_rm_keys_enter, write_op, keys_len);
+  std::set<std::string> to_remove;
+  for(size_t i = 0; i < keys_len; i++) {
+    to_remove.emplace(keys[i], key_lens[i]);
+  }
   ((::ObjectOperation *)write_op)->omap_rm_keys(to_remove);
   tracepoint(librados, rados_write_op_omap_rm_keys_exit);
 }
@@ -5907,15 +5957,29 @@ extern "C" void rados_read_op_cmpxattr(rados_read_op_t read_op,
 }
 
 extern "C" void rados_read_op_omap_cmp(rados_read_op_t read_op,
-				       const char *key,
-				       uint8_t comparison_operator,
-				       const char *val,
-				       size_t val_len,
-				       int *prval)
+                                       const char *key,
+                                       uint8_t comparison_operator,
+                                       const char *val,
+                                       size_t val_len,
+                                       int *prval)
 {
   tracepoint(librados, rados_read_op_omap_cmp_enter, read_op, key, comparison_operator, val, val_len, prval);
   rados_c_omap_cmp((::ObjectOperation *)read_op, key, comparison_operator,
-		   val, val_len, prval);
+                   val,  strlen(key), val_len, prval);
+  tracepoint(librados, rados_read_op_omap_cmp_exit);
+}
+
+extern "C" void rados_read_op_omap_cmp2(rados_read_op_t read_op,
+                                       const char *key,
+                                       uint8_t comparison_operator,
+                                       const char *val,
+                                       size_t key_len,
+                                       size_t val_len,
+                                       int *prval)
+{
+  tracepoint(librados, rados_read_op_omap_cmp_enter, read_op, key, comparison_operator, val, val_len, prval);
+  rados_c_omap_cmp((::ObjectOperation *)read_op, key, comparison_operator,
+                   val, key_len, val_len, prval);
   tracepoint(librados, rados_read_op_omap_cmp_exit);
 }
 
@@ -6178,46 +6242,85 @@ extern "C" void rados_read_op_omap_get_keys2(rados_read_op_t read_op,
   tracepoint(librados, rados_read_op_omap_get_keys_exit, *iter);
 }
 
+void internal_rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
+                                                    set<string>& to_get,
+                                                    rados_omap_iter_t *iter,
+                                                    int *prval)
+{
+  RadosOmapIter *omap_iter = new RadosOmapIter;
+  ((::ObjectOperation *)read_op)->omap_get_vals_by_keys(to_get,
+                                                        &omap_iter->values,
+                                                        prval);
+  ((::ObjectOperation *)read_op)->add_handler(new C_OmapIter(omap_iter));
+  *iter = omap_iter;
+}
+
 extern "C" void rados_read_op_omap_get_vals_by_keys(rados_read_op_t read_op,
-						    char const* const* keys,
-						    size_t keys_len,
-						    rados_omap_iter_t *iter,
-						    int *prval)
+                                                    char const* const* keys,
+                                                    size_t keys_len,
+                                                    rados_omap_iter_t *iter,
+                                                    int *prval)
 {
   tracepoint(librados, rados_read_op_omap_get_vals_by_keys_enter, read_op, keys, keys_len, iter, prval);
   std::set<std::string> to_get(keys, keys + keys_len);
+  internal_rados_read_op_omap_get_vals_by_keys(read_op, to_get, iter, prval);
+  tracepoint(librados, rados_read_op_omap_get_vals_by_keys_exit, *iter);
+}
 
-  RadosOmapIter *omap_iter = new RadosOmapIter;
-  ((::ObjectOperation *)read_op)->omap_get_vals_by_keys(to_get,
-							&omap_iter->values,
-							prval);
-  ((::ObjectOperation *)read_op)->add_handler(new C_OmapIter(omap_iter));
-  *iter = omap_iter;
+extern "C" void rados_read_op_omap_get_vals_by_keys2(rados_read_op_t read_op,
+                                                    char const* const* keys,
+                                                    size_t num_keys,
+                                                    const size_t* key_lens,
+                                                    rados_omap_iter_t *iter,
+                                                    int *prval)
+{
+  tracepoint(librados, rados_read_op_omap_get_vals_by_keys_enter, read_op, keys, num_keys, iter, prval);
+  std::set<std::string> to_get;
+  for (size_t i = 0; i < num_keys; i++) {
+    to_get.emplace(keys[i], key_lens[i]);
+  }
+  internal_rados_read_op_omap_get_vals_by_keys(read_op, to_get, iter, prval);
   tracepoint(librados, rados_read_op_omap_get_vals_by_keys_exit, *iter);
 }
 
 extern "C" int rados_omap_get_next(rados_omap_iter_t iter,
-				   char **key,
-				   char **val,
-				   size_t *len)
+                                   char **key,
+                                   char **val,
+                                   size_t *len)
+{
+  return rados_omap_get_next2(iter, key, val, nullptr, len);
+}
+
+extern "C" int rados_omap_get_next2(rados_omap_iter_t iter,
+                                   char **key,
+                                   char **val,
+                                   size_t *key_len,
+                                   size_t *val_len)
 {
   tracepoint(librados, rados_omap_get_next_enter, iter);
   RadosOmapIter *it = static_cast<RadosOmapIter *>(iter);
   if (it->i == it->values.end()) {
-    *key = NULL;
-    *val = NULL;
-    *len = 0;
-    tracepoint(librados, rados_omap_get_next_exit, 0, key, val, len);
+    if (key)
+      *key = NULL;
+    if (val)
+      *val = NULL;
+    if (key_len)
+      *key_len = 0;
+    if (val_len)
+      *val_len = 0;
+    tracepoint(librados, rados_omap_get_next_exit, 0, key, val, val_len);
     return 0;
   }
   if (key)
     *key = (char*)it->i->first.c_str();
   if (val)
     *val = it->i->second.c_str();
-  if (len)
-    *len = it->i->second.length();
+  if (key_len)
+    *key_len = it->i->first.length();
+  if (val_len)
+    *val_len = it->i->second.length();
   ++it->i;
-  tracepoint(librados, rados_omap_get_next_exit, 0, key, val, len);
+  tracepoint(librados, rados_omap_get_next_exit, 0, key, val, val_len);
   return 0;
 }
 

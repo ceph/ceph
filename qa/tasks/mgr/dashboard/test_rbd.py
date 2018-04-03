@@ -17,6 +17,13 @@ class RbdTest(DashboardTestCase):
         cls._rbd_cmd(['create', '--size=1G', 'img1'])
         cls._rbd_cmd(['create', '--size=2G', 'img2'])
 
+        osd_metadata = cls.ceph_cluster.mon_manager.get_osd_metadata()
+        cls.bluestore_support = True
+        for osd in osd_metadata:
+            if osd['osd_objectstore'] != 'bluestore':
+                cls.bluestore_support = False
+                break
+
     @classmethod
     def tearDownClass(cls):
         super(RbdTest, cls).tearDownClass()
@@ -33,7 +40,8 @@ class RbdTest(DashboardTestCase):
         self.assertEqual(img1['num_objs'], 256)
         self.assertEqual(img1['obj_size'], 4194304)
         self.assertEqual(img1['features_name'],
-                         'deep-flatten, exclusive-lock, fast-diff, layering, object-map')
+                         ['deep-flatten', 'exclusive-lock', 'fast-diff', 'layering', 'object-map'])
+        self.assertIn('id', img1)
 
         img2 = data['value'][1]
         self.assertEqual(img2['name'], 'img2')
@@ -41,7 +49,8 @@ class RbdTest(DashboardTestCase):
         self.assertEqual(img2['num_objs'], 512)
         self.assertEqual(img2['obj_size'], 4194304)
         self.assertEqual(img2['features_name'],
-                         'deep-flatten, exclusive-lock, fast-diff, layering, object-map')
+                         ['deep-flatten', 'exclusive-lock', 'fast-diff', 'layering', 'object-map'])
+        self.assertIn('id', img2)
 
     @authenticate
     def test_create(self):
@@ -63,14 +72,15 @@ class RbdTest(DashboardTestCase):
                 self.assertEqual(rbd['num_objs'], 1)
                 self.assertEqual(rbd['obj_size'], 4194304)
                 self.assertEqual(rbd['features_name'],
-                                 'deep-flatten, exclusive-lock, fast-diff, layering, object-map')
+                                 ['deep-flatten', 'exclusive-lock', 'fast-diff', 'layering',
+                                  'object-map'])
                 break
 
-    # TODO: Re-enable this test for bluestore cluster by figuring out how to skip none-bluestore
-    # ones automatically
-    @unittest.skip("requires bluestore cluster")
     @authenticate
     def test_create_rbd_in_data_pool(self):
+        if not self.bluestore_support:
+            self.skipTest('requires bluestore cluster')
+
         self._ceph_cmd(['osd', 'pool', 'create', 'data_pool', '12', '12', 'erasure'])
         self._ceph_cmd(['osd', 'pool', 'application', 'enable', 'data_pool', 'rbd'])
         self._ceph_cmd(['osd', 'pool', 'set', 'data_pool', 'allow_ec_overwrites', 'true'])
@@ -93,8 +103,9 @@ class RbdTest(DashboardTestCase):
                 self.assertEqual(rbd['size'], 10240)
                 self.assertEqual(rbd['num_objs'], 1)
                 self.assertEqual(rbd['obj_size'], 4194304)
-                self.assertEqual(rbd['features_name'], 'data-pool, deep-flatten, exclusive-lock, '
-                                                       'fast-diff, layering, object-map')
+                self.assertEqual(rbd['features_name'],
+                                 ['data-pool', 'deep-flatten', 'exclusive-lock', 'fast-diff',
+                                  'layering', 'object-map'])
                 break
 
         self._ceph_cmd(['osd', 'pool', 'delete', 'data_pool', 'data_pool',

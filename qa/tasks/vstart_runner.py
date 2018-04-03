@@ -155,7 +155,7 @@ class LocalRemoteProcess(object):
         if self.finished:
             # Avoid calling communicate() on a dead process because it'll
             # give you stick about std* already being closed
-            if self.exitstatus != 0:
+            if self.check_status and self.exitstatus != 0:
                 raise CommandFailedError(self.args, self.exitstatus)
             else:
                 return

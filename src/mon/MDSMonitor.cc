@@ -1735,7 +1735,7 @@ int MDSMonitor::print_nodes(Formatter *f)
     return r;
   }
 
-  map<string, list<int> > mdses; // hostname => rank
+  map<string, list<string> > mdses; // hostname => mds
   for (map<mds_gid_t, Metadata>::iterator it = metadata.begin();
        it != metadata.end(); ++it) {
     const Metadata& m = it->second;
@@ -1750,8 +1750,7 @@ int MDSMonitor::print_nodes(Formatter *f)
       continue;
     }
     const MDSMap::mds_info_t& mds_info = fsmap.get_info_gid(gid);
-    // FIXME: include filesystem name with rank here
-    mdses[hostname->second].push_back(mds_info.rank);
+    mdses[hostname->second].push_back(mds_info.name);
   }
 
   dump_services(f, mdses, "mds");

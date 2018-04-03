@@ -7,7 +7,7 @@ import cherrypy
 
 from .. import logger, mgr
 from ..controllers.rbd_mirroring import get_daemons_and_pools
-from ..tools import AuthRequired, ApiController, BaseController
+from ..tools import AuthRequired, ApiController, BaseController, TaskManager
 from ..services.ceph_service import CephService
 
 
@@ -58,12 +58,15 @@ class Summary(BaseController):
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    def default(self):
+    def default(self, *_vpath, **_params):
+        executing_t, finished_t = TaskManager.list_serializable()
         return {
             'rbd_pools': self._rbd_pool_data(),
             'health_status': self._health_status(),
             'filesystems': self._filesystems(),
             'rbd_mirroring': self._rbd_mirroring(),
             'mgr_id': mgr.get_mgr_id(),
-            'have_mon_connection': mgr.have_mon_connection()
+            'have_mon_connection': mgr.have_mon_connection(),
+            'executing_tasks': executing_t,
+            'finished_tasks': finished_t
         }

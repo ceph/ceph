@@ -319,7 +319,7 @@ int TableTool::main(std::vector<const char*> &argv)
 
   // Require at least 3 args <rank> <mode> <arg> [args...]
   if (argv.size() < 3) {
-    usage();
+    cerr << "missing required 3 arguments" << std::endl;
     return -EINVAL;
   }
 
@@ -368,8 +368,7 @@ int TableTool::main(std::vector<const char*> &argv)
       jf.dump_int("result", r);
       jf.close_section();
     } else {
-      derr << "Invalid table '" << table << "'" << dendl;
-      usage();
+      cerr << "Invalid table '" << table << "'" << std::endl;
       return -EINVAL;
     }
   } else if (mode == "show") {
@@ -391,8 +390,7 @@ int TableTool::main(std::vector<const char*> &argv)
       }
       jf.close_section();
     } else {
-      derr << "Invalid table '" << table << "'" << dendl;
-      usage();
+      cerr << "Invalid table '" << table << "'" << std::endl;
       return -EINVAL;
     }
   } else if (mode == "take_inos") {
@@ -407,8 +405,7 @@ int TableTool::main(std::vector<const char*> &argv)
       return InoTableHandler(rank).take_inos(&io, ino, f);
     }, &jf);
   } else {
-    derr << "Invalid mode '" << mode << "'" << dendl;
-    usage();
+    cerr << "Invalid mode '" << mode << "'" << std::endl;
     return -EINVAL;
   }
 

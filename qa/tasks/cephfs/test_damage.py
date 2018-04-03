@@ -141,7 +141,9 @@ class TestDamage(CephFSTestCase):
                 # Missing dirfrags for non-system dirs result in empty directory
                 "10000000000.00000000",
                 # PurgeQueue is auto-created if not found on startup
-                "500.00000000"
+                "500.00000000",
+                # open file table is auto-created if not found on startup
+                "mds0_openfiles.0"
             ]:
                 expectation = NO_DAMAGE
             else:

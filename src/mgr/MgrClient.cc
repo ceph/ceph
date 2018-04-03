@@ -329,7 +329,7 @@ void MgrClient::_send_report()
     daemon_dirty_status = false;
   }
 
-  report->osd_health_metrics = std::move(osd_health_metrics);
+  report->daemon_health_metrics = std::move(daemon_health_metrics);
 
   cct->_conf->get_config_bl(last_config_bl_version, &report->config_bl,
 			    &last_config_bl_version);
@@ -482,7 +482,8 @@ int MgrClient::service_daemon_update_status(
   return 0;
 }
 
-void MgrClient::update_osd_health(std::vector<OSDHealthMetric>&& metrics)
+void MgrClient::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
 {
-  osd_health_metrics = std::move(metrics);
+  daemon_health_metrics = std::move(metrics);
 }
+

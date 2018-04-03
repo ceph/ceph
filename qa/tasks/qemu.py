@@ -7,6 +7,7 @@ import contextlib
 import logging
 import os
 import yaml
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -407,6 +408,7 @@ def run_qemu(ctx, config):
                     cachemode=cachemode,
                     ),
                 ])
+        time_wait = client_config.get('time_wait', 0)
 
         log.info('starting qemu...')
         procs.append(
@@ -423,6 +425,11 @@ def run_qemu(ctx, config):
     finally:
         log.info('waiting for qemu tests to finish...')
         run.wait(procs)
+
+        if time_wait > 0:
+            log.debug('waiting {time_wait} sec for workloads detect finish...'.format(
+                time_wait=time_wait));
+            time.sleep(time_wait)
 
         log.debug('checking that qemu tests succeeded...')
         for client in config.iterkeys():

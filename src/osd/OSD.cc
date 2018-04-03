@@ -12,14 +12,21 @@
  * Foundation.  See file COPYING.
  *
  */
+
 #include "acconfig.h"
-#include <unistd.h>
+
+#include <cerrno>
+#include <cctype>
 #include <fstream>
 #include <iostream>
-#include <errno.h>
+#include <algorithm>
+
+#include <experimental/iterator>
+
+#include <unistd.h>
+
 #include <sys/stat.h>
 #include <signal.h>
-#include <ctype.h>
 #include <boost/scoped_ptr.hpp>
 
 #ifdef HAVE_SYS_PARAM_H
@@ -47,6 +54,7 @@
 #include "common/io_priority.h"
 #include "common/pick_address.h"
 #include "common/SubProcess.h"
+#include "common/PluginRegistry.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -54,7 +62,6 @@
 #endif
 
 #include "PrimaryLogPG.h"
-
 
 #include "msg/Messenger.h"
 #include "msg/Message.h"
@@ -864,7 +871,7 @@ bool OSDService::need_fullness_update()
   return want != cur;
 }
 
-bool OSDService::_check_full(s_names type, ostream &ss) const
+bool OSDService::_check_full(DoutPrefixProvider *dpp, s_names type) const
 {
   Mutex::Locker l(full_status_lock);
 
@@ -873,33 +880,35 @@ bool OSDService::_check_full(s_names type, ostream &ss) const
     // or if -1 then always return full
     if (injectfull > 0)
       --injectfull;
-    ss << "Injected " << get_full_state_name(type) << " OSD ("
-       << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")";
+    ldpp_dout(dpp, 10) << __func__ << " Injected " << get_full_state_name(type) << " OSD ("
+             << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")"
+             << dendl;
     return true;
   }
+  if (cur_state >= type)
+    ldpp_dout(dpp, 10) << __func__ << " current usage is " << cur_ratio << dendl;
 
-  ss << "current usage is " << cur_ratio;
   return cur_state >= type;
 }
 
-bool OSDService::check_failsafe_full(ostream &ss) const
+bool OSDService::check_failsafe_full(DoutPrefixProvider *dpp) const
 {
-  return _check_full(FAILSAFE, ss);
+  return _check_full(dpp, FAILSAFE);
 }
 
-bool OSDService::check_full(ostream &ss) const
+bool OSDService::check_full(DoutPrefixProvider *dpp) const
 {
-  return _check_full(FULL, ss);
+  return _check_full(dpp, FULL);
 }
 
-bool OSDService::check_backfill_full(ostream &ss) const
+bool OSDService::check_backfill_full(DoutPrefixProvider *dpp) const
 {
-  return _check_full(BACKFILLFULL, ss);
+  return _check_full(dpp, BACKFILLFULL);
 }
 
-bool OSDService::check_nearfull(ostream &ss) const
+bool OSDService::check_nearfull(DoutPrefixProvider *dpp) const
 {
-  return _check_full(NEARFULL, ss);
+  return _check_full(dpp, NEARFULL);
 }
 
 bool OSDService::is_failsafe_full() const
@@ -4984,7 +4993,7 @@ void OSD::tick_without_osd_lock()
     }
   }
 
-  mgrc.update_osd_health(get_health_metrics());
+  mgrc.update_daemon_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
 }
@@ -5540,6 +5549,27 @@ void OSD::_send_boot()
   set_state(STATE_BOOTING);
 }
 
+std::string OSD::_collect_compression_algorithms()
+{
+  using std::experimental::make_ostream_joiner;
+
+  const auto& compression_algorithms = Compressor::compression_algorithms;
+  const auto& plugin_registry = cct->get_plugin_registry()->plugins;
+
+  if (plugin_registry.empty())
+   return {};
+
+  ostringstream os;
+
+  copy_if(begin(compression_algorithms), end(compression_algorithms),
+          make_ostream_joiner(os, ", "),
+          [&plugin_registry](const auto& algorithm) {
+            return plugin_registry.end() != plugin_registry.find(algorithm.first);
+         });
+  
+  return os.str();
+}
+
 void OSD::_collect_metadata(map<string,string> *pm)
 {
   // config info
@@ -5570,6 +5600,10 @@ void OSD::_collect_metadata(map<string,string> *pm)
   set<string> devnames;
   store->get_devices(&devnames);
   (*pm)["devices"] = stringify(devnames);
+
+  // Other information:
+  (*pm)["supported_compression_algorithms"] = _collect_compression_algorithms();
+
   dout(10) << __func__ << " " << *pm << dendl;
 }
 
@@ -7064,9 +7098,9 @@ MPGStats* OSD::collect_pg_stats()
   return m;
 }
 
-vector<OSDHealthMetric> OSD::get_health_metrics()
+vector<DaemonHealthMetric> OSD::get_health_metrics()
 {
-  vector<OSDHealthMetric> metrics;
+  vector<DaemonHealthMetric> metrics;
   {
     utime_t oldest_secs;
     const utime_t now = ceph_clock_now();
@@ -7082,10 +7116,10 @@ vector<OSDHealthMetric> OSD::get_health_metrics()
       }
     };
     if (op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops)) {
-      metrics.emplace_back(osd_metric::SLOW_OPS, slow, oldest_secs);
+      metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
     } else {
       // no news is not good news.
-      metrics.emplace_back(osd_metric::SLOW_OPS, 0, 0);
+      metrics.emplace_back(daemon_metric::SLOW_OPS, 0, 0);
     }
   }
   with_unique_lock(pending_creates_lock, [&]() {
@@ -7095,7 +7129,7 @@ vector<OSDHealthMetric> OSD::get_health_metrics()
 	  n_primaries++;
 	}
       }
-      metrics.emplace_back(osd_metric::PENDING_CREATING_PGS, n_primaries);
+      metrics.emplace_back(daemon_metric::PENDING_CREATING_PGS, n_primaries);
     });
   return metrics;
 }

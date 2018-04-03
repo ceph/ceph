@@ -1101,6 +1101,34 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("mon_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("enable/disable MON op tracking"),
+
+    Option("mon_op_complaint_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_description("time in seconds to consider a MON OP blocked after no updates"),
+
+    Option("mon_op_log_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("max number of slow ops to display"),
+
+    Option("mon_op_history_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(20)
+    .set_description("max number of completed ops to track"),
+
+    Option("mon_op_history_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(600)
+    .set_description("expiration time in seconds of historical MON OPS"),
+
+    Option("mon_op_history_slow_op_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(20)
+    .set_description("max number of slow historical MON OPS to keep"),
+
+    Option("mon_op_history_slow_op_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(10.0)
+    .set_description("duration time in seconds of an op to be considered as a historical slow op"),
+
     Option("mon_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_default("/var/lib/ceph/mon/$cluster-$id")
@@ -3192,7 +3220,7 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
-    Option("osd_debug_verify_snaps_on_info", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    Option("osd_debug_verify_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
@@ -4769,7 +4797,7 @@ std::vector<Option> get_global_options() {
                           "failures about managers that aren't online yet"),
 
     Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(60)
+    .set_default(120)
     .add_service("mon")
     .set_description("Period in seconds that the cluster may have no active "
                      "manager before this is reported as an ERR rather than "
@@ -4802,6 +4830,14 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_acl_grants_max_num", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_description("Max number of ACL grants in a single request"),
+
+    Option("rgw_rados_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("true if LTTng-UST tracepoints should be enabled"),
+
+    Option("rgw_op_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("true if LTTng-UST tracepoints should be enabled"),
 
     Option("rgw_max_chunk_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_M)
@@ -6340,6 +6376,10 @@ static std::vector<Option> get_rbd_options() {
     Option("rbd_qos_iops_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("the desired limit of IO operations per second"),
+
+    Option("rbd_discard_on_zeroed_write_same", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("discard data on zeroed write same instead of writing zero"),
   });
 }
 
@@ -7030,6 +7070,10 @@ std::vector<Option> get_mds_client_options() {
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("big_writes is deprecated in libfuse 3.0.0"),
+
+    Option("fuse_max_write", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Set the maximum number of bytes in a single write operation.  Because the FUSE default is 128kbytes, SO fuse_max_write default set to 0(The default does not take effect)"),
 
     Option("fuse_atomic_o_trunc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

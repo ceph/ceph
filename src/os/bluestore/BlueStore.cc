@@ -4115,7 +4115,7 @@ int BlueStore::_reload_logger()
   struct store_statfs_t store_statfs;
 
   int r = statfs(&store_statfs);
-  if(r >= 0) {
+  if (r >= 0) {
     logger->set(l_bluestore_allocated, store_statfs.allocated);
     logger->set(l_bluestore_stored, store_statfs.stored);
     logger->set(l_bluestore_compressed, store_statfs.compressed);
@@ -5116,7 +5116,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   if (bluefs_free < min_free &&
       min_free < free_cap) {
     uint64_t g = min_free - bluefs_free;
-    dout(10) << __func__ << " bluefs_free " << bluefs_total
+    dout(10) << __func__ << " bluefs_free " << bluefs_free
 	     << " < min " << min_free
 	     << ", should gift " << pretty_si_t(g) << dendl;
     if (g > gift)
@@ -5129,7 +5129,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     gift = p2roundup(gift, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
-    gift = std::min<uint64_t>(gift, 1 << 31);
+    gift = std::min<uint64_t>(gift, 1ull << 31);
     dout(10) << __func__ << " gifting " << gift
 	     << " (" << pretty_si_t(gift) << ")" << dendl;
 
@@ -5166,7 +5166,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     reclaim = p2roundup(reclaim, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
-    reclaim = std::min<uint64_t>(reclaim, 1 << 31);
+    reclaim = std::min<uint64_t>(reclaim, 1ull << 31);
     dout(10) << __func__ << " reclaiming " << reclaim
 	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
 
@@ -6472,7 +6472,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    
 	    // relying on blob's pextents to decide what to release.
 	    for (auto& p : pext_to_release) {
-	      to_release.insert(p.offset, p.length);
+	      to_release.union_insert(p.offset, p.length);
 	    }
 	  } else {
 	    for (auto& p : pext_to_release) {
@@ -6480,7 +6480,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	      if (compressed) {
 		expected_statfs.compressed_allocated -= p.length;
 	      }
-	      to_release.insert(p.offset, p.length);
+	      to_release.union_insert(p.offset, p.length);
 	    }
 	  }
 	  if (bypass_rest) {
@@ -10838,7 +10838,7 @@ void BlueStore::_choose_write_options(
     comp_mode.load(),
     [&]() {
       string val;
-      if(c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
+      if (c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
 	return boost::optional<Compressor::CompressionMode>(
 	  Compressor::get_comp_mode_type(val));
       }
@@ -10874,7 +10874,7 @@ void BlueStore::_choose_write_options(
         comp_max_blob_size.load(),
         [&]() {
           int val;
-          if(c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
+          if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
    	    return boost::optional<uint64_t>((uint64_t)val);
           }
           return boost::optional<uint64_t>();
@@ -10888,7 +10888,7 @@ void BlueStore::_choose_write_options(
         comp_min_blob_size.load(),
         [&]() {
           int val;
-          if(c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
+          if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
    	    return boost::optional<uint64_t>((uint64_t)val);
           }
           return boost::optional<uint64_t>();
@@ -11518,7 +11518,6 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
 				 const string& first, const string& last)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  KeyValueDB::Iterator it;
   string key_first, key_last;
   int r = 0;
   if (!o->onode.has_omap()) {

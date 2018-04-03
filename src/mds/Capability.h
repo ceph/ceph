@@ -257,10 +257,7 @@ public:
 
   // caps this client wants to hold
   int wanted() { return _wanted; }
-  void set_wanted(int w) {
-    _wanted = w;
-    //check_rdcaps_list();
-  }
+  void set_wanted(int w);
 
   void inc_last_seq() { last_sent++; }
   ceph_seq_t get_last_seq() { return last_sent; }
@@ -291,7 +288,7 @@ public:
     client_follows = other.client_follows;
 
     // wanted
-    _wanted = _wanted | other.wanted;
+    set_wanted(wanted() | other.wanted);
     if (auth_cap)
       mseq = other.mseq;
   }
@@ -308,7 +305,7 @@ public:
     }
 
     // wanted
-    _wanted = _wanted | otherwanted;
+    set_wanted(wanted() | otherwanted);
   }
 
   void revoke() {
