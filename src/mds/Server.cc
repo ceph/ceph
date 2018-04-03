@@ -170,7 +170,7 @@ void Server::dispatch(Message *m)
 	if (req->is_replay()) {
 	  wait_for_active = false;
 	} else {
-	  Session *session = get_session(req);
+	  Session *session = mds->get_session(req);
 	  if (session && session->have_completed_request(req->get_reqid().tid, NULL))
 	    wait_for_active = false;
 	}
