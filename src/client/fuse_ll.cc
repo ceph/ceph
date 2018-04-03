@@ -129,13 +129,6 @@ static int getgroups(fuse_req_t req, gid_t **sgids)
   return -ENOSYS;
 }
 
-static int getgroups_cb(void *handle, gid_t **sgids)
-{
-  CephFuse::Handle *cfuse = (CephFuse::Handle *) handle;
-  fuse_req_t req = cfuse->get_fuse_req();
-  return getgroups(req, sgids);
-}
-
 static void get_fuse_groups(UserPerm& perms, fuse_req_t req)
 {
   if (g_conf->get_val<bool>("fuse_set_user_groups")) {
@@ -1176,7 +1169,6 @@ int CephFuse::Handle::start()
 #if defined(__linux__)
     remount_cb: remount_cb,
 #endif
-    getgroups_cb: getgroups_cb,
 #if !defined(__APPLE__)
     umask_cb: umask_cb,
 #endif
