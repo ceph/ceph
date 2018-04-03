@@ -1,6 +1,5 @@
 # TODO synchronize with man page
   $ ceph-authtool --help
-  no command specified
   usage: ceph-authtool keyringfile [OPTIONS]...
   where the options are:
     -l, --list                    will list all keys and capabilities present in
