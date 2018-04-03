@@ -294,6 +294,5 @@
     --setgroup GROUP  set gid to group or gid
     --version         show version and quit
   
-  [1]
 
 
