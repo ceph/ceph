@@ -3036,6 +3036,10 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
   in->add_replica(oldauth, CInode::EXPORT_NONCE);
   if (in->is_replica(mds->get_nodeid()))
     in->remove_replica(mds->get_nodeid());
+
+  if (in->snaplock.is_stable() &&
+      in->snaplock.get_state() != LOCK_SYNC)
+      mds->locker->try_eval(&in->snaplock, NULL);
 }
 
 void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,

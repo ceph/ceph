@@ -1096,7 +1096,9 @@ void MDSRank::boot_start(BootStep step, int r)
         MDSGatherBuilder gather(g_ceph_context,
             new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
 
-        mdcache->open_mydir_inode(gather.new_sub());
+	mdcache->open_mydir_inode(gather.new_sub());
+
+	mdcache->create_global_snaprealm();
 
         if (is_starting() ||
             whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
@@ -1184,6 +1186,9 @@ void MDSRank::starting_done()
 			       mdlog->start_new_segment();
 			   })));
   }
+
+  // sync snaptable cache
+  snapclient->sync(new C_MDSInternalNoop);
 }
 
 
@@ -1322,6 +1327,13 @@ void MDSRank::replay_done()
   mdlog->get_journaler()->set_writeable();
   mdlog->get_journaler()->trim_tail();
 
+  if (snapserver->get_version() == 0) {
+    // upgraded from old filesystem. version 0 snaptable confuses current code.
+    dout(1) << "upgrading snaptable version from 0 to 1" << dendl;
+    snapserver->reset();
+    sessionmap.save(new C_MDSInternalNoop);
+  }
+
   if (g_conf->mds_wipe_sessions) {
     dout(1) << "wiping out client sessions" << dendl;
     sessionmap.wipe();
@@ -1343,6 +1355,8 @@ void MDSRank::replay_done()
       mdsmap->get_num_failed_mds() == 0) { // just me!
     dout(2) << "i am alone, moving to state reconnect" << dendl;
     request_state(MDSMap::STATE_RECONNECT);
+    // sync snaptable cache
+    snapclient->sync(new C_MDSInternalNoop);
   } else {
     dout(2) << "i am not alone, moving to state resolve" << dendl;
     request_state(MDSMap::STATE_RESOLVE);
@@ -1355,7 +1369,6 @@ void MDSRank::reopen_log()
   mdcache->rollback_uncommitted_fragments();
 }
 
-
 void MDSRank::resolve_start()
 {
   dout(1) << "resolve_start" << dendl;
@@ -1365,10 +1378,13 @@ void MDSRank::resolve_start()
   mdcache->resolve_start(new C_MDS_VoidFn(this, &MDSRank::resolve_done));
   finish_contexts(g_ceph_context, waiting_for_resolve);
 }
+
 void MDSRank::resolve_done()
 {
   dout(1) << "resolve_done" << dendl;
   request_state(MDSMap::STATE_RECONNECT);
+  // sync snaptable cache
+  snapclient->sync(new C_MDSInternalNoop);
 }
 
 void MDSRank::reconnect_start()
@@ -1490,13 +1506,6 @@ void MDSRank::recovery_done(int oldstate)
   dout(1) << "recovery_done -- successful recovery!" << dendl;
   assert(is_clientreplay() || is_active());
 
-  // kick snaptable (resent AGREEs)
-  if (mdsmap->get_tableserver() == whoami) {
-    set<mds_rank_t> active;
-    mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
-    snapserver->finish_recovery(active);
-  }
-
   if (oldstate == MDSMap::STATE_CREATING)
     return;
 
@@ -1513,6 +1522,8 @@ void MDSRank::creating_done()
 {
   dout(1)<< "creating_done" << dendl;
   request_state(MDSMap::STATE_ACTIVE);
+  // sync snaptable cache
+  snapclient->sync(new C_MDSInternalNoop);
 }
 
 void MDSRank::boot_create()
@@ -1541,6 +1552,9 @@ void MDSRank::boot_create()
 
   dout(3) << "boot_create creating mydir hierarchy" << dendl;
   mdcache->create_mydir_hierarchy(fin.get());
+
+  dout(3) << "boot_create creating global snaprealm" << dendl;
+  mdcache->create_global_snaprealm();
 
   // fixme: fake out inotable (reset, pretend loaded)
   dout(10) << "boot_create creating fresh inotable table" << dendl;
@@ -1691,6 +1705,26 @@ void MDSRankDispatcher::handle_mds_map(
   // is someone else newly resolving?
   if (is_resolve() || is_reconnect() || is_rejoin() ||
       is_clientreplay() || is_active() || is_stopping()) {
+
+    // recover snaptable
+    if (mdsmap->get_tableserver() == whoami) {
+      if (oldstate < MDSMap::STATE_RESOLVE) {
+	set<mds_rank_t> s;
+	mdsmap->get_mds_set_lower_bound(s, MDSMap::STATE_RESOLVE);
+	snapserver->finish_recovery(s);
+      } else {
+	set<mds_rank_t> old_set, new_set;
+	oldmap->get_mds_set_lower_bound(old_set, MDSMap::STATE_RESOLVE);
+	mdsmap->get_mds_set_lower_bound(new_set, MDSMap::STATE_RESOLVE);
+	for (auto p : new_set) {
+	  if (p != whoami &&            // not me
+	      old_set.count(p) == 0) {  // newly so?
+	    snapserver->handle_mds_recovery(p);
+	  }
+	}
+      }
+    }
+
     if (!oldmap->is_resolving() && mdsmap->is_resolving()) {
       set<mds_rank_t> resolve;
       mdsmap->get_mds_set(resolve, MDSMap::STATE_RESOLVE);
@@ -1783,8 +1817,11 @@ void MDSRankDispatcher::handle_mds_map(
     oldmap->get_stopped_mds_set(oldstopped);
     mdsmap->get_stopped_mds_set(stopped);
     for (set<mds_rank_t>::iterator p = stopped.begin(); p != stopped.end(); ++p)
-      if (oldstopped.count(*p) == 0)      // newly so?
+      if (oldstopped.count(*p) == 0) {     // newly so?
 	mdcache->migrator->handle_mds_failure_or_stop(*p);
+	if (mdsmap->get_tableserver() == whoami)
+	  snapserver->handle_mds_failure_or_stop(*p);
+      }
   }
 
   {
@@ -1835,10 +1872,6 @@ void MDSRank::handle_mds_recovery(mds_rank_t who)
 
   mdcache->handle_mds_recovery(who);
 
-  if (mdsmap->get_tableserver() == whoami) {
-    snapserver->handle_mds_recovery(who);
-  }
-
   queue_waiters(waiting_for_active_peer[who]);
   waiting_for_active_peer.erase(who);
 }
@@ -1852,6 +1885,9 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
   dout(5) << "handle_mds_failure mds." << who << dendl;
 
   mdcache->handle_mds_failure(who);
+
+  if (mdsmap->get_tableserver() == whoami)
+    snapserver->handle_mds_failure_or_stop(who);
 
   snapclient->handle_mds_failure(who);
 }
@@ -1984,6 +2020,23 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
     if (r != 0) {
       ss << "Failed to dump loads: " << cpp_strerror(r);
       f->reset();
+    }
+  } else if (command == "dump snaps") {
+    Mutex::Locker l(mds_lock);
+    string server;
+    cmd_getval(g_ceph_context, cmdmap, "server", server);
+    if (server == "--server") {
+      if (mdsmap->get_tableserver() == whoami) {
+	snapserver->dump(f);
+      } else {
+	ss << "Not snapserver";
+      }
+    } else {
+      int r = snapclient->dump_cache(f);
+      if (r != 0) {
+	ss << "Failed to dump snapclient: " << cpp_strerror(r);
+	f->reset();
+      }
     }
   } else if (command == "force_readonly") {
     Mutex::Locker l(mds_lock);

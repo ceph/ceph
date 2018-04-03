@@ -94,6 +94,7 @@
 #include "messages/MMDSSlaveRequest.h"
 
 #include "messages/MMDSFragmentNotify.h"
+#include "messages/MMDSSnapUpdate.h"
 
 #include "messages/MGatherCaps.h"
 
@@ -213,6 +214,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   decayrate.set_halflife(g_conf->mds_decay_halflife);
 
   did_shutdown_log_cap = false;
+
+  global_snaprealm = NULL;
 }
 
 MDCache::~MDCache() 
@@ -327,7 +330,7 @@ void MDCache::remove_inode(CInode *o)
     }
     if (o->is_base())
       base_inodes.erase(o);
-    }
+  }
 
   // delete it
   assert(o->get_num_ref() == 0);
@@ -606,13 +609,8 @@ void MDCache::open_root_inode(MDSInternalContextBase *c)
 
 void MDCache::open_mydir_inode(MDSInternalContextBase *c)
 {
-  MDSGatherBuilder gather(g_ceph_context);
-
   CInode *in = create_system_inode(MDS_INO_MDSDIR(mds->get_nodeid()), S_IFDIR|0755);  // initially inaccurate!
-  in->fetch(gather.new_sub());
-
-  gather.set_finisher(c);
-  gather.activate();
+  in->fetch(c);
 }
 
 void MDCache::open_root()
@@ -1597,7 +1595,8 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     if (in->get_projected_parent_dn() != dn) {
       assert(follows == CEPH_NOSNAP);
       realm = dn->dir->inode->find_snaprealm();
-      snapid_t dir_follows = realm->get_newest_seq();
+      snapid_t dir_follows = get_global_snaprealm()->get_newest_seq();
+      assert(dir_follows >= realm->get_newest_seq());
 
       if (dir_follows+1 > dn->first) {
 	snapid_t oldfirst = dn->first;
@@ -1616,15 +1615,17 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	}
       }
 
+      follows = dir_follows;
       if (in->snaprealm) {
 	realm = in->snaprealm;
-	follows = realm->get_newest_seq();
-      } else
-	follows = dir_follows;
+	assert(follows >= realm->get_newest_seq());
+      }
     } else {
       realm = in->find_snaprealm();
-      if (follows == CEPH_NOSNAP)
-	follows = realm->get_newest_seq();
+      if (follows == CEPH_NOSNAP) {
+	follows = get_global_snaprealm()->get_newest_seq();
+	assert(follows >= realm->get_newest_seq());
+      }
     }
 
     // already cloned?
@@ -1643,8 +1644,10 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 
   } else {
     SnapRealm *realm = dn->dir->inode->find_snaprealm();
-    if (follows == CEPH_NOSNAP)
-      follows = realm->get_newest_seq();
+    if (follows == CEPH_NOSNAP) {
+      follows = get_global_snaprealm()->get_newest_seq();
+      assert(follows >= realm->get_newest_seq());
+    }
 
     // already cloned?
     if (follows < dn->first) {
@@ -2405,8 +2408,9 @@ void MDCache::logged_master_update(metareqid_t reqid)
   dout(10) << "logged_master_update " << reqid << dendl;
   assert(uncommitted_masters.count(reqid));
   uncommitted_masters[reqid].safe = true;
-  if (pending_masters.count(reqid)) {
-    pending_masters.erase(reqid);
+  auto p = pending_masters.find(reqid);
+  if (p != pending_masters.end()) {
+    pending_masters.erase(p);
     if (pending_masters.empty())
       process_delayed_resolve();
   }
@@ -2670,21 +2674,37 @@ void MDCache::resolve_start(MDSInternalContext *resolve_done_)
       adjust_subtree_auth(rootdir, CDIR_AUTH_UNKNOWN);
   }
   resolve_gather = recovery_set;
+
+  resolve_snapclient_commits = mds->snapclient->get_journaled_tids();
 }
 
 void MDCache::send_resolves()
 {
   send_slave_resolves();
+
+  if (!resolve_done) {
+    // I'm survivor: refresh snap cache
+    mds->snapclient->sync(
+	new MDSInternalContextWrapper(mds,
+	  new FunctionContext([this](int r) {
+	    maybe_finish_slave_resolve();
+	    })
+	  )
+	);
+    dout(10) << "send_resolves waiting for snapclient cache to sync" << dendl;
+    return;
+  }
   if (!resolve_ack_gather.empty()) {
     dout(10) << "send_resolves still waiting for resolve ack from ("
 	     << resolve_ack_gather << ")" << dendl;
     return;
   }
-  if (!need_resolve_rollback.empty()) {
+  if (!resolve_need_rollback.empty()) {
     dout(10) << "send_resolves still waiting for rollback to commit on ("
-	     << need_resolve_rollback << ")" << dendl;
+	     << resolve_need_rollback << ")" << dendl;
     return;
   }
+
   send_subtree_resolves();
 }
 
@@ -2848,12 +2868,26 @@ void MDCache::send_subtree_resolves()
        p != resolves.end();
        ++p) {
     MMDSResolve* m = p->second;
+    if (mds->is_resolve()) {
+      m->add_table_commits(TABLE_SNAP, resolve_snapclient_commits);
+    } else {
+      m->add_table_commits(TABLE_SNAP, mds->snapclient->get_journaled_tids());
+    }
     m->subtrees = my_subtrees;
     m->ambiguous_imports = my_ambig_imports;
     dout(10) << "sending subtee resolve to mds." << p->first << dendl;
     mds->send_message_mds(m, p->first);
   }
   resolves_pending = false;
+}
+
+void MDCache::maybe_finish_slave_resolve() {
+  if (resolve_ack_gather.empty() && resolve_need_rollback.empty()) {
+    // snap cache get synced or I'm in resolve state
+    if (mds->snapclient->is_synced() || resolve_done)
+      send_subtree_resolves();
+    process_delayed_resolve();
+  }
 }
 
 void MDCache::handle_mds_failure(mds_rank_t who)
@@ -3192,7 +3226,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
     return;
   }
 
-  if (!resolve_ack_gather.empty() || !need_resolve_rollback.empty()) {
+  if (!resolve_ack_gather.empty() || !resolve_need_rollback.empty()) {
     dout(10) << "delay processing subtree resolve" << dendl;
     delayed_resolve[from] = m;
     return;
@@ -3274,6 +3308,16 @@ void MDCache::handle_resolve(MMDSResolve *m)
     dout(10) << "noting ambiguous import on " << pi->first << " bounds " << pi->second << dendl;
     other_ambiguous_imports[from][pi->first].swap( pi->second );
   }
+
+  // learn other mds' pendina snaptable commits. later when resolve finishes, we will reload
+  // snaptable cache from snapserver. By this way, snaptable cache get synced among all mds
+  for (auto p : m->table_clients) {
+    dout(10) << " noting " << get_mdstable_name(p.type)
+	     << " pending_commits " << p.pending_commits << dendl;
+    MDSTableClient *client = mds->get_table_client(p.type);
+    for (auto q : p.pending_commits)
+      client->notify_commit(q);
+  }
   
   // did i get them all?
   resolve_gather.erase(from);
@@ -3303,7 +3347,7 @@ void MDCache::discard_delayed_resolve(mds_rank_t who)
 void MDCache::maybe_resolve_finish()
 {
   assert(resolve_ack_gather.empty());
-  assert(need_resolve_rollback.empty());
+  assert(resolve_need_rollback.empty());
 
   if (!resolve_gather.empty()) {
     dout(10) << "maybe_resolve_finish still waiting for resolves ("
@@ -3321,6 +3365,7 @@ void MDCache::maybe_resolve_finish()
     recalc_auth_bits(false);
     resolve_done.release()->complete(0);
   } else {
+    // I am survivor.
     maybe_send_pending_rejoins();
   }
 }
@@ -3412,11 +3457,9 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     }
   }
 
-  if (!ambiguous_slave_updates.count(from))
+  if (!ambiguous_slave_updates.count(from)) {
     resolve_ack_gather.erase(from);
-  if (resolve_ack_gather.empty() && need_resolve_rollback.empty()) {
-    send_subtree_resolves();
-    process_delayed_resolve();
+    maybe_finish_slave_resolve();
   }
 
   ack->put();
@@ -3490,14 +3533,12 @@ MDSlaveUpdate* MDCache::get_uncommitted_slave_update(metareqid_t reqid, mds_rank
 }
 
 void MDCache::finish_rollback(metareqid_t reqid) {
-  assert(need_resolve_rollback.count(reqid));
+  auto p = resolve_need_rollback.find(reqid);
+  assert(p != resolve_need_rollback.end());
   if (mds->is_resolve())
-    finish_uncommitted_slave_update(reqid, need_resolve_rollback[reqid]);
-  need_resolve_rollback.erase(reqid);
-  if (resolve_ack_gather.empty() && need_resolve_rollback.empty()) {
-    send_subtree_resolves();
-    process_delayed_resolve();
-  }
+    finish_uncommitted_slave_update(reqid, p->second);
+  resolve_need_rollback.erase(p);
+  maybe_finish_slave_resolve();
 }
 
 void MDCache::disambiguate_other_imports()
@@ -4913,6 +4954,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   // for sending cache expire message
   set<CInode*> isolated_inodes;
   set<CInode*> refragged_inodes;
+  list<pair<CInode*,int> > updated_realms;
 
   // dirs
   for (map<dirfrag_t, MMDSCacheRejoin::dirfrag_strong>::iterator p = ack->strong_dirfrags.begin();
@@ -5061,7 +5103,14 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     CInode *in = get_inode(ino, last);
     assert(in);
     bufferlist::iterator q = basebl.begin();
+    snapid_t sseq = 0;
+    if (in->snaprealm)
+      sseq = in->snaprealm->srnode.seq;
     in->_decode_base(q);
+    if (in->snaprealm && in->snaprealm->srnode.seq != sseq) {
+      int snap_op = sseq > 0 ? CEPH_SNAP_OP_UPDATE : CEPH_SNAP_OP_SPLIT;
+      updated_realms.push_back(pair<CInode*,int>(in, snap_op));
+    }
     dout(10) << " got inode base " << *in << dendl;
   }
 
@@ -5123,11 +5172,26 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     assert(cap_exports[p->first].empty());
   }
 
+  for (auto p : updated_realms) {
+    CInode *in = p.first;
+    bool notify_clients;
+    if (mds->is_rejoin()) {
+      if (!rejoin_pending_snaprealms.count(in)) {
+	in->get(CInode::PIN_OPENINGSNAPPARENTS);
+	rejoin_pending_snaprealms.insert(in);
+      }
+      notify_clients = false;
+    } else {
+      // notify clients if I'm survivor
+      notify_clients = true;
+    }
+    do_realm_invalidate_and_update_notify(in, p.second, notify_clients);
+  }
+
   // done?
   assert(rejoin_ack_gather.count(from));
   rejoin_ack_gather.erase(from);
   if (!survivor) {
-
     if (rejoin_gather.empty()) {
       // eval unstable scatter locks after all wrlocks are rejoined.
       while (!rejoin_eval_locks.empty()) {
@@ -5141,7 +5205,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     if (rejoin_gather.empty() &&     // make sure we've gotten our FULL inodes, too.
 	rejoin_ack_gather.empty()) {
       // finally, kickstart past snap parent opens
-      open_snap_parents();
+      open_snaprealms();
     } else {
       dout(7) << "still need rejoin from (" << rejoin_gather << ")"
 	      << ", rejoin_ack from (" << rejoin_ack_gather << ")" << dendl;
@@ -5228,8 +5292,8 @@ void MDCache::rejoin_gather_finish()
 
   // did we already get our acks too?
   if (rejoin_ack_gather.empty()) {
-    // finally, kickstart past snap parent opens
-    open_snap_parents();
+    // finally, open snaprealms
+    open_snaprealms();
   }
 }
 
@@ -5378,8 +5442,11 @@ bool MDCache::process_imported_caps()
 	assert(session);
 
 	Capability *cap = in->get_client_cap(q->first);
-	if (!cap)
+	if (!cap) {
 	  cap = in->add_client_cap(q->first, session);
+	  // add empty item to reconnected_caps
+	  (void)reconnected_caps[p->first][q->first];
+	}
 	cap->merge(q->second, true);
 
 	Capability::Import& im = rejoin_imported_caps[p->second.first][p->first][q->first];
@@ -5437,34 +5504,6 @@ bool MDCache::process_imported_caps()
   return false;
 }
 
-void MDCache::check_realm_past_parents(SnapRealm *realm, bool reconnect)
-{
-  // are this realm's parents fully open?
-  if (realm->have_past_parents_open()) {
-    dout(10) << " have past snap parents for realm " << *realm 
-	     << " on " << *realm->inode << dendl;
-    if (reconnect) {
-      // finish off client snaprealm reconnects?
-      auto p = reconnected_snaprealms.find(realm->inode->ino());
-      if (p != reconnected_snaprealms.end()) {
-	for (auto q = p->second.begin(); q != p->second.end(); ++q)
-	  finish_snaprealm_reconnect(q->first, realm, q->second);
-	reconnected_snaprealms.erase(p);
-      }
-    }
-  } else {
-    if (!missing_snap_parents.count(realm->inode)) {
-      dout(10) << " MISSING past snap parents for realm " << *realm
-	       << " on " << *realm->inode << dendl;
-      realm->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
-      missing_snap_parents[realm->inode].size();   // just to get it into the map!
-    } else {
-      dout(10) << " (already) MISSING past snap parents for realm " << *realm 
-	       << " on " << *realm->inode << dendl;
-    }
-  }
-}
-
 void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
 				     client_t client, snapid_t snap_follows)
 {
@@ -5516,10 +5555,8 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 {
   dout(10) << "choose_lock_states_and_reconnect_caps" << dendl;
 
-  map<client_t,MClientSnap*> splits;
-
-  for (auto i : inode_map) {
-    CInode *in = i.second;
+  for (auto p : inode_map) {
+    CInode *in = p.second;
 
     if (in->last != CEPH_NOSNAP)
       continue;
@@ -5528,69 +5565,68 @@ void MDCache::choose_lock_states_and_reconnect_caps()
       in->mark_dirty_rstat();
 
     int dirty_caps = 0;
-    auto p = reconnected_caps.find(in->ino());
-    if (p != reconnected_caps.end()) {
-      for (const auto &it : p->second)
+    auto q = reconnected_caps.find(in->ino());
+    if (q != reconnected_caps.end()) {
+      for (const auto &it : q->second)
 	dirty_caps |= it.second.dirty_caps;
     }
     in->choose_lock_states(dirty_caps);
     dout(15) << " chose lock states on " << *in << dendl;
 
-    SnapRealm *realm = in->find_snaprealm();
-
-    check_realm_past_parents(realm, realm == in->snaprealm);
-
-    if (p != reconnected_caps.end()) {
-      bool missing_snap_parent = false;
-      // also, make sure client's cap is in the correct snaprealm.
-      for (auto q = p->second.begin(); q != p->second.end(); ++q) {
-	if (q->second.snap_follows > 0 && q->second.snap_follows < in->first - 1) {
-	  if (realm->have_past_parents_open()) {
-	    rebuild_need_snapflush(in, realm, q->first, q->second.snap_follows);
-	  } else {
-	    missing_snap_parent = true;
-	  }
-	}
-
-	if (q->second.realm_ino == realm->inode->ino()) {
-	  dout(15) << "  client." << q->first << " has correct realm " << q->second.realm_ino << dendl;
-	} else {
-	  dout(15) << "  client." << q->first << " has wrong realm " << q->second.realm_ino
-		   << " != " << realm->inode->ino() << dendl;
-	  if (realm->have_past_parents_open()) {
-	    // ok, include in a split message _now_.
-	    prepare_realm_split(realm, q->first, in->ino(), splits);
-	  } else {
-	    // send the split later.
-	    missing_snap_parent = true;
-	  }
-	}
-      }
-      if (missing_snap_parent)
-	missing_snap_parents[realm->inode].insert(in);
+    if (in->snaprealm && !rejoin_pending_snaprealms.count(in)) {
+      in->get(CInode::PIN_OPENINGSNAPPARENTS);
+      rejoin_pending_snaprealms.insert(in);
     }
-  }    
-
-  send_snaps(splits);
+  }
 }
 
 void MDCache::prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
 				  map<client_t,MClientSnap*>& splits)
 {
   MClientSnap *snap;
-  if (splits.count(client) == 0) {
+  auto it = splits.find(client);
+  if (it != splits.end()) {
+    snap = it->second;
+    snap->head.op = CEPH_SNAP_OP_SPLIT;
+  } else {
     splits[client] = snap = new MClientSnap(CEPH_SNAP_OP_SPLIT);
     snap->head.split = realm->inode->ino();
-    realm->build_snap_trace(snap->bl);
+    snap->bl = realm->get_snap_trace();
 
-    for (set<SnapRealm*>::iterator p = realm->open_children.begin();
-	 p != realm->open_children.end();
-	 ++p)
-      snap->split_realms.push_back((*p)->inode->ino());
-    
-  } else 
-    snap = splits[client]; 
+    for (const auto& child : realm->open_children)
+      snap->split_realms.push_back(child->inode->ino());
+  }
   snap->split_inos.push_back(ino);	
+}
+
+void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
+				  map<client_t,MClientSnap*>& splits)
+{
+  assert(parent_realm);
+
+  vector<inodeno_t> split_inos;
+  vector<inodeno_t> split_realms;
+
+  for (elist<CInode*>::iterator p = realm->inodes_with_caps.begin(member_offset(CInode, item_caps));
+       !p.end();
+       ++p)
+    split_inos.push_back((*p)->ino());
+  for (set<SnapRealm*>::iterator p = realm->open_children.begin();
+       p != realm->open_children.end();
+       ++p)
+    split_realms.push_back((*p)->inode->ino());
+
+  for (auto p : realm->client_caps) {
+    assert(!p.second->empty());
+    if (splits.count(p.first) == 0) {
+      MClientSnap *update = new MClientSnap(CEPH_SNAP_OP_SPLIT);
+      splits[p.first] = update;
+      update->head.split = parent_realm->inode->ino();
+      update->split_inos = split_inos;
+      update->split_realms = split_realms;
+      update->bl = parent_realm->get_snap_trace();
+    }
+  }
 }
 
 void MDCache::send_snaps(map<client_t,MClientSnap*>& splits)
@@ -5769,7 +5805,6 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 			    uint64_t p_cap_id, ceph_seq_t p_seq, ceph_seq_t p_mseq,
 			    int peer, int p_flags)
 {
-  client_t client = session->get_client();
   SnapRealm *realm = in->find_snaprealm();
   if (realm->have_past_parents_open()) {
     dout(10) << "do_cap_import " << session->info.inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
@@ -5785,16 +5820,11 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 					cap->pending(), cap->wanted(), 0,
 					cap->get_mseq(), mds->get_osd_epoch_barrier());
     in->encode_cap_message(reap, cap);
-    realm->build_snap_trace(reap->snapbl);
+    reap->snapbl = realm->get_snap_trace();
     reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
     mds->send_message_client_counted(reap, session);
   } else {
-    dout(10) << "do_cap_import missing past snap parents, delaying " << session->info.inst.name << " mseq "
-	     << cap->get_mseq() << " on " << *in << dendl;
-    in->auth_pin(this);
-    cap->inc_suppress();
-    delayed_imported_caps[client].insert(in);
-    missing_snap_parents[in].size();
+    assert(0);
   }
 }
 
@@ -5805,34 +5835,46 @@ void MDCache::do_delayed_cap_imports()
   assert(delayed_imported_caps.empty());
 }
 
-struct C_MDC_OpenSnapParents : public MDCacheContext {
-  explicit C_MDC_OpenSnapParents(MDCache *c) : MDCacheContext(c) {}
+struct C_MDC_OpenSnapRealms : public MDCacheContext {
+  explicit C_MDC_OpenSnapRealms(MDCache *c) : MDCacheContext(c) {}
   void finish(int r) override {
-    mdcache->open_snap_parents();
+    mdcache->open_snaprealms();
   }
 };
 
-void MDCache::open_snap_parents()
+void MDCache::open_snaprealms()
 {
-  dout(10) << "open_snap_parents" << dendl;
+  dout(10) << "open_snaprealms" << dendl;
   
-  map<client_t,MClientSnap*> splits;
   MDSGatherBuilder gather(g_ceph_context);
 
-  auto p = missing_snap_parents.begin();
-  while (p != missing_snap_parents.end()) {
-    CInode *in = p->first;
-    assert(in->snaprealm);
-    if (in->snaprealm->open_parents(gather.new_sub())) {
+  auto it = rejoin_pending_snaprealms.begin();
+  while (it != rejoin_pending_snaprealms.end()) {
+    CInode *in = *it;
+    SnapRealm *realm = in->snaprealm;
+    assert(realm);
+    if (realm->have_past_parents_open() ||
+	realm->open_parents(gather.new_sub())) {
       dout(10) << " past parents now open on " << *in << dendl;
 
-      for (CInode *child : p->second) {
+      map<client_t,MClientSnap*> splits;
+      // finish off client snaprealm reconnects?
+      map<inodeno_t,map<client_t,snapid_t> >::iterator q = reconnected_snaprealms.find(in->ino());
+      if (q != reconnected_snaprealms.end()) {
+	for (const auto& r : q->second)
+	  finish_snaprealm_reconnect(r.first, realm, r.second, splits);
+	reconnected_snaprealms.erase(q);
+      }
+
+      for (elist<CInode*>::iterator p = realm->inodes_with_caps.begin(member_offset(CInode, item_caps));
+	   !p.end(); ++p) {
+	CInode *child = *p;
 	auto q = reconnected_caps.find(child->ino());
 	assert(q != reconnected_caps.end());
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
 	  if (r->second.snap_follows > 0) {
 	    if (r->second.snap_follows < child->first - 1) {
-	      rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
+	      rebuild_need_snapflush(child, realm, r->first, r->second.snap_follows);
 	    } else if (r->second.snapflush) {
 	      // When processing a cap flush message that is re-sent, it's possble
 	      // that the sender has already released all WR caps. So we should
@@ -5844,61 +5886,63 @@ void MDCache::open_snap_parents()
 	  }
 	  // make sure client's cap is in the correct snaprealm.
 	  if (r->second.realm_ino != in->ino()) {
-	    prepare_realm_split(in->snaprealm, r->first, child->ino(), splits);
+	    prepare_realm_split(realm, r->first, child->ino(), splits);
 	  }
 	}
       }
 
-      missing_snap_parents.erase(p++);
-
+      rejoin_pending_snaprealms.erase(it++);
       in->put(CInode::PIN_OPENINGSNAPPARENTS);
 
-      // finish off client snaprealm reconnects?
-      map<inodeno_t,map<client_t,snapid_t> >::iterator q = reconnected_snaprealms.find(in->ino());
-      if (q != reconnected_snaprealms.end()) {
-	for (map<client_t,snapid_t>::iterator r = q->second.begin();
-	     r != q->second.end();
-	     ++r)
-	  finish_snaprealm_reconnect(r->first, in->snaprealm, r->second);
-      	reconnected_snaprealms.erase(q);
-      }
+      send_snaps(splits);
     } else {
       dout(10) << " opening past parents on " << *in << dendl;
-      ++p;
+      ++it;
     }
   }
-
-  send_snaps(splits);
 
   if (gather.has_subs()) {
-    dout(10) << "open_snap_parents - waiting for "
-	     << gather.num_subs_remaining() << dendl;
-    gather.set_finisher(new C_MDC_OpenSnapParents(this));
-    gather.activate();
-  } else {
-    if (!reconnected_snaprealms.empty()) {
-      stringstream warn_str;
-      for (map<inodeno_t,map<client_t,snapid_t> >::iterator p = reconnected_snaprealms.begin();
-	   p != reconnected_snaprealms.end();
-	   ++p) {
-	warn_str << " unconnected snaprealm " << p->first << "\n";
-	for (map<client_t,snapid_t>::iterator q = p->second.begin();
-	     q != p->second.end();
-	     ++q)
-	  warn_str << "  client." << q->first << " snapid " << q->second << "\n";
-      }
-      mds->clog->warn() << "open_snap_parents has:";
-      mds->clog->warn(warn_str);
-    }
-    assert(rejoin_waiters.empty());
-    assert(missing_snap_parents.empty());
-    dout(10) << "open_snap_parents - all open" << dendl;
-    do_delayed_cap_imports();
+    if (gather.num_subs_remaining() == 0) {
+      // cleanup gather
+      gather.set_finisher(new C_MDSInternalNoop);
+      gather.activate();
+    } else {
+      // for multimds, must succeed the first time
+      assert(recovery_set.empty());
 
-    assert(rejoin_done);
-    rejoin_done.release()->complete(0);
-    reconnected_caps.clear();
+      dout(10) << "open_snaprealms - waiting for "
+	       << gather.num_subs_remaining() << dendl;
+      gather.set_finisher(new C_MDC_OpenSnapRealms(this));
+      gather.activate();
+      return;
+    }
   }
+
+  notify_global_snaprealm_update(CEPH_SNAP_OP_UPDATE);
+
+  if (!reconnected_snaprealms.empty()) {
+    dout(5) << "open_snaprealms has unconnected snaprealm:" << dendl;
+    for (auto& p : reconnected_snaprealms) {
+      stringstream warn_str;
+      warn_str << " " << p.first << " {";
+      bool first = true;
+      for (auto& q : p.second) {
+        if (!first)
+          warn_str << ", ";
+        warn_str << "client." << q.first << "/" << q.second;
+      }
+      warn_str << "}";
+      dout(5) << warn_str.str() << dendl;
+    }
+  }
+  assert(rejoin_waiters.empty());
+  assert(rejoin_pending_snaprealms.empty());
+  dout(10) << "open_snaprealms - all open" << dendl;
+  do_delayed_cap_imports();
+
+  assert(rejoin_done);
+  rejoin_done.release()->complete(0);
+  reconnected_caps.clear();
 }
 
 bool MDCache::open_undef_inodes_dirfrags()
@@ -5956,21 +6000,16 @@ void MDCache::opened_undef_inode(CInode *in) {
   }
 }
 
-void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq)
+void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq,
+					 map<client_t,MClientSnap*>& updates)
 {
   if (seq < realm->get_newest_seq()) {
     dout(10) << "finish_snaprealm_reconnect client." << client << " has old seq " << seq << " < " 
-	     << realm->get_newest_seq()
-    	     << " on " << *realm << dendl;
-    // send an update
-    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
-    if (session) {
-      MClientSnap *snap = new MClientSnap(CEPH_SNAP_OP_UPDATE);
-      realm->build_snap_trace(snap->bl);
-      mds->send_message_client_counted(snap, session);
-    } else {
-      dout(10) << " ...or not, no session for this client!" << dendl;
-    }
+	     << realm->get_newest_seq() << " on " << *realm << dendl;
+    MClientSnap *snap = new MClientSnap(CEPH_SNAP_OP_UPDATE);
+    snap->bl = realm->get_snap_trace();
+    for (const auto& child : realm->open_children)
+      snap->split_realms.push_back(child->inode->ino());
   } else {
     dout(10) << "finish_snaprealm_reconnect client." << client << " up to date"
 	     << " on " << *realm << dendl;
@@ -6663,11 +6702,14 @@ bool MDCache::trim(uint64_t count)
   // Other rank's base inodes (when I'm stopping)
   if (mds->is_stopping()) {
     for (set<CInode*>::iterator p = base_inodes.begin();
-         p != base_inodes.end(); ++p) {
-      if (MDS_INO_MDSDIR_OWNER((*p)->ino()) != mds->get_nodeid()) {
-        dout(20) << __func__ << ": maybe trimming base: " << *(*p) << dendl;
-        if ((*p)->get_num_ref() == 0) {
-          trim_inode(NULL, *p, NULL, expiremap);
+         p != base_inodes.end();) {
+      CInode *base_in = *p;
+      ++p;
+      if (MDS_INO_IS_MDSDIR(base_in->ino()) &&
+	  MDS_INO_MDSDIR_OWNER(base_in->ino()) != mds->get_nodeid()) {
+        dout(20) << __func__ << ": maybe trimming base: " << *base_in << dendl;
+        if (base_in->get_num_ref() == 0) {
+          trim_inode(NULL, base_in, NULL, expiremap);
         }
       }
     }
@@ -7761,6 +7803,9 @@ bool MDCache::shutdown_pass()
 
   if (myin)
     remove_inode(myin);
+
+  if (global_snaprealm)
+    remove_inode(global_snaprealm->inode);
   
   // done!
   dout(2) << "shutdown done." << dendl;
@@ -7884,6 +7929,10 @@ void MDCache::dispatch(Message *m)
   case MSG_MDS_OPENINOREPLY:
     handle_open_ino_reply(static_cast<MMDSOpenInoReply *>(m));
     break;
+
+  case MSG_MDS_SNAPUPDATE:
+    handle_snap_update(static_cast<MMDSSnapUpdate*>(m));
+    break;
     
   default:
     derr << "cache unknown message " << m->get_type() << dendl;
@@ -7940,7 +7989,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
     return -ESTALE;
 
   // make sure snaprealm are open...
-  if (mdr && cur->snaprealm && !cur->snaprealm->is_open() &&
+  if (mdr && cur->snaprealm && !cur->snaprealm->have_past_parents_open() &&
       !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
     return 1;
   }
@@ -7978,8 +8027,21 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       SnapRealm *realm = cur->find_snaprealm();
       snapid = realm->resolve_snapname(path[depth], cur->ino());
       dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
-      if (!snapid)
+      if (!snapid) {
+	CInode *t = cur;
+	while (t) {
+	  // if snaplock isn't readable, it's possible that other mds is creating
+	  // snapshot, but snap update message hasn't been received.
+	  if (!t->snaplock.can_read(client)) {
+	    dout(10) << " non-readable snaplock on " << *t << dendl;
+	    t->snaplock.add_waiter(SimpleLock::WAIT_RD, _get_waiter(mdr, req, fin));
+	    return 1;
+	  }
+	  CDentry *pdn = t->get_projected_parent_dn();
+	  t = pdn ? pdn->get_dir()->get_inode() : NULL;
+	}
 	return -ENOENT;
+      }
       mdr->snapid = snapid;
       depth++;
       continue;
@@ -8106,7 +8168,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
 
       cur = in;
       // make sure snaprealm are open...
-      if (mdr && cur->snaprealm && !cur->snaprealm->is_open() &&
+      if (mdr && cur->snaprealm && !cur->snaprealm->have_past_parents_open() &&
 	  !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
 	return 1;
       }
@@ -9384,6 +9446,14 @@ void MDCache::request_kill(MDRequestRef& mdr)
 // -------------------------------------------------------------------------------
 // SNAPREALMS
 
+void MDCache::create_global_snaprealm()
+{
+  CInode *in = new CInode(this); // dummy inode
+  create_unlinked_system_inode(in, MDS_INO_GLOBAL_SNAPREALM, S_IFDIR|0755);
+  add_inode(in);
+  global_snaprealm = in->snaprealm;
+}
+
 struct C_MDC_snaprealm_create_finish : public MDCacheLogContext {
   MDRequestRef mdr;
   MutationRef mut;
@@ -9439,28 +9509,27 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
   mds->mdlog->flush();
 }
 
-
-void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend)
+void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients)
 {
   dout(10) << "do_realm_invalidate_and_update_notify " << *in->snaprealm << " " << *in << dendl;
 
   vector<inodeno_t> split_inos;
   vector<inodeno_t> split_realms;
 
-  if (snapop == CEPH_SNAP_OP_SPLIT) {
-    // notify clients of update|split
-    for (elist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(member_offset(CInode, item_caps));
-	 !p.end(); ++p)
-      split_inos.push_back((*p)->ino());
-    
-    for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
-	 p != in->snaprealm->open_children.end();
-	 ++p)
-      split_realms.push_back((*p)->inode->ino());
-  }
+  if (notify_clients) {
+    assert(in->snaprealm->have_past_parents_open());
+    if (snapop == CEPH_SNAP_OP_SPLIT) {
+      // notify clients of update|split
+      for (elist<CInode*>::iterator p = in->snaprealm->inodes_with_caps.begin(member_offset(CInode, item_caps));
+	   !p.end(); ++p)
+	split_inos.push_back((*p)->ino());
 
-  bufferlist snapbl;
-  in->snaprealm->build_snap_trace(snapbl);
+      for (set<SnapRealm*>::iterator p = in->snaprealm->open_children.begin();
+	   p != in->snaprealm->open_children.end();
+	   ++p)
+	split_realms.push_back((*p)->inode->ino());
+    }
+  }
 
   set<SnapRealm*> past_children;
   map<client_t, MClientSnap*> updates;
@@ -9473,17 +9542,19 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
     dout(10) << " realm " << *realm << " on " << *realm->inode << dendl;
     realm->invalidate_cached_snaps();
 
-    for (map<client_t, xlist<Capability*>* >::iterator p = realm->client_caps.begin();
-	 p != realm->client_caps.end();
-	 ++p) {
-      assert(!p->second->empty());
-      if (!nosend && updates.count(p->first) == 0) {
-	MClientSnap *update = new MClientSnap(snapop);
-	update->head.split = in->ino();
-	update->split_inos = split_inos;
-	update->split_realms = split_realms;
-	update->bl = snapbl;
-	updates[p->first] = update;
+    if (notify_clients) {
+      for (map<client_t, xlist<Capability*>* >::iterator p = realm->client_caps.begin();
+	   p != realm->client_caps.end();
+	   ++p) {
+	assert(!p->second->empty());
+	if (updates.count(p->first) == 0) {
+	  MClientSnap *update = new MClientSnap(snapop);
+	  update->head.split = in->ino();
+	  update->split_inos = split_inos;
+	  update->split_realms = split_realms;
+	  update->bl = in->snaprealm->get_snap_trace();
+	  updates[p->first] = update;
+	}
       }
     }
 
@@ -9502,7 +9573,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
       q.push_back(*p);
   }
 
-  if (!nosend)
+  if (notify_clients)
     send_snaps(updates);
 
   // notify past children and their descendants if we update/delete old snapshots
@@ -9580,6 +9651,91 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
   dispatch_request(mdr);
 }
 
+void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
+{
+  dout(10) << __func__ << " " << *in << " stid " << stid << dendl;
+  assert(in->is_auth());
+
+  set<mds_rank_t> mds_set;
+  if (stid > 0) {
+    mds->mdsmap->get_mds_set_lower_bound(mds_set, MDSMap::STATE_RESOLVE);
+    mds_set.erase(mds->get_nodeid());
+  } else {
+    in->list_replicas(mds_set);
+  }
+
+  if (!mds_set.empty()) {
+    bufferlist snap_blob;
+    in->encode_snap(snap_blob);
+
+    for (auto p : mds_set) {
+      MMDSSnapUpdate *m = new MMDSSnapUpdate(in->ino(), stid, snap_op);
+      m->snap_blob = snap_blob;
+      mds->send_message_mds(m, p);
+    }
+  }
+
+  if (stid > 0)
+    notify_global_snaprealm_update(snap_op);
+}
+
+void MDCache::handle_snap_update(MMDSSnapUpdate *m)
+{
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+  dout(10) << __func__ << " " << *m << " from mds." << from << dendl;
+
+  if (mds->get_state() < MDSMap::STATE_RESOLVE &&
+      mds->get_want_state() != CEPH_MDS_STATE_RESOLVE) {
+    m->put();
+    return;
+  }
+
+  // null rejoin_done means open_snaprealms() has already been called
+  bool notify_clients = mds->get_state() > MDSMap::STATE_REJOIN ||
+			(mds->is_rejoin() && !rejoin_done);
+
+  if (m->get_tid() > 0) {
+    mds->snapclient->notify_commit(m->get_tid());
+    if (notify_clients)
+      notify_global_snaprealm_update(m->get_snap_op());
+  }
+
+  CInode *in = get_inode(m->get_ino());
+  if (in) {
+    assert(!in->is_auth());
+    if (mds->get_state() > MDSMap::STATE_REJOIN ||
+	(mds->is_rejoin() && !in->is_rejoining())) {
+      bufferlist::iterator p = m->snap_blob.begin();
+      in->decode_snap(p);
+
+      if (!notify_clients) {
+	if (!rejoin_pending_snaprealms.count(in)) {
+	  in->get(CInode::PIN_OPENINGSNAPPARENTS);
+	  rejoin_pending_snaprealms.insert(in);
+	}
+      }
+      do_realm_invalidate_and_update_notify(in, m->get_snap_op(), notify_clients);
+    }
+  }
+
+  m->put();
+}
+
+void MDCache::notify_global_snaprealm_update(int snap_op)
+{
+  if (snap_op != CEPH_SNAP_OP_DESTROY)
+    snap_op = CEPH_SNAP_OP_UPDATE;
+  set<Session*> sessions;
+  mds->sessionmap.get_client_session_set(sessions);
+  for (auto &session : sessions) {
+    if (!session->is_open() && !session->is_stale())
+      continue;
+    MClientSnap *update = new MClientSnap(snap_op);
+    update->head.split = global_snaprealm->inode->ino();
+    update->bl = global_snaprealm->get_snap_trace();
+    mds->send_message_client_counted(update, session);
+  }
+}
 
 // -------------------------------------------------------------------------------
 // STRAYS
@@ -10618,8 +10774,12 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
   // share unlink news with replicas
   set<mds_rank_t> replicas;
   dn->list_replicas(replicas);
-  if (straydn)
+  bufferlist snapbl;
+  if (straydn) {
     straydn->list_replicas(replicas);
+    CInode *strayin = straydn->get_linkage()->get_inode();
+    strayin->encode_snap_blob(snapbl);
+  }
   for (set<mds_rank_t>::iterator it = replicas.begin();
        it != replicas.end();
        ++it) {
@@ -10633,8 +10793,10 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
       continue;
 
     MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->get_name());
-    if (straydn)
+    if (straydn) {
       replicate_stray(straydn, *it, unlink->straybl);
+      unlink->snapbl = snapbl;
+    }
     mds->send_message_mds(unlink, *it);
   }
 }
@@ -10673,6 +10835,15 @@ void MDCache::handle_dentry_unlink(MDentryUnlink *m)
 	// update subtree map?
 	if (in->is_dir()) 
 	  adjust_subtree_after_rename(in, dir, false);
+
+	if (m->snapbl.length()) {
+	  bool hadrealm = (in->snaprealm ? true : false);
+	  in->decode_snap_blob(m->snapbl);
+	  assert(in->snaprealm);
+	  assert(in->snaprealm->have_past_parents_open());
+	  if (!hadrealm)
+	    do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT, false);
+	}
 
 	// send caps to auth (if we're not already)
 	if (in->is_any_caps() &&
