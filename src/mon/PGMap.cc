@@ -703,37 +703,6 @@ void PGMapDigest::pool_cache_io_rate_summary(Formatter *f, ostream *out,
   cache_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
-static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
-{
-  const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
-
-  switch (pool->get_type()) {
-  case pg_pool_t::TYPE_REPLICATED:
-    return pool->get_size();
-    break;
-  case pg_pool_t::TYPE_ERASURE:
-  {
-    auto& ecp =
-      osd_map.get_erasure_code_profile(pool->erasure_code_profile);
-    auto pm = ecp.find("m");
-    auto pk = ecp.find("k");
-    if (pm != ecp.end() && pk != ecp.end()) {
-      int k = atoi(pk->second.c_str());
-      int m = atoi(pm->second.c_str());
-      int mk = m + k;
-      ceph_assert(mk != 0);
-      ceph_assert(k != 0);
-      return (float)mk / k;
-    } else {
-      return 0.0;
-    }
-  }
-  break;
-  default:
-    ceph_abort_msg("unrecognized pool type");
-  }
-}
-
 ceph_statfs PGMapDigest::get_statfs(OSDMap &osdmap,
 				    boost::optional<int64_t> data_pool) const
 {
@@ -826,7 +795,7 @@ void PGMapDigest::dump_pool_stats_full(
       tbl << pool_name
           << pool_id;
     }
-    float raw_used_rate = ::pool_raw_used_rate(osd_map, pool_id);
+    float raw_used_rate = osd_map.pool_raw_used_rate(pool_id);
     dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, pool);
     if (f) {
       f->close_section();  // stats
@@ -986,7 +955,7 @@ int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
   if (avail < 0)
     avail = 0;
 
-  return avail / ::pool_raw_used_rate(osd_map, poolid);
+  return avail / osd_map.pool_raw_used_rate(poolid);
 }
 
 int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const

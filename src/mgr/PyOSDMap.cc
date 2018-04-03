@@ -253,6 +253,23 @@ static PyObject *osdmap_pg_to_up_acting_osds(BasePyOSDMap *self, PyObject *args)
   return f.get();
 }
 
+static PyObject *osdmap_pool_raw_used_rate(BasePyOSDMap *self, PyObject *args)
+{
+  int pool_id = 0;
+  if (!PyArg_ParseTuple(args, "i:pool_raw_used_rate",
+			&pool_id)) {
+    return nullptr;
+  }
+
+  if (!self->osdmap->have_pg_pool(pool_id)) {
+    return nullptr;
+  }
+
+  float rate = self->osdmap->pool_raw_used_rate(pool_id);
+
+  return PyFloat_FromDouble(rate);
+}
+
 
 PyMethodDef BasePyOSDMap_methods[] = {
   {"_get_epoch", (PyCFunction)osdmap_get_epoch, METH_NOARGS, "Get OSDMap epoch"},
@@ -272,6 +289,8 @@ PyMethodDef BasePyOSDMap_methods[] = {
    "Calculate up set mappings for all PGs in a pool"},
   {"_pg_to_up_acting_osds", (PyCFunction)osdmap_pg_to_up_acting_osds, METH_VARARGS,
     "Calculate up+acting OSDs for a PG ID"},
+  {"_pool_raw_used_rate", (PyCFunction)osdmap_pool_raw_used_rate, METH_VARARGS,
+   "Get raw space to logical space ratio"},
   {NULL, NULL, 0, NULL}
 };
 
