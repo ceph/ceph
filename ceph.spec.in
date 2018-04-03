@@ -209,6 +209,7 @@ BuildRequires:	python3-Cython
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	python-cherrypy
+BuildRequires:	python-routes
 BuildRequires:	python-tox
 BuildRequires:	python-coverage
 %if 0%{?fedora}
@@ -220,6 +221,7 @@ BuildRequires:	py-bcrypt
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python-CherryPy
+BuildRequires:	python-Routes
 BuildRequires:	python-bcrypt
 BuildRequires:	python-tox
 BuildRequires:	python-coverage
@@ -351,6 +353,7 @@ Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       python-six
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python-cherrypy
+Requires:       python-routes
 Requires:       python-jinja2
 Requires:       python-werkzeug
 Requires:       pyOpenSSL
@@ -363,6 +366,7 @@ Requires:	py-bcrypt
 %endif
 %if 0%{?suse_version}
 Requires: 	python-CherryPy
+Requires:       python%{_python_buildid}-Routes
 Requires:       python-Jinja2
 Requires:       python-Werkzeug
 Requires:       python-pyOpenSSL

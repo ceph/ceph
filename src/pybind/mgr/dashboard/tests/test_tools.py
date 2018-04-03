@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import cherrypy
 from cherrypy.lib.sessions import RamSession
 from mock import patch
 
@@ -14,15 +13,15 @@ from ..tools import RESTController, ApiController
 class FooResource(RESTController):
     elems = []
 
-    def list(self, *vpath, **params):
+    def list(self):
         return FooResource.elems
 
-    def create(self, data, *args, **kwargs):
+    def create(self, data):
         FooResource.elems.append(data)
         return data
 
-    def get(self, key, *args, **kwargs):
-        return {'detail': (key, args)}
+    def get(self, key):
+        return {'detail': (key, [])}
 
     def delete(self, key):
         del FooResource.elems[int(key)]
@@ -35,10 +34,16 @@ class FooResource(RESTController):
         return dict(key=key, **data)
 
 
+@ApiController('foo/:key/:method')
+class FooResourceDetail(RESTController):
+    def list(self, key, method):
+        return {'detail': (key, [method])}
+
+
 @ApiController('fooargs')
 class FooArgs(RESTController):
     @RESTController.args_from_json
-    def set(self, code, name, opt1=None, opt2=None):
+    def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
 
 
@@ -52,7 +57,7 @@ class RESTControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
-        cherrypy.tree.mount(Root())
+        cls.setup_controllers([FooResource, FooResourceDetail, FooArgs])
 
     def test_empty(self):
         self._delete("/foo")
@@ -84,11 +89,11 @@ class RESTControllerTest(ControllerTestCase):
 
     def test_not_implemented(self):
         self._put("/foo")
-        self.assertStatus(405)
+        self.assertStatus(404)
         body = self.jsonBody()
         self.assertIsInstance(body, dict)
-        assert body['detail'] == 'Method not implemented.'
-        assert '405' in body['status']
+        assert body['detail'] == "The path '/foo' was not found."
+        assert '404' in body['status']
         assert 'traceback' in body
 
     def test_args_from_json(self):
@@ -112,7 +117,7 @@ class RESTControllerTest(ControllerTestCase):
         self.assertJsonBody({'detail': ['1', ['detail']]})
 
         self._post('/foo/1/detail', 'post-data')
-        self.assertStatus(405)
+        self.assertStatus(404)
 
     def test_developer_page(self):
         self.getPage('/foo', headers=[('Accept', 'text/html')])
@@ -126,8 +131,4 @@ class RESTControllerTest(ControllerTestCase):
         self.getPage('/foo',
                      headers=[('Accept', 'text/html'), ('Content-Length', '0')],
                      method='put')
-        assert '<p>PUT' in self.body.decode('utf-8')
-        assert 'Exception' in self.body.decode('utf-8')
-        assert 'Content-Type: text/html' in self.body.decode('utf-8')
-        assert '<form action="/api/foo/" method="post">' in self.body.decode('utf-8')
-        assert '<input type="hidden" name="_method" value="post" />' in self.body.decode('utf-8')
+        self.assertStatus(404)

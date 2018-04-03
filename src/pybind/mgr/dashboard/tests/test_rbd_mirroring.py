@@ -3,8 +3,6 @@ from __future__ import absolute_import
 import json
 import mock
 
-import cherrypy
-
 from .. import mgr
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirror
@@ -66,8 +64,7 @@ class RbdMirroringControllerTest(ControllerTestCase):
 
         Summary._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
-        cherrypy.tree.mount(RbdMirror(), '/api/test/rbdmirror')
-        cherrypy.tree.mount(Summary(), '/api/test/summary')
+        cls.setup_controllers([RbdMirror, Summary], '/api/test')
 
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
     def test_default(self, rbd_mock):  # pylint: disable=W0613
