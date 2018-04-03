@@ -8183,7 +8183,7 @@ PG::RecoveryCtx OSD::create_context()
 void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
-  if (!ctx.transaction->empty()) {
+  if (!ctx.transaction->empty() || ctx.transaction->has_contexts()) {
     int tr = store->queue_transaction(
       pg->ch,
       std::move(*ctx.transaction), TrackedOpRef(), handle);
@@ -8205,19 +8205,17 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     do_queries(*ctx.query_map, curmap);
     do_infos(*ctx.info_map, curmap);
   }
-  delete ctx.notify_list;
-  delete ctx.query_map;
-  delete ctx.info_map;
-  if (ctx.transaction->empty() || !pg) {
-    delete ctx.transaction;
-  } else {
+  if ((!ctx.transaction->empty() || ctx.transaction->has_contexts()) && pg) {
     int tr = store->queue_transaction(
       pg->ch,
       std::move(*ctx.transaction), TrackedOpRef(),
       handle);
-    delete (ctx.transaction);
     assert(tr == 0);
   }
+  delete ctx.notify_list;
+  delete ctx.query_map;
+  delete ctx.info_map;
+  delete ctx.transaction;
 }
 
 void OSD::discard_context(PG::RecoveryCtx& ctx)
