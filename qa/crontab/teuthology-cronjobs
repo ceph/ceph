@@ -10,7 +10,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 ## crontab is in https://github.com/ceph/ceph/master/qa/crontab/teuthology-cronjobs
 # chkcrontab: disable-msg=INVALID_USER
 # chkcrontab: disable-msg=USER_NOT_FOUND
-@hourly /bin/sh /home/teuthology/bin/update-crontab.sh
+@daily /bin/bash /home/teuthology/bin/update-crontab.sh
 ### !!!!!!!!!!!!!!!!!!!!!!!!!!
 
 
