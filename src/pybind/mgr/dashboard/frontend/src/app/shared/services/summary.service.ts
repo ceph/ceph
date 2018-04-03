@@ -36,4 +36,10 @@ export class SummaryService {
       }, 5000);
     });
   }
+
+  get() {
+    return this.http.get('api/summary').toPromise().then((resp: any) => {
+      return resp;
+    });
+  }
 }
