@@ -101,6 +101,7 @@ authentication keyring.
     Upgrading old filesystems <upgrading>
     Configuring directory fragmentation <dirfrags>
     Configuring multiple active MDS daemons <multimds>
+    Export over NFS <nfs>
 
 .. raw:: html
 
