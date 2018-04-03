@@ -35,6 +35,7 @@ class Session;
 class ScatterLock;
 class MClientRequest;
 class MMDSSlaveRequest;
+struct sr_t;
 
 struct MutationImpl : public TrackedOp {
   metareqid_t reqid;
@@ -255,6 +256,9 @@ struct MDRequestImpl : public MutationImpl {
     version_t stid;
     bufferlist snapidbl;
 
+    sr_t *srci_srnode;
+    sr_t *desti_srnode;
+
     // called when slave commits or aborts
     Context *slave_commit;
     bufferlist rollback_bl;
@@ -276,7 +280,9 @@ struct MDRequestImpl : public MutationImpl {
       srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
       is_freeze_authpin(false), is_ambiguous_auth(false),
       is_remote_frozen_authpin(false), is_inode_exporter(false),
-      flock_was_waiting(false), stid(0), slave_commit(0), export_dir(NULL)  { }
+      flock_was_waiting(false),
+      stid(0), srci_srnode(NULL), desti_srnode(NULL),
+      slave_commit(0), export_dir(NULL)  { }
   } *_more;
 
 

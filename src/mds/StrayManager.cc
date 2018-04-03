@@ -452,7 +452,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
     if (in->is_dir()) {
       if (in->snaprealm && in->snaprealm->has_past_parents()) {
 	dout(20) << "  directory has past parents "
-		 << in->snaprealm->srnode.past_parents << dendl;
+		 << in->snaprealm << dendl;
 	if (in->state_test(CInode::STATE_MISSINGOBJS)) {
 	  mds->clog->error() << "previous attempt at committing dirfrag of ino "
 			     << in->ino() << " has failed, missing object";
@@ -507,7 +507,7 @@ bool StrayManager::_eval_stray(CDentry *dn, bool delay)
       // but leave the metadata intact.
       assert(!in->is_dir());
       dout(20) << " file has past parents "
-        << in->snaprealm->srnode.past_parents << dendl;
+        << in->snaprealm << dendl;
       if (in->is_file() && in->get_projected_inode()->size > 0) {
 	enqueue(dn, true); // truncate head objects    
       }

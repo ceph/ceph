@@ -239,27 +239,27 @@ public:
   // link
   void handle_client_link(MDRequestRef& mdr);
   void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti);
-  void _link_local_finish(MDRequestRef& mdr,
-			  CDentry *dn, CInode *targeti,
-			  version_t, version_t);
+  void _link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+			  version_t, version_t, bool);
 
   void _link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
   void _link_remote_finish(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
 			   version_t);
 
   void handle_slave_link_prep(MDRequestRef& mdr);
-  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti);
+  void _logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
   void _commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti);
   void _committed_slave(MDRequestRef& mdr);  // use for rename, too
   void handle_slave_link_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m);
   void do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr);
-  void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr);
+  void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
+			     map<client_t,MClientSnap*>& split);
 
   // unlink
   void handle_client_unlink(MDRequestRef& mdr);
   bool _dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *rmdiri);
   bool _dir_is_nonempty(MDRequestRef& mdr, CInode *rmdiri);
-  void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn, snapid_t follows);
+  void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
@@ -307,7 +307,8 @@ public:
   void _commit_slave_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
   void do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr, bool finish_mdr=false);
   void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
-			       CDentry *destdn, CDentry *staydn, bool finish_mdr);
+			       CDentry *destdn, CDentry *staydn, map<client_t,MClientSnap*> splits[2],
+			       bool finish_mdr);
 
 private:
   void reply_client_request(MDRequestRef& mdr, MClientReply *reply);

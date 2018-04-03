@@ -27,6 +27,7 @@ class MDentryUnlink : public Message {
   string& get_dn() { return dn; }
 
   bufferlist straybl;
+  bufferlist snapbl;
 
   MDentryUnlink() :
     Message(MSG_MDS_DENTRYUNLINK) { }

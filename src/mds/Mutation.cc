@@ -362,8 +362,6 @@ void MDRequestImpl::_dump(Formatter *f) const
       f->dump_bool("has_inode_export",
                    slave_request->inode_export.length() != 0);
       f->dump_int("inode_export_v", slave_request->inode_export_v);
-      f->dump_bool("has_srci_replica",
-                   slave_request->srci_replica.length() != 0);
       f->dump_stream("op_stamp") << slave_request->op_stamp;
       f->close_section(); // request_info
     }

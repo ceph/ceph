@@ -58,6 +58,9 @@ void SnapServer::reset_state()
     if (first_free > last_snap)
       last_snap = first_free;
   }
+  last_created = last_snap;
+  last_destroyed = last_snap;
+  version++;
 }
 
 
@@ -167,6 +170,8 @@ void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 	info.stamp = snaps[info.snapid].stamp;
     } else {
       opname = "create";
+      if (info.snapid > last_created)
+	last_created = info.snapid;
     }
     dout(7) << "commit " << tid << " " << opname << " " << info << dendl;
     snaps[info.snapid] = info;
@@ -178,6 +183,8 @@ void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
     snapid_t seq = pending_destroy[tid].second;
     dout(7) << "commit " << tid << " destroy " << sn << " seq " << seq << dendl;
     snaps.erase(sn);
+    if (seq > last_destroyed)
+      last_destroyed = seq;
 
     for (const auto p : mds->mdsmap->get_data_pools()) {
       need_to_purge[p].insert(sn);
@@ -245,12 +252,63 @@ void SnapServer::_server_update(bufferlist& bl)
   }
 }
 
-void SnapServer::handle_query(MMDSTableRequest *req)
+bool SnapServer::_notify_prep(version_t tid)
 {
-  req->put();
+  using ceph::encode;
+  bufferlist bl;
+  char type = 'F';
+  encode(type, bl);
+  encode(snaps, bl);
+  encode(pending_update, bl);
+  encode(pending_destroy, bl);
+  encode(last_created, bl);
+  encode(last_destroyed, bl);
+  assert(version == tid);
+
+  for (auto p : active_clients) {
+    MMDSTableRequest *m = new MMDSTableRequest(table, TABLESERVER_OP_NOTIFY_PREP, 0, version);
+    m->bl = bl;
+    mds->send_message_mds(m, p);
+  }
+  return true;
 }
 
+void SnapServer::handle_query(MMDSTableRequest *req)
+{
+  using ceph::encode;
+  using ceph::decode;
+  char op;
+  bufferlist::iterator p = req->bl.begin();
+  decode(op, p);
 
+  MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_QUERY_REPLY, req->reqid, version);
+
+  switch (op) {
+    case 'F': // full
+      version_t have_version;
+      decode(have_version, p);
+      assert(have_version <= version);
+      if (have_version == version) {
+	char type = 'U';
+	encode(type, reply->bl);
+      } else {
+	char type = 'F';
+	encode(type, reply->bl);
+	encode(snaps, reply->bl);
+	encode(pending_update, reply->bl);
+	encode(pending_destroy, reply->bl);
+	encode(last_created, reply->bl);
+	encode(last_destroyed, reply->bl);
+      }
+      // FIXME: implement incremental change
+      break;
+    default:
+      ceph_abort();
+  };
+
+  mds->send_message(reply, req->get_connection());
+  req->put();
+}
 
 void SnapServer::check_osd_map(bool force)
 {
@@ -308,7 +366,9 @@ void SnapServer::dump(Formatter *f) const
 {
   f->open_object_section("snapserver");
 
-  f->dump_int("last_snap", last_snap.val);
+  f->dump_int("last_snap", last_snap);
+  f->dump_int("last_created", last_created);
+  f->dump_int("last_destroyed", last_destroyed);
 
   f->open_array_section("pending_noop");
   for(set<version_t>::const_iterator i = pending_noop.begin(); i != pending_noop.end(); ++i) {

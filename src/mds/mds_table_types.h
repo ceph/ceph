@@ -40,6 +40,8 @@ enum {
   TABLESERVER_OP_ROLLBACK     =  7,
   TABLESERVER_OP_SERVER_UPDATE = 8,
   TABLESERVER_OP_SERVER_READY = -9,
+  TABLESERVER_OP_NOTIFY_ACK   = 10,
+  TABLESERVER_OP_NOTIFY_PREP  = -11,
 };
 
 inline const char *get_mdstableserver_opname(int op) {
@@ -53,6 +55,8 @@ inline const char *get_mdstableserver_opname(int op) {
   case TABLESERVER_OP_ROLLBACK: return "rollback";
   case TABLESERVER_OP_SERVER_UPDATE: return "server_update";
   case TABLESERVER_OP_SERVER_READY: return "server_ready";
+  case TABLESERVER_OP_NOTIFY_ACK: return "notify_ack";
+  case TABLESERVER_OP_NOTIFY_PREP: return "notify_prep";
   default: ceph_abort(); return 0;
   }
 }

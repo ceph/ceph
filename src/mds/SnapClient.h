@@ -25,11 +25,29 @@ class MDSRank;
 class LogSegment;
 
 class SnapClient : public MDSTableClient {
-public:
-  explicit SnapClient(MDSRank *m) : MDSTableClient(m, TABLE_SNAP) {}
+  version_t cached_version;
+  snapid_t cached_last_created, cached_last_destroyed;
+  map<snapid_t, SnapInfo> cached_snaps;
+  map<version_t, SnapInfo> cached_pending_update;
+  map<version_t, pair<snapid_t,snapid_t> > cached_pending_destroy;
 
-  void resend_queries() override {}
-  void handle_query_result(MMDSTableRequest *m) override {}
+  set<version_t> committing_tids;
+
+  map<version_t, std::list<MDSInternalContextBase*> > waiting_for_version;
+
+  uint64_t sync_reqid;
+  bool synced;
+
+public:
+  explicit SnapClient(MDSRank *m) :
+    MDSTableClient(m, TABLE_SNAP),
+    cached_version(0), cached_last_created(0), cached_last_destroyed(0),
+    sync_reqid(0), synced(false) {}
+
+  void resend_queries() override;
+  void handle_query_result(MMDSTableRequest *m) override;
+  void handle_notify_prep(MMDSTableRequest *m) override;
+  void notify_commit(version_t tid) override;
 
   void prepare_create(inodeno_t dirino, std::string_view name, utime_t stamp,
 		      version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
@@ -70,6 +88,27 @@ public:
     encode(stamp, bl);
     _prepare(bl, pstid, NULL, onfinish);
   }
+
+  version_t get_cached_version() const { return cached_version; }
+  void refresh(version_t want, MDSInternalContextBase *onfinish);
+
+  void sync(MDSInternalContextBase *onfinish);
+
+  bool is_synced() const { return synced; }
+  void wait_for_sync(MDSInternalContextBase *c) {
+    assert(!synced);
+    waiting_for_version[std::max<version_t>(cached_version, 1)].push_back(c);
+  }
+
+  snapid_t get_last_created() const { return cached_last_created; }
+  snapid_t get_last_destroyed() const { return cached_last_destroyed; }
+
+  void get_snaps(set<snapid_t>& snaps) const;
+  set<snapid_t> filter(const set<snapid_t>& snaps) const;
+  const SnapInfo* get_snap_info(snapid_t snapid) const;
+  void get_snap_infos(map<snapid_t, const SnapInfo*>& infomap, const set<snapid_t>& snaps) const;
+
+  int dump_cache(Formatter *f) const;
 };
 
 #endif
