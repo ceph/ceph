@@ -21,6 +21,9 @@ class TestAnsibleTask(TestTask):
     task_name = 'ansible'
 
     def setup(self):
+        pass
+
+    def setup_method(self, method):
         self.ctx = FakeNamespace()
         self.ctx.cluster = Cluster()
         self.ctx.cluster.add(Remote('user@remote1'), ['role1'])
@@ -44,6 +47,8 @@ class TestAnsibleTask(TestTask):
             'teuthology.task.ansible.NamedTemporaryFile',
             m_NTF,
         )
+        self.patchers['file'] = patch(
+            'teuthology.task.ansible.file', create=True)
         self.patchers['os_mkdir'] = patch(
             'teuthology.task.ansible.os.mkdir',
         )
@@ -53,16 +58,23 @@ class TestAnsibleTask(TestTask):
         self.patchers['shutil_rmtree'] = patch(
             'teuthology.task.ansible.shutil.rmtree',
         )
-        for name, patcher in self.patchers.items():
-            if name not in self.mocks:
-                self.mocks[name] = patcher.start()
+        for name in self.patchers.keys():
+            self.start_patcher(name)
 
-    def teardown(self):
+    def start_patcher(self, name):
+        if name not in self.mocks.keys():
+            self.mocks[name] = self.patchers[name].start()
+
+    def teardown_method(self, method):
         self.stop_patchers()
 
     def stop_patchers(self):
-        for patcher in self.mocks.values():
-            patcher.stop()
+        for name in self.mocks.keys():
+            self.stop_patcher(name)
+
+    def stop_patcher(self, name):
+        self.patchers[name].stop()
+        del self.mocks[name]
 
     def test_setup(self):
         self.task_config.update(dict(
@@ -183,9 +195,8 @@ class TestAnsibleTask(TestTask):
             playbook='~/fake/playbook',
         ))
         task = self.klass(self.ctx, self.task_config)
-        with patch('teuthology.task.ansible.file', create=True) as m_file:
-            m_file.return_value = fake_playbook_obj
-            task.get_playbook()
+        self.mocks['file'].return_value = fake_playbook_obj
+        task.get_playbook()
         assert task.playbook == fake_playbook
 
     def test_playbook_file_missing(self):
@@ -193,6 +204,7 @@ class TestAnsibleTask(TestTask):
             playbook='~/fake/playbook',
         ))
         task = self.klass(self.ctx, self.task_config)
+        self.mocks['file'].side_effect = IOError
         with raises(IOError):
             task.get_playbook()
 
@@ -249,20 +261,20 @@ class TestAnsibleTask(TestTask):
         inventory_dir = os.path.dirname(hosts_file_path)
         gv_dir = os.path.join(inventory_dir, 'group_vars')
         self.mocks['mkdtemp'].return_value = inventory_dir
-        with patch('teuthology.task.ansible.file', create=True) as m_file:
-            fake_files = [hosts_file_obj]
-            # Create StringIOs for each group_vars file
-            if group_vars:
-                fake_files += [StringIO() for i in sorted(group_vars)]
-            m_file.side_effect = fake_files
-            task.generate_inventory()
-            file_calls = m_file.call_args_list
-            # Verify the inventory file was created
-            assert file_calls[0][0][0] == hosts_file_path
-            # Verify each group_vars file was created
-            for gv_name, call_obj in zip(sorted(group_vars), file_calls[1:]):
-                gv_path = call_obj[0][0]
-                assert gv_path == os.path.join(gv_dir, '%s.yml' % gv_name)
+        m_file = self.mocks['file']
+        fake_files = [hosts_file_obj]
+        # Create StringIOs for each group_vars file
+        if group_vars:
+            fake_files += [StringIO() for i in sorted(group_vars)]
+        m_file.side_effect = fake_files
+        task.generate_inventory()
+        file_calls = m_file.call_args_list
+        # Verify the inventory file was created
+        assert file_calls[0][0][0] == hosts_file_path
+        # Verify each group_vars file was created
+        for gv_name, call_obj in zip(sorted(group_vars), file_calls[1:]):
+            gv_path = call_obj[0][0]
+            assert gv_path == os.path.join(gv_dir, '%s.yml' % gv_name)
         # Verify the group_vars dir was created
         if group_vars:
             mkdir_call = self.mocks['os_mkdir'].call_args_list
@@ -322,11 +334,11 @@ class TestAnsibleTask(TestTask):
         fake_playbook = [dict(fake_playbook=True)]
         fake_playbook_obj = StringIO(yaml.safe_dump(fake_playbook))
         fake_playbook_obj.name = playbook
+        self.mocks['mkdtemp'].return_value = '/inventory/dir'
 
         task = self.klass(self.ctx, self.task_config)
-        with patch('teuthology.task.ansible.file', create=True) as m_file:
-            m_file.return_value = fake_playbook_obj
-            task.setup()
+        self.mocks['file'].return_value = fake_playbook_obj
+        task.setup()
         args = task._build_args()
         logger = StringIO()
         with patch.object(ansible.pexpect, 'run') as m_run:
@@ -346,6 +358,7 @@ class TestAnsibleTask(TestTask):
         self.task_config.update(dict(
             playbook=[],
         ))
+        self.mocks['mkdtemp'].return_value = '/inventory/dir'
         task = self.klass(self.ctx, self.task_config)
         task.setup()
         with patch.object(ansible.pexpect, 'run') as m_run:
@@ -473,22 +486,16 @@ class TestAnsibleTask(TestTask):
             assert 'cleanup' in task.config['vars']
 
 
-class TestCephLabTask(TestTask):
+class TestCephLabTask(TestAnsibleTask):
     klass = CephLab
     task_name = 'ansible.cephlab'
 
     def setup(self):
-        self.ctx = FakeNamespace()
-        self.ctx.cluster = Cluster()
-        self.ctx.cluster.add(Remote('user@remote1'), ['role1'])
-        self.ctx.cluster.add(Remote('user@remote2'), ['role2'])
-        self.ctx.config = dict()
+        super(TestCephLabTask, self).setup()
         self.task_config = dict()
-        self.start_patchers()
 
     def start_patchers(self):
-        self.patchers = dict()
-        self.mocks = dict()
+        super(TestCephLabTask, self).start_patchers()
         self.patchers['fetch_repo'] = patch(
             'teuthology.task.ansible.fetch_repo',
         )
@@ -502,15 +509,8 @@ class TestCephLabTask(TestTask):
             'teuthology.task.ansible.CephLab.get_playbook',
             new=fake_get_playbook,
         )
-        self.patchers['mkdtemp'] = patch(
-            'teuthology.task.ansible.mkdtemp',
-        )
-        for name, patcher in self.patchers.items():
-            self.mocks[name] = patcher.start()
-
-    def teardown(self):
-        for patcher in self.patchers.values():
-            patcher.stop()
+        for name in self.patchers.keys():
+            self.start_patcher(name)
 
     @patch('teuthology.task.ansible.fetch_repo')
     def test_find_repo_http(self, m_fetch_repo):
@@ -527,9 +527,8 @@ class TestCephLabTask(TestTask):
         fake_playbook_obj.name = playbook
         task = self.klass(self.ctx, dict())
         task.repo_path = '/tmp/fake/repo'
-        with patch('teuthology.task.ansible.file', create=True) as m_file:
-            m_file.return_value = fake_playbook_obj
-            task.get_playbook()
+        self.mocks['file'].return_value = fake_playbook_obj
+        task.get_playbook()
         assert task.playbook_file.name == playbook
 
     def test_generate_inventory(self):
@@ -541,9 +540,8 @@ class TestCephLabTask(TestTask):
         hosts_file_obj = StringIO()
         hosts_file_obj.name = hosts_file_path
         self.mocks['mkdtemp'].return_value = os.path.dirname(hosts_file_path)
-        with patch('teuthology.task.ansible.file', create=True) as m_file:
-            m_file.return_value = hosts_file_obj
-            task.generate_inventory()
+        self.mocks['file'].return_value = hosts_file_obj
+        task.generate_inventory()
         assert task.generated_inventory is True
         assert task.inventory == os.path.dirname(hosts_file_path)
         hosts_file_obj.seek(0)
@@ -557,6 +555,7 @@ class TestCephLabTask(TestTask):
         self.task_config.update(dict(
             playbook=[],
         ))
+        self.mocks['mkdtemp'].return_value = '/inventory/dir'
         task = self.klass(self.ctx, self.task_config)
         task.ctx.summary = dict()
         task.setup()
@@ -570,3 +569,42 @@ class TestCephLabTask(TestTask):
                 with raises(CommandFailedError):
                     task.execute_playbook()
                 assert task.ctx.summary.get('status') == 'dead'
+
+    def test_execute_playbook_fail(self):
+        self.mocks['mkdtemp'].return_value = '/inventory/dir'
+        task = self.klass(self.ctx, self.task_config)
+        task.setup()
+        with patch.object(ansible.pexpect, 'run') as m_run:
+            with patch('teuthology.task.ansible.open') as m_open:
+                fake_failure_log = Mock()
+                fake_failure_log.__enter__ = Mock()
+                fake_failure_log.__exit__ = Mock()
+                m_open.return_value = fake_failure_log
+                m_run.return_value = ('', 1)
+                with raises(CommandFailedError):
+                    task.execute_playbook()
+                assert task.ctx.summary.get('status') == 'dead'
+
+    @mark.skip("Unsupported")
+    def test_generate_playbook(self):
+        pass
+
+    @mark.skip("Unsupported")
+    def test_playbook_http(self):
+        pass
+
+    @mark.skip("Unsupported")
+    def test_playbook_none(self):
+        pass
+
+    @mark.skip("Unsupported")
+    def test_playbook_wrong_type(self):
+        pass
+
+    @mark.skip("Unsupported")
+    def test_playbook_list(self):
+        pass
+
+    @mark.skip("Test needs to be reimplemented for this class")
+    def test_playbook_file_missing(self):
+        pass
