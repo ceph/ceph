@@ -894,6 +894,12 @@ def main(argv):
     cmd = "{path}/ceph-objectstore-tool --journal-path BAD_JOURNAL_PATH --op dump-journal".format(path=CEPH_BIN)
     ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: (2) No such file or directory")
 
+    cmd = (CFSD_PREFIX + "--journal-path BAD_JOURNAL_PATH --op list").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: No such file or directory")
+
+    cmd = (CFSD_PREFIX + "--journal-path /bin --op list").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "journal-path: /bin: (21) Is a directory")
+
     # On import can't use stdin from a terminal
     cmd = (CFSD_PREFIX + "--op import --pgid {pg}").format(osd=ONEOSD, pg=ONEPG)
     ERRORS += test_failure(cmd, "stdin is a tty and no --file filename specified", tty=True)
@@ -911,7 +917,10 @@ def main(argv):
     cmd = "{path}/ceph-objectstore-tool --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG, path=CEPH_BIN)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
-    cmd = (CFSD_PREFIX + "--op remove").format(osd=ONEOSD)
+    cmd = (CFSD_PREFIX + "--op remove --pgid 1.0").format(osd=ONEOSD)
+    ERRORS += test_failure(cmd, "Please use export-remove or you must use --force option")
+
+    cmd = (CFSD_PREFIX + "--force --op remove").format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "Must provide pgid")
 
     # Don't secify a --op nor object command
@@ -920,7 +929,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, export, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
@@ -1623,7 +1632,7 @@ def main(argv):
             if ret != 0:
                 logging.error("Removing --dry-run failed for pg {pg} on {osd} with {ret}".format(pg=pg, osd=osd, ret=ret))
                 RM_ERRORS += 1
-            cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
+            cmd = (CFSD_PREFIX + "--force --op remove --pgid {pg}").format(pg=pg, osd=osd)
             logging.debug(cmd)
             ret = call(cmd, shell=True, stdout=nullfd)
             if ret != 0:
@@ -1826,7 +1835,7 @@ def main(argv):
 
             which = 0
             for osd in get_osds(pg, OSDDIR):
-                cmd = (CFSD_PREFIX + "--op remove --pgid {pg}").format(pg=pg, osd=osd)
+                cmd = (CFSD_PREFIX + "--force --op remove --pgid {pg}").format(pg=pg, osd=osd)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
 
