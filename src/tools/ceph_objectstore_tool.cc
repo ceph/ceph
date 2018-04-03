@@ -1175,10 +1175,6 @@ int dump_pg_metadata(Formatter *formatter, bufferlist &bl, metadata_section &ms)
   formatter->close_section();
   formatter->flush(cout);
 
-  formatter->open_object_section("pg_missing_t");
-  ms.missing.dump(formatter);
-  formatter->close_section();
-
   // XXX: ms.past_intervals?
 
   formatter->close_section();
