@@ -8796,10 +8796,13 @@ retry:
           bl->substr_of(in->inline_data, offset, len - offset);
           bl->append_zero(endoff - len);
         }
+	r = endoff - offset;
       } else if ((uint64_t)offset < endoff) {
         bl->append_zero(endoff - offset);
+	r = endoff - offset;
+      } else {
+	r = 0;
       }
-      r = endoff - offset;
       goto success;
     }
   }
