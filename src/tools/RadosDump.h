@@ -226,7 +226,7 @@ struct attr_section {
     for (std::map<std::string, bufferptr>::iterator i = data_.begin();
          i != data_.end(); ++i) {
       bufferlist bl;
-      bl.push_front(i->second);
+      bl.push_back(i->second);
       data[i->first] = bl;
     }
   }
