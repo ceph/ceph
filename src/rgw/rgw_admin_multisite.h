@@ -218,17 +218,17 @@ public:
       {"init",   OPT_METADATA_SYNC_INIT},
       {"run",    OPT_METADATA_SYNC_RUN},
   }, store, formatter) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command: " << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
     }
   }
 
   ~RgwAdminMetadataSyncCommandsHandler() override = default;
 
-  // If parameter parsing failed, the value of m_command is OPT_NO_CMD and a call of this method
+  // If parameter parsing failed, the value of command is OPT_NO_CMD and a call of this method
   // will return EINVAL
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case (OPT_METADATA_SYNC_STATUS) :
         return handle_opt_metadata_sync_status();
       case (OPT_METADATA_SYNC_INIT) :
@@ -243,16 +243,16 @@ public:
   RgwAdminCommandGroup get_type() const override { return METADATA_SYNC; }
 
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_metadata_sync_status() {
-    return ::handle_opt_metadata_sync_status(m_store, m_formatter);
+    return ::handle_opt_metadata_sync_status(store, formatter);
   }
   int handle_opt_metadata_sync_init() {
-    return ::handle_opt_metadata_sync_init(m_store);
+    return ::handle_opt_metadata_sync_init(store);
   }
   int handle_opt_metadata_sync_run() {
-    return ::handle_opt_metadata_sync_run(m_store);
+    return ::handle_opt_metadata_sync_run(store);
   }
 };
 
@@ -268,15 +268,15 @@ public:
                                                               {"push",        OPT_PERIOD_PUSH},
                                                               {"update",      OPT_PERIOD_UPDATE}},
                                            store, formatter) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command:" << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command:" << command << std::endl;
     }
   }
 
   ~RgwAdminPeriodCommandsHandler() override = default;
 
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case (OPT_PERIOD_COMMIT) :
         return handle_opt_period_commit();
       case (OPT_PERIOD_DELETE) :
@@ -301,44 +301,44 @@ public:
   RgwAdminCommandGroup get_type() const override { return PERIOD; }
 
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_period_commit() {
     return ::handle_opt_period_commit(period_id, period_epoch, realm_id, realm_name, url,
                                       access_key, secret_key, remote, yes_i_really_mean_it,
-                                      g_ceph_context, m_store, m_formatter);
+                                      g_ceph_context, store, formatter);
   }
 
   int handle_opt_period_delete() {
-    return ::handle_opt_period_delete(period_id, g_ceph_context, m_store);
+    return ::handle_opt_period_delete(period_id, g_ceph_context, store);
   }
 
   int handle_opt_period_get() {
     return ::handle_opt_period_get(period_epoch, period_id, staging, realm_id, realm_name,
-                                   g_ceph_context, m_store, m_formatter);
+                                   g_ceph_context, store, formatter);
   }
 
   int handle_opt_period_get_current() {
-    return ::handle_opt_period_get_current(realm_id, realm_name, m_store, m_formatter);
+    return ::handle_opt_period_get_current(realm_id, realm_name, store, formatter);
   }
 
   int handle_opt_period_list() {
-    return ::handle_opt_period_list(m_store, m_formatter);
+    return ::handle_opt_period_list(store, formatter);
   }
 
   int handle_opt_period_pull() {
     return ::handle_opt_period_pull(period_id, period_epoch, realm_id, realm_name, url, access_key,
-                                    secret_key, remote, g_ceph_context, m_store, m_formatter);
+                                    secret_key, remote, g_ceph_context, store, formatter);
   }
 
   int handle_opt_period_push() {
     return ::handle_opt_period_push(period_id, period_epoch, realm_id, realm_name, url,
-                                    access_key, secret_key, g_ceph_context, m_store);
+                                    access_key, secret_key, g_ceph_context, store);
   }
 
   int handle_opt_period_update() {
-    return update_period(m_store, realm_id, realm_name, period_id, period_epoch,
-                         commit, remote, url, access_key, secret_key, m_formatter,
+    return update_period(store, realm_id, realm_name, period_id, period_epoch,
+                         commit, remote, url, access_key, secret_key, formatter,
                          yes_i_really_mean_it);
   }
 
@@ -370,8 +370,8 @@ public:
                                                              {"pull",         OPT_REALM_PULL},
                                                              {"set",          OPT_REALM_SET}},
                                            store, formatter) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command:" << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command:" << command << std::endl;
     }
   }
 
@@ -380,7 +380,7 @@ public:
   RgwAdminCommandGroup get_type() const override { return REALM; }
 
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case (OPT_REALM_CREATE) :
         return handle_opt_realm_create();
       case (OPT_REALM_DEFAULT) :
@@ -407,48 +407,48 @@ public:
   }
 
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_realm_create() {
-    return ::handle_opt_realm_create(realm_name, set_default, g_ceph_context, m_store, m_formatter);
+    return ::handle_opt_realm_create(realm_name, set_default, g_ceph_context, store, formatter);
   }
 
   int handle_opt_realm_default() {
-    return ::handle_opt_realm_default(realm_id, realm_name, g_ceph_context, m_store);
+    return ::handle_opt_realm_default(realm_id, realm_name, g_ceph_context, store);
   }
 
   int handle_opt_realm_delete() {
-    return ::handle_opt_realm_delete(realm_id, realm_name, g_ceph_context, m_store);
+    return ::handle_opt_realm_delete(realm_id, realm_name, g_ceph_context, store);
   }
 
   int handle_opt_realm_get() {
-    return ::handle_opt_realm_get(realm_id, realm_name, g_ceph_context, m_store, m_formatter);
+    return ::handle_opt_realm_get(realm_id, realm_name, g_ceph_context, store, formatter);
   }
 
   int handle_opt_realm_get_default() {
-    return ::handle_opt_realm_get_default(g_ceph_context, m_store);
+    return ::handle_opt_realm_get_default(g_ceph_context, store);
   }
 
   int handle_opt_realm_list() {
-    return ::handle_opt_realm_list(g_ceph_context, m_store, m_formatter);
+    return ::handle_opt_realm_list(g_ceph_context, store, formatter);
   }
 
   int handle_opt_realm_list_periods() {
-    return ::handle_opt_realm_list_periods(realm_id, realm_name, m_store, m_formatter);
+    return ::handle_opt_realm_list_periods(realm_id, realm_name, store, formatter);
   }
 
   int handle_opt_realm_rename() {
-    return ::handle_opt_realm_rename(realm_id, realm_name, realm_new_name, g_ceph_context, m_store);
+    return ::handle_opt_realm_rename(realm_id, realm_name, realm_new_name, g_ceph_context, store);
   }
 
   int handle_opt_realm_pull() {
     return ::handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key,
-                                   set_default, g_ceph_context, m_store, m_formatter);
+                                   set_default, g_ceph_context, store, formatter);
   }
 
   int handle_opt_realm_set() {
     return ::handle_opt_realm_set(realm_id, realm_name, infile, set_default, g_ceph_context,
-                                  m_store, m_formatter);
+                                  store, formatter);
   }
 
   // TODO: support generating access key

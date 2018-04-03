@@ -138,17 +138,17 @@ public:
       {"put",  OPT_METADATA_PUT},
       {"rm",   OPT_METADATA_RM},
   }, store, formatter) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command: " << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
     }
   }
 
   ~RgwAdminMetadataCommandsHandler() override = default;
 
-  // If parameter parsing failed, the value of m_command is OPT_NO_CMD and a call of this method
+  // If parameter parsing failed, the value of command is OPT_NO_CMD and a call of this method
   // will return EINVAL
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case (OPT_METADATA_GET) :
         return handle_opt_metadata_get();
       case (OPT_METADATA_PUT) :
@@ -165,22 +165,22 @@ public:
   RgwAdminCommandGroup get_type() const override { return METADATA; }
 
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_metadata_list() {
     // TODO: marker.value() is unsafe, check if the value is set inside the handling function
     return ::handle_opt_metadata_list(metadata_key, marker.value(), max_entries.is_initialized(),
-                             max_entries.get_value_or(-1), m_store, m_formatter);
+                                      max_entries.get_value_or(-1), store, formatter);
   }
   int handle_opt_metadata_get() {
-    return ::handle_opt_metadata_get(metadata_key, m_store, m_formatter);
+    return ::handle_opt_metadata_get(metadata_key, store, formatter);
   }
   int handle_opt_metadata_put() {
     // TODO: infile.value() is unsafe, check if the value is set inside the handling function
-    return ::handle_opt_metadata_put(metadata_key, infile.value(), m_store, m_formatter);
+    return ::handle_opt_metadata_put(metadata_key, infile.value(), store, formatter);
   }
   int handle_opt_metadata_rm() {
-    return ::handle_opt_metadata_rm(metadata_key, m_store, m_formatter);
+    return ::handle_opt_metadata_rm(metadata_key, store, formatter);
   }
 
   std::string metadata_key;

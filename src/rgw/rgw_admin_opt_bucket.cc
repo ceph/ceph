@@ -1307,7 +1307,7 @@ int handle_opt_object_stat(const std::string& bucket_id, const std::string& buck
   return 0;
 }
 
-int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminBiCommandsHandler::parse_command_and_parameters() {
   const char INDEX_TYPE[] = "index-type";
   std::string bi_index_type_str;
   boost::program_options::options_description desc{"Bi options"};
@@ -1324,7 +1324,7 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
       (rgw_admin_params::YES_I_REALLY_MEAN_IT, "Confirmation of purging certain information");
   boost::program_options::variables_map var_map;
 
-  int ret = parse_command(args, desc, var_map);
+  int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }
@@ -1340,7 +1340,7 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters(std::vector<const ch
   return 0;
 }
 
-int RgwAdminBilogCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminBilogCommandsHandler::parse_command_and_parameters() {
   std::string bi_index_type_str;
   boost::program_options::options_description desc{"Bi options"};
   desc.add_options()
@@ -1354,10 +1354,10 @@ int RgwAdminBilogCommandsHandler::parse_command_and_parameters(std::vector<const
       (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
   boost::program_options::variables_map var_map;
 
-  return parse_command(args, desc, var_map);
+  return parse_command(desc, var_map);
 }
 
-int RgwAdminBucketCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminBucketCommandsHandler::parse_command_and_parameters() {
   const char BYPASS_GC[] = "bypass-gc";
   const char CHECK_HOL[] = "check-head-obj-locator";
   const char FIX[] = "fix";
@@ -1400,7 +1400,7 @@ int RgwAdminBucketCommandsHandler::parse_command_and_parameters(std::vector<cons
       (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
   boost::program_options::variables_map var_map;
 
-  int ret = parse_command(args, desc, var_map);
+  int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }
@@ -1451,8 +1451,7 @@ void RgwAdminBucketCommandsHandler::populate_bucket_op() {
   bucket_op.set_max_aio(max_concurrent_ios);
 }
 
-int RgwAdminBucketSyncCommandsHandler::parse_command_and_parameters(
-    std::vector<const char*>& args) {
+int RgwAdminBucketSyncCommandsHandler::parse_command_and_parameters() {
   std::string bi_index_type_str;
   boost::program_options::options_description desc{"Bi options"};
   desc.add_options()
@@ -1465,10 +1464,10 @@ int RgwAdminBucketSyncCommandsHandler::parse_command_and_parameters(
       (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
   boost::program_options::variables_map var_map;
 
-  return parse_command(args, desc, var_map);
+  return parse_command(desc, var_map);
 }
 
-int RgwAdminObjectCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminObjectCommandsHandler::parse_command_and_parameters() {
   boost::program_options::options_description desc{"Object options"};
   desc.add_options()
       (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
@@ -1482,11 +1481,11 @@ int RgwAdminObjectCommandsHandler::parse_command_and_parameters(std::vector<cons
       (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
   boost::program_options::variables_map var_map;
 
-  return parse_command(args, desc, var_map);
+  return parse_command(desc, var_map);
 
 }
 
-int RgwAdminReshardCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminReshardCommandsHandler::parse_command_and_parameters() {
   boost::program_options::options_description desc{"Reshard options"};
   desc.add_options()
       (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
@@ -1500,7 +1499,7 @@ int RgwAdminReshardCommandsHandler::parse_command_and_parameters(std::vector<con
       (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
   boost::program_options::variables_map var_map;
 
-  int ret = parse_command(args, desc, var_map);
+  int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }

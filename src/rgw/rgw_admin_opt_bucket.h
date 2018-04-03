@@ -162,26 +162,23 @@ int handle_opt_reshard_status(const std::string& bucket_id, const std::string& b
 
 class RgwAdminBiCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  explicit RgwAdminBiCommandsHandler(std::vector<const char*>& args, RGWRados *store,
-                                     Formatter *formatter)
-      : RgwAdminCommandGroupHandler(args, {"bi"}, {
-      {"get",   OPT_BI_GET},
-      {"list",  OPT_BI_LIST},
-      {"purge", OPT_BI_PURGE},
-      {"put",   OPT_BI_PUT},
-  }, store, formatter)
-  {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command: " << m_command << std::endl;
+  RgwAdminBiCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+                            Formatter* formatter) : RgwAdminCommandGroupHandler(args, {"bi"}, {{"get",   OPT_BI_GET},
+                                                                                               {"list",  OPT_BI_LIST},
+                                                                                               {"purge", OPT_BI_PURGE},
+                                                                                               {"put",   OPT_BI_PUT},},
+                                                                                store, formatter) {
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
     }
   }
 
   ~RgwAdminBiCommandsHandler() override = default;
 
-  // If parameter parsing failed, the value of m_command is OPT_NO_CMD and a call of this method
-  // will return EINVAL
+  RgwAdminCommandGroup get_type() const override { return BI; }
+
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case OPT_BI_GET : return handle_opt_bi_get();
       case OPT_BI_LIST : return handle_opt_bi_list();
       case OPT_BI_PURGE : return handle_opt_bi_purge();
@@ -190,30 +187,27 @@ public:
     }
   }
 
-  RgwAdminCommandGroup get_type() const override { return BI; }
-
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_bi_get() {
-    return ::handle_opt_bi_get(object, bucket_id, bucket_name, tenant, bi_index_type,
-                               object_version, bucket, m_store, m_formatter);
+    return ::handle_opt_bi_get(object, bucket_id, bucket_name, tenant, bi_index_type, object_version,
+                               bucket, store, formatter);
   }
 
   int handle_opt_bi_list() {
-    return ::handle_opt_bi_list(bucket_id, bucket_name, tenant, max_entries, object, marker,
-                                bucket, m_store, m_formatter);
+    return ::handle_opt_bi_list(bucket_id, bucket_name, tenant, max_entries, object, marker, bucket,
+                                store, formatter);
   }
 
   int handle_opt_bi_purge() {
-    return ::handle_opt_bi_purge(bucket_id, bucket_name, tenant, yes_i_really_mean_it, bucket,
-                                 m_store);
+    return ::handle_opt_bi_purge(bucket_id, bucket_name, tenant, yes_i_really_mean_it, bucket, store);
   }
 
   int handle_opt_bi_put() {
-    return ::handle_opt_bi_put(bucket_id, bucket_name, tenant, infile, object_version, bucket,
-                               m_store);
+    return ::handle_opt_bi_put(bucket_id, bucket_name, tenant, infile, object_version, bucket, store);
   }
+
 
   BIIndexType bi_index_type = PlainIdx;
   rgw_bucket bucket;
@@ -238,17 +232,17 @@ public:
       {"status",   OPT_BILOG_STATUS},
       {"trim",     OPT_BILOG_TRIM},
   }, store, formatter) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command: " << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
     }
   }
 
   ~RgwAdminBilogCommandsHandler() override = default;
 
-  // If parameter parsing failed, the value of m_command is OPT_NO_CMD and a call of this method
+  // If parameter parsing failed, the value of command is OPT_NO_CMD and a call of this method
   // will return EINVAL
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case OPT_BILOG_AUTOTRIM :
         return handle_opt_bilog_autotrim();
       case OPT_BILOG_LIST :
@@ -265,25 +259,25 @@ public:
   RgwAdminCommandGroup get_type() const override { return BI; }
 
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_bilog_autotrim() {
-    return ::handle_opt_bilog_autotrim(m_store);
+    return ::handle_opt_bilog_autotrim(store);
   }
 
   int handle_opt_bilog_list() {
     return ::handle_opt_bilog_list(bucket_id, bucket_name, tenant, max_entries, shard_id, marker,
-                                   bucket, m_store, m_formatter);
+                                   bucket, store, formatter);
   }
 
   int handle_opt_bilog_status() {
-    return ::handle_opt_bilog_status(bucket_id, bucket_name, tenant, shard_id, bucket, m_store,
-                                     m_formatter);
+    return ::handle_opt_bilog_status(bucket_id, bucket_name, tenant, shard_id, bucket, store,
+                                     formatter);
   }
 
   int handle_opt_bilog_trim() {
     return ::handle_opt_bilog_trim(bucket_id, bucket_name, tenant, shard_id, start_marker,
-                                   end_marker, bucket, m_store);
+                                   end_marker, bucket, store);
   }
 
   rgw_bucket bucket;
@@ -313,8 +307,8 @@ public:
                                                      {"rm",          OPT_BUCKET_RM}},
                                   store, formatter),
       rgw_stream_flusher(formatter, std::cout) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command: " << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
       populate_bucket_op();
     }
   }
@@ -322,7 +316,7 @@ public:
   ~RgwAdminBucketCommandsHandler() override = default;
 
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case(OPT_BUCKETS_LIST) : return handle_opt_buckets_list();
       case(OPT_BUCKET_CHECK) : return handle_opt_bucket_check();
       case(OPT_BUCKET_LIMIT_CHECK) : return handle_opt_bucket_limit_check();
@@ -340,52 +334,52 @@ public:
   RgwAdminCommandGroup get_type() const override { return BUCKET; }
 
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   void populate_bucket_op();
 
   int handle_opt_buckets_list() {
     return ::handle_opt_buckets_list(bucket_name, tenant, bucket_id, marker, max_entries, bucket,
-                                     bucket_op, rgw_stream_flusher, m_store, m_formatter);
+                                     bucket_op, rgw_stream_flusher, store, formatter);
   }
 
   int handle_opt_bucket_check() {
     return ::handle_opt_bucket_check(check_head_obj_locator, bucket_name, tenant, fix,
-                                     remove_bad, bucket_op, rgw_stream_flusher, m_store, m_formatter);
+                                     remove_bad, bucket_op, rgw_stream_flusher, store, formatter);
   }
 
   int handle_opt_bucket_limit_check() {
     return ::handle_opt_bucket_limit_check(user_id, warnings_only, bucket_op, rgw_stream_flusher,
-                                           m_store);
+                                           store);
   }
 
   int handle_opt_bucket_link() {
-    return ::handle_opt_bucket_link(bucket_id, bucket_op, m_store);
+    return ::handle_opt_bucket_link(bucket_id, bucket_op, store);
   }
 
   int handle_opt_bucket_unlink() {
-    return ::handle_opt_bucket_unlink(bucket_op, m_store);
+    return ::handle_opt_bucket_unlink(bucket_op, store);
   }
 
   int handle_opt_bucket_stats() {
-    return ::handle_opt_bucket_stats(bucket_op, rgw_stream_flusher, m_store);
+    return ::handle_opt_bucket_stats(bucket_op, rgw_stream_flusher, store);
   }
 
   int handle_opt_bucket_reshard() {
     return ::handle_opt_bucket_reshard(bucket_name, tenant, bucket_id, num_shards.is_initialized(),
                                        num_shards.get_value_or(0), yes_i_really_mean_it,
-                                       max_entries, verbose, m_store, m_formatter);
+                                       max_entries, verbose, store, formatter);
   }
 
   int handle_opt_bucket_rewrite() {
     return ::handle_opt_bucket_rewrite(bucket_name, tenant, bucket_id, start_date, end_date,
                                        min_rewrite_size, max_rewrite_size,
-                                       min_rewrite_stripe_size, bucket, m_store, m_formatter);
+                                       min_rewrite_stripe_size, bucket, store, formatter);
   }
 
   int handle_opt_bucket_rm() {
     return ::handle_opt_bucket_rm(inconsistent_index, bypass_gc, yes_i_really_mean_it, bucket_op,
-                                  m_store);
+                                  store);
   }
 
   // Members, set by parse_command_and_parameters:
@@ -428,15 +422,15 @@ public:
                                                              {"run",     OPT_BUCKET_SYNC_RUN},
                                                              {"status",  OPT_BUCKET_SYNC_STATUS}},
                                   store, formatter) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command: " << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
     }
   }
 
   ~RgwAdminBucketSyncCommandsHandler() override = default;
 
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case (OPT_BUCKET_SYNC_DISABLE) :
         return handle_opt_bucket_sync_disable();
       case (OPT_BUCKET_SYNC_ENABLE) :
@@ -455,29 +449,29 @@ public:
   RgwAdminCommandGroup get_type() const override { return BUCKET_SYNC; }
 
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_bucket_sync_disable() {
     return ::bucket_sync_toggle(OPT_BUCKET_SYNC_DISABLE, bucket_name, tenant, realm_id,
-                                realm_name, object, bucket, g_ceph_context, m_store);
+                                realm_name, object, bucket, g_ceph_context, store);
   }
 
   int handle_opt_bucket_sync_enable() {
     return ::bucket_sync_toggle(OPT_BUCKET_SYNC_ENABLE, bucket_name, tenant, realm_id,
-                                realm_name, object, bucket, g_ceph_context, m_store);
+                                realm_name, object, bucket, g_ceph_context, store);
   }
 
   int handle_opt_bucket_sync_init() {
-    return ::handle_opt_bucket_sync_init(source_zone, bucket_name, bucket_id, tenant, m_store);
+    return ::handle_opt_bucket_sync_init(source_zone, bucket_name, bucket_id, tenant, store);
   }
 
   int handle_opt_bucket_sync_run() {
-    return ::handle_opt_bucket_sync_run(source_zone, bucket_name, bucket_id, tenant, m_store);
+    return ::handle_opt_bucket_sync_run(source_zone, bucket_name, bucket_id, tenant, store);
   }
 
   int handle_opt_bucket_sync_status() {
-    return ::handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, m_store,
-                                           m_formatter);
+    return ::handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, store,
+                                           formatter);
   }
 
   rgw_bucket bucket;
@@ -500,15 +494,15 @@ public:
                                                      {"rm",      OPT_OBJECT_RM},
                                                      {"unlink",  OPT_OBJECT_UNLINK}},
                                   store, formatter) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command: " << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
     }
   }
 
   ~RgwAdminObjectCommandsHandler() override = default;
 
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case (OPT_OBJECTS_EXPIRE) :
         return handle_opt_objects_expire();
       case (OPT_OBJECT_STAT) :
@@ -527,30 +521,30 @@ public:
   RgwAdminCommandGroup get_type() const override { return OBJECT; }
 
 private:
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_objects_expire() {
-    return ::handle_opt_object_expire(m_store);
+    return ::handle_opt_object_expire(store);
   }
 
   int handle_opt_objects_stat() {
     return ::handle_opt_object_stat(bucket_id, bucket_name, tenant, object, object_version, bucket,
-                                    m_store, m_formatter);
+                                    store, formatter);
   }
 
   int handle_opt_object_rewrite() {
     return ::handle_opt_object_rewrite(bucket_id, bucket_name, tenant, object, object_version,
-                                       min_rewrite_stripe_size, bucket, m_store);
+                                       min_rewrite_stripe_size, bucket, store);
   }
 
   int handle_opt_object_rm() {
     return ::handle_opt_object_rm(bucket_id, bucket_name, tenant, object, object_version, bucket,
-                                  m_store);
+                                  store);
   }
 
   int handle_opt_object_unlink() {
     return ::handle_opt_object_unlink(bucket_id, bucket_name, tenant, object, object_version,
-                                      bucket, m_store);
+                                      bucket, store);
   }
 
   rgw_bucket bucket;
@@ -572,15 +566,15 @@ public:
                                                       {"status",  OPT_RESHARD_STATUS},
                                                       {"process", OPT_RESHARD_PROCESS}},
                                   store, formatter) {
-    if (parse_command_and_parameters(args) == 0) {
-      std::cout << "Parsed command: " << m_command << std::endl;
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
     }
   }
 
   ~RgwAdminReshardCommandsHandler() override = default;
 
   int execute_command() override {
-    switch (m_command) {
+    switch (command) {
       case OPT_RESHARD_ADD:
         return handle_opt_reshard_add();
       case OPT_RESHARD_CANCEL :
@@ -600,27 +594,27 @@ public:
 
 private:
 
-  int parse_command_and_parameters(std::vector<const char*>& args) override;
+  int parse_command_and_parameters() override;
 
   int handle_opt_reshard_add() {
     return ::handle_opt_reshard_add(bucket_id, bucket_name, tenant, num_shards.is_initialized(),
-                                    num_shards.value_or(0), yes_i_really_mean_it, m_store);
+                                    num_shards.value_or(0), yes_i_really_mean_it, store);
   }
 
   int handle_opt_reshard_cancel() {
-    return ::handle_opt_reshard_cancel(bucket_name, m_store);
+    return ::handle_opt_reshard_cancel(bucket_name, store);
   }
 
   int handle_opt_reshard_list() {
-    return ::handle_opt_reshard_list(max_entries, m_store, m_formatter);
+    return ::handle_opt_reshard_list(max_entries, store, formatter);
   }
 
   int handle_opt_reshard_status() {
-    return ::handle_opt_reshard_status(bucket_id, bucket_name, tenant, m_store, m_formatter);
+    return ::handle_opt_reshard_status(bucket_id, bucket_name, tenant, store, formatter);
   }
 
   int handle_opt_reshard_process() {
-    return ::handle_opt_reshard_process(m_store);
+    return ::handle_opt_reshard_process(store);
   }
 
   std::string bucket_id;

@@ -216,41 +216,41 @@ enum RgwAdminCommand {
   OPT_RESHARD_CANCEL,
 };
 
+enum ReplicaLogType {
+  ReplicaLog_Invalid = 0,
+  ReplicaLog_Metadata,
+  ReplicaLog_Data,
+  ReplicaLog_Bucket,
+};
+
 class RgwAdminCommandGroupHandler {
 public:
   explicit RgwAdminCommandGroupHandler(std::vector<const char*>& args,
-                                       std::vector<std::string>&& command_prefix,
+                                       std::vector<std::string>&& _command_prefix,
                                        std::unordered_map<std::string, RgwAdminCommand>&&
-                                        string_to_command,
-                                       RGWRados *store, Formatter *formatter)
-      : COMMAND_PREFIX(command_prefix), STRING_TO_COMMAND(string_to_command), m_store(store),
-        m_formatter(formatter)
+                                       _string_to_command,
+                                       RGWRados* _store, Formatter* _formatter)
+      : commandline_arguments(args), command_prefix(_command_prefix), string_to_command(_string_to_command),
+        store(_store),
+        formatter(_formatter)
   {}
   virtual ~RgwAdminCommandGroupHandler() = default;
   virtual int execute_command() = 0;
   virtual RgwAdminCommandGroup get_type() const = 0;
 
 protected:
-  virtual int parse_command_and_parameters(std::vector<const char*>& args) = 0;
+  virtual int parse_command_and_parameters() = 0;
 
-  int parse_command(std::vector<const char*>& args,
-                    boost::program_options::options_description& desc,
-                    boost::program_options::variables_map& var_map);
+  int parse_command(boost::program_options::options_description& desc, boost::program_options::variables_map& var_map);
 
-  const std::vector<std::string> COMMAND_PREFIX;
-  const std::unordered_map<std::string, RgwAdminCommand> STRING_TO_COMMAND;
-  RgwAdminCommand m_command = OPT_NO_CMD;
+  std::vector<const char*> commandline_arguments;
+  const std::vector<std::string> command_prefix;
+  const std::unordered_map<std::string, RgwAdminCommand> string_to_command;
+  RgwAdminCommand command = OPT_NO_CMD;
   // Does not take ownership.
-  RGWRados* m_store;
+  RGWRados* store;
   // Does not take ownership.
-  Formatter* m_formatter;
-};
-
-enum ReplicaLogType {
-  ReplicaLog_Invalid = 0,
-  ReplicaLog_Metadata,
-  ReplicaLog_Data,
-  ReplicaLog_Bucket,
+  Formatter* formatter;
 };
 
 int init_bucket(RGWRados *store, const std::string& tenant_name, const std::string& bucket_name, const std::string& bucket_id,

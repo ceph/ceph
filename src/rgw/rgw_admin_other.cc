@@ -1552,7 +1552,7 @@ void handle_opt_sync_status(RGWRados *store)
   tab_dump("data sync", width, data_status);
 }
 
-int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminMetadataCommandsHandler::parse_command_and_parameters() {
   const char METADATA_KEY[] = "metadata-key";
   boost::program_options::options_description desc{"Metadata options"};
   desc.add_options()
@@ -1562,5 +1562,5 @@ int RgwAdminMetadataCommandsHandler::parse_command_and_parameters(std::vector<co
       (rgw_admin_params::MARKER, boost::program_options::value(&marker), "");
   boost::program_options::variables_map var_map;
 
-  return parse_command(args, desc, var_map);
+  return parse_command(desc, var_map);
 }

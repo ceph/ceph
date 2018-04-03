@@ -1455,7 +1455,7 @@ int parse_other_commandline_params(std::vector<const char*>& args, std::string& 
   return 0;
 }
 
-const std::unordered_map<std::string, RgwAdminCommandGroup> RgwAdminCommandGroupHandlerFactory::STR_TO_RGW_COMMAND_GROUP = {
+const std::unordered_map<std::string, RgwAdminCommandGroup> RgwAdminCommandGroupHandlerFactory::str_to_rgw_command_group = {
     {"bi", BI},
     {"bilog", BILOG},
     {"bucket", BUCKET},
@@ -1525,15 +1525,15 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std
       if (command.size() == 1) {
         // Will throw an exception if such a command group is not found. Since an exception could
         // also be thrown by boost::program_options, fail instead of introducing additional checks in the code.
-        return STR_TO_RGW_COMMAND_GROUP.at(first_word);
+        return str_to_rgw_command_group.at(first_word);
       } else {
         std::string maybe_second_word = command[1];
-        if (STR_TO_RGW_COMMAND_GROUP.count(first_word + " " + maybe_second_word) > 0) {
-          return STR_TO_RGW_COMMAND_GROUP.at(first_word + " " + maybe_second_word);
+        if (str_to_rgw_command_group.count(first_word + " " + maybe_second_word) > 0) {
+          return str_to_rgw_command_group.at(first_word + " " + maybe_second_word);
         } else {
           // Will throw an exception if such a command group is not found. Since an exception could
           // also be thrown by boost::program_options, fail instead of introducing additional checks in the code.
-          return STR_TO_RGW_COMMAND_GROUP.at(first_word);
+          return str_to_rgw_command_group.at(first_word);
         }
       }
     } else {

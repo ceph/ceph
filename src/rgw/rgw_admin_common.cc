@@ -193,18 +193,18 @@ int check_reshard_bucket_params(RGWRados *store,
   return 0;
 }
 
-int RgwAdminCommandGroupHandler::parse_command(std::vector<const char*>& args,
-                                               boost::program_options::options_description& desc,
+int RgwAdminCommandGroupHandler::parse_command(boost::program_options::options_description& desc,
                                                boost::program_options::variables_map& var_map) {
   const char COMMAND[] = "command";
-  std::vector<std::string> command;
+  std::vector<std::string> parsed_command;
   desc.add_options()
-      (COMMAND, boost::program_options::value(&command), "Command");
+      (COMMAND, boost::program_options::value(&parsed_command), "Command");
 
   boost::program_options::positional_options_description pos_desc;
   pos_desc.add(COMMAND, -1);
   try {
-    boost::program_options::parsed_options options = boost::program_options::command_line_parser{args.size(), args.data()}
+    boost::program_options::parsed_options options = boost::program_options::command_line_parser{
+        commandline_arguments.size(), commandline_arguments.data()}
         .options(desc)
         .positional(pos_desc)
         .run();
@@ -213,15 +213,15 @@ int RgwAdminCommandGroupHandler::parse_command(std::vector<const char*>& args,
     boost::program_options::notify(var_map);
 
     if (var_map.count(COMMAND)) {
-      if (command.size() <= COMMAND_PREFIX.size()) {
+      if (parsed_command.size() <= command_prefix.size()) {
         return EINVAL;
       }
-      for (std::size_t i = 0; i < COMMAND_PREFIX.size(); ++i) {
-        if (command[i] != COMMAND_PREFIX[i]) {
+      for (std::size_t i = 0; i < command_prefix.size(); ++i) {
+        if (parsed_command[i] != command_prefix[i]) {
           return EINVAL;
         }
       }
-      m_command = STRING_TO_COMMAND.at(command[COMMAND_PREFIX.size()]);
+      command = string_to_command.at(parsed_command[command_prefix.size()]);
     } else {
       return EINVAL;
     }

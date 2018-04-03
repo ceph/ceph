@@ -2109,14 +2109,14 @@ int handle_opt_data_sync_run(const std::string& source_zone, const boost::intrus
   return 0;
 }
 
-int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters() {
   boost::program_options::options_description desc{"Metadata sync options"};
   boost::program_options::variables_map var_map;
 
-  return parse_command(args, desc, var_map);
+  return parse_command(desc, var_map);
 }
 
-int RgwAdminPeriodCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminPeriodCommandsHandler::parse_command_and_parameters() {
   const char COMMIT[] = "commit";
   const char PERIOD_EPOCH[] = "epoch";
   const char REMOTE[] = "remote";
@@ -2137,7 +2137,7 @@ int RgwAdminPeriodCommandsHandler::parse_command_and_parameters(std::vector<cons
       (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
   boost::program_options::variables_map var_map;
 
-  int ret = parse_command(args, desc, var_map);
+  int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }
@@ -2150,7 +2150,7 @@ int RgwAdminPeriodCommandsHandler::parse_command_and_parameters(std::vector<cons
   return 0;
 }
 
-int RgwAdminRealmCommandsHandler::parse_command_and_parameters(std::vector<const char*>& args) {
+int RgwAdminRealmCommandsHandler::parse_command_and_parameters() {
   const char REALM_NEW_NAME[] = "realm-new-name";
   boost::program_options::options_description desc{"Realm options"};
   desc.add_options()
@@ -2166,7 +2166,7 @@ int RgwAdminRealmCommandsHandler::parse_command_and_parameters(std::vector<const
       (rgw_admin_params::URL, boost::program_options::value(&url), "");
   boost::program_options::variables_map var_map;
 
-  int ret = parse_command(args, desc, var_map);
+  int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }
