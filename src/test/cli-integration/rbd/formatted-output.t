@@ -12,11 +12,11 @@ ls on empty pool never containing images
 
 create
 =======
-  $ rbd create -s 1024 --image-format 1 foo
+  $ RBD_FORCE_ALLOW_V1=1 rbd create -s 1024 --image-format 1 foo --log-to-stderr=false
   rbd: image format 1 is deprecated
   $ rbd create -s 512 --image-format 2 bar
   $ rbd create -s 2048 --image-format 2 --image-feature layering baz
-  $ rbd create -s 1 --image-format 1 quux
+  $ RBD_FORCE_ALLOW_V1=1 rbd create -s 1 --image-format 1 quux --log-to-stderr=false
   rbd: image format 1 is deprecated
   $ rbd create -s 1G --image-format 2 quuy
 

@@ -1,5 +1,7 @@
 #!/bin/sh -ex
 
+export RBD_FORCE_ALLOW_V1=1
+
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
