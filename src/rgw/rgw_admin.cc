@@ -77,6 +77,14 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
 
@@ -251,8 +259,7 @@ int main(int argc, const char **argv)
     formatter = new JSONFormatter(pretty_format);
   else {
     cerr << "unrecognized format: " << format << std::endl;
-    usage();
-    ceph_abort();
+    exit(1);
   }
 
   ret = parse_multisite_commandline_params(args, set_default, url, commit, period_epoch, remote,
