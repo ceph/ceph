@@ -62,7 +62,8 @@ public:
     bool deleted;
     boost::intrusive::list_member_hook<> dirty_item;
 
-    std::atomic_int num_readers, num_writers;
+    int num_readers = 0, num_writers = 0;
+
     std::atomic_int num_reading;
 
     File()
@@ -76,8 +77,8 @@ public:
 	num_reading(0)
       {}
     ~File() override {
-      assert(num_readers.load() == 0);
-      assert(num_writers.load() == 0);
+      assert(num_readers == 0);
+      assert(num_writers == 0);
       assert(num_reading.load() == 0);
       assert(!locked);
     }
@@ -267,6 +268,7 @@ private:
 
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
+  void _maybe_finish_unlink(FileRef f);
 
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
@@ -317,6 +319,8 @@ private:
 
   FileWriter *_create_writer(FileRef f);
   void _close_writer(FileWriter *h);
+
+  void _close_reader(FileReader *h);
 
   // always put the super in the second 4k block.  FIXME should this be
   // block size independent?
@@ -371,6 +375,10 @@ public:
   void close_writer(FileWriter *h) {
     std::lock_guard<std::mutex> l(lock);
     _close_writer(h);
+  }
+  void close_reader(FileReader *h) {
+    std::lock_guard<std::mutex> l(lock);
+    _close_reader(h);
   }
 
   int rename(const string& old_dir, const string& old_file,

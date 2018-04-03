@@ -35,7 +35,7 @@ class BlueRocksSequentialFile : public rocksdb::SequentialFile {
  public:
   BlueRocksSequentialFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
   ~BlueRocksSequentialFile() override {
-    delete h;
+    fs->close_reader(h);
   }
 
   // Read up to "n" bytes from the file.  "scratch[0..n-1]" may be
@@ -81,7 +81,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
  public:
   BlueRocksRandomAccessFile(BlueFS *fs, BlueFS::FileReader *h) : fs(fs), h(h) {}
   ~BlueRocksRandomAccessFile() override {
-    delete h;
+    fs->close_reader(h);
   }
 
   // Read up to "n" bytes from the file starting at "offset".

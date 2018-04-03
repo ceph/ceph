@@ -134,6 +134,59 @@ TEST(BlueFS, small_appends) {
   rm_temp_bdev(fn);
 }
 
+TEST(BlueFS, read_after_unlink) {
+  uint64_t size = 1048576 * 128;
+  string fn = get_temp_bdev(size);
+  BlueFS fs(g_ceph_context);
+  ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
+  fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
+  uuid_d fsid;
+  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mount());
+  char data[8192];
+  char data2[8192];
+  for (unsigned i=0; i<sizeof(data); ++i) {
+    data[i] = i;
+    data2[i] = i ^ 123;
+  }
+  {
+    BlueFS::FileWriter *h;
+    ASSERT_EQ(0, fs.mkdir("dir"));
+    ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
+    for (unsigned i = 0; i < 100; ++i) {
+      h->append(data, sizeof(data));
+    }
+    fs.fsync(h);
+    fs.close_writer(h);
+  }
+  {
+    // overwrite (hopefully) same blocks with a new file, different data
+    BlueFS::FileReader *h;
+    BlueFS::FileReaderBuffer buf(1);
+    ASSERT_EQ(0, fs.open_for_read("dir", "file", &h, false));
+    char cbuf[sizeof(data)];
+    ASSERT_EQ(sizeof(data), fs.read(h, &buf, 0, sizeof(data), nullptr, cbuf));
+    ASSERT_EQ(0, memcmp(cbuf, data, sizeof(data)));
+    ASSERT_EQ(0, fs.unlink("dir", "file"));
+    fs.sync_metadata();
+    sleep(1);
+    {
+      BlueFS::FileWriter *h;
+      ASSERT_EQ(0, fs.open_for_write("dir", "newer", &h, false));
+      for (unsigned i = 0; i < 100; ++i) {
+	h->append(data2, sizeof(data2));
+      }
+      fs.fsync(h);
+      fs.close_writer(h);
+    }
+    ASSERT_EQ(sizeof(data), fs.read(h, &buf, sizeof(data) * 12, sizeof(data), nullptr, cbuf));
+    ASSERT_EQ(0, memcmp(cbuf, data, sizeof(data)));
+    fs.close_reader(h);
+  }
+  fs.umount();
+  rm_temp_bdev(fn);
+}
+
 #define ALLOC_SIZE 4096
 
 void write_data(BlueFS &fs, uint64_t rationed_bytes)

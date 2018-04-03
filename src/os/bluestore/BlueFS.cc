@@ -995,11 +995,7 @@ void BlueFS::_drop_link(FileRef file)
   --file->refs;
   if (file->refs == 0) {
     dout(20) << __func__ << " destroying " << file->fnode << dendl;
-    assert(file->num_reading.load() == 0);
     log_t.op_file_remove(file->fnode.ino);
-    for (auto& r : file->fnode.extents) {
-      pending_release[r.bdev].insert(r.offset, r.length);
-    }
     file_map.erase(file->fnode.ino);
     file->deleted = true;
 
@@ -1009,6 +1005,22 @@ void BlueFS::_drop_link(FileRef file)
       auto it = dirty_files[file->dirty_seq].iterator_to(*file);
       dirty_files[file->dirty_seq].erase(it);
       file->dirty_seq = 0;
+    }
+
+    _maybe_finish_unlink(file);
+  }
+}
+
+void BlueFS::_maybe_finish_unlink(FileRef file)
+{
+  if (file->deleted &&
+      file->refs == 0 &&
+      file->num_readers == 0) {
+    dout(20) << __func__ << " " << file->fnode << dendl;
+    assert(file->num_writers == 0); // rocksdb doesn't do this.
+    assert(file->num_reading.load() == 0); // no readers => no reading
+    for (auto& r : file->fnode.extents) {
+      pending_release[r.bdev].insert(r.offset, r.length);
     }
   }
 }
@@ -1623,7 +1635,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 	   << " 0x" << offset << "~" << length << std::dec
 	   << " to " << h->file->fnode << dendl;
   assert(!h->file->deleted);
-  assert(h->file->num_readers.load() == 0);
+  assert(h->file->num_readers == 0);
 
   h->buffer_appender.flush();
 
@@ -2214,6 +2226,13 @@ int BlueFS::open_for_read(
 		      random, false);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;
+}
+
+void BlueFS::_close_reader(FileReader *h)
+{
+  FileRef file = h->file;
+  delete h;
+  _maybe_finish_unlink(file);
 }
 
 int BlueFS::rename(
