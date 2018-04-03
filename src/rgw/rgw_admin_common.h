@@ -226,11 +226,11 @@ enum ReplicaLogType {
 class RgwAdminCommandGroupHandler {
 public:
   explicit RgwAdminCommandGroupHandler(std::vector<const char*>& args,
-                                       std::vector<std::string>&& _command_prefix,
+                                       const std::vector<std::string>& prefix,
                                        std::unordered_map<std::string, RgwAdminCommand>&&
                                        _string_to_command,
                                        RGWRados* _store, Formatter* _formatter)
-      : commandline_arguments(args), command_prefix(_command_prefix), string_to_command(_string_to_command),
+      : commandline_arguments(args), command_prefix(prefix), string_to_command(_string_to_command),
         store(_store),
         formatter(_formatter)
   {}

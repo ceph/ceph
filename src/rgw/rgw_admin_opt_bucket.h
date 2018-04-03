@@ -162,8 +162,10 @@ int handle_opt_reshard_status(const std::string& bucket_id, const std::string& b
 
 class RgwAdminBiCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  RgwAdminBiCommandsHandler(std::vector<const char*>& args, RGWRados* store,
-                            Formatter* formatter) : RgwAdminCommandGroupHandler(args, {"bi"}, {{"get",   OPT_BI_GET},
+  RgwAdminBiCommandsHandler(std::vector<const char*>& args,
+                            const std::vector<std::string>& prefix, RGWRados* store,
+                            Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, prefix, {{                                            "get",   OPT_BI_GET},
                                                                                                {"list",  OPT_BI_LIST},
                                                                                                {"purge", OPT_BI_PURGE},
                                                                                                {"put",   OPT_BI_PUT},},
@@ -224,9 +226,10 @@ private:
 
 class RgwAdminBilogCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  explicit RgwAdminBilogCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+  explicit RgwAdminBilogCommandsHandler(std::vector<const char*>& args,
+                                        const std::vector<std::string>& prefix, RGWRados* store,
                                         Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, {"bilog"}, {
+      : RgwAdminCommandGroupHandler(args, prefix, {
       {"autotrim", OPT_BILOG_AUTOTRIM},
       {"list",     OPT_BILOG_LIST},
       {"status",   OPT_BILOG_STATUS},
@@ -293,10 +296,10 @@ private:
 
 class RgwAdminBucketCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  RgwAdminBucketCommandsHandler(std::vector<const char*>& args, RGWRados* store,
-                                Formatter* formatter) :
-  // TODO: support multiple prefixes of the same command group (buckets list / bucket *)
-      RgwAdminCommandGroupHandler(args, {"bucket"}, {{"list",        OPT_BUCKETS_LIST},
+  RgwAdminBucketCommandsHandler(std::vector<const char*>& args,
+                                const std::vector<std::string>& prefix, RGWRados* store,
+                                Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, prefix, {{  "list",        OPT_BUCKETS_LIST},
                                                      {"check",       OPT_BUCKET_CHECK},
                                                      {"limit check", OPT_BUCKET_LIMIT_CHECK},
                                                      {"link",        OPT_BUCKET_LINK},
@@ -414,9 +417,10 @@ private:
 
 class RgwAdminBucketSyncCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  RgwAdminBucketSyncCommandsHandler(std::vector<const char*>& args, RGWRados* store,
-                                    Formatter* formatter) :
-      RgwAdminCommandGroupHandler(args, {"bucket", "sync"}, {{"disable", OPT_BUCKET_SYNC_DISABLE},
+  RgwAdminBucketSyncCommandsHandler(std::vector<const char*>& args,
+                                    const std::vector<std::string>& prefix, RGWRados* store,
+                                    Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, prefix, {{          "disable", OPT_BUCKET_SYNC_DISABLE},
                                                              {"enable",  OPT_BUCKET_SYNC_ENABLE},
                                                              {"init",    OPT_BUCKET_SYNC_INIT},
                                                              {"run",     OPT_BUCKET_SYNC_RUN},
@@ -486,9 +490,10 @@ private:
 
 class RgwAdminObjectCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  RgwAdminObjectCommandsHandler(std::vector<const char*>& args, RGWRados* store,
-                                Formatter* formatter) :
-      RgwAdminCommandGroupHandler(args, {"object"}, {{"expire",  OPT_OBJECTS_EXPIRE},
+  RgwAdminObjectCommandsHandler(std::vector<const char*>& args,
+                                const std::vector<std::string>& prefix, RGWRados* store,
+                                Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, prefix, {{  "expire",  OPT_OBJECTS_EXPIRE},
                                                      {"stat",    OPT_OBJECT_STAT},
                                                      {"rewrite", OPT_OBJECT_REWRITE},
                                                      {"rm",      OPT_OBJECT_RM},
@@ -558,9 +563,10 @@ private:
 
 class RgwAdminReshardCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  RgwAdminReshardCommandsHandler(std::vector<const char*>& args, RGWRados* store,
-                                 Formatter* formatter) :
-      RgwAdminCommandGroupHandler(args, {"reshard"}, {{"add",     OPT_RESHARD_ADD},
+  RgwAdminReshardCommandsHandler(std::vector<const char*>& args,
+                                 const std::vector<std::string>& prefix, RGWRados* store,
+                                 Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, prefix, {{   "add",     OPT_RESHARD_ADD},
                                                       {"cancel",  OPT_RESHARD_CANCEL},
                                                       {"list",    OPT_RESHARD_LIST},
                                                       {"status",  OPT_RESHARD_STATUS},

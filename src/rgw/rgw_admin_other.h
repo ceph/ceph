@@ -130,14 +130,14 @@ void handle_opt_sync_status(RGWRados *store);
 
 class RgwAdminMetadataCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  explicit RgwAdminMetadataCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+  explicit RgwAdminMetadataCommandsHandler(std::vector<const char*>& args,
+                                           const std::vector<std::string>& prefix, RGWRados* store,
                                            Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, {"metadata"}, {
-      {"list", OPT_METADATA_LIST},
-      {"get",  OPT_METADATA_GET},
-      {"put",  OPT_METADATA_PUT},
-      {"rm",   OPT_METADATA_RM},
-  }, store, formatter) {
+      : RgwAdminCommandGroupHandler(args, prefix,
+                                    {{"list", OPT_METADATA_LIST},
+                                     {"get",  OPT_METADATA_GET},
+                                     {"put",  OPT_METADATA_PUT},
+                                     {"rm",   OPT_METADATA_RM},}, store, formatter) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command: " << command << std::endl;
     }

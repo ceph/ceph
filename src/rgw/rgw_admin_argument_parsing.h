@@ -152,7 +152,8 @@ public:
 private:
   static const std::unordered_map<std::string, RgwAdminCommandGroup> str_to_rgw_command_group;
 
-  static RgwAdminCommandGroup parse_command_group(std::vector<const char*>& args);
+  static RgwAdminCommandGroup parse_command_group(std::vector<const char*>& args,
+                                                  std::vector<std::string>& command_prefix);
 };
 
 #endif //CEPH_RGW_ADMIN_ARGUMENT_PARSING_H

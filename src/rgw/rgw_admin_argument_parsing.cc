@@ -1496,7 +1496,8 @@ const std::unordered_map<std::string, RgwAdminCommandGroup> RgwAdminCommandGroup
     {"user list", USER_LIST},
 };
 
-RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std::vector<const char*>& args) {
+RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(
+    std::vector<const char*>& args, std::vector<std::string>& command_prefix) {
   const char COMMAND_GROUP[] = "command";
   std::vector<std::string> command;
   boost::program_options::options_description desc{"General options"};
@@ -1522,6 +1523,7 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std
     }
     else if (var_map.count(COMMAND_GROUP)) {
       std::string first_word = command[0];
+      command_prefix.push_back(first_word);
       if (command.size() == 1) {
         // Will throw an exception if such a command group is not found. Since an exception could
         // also be thrown by boost::program_options, fail instead of introducing additional checks in the code.
@@ -1529,6 +1531,7 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std
       } else {
         std::string maybe_second_word = command[1];
         if (str_to_rgw_command_group.count(first_word + " " + maybe_second_word) > 0) {
+          command_prefix.push_back(maybe_second_word);
           return str_to_rgw_command_group.at(first_word + " " + maybe_second_word);
         } else {
           // Will throw an exception if such a command group is not found. Since an exception could
@@ -1548,13 +1551,21 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(std
 
 RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_group_handler(std::vector<const char*>& args) {
   // TODO: pass pointers to RGWRados and Formatter
-  RgwAdminCommandGroup command_group = RgwAdminCommandGroupHandlerFactory::parse_command_group(args);
+  std::vector<std::string> command_prefix;
+  RgwAdminCommandGroup command_group = RgwAdminCommandGroupHandlerFactory::parse_command_group(args,
+                                                                                               command_prefix);
   switch (command_group) {
     case(INVALID) : return nullptr;
-    case(BI) : return new RgwAdminBiCommandsHandler(args, nullptr, nullptr);
-    case(BILOG) : return new RgwAdminBilogCommandsHandler(args, nullptr, nullptr);
-    case(BUCKET) : return new RgwAdminBucketCommandsHandler(args, nullptr, nullptr);
-    case(BUCKET_SYNC) : return new RgwAdminBucketSyncCommandsHandler(args, nullptr, nullptr);
+    case (BI) :
+      return new RgwAdminBiCommandsHandler(args, command_prefix, nullptr,
+                                           nullptr);
+    case (BILOG) :
+      return new RgwAdminBilogCommandsHandler(args, command_prefix, nullptr, nullptr);
+    case (BUCKET) :
+      return new RgwAdminBucketCommandsHandler(args, command_prefix, nullptr, nullptr);
+    case (BUCKET_SYNC) :
+      return new RgwAdminBucketSyncCommandsHandler(args, command_prefix, nullptr,
+                                                   nullptr);
     case(CAPS) : return nullptr;
     case(DATA_SYNC) : return nullptr;
     case(DATALOG) : return nullptr;
@@ -1564,23 +1575,26 @@ RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_gro
     case(LC) : return nullptr;
     case(LOG) : return nullptr;
     case(MDLOG) : return nullptr;
-    case(METADATA) : return new RgwAdminMetadataCommandsHandler(args, nullptr, nullptr);
-    case(METADATA_SYNC) : return new RgwAdminMetadataSyncCommandsHandler(args, nullptr, nullptr);
+    case (METADATA) :
+      return new RgwAdminMetadataCommandsHandler(args, command_prefix, nullptr, nullptr);
+    case (METADATA_SYNC) :
+      return new RgwAdminMetadataSyncCommandsHandler(args, command_prefix, nullptr,
+                                                     nullptr);
     case (OBJECT) :
-      return new RgwAdminObjectCommandsHandler(args, nullptr, nullptr);
+      return new RgwAdminObjectCommandsHandler(args, command_prefix, nullptr, nullptr);
     case(OLH) : return nullptr;
     case(OPSTATE) : return nullptr;
     case(ORPHANS) : return nullptr;
     case (PERIOD) :
-      return new RgwAdminPeriodCommandsHandler(args, nullptr, nullptr);
+      return new RgwAdminPeriodCommandsHandler(args, command_prefix, nullptr, nullptr);
     case(POLICY) : return nullptr;
     case(POOL) : return nullptr;
     case(QUOTA) : return nullptr;
     case (REALM) :
-      return new RgwAdminRealmCommandsHandler(args, nullptr, nullptr);
+      return new RgwAdminRealmCommandsHandler(args, command_prefix, nullptr, nullptr);
     case(REPLICALOG) : return nullptr;
     case (RESHARD) :
-      return new RgwAdminReshardCommandsHandler(args, nullptr, nullptr);
+      return new RgwAdminReshardCommandsHandler(args, command_prefix, nullptr, nullptr);
     case(ROLE) : return nullptr;
     case(ROLE_POLICY) : return nullptr;
     case(SUBUSER) : return nullptr;

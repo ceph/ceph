@@ -211,9 +211,10 @@ int handle_opt_data_sync_run(const std::string& source_zone, const boost::intrus
 
 class RgwAdminMetadataSyncCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  explicit RgwAdminMetadataSyncCommandsHandler(std::vector<const char*>& args, RGWRados* store,
+  explicit RgwAdminMetadataSyncCommandsHandler(std::vector<const char*>& args,
+                                               const std::vector<std::string>& prefix, RGWRados* store,
                                                Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, {"metadata", "sync"}, {
+      : RgwAdminCommandGroupHandler(args, prefix, {
       {"status", OPT_METADATA_SYNC_STATUS},
       {"init",   OPT_METADATA_SYNC_INIT},
       {"run",    OPT_METADATA_SYNC_RUN},
@@ -258,8 +259,10 @@ private:
 
 class RgwAdminPeriodCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  RgwAdminPeriodCommandsHandler(std::vector<const char*>& args, RGWRados* store, Formatter*
-  formatter) : RgwAdminCommandGroupHandler(args, {"period"}, {{"commit",      OPT_PERIOD_COMMIT},
+  RgwAdminPeriodCommandsHandler(std::vector<const char*>& args,
+                                const std::vector<std::string>& prefix, RGWRados* store,
+                                Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, prefix, {{           "commit",      OPT_PERIOD_COMMIT},
                                                               {"delete",      OPT_PERIOD_DELETE},
                                                               {"get",         OPT_PERIOD_GET},
                                                               {"get-current", OPT_PERIOD_GET_CURRENT},
@@ -358,8 +361,10 @@ private:
 
 class RgwAdminRealmCommandsHandler : public RgwAdminCommandGroupHandler {
 public:
-  RgwAdminRealmCommandsHandler(std::vector<const char*>& args, RGWRados* store, Formatter*
-  formatter) : RgwAdminCommandGroupHandler(args, {"realm"}, {{"create",       OPT_REALM_CREATE},
+  RgwAdminRealmCommandsHandler(std::vector<const char*>& args,
+                               const std::vector<std::string>& prefix, RGWRados* store,
+                               Formatter* formatter)
+      : RgwAdminCommandGroupHandler(args, prefix, {{          "create",       OPT_REALM_CREATE},
                                                              {"default",      OPT_REALM_DEFAULT},
                                                              {"delete",       OPT_REALM_DELETE},
                                                              {"get",          OPT_REALM_GET},
