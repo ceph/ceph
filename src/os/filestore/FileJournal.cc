@@ -1079,7 +1079,10 @@ void FileJournal::do_write(bufferlist& bl)
     // header too?
     if (hbp.length()) {
       // be sneaky: include the header in the second fragment
-      second.push_front(hbp);
+      bufferlist tmp;
+      tmp.push_back(hbp);
+      tmp.claim_append(second);
+      second.swap(tmp);
       pos = 0;          // we included the header
     }
     // Write the second portion first possible with the header, so
@@ -1335,7 +1338,10 @@ void FileJournal::do_aio_write(bufferlist& bl)
     assert(pos == header.max_size);
     if (hbp.length()) {
       // be sneaky: include the header in the second fragment
-      second.push_front(hbp);
+      bufferlist tmp;
+      tmp.push_back(hbp);
+      tmp.claim_append(second);
+      second.swap(tmp);
       pos = 0;          // we included the header
     } else
       pos = get_top();  // no header, start after that
