@@ -372,6 +372,14 @@ cdef class LibCephFS(object):
         self.state = "configuring"
 
     def create(self, conf=None, conffile=None, auth_id=None):
+        """
+        Create a mount handle for interacting with Ceph.  All libcephfs
+        functions operate on a mount info handle.
+        
+        :param conf dict opt: settings overriding the default ones and conffile
+        :param conffile str opt: the path to ceph.conf to override the default settings
+        :auth_id str opt: the id used to authenticate the client entity
+        """
         if conf is not None and not isinstance(conf, dict):
             raise TypeError("conf must be dict or None")
         cstr(conffile, 'configfile', opt=True)
@@ -397,6 +405,11 @@ cdef class LibCephFS(object):
                 self.conf_set(key, value)
 
     def conf_read_file(self, conffile=None):
+        """
+        Load the ceph configuration from the specified config file.
+         
+        :param conffile str opt: the path to ceph.conf to override the default settings
+        """
         conffile = cstr(conffile, 'conffile', opt=True)
         cdef:
             char *_conffile = opt_str(conffile)
@@ -406,6 +419,11 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error calling conf_read_file")
 
     def conf_parse_argv(self, argv):
+        """
+        Parse the command line arguments and load the configuration parameters.
+        
+        :param argv: the argument list
+        """
         self.require_state("configuring")
         cargv = cstr_list(argv, 'argv')
         cdef:
@@ -457,6 +475,11 @@ cdef class LibCephFS(object):
         return (major, minor, extra)
 
     def conf_get(self, option):
+        """
+        Gets the configuration value as a string.
+        
+        :param option: the config option to get
+        """
         self.require_state("configuring", "initialized", "mounted")
 
         option = cstr(option, 'option')
@@ -482,6 +505,12 @@ cdef class LibCephFS(object):
             free(ret_buf)
 
     def conf_set(self, option, val):
+        """
+        Sets a configuration value from a string.
+        
+        :param option: the configuration option to set
+        :param value: the value of the configuration option to set
+        """
         self.require_state("configuring", "initialized", "mounted")
 
         option = cstr(option, 'option')
@@ -496,6 +525,9 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error calling conf_set")
 
     def init(self):
+        """
+        Initialize the filesystem client (but do not mount the filesystem yet)
+        """
         self.require_state("configuring")
         with nogil:
             ret = ceph_init(self.cluster)
@@ -504,6 +536,9 @@ cdef class LibCephFS(object):
         self.state = "initialized"
 
     def mount(self):
+        """
+        Perform a mount using the path for the root of the mount.
+        """
         if self.state == "configuring":
             self.init()
         self.require_state("initialized")
@@ -514,6 +549,9 @@ cdef class LibCephFS(object):
         self.state = "mounted"
 
     def unmount(self):
+        """
+        Unmount a mount handle.
+        """
         self.require_state("mounted")
         with nogil:
             ret = ceph_unmount(self.cluster)
@@ -522,6 +560,12 @@ cdef class LibCephFS(object):
         self.state = "initialized"
 
     def statfs(self, path):
+        """
+        Perform a statfs on the ceph file system.  This call fills in file system wide statistics
+        into the passed in buffer.
+        
+        :param path: any path within the mounted filesystem
+        """
         self.require_state("mounted")
         path = cstr(path, 'path')
         cdef:
@@ -545,6 +589,9 @@ cdef class LibCephFS(object):
                 'f_namemax': statbuf.f_namemax}
 
     def sync_fs(self):
+        """
+        Synchronize all filesystem data to persistent media
+        """
         self.require_state("mounted")
         with nogil:
             ret = ceph_sync_fs(self.cluster)
@@ -552,6 +599,13 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "sync_fs failed")
 
     def fsync(self, int fd, int syncdataonly):
+        """
+        Synchronize an open file to persistent media.
+        
+        :param fd: the file descriptor of the file to sync.
+        :param syncdataonly: a boolean whether to synchronize metadata and data (0)
+                             or just data (1).
+        """
         self.require_state("mounted")
         with nogil:
             ret = ceph_fsync(self.cluster, fd, syncdataonly)
@@ -559,12 +613,22 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "fsync failed")
 
     def getcwd(self):
+        """
+        Get the current working directory.
+        
+        :rtype the path to the current working directory
+        """
         self.require_state("mounted")
         with nogil:
             ret = ceph_getcwd(self.cluster)
         return ret
 
     def chdir(self, path):
+        """
+        Change the current working directory.
+        
+        :param path the path to the working directory to change into.
+        """
         self.require_state("mounted")
 
         path = cstr(path, 'path')
@@ -575,6 +639,13 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "chdir failed")
 
     def opendir(self, path):
+        """
+        Open the given directory.
+        
+        :param path: the path name of the directory to open.  Must be either an absolute path
+                     or a path relative to the current working directory.
+        :param dir_handler: the directory result pointer structure to fill in.
+        """
         self.require_state("mounted")
 
         path = cstr(path, 'path')
@@ -590,6 +661,15 @@ cdef class LibCephFS(object):
         return d
 
     def readdir(self, DirResult dir_handler):
+        """
+        Get the next entry in an open directory.
+        
+        :param dir_handler: the directory stream pointer from an opendir holding the state of the
+                            next entry to return.
+        :rtype dir_handler: the next directory entry or NULL if at the end of the directory (or the directory is empty.
+                            This pointer should not be freed by the caller, and is only safe to access between return and
+                            the next call to readdir or closedir.
+        """
         self.require_state("mounted")
 
         cdef ceph_dir_result *_dir_handler = dir_handler.handler
@@ -605,6 +685,11 @@ cdef class LibCephFS(object):
                         d_name=dirent.d_name)
 
     def closedir(self, DirResult dir_handler):
+        """
+        Close the open directory.
+        
+        :param dir_handler: the directory result pointer (set by ceph_opendir) to close
+        """
         self.require_state("mounted")
         cdef:
             ceph_dir_result *_dir_handler = dir_handler.handler
@@ -615,6 +700,14 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "closedir failed")
 
     def mkdir(self, path, mode):
+        """
+        Create a directory.
+ 
+        :param path: the path of the directory to create.  This must be either an
+                     absolute path or a relative path off of the current working directory.
+        :param mode the permissions the directory should have once created.
+        """
+
         self.require_state("mounted")
         path = cstr(path, 'path')
         if not isinstance(mode, int):
@@ -628,6 +721,13 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in mkdir '%s'" % path)
 
     def mkdirs(self, path, mode):
+        """
+        Create multiple directories at once.
+
+        :param path: the full path of directories and sub-directories that should
+                     be created.
+        :param mode the permissions the directory should have once created
+        """
         self.require_state("mounted")
         path = cstr(path, 'path')
         if not isinstance(mode, int):
@@ -642,6 +742,11 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in mkdirs '%s'" % path)
 
     def rmdir(self, path):
+        """
+        Remove a directory.
+         
+        :param path: the path of the directory to remove.
+        """
         self.require_state("mounted")
         path = cstr(path, 'path')
         cdef char* _path = path
@@ -650,6 +755,15 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in rmdir '%s'" % path)
 
     def open(self, path, flags, mode=0):
+        """
+        Create and/or open a file.
+         
+        :param path: the path of the file to open.  If the flags parameter includes O_CREAT,
+                     the file will first be created before opening.
+        :param flags: set of option masks that control how the file is created/opened.
+        :param mode: the permissions to place on the file if the file does not exist and O_CREAT
+                     is specified in the flags.
+        """
         self.require_state("mounted")
         path = cstr(path, 'path')
 
@@ -697,6 +811,12 @@ cdef class LibCephFS(object):
         return ret
 
     def close(self, fd):
+        """
+        Close the open file.
+        
+        :param fd: the file descriptor referring to the open file.
+        """
+
         self.require_state("mounted")
         if not isinstance(fd, int):
             raise TypeError('fd must be an int')
@@ -707,6 +827,14 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in close")
 
     def read(self, fd, offset, l):
+        """
+        Read data from the file.
+ 
+        :param fd : the file descriptor of the open file to read from.
+        :param offset : the offset in the file to read from.  If this value is negative, the
+                        function reads from the current offset of the file descriptor.
+        :param l : the flag to indicate what type of seeking to perform
+        """     
         self.require_state("mounted")
         if not isinstance(offset, int):
             raise TypeError('offset must be an int')
@@ -742,6 +870,14 @@ cdef class LibCephFS(object):
             ref.Py_XDECREF(ret_s)
 
     def write(self, fd, buf, offset):
+        """
+        Write data to a file.
+       
+        :param fd : the file descriptor of the open file to write to
+        :param buf : the bytes to write to the file
+        :param offset : the offset of the file write into.  If this value is negative, the
+                        function writes to the current offset of the file descriptor.
+        """
         self.require_state("mounted")
         if not isinstance(fd, int):
             raise TypeError('fd must be an int')
@@ -764,6 +900,13 @@ cdef class LibCephFS(object):
         return ret
 
     def flock(self, fd, operation, owner):
+        """
+        Apply or remove an advisory lock.
+        
+        :param fd: the open file descriptor to change advisory lock.
+        :param operation: the advisory lock operation to be performed on the file
+        :param owner: the user-supplied owner identifier (an arbitrary integer)
+        """
         self.require_state("mounted")
         if not isinstance(fd, int):
             raise TypeError('fd must be an int')
@@ -782,6 +925,13 @@ cdef class LibCephFS(object):
         return ret
 
     def getxattr(self, path, name, size=255):
+        """
+         Get an extended attribute.
+         
+         :param path: the path to the file
+         :param name: the name of the extended attribute to get
+         :param size: the size of the pre-allocated buffer
+        """ 
         self.require_state("mounted")
 
         path = cstr(path, 'path')
@@ -808,6 +958,13 @@ cdef class LibCephFS(object):
             free(ret_buf)
 
     def setxattr(self, path, name, value, flags):
+        """
+        Set an extended attribute on a file.
+        
+       :param path: the path to the file.
+       :param name: the name of the extended attribute to set.
+       :param value: the bytes of the extended attribute value
+       """
         self.require_state("mounted")
 
         name = cstr(name, 'name')
@@ -831,6 +988,11 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in setxattr")
 
     def stat(self, path):
+        """
+        Get a file's extended statistics and attributes.
+        
+        :param path: the file or directory to get the statistics of.
+        """
         self.require_state("mounted")
         path = cstr(path, 'path')
 
@@ -854,6 +1016,11 @@ cdef class LibCephFS(object):
                           st_ctime=datetime.fromtimestamp(stx.stx_ctime.tv_sec))
 
     def fstat(self, fd):
+        """
+        Get an open file's extended statistics and attributes.
+
+        :param fd: the file descriptor of the file to get statistics of.
+         """
         self.require_state("mounted")
         if not isinstance(fd, int):
             raise TypeError('fd must be an int')
@@ -878,6 +1045,12 @@ cdef class LibCephFS(object):
                           st_ctime=datetime.fromtimestamp(stx.stx_ctime.tv_sec))
 
     def symlink(self, existing, newname):
+        """
+        Creates a symbolic link.
+       
+        :param existing: the path to the existing file/directory to link to.
+        :param newname: the path to the new file/directory to link from.
+        """
         self.require_state("mounted")
         existing = cstr(existing, 'existing')
         newname = cstr(newname, 'newname')
@@ -891,6 +1064,13 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in symlink")
     
     def link(self, existing, newname):
+        """
+        Create a link.
+        
+        :param existing: the path to the existing file/directory to link to.
+        :param newname: the path to the new file/directory to link from.
+        """
+
         self.require_state("mounted")
         existing = cstr(existing, 'existing')
         newname = cstr(newname, 'newname')
@@ -904,6 +1084,13 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in link")    
     
     def readlink(self, path, size):
+        """
+        Read a symbolic link.
+      
+        :param path: the path to the symlink to read
+        :param size: the length of the buffer
+        :rtype buf: buffer to hold the path of the file that the symlink points to.
+        """
         self.require_state("mounted")
         path = cstr(path, 'path')
 
@@ -923,6 +1110,12 @@ cdef class LibCephFS(object):
             free(buf)
 
     def unlink(self, path):
+        """
+        Removes a file, link, or symbolic link.  If the file/link has multiple links to it, the
+        file will not disappear from the namespace until all references to it are removed.
+        
+        :param path: the path of the file or link to unlink.
+        """
         self.require_state("mounted")
         path = cstr(path, 'path')
         cdef char* _path = path
@@ -932,6 +1125,13 @@ cdef class LibCephFS(object):
             raise make_ex(ret, "error in unlink: %s" % path)
 
     def rename(self, src, dst):
+        """
+        Rename a file or directory.
+        
+        :param src: the path to the existing file or directory.
+        :param dst: the new name of the file or directory.
+        """
+        
         self.require_state("mounted")
 
         src = cstr(src, 'source')
