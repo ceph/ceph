@@ -143,6 +143,7 @@ private:
   Cond m_in_flight_flushes_cond;
 
   AppendBuffers m_pending_buffers;
+  uint64_t m_aio_sent_size = 0;
   bool m_aio_scheduled;
 
   void handle_append_task();
