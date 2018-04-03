@@ -944,6 +944,13 @@ void MDBalancer::find_exports(CDir *dir,
                               double& have,
                               set<CDir*>& already_exporting)
 {
+  utime_t now = ceph_clock_now();
+  if ((double)(now - rebalance_time) > 0.1) {
+    derr << " balancer runs too long"  << dendl_impl;
+    have = amount;
+    return;
+  }
+
   assert(dir->is_auth());
 
   double need = amount - have;
