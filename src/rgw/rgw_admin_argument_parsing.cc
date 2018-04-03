@@ -804,7 +804,7 @@ int parse_command(const std::string& access_key, int gen_access_key, const std::
                   vector<const char*>& args, RgwAdminCommand& opt_cmd, std::string& metadata_key, std::string& tenant, rgw_user& user_id)
 {
   if (args.empty()) {
-    exit(1)
+    exit(1);
   }
   bool need_more;
   const char *prev_cmd = nullptr;
@@ -829,7 +829,7 @@ int parse_command(const std::string& access_key, int gen_access_key, const std::
   opt_cmd = static_cast<RgwAdminCommand>(command_or_error);
   if (opt_cmd == OPT_NO_CMD) {
     cerr << "no command" << std::endl;
-    exit(1)
+    exit(1);
   }
 
   /* some commands may have an optional extra param */
@@ -947,7 +947,7 @@ int parse_common_commandline_params(std::vector<const char*>& args, rgw_user& us
       bucket_id = val;
       if (bucket_id.empty()) {
         cerr << "bad bucket-id" << std::endl;
-        exit(1)
+        exit(1);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*) nullptr)) {
       format = val;
@@ -1347,7 +1347,7 @@ int parse_user_commandline_params(std::vector<const char*>& args,
         key_type = KEY_TYPE_S3;
       } else {
         cerr << "bad key type: " << key_type_str << std::endl;
-        exit(1)
+        exit(1);
       }
     } else if (ceph_argparse_binary_flag(args, i, &admin, nullptr, "--admin", (char*) nullptr)) {
       admin_specified = true;

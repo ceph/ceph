@@ -11,7 +11,7 @@ int handle_opt_pool_add(const std::string& pool_name, rgw_pool& pool, RGWRados *
 {
   if (pool_name.empty()) {
     cerr << "need to specify pool to add!" << std::endl;
-    exit(1)
+    exit(1);
   }
 
   int ret = store->add_bucket_placement(pool);
@@ -187,7 +187,7 @@ int handle_opt_log_rm(const std::string& object, const std::string& date,
                       const std::string& bucket_id, const std::string& bucket_name, RGWRados *store) {
   if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
     cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
-    exit(1)
+    exit(1);
   }
 
   std::string oid;
