@@ -68,7 +68,8 @@ private:
   void mirror_image_status_shut_down();
 
   int init_rados(const std::string &cluser_name, const std::string &client_name,
-                 const std::string &description, RadosRef *rados_ref);
+                 const std::string &description, RadosRef *rados_ref,
+                 bool strip_cluster_overrides);
 
   Threads *m_threads;
   std::shared_ptr<ImageDeleter> m_image_deleter;
