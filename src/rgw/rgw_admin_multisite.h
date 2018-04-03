@@ -214,11 +214,9 @@ public:
   explicit RgwAdminMetadataSyncCommandsHandler(std::vector<const char*>& args,
                                                const std::vector<std::string>& prefix, RGWRados* store,
                                                Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, prefix, {
-      {"status", OPT_METADATA_SYNC_STATUS},
-      {"init",   OPT_METADATA_SYNC_INIT},
-      {"run",    OPT_METADATA_SYNC_RUN},
-  }, store, formatter) {
+      : RgwAdminCommandGroupHandler(args, prefix, {{"status", OPT_METADATA_SYNC_STATUS},
+                                                   {"init",   OPT_METADATA_SYNC_INIT},
+                                                   {"run",    OPT_METADATA_SYNC_RUN}}, store, formatter) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command: " << command << std::endl;
     }
@@ -262,15 +260,15 @@ public:
   RgwAdminPeriodCommandsHandler(std::vector<const char*>& args,
                                 const std::vector<std::string>& prefix, RGWRados* store,
                                 Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, prefix, {{           "commit",      OPT_PERIOD_COMMIT},
-                                                              {"delete",      OPT_PERIOD_DELETE},
-                                                              {"get",         OPT_PERIOD_GET},
-                                                              {"get-current", OPT_PERIOD_GET_CURRENT},
-                                                              {"list",        OPT_PERIOD_LIST},
-                                                              {"pull",        OPT_PERIOD_PULL},
-                                                              {"push",        OPT_PERIOD_PUSH},
-                                                              {"update",      OPT_PERIOD_UPDATE}},
-                                           store, formatter) {
+      : RgwAdminCommandGroupHandler(args, prefix, {{"commit",      OPT_PERIOD_COMMIT},
+                                                   {"delete",      OPT_PERIOD_DELETE},
+                                                   {"get",         OPT_PERIOD_GET},
+                                                   {"get-current", OPT_PERIOD_GET_CURRENT},
+                                                   {"list",        OPT_PERIOD_LIST},
+                                                   {"pull",        OPT_PERIOD_PULL},
+                                                   {"push",        OPT_PERIOD_PUSH},
+                                                   {"update",      OPT_PERIOD_UPDATE}},
+                                    store, formatter) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command:" << command << std::endl;
     }
@@ -364,17 +362,17 @@ public:
   RgwAdminRealmCommandsHandler(std::vector<const char*>& args,
                                const std::vector<std::string>& prefix, RGWRados* store,
                                Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, prefix, {{          "create",       OPT_REALM_CREATE},
-                                                             {"default",      OPT_REALM_DEFAULT},
-                                                             {"delete",       OPT_REALM_DELETE},
-                                                             {"get",          OPT_REALM_GET},
-                                                             {"get-default",  OPT_REALM_GET_DEFAULT},
-                                                             {"list",         OPT_REALM_LIST},
-                                                             {"list-periods", OPT_REALM_LIST_PERIODS},
-                                                             {"rename",       OPT_REALM_RENAME},
-                                                             {"pull",         OPT_REALM_PULL},
-                                                             {"set",          OPT_REALM_SET}},
-                                           store, formatter) {
+      : RgwAdminCommandGroupHandler(args, prefix, {{"create",       OPT_REALM_CREATE},
+                                                   {"default",      OPT_REALM_DEFAULT},
+                                                   {"delete",       OPT_REALM_DELETE},
+                                                   {"get",          OPT_REALM_GET},
+                                                   {"get-default",  OPT_REALM_GET_DEFAULT},
+                                                   {"list",         OPT_REALM_LIST},
+                                                   {"list-periods", OPT_REALM_LIST_PERIODS},
+                                                   {"rename",       OPT_REALM_RENAME},
+                                                   {"pull",         OPT_REALM_PULL},
+                                                   {"set",          OPT_REALM_SET}},
+                                    store, formatter) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command:" << command << std::endl;
     }

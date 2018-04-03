@@ -165,11 +165,11 @@ public:
   RgwAdminBiCommandsHandler(std::vector<const char*>& args,
                             const std::vector<std::string>& prefix, RGWRados* store,
                             Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, prefix, {{                                            "get",   OPT_BI_GET},
-                                                                                               {"list",  OPT_BI_LIST},
-                                                                                               {"purge", OPT_BI_PURGE},
-                                                                                               {"put",   OPT_BI_PUT},},
-                                                                                store, formatter) {
+      : RgwAdminCommandGroupHandler(args, prefix, {{"get",   OPT_BI_GET},
+                                                   {"list",  OPT_BI_LIST},
+                                                   {"purge", OPT_BI_PURGE},
+                                                   {"put",   OPT_BI_PUT},},
+                                    store, formatter) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command: " << command << std::endl;
     }
@@ -299,17 +299,16 @@ public:
   RgwAdminBucketCommandsHandler(std::vector<const char*>& args,
                                 const std::vector<std::string>& prefix, RGWRados* store,
                                 Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, prefix, {{  "list",        OPT_BUCKETS_LIST},
-                                                     {"check",       OPT_BUCKET_CHECK},
-                                                     {"limit check", OPT_BUCKET_LIMIT_CHECK},
-                                                     {"link",        OPT_BUCKET_LINK},
-                                                     {"unlink",      OPT_BUCKET_UNLINK},
-                                                     {"stats",       OPT_BUCKET_STATS},
-                                                     {"reshard",     OPT_BUCKET_RESHARD},
-                                                     {"rewrite",     OPT_BUCKET_REWRITE},
-                                                     {"rm",          OPT_BUCKET_RM}},
-                                  store, formatter),
-      rgw_stream_flusher(formatter, std::cout) {
+      : RgwAdminCommandGroupHandler(args, prefix, {{"list",        OPT_BUCKETS_LIST},
+                                                   {"check",       OPT_BUCKET_CHECK},
+                                                   {"limit check", OPT_BUCKET_LIMIT_CHECK},
+                                                   {"link",        OPT_BUCKET_LINK},
+                                                   {"unlink",      OPT_BUCKET_UNLINK},
+                                                   {"stats",       OPT_BUCKET_STATS},
+                                                   {"reshard",     OPT_BUCKET_RESHARD},
+                                                   {"rewrite",     OPT_BUCKET_REWRITE},
+                                                   {"rm",          OPT_BUCKET_RM}},
+                                    store, formatter), rgw_stream_flusher(formatter, std::cout) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command: " << command << std::endl;
       populate_bucket_op();
@@ -420,12 +419,12 @@ public:
   RgwAdminBucketSyncCommandsHandler(std::vector<const char*>& args,
                                     const std::vector<std::string>& prefix, RGWRados* store,
                                     Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, prefix, {{          "disable", OPT_BUCKET_SYNC_DISABLE},
-                                                             {"enable",  OPT_BUCKET_SYNC_ENABLE},
-                                                             {"init",    OPT_BUCKET_SYNC_INIT},
-                                                             {"run",     OPT_BUCKET_SYNC_RUN},
-                                                             {"status",  OPT_BUCKET_SYNC_STATUS}},
-                                  store, formatter) {
+      : RgwAdminCommandGroupHandler(args, prefix, {{"disable", OPT_BUCKET_SYNC_DISABLE},
+                                                   {"enable",  OPT_BUCKET_SYNC_ENABLE},
+                                                   {"init",    OPT_BUCKET_SYNC_INIT},
+                                                   {"run",     OPT_BUCKET_SYNC_RUN},
+                                                   {"status",  OPT_BUCKET_SYNC_STATUS}},
+                                    store, formatter) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command: " << command << std::endl;
     }
@@ -493,12 +492,12 @@ public:
   RgwAdminObjectCommandsHandler(std::vector<const char*>& args,
                                 const std::vector<std::string>& prefix, RGWRados* store,
                                 Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, prefix, {{  "expire",  OPT_OBJECTS_EXPIRE},
-                                                     {"stat",    OPT_OBJECT_STAT},
-                                                     {"rewrite", OPT_OBJECT_REWRITE},
-                                                     {"rm",      OPT_OBJECT_RM},
-                                                     {"unlink",  OPT_OBJECT_UNLINK}},
-                                  store, formatter) {
+      : RgwAdminCommandGroupHandler(args, prefix, {{"expire",  OPT_OBJECTS_EXPIRE},
+                                                   {"stat",    OPT_OBJECT_STAT},
+                                                   {"rewrite", OPT_OBJECT_REWRITE},
+                                                   {"rm",      OPT_OBJECT_RM},
+                                                   {"unlink",  OPT_OBJECT_UNLINK}},
+                                    store, formatter) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command: " << command << std::endl;
     }
@@ -566,12 +565,12 @@ public:
   RgwAdminReshardCommandsHandler(std::vector<const char*>& args,
                                  const std::vector<std::string>& prefix, RGWRados* store,
                                  Formatter* formatter)
-      : RgwAdminCommandGroupHandler(args, prefix, {{   "add",     OPT_RESHARD_ADD},
-                                                      {"cancel",  OPT_RESHARD_CANCEL},
-                                                      {"list",    OPT_RESHARD_LIST},
-                                                      {"status",  OPT_RESHARD_STATUS},
-                                                      {"process", OPT_RESHARD_PROCESS}},
-                                  store, formatter) {
+      : RgwAdminCommandGroupHandler(args, prefix, {{"add",     OPT_RESHARD_ADD},
+                                                   {"cancel",  OPT_RESHARD_CANCEL},
+                                                   {"list",    OPT_RESHARD_LIST},
+                                                   {"status",  OPT_RESHARD_STATUS},
+                                                   {"process", OPT_RESHARD_PROCESS}},
+                                    store, formatter) {
     if (parse_command_and_parameters() == 0) {
       std::cout << "Parsed command: " << command << std::endl;
     }

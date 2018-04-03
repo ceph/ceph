@@ -1552,20 +1552,18 @@ RgwAdminCommandGroup RgwAdminCommandGroupHandlerFactory::parse_command_group(
 RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_group_handler(std::vector<const char*>& args) {
   // TODO: pass pointers to RGWRados and Formatter
   std::vector<std::string> command_prefix;
-  RgwAdminCommandGroup command_group = RgwAdminCommandGroupHandlerFactory::parse_command_group(args,
-                                                                                               command_prefix);
+  RgwAdminCommandGroup command_group = RgwAdminCommandGroupHandlerFactory::parse_command_group(args, command_prefix);
+  std::cout << "Command group: " << command_group << std::endl;
   switch (command_group) {
     case(INVALID) : return nullptr;
     case (BI) :
-      return new RgwAdminBiCommandsHandler(args, command_prefix, nullptr,
-                                           nullptr);
+      return new RgwAdminBiCommandsHandler(args, command_prefix, nullptr, nullptr);
     case (BILOG) :
       return new RgwAdminBilogCommandsHandler(args, command_prefix, nullptr, nullptr);
     case (BUCKET) :
       return new RgwAdminBucketCommandsHandler(args, command_prefix, nullptr, nullptr);
     case (BUCKET_SYNC) :
-      return new RgwAdminBucketSyncCommandsHandler(args, command_prefix, nullptr,
-                                                   nullptr);
+      return new RgwAdminBucketSyncCommandsHandler(args, command_prefix, nullptr, nullptr);
     case(CAPS) : return nullptr;
     case(DATA_SYNC) : return nullptr;
     case(DATALOG) : return nullptr;
@@ -1578,8 +1576,7 @@ RgwAdminCommandGroupHandler* RgwAdminCommandGroupHandlerFactory::get_command_gro
     case (METADATA) :
       return new RgwAdminMetadataCommandsHandler(args, command_prefix, nullptr, nullptr);
     case (METADATA_SYNC) :
-      return new RgwAdminMetadataSyncCommandsHandler(args, command_prefix, nullptr,
-                                                     nullptr);
+      return new RgwAdminMetadataSyncCommandsHandler(args, command_prefix, nullptr, nullptr);
     case (OBJECT) :
       return new RgwAdminObjectCommandsHandler(args, command_prefix, nullptr, nullptr);
     case(OLH) : return nullptr;
