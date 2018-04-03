@@ -815,8 +815,8 @@ void MDBalancer::try_rebalance(balance_state_t& state)
   }
 
   // make a sorted list of my imports
-  map<double,CDir*>    import_pop_map;
-  multimap<mds_rank_t,CDir*>  import_from_map;
+  multimap<double, CDir*> import_pop_map;
+  multimap<mds_rank_t, pair<CDir*, double> > import_from_map;
   set<CDir*> fullauthsubs;
 
   mds->mdcache->get_fullauth_subtrees(fullauthsubs);
@@ -824,6 +824,8 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     CInode *diri = dir->get_inode();
     if (diri->is_mdsdir())
       continue;
+    if (dir->is_freezing() || dir->is_frozen())
+      continue;  // export pbly already in progress
 
     mds_rank_t from = diri->authority().first;
     double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
@@ -837,12 +839,10 @@ void MDBalancer::try_rebalance(balance_state_t& state)
       continue;
     }
 
-    import_pop_map[pop] = dir;
     dout(15) << "  map: i imported " << *dir << " from " << from << dendl;
-    import_from_map.insert(pair<mds_rank_t,CDir*>(from, dir));
+    import_pop_map.insert(make_pair(pop, dir));
+    import_from_map.insert(make_pair(from, make_pair(dir, pop)));
   }
-
-
 
   // do my exports!
   set<CDir*> already_exporting;
@@ -851,8 +851,10 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     mds_rank_t target = it.first;
     double amount = it.second;
 
-    if (amount < MIN_OFFLOAD) continue;
-    if (amount / target_load < .2) continue;
+    if (amount / target_load < .2)
+      continue;
+    if (amount < MIN_OFFLOAD)
+      continue;
 
     dout(5) << "want to send " << amount << " to mds." << target
       //<< " .. " << (*it).second << " * " << load_fac
@@ -860,38 +862,41 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 	    << dendl;//" .. fudge is " << fudge << dendl;
     double have = 0.0;
 
-
     mds->mdcache->show_subtrees();
 
     // search imports from target
     if (import_from_map.count(target)) {
       dout(5) << " aha, looking through imports from target mds." << target << dendl;
-      pair<multimap<mds_rank_t,CDir*>::iterator, multimap<mds_rank_t,CDir*>::iterator> p =
-	import_from_map.equal_range(target);
-      while (p.first != p.second) {
-	CDir *dir = (*p.first).second;
+      for (auto p = import_from_map.equal_range(target);
+	   p.first != p.second; ) {
+	CDir *dir = p.first->second.first;
+	double pop = p.first->second.second;
 	dout(5) << "considering " << *dir << " from " << (*p.first).first << dendl;
-	multimap<mds_rank_t,CDir*>::iterator plast = p.first++;
+	auto plast = p.first++;
 
 	if (dir->inode->is_base())
 	  continue;
-	if (dir->is_freezing() || dir->is_frozen())
-	  continue;  // export pbly already in progress
-	double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
 	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
 
 	if (pop <= amount-have) {
-	  dout(5) << "reexporting " << *dir
-		  << " pop " << pop
+	  dout(5) << "reexporting " << *dir << " pop " << pop
 		  << " back to mds." << target << dendl;
 	  mds->mdcache->migrator->export_dir_nicely(dir, target);
 	  have += pop;
 	  import_from_map.erase(plast);
-	  import_pop_map.erase(pop);
+	  for (auto q = import_pop_map.equal_range(pop);
+	       q.first != q.second; ) {
+	    if (q.first->second == dir) {
+	      import_pop_map.erase(q.first);
+	      break;
+	    }
+	    q.first++;
+	  }
 	} else {
 	  dout(5) << "can't reexport " << *dir << ", too big " << pop << dendl;
 	}
-	if (amount-have < MIN_OFFLOAD) break;
+	if (amount-have < MIN_OFFLOAD)
+	  break;
       }
     }
     if (amount-have < MIN_OFFLOAD) {
@@ -901,13 +906,12 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     // okay, search for fragments of my workload
     list<CDir*> exports;
 
-    for (auto dir : fullauthsubs) {
-      if (dir->get_inode()->is_mdsdir())
-	continue;
-      if (dir->is_freezing() || dir->is_frozen())
-	continue;  // export pbly already in progress
+    for (auto p = import_pop_map.rbegin();
+	 p != import_pop_map.rend();
+	 ++p) {
+      CDir *dir = p->second;
       find_exports(dir, amount, exports, have, already_exporting);
-      if (have > amount-MIN_OFFLOAD)
+      if (amount-have < MIN_OFFLOAD)
 	break;
     }
     //fudge = amount - have;
