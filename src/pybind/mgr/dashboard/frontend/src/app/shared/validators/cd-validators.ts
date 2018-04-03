@@ -62,4 +62,25 @@ export class CdValidators {
       return success ? {'required': true} : null;
     };
   }
+
+  /**
+   * Checks if the value of 'password' matches 'confirmPassword', both this
+   * controls are required to exist on the FormGroup.
+   * This should be used direcly on the FormGroup and not in any FormControl.
+   */
+  static matchPassword(control: AbstractControl): ValidationErrors {
+    const confirmPasswordControl = control.get('confirmPassword');
+
+    const password = control.get('password').value || '';
+    const confirmPassword = confirmPasswordControl.value || '';
+
+    if (password !== confirmPassword) {
+      confirmPasswordControl.setErrors({ MatchPassword: true });
+    } else {
+      if (!confirmPasswordControl.valid) {
+        confirmPasswordControl.updateValueAndValidity();
+      }
+      return null;
+    }
+  }
 }

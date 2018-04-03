@@ -1,4 +1,6 @@
 import { Component, OnInit } from '@angular/core';
+
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
@@ -9,14 +11,20 @@ import { SummaryService } from '../../../shared/services/summary.service';
 export class NavigationComponent implements OnInit {
   summaryData: any;
   rbdPools: Array<any> = [];
+  username: string;
 
-  constructor(private summaryService: SummaryService) {}
+  constructor(
+    private summaryService: SummaryService,
+    private authStorageService: AuthStorageService
+  ) {}
 
   ngOnInit() {
     this.summaryService.summaryData$.subscribe((data: any) => {
       this.summaryData = data;
       this.rbdPools = data.rbd_pools;
     });
+
+    this.username = this.authStorageService.get();
   }
 
   blockHealthColor() {

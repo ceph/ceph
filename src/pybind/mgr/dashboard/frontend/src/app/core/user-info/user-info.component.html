@@ -1,0 +1,107 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item active">User Info</li>
+  </ol>
+</nav>
+
+
+<div class="col-sm-12 col-lg-6">
+  <form name="userForm"
+        class="form-horizontal"
+        #formDir="ngForm"
+        [formGroup]="userForm"
+        novalidate>
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title">Edit User: {{ username }} </h3>
+      </div>
+      <div class="panel-body">
+
+        <!-- Username -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || userForm.controls.username.dirty) && userForm.controls.username.invalid}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="username">Username
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Username..."
+                   id="username"
+                   name="username"
+                   formControlName="username"
+                   autofocus>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || userForm.controls.username.dirty) && userForm.controls.username.hasError('required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || userForm.controls.password.dirty) && userForm.controls.password.invalid}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="password">Password
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="password"
+                   placeholder="Password..."
+                   id="password"
+                   name="password"
+                   formControlName="password"
+                   autofocus>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || userForm.controls.password.dirty) && userForm.controls.password.hasError('required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+        <!-- confirmPassword -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (formDir.submitted || userForm.controls.confirmPassword.dirty) && userForm.controls.confirmPassword.invalid}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="confirmPassword">Confirm Password
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="password"
+                   placeholder="Confirm Password..."
+                   id="confirmPassword"
+                   name="confirmPassword"
+                   formControlName="confirmPassword"
+                   autofocus>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(formDir.submitted || userForm.controls.confirmPassword.dirty) && userForm.controls.confirmPassword.hasError('MatchPassword')">
+              Passwords do not match
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-footer">
+        <div class="button-group text-right">
+          <cd-submit-button [form]="userForm"
+                            (submitAction)="submit()">
+            Save User
+          </cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  (click)="cancel()">
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
