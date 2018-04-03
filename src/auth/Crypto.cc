@@ -135,9 +135,9 @@ static int nss_aes_operation(
 			     const bufferlist& in, bufferlist& out,
 			     std::string *error)
 {
-  // sample source said this has to be at least size of input + 8,
-  // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
-  bufferptr out_tmp(in.length()+16);
+  // we are using CEPH_AES_IV for the IV param, so take it into consideration.
+  bufferptr out_tmp{round_up_to(in.length() + sizeof(CEPH_AES_IV),
+                                AES_BLOCK_LEN)};
   bufferlist incopy;
 
   SECStatus ret;
