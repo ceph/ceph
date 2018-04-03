@@ -897,6 +897,11 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       goto out;
     }
 
+    if (pending_map.module_enabled(module)) {
+      ss << "module '" << module << "' is already enabled";
+      r = 0;
+      goto out;
+    }
     pending_map.modules.insert(module);
   } else if (prefix == "mgr module disable") {
     string module;
@@ -904,6 +909,14 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     if (module.empty()) {
       r = -EINVAL;
       goto out;
+    }
+    if (!pending_map.module_enabled(module)) {
+      ss << "module '" << module << "' is already disabled";
+      r = 0;
+      goto out;
+    }
+    if (!pending_map.any_supports_module(module)) {
+      ss << "module '" << module << "' does not exist";
     }
     pending_map.modules.erase(module);
   } else {
