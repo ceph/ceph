@@ -74,7 +74,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 #59 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=ovh;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
 05 04 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=ovh;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 ### The suite below must run on bare-metal because it's perfromance suite
-57 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL
+57 03 * * * CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL
 
 
 #********** jewel branch
