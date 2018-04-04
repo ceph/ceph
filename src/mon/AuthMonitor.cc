@@ -1598,12 +1598,10 @@ bool AuthMonitor::_upgrade_format_to_luminous()
       bufferlist bl;
       encode(newcap, bl);
 
-      KeyServerData::Incremental auth_inc;
-      auth_inc.name = p->first;
-      auth_inc.auth = p->second;
-      auth_inc.auth.caps["mgr"] = bl;
-      auth_inc.op = KeyServerData::AUTH_INC_ADD;
-      push_cephx_inc(auth_inc);
+      EntityAuth auth = p->second;
+      auth.caps["mgr"] = bl;
+
+      add_entity(p->first, auth);
       changed = true;
     }
 
@@ -1618,12 +1616,10 @@ bool AuthMonitor::_upgrade_format_to_luminous()
 		<< dendl;
 	bufferlist bl;
 	encode("allow profile mgr", bl);
-	KeyServerData::Incremental auth_inc;
-	auth_inc.name = p->first;
-	auth_inc.auth = p->second;
-	auth_inc.auth.caps["mon"] = bl;
-	auth_inc.op = KeyServerData::AUTH_INC_ADD;
-	push_cephx_inc(auth_inc);
+
+	EntityAuth auth = p->second;
+	auth.caps["mon"] = bl;
+	add_entity(p->first, p->second);
 	changed = true;
       }
     }
@@ -1636,13 +1632,12 @@ bool AuthMonitor::_upgrade_format_to_luminous()
   int r = bootstrap_mgr_name.from_str("client.bootstrap-mgr");
   assert(r);
   if (!mon->key_server.contains(bootstrap_mgr_name)) {
-    KeyServerData::Incremental auth_inc;
-    auth_inc.name = bootstrap_mgr_name;
-    encode("allow profile bootstrap-mgr", auth_inc.auth.caps["mon"]);
-    auth_inc.op = KeyServerData::AUTH_INC_ADD;
-    // generate key
-    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
-    push_cephx_inc(auth_inc);
+
+    EntityName name = bootstrap_mgr_name;
+    EntityAuth auth;
+    encode("allow profile bootstrap-mgr", auth.caps["mon"]);
+    auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    add_entity(name, auth);
     changed = true;
   }
   return changed;
