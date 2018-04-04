@@ -1326,6 +1326,7 @@ public:
   void scrub_finish();
   void scrub_clear_state();
   void _scan_snaps(ScrubMap &map);
+  void _repair_oinfo_oid(ScrubMap &map);
   void _scan_rollback_obs(
     const vector<ghobject_t> &rollback_obs,
     ThreadPool::TPHandle &handle);
