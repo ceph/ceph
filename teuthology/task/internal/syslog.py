@@ -132,6 +132,8 @@ def syslog(ctx, config):
                     run.Raw('|'),
                     'grep', '-v', 'Loaded datasource DataSourceOpenStack',
                     run.Raw('|'),
+                    'grep', '-v', 'container-storage-setup: INFO: Volume group backing root filesystem could not be determined',  # noqa
+                    run.Raw('|'),
                     'head', '-n', '1',
                 ],
                 stdout=StringIO(),

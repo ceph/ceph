@@ -61,12 +61,12 @@ paramiko==2.1.2
 pbr==2.0.0                # via cliff, debtcollector, keystoneauth1, openstacksdk, osc-lib, oslo.i18n, oslo.serialization, oslo.utils, positional, python-cinderclient, python-glanceclient, python-keystoneclient, python-neutronclient, python-novaclient, python-openstackclient, requestsexceptions, stevedore
 pexpect==4.2.1
 pip-tools==1.10.1
-pluggy==0.4.0             # via tox
+pluggy==0.6.0             # via tox
 positional==1.1.1         # via keystoneauth1, python-keystoneclient
 prettytable==0.7.2
 psutil==5.2.2
 ptyprocess==0.5.1         # via pexpect
-py==1.4.33                # via tox
+py==1.5.3                 # via tox
 pyasn1==0.2.3
 pycparser==2.17           # via cffi
 pyopenssl==16.2.0
@@ -87,7 +87,7 @@ rfc3986==0.4.1            # via oslo.config
 simplejson==3.10.0        # via osc-lib, python-cinderclient, python-neutronclient, python-novaclient
 six==1.10.0
 stevedore==1.21.0         # via cliff, keystoneauth1, openstacksdk, osc-lib, oslo.config, python-keystoneclient
-tox==2.9.1
+tox==3.0.0
 unicodecsv==0.14.1        # via cliff
 virtualenv==15.1.0        # via tox
 warlock==1.2.0            # via python-glanceclient
