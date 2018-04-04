@@ -20,8 +20,15 @@ NPROC = nproc
 if FREEBSD
         NPROC = sysctl -n hw.ncpu
 endif
+
+ROCKSDB_MAKE_VARS = CC="${CC}" CXX="${CXX}" EXTRA_CXXFLAGS=-fPIC
+ROCKSDB_MAKE_VARS += PORTABLE=1
+if !WITH_JEMALLOC
+ROCKSDB_MAKE_VARS += DISABLE_JEMALLOC=1
+endif
+
 rocksdb/librocksdb.a:
-	cd rocksdb && CC="${CC}" CXX="${CXX}" EXTRA_CXXFLAGS=-fPIC PORTABLE=1 $(MAKE) -j$(shell ${NPROC}) static_lib
+	cd rocksdb && $(ROCKSDB_MAKE_VARS) $(MAKE) -j$(shell ${NPROC}) static_lib
 libkv_a_CXXFLAGS += -I rocksdb/include -fPIC
 libkv_a_SOURCES += kv/RocksDBStore.cc
 libkv_a_LIBADD += rocksdb/librocksdb.a
