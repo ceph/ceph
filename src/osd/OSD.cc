@@ -7846,13 +7846,13 @@ void OSD::consume_map()
   vector<spg_t> pgids;
   _get_pgids(&pgids);
 
-  // count (FIXME)
+  // count (FIXME, probably during seastar rewrite)
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
   vector<PGRef> pgs;
   _get_pgs(&pgs);
   for (auto& pg : pgs) {
-    // FIXME: this is lockless and racy, but we don't want to take pg lock
-    // here.
+    // FIXME (probably during seastar rewrite): this is lockless and
+    // racy, but we don't want to take pg lock here.
     if (pg->is_primary())
       num_pg_primary++;
     else if (pg->is_replica())
@@ -7862,7 +7862,7 @@ void OSD::consume_map()
   }
 
   {
-    // FIXME: move to OSDShard
+    // FIXME (as part of seastar rewrite): move to OSDShard
     [[gnu::unused]] auto&& pending_create_locker = guardedly_lock(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.cbegin();
 	 pg != pending_creates_from_osd.cend();) {
@@ -9488,8 +9488,9 @@ void OSDShard::_wake_pg_slot(
   for (auto i = slot->waiting_peering.rbegin();
        i != slot->waiting_peering.rend();
        ++i) {
-    // this is overkill; we requeue everything, even if some of these items are
-    // waiting for maps we don't have yet.  FIXME.
+    // this is overkill; we requeue everything, even if some of these
+    // items are waiting for maps we don't have yet.  FIXME, maybe,
+    // someday, if we decide this inefficiency matters
     for (auto j = i->second.rbegin(); j != i->second.rend(); ++j) {
       _enqueue_front(std::move(*j), osd->op_prio_cutoff);
     }
