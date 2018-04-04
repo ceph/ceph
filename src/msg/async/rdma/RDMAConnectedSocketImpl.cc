@@ -317,6 +317,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
       } else {
         read += chunk->read(buf+read, response->byte_len);
         dispatcher->post_chunk_to_pool(chunk);
+        update_post_backlog();
       }
     }
   }
@@ -348,6 +349,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
     ldout(cct, 25) << __func__ << " this iter read: " << tmp << " bytes." << " offset: " << (*c)->get_offset() << " ,bound: " << (*c)->get_bound()  << ". Chunk:" << *c  << dendl;
     if ((*c)->over()) {
       dispatcher->post_chunk_to_pool(*c);
+      update_post_backlog();
       ldout(cct, 25) << __func__ << " one chunk over." << dendl;
     }
     if (read == len) {
@@ -658,4 +660,15 @@ void RDMAConnectedSocketImpl::set_accept_fd(int sd)
   worker->center.submit_to(worker->center.get_id(), [this]() {
 			   worker->center.create_file_event(tcp_fd, EVENT_READABLE, con_handler);
 			   }, true);
+}
+
+void RDMAConnectedSocketImpl::post_chunks_to_rq(int num)
+{
+  post_backlog += num - infiniband->post_chunks_to_rq(num, qp->get_qp());
+}
+
+void RDMAConnectedSocketImpl::update_post_backlog()
+{
+  if (post_backlog)
+    post_backlog -= post_backlog - dispatcher->post_chunks_to_rq(post_backlog, qp->get_qp());
 }

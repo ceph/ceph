@@ -47,7 +47,6 @@ class RDMADispatcher {
   bool done = false;
   std::atomic<uint64_t> num_dead_queue_pair = {0};
   std::atomic<uint64_t> num_qp_conn = {0};
-  int post_backlog = 0;
   Mutex lock; // protect `qp_conns`, `dead_queue_pairs`
   // qp_num -> InfRcConnection
   // The main usage of `qp_conns` is looking up connection by qp_num,
@@ -119,8 +118,8 @@ class RDMADispatcher {
 
   std::atomic<uint64_t> inflight = {0};
 
-  void post_chunk_to_pool(Chunk* chunk); 
-
+  void post_chunk_to_pool(Chunk* chunk);
+  int post_chunks_to_rq(int num, ibv_qp *qp=NULL);
 };
 
 class RDMAWorker : public Worker {
@@ -199,6 +198,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   int tcp_fd = -1;
   bool active;// qp is active ?
   bool pending;
+  int post_backlog = 0;
 
   void notify();
   ssize_t read_buffers(char* buf, size_t len);
@@ -230,6 +230,8 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   virtual int try_connect(const entity_addr_t&, const SocketOptions &opt);
   bool is_pending() {return pending;}
   void set_pending(bool val) {pending = val;}
+  void post_chunks_to_rq(int num);
+  void update_post_backlog();
 
   class C_handle_connection : public EventCallback {
     RDMAConnectedSocketImpl *csi;
