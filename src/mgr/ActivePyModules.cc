@@ -35,20 +35,14 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "    
 
-ActivePyModules::ActivePyModules(PyModuleConfig &module_config,
+ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           DaemonStateIndex &ds, ClusterState &cs,
 	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
           Client &client_, Finisher &f)
-  : config_cache(module_config), daemon_state(ds), cluster_state(cs),
+  : module_config(module_config_), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
     lock("ActivePyModules")
 {
-  for(auto &i: config_cache.config) {
-      auto last_slash = i.first.rfind('/');
-      const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
-      const std::string key = i.first.substr(last_slash + 1);
-      set_config(module_name, key, i.second);
-  }
 }
 
 ActivePyModules::~ActivePyModules() = default;
@@ -437,11 +431,8 @@ bool ActivePyModules::get_store(const std::string &module_name,
 
   dout(4) << __func__ << "key: " << global_key << dendl;
 
-
-  Mutex::Locker lock(config_cache.lock);
-
-  if (config_cache.config.count(global_key)) {
-    *val = config_cache.config.at(global_key);
+  if (store_cache.count(global_key)) {
+    *val = store_cache.at(global_key);
     return true;
   } else {
     return false;
@@ -461,10 +452,10 @@ bool ActivePyModules::get_config(const std::string &module_name,
   dout(4) << __func__ << " key: " << global_key << dendl;
 
   
-  Mutex::Locker lock(config_cache.lock);
+  Mutex::Locker lock(module_config.lock);
   
-  if (config_cache.config.count(global_key)) { 
-    *val = config_cache.config.at(global_key);
+  if (module_config.config.count(global_key)) {
+    *val = module_config.config.at(global_key);
     return true;
   } else {
     return false;
@@ -485,10 +476,10 @@ PyObject *ActivePyModules::get_config_prefix(const std::string &module_name,
 
   PyFormatter f;
   
-  Mutex::Locker lock(config_cache.lock);
+  Mutex::Locker lock(module_config.lock);
   
-  for (auto p = config_cache.config.lower_bound(global_prefix);
-       p != config_cache.config.end() && p->first.find(global_prefix) == 0;
+  for (auto p = module_config.config.lower_bound(global_prefix);
+       p != module_config.config.end() && p->first.find(global_prefix) == 0;
        ++p) {
     f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
   }
@@ -507,12 +498,10 @@ void ActivePyModules::set_store(const std::string &module_name,
     Mutex::Locker l(lock);
     PyEval_RestoreThread(tstate);
 
-    Mutex::Locker lock(config_cache.lock);
-    
     if (val) {
-      config_cache.config[global_key] = *val;
+      store_cache[global_key] = *val;
     } else {
-      config_cache.config.erase(global_key);
+      store_cache.erase(global_key);
     }
 
     std::ostringstream cmd_json;
@@ -554,12 +543,12 @@ void ActivePyModules::set_config(const std::string &module_name,
     Mutex::Locker l(lock);
     PyEval_RestoreThread(tstate);
 
-    Mutex::Locker lock(config_cache.lock);
+    Mutex::Locker lock(module_config.lock);
     
     if (val) {
-      config_cache.config[global_key] = *val;
+      module_config.config[global_key] = *val;
     } else {
-      config_cache.config.erase(global_key);
+      module_config.config.erase(global_key);
     }
 
     std::ostringstream cmd_json;

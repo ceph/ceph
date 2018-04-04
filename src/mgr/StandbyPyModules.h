@@ -26,8 +26,6 @@
 #include "mon/MgrMap.h"
 #include "mgr/PyModuleRunner.h"
 
-//typedef std::map<std::string, std::string> PyModuleConfig;
-
 /**
  * State that is read by all modules running in standby mode
  */
@@ -36,13 +34,10 @@ class StandbyPyModuleState
   mutable Mutex lock{"StandbyPyModuleState::lock"};
 
   MgrMap mgr_map;
-  //PyModuleConfig config_cache;
-
-  
+  PyModuleConfig &module_config;
 
 public:
 
-  PyModuleConfig &module_config;
   
   StandbyPyModuleState(PyModuleConfig &module_config_)
     : module_config(module_config_)
