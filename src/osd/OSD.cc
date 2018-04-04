@@ -10255,7 +10255,6 @@ void OSD::ShardedOpWQ::wake_pg_waiters(spg_t pgid)
   uint32_t shard_index = pgid.hash_to_shard(shard_list.size());
   auto sdata = shard_list[shard_index];
   bool queued = false;
-  unsigned pushes_to_free = 0;
   {
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
     auto p = sdata->pg_slots.find(pgid);
@@ -10268,17 +10267,11 @@ void OSD::ShardedOpWQ::wake_pg_waiters(spg_t pgid)
 	   ++i) {
 	sdata->_enqueue_front(make_pair(pgid, *i), osd->op_prio_cutoff);
       }
-      for (auto& q : p->second.to_process) {
-	pushes_to_free += q.get_reserved_pushes();
-      }
       p->second.to_process.clear();
       p->second.waiting_for_pg = false;
       ++p->second.requeue_seq;
       queued = true;
     }
-  }
-  if (pushes_to_free > 0) {
-    osd->service.release_reserved_pushes(pushes_to_free);
   }
   if (queued) {
     sdata->sdata_lock.Lock();
