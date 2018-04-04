@@ -284,22 +284,6 @@ struct TestHandler : public PGLog::LogEntryHandler {
 };
 
 TEST_F(PGLogTest, rewind_divergent_log) {
-  // newhead > log.tail : throw an assert
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    bool dirty_info = false;
-    bool dirty_big_info = false;
-
-    log.tail = eversion_t(2, 1);
-    TestHandler h(remove_snap);
-    EXPECT_DEATH(rewind_divergent_log(t, eversion_t(1, 1), info, &h,
-				      dirty_info, dirty_big_info), "");
-  }
-
   /*        +----------------+
             |  log           |
             +--------+-------+
@@ -1221,90 +1205,6 @@ TEST_F(PGLogTest, merge_log) {
     EXPECT_TRUE(dirty_big_info);
   }
 
-  // If our log is empty, the incoming log needs to have not been trimmed.
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_log_t olog;
-    pg_info_t oinfo;
-    pg_shard_t fromosd;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    bool dirty_info = false;
-    bool dirty_big_info = false;
-
-    // olog has been trimmed
-    olog.tail = eversion_t(1, 1);
-
-    TestHandler h(remove_snap);
-    ASSERT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
-			   dirty_info, dirty_big_info), "");
-  }
-
-  /*        +--------------------------+
-            |  log              olog   |
-            +--------+-------+---------+
-            |        |object |         |
-            |version | hash  | version |
-       tail > (0,0)  |       |         |
-            | (1,1)  |  x5   |         |
-            |        |       |         |
-            |        |       |         |
-       head > (1,2)  |  x3   |         |
-            |        |       |         |
-            |        |       |  (2,3)  < tail
-            |        |  x9   |  (2,4)  |
-            |        |       |         |
-            |        |  x5   |  (2,5)  < head
-            |        |       |         |
-            +--------+-------+---------+
-
-      If the logs do not overlap, throw an exception.
-
-  */
-  {
-    clear();
-
-    ObjectStore::Transaction t;
-    pg_log_t olog;
-    pg_info_t oinfo;
-    pg_shard_t fromosd;
-    pg_info_t info;
-    list<hobject_t> remove_snap;
-    bool dirty_info = false;
-    bool dirty_big_info = false;
-
-    {
-      pg_log_entry_t e;
-      e.mod_desc.mark_unrollbackable();
-
-      log.tail = eversion_t();
-      e.version = eversion_t(1, 1);
-      e.soid.set_hash(0x5);
-      log.log.push_back(e);
-      e.version = eversion_t(1, 2);
-      e.soid.set_hash(0x3);
-      log.log.push_back(e);
-      log.head = e.version;
-      log.index();
-
-      info.last_update = log.head;
-
-      olog.tail = eversion_t(2, 3);
-      e.version = eversion_t(2, 4);
-      e.soid.set_hash(0x9);
-      olog.log.push_back(e);
-      e.version = eversion_t(2, 5);
-      e.soid.set_hash(0x5);
-      olog.log.push_back(e);
-      olog.head = e.version;
-    }
-
-    TestHandler h(remove_snap);
-    EXPECT_DEATH(merge_log(t, oinfo, olog, fromosd, info, &h,
-			   dirty_info, dirty_big_info), "");
-  }
 }
 
 TEST_F(PGLogTest, proc_replica_log) {
