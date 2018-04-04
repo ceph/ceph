@@ -70,8 +70,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 #45 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=mira;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s hadoop -e $CEPH_QA_EMAIL
 #50 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s samba -e $CEPH_QA_EMAIL
 55 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s rest -k distro -e $CEPH_QA_EMAIL
-# removed ceph-deploy per Vasu reuest 2/2/18
-#59 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=ovh;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
+59 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=mira;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
 05 04 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=ovh;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 ### The suite below must run on bare-metal because it's perfromance suite
 57 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL
@@ -99,8 +98,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 40 04 * * 3,7  CEPH_BRANCH=jewel; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s rest -k distro -e $CEPH_QA_EMAIL
 #removed per Greg's request 18 23 * * 4  CEPH_BRANCH=jewel; MACHINE_NAME=smithi; teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -k testing -s multimds -e $CEPH_QA_EMAIL
 45 04 * * 3,7  CEPH_BRANCH=jewel; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s upgrade/client-upgrade -k distro -e $CEPH_QA_EMAIL
-# removed ceph-deploy per Vasu request 2/2/18
-#50 04 * * 3,7 CEPH_BRANCH=jewel; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
+50 04 * * 3,7 CEPH_BRANCH=jewel; MACHINE_NAME=mira;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
 10 04 * * 3,7  CEPH_BRANCH=jewel; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s ceph-disk -k distro -e $CEPH_QA_EMAIL
 15 04 * * 3,7  CEPH_BRANCH=jewel; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 
@@ -139,9 +137,8 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 #30 05 * * 2,4,6 CEPH_BRANCH=luminous; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s hadoop -e $CEPH_QA_EMAIL
 #35 05 * * 2,4,6 CEPH_BRANCH=luminous; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s samba -e $CEPH_QA_EMAIL
 40 05 * * 2,4,6  CEPH_BRANCH=luminous; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s rest -k distro -e $CEPH_QA_EMAIL
-# removed ceph-deploy per Vasu reuest 2/2/18
-#55 05 * * 2,4,6  CEPH_BRANCH=luminous; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro ~/vps.yaml -e $CEPH_QA_EMAIL
-10 05 * * 2,4,6  CEPH_BRANCH=luminous; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-disk -k distro ~/vps.yaml -e $CEPH_QA_EMAIL
+55 05 * * 2,4,6  CEPH_BRANCH=luminous; MACHINE_NAME=mira; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
+10 05 * * 2,4,6  CEPH_BRANCH=luminous; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-disk -k distro -e $CEPH_QA_EMAIL
 15 05 * * 2,4,6  CEPH_BRANCH=luminous; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 
 
