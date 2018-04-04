@@ -3898,7 +3898,8 @@ std::vector<Option> get_global_options() {
     Option("bluestore_compression_min_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_flag(Option::FLAG_RUNTIME)
-    .set_description("Chunks smaller than this are never compressed"),
+    .set_description("Maximum chunk size to apply compression to when random access is expected for an object.")
+    .set_long_description("Chunks larger than this are broken into smaller chunks before being compressed"),
 
     Option("bluestore_compression_min_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128_K)
@@ -3913,7 +3914,8 @@ std::vector<Option> get_global_options() {
     Option("bluestore_compression_max_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_flag(Option::FLAG_RUNTIME)
-    .set_description("Chunks larger than this are broken into smaller chunks before being compressed"),
+    .set_description("Maximum chunk size to apply compression to when non-random access is expected for an object.")
+    .set_long_description("Chunks larger than this are broken into smaller chunks before being compressed"),
 
     Option("bluestore_compression_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(512_K)
