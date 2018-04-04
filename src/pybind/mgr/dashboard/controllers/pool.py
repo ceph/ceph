@@ -3,9 +3,9 @@ from __future__ import absolute_import
 
 import cherrypy
 
+from . import ApiController, RESTController, AuthRequired
 from .. import mgr
 from ..services.ceph_service import CephService
-from ..tools import ApiController, RESTController, AuthRequired
 
 
 @ApiController('pool')

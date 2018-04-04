@@ -5,7 +5,7 @@ from cherrypy.lib.sessions import RamSession
 from mock import patch
 
 from .helper import ControllerTestCase
-from ..tools import RESTController, ApiController
+from ..controllers import RESTController, ApiController
 
 
 # pylint: disable=W0613
