@@ -107,9 +107,10 @@ void AuthMonitor::get_initial_keyring(KeyRing *keyring)
   decode(*keyring, p);
 }
 
-void AuthMonitor::create_initial_keys(KeyRing *keyring)
+void _generate_bootstrap_keys(
+    list<pair<EntityName,EntityAuth> >* auth_lst)
 {
-  dout(10) << __func__ << dendl;
+  assert(auth_lst != nullptr);
 
   map<string,map<string,bufferlist> > bootstrap = {
     { "admin", {
@@ -138,16 +139,27 @@ void AuthMonitor::create_initial_keys(KeyRing *keyring)
   for (auto &p : bootstrap) {
     EntityName name;
     name.from_str("client." + p.first);
-    if (keyring->exists(name)) {
-      continue;
-    }
-
-    dout(10) << __func__ << " creating entry for client." << p.first << dendl;
     EntityAuth auth;
     auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
     auth.caps = p.second;
 
-    keyring->add(name, auth);
+    auth_lst->push_back(make_pair(name, auth));
+  }
+}
+
+void AuthMonitor::create_initial_keys(KeyRing *keyring)
+{
+  dout(10) << __func__ << " with keyring" << dendl;
+  assert(keyring != nullptr);
+
+  list<pair<EntityName,EntityAuth> > auth_lst;
+  _generate_bootstrap_keys(&auth_lst);
+
+  for (auto &p : auth_lst) {
+    if (keyring->exists(p.first)) {
+      continue;
+    }
+    keyring->add(p.first, p.second);
   }
 }
 
@@ -177,7 +189,7 @@ void AuthMonitor::create_initial()
   inc.max_global_id = max_global_id;
   pending_auth.push_back(inc);
 
-  format_version = 2;
+  format_version = 3;
 }
 
 void AuthMonitor::update_from_paxos(bool *need_bootstrap)
@@ -725,6 +737,8 @@ void AuthMonitor::export_keyring(KeyRing& keyring)
 
 int AuthMonitor::import_keyring(KeyRing& keyring)
 {
+  dout(10) << __func__ << " " << keyring.size() << " keys" << dendl;
+
   for (map<EntityName, EntityAuth>::iterator p = keyring.get_keys().begin();
        p != keyring.get_keys().end();
        ++p) {
@@ -831,7 +845,7 @@ int AuthMonitor::add_entity(
   auth_inc.name = name;
   auth_inc.auth = auth;
 
-  dout(10) << " importing " << auth_inc.name << dendl;
+  dout(10) << " add auth entity " << auth_inc.name << dendl;
   dout(30) << "    " << auth_inc.auth << dendl;
   push_cephx_inc(auth_inc);
   return 0;
@@ -1492,71 +1506,118 @@ bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
   return true;
 }
 
-void AuthMonitor::upgrade_format()
+bool AuthMonitor::_upgrade_format_to_dumpling()
 {
-  // NOTE: make sure we either *always* get a bootstrap-mgr key if it doesn't
-  // exist when we upgrade, or that it already exists.
-  //
-  // <sage> joao: one thing is i think maybe we should create the key on
-  // upgrade if it doesn't exist.  right now it only happens on upgrade from
-  // kraken->luminous, but ironically i think fresh luminous clusters that
-  // don't use ceph-deploy might be missing it.
-
-  unsigned int current = 2;
-  if (!mon->get_quorum_mon_features().contains_all(
-	ceph::features::mon::FEATURE_LUMINOUS)) {
-    current = 1;
-  }
-  if (format_version >= current) {
-    dout(20) << __func__ << " format " << format_version << " is current" << dendl;
-    return;
-  }
+  dout(1) << __func__ << " upgrading from format 0 to 1" << dendl;
+  assert(format_version == 0);
 
   bool changed = false;
-  if (format_version == 0) {
-    dout(1) << __func__ << " upgrading from format 0 to 1" << dendl;
-    map<EntityName, EntityAuth>::iterator p;
-    for (p = mon->key_server.secrets_begin();
-	 p != mon->key_server.secrets_end();
-	 ++p) {
-      // grab mon caps, if any
-      string mon_caps;
-      if (p->second.caps.count("mon") == 0)
-	continue;
-      try {
-	bufferlist::iterator it = p->second.caps["mon"].begin();
-	decode(mon_caps, it);
-      }
-      catch (buffer::error) {
-	dout(10) << __func__ << " unable to parse mon cap for "
-		 << p->first << dendl;
-	continue;
-      }
+  map<EntityName, EntityAuth>::iterator p;
+  for (p = mon->key_server.secrets_begin();
+       p != mon->key_server.secrets_end();
+       ++p) {
+    // grab mon caps, if any
+    string mon_caps;
+    if (p->second.caps.count("mon") == 0)
+      continue;
+    try {
+      bufferlist::iterator it = p->second.caps["mon"].begin();
+      decode(mon_caps, it);
+    }
+    catch (buffer::error) {
+      dout(10) << __func__ << " unable to parse mon cap for "
+	       << p->first << dendl;
+      continue;
+    }
 
-      string n = p->first.to_str();
-      string new_caps;
+    string n = p->first.to_str();
+    string new_caps;
 
-      // set daemon profiles
-      if ((p->first.is_osd() || p->first.is_mds()) &&
-	  mon_caps == "allow rwx") {
-	new_caps = string("allow profile ") + string(p->first.get_type_name());
-      }
+    // set daemon profiles
+    if ((p->first.is_osd() || p->first.is_mds()) &&
+        mon_caps == "allow rwx") {
+      new_caps = string("allow profile ") + string(p->first.get_type_name());
+    }
 
-      // update bootstrap keys
-      if (n == "client.bootstrap-osd") {
-	new_caps = "allow profile bootstrap-osd";
-      }
-      if (n == "client.bootstrap-mds") {
-	new_caps = "allow profile bootstrap-mds";
-      }
+    // update bootstrap keys
+    if (n == "client.bootstrap-osd") {
+      new_caps = "allow profile bootstrap-osd";
+    }
+    if (n == "client.bootstrap-mds") {
+      new_caps = "allow profile bootstrap-mds";
+    }
 
-      if (new_caps.length() > 0) {
-	dout(5) << __func__ << " updating " << p->first << " mon cap from "
-		<< mon_caps << " to " << new_caps << dendl;
+    if (new_caps.length() > 0) {
+      dout(5) << __func__ << " updating " << p->first << " mon cap from "
+	      << mon_caps << " to " << new_caps << dendl;
 
+      bufferlist bl;
+      encode(new_caps, bl);
+
+      KeyServerData::Incremental auth_inc;
+      auth_inc.name = p->first;
+      auth_inc.auth = p->second;
+      auth_inc.auth.caps["mon"] = bl;
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      push_cephx_inc(auth_inc);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+bool AuthMonitor::_upgrade_format_to_luminous()
+{
+  dout(1) << __func__ << " upgrading from format 1 to 2" << dendl;
+  assert(format_version == 1);
+
+  bool changed = false;
+  map<EntityName, EntityAuth>::iterator p;
+  for (p = mon->key_server.secrets_begin();
+       p != mon->key_server.secrets_end();
+       ++p) {
+    string n = p->first.to_str();
+
+    string newcap;
+    if (n == "client.admin") {
+      // admin gets it all
+      newcap = "allow *";
+    } else if (n.find("osd.") == 0 ||
+	       n.find("mds.") == 0 ||
+	       n.find("mon.") == 0) {
+      // daemons follow their profile
+      string type = n.substr(0, 3);
+      newcap = "allow profile " + type;
+    } else if (p->second.caps.count("mon")) {
+      // if there are any mon caps, give them 'r' mgr caps
+      newcap = "allow r";
+    }
+
+    if (newcap.length() > 0) {
+      dout(5) << " giving " << n << " mgr '" << newcap << "'" << dendl;
+      bufferlist bl;
+      encode(newcap, bl);
+
+      KeyServerData::Incremental auth_inc;
+      auth_inc.name = p->first;
+      auth_inc.auth = p->second;
+      auth_inc.auth.caps["mgr"] = bl;
+      auth_inc.op = KeyServerData::AUTH_INC_ADD;
+      push_cephx_inc(auth_inc);
+      changed = true;
+    }
+
+    if (n.find("mgr.") == 0 &&
+	p->second.caps.count("mon")) {
+      // the kraken ceph-mgr@.service set the mon cap to 'allow *'.
+      auto blp = p->second.caps["mon"].begin();
+      string oldcaps;
+      decode(oldcaps, blp);
+      if (oldcaps == "allow *") {
+	dout(5) << " fixing " << n << " mon cap to 'allow profile mgr'"
+		<< dendl;
 	bufferlist bl;
-	encode(new_caps, bl);
-
+	encode("allow profile mgr", bl);
 	KeyServerData::Incremental auth_inc;
 	auth_inc.name = p->first;
 	auth_inc.auth = p->second;
@@ -1568,79 +1629,88 @@ void AuthMonitor::upgrade_format()
     }
   }
 
-  if (format_version == 1) {
-    dout(1) << __func__ << " upgrading from format 1 to 2" << dendl;
-    map<EntityName, EntityAuth>::iterator p;
-    for (p = mon->key_server.secrets_begin();
-	 p != mon->key_server.secrets_end();
-	 ++p) {
-      string n = p->first.to_str();
-
-      string newcap;
-      if (n == "client.admin") {
-	// admin gets it all
-	newcap = "allow *";
-      } else if (n.find("osd.") == 0 ||
-		 n.find("mds.") == 0 ||
-		 n.find("mon.") == 0) {
-	// daemons follow their profile
-	string type = n.substr(0, 3);
-	newcap = "allow profile " + type;
-      } else if (p->second.caps.count("mon")) {
-	// if there are any mon caps, give them 'r' mgr caps
-	newcap = "allow r";
-      }
-
-      if (newcap.length() > 0) {
-	dout(5) << " giving " << n << " mgr '" << newcap << "'" << dendl;
-	bufferlist bl;
-	encode(newcap, bl);
-
-	KeyServerData::Incremental auth_inc;
-	auth_inc.name = p->first;
-	auth_inc.auth = p->second;
-	auth_inc.auth.caps["mgr"] = bl;
-	auth_inc.op = KeyServerData::AUTH_INC_ADD;
-	push_cephx_inc(auth_inc);
-      }
-
-      if (n.find("mgr.") == 0 &&
-	  p->second.caps.count("mon")) {
-	// the kraken ceph-mgr@.service set the mon cap to 'allow *'.
-	auto blp = p->second.caps["mon"].begin();
-	string oldcaps;
-	decode(oldcaps, blp);
-	if (oldcaps == "allow *") {
-	  dout(5) << " fixing " << n << " mon cap to 'allow profile mgr'"
-		  << dendl;
-	  bufferlist bl;
-	  encode("allow profile mgr", bl);
-	  KeyServerData::Incremental auth_inc;
-	  auth_inc.name = p->first;
-	  auth_inc.auth = p->second;
-	  auth_inc.auth.caps["mon"] = bl;
-	  auth_inc.op = KeyServerData::AUTH_INC_ADD;
-	  push_cephx_inc(auth_inc);
-	}
-      }
-    }
-
-    // add bootstrap key if it does not already exist
-    // (might have already been get-or-create'd by
-    //  ceph-create-keys)
-    EntityName bootstrap_mgr_name;
-    int r = bootstrap_mgr_name.from_str("client.bootstrap-mgr");
-    assert(r);
-    if (!mon->key_server.contains(bootstrap_mgr_name)) {
-      KeyServerData::Incremental auth_inc;
-      auth_inc.name = bootstrap_mgr_name;
-      encode("allow profile bootstrap-mgr", auth_inc.auth.caps["mon"]);
-      auth_inc.op = KeyServerData::AUTH_INC_ADD;
-      // generate key
-      auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
-      push_cephx_inc(auth_inc);
-    }
+  // add bootstrap key if it does not already exist
+  // (might have already been get-or-create'd by
+  //  ceph-create-keys)
+  EntityName bootstrap_mgr_name;
+  int r = bootstrap_mgr_name.from_str("client.bootstrap-mgr");
+  assert(r);
+  if (!mon->key_server.contains(bootstrap_mgr_name)) {
+    KeyServerData::Incremental auth_inc;
+    auth_inc.name = bootstrap_mgr_name;
+    encode("allow profile bootstrap-mgr", auth_inc.auth.caps["mon"]);
+    auth_inc.op = KeyServerData::AUTH_INC_ADD;
+    // generate key
+    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    push_cephx_inc(auth_inc);
     changed = true;
+  }
+  return changed;
+}
+
+bool AuthMonitor::_upgrade_format_to_mimic()
+{
+  dout(1) << __func__ << " upgrading from format 2 to 3" << dendl;
+  assert(format_version == 2);
+
+  list<pair<EntityName,EntityAuth> > auth_lst;
+  _generate_bootstrap_keys(&auth_lst);
+
+  bool changed = false;
+  for (auto &p : auth_lst) {
+    if (mon->key_server.contains(p.first)) {
+      continue;
+    }
+    int err = add_entity(p.first, p.second);
+    assert(err == 0);
+    changed = true;
+  }
+
+  return changed;
+}
+
+void AuthMonitor::upgrade_format()
+{
+  constexpr unsigned int FORMAT_NONE = 0;
+  constexpr unsigned int FORMAT_DUMPLING = 1;
+  constexpr unsigned int FORMAT_LUMINOUS = 2;
+  constexpr unsigned int FORMAT_MIMIC = 3;
+
+  // when upgrading from the current format to a new format, ensure that
+  // the new format doesn't break the older format. I.e., if a given format N
+  // changes or adds something, ensure that when upgrading from N-1 to N+1, we
+  // still observe the changes for format N if those have not been superseded
+  // by N+1.
+
+  unsigned int current = FORMAT_MIMIC;
+  if (!mon->get_quorum_mon_features().contains_all(
+	ceph::features::mon::FEATURE_LUMINOUS)) {
+    // pre-luminous quorum
+    current = FORMAT_DUMPLING;
+  } else if (!mon->get_quorum_mon_features().contains_all(
+	ceph::features::mon::FEATURE_MIMIC)) {
+    // pre-mimic quorum
+    current = FORMAT_LUMINOUS;
+  }
+  if (format_version >= current) {
+    dout(20) << __func__ << " format " << format_version
+	     << " is current" << dendl;
+    return;
+  }
+
+  // perform a rolling upgrade of the new format, if necessary.
+  // i.e., if we are moving from format NONE to MIMIC, we will first upgrade
+  // to DUMPLING, then to LUMINOUS, and finally to MIMIC, in several different
+  // proposals.
+
+  bool changed = false;
+  if (format_version == FORMAT_NONE) {
+    changed = _upgrade_format_to_dumpling();
+
+  } else if (format_version == FORMAT_DUMPLING) {
+    changed = _upgrade_format_to_luminous();
+  } else if (format_version == FORMAT_LUMINOUS) {
+    changed = _upgrade_format_to_mimic();
   }
 
   if (changed) {
