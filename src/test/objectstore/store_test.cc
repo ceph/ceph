@@ -5576,7 +5576,7 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
 
-    g_conf->set_val("bluestore_csum_type", "none");
+    SetVal(g_conf, "bluestore_csum_type", "none");
     g_conf->apply_changes(NULL);
 
     bufferlist in;
@@ -7001,37 +7001,37 @@ int main(int argc, char **argv) {
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
-  g_ceph_context->_conf->set_val("osd_journal_size", "400");
-  g_ceph_context->_conf->set_val("filestore_index_retry_probability", "0.5");
-  g_ceph_context->_conf->set_val("filestore_op_thread_timeout", "1000");
-  g_ceph_context->_conf->set_val("filestore_op_thread_suicide_timeout", "10000");
-  //g_ceph_context->_conf->set_val("filestore_fiemap", "true");
-  g_ceph_context->_conf->set_val("bluestore_fsck_on_mkfs", "false");
-  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "false");
-  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "false");
-  g_ceph_context->_conf->set_val("bluestore_debug_misc", "true");
-  g_ceph_context->_conf->set_val("bluestore_debug_small_allocations", "4");
-  g_ceph_context->_conf->set_val("bluestore_debug_freelist", "true");
-  g_ceph_context->_conf->set_val("bluestore_clone_cow", "true");
-  g_ceph_context->_conf->set_val("bluestore_max_alloc_size", "196608");
+  g_ceph_context->_conf->set_val_or_die("osd_journal_size", "400");
+  g_ceph_context->_conf->set_val_or_die("filestore_index_retry_probability", "0.5");
+  g_ceph_context->_conf->set_val_or_die("filestore_op_thread_timeout", "1000");
+  g_ceph_context->_conf->set_val_or_die("filestore_op_thread_suicide_timeout", "10000");
+  //g_ceph_context->_conf->set_val_or_die("filestore_fiemap", "true");
+  g_ceph_context->_conf->set_val_or_die("bluestore_fsck_on_mkfs", "false");
+  g_ceph_context->_conf->set_val_or_die("bluestore_fsck_on_mount", "false");
+  g_ceph_context->_conf->set_val_or_die("bluestore_fsck_on_umount", "false");
+  g_ceph_context->_conf->set_val_or_die("bluestore_debug_misc", "true");
+  g_ceph_context->_conf->set_val_or_die("bluestore_debug_small_allocations", "4");
+  g_ceph_context->_conf->set_val_or_die("bluestore_debug_freelist", "true");
+  g_ceph_context->_conf->set_val_or_die("bluestore_clone_cow", "true");
+  g_ceph_context->_conf->set_val_or_die("bluestore_max_alloc_size", "196608");
 
   // set small cache sizes so we see trimming during Synthetic tests
-  g_ceph_context->_conf->set_val("bluestore_cache_size_hdd", "4000000");
-  g_ceph_context->_conf->set_val("bluestore_cache_size_ssd", "4000000");
+  g_ceph_context->_conf->set_val_or_die("bluestore_cache_size_hdd", "4000000");
+  g_ceph_context->_conf->set_val_or_die("bluestore_cache_size_ssd", "4000000");
 
   // very short *_max prealloc so that we fall back to async submits
-  g_ceph_context->_conf->set_val("bluestore_blobid_prealloc", "10");
-  g_ceph_context->_conf->set_val("bluestore_nid_prealloc", "10");
-  g_ceph_context->_conf->set_val("bluestore_debug_randomize_serial_transaction",
+  g_ceph_context->_conf->set_val_or_die("bluestore_blobid_prealloc", "10");
+  g_ceph_context->_conf->set_val_or_die("bluestore_nid_prealloc", "10");
+  g_ceph_context->_conf->set_val_or_die("bluestore_debug_randomize_serial_transaction",
 				 "10");
 
-  g_ceph_context->_conf->set_val("bdev_debug_aio", "true");
+  g_ceph_context->_conf->set_val_or_die("bdev_debug_aio", "true");
 
   // specify device size
-  g_ceph_context->_conf->set_val("bluestore_block_size",
+  g_ceph_context->_conf->set_val_or_die("bluestore_block_size",
     stringify(DEF_STORE_TEST_BLOCKDEV_SIZE));
 
-  g_ceph_context->_conf->set_val(
+  g_ceph_context->_conf->set_val_or_die(
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
   g_ceph_context->_conf->apply_changes(NULL);
 
