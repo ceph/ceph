@@ -5,8 +5,9 @@ import math
 import cherrypy
 import rbd
 
+from . import ApiController, AuthRequired, RESTController
 from .. import mgr
-from ..tools import ApiController, AuthRequired, RESTController, ViewCache
+from ..tools import ViewCache
 
 
 @ApiController('rbd')

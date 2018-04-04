@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from ..tools import ApiController, AuthRequired, RESTController, TaskManager
+from . import ApiController, AuthRequired, RESTController
+from ..tools import TaskManager
 
 
 @ApiController('task')

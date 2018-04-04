@@ -9,9 +9,10 @@ from functools import partial
 import cherrypy
 import rbd
 
+from . import ApiController, AuthRequired, BaseController
 from .. import logger, mgr
 from ..services.ceph_service import CephService
-from ..tools import ApiController, AuthRequired, BaseController, ViewCache
+from ..tools import ViewCache
 
 
 @ViewCache()

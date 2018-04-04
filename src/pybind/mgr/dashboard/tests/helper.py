@@ -8,8 +8,8 @@ import cherrypy
 from cherrypy.test import helper
 
 from ..controllers.auth import Auth
-from ..tools import json_error_page, SessionExpireAtBrowserCloseTool, \
-                    generate_controller_routes
+from ..controllers import json_error_page, generate_controller_routes
+from ..tools import SessionExpireAtBrowserCloseTool
 
 
 class ControllerTestCase(helper.CPWebCase):
