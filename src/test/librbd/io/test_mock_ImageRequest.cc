@@ -248,6 +248,8 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
   MockJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
 
+  expect_op_work_queue(mock_image_ctx);
+
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
   if (!ictx->skip_partial_discard) {
@@ -341,6 +343,8 @@ TEST_F(TestMockIoImageRequest, AioCompareAndWriteJournalAppendDisabled) {
   MockTestImageCtx mock_image_ctx(*ictx);
   MockJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
+
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
