@@ -109,14 +109,19 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
 }
 
 
-Device::Device(CephContext *cct, ibv_device* d): device(d), device_attr(new ibv_device_attr), active_port(nullptr)
+Device::Device(CephContext *cct, ibv_device* d, struct ibv_context *dc)
+  : device(d), device_attr(new ibv_device_attr), active_port(nullptr)
 {
   if (device == NULL) {
     lderr(cct) << __func__ << " device == NULL" << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
   name = ibv_get_device_name(device);
-  ctxt = ibv_open_device(device);
+  if (cct->_conf->ms_async_rdma_cm) {
+    ctxt = dc;
+  } else {
+    ctxt = ibv_open_device(device);
+  }
   if (ctxt == NULL) {
     lderr(cct) << __func__ << " open rdma device failed. " << cpp_strerror(errno) << dendl;
     ceph_abort();
@@ -152,7 +157,7 @@ Infiniband::QueuePair::QueuePair(
     CephContext *c, Infiniband& infiniband, ibv_qp_type type,
     int port, ibv_srq *srq,
     Infiniband::CompletionQueue* txcq, Infiniband::CompletionQueue* rxcq,
-    uint32_t tx_queue_len, uint32_t rx_queue_len, uint32_t q_key)
+    uint32_t tx_queue_len, uint32_t rx_queue_len, struct rdma_cm_id *cid, uint32_t q_key)
 : cct(c), infiniband(infiniband),
   type(type),
   ctxt(infiniband.device->ctxt),
@@ -160,6 +165,7 @@ Infiniband::QueuePair::QueuePair(
   pd(infiniband.pd->pd),
   srq(srq),
   qp(NULL),
+  cm_id(cid),
   txcq(txcq),
   rxcq(rxcq),
   initial_psn(0),
@@ -190,19 +196,31 @@ int Infiniband::QueuePair::init()
   qpia.qp_type = type;                 // RC, UC, UD, or XRC
   qpia.sq_sig_all = 0;                 // only generate CQEs on requested WQEs
 
-  qp = ibv_create_qp(pd, &qpia);
-  if (qp == NULL) {
-    lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
-    if (errno == ENOMEM) {
-      lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_queue_length, "
-				" ms_async_rdma_send_buffers or"
-				" ms_async_rdma_buffer_size" << dendl;
+  if (!cct->_conf->ms_async_rdma_cm) {
+    qp = ibv_create_qp(pd, &qpia);
+    if (qp == NULL) {
+      lderr(cct) << __func__ << " failed to create queue pair" << cpp_strerror(errno) << dendl;
+      if (errno == ENOMEM) {
+        lderr(cct) << __func__ << " try reducing ms_async_rdma_receive_queue_length, "
+                                  " ms_async_rdma_send_buffers or"
+                                  " ms_async_rdma_buffer_size" << dendl;
+      }
+      return -1;
     }
-    return -1;
+  } else {
+    assert(cm_id->verbs == pd->context);
+    if (rdma_create_qp(cm_id, pd, &qpia)) {
+      lderr(cct) << __func__ << " failed to create queue pair with rdmacm library"
+                 << cpp_strerror(errno) << dendl;
+      return -1;
+    }
+    qp = cm_id->qp;
   }
-
   ldout(cct, 20) << __func__ << " successfully create queue pair: "
                  << "qp=" << qp << dendl;
+
+  if (cct->_conf->ms_async_rdma_cm)
+    return 0;
 
   // move from RESET to INIT state
   ibv_qp_attr qpa;
@@ -973,10 +991,11 @@ int Infiniband::get_tx_buffers(std::vector<Chunk*> &c, size_t bytes)
  *      QueuePair on success or NULL if init fails
  * See QueuePair::QueuePair for parameter documentation.
  */
-Infiniband::QueuePair* Infiniband::create_queue_pair(CephContext *cct, CompletionQueue *tx, CompletionQueue* rx, ibv_qp_type type)
+Infiniband::QueuePair* Infiniband::create_queue_pair(CephContext *cct, CompletionQueue *tx,
+    CompletionQueue* rx, ibv_qp_type type, struct rdma_cm_id *cm_id)
 {
   Infiniband::QueuePair *qp = new QueuePair(
-      cct, *this, type, ib_physical_port, srq, tx, rx, tx_queue_len, rx_queue_len);
+      cct, *this, type, ib_physical_port, srq, tx, rx, tx_queue_len, rx_queue_len, cm_id);
   if (qp->init()) {
     delete qp;
     return NULL;
