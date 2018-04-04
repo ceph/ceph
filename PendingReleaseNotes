@@ -104,3 +104,6 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
   now reflects the source of each config option (e.g., default, config file,
   command line) as well as the final (active) value.
 
+* The default BlueStore cache size for OSDs backed by SSDs (bluestore_cache_size_ssd)
+  has been lowered from 3GB to 1GB. 3GB might be a too large value for systems
+  being upgraded from FileStore to BlueStore.

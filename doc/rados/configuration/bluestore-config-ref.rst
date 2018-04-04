@@ -104,7 +104,7 @@ certain point.
 :Description: The default amount of memory BlueStore will use for its cache when backed by an SSD.
 :Type: Unsigned Integer
 :Required: Yes
-:Default: ``3 * 1024 * 1024 * 1024`` (3 GB)
+:Default: ``1 * 1024 * 1024 * 1024`` (1 GB)
 
 ``bluestore_cache_meta_ratio``
 

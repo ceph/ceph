@@ -4007,7 +4007,7 @@ std::vector<Option> get_global_options() {
     .set_description("Default bluestore_cache_size for rotational media"),
 
     Option("bluestore_cache_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(3_G)
+    .set_default(1_G)
     .set_description("Default bluestore_cache_size for non-rotational (solid state) media"),
 
     Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
