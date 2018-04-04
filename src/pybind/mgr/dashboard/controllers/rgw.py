@@ -23,15 +23,6 @@ class RgwDaemon(RESTController):
         for hostname, server in CephService.get_service_map('rgw').items():
             for service in server['services']:
                 metadata = service['metadata']
-                status = service['status']
-                if 'json' in status:
-                    try:
-                        status = json.loads(status['json'])
-                    except ValueError:
-                        logger.warning("%s had invalid status json", service['id'])
-                        status = {}
-                else:
-                    logger.warning('%s has no key "json" in status', service['id'])
 
                 # extract per-daemon service data and health
                 daemon = {
