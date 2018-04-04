@@ -115,6 +115,9 @@ private:
   uint64_t max_global_id;
   uint64_t last_allocated_id;
 
+  bool _upgrade_format_to_dumpling();
+  bool _upgrade_format_to_luminous();
+  bool _upgrade_format_to_mimic();
   void upgrade_format() override;
 
   void export_keyring(KeyRing& keyring);

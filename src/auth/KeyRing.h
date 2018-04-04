@@ -71,6 +71,9 @@ public:
     }
     return true;
   }
+  size_t size() const {
+    return keys.size();
+  }
 
   // modifiers
   void add(const EntityName& name, EntityAuth &a) {
