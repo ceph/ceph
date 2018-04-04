@@ -26,23 +26,30 @@
 
 // For ::config_prefix
 #include "PyModuleRegistry.h"
+#include "PyModule.h"
 
 #include "ActivePyModules.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
-#define dout_prefix *_dout << "mgr " << __func__ << " "
+#define dout_prefix *_dout << "mgr " << __func__ << " "    
 
-
-ActivePyModules::ActivePyModules(PyModuleConfig const &config_,
+ActivePyModules::ActivePyModules(PyModuleConfig &module_config,
           DaemonStateIndex &ds, ClusterState &cs,
 	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
           Client &client_, Finisher &f)
-  : config_cache(config_), daemon_state(ds), cluster_state(cs),
+  : config_cache(module_config), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
     lock("ActivePyModules")
-{}
+{
+  for(auto &i: config_cache.config) {
+      auto last_slash = i.first.rfind('/');
+      const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
+      const std::string key = i.first.substr(last_slash + 1);
+      set_config(module_name, key, i.second);
+  }
+}
 
 ActivePyModules::~ActivePyModules() = default;
 
@@ -410,6 +417,29 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
   }
 }
 
+bool ActivePyModules::get_store(const std::string &module_name,
+    const std::string &key, std::string *val) const
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  const std::string global_key = PyModuleRegistry::config_prefix
+    + module_name + "/" + key;
+
+  dout(4) << __func__ << "key: " << global_key << dendl;
+
+
+  Mutex::Locker lock(config_cache.lock);
+
+  if (config_cache.config.count(global_key)) {
+    *val = config_cache.config.at(global_key);
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
@@ -422,8 +452,11 @@ bool ActivePyModules::get_config(const std::string &module_name,
 
   dout(4) << __func__ << "key: " << global_key << dendl;
 
-  if (config_cache.count(global_key)) {
-    *val = config_cache.at(global_key);
+  
+  Mutex::Locker lock(config_cache.lock);
+  
+  if (config_cache.config.count(global_key)) { 
+    *val = config_cache.config.at(global_key);
     return true;
   } else {
     return false;
@@ -443,29 +476,35 @@ PyObject *ActivePyModules::get_config_prefix(const std::string &module_name,
   dout(4) << __func__ << "prefix: " << global_prefix << dendl;
 
   PyFormatter f;
-  for (auto p = config_cache.lower_bound(global_prefix);
-       p != config_cache.end() && p->first.find(global_prefix) == 0;
+  
+  Mutex::Locker lock(config_cache.lock);
+  
+  for (auto p = config_cache.config.lower_bound(global_prefix);
+       p != config_cache.config.end() && p->first.find(global_prefix) == 0;
        ++p) {
     f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
   }
   return f.get();
 }
 
-void ActivePyModules::set_config(const std::string &module_name,
+void ActivePyModules::set_store(const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
   const std::string global_key = PyModuleRegistry::config_prefix
                                    + module_name + "/" + key;
-
+  
   Command set_cmd;
   {
     PyThreadState *tstate = PyEval_SaveThread();
     Mutex::Locker l(lock);
     PyEval_RestoreThread(tstate);
+
+    Mutex::Locker lock(config_cache.lock);
+    
     if (val) {
-      config_cache[global_key] = *val;
+      config_cache.config[global_key] = *val;
     } else {
-      config_cache.erase(global_key);
+      config_cache.config.erase(global_key);
     }
 
     std::ostringstream cmd_json;
@@ -490,6 +529,50 @@ void ActivePyModules::set_config(const std::string &module_name,
     // permission to set config keys
     // FIXME: should this somehow raise an exception back into Python land?
     dout(0) << "`config-key set " << global_key << " " << val << "` failed: "
+      << cpp_strerror(set_cmd.r) << dendl;
+    dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+  }
+}
+
+void ActivePyModules::set_config(const std::string &module_name,
+    const std::string &key, const boost::optional<std::string>& val)
+{
+  const std::string global_key = PyModuleRegistry::config_prefix
+                                   + module_name + "/" + key;
+
+  Command set_cmd;
+  {
+    PyThreadState *tstate = PyEval_SaveThread();
+    Mutex::Locker l(lock);
+    PyEval_RestoreThread(tstate);
+
+    Mutex::Locker lock(config_cache.lock);
+    
+    if (val) {
+      config_cache.config[global_key] = *val;
+    } else {
+      config_cache.config.erase(global_key);
+    }
+
+    std::ostringstream cmd_json;
+    JSONFormatter jf;
+    jf.open_object_section("cmd");
+    if (val) {
+      jf.dump_string("prefix", "config set mgr");
+      jf.dump_string("key", global_key);
+      jf.dump_string("val", *val);
+    } else {
+      jf.dump_string("prefix", "config rm");
+      jf.dump_string("key", global_key);
+    }
+    jf.close_section();
+    jf.flush(cmd_json);
+    set_cmd.run(&monc, cmd_json.str());
+  }
+  set_cmd.wait();
+
+  if (set_cmd.r != 0) {
+    dout(0) << "`config set mgr" << global_key << " " << val << "` failed: "
       << cpp_strerror(set_cmd.r) << dendl;
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
   }

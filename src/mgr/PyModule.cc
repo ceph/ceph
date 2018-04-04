@@ -104,6 +104,13 @@ namespace {
 #endif
 }
 
+PyModuleConfig::PyModuleConfig() = default;  
+
+PyModuleConfig::PyModuleConfig(PyModuleConfig &mconfig)
+  : config(mconfig.config)
+{}
+
+PyModuleConfig::~PyModuleConfig() = default;
 
 std::string PyModule::get_site_packages()
 {

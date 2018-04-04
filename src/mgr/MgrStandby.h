@@ -28,6 +28,7 @@
 
 class MMgrMap;
 class Mgr;
+class PyModuleConfig;
 
 class MgrStandby : public Dispatcher,
 		   public md_config_obs_t {

@@ -64,8 +64,7 @@ MonClient::MonClient(CephContext *cct_) :
     cct_->_conf->get_val<double>("mon_client_hunt_interval_min_multiple")),
   last_mon_command_tid(0),
   version_req_id(0)
-{
-}
+{}
 
 MonClient::~MonClient()
 {
@@ -354,8 +353,8 @@ void MonClient::handle_monmap(MMonMap *m)
   decode(monmap, p);
 
   ldout(cct, 10) << " got monmap " << monmap.epoch
-		 << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
-		 << dendl;
+ 		 << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
+ 		 << dendl;
   ldout(cct, 10) << "dump:\n";
   monmap.print(*_dout);
   *_dout << dendl;
@@ -375,7 +374,7 @@ void MonClient::handle_monmap(MMonMap *m)
 void MonClient::handle_config(MConfig *m)
 {
   ldout(cct,10) << __func__ << " " << *m << dendl;
-  cct->_conf->set_mon_vals(cct, m->config);
+  cct->_conf->set_mon_vals(cct, m->config, config_cb);
   m->put();
   got_config = true;
   map_cond.Signal();
@@ -484,7 +483,6 @@ int MonClient::authenticate(double timeout)
     ldout(cct, 5) << "already authenticated" << dendl;
     return 0;
   }
-
   _sub_want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
   _sub_want("config", 0, 0);
   if (!_opened())
@@ -1328,4 +1326,13 @@ int MonConnection::authenticate(MAuthReply *m)
     con->send_message(ma);
   }
   return ret;
+}
+
+void MonClient::register_config_callback(md_config_t::config_callback fn) {
+  assert(!config_cb);
+  config_cb = fn;
+}
+
+md_config_t::config_callback MonClient::get_config_callback() {
+  return config_cb;
 }
