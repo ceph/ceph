@@ -383,7 +383,7 @@ function TEST_scrub_snaps() {
     },
     {
       "errors": [
-        "snapset_mismatch"
+        "snapset_error"
       ],
       "snap": "head",
       "locator": "",
