@@ -16,6 +16,10 @@
 #
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
+# Test development and debugging
+# Set to "yes" in order to ignore diff errors and save results to update test
+getjson="no"
+
 function run() {
     local dir=$1
     shift
@@ -406,7 +410,11 @@ function TEST_scrub_snaps() {
 EOF
 
     jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
-    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || return 1
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    if test $getjson = "yes"
+    then
+        jq '.' $dir/json > save1.json
+    fi
 
     if which jsonschema > /dev/null;
     then
