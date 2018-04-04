@@ -26,9 +26,10 @@ if 'COVERAGE_ENABLED' in os.environ:
 
 # pylint: disable=wrong-import-position
 from . import logger, mgr
+from .controllers import generate_routes, json_error_page
 from .controllers.auth import Auth
-from .tools import generate_routes, json_error_page, SessionExpireAtBrowserCloseTool, \
-                   NotificationQueue, RequestLoggingTool, TaskManager
+from .tools import SessionExpireAtBrowserCloseTool, NotificationQueue, \
+                   RequestLoggingTool, TaskManager
 from .settings import options_command_list, handle_option_command
 
 

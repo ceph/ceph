@@ -6,9 +6,10 @@ import json
 
 import cherrypy
 
+from . import ApiController, AuthRequired, BaseController
 from .. import mgr
 from ..services.ceph_service import CephService
-from ..tools import ApiController, AuthRequired, BaseController, NotificationQueue
+from ..tools import NotificationQueue
 
 
 LOG_BUFFER_SIZE = 30

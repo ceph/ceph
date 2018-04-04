@@ -5,8 +5,8 @@ import json
 
 from mgr_module import CommandResult
 
+from . import ApiController, AuthRequired, RESTController
 from .. import logger, mgr
-from ..tools import ApiController, AuthRequired, RESTController
 
 
 @ApiController('osd')

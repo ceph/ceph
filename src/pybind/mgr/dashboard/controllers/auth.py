@@ -6,8 +6,9 @@ import time
 import bcrypt
 import cherrypy
 
-from ..tools import ApiController, RESTController, Session
+from . import ApiController, RESTController
 from .. import logger, mgr
+from ..tools import Session
 
 
 @ApiController('auth')
