@@ -265,6 +265,7 @@ struct inconsistent_snapset_t {
   // Extra clones
   std::vector<snap_t> clones;
   std::vector<snap_t> missing;
+  ceph::bufferlist ss_bl;
 
   bool ss_attr_missing() const {     // Compatibility
     return errors & SNAPSET_MISSING;
