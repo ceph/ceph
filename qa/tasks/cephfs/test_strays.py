@@ -833,8 +833,6 @@ class TestStrays(CephFSTestCase):
         That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
         """
 
-        self.fs.set_allow_dirfrags(True)
-
         LOW_LIMIT = 50
         for mds in self.fs.get_daemon_names():
             self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(LOW_LIMIT)], mds)
@@ -962,7 +960,6 @@ class TestStrays(CephFSTestCase):
 
         max_purge_files = 2
 
-        self.fs.set_allow_dirfrags(True)
         self.set_conf('mds', 'mds_max_purge_files', "%d" % max_purge_files)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()

@@ -468,7 +468,6 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
   dout(10) << __func__ << " enqueuing " << *dir
                        << " (fast=" << fast << ")" << dendl;
 
-  assert(mds->mdsmap->allows_dirfrags());
   const dirfrag_t frag = dir->dirfrag();
 
   auto callback = [this, frag](int r) {
@@ -1124,10 +1123,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
       dir->is_auth()) {
 
     // split
-    if (g_conf->mds_bal_split_size > 0 &&
-	mds->mdsmap->allows_dirfrags() &&
-	(dir->should_split() || hot))
-    {
+    if (g_conf->mds_bal_split_size > 0 && (dir->should_split() || hot)) {
       if (split_pending.count(dir->dirfrag()) == 0) {
         queue_split(dir, false);
       } else {

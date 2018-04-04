@@ -635,12 +635,10 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
     frag_t fg = dir->get_frag();
-    if (mdsmap->allows_dirfrags()) {
-      if ((fg == frag_t() || (rand() % (1 << fg.bits()) == 0))) {
-        mdcache->split_dir(dir, 1);
-      } else {
-        balancer->queue_merge(dir);
-      }
+    if ((fg == frag_t() || (rand() % (1 << fg.bits()) == 0))) {
+      mdcache->split_dir(dir, 1);
+    } else {
+      balancer->queue_merge(dir);
     }
   }
 
@@ -2470,11 +2468,6 @@ bool MDSRank::command_dirfrag_split(
     std::ostream &ss)
 {
   Mutex::Locker l(mds_lock);
-  if (!mdsmap->allows_dirfrags()) {
-    ss << "dirfrags are disallowed by the mds map!";
-    return false;
-  }
-
   int64_t by = 0;
   if (!cmd_getval(g_ceph_context, cmdmap, "bits", by)) {
     ss << "missing bits argument";

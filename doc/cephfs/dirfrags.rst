@@ -25,10 +25,6 @@ fragments may be *merged* to reduce the number of fragments in the directory.
 Splitting and merging
 =====================
 
-An MDS will only consider doing splits if the allow_dirfrags setting is true in
-the file system map (set on the mons).  This setting is true by default since
-the *Luminous* release (12.2.X).
-
 When an MDS identifies a directory fragment to be split, it does not
 do the split immediately.  Because splitting interrupts metadata IO,
 a short delay is used to allow short bursts of client IO to complete

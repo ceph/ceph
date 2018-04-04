@@ -440,9 +440,6 @@ class Filesystem(MDSCluster):
     def set_max_mds(self, max_mds):
         self.set_var("max_mds", "%d" % max_mds)
 
-    def set_allow_dirfrags(self, yes):
-        self.set_var("allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
-
     def set_allow_new_snaps(self, yes):
         self.set_var("allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
 

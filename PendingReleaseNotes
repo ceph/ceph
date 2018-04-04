@@ -37,6 +37,10 @@
     default. ceph fs set allow_multimds is now deprecated and will be
     removed in a future release.
 
+  * As the directory fragmentation feature is now standard, it is now
+    enabled by default. ceph fs set allow_dirfrags is now deprecated and
+    will be removed in a future release.
+
   * New CephFS file system attributes session_timeout and session_autoclose
     are configurable via `ceph fs set`. The MDS config options
     mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now

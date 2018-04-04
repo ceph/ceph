@@ -503,7 +503,7 @@ void FSMap::decode(bufferlist::iterator& p)
 	decode(legacy_mds_map.explicitly_allowed_features, p);
       }
     } else {
-      legacy_mds_map.ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
+      legacy_mds_map.ever_allowed_features = 0;
       legacy_mds_map.explicitly_allowed_features = 0;
     }
     if (ev >= 7)
