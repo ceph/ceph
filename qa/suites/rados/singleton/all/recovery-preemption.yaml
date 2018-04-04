@@ -25,6 +25,7 @@ tasks:
       - \(OSD_
       - \(OBJECT_
       - \(PG_
+      - \(SLOW_OPS\)
       - overall HEALTH
 - exec:
     osd.0:
