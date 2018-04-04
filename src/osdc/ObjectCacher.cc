@@ -561,7 +561,8 @@ void ObjectCacher::Object::truncate(loff_t s)
   }
 }
 
-void ObjectCacher::Object::discard(loff_t off, loff_t len)
+void ObjectCacher::Object::discard(loff_t off, loff_t len,
+                                   C_GatherBuilder* commit_gather)
 {
   assert(oc->lock.is_locked());
   ldout(oc->cct, 10) << "discard " << *this << " " << off << "~" << len
@@ -596,8 +597,23 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len)
 
     ++p;
     ldout(oc->cct, 10) << "discard " << *this << " bh " << *bh << dendl;
-    assert(bh->waitfor_read.empty());
     replace_journal_tid(bh, 0);
+
+    if (bh->is_tx() && commit_gather != nullptr) {
+      // wait for the writeback to commit
+      waitfor_commit[bh->last_write_tid].emplace_back(commit_gather->new_sub());
+    } else if (bh->is_rx()) {
+      // cannot remove bh with in-flight read, but we can ensure the
+      // read won't overwrite the discard
+      bh->last_read_tid = ++oc->last_read_tid;
+      bh->bl.clear();
+      bh->set_nocache(true);
+      oc->mark_zero(bh);
+      return;
+    } else {
+      assert(bh->waitfor_read.empty());
+    }
+
     oc->bh_remove(this, bh);
     delete bh;
   }
@@ -2450,32 +2466,74 @@ void ObjectCacher::clear_nonexistence(ObjectSet *oset)
 void ObjectCacher::discard_set(ObjectSet *oset, const vector<ObjectExtent>& exls)
 {
   assert(lock.is_locked());
-  if (oset->objects.empty()) {
-    ldout(cct, 10) << "discard_set on " << oset << " dne" << dendl;
+  bool was_dirty = oset->dirty_or_tx > 0;
+
+  _discard(oset, exls, nullptr);
+  _discard_finish(oset, was_dirty, nullptr);
+}
+
+/**
+ * discard object extents from an ObjectSet by removing the objects in
+ * exls from the in-memory oset. If the bh is in TX state, the discard
+ * will wait for the write to commit prior to invoking on_finish.
+ */
+void ObjectCacher::discard_writeback(ObjectSet *oset,
+                                     const vector<ObjectExtent>& exls,
+                                     Context* on_finish)
+{
+  assert(lock.is_locked());
+  bool was_dirty = oset->dirty_or_tx > 0;
+
+  C_GatherBuilder gather(cct);
+  _discard(oset, exls, &gather);
+
+  if (gather.has_subs()) {
+    gather.set_finisher(new FunctionContext(
+      [this, oset, was_dirty, on_finish](int) {
+        _discard_finish(oset, was_dirty, on_finish);
+      }));
+    gather.activate();
     return;
   }
 
-  ldout(cct, 10) << "discard_set " << oset << dendl;
+  _discard_finish(oset, was_dirty, on_finish);
+}
 
-  bool were_dirty = oset->dirty_or_tx > 0;
+void ObjectCacher::_discard(ObjectSet *oset, const vector<ObjectExtent>& exls,
+                            C_GatherBuilder* gather)
+{
+  if (oset->objects.empty()) {
+    ldout(cct, 10) << __func__ << " on " << oset << " dne" << dendl;
+    return;
+  }
 
-  for (vector<ObjectExtent>::const_iterator p = exls.begin();
-       p != exls.end();
-       ++p) {
-    ldout(cct, 10) << "discard_set " << oset << " ex " << *p << dendl;
-    const ObjectExtent &ex = *p;
+  ldout(cct, 10) << __func__ << " " << oset << dendl;
+
+  for (auto& ex : exls) {
+    ldout(cct, 10) << __func__ << " " << oset << " ex " << ex << dendl;
     sobject_t soid(ex.oid, CEPH_NOSNAP);
     if (objects[oset->poolid].count(soid) == 0)
       continue;
     Object *ob = objects[oset->poolid][soid];
 
-    ob->discard(ex.offset, ex.length);
+    ob->discard(ex.offset, ex.length, gather);
   }
+}
+
+void ObjectCacher::_discard_finish(ObjectSet *oset, bool was_dirty,
+                                   Context* on_finish)
+{
+  assert(lock.is_locked());
 
   // did we truncate off dirty data?
-  if (flush_set_callback &&
-      were_dirty && oset->dirty_or_tx == 0)
+  if (flush_set_callback && was_dirty && oset->dirty_or_tx == 0) {
     flush_set_callback(flush_set_callback_arg, oset);
+  }
+
+  // notify that in-flight writeback has completed
+  if (on_finish != nullptr) {
+    on_finish->complete(0);
+  }
 }
 
 void ObjectCacher::verify_stats() const
