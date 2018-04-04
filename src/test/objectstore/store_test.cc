@@ -155,10 +155,6 @@ public:
     SetVal(g_conf, "bluestore_min_alloc_size", stringify(min_alloc_size).c_str());
     DeferredSetup();
   }
-    
-  void TearDown() override {
-    StoreTestDeferredSetup::TearDown();
-  }
 
 private:
   // bluestore matrix testing
@@ -1936,8 +1932,6 @@ TEST_P(StoreTest, AppendDeferredVsTailCache) {
     ASSERT_EQ(r, 0);
   }
   unsigned min_alloc = g_conf->bluestore_min_alloc_size;
-  SetVal(g_conf, "bluestore_inject_deferred_apply_delay", "1.0");
-  g_ceph_context->_conf->apply_changes(NULL);
   unsigned size = min_alloc / 3;
   bufferptr bpa(size);
   memset(bpa.c_str(), 1, bpa.length());
@@ -6388,7 +6382,7 @@ TEST_P(StoreTestSpecificAUSize, SmallWriteOnShardedExtents) {
   StartDeferred(block_size);
 
   SetVal(g_conf, "bluestore_csum_type", "xxhash64");
-  SetVal(g_conf, "bluestore_max_target_blob", "524288"); // for sure
+  SetVal(g_conf, "bluestore_max_blob_size", "524288"); // for sure
 
   g_conf->apply_changes(NULL);
 
@@ -7000,6 +6994,9 @@ int main(int argc, char **argv) {
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
+
+  // make sure we can adjust any config settings
+  g_ceph_context->_conf->_clear_safe_to_start_threads();
 
   g_ceph_context->_conf->set_val_or_die("osd_journal_size", "400");
   g_ceph_context->_conf->set_val_or_die("filestore_index_retry_probability", "0.5");
