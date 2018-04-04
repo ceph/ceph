@@ -44,7 +44,7 @@
                 "snapset_corrupted",
                 "info_missing",
                 "info_corrupted",
-                "snapset_mismatch",
+                "snapset_error",
                 "headless",
                 "size_mismatch",
                 "extra_clones",

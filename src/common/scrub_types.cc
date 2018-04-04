@@ -217,9 +217,9 @@ void inconsistent_snapset_wrapper::set_clone(snapid_t snap)
   clones.push_back(snap);
 }
 
-void inconsistent_snapset_wrapper::set_snapset_mismatch()
+void inconsistent_snapset_wrapper::set_snapset_error()
 {
-  errors |= inc_snapset_t::SNAP_MISMATCH;
+  errors |= inc_snapset_t::SNAP_ERROR;
 }
 
 void inconsistent_snapset_wrapper::set_size_mismatch()

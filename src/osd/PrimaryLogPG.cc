@@ -14551,7 +14551,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	    osd->clog->error() << mode << " " << info.pgid << " " << soid
 			       << " snaps.seq not set";
 	    ++scrubber.shallow_errors;
-	    head_error.set_snapset_mismatch();
+	    head_error.set_snapset_error();
           }
 	}
       }
