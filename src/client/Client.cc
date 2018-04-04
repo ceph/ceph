@@ -11097,6 +11097,8 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
       !posix_acl_xattr)
     return -EOPNOTSUPP;
 
+  bool check_realm = false;
+
   if (posix_acl_xattr) {
     if (!strcmp(name, ACL_EA_ACCESS)) {
       mode_t new_mode = in->mode;
@@ -11133,11 +11135,23 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
     }
   } else {
     const VXattr *vxattr = _match_vxattr(in, name);
-    if (vxattr && vxattr->readonly)
-      return -EOPNOTSUPP;
+    if (vxattr) {
+      if (vxattr->readonly)
+	return -EOPNOTSUPP;
+      if (vxattr->name.compare(0, 10, "ceph.quota") == 0 && value)
+	check_realm = true;
+    }
   }
 
-  return _do_setxattr(in, name, value, size, flags, perms);
+  int ret = _do_setxattr(in, name, value, size, flags, perms);
+  if (ret >= 0 && check_realm) {
+    // check if snaprealm was created for quota inode
+    if (in->quota.is_enable() &&
+	!(in->snaprealm && in->snaprealm->ino == in->ino))
+      ret = -EOPNOTSUPP;
+  }
+
+  return ret;
 }
 
 int Client::_setxattr(InodeRef &in, const char *name, const void *value,
@@ -11308,7 +11322,8 @@ int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
 
 bool Client::_vxattrcb_quota_exists(Inode *in)
 {
-  return in->quota.is_enable();
+  return in->quota.is_enable() &&
+	 in->snaprealm && in->snaprealm->ino == in->ino;
 }
 size_t Client::_vxattrcb_quota(Inode *in, char *val, size_t size)
 {
