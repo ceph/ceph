@@ -1859,6 +1859,8 @@ protected:
 public:
   PGRef lookup_lock_pg(spg_t pgid);
 
+  std::set<int64_t> get_mapped_pools();
+
 protected:
   PG* _make_pg(OSDMapRef createmap, spg_t pgid);
 
