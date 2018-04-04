@@ -350,6 +350,7 @@ class Infiniband {
     MemPoolContext rxbuf_pool_ctx;
     mem_pool     rxbuf_pool;
 
+
     void* huge_pages_malloc(size_t size);
     void  huge_pages_free(void *ptr);
   };
@@ -371,6 +372,7 @@ class Infiniband {
   bool initialized = false;
   const std::string &device_name;
   uint8_t port_num;
+  bool support_srq = false;
 
  public:
   explicit Infiniband(CephContext *c);
@@ -504,7 +506,7 @@ class Infiniband {
       ibv_qp_type type, struct rdma_cm_id *cm_id);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   // post rx buffers to srq, return number of buffers actually posted
-  int  post_chunks_to_srq(int num);
+  int post_chunks_to_rq(int num, ibv_qp *qp=NULL);
   void post_chunk_to_pool(Chunk* chunk) {
     get_memory_manager()->release_rx_buffer(chunk);
   }
@@ -523,6 +525,7 @@ class Infiniband {
   Chunk *get_tx_chunk_by_buffer(const char *c) { return memory_manager->get_tx_chunk_by_buffer(c); }
   static const char* wc_status_to_string(int status);
   static const char* qp_state_string(int status);
+  uint32_t get_rx_queue_len() const { return rx_queue_len; }
 };
 
 #endif

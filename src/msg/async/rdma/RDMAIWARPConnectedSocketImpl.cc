@@ -19,14 +19,14 @@ RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, Inf
     cm_channel = info->cm_channel;
     status = RDMA_ID_CREATED;
     remote_qpn = info->qp_num;
-    worker->center.submit_to(worker->center.get_id(), [this]() {
-      worker->center.create_file_event(cm_channel->fd, EVENT_READABLE, cm_con_handler);
-      status = CHANNEL_FD_CREATED;
-    }, false);
     if (alloc_resource()) {
       close_notify();
       return;
     }
+    worker->center.submit_to(worker->center.get_id(), [this]() {
+      worker->center.create_file_event(cm_channel->fd, EVENT_READABLE, cm_con_handler);
+      status = CHANNEL_FD_CREATED;
+    }, false);
     status = RESOURCE_ALLOCATED;
     local_qpn = qp->get_local_qp_number();
     my_msg.qpn = local_qpn;
@@ -62,8 +62,9 @@ int RDMAIWARPConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, co
 void RDMAIWARPConnectedSocketImpl::close() {
   error = ECONNRESET;
   active = false;
-  if (status >= CONNECTED)
+  if (status >= CONNECTED) {
     rdma_disconnect(cm_id);
+  }
   close_notify();
 }
 
@@ -109,6 +110,7 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
       break;
 
     case RDMA_CM_EVENT_ESTABLISHED:
+      ldout(cct, 20) << __func__ << " qp_num=" << cm_id->qp->qp_num << dendl;
       status = CONNECTED;
       if (!is_server) {
         remote_qpn = event->param.conn.qp_num;
@@ -159,6 +161,8 @@ int RDMAIWARPConnectedSocketImpl::alloc_resource() {
   if (!qp) {
     return -1;
   }
+  if (!cct->_conf->ms_async_rdma_support_srq)
+    dispatcher->post_chunks_to_rq(infiniband->get_rx_queue_len(), qp->get_qp());
   dispatcher->register_qp(qp, this);
   dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
   dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);

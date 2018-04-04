@@ -189,7 +189,12 @@ int Infiniband::QueuePair::init()
   memset(&qpia, 0, sizeof(qpia));
   qpia.send_cq = txcq->get_cq();
   qpia.recv_cq = rxcq->get_cq();
-  qpia.srq = srq;                      // use the same shared receive queue
+  if (srq) {
+    qpia.srq = srq;                      // use the same shared receive queue
+  } else {
+    qpia.cap.max_recv_wr = max_recv_wr;
+    qpia.cap.max_recv_sge = 1;
+  }
   qpia.cap.max_send_wr  = max_send_wr; // max outstanding send requests
   qpia.cap.max_send_sge = 1;           // max send scatter-gather elements
   qpia.cap.max_inline_data = MAX_INLINE_DATA;          // max bytes of immediate data on send q
@@ -908,7 +913,11 @@ void Infiniband::init()
   pd = new ProtectionDomain(cct, device);
   assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
 
-  rx_queue_len = device->device_attr->max_srq_wr;
+  support_srq = cct->_conf->ms_async_rdma_support_srq;
+  if (support_srq)
+    rx_queue_len = device->device_attr->max_srq_wr;
+  else
+    rx_queue_len = device->device_attr->max_qp_wr;
   if (rx_queue_len > cct->_conf->ms_async_rdma_receive_queue_len) {
     rx_queue_len = cct->_conf->ms_async_rdma_receive_queue_len;
     ldout(cct, 1) << __func__ << " receive queue length is " << rx_queue_len << " receive buffers" << dendl;
@@ -941,17 +950,18 @@ void Infiniband::init()
   memory_manager = new MemoryManager(cct, device, pd);
   memory_manager->create_tx_pool(cct->_conf->ms_async_rdma_buffer_size, tx_queue_len);
 
-  srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
-
-  post_chunks_to_srq(rx_queue_len); //add to srq
+  if (support_srq) {
+    srq = create_shared_receive_queue(rx_queue_len, MAX_SHARED_RX_SGE_COUNT);
+    post_chunks_to_rq(rx_queue_len, NULL); //add to srq
+  }
 }
 
 Infiniband::~Infiniband()
 {
   if (!initialized)
     return;
-
-  ibv_destroy_srq(srq);
+  if (support_srq)
+    ibv_destroy_srq(srq);
   delete memory_manager;
   delete pd;
 }
@@ -1003,7 +1013,7 @@ Infiniband::QueuePair* Infiniband::create_queue_pair(CephContext *cct, Completio
   return qp;
 }
 
-int Infiniband::post_chunks_to_srq(int num)
+int Infiniband::post_chunks_to_rq(int num, ibv_qp *qp)
 {
   int ret, i = 0;
   ibv_sge isge[num];
@@ -1038,8 +1048,14 @@ int Infiniband::post_chunks_to_srq(int num)
     i++;
   }
   ibv_recv_wr *badworkrequest;
-  ret = ibv_post_srq_recv(srq, &rx_work_request[0], &badworkrequest);
-  assert(ret == 0);
+  if (support_srq) {
+    ret = ibv_post_srq_recv(srq, &rx_work_request[0], &badworkrequest);
+    assert(ret == 0);
+  } else {
+    assert(qp);
+    ret = ibv_post_recv(qp, &rx_work_request[0], &badworkrequest);
+    assert(ret == 0);
+  }
   return i;
 }
 
