@@ -1713,11 +1713,11 @@ struct object_stat_sum_t {
     FLOOR(num_rd_kb);
     FLOOR(num_wr);
     FLOOR(num_wr_kb);
-    FLOOR(num_scrub_errors);
     FLOOR(num_large_omap_objects);
     FLOOR(num_objects_manifest);
     FLOOR(num_shallow_scrub_errors);
     FLOOR(num_deep_scrub_errors);
+    num_scrub_errors = num_shallow_scrub_errors + num_deep_scrub_errors;
     FLOOR(num_objects_recovered);
     FLOOR(num_bytes_recovered);
     FLOOR(num_keys_recovered);
@@ -1769,11 +1769,14 @@ struct object_stat_sum_t {
     SPLIT(num_rd_kb);
     SPLIT(num_wr);
     SPLIT(num_wr_kb);
-    SPLIT(num_scrub_errors);
     SPLIT(num_large_omap_objects);
     SPLIT(num_objects_manifest);
-    SPLIT(num_shallow_scrub_errors);
-    SPLIT(num_deep_scrub_errors);
+    SPLIT_PRESERVE_NONZERO(num_shallow_scrub_errors);
+    SPLIT_PRESERVE_NONZERO(num_deep_scrub_errors);
+    for (unsigned i = 0; i < out.size(); ++i) {
+      out[i].num_scrub_errors = out[i].num_shallow_scrub_errors +
+				out[i].num_deep_scrub_errors;
+    }
     SPLIT(num_objects_recovered);
     SPLIT(num_bytes_recovered);
     SPLIT(num_keys_recovered);
