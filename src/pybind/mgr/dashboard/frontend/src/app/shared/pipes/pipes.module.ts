@@ -1,6 +1,7 @@
-import { CommonModule } from '@angular/common';
+import { CommonModule, DatePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 
+import { CdDatePipe } from './cd-date.pipe';
 import { CephShortVersionPipe } from './ceph-short-version.pipe';
 import { DimlessBinaryPipe } from './dimless-binary.pipe';
 import { DimlessPipe } from './dimless.pipe';
@@ -18,7 +19,8 @@ import { RelativeDatePipe } from './relative-date.pipe';
     CephShortVersionPipe,
     RelativeDatePipe,
     ListPipe,
-    FilterPipe
+    FilterPipe,
+    CdDatePipe
   ],
   exports: [
     DimlessBinaryPipe,
@@ -27,14 +29,17 @@ import { RelativeDatePipe } from './relative-date.pipe';
     CephShortVersionPipe,
     RelativeDatePipe,
     ListPipe,
-    FilterPipe
+    FilterPipe,
+    CdDatePipe
   ],
   providers: [
+    DatePipe,
     CephShortVersionPipe,
     DimlessBinaryPipe,
     DimlessPipe,
     RelativeDatePipe,
-    ListPipe
+    ListPipe,
+    CdDatePipe
   ]
 })
 export class PipesModule {}
