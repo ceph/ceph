@@ -639,7 +639,7 @@ def main():
         return 0
     elif sockpath:
         try:
-            print(admin_socket(sockpath, childargs, format))
+            raw_stdout.write(admin_socket(sockpath, childargs, format))
         except Exception as e:
             print('admin_socket: {0}'.format(e))
             print('admin_socket: {0}'.format(e), file=sys.stderr)
