@@ -289,6 +289,31 @@ function TEST_scrub_snaps() {
       "name": "obj5"
     },
     {
+      "name": "obj10",
+      "nspace": "",
+      "locator": "",
+      "snap": "head",
+      "snapset": {
+        "snap_context": {
+          "seq": 1,
+          "snaps": [
+            1
+          ]
+        },
+        "clones": [
+          {
+            "snap": 1,
+            "size": 1032,
+            "overlap": "????",
+            "snaps": [
+              1
+            ]
+          }
+        ]
+      },
+      "errors": []
+    },
+    {
       "extra clones": [
         1
       ],
@@ -298,7 +323,41 @@ function TEST_scrub_snaps() {
       "snap": "head",
       "locator": "",
       "nspace": "",
-      "name": "obj11"
+      "name": "obj11",
+      "snapset": {
+        "snap_context": {
+          "seq": 1,
+          "snaps": [
+            1
+          ]
+        },
+        "clones": []
+      }
+    },
+    {
+      "name": "obj14",
+      "nspace": "",
+      "locator": "",
+      "snap": "head",
+      "snapset": {
+        "snap_context": {
+          "seq": 1,
+          "snaps": [
+            1
+          ]
+        },
+        "clones": [
+          {
+            "snap": 1,
+            "size": 1033,
+            "overlap": "[]",
+            "snaps": [
+              1
+            ]
+          }
+        ]
+      },
+      "errors": []
     },
     {
       "errors": [
@@ -330,7 +389,36 @@ function TEST_scrub_snaps() {
       "snap": "head",
       "locator": "",
       "nspace": "",
-      "name": "obj3"
+      "name": "obj3",
+      "snapset": {
+        "snap_context": {
+          "seq": 3,
+          "snaps": [
+            3,
+            2,
+            1
+          ]
+        },
+        "clones": [
+          {
+            "snap": 1,
+            "size": 1032,
+            "overlap": "[]",
+            "snaps": [
+              1
+            ]
+          },
+          {
+            "snap": 3,
+            "size": 256,
+            "overlap": "[]",
+            "snaps": [
+              3,
+              2
+            ]
+          }
+        ]
+      }
     },
     {
       "missing": [
@@ -342,7 +430,37 @@ function TEST_scrub_snaps() {
       "snap": "head",
       "locator": "",
       "nspace": "",
-      "name": "obj4"
+      "name": "obj4",
+      "snapset": {
+        "snap_context": {
+          "seq": 7,
+          "snaps": [
+            7,
+            6,
+            5,
+            4,
+            3,
+            2,
+            1
+          ]
+        },
+        "clones": [
+          {
+            "snap": 7,
+            "size": 1032,
+            "overlap": "[]",
+            "snaps": [
+              7,
+              6,
+              5,
+              4,
+              3,
+              2,
+              1
+            ]
+          }
+        ]
+      }
     },
     {
       "missing": [
@@ -359,7 +477,56 @@ function TEST_scrub_snaps() {
       "snap": "head",
       "locator": "",
       "nspace": "",
-      "name": "obj5"
+      "name": "obj5",
+      "snapset": {
+        "snap_context": {
+          "seq": 6,
+          "snaps": [
+            6,
+            5,
+            4,
+            3,
+            2,
+            1
+          ]
+        },
+        "clones": [
+          {
+            "snap": 1,
+            "size": 1032,
+            "overlap": "[]",
+            "snaps": [
+              1
+            ]
+          },
+          {
+            "snap": 2,
+            "size": 256,
+            "overlap": "[]",
+            "snaps": [
+              2
+            ]
+          },
+          {
+            "snap": 4,
+            "size": 512,
+            "overlap": "[]",
+            "snaps": [
+              4,
+              3
+            ]
+          },
+          {
+            "snap": 6,
+            "size": 1024,
+            "overlap": "[]",
+            "snaps": [
+              6,
+              5
+            ]
+          }
+        ]
+      }
     },
     {
       "extra clones": [
@@ -371,7 +538,16 @@ function TEST_scrub_snaps() {
       "snap": "head",
       "locator": "",
       "nspace": "",
-      "name": "obj6"
+      "name": "obj6",
+      "snapset": {
+        "snap_context": {
+          "seq": 1,
+          "snaps": [
+            1
+          ]
+        },
+        "clones": []
+      }
     },
     {
       "extra clones": [
@@ -383,7 +559,14 @@ function TEST_scrub_snaps() {
       "snap": "head",
       "locator": "",
       "nspace": "",
-      "name": "obj7"
+      "name": "obj7",
+      "snapset": {
+        "snap_context": {
+          "seq": 0,
+          "snaps": []
+        },
+        "clones": []
+      }
     },
     {
       "errors": [
@@ -392,7 +575,50 @@ function TEST_scrub_snaps() {
       "snap": "head",
       "locator": "",
       "nspace": "",
-      "name": "obj8"
+      "name": "obj8",
+      "snapset": {
+        "snap_context": {
+          "seq": 0,
+          "snaps": [
+            1
+          ]
+        },
+        "clones": [
+          {
+            "snap": 1,
+            "size": 1032,
+            "overlap": "[]",
+            "snaps": [
+              1
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "obj9",
+      "nspace": "",
+      "locator": "",
+      "snap": "head",
+      "snapset": {
+        "snap_context": {
+          "seq": 1,
+          "snaps": [
+            1
+          ]
+        },
+        "clones": [
+          {
+            "snap": 1,
+            "size": "????",
+            "overlap": "[]",
+            "snaps": [
+              1
+            ]
+          }
+        ]
+      },
+      "errors": []
     }
   ],
   "epoch": 20
