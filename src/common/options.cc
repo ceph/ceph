@@ -1048,6 +1048,14 @@ std::vector<Option> get_global_options() {
     .set_default(96)
     .set_description(""),
 
+    Option("ms_async_rdma_cm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
+    Option("ms_async_rdma_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("ib")
+    .set_description(""),
+
     Option("ms_dpdk_port_id", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),

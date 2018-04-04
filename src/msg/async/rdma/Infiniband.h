@@ -22,6 +22,7 @@
 #include <include/assert.h>
 
 #include <infiniband/verbs.h>
+#include <rdma/rdma_cma.h>
 
 #include <atomic>
 #include <string>
@@ -76,7 +77,7 @@ class Device {
   const char* name;
   uint8_t  port_cnt = 0;
  public:
-  explicit Device(CephContext *c, ibv_device* d);
+  explicit Device(CephContext *c, ibv_device* d, struct ibv_context *dc);
   ~Device() {
     if (active_port) {
       delete active_port;
@@ -96,10 +97,12 @@ class Device {
 
 class DeviceList {
   struct ibv_device ** device_list;
+  struct ibv_context ** device_context_list;
   int num;
   Device** devices;
  public:
-  explicit DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
+  explicit DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)),
+                                device_context_list(rdma_get_devices(&num)) {
     if (device_list == NULL || num == 0) {
       lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
       ceph_abort();
@@ -107,7 +110,7 @@ class DeviceList {
     devices = new Device*[num];
 
     for (int i = 0;i < num; ++i) {
-      devices[i] = new Device(cct, device_list[i]);
+      devices[i] = new Device(cct, device_list[i], device_context_list[i]);
     }
   }
   ~DeviceList() {
@@ -430,7 +433,7 @@ class Infiniband {
               int ib_physical_port,  ibv_srq *srq,
               Infiniband::CompletionQueue* txcq,
               Infiniband::CompletionQueue* rxcq,
-              uint32_t tx_queue_len, uint32_t max_recv_wr, uint32_t q_key = 0);
+              uint32_t tx_queue_len, uint32_t max_recv_wr, struct rdma_cm_id *cid, uint32_t q_key = 0);
     ~QueuePair();
 
     int init();
@@ -483,6 +486,7 @@ class Infiniband {
     ibv_pd*      pd;             // protection domain
     ibv_srq*     srq;            // shared receive queue
     ibv_qp*      qp;             // infiniband verbs QP handle
+    struct rdma_cm_id *cm_id;
     Infiniband::CompletionQueue* txcq;
     Infiniband::CompletionQueue* rxcq;
     uint32_t     initial_psn;    // initial packet sequence number
@@ -496,7 +500,8 @@ class Infiniband {
  public:
   typedef MemoryManager::Cluster Cluster;
   typedef MemoryManager::Chunk Chunk;
-  QueuePair* create_queue_pair(CephContext *c, CompletionQueue*, CompletionQueue*, ibv_qp_type type);
+  QueuePair* create_queue_pair(CephContext *c, CompletionQueue*, CompletionQueue*,
+      ibv_qp_type type, struct rdma_cm_id *cm_id);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   // post rx buffers to srq, return number of buffers actually posted
   int  post_chunks_to_srq(int num);

@@ -10,9 +10,12 @@ find_path(RDMA_INCLUDE_DIR infiniband/verbs.h)
 set(RDMA_NAMES ${RDMA_NAMES} ibverbs)
 find_library(RDMA_LIBRARY NAMES ${RDMA_NAMES})
 
+set(RDMACM_NAMES ${RDMACM_NAMES} rdmacm)
+find_library(RDMACM_LIBRARY NAMES ${RDMACM_NAMES})
+
 if (RDMA_INCLUDE_DIR AND RDMA_LIBRARY)
   set(RDMA_FOUND TRUE)
-  set(RDMA_LIBRARIES ${RDMA_LIBRARY})
+  set(RDMA_LIBRARIES ${RDMA_LIBRARY} ${RDMACM_LIBRARY})
 else ()
   set(RDMA_FOUND FALSE)
   set( RDMA_LIBRARIES )
@@ -20,6 +23,7 @@ endif ()
 
 if (RDMA_FOUND)
   message(STATUS "Found libibverbs: ${RDMA_LIBRARY}")
+  message(STATUS "Found librdmacm: ${RDMACM_LIBRARY}")
 
   include(CheckCXXSourceCompiles)
   CHECK_CXX_SOURCE_COMPILES("
