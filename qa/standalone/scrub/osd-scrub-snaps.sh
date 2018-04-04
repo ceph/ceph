@@ -172,7 +172,6 @@ function TEST_scrub_snaps() {
     test $(jq -r '.[0]' $dir/json) = $pgid || return 1
 
     rados list-inconsistent-snapset $pgid > $dir/json || return 1
-    test $(jq '.inconsistents | length' $dir/json) = "21" || return 1
 
     local jqfilter='.inconsistents'
     local sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
