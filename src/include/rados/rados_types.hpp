@@ -250,7 +250,7 @@ struct inconsistent_snapset_t {
     SNAPSET_MISSING = 1 << 0,
     SNAPSET_CORRUPTED = 1 << 1,
     CLONE_MISSING  = 1 << 2,
-    SNAP_MISMATCH  = 1 << 3,
+    SNAP_ERROR  = 1 << 3,
     HEAD_MISMATCH  = 1 << 4,
     HEADLESS_CLONE = 1 << 5,
     SIZE_MISMATCH  = 1 << 6,
@@ -281,8 +281,11 @@ struct inconsistent_snapset_t {
   bool clone_missing() const  {
     return errors & CLONE_MISSING;
   }
-  bool snapset_mismatch() const {
-    return errors & SNAP_MISMATCH;
+  bool snapset_mismatch() const {    // Compatibility
+    return errors & SNAP_ERROR;
+  }
+  bool snapset_error() const {
+    return errors & SNAP_ERROR;
   }
   bool head_mismatch() const {
     return errors & HEAD_MISMATCH;
