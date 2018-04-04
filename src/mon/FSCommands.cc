@@ -372,28 +372,7 @@ public:
     } else if (var == "allow_multimds") {
 	   ss << "Multiple MDS is always enabled. Use the max_mds parameter to control the number of active MDSs allowed. This command is DEPRECATED and will be REMOVED from future releases.";
     } else if (var == "allow_dirfrags") {
-      bool enable_dirfrags = false;
-      int r = parse_bool(val, &enable_dirfrags, ss);
-      if (r != 0) {
-	return r;
-      }
-
-      if (!enable_dirfrags) {
-	fsmap.modify_filesystem(fs->fscid,
-	     [](std::shared_ptr<Filesystem> fs)
-		{
-		  fs->mds_map.clear_dirfrags_allowed();
-		});
-	ss << "disallowed new directory fragmentation";
-      } else {
-        fsmap.modify_filesystem(
-            fs->fscid,
-            [](std::shared_ptr<Filesystem> fs)
-        {
-          fs->mds_map.set_dirfrags_allowed();
-        });
-	ss << "enabled directory fragmentation";
-      }
+	ss << "Directory fragmentation is now permanently enabled. This command is DEPRECATED and will be REMOVED from future releases.";
     } else if (var == "cluster_down") {
       bool is_down = false;
       int r = parse_bool(val, &is_down, ss);
