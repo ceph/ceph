@@ -31,9 +31,9 @@ class health_check_map_t;
 
 class ActivePyModules
 {
-
   std::map<std::string, std::unique_ptr<ActivePyModule>> modules;
-  PyModuleConfig config_cache;
+  PyModuleConfig &module_config;
+  std::map<std::string, std::string> store_cache;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
