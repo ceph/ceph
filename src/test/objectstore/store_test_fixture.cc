@@ -75,7 +75,7 @@ void StoreTestFixture::SetVal(md_config_t* _conf, const char* key, const char* v
   std::string skey(key);
   std::string prev_val;
   conf->get_val(skey, &prev_val);
-  conf->set_val(key, val);
+  conf->set_val_or_die(key, val);
   saved_settings.emplace(skey, prev_val);
 }
 
@@ -86,7 +86,7 @@ void StoreTestFixture::PopSettings(size_t pos)
     while(pos < saved_settings.size())
     {
       auto& e = saved_settings.top();
-      conf->set_val(e.first, e.second);
+      conf->set_val_or_die(e.first, e.second);
       saved_settings.pop();
     }
     conf->apply_changes(NULL);
