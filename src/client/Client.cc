@@ -910,6 +910,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   // setting I_COMPLETE needs to happen after adding the cap
   if (updating_inode &&
+      in->snapid == CEPH_NOSNAP &&
       in->is_dir() &&
       (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
       (issued & CEPH_CAP_FILE_EXCL) == 0 &&
@@ -3835,6 +3836,16 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     in->snaprealm = get_snap_realm(realm);
     in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
     ldout(cct, 15) << __func__ << " first one, opened snaprealm " << in->snaprealm << dendl;
+  } else {
+    assert(in->snaprealm);
+    if ((flags & CEPH_CAP_FLAG_AUTH) &&
+	realm != inodeno_t(-1) && in->snaprealm->ino != realm) {
+      in->snaprealm_item.remove_myself();
+      auto oldrealm = in->snaprealm;
+      in->snaprealm = get_snap_realm(realm);
+      in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
+      put_snap_realm(oldrealm);
+    }
   }
 
   mds_rank_t mds = mds_session->mds_num;
@@ -6085,11 +6096,6 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
   int r = 0;
   Dentry *dn = NULL;
 
-  if (!dir->is_dir()) {
-    r = -ENOTDIR;
-    goto done;
-  }
-
   if (dname == "..") {
     if (dir->dentries.empty()) {
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
@@ -6115,6 +6121,11 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 
   if (dname == ".") {
     *target = dir;
+    goto done;
+  }
+
+  if (!dir->is_dir()) {
+    r = -ENOTDIR;
     goto done;
   }
 
@@ -8747,7 +8758,7 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   int have = 0;
   bool movepos = false;
   std::unique_ptr<C_SaferCond> onuninline;
-  int64_t r;
+  int64_t r = 0;
   const md_config_t *conf = cct->_conf;
   Inode *in = f->inode.get();
 
@@ -8763,7 +8774,7 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   loff_t start_pos = offset;
 
   if (in->inline_version == 0) {
-    int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
+    r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
     if (r < 0) {
       goto done;
     }
@@ -8796,10 +8807,13 @@ retry:
           bl->substr_of(in->inline_data, offset, len - offset);
           bl->append_zero(endoff - len);
         }
+        r = endoff - offset;
       } else if ((uint64_t)offset < endoff) {
         bl->append_zero(endoff - offset);
+        r = endoff - offset;
+      } else {
+        r = 0;
       }
-      r = endoff - offset;
       goto success;
     }
   }
@@ -10279,9 +10293,11 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   auto fuse_default_permissions = cct->_conf->get_val<bool>(
     "fuse_default_permissions");
   if (!fuse_default_permissions) {
-    r = may_lookup(parent, perms);
-    if (r < 0)
-      return r;
+    if (strcmp(name, ".") && strcmp(name, "..")) {
+      r = may_lookup(parent, perms);
+      if (r < 0)
+	return r;
+    }
   }
 
   string dname(name);

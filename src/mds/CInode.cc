@@ -65,6 +65,7 @@ public:
   }
 };
 
+sr_t* const CInode::projected_inode::UNDEF_SRNODE = (sr_t*)(unsigned long)-1;
 
 LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
 LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
@@ -361,27 +362,6 @@ void CInode::clear_dirty_rstat()
   }
 }
 
-/* Ideally this function would be subsumed by project_inode but it is also
- * needed by CInode::project_past_snaprealm_parent so we keep it.
- */
-sr_t &CInode::project_snaprealm(projected_inode &pi)
-{
-  const sr_t *cur_srnode = get_projected_srnode();
-
-  assert(!pi.snapnode);
-  if (cur_srnode) {
-    pi.snapnode.reset(new sr_t(*cur_srnode));
-  } else {
-    pi.snapnode.reset(new sr_t());
-    pi.snapnode->created = 0;
-    pi.snapnode->current_parent_since = get_oldest_snap();
-  }
-  ++num_projected_srnodes;
-
-  dout(10) << __func__ << " " << pi.snapnode.get() << dendl;
-  return *pi.snapnode.get();
-}
-
 CInode::projected_inode &CInode::project_inode(bool xattr, bool snap)
 {
   auto &pi = projected_nodes.empty() ?
@@ -401,7 +381,7 @@ CInode::projected_inode &CInode::project_inode(bool xattr, bool snap)
   }
 
   if (snap) {
-    project_snaprealm(pi);
+    project_snaprealm();
   }
 
   dout(15) << __func__ << " " << pi.inode.ino << dendl;
@@ -427,67 +407,183 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
     xattrs = *front.xattrs;
   }
 
-  auto &snapnode = front.snapnode;
-  if (snapnode) {
-    pop_projected_snaprealm(snapnode.get());
+  if (projected_nodes.front().snapnode != projected_inode::UNDEF_SRNODE) {
+    pop_projected_snaprealm(projected_nodes.front().snapnode, false);
     --num_projected_srnodes;
   }
 
   projected_nodes.pop_front();
 }
 
+sr_t *CInode::prepare_new_srnode(snapid_t snapid)
+{
+  const sr_t *cur_srnode = get_projected_srnode();
+  sr_t *new_srnode;
+
+  if (cur_srnode) {
+    new_srnode = new sr_t(*cur_srnode);
+    if (!new_srnode->past_parents.empty()) {
+      // convert past_parents to past_parent_snaps
+      assert(snaprealm);
+      auto& snaps = snaprealm->get_snaps();
+      for (auto p : snaps) {
+	if (p >= new_srnode->current_parent_since)
+	  break;
+	if (!new_srnode->snaps.count(p))
+	  new_srnode->past_parent_snaps.insert(p);
+      }
+      new_srnode->seq = snaprealm->get_newest_seq();
+      new_srnode->past_parents.clear();
+    }
+  } else {
+    if (snapid == 0)
+      snapid = mdcache->get_global_snaprealm()->get_newest_seq();
+    new_srnode = new sr_t();
+    new_srnode->seq = snapid;
+    new_srnode->created = snapid;
+    new_srnode->current_parent_since = get_oldest_snap();
+  }
+  return new_srnode;
+}
+
+void CInode::project_snaprealm(sr_t *new_srnode)
+{
+  dout(10) << __func__ << " " << new_srnode << dendl;
+  assert(projected_nodes.back().snapnode == projected_inode::UNDEF_SRNODE);
+  projected_nodes.back().snapnode = new_srnode;
+  ++num_projected_srnodes;
+}
+
+void CInode::mark_snaprealm_global(sr_t *new_srnode)
+{
+  assert(!is_dir());
+  // 'last_destroyed' is no longer used, use it to store origin 'current_parent_since'
+  new_srnode->last_destroyed = new_srnode->current_parent_since;
+  new_srnode->current_parent_since = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+  new_srnode->mark_parent_global();
+}
+
+void CInode::clear_snaprealm_global(sr_t *new_srnode)
+{
+  // restore 'current_parent_since'
+  new_srnode->current_parent_since = new_srnode->last_destroyed;
+  new_srnode->last_destroyed = 0;
+  new_srnode->seq = mdcache->get_global_snaprealm()->get_newest_seq();
+  new_srnode->clear_parent_global();
+}
+
+bool CInode::is_projected_snaprealm_global() const
+{
+  const sr_t *srnode = get_projected_srnode();
+  if (srnode && srnode->is_parent_global())
+    return true;
+  return false;
+}
+
+void CInode::project_snaprealm_past_parent(SnapRealm *newparent)
+{
+  sr_t *new_snap = project_snaprealm();
+  record_snaprealm_past_parent(new_snap, newparent);
+}
+
+
 /* if newparent != parent, add parent to past_parents
  if parent DNE, we need to find what the parent actually is and fill that in */
-void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
+void CInode::record_snaprealm_past_parent(sr_t *new_snap, SnapRealm *newparent)
 {
-  assert(!projected_nodes.empty());
-  sr_t &new_snap = project_snaprealm(projected_nodes.back());
+  assert(!new_snap->is_parent_global());
   SnapRealm *oldparent;
   if (!snaprealm) {
     oldparent = find_snaprealm();
-    new_snap.seq = oldparent->get_newest_seq();
-  }
-  else
+  } else {
     oldparent = snaprealm->parent;
+  }
 
   if (newparent != oldparent) {
     snapid_t oldparentseq = oldparent->get_newest_seq();
-    if (oldparentseq + 1 > new_snap.current_parent_since) {
-      new_snap.past_parents[oldparentseq].ino = oldparent->inode->ino();
-      new_snap.past_parents[oldparentseq].first = new_snap.current_parent_since;
+    if (oldparentseq + 1 > new_snap->current_parent_since) {
+      // copy old parent's snaps
+      const set<snapid_t>& snaps = oldparent->get_snaps();
+      auto p = snaps.lower_bound(new_snap->current_parent_since);
+      if (p != snaps.end())
+	new_snap->past_parent_snaps.insert(p, snaps.end());
+      if (oldparentseq > new_snap->seq)
+	new_snap->seq = oldparentseq;
     }
-    new_snap.current_parent_since = std::max(oldparentseq, newparent->get_last_created()) + 1;
+    new_snap->current_parent_since = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
   }
 }
 
-void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
+void CInode::record_snaprealm_parent_dentry(sr_t *new_snap, SnapRealm *newparent,
+					    CDentry *dn, bool primary_dn)
 {
-  assert(next_snaprealm);
-  dout(10) << __func__ << " " << next_snaprealm
-          << " seq" << next_snaprealm->seq << dendl;
-  bool invalidate_cached_snaps = false;
-  if (!snaprealm) {
-    open_snaprealm();
-  } else if (next_snaprealm->past_parents.size() !=
-	     snaprealm->srnode.past_parents.size()) {
-    invalidate_cached_snaps = true;
-    // re-open past parents
-    snaprealm->_close_parents();
+  assert(new_snap->is_parent_global());
+  SnapRealm *oldparent = dn->get_dir()->inode->find_snaprealm();
+  auto& snaps = oldparent->get_snaps();
 
-    dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
-	     << " -> " << next_snaprealm->past_parents << dendl;
+  if (!primary_dn) {
+    auto p = snaps.lower_bound(dn->first);
+    if (p != snaps.end())
+      new_snap->past_parent_snaps.insert(p, snaps.end());
+  } else if (newparent != oldparent) {
+    // 'last_destroyed' is used as 'current_parent_since'
+    auto p = snaps.lower_bound(new_snap->last_destroyed);
+    if (p != snaps.end())
+      new_snap->past_parent_snaps.insert(p, snaps.end());
+    new_snap->last_destroyed = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
   }
-  snaprealm->srnode = *next_snaprealm;
+}
 
-  // we should be able to open these up (or have them already be open).
-  bool ok = snaprealm->_open_parents(NULL);
-  assert(ok);
+void CInode::early_pop_projected_snaprealm()
+{
+  assert(!projected_nodes.empty());
+  if (projected_nodes.front().snapnode != projected_inode::UNDEF_SRNODE) {
+    pop_projected_snaprealm(projected_nodes.front().snapnode, true);
+    projected_nodes.front().snapnode = projected_inode::UNDEF_SRNODE;
+    --num_projected_srnodes;
+  }
+}
 
-  if (invalidate_cached_snaps)
-    snaprealm->invalidate_cached_snaps();
+void CInode::pop_projected_snaprealm(sr_t *next_snaprealm, bool early)
+{
+  if (next_snaprealm) {
+    dout(10) << __func__ << (early ? " (early) " : " ")
+	     << next_snaprealm << " seq " << next_snaprealm->seq << dendl;
+    bool invalidate_cached_snaps = false;
+    if (!snaprealm) {
+      open_snaprealm();
+    } else if (next_snaprealm->past_parents.size() !=
+	       snaprealm->srnode.past_parents.size()) {
+      invalidate_cached_snaps = true;
+      // re-open past parents
+      snaprealm->_close_parents();
 
-  if (snaprealm->parent)
-    dout(10) << " realm " << *snaprealm << " parent " << *snaprealm->parent << dendl;
+      dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
+	       << " -> " << next_snaprealm->past_parents << dendl;
+    }
+    auto old_flags = snaprealm->srnode.flags;
+    snaprealm->srnode = *next_snaprealm;
+    delete next_snaprealm;
+
+    if ((snaprealm->srnode.flags ^ old_flags) & sr_t::PARENT_GLOBAL) {
+      snaprealm->close_parents();
+      snaprealm->adjust_parent();
+    }
+
+    // we should be able to open these up (or have them already be open).
+    bool ok = snaprealm->_open_parents(NULL);
+    assert(ok);
+
+    if (invalidate_cached_snaps)
+      snaprealm->invalidate_cached_snaps();
+
+    if (snaprealm->parent)
+      dout(10) << " realm " << *snaprealm << " parent " << *snaprealm->parent << dendl;
+  } else {
+    dout(10) << __func__ << (early ? " (early) null" : " null") << dendl;
+    assert(snaprealm);
+    snaprealm->merge_to(NULL);
+  }
 }
 
 
@@ -1799,12 +1895,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       decode(inode.version, p);
       decode(tm, p);
       if (inode.ctime < tm) inode.ctime = tm;
-      snapid_t seq = 0;
-      if (snaprealm)
-	seq = snaprealm->srnode.seq;
       decode_snap(p);
-      if (snaprealm && snaprealm->srnode.seq != seq)
-	mdcache->do_realm_invalidate_and_update_notify(this, seq ? CEPH_SNAP_OP_UPDATE:CEPH_SNAP_OP_SPLIT);
     }
     break;
 
@@ -2586,7 +2677,7 @@ void CInode::split_old_inode(snapid_t snap)
 
 void CInode::pre_cow_old_inode()
 {
-  snapid_t follows = find_snaprealm()->get_newest_seq();
+  snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
   if (first <= follows)
     cow_old_inode(follows, true);
 }
@@ -2696,13 +2787,22 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
   using ceph::decode;
   if (snapbl.length()) {
     open_snaprealm();
+    auto old_flags = snaprealm->srnode.flags;
     bufferlist::iterator p = snapbl.begin();
     decode(snaprealm->srnode, p);
     if (is_base()) {
       bool ok = snaprealm->_open_parents(NULL);
       assert(ok);
+    } else {
+      if ((snaprealm->srnode.flags ^ old_flags) & sr_t::PARENT_GLOBAL) {
+	snaprealm->close_parents();
+	snaprealm->adjust_parent();
+      }
     }
     dout(20) << __func__ << " " << *snaprealm << dendl;
+  } else if (snaprealm) {
+    assert(mdcache->mds->is_any_replay());
+    snaprealm->merge_to(NULL);
   }
 }
 

@@ -34,6 +34,7 @@ void MDSTableServer::handle_request(MMDSTableRequest *req)
   case TABLESERVER_OP_PREPARE: return handle_prepare(req);
   case TABLESERVER_OP_COMMIT: return handle_commit(req);
   case TABLESERVER_OP_ROLLBACK: return handle_rollback(req);
+  case TABLESERVER_OP_NOTIFY_ACK: return handle_notify_ack(req);
   default: assert(0 == "unrecognized mds_table_server request op");
   }
 }
@@ -83,8 +84,40 @@ void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = req->bl;
-  mds->send_message_mds(reply, from);
+
+  if (_notify_prep(tid)) {
+    auto& p = pending_notifies[tid];
+    p.notify_ack_gather = active_clients;
+    p.mds = from;
+    p.reply = reply;
+  } else {
+    mds->send_message_mds(reply, from);
+  }
   req->put();
+}
+
+void MDSTableServer::handle_notify_ack(MMDSTableRequest *m)
+{
+  dout(7) << __func__ << " " << *m << dendl;
+  mds_rank_t from = mds_rank_t(m->get_source().num());
+  version_t tid = m->get_tid();
+
+  auto p = pending_notifies.find(tid);
+  if (p != pending_notifies.end()) {
+    if (p->second.notify_ack_gather.erase(from)) {
+      if (p->second.notify_ack_gather.empty()) {
+	if (p->second.onfinish)
+	  p->second.onfinish->complete(0);
+	else
+	  mds->send_message_mds(p->second.reply, p->second.mds);
+	pending_notifies.erase(p);
+      }
+    } else {
+      dout(0) << "got unexpected notify ack for tid " <<  tid << " from mds." << from << dendl;
+    }
+  } else {
+  }
+  m->put();
 }
 
 class C_Commit : public MDSLogContextBase {
@@ -172,6 +205,7 @@ void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
 
+  assert(g_conf->mds_kill_mdstable_at != 8);
   version_t tid = req->get_tid();
   assert(pending_for_mds.count(tid));
   assert(!committing_tids.count(tid));
@@ -189,7 +223,6 @@ void MDSTableServer::_rollback_logged(MMDSTableRequest *req)
 {
   dout(7) << "_rollback_logged " << *req << dendl;
 
-  assert(g_conf->mds_kill_mdstable_at != 7);
   version_t tid = req->get_tid();
 
   pending_for_mds.erase(tid);
@@ -234,29 +267,82 @@ void MDSTableServer::_server_update_logged(bufferlist& bl)
   _note_server_update(bl);
 }
 
-
 // recovery
+
+class C_ServerRecovery : public MDSInternalContextBase {
+  MDSTableServer *server;
+  MDSRank *get_mds() override { return server->mds; }
+public:
+  C_ServerRecovery(MDSTableServer *s)  : server(s) {}
+  void finish(int r) override {
+    server->_do_server_recovery();
+  }
+};
+
+void MDSTableServer::_do_server_recovery()
+{
+  dout(7) << __func__ << " " << active_clients <<  dendl;
+  map<mds_rank_t, uint64_t> next_reqids;
+
+  for (auto p : pending_for_mds) {
+    mds_rank_t who = p.second.mds;
+    if (!active_clients.count(who))
+      continue;
+
+    if (p.second.reqid >= next_reqids[who])
+      next_reqids[who] = p.second.reqid + 1;
+
+    version_t tid = p.second.tid;
+    MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, p.second.reqid, tid);
+    _get_reply_buffer(tid, &reply->bl);
+    mds->send_message_mds(reply, who);
+  }
+
+  for (auto p : active_clients) {
+    MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_SERVER_READY, next_reqids[p]);
+    mds->send_message_mds(reply, p);
+  }
+  recovered = true;
+}
 
 void MDSTableServer::finish_recovery(set<mds_rank_t>& active)
 {
-  dout(7) << "finish_recovery" << dendl;
-  for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p)
-    handle_mds_recovery(*p);  // resend agrees for everyone.
+  dout(7) << __func__ << dendl;
+
+  active_clients = active;
+
+  // don't know if survivor mds have received all 'notify prep' messages.
+  // so we need to send 'notify prep' again.
+  if (!pending_for_mds.empty() && _notify_prep(version)) {
+    auto& q = pending_notifies[version];
+    q.notify_ack_gather = active_clients;
+    q.mds = MDS_RANK_NONE;
+    q.onfinish = new C_ServerRecovery(this);
+  } else {
+    _do_server_recovery();
+  }
 }
 
 void MDSTableServer::handle_mds_recovery(mds_rank_t who)
 {
   dout(7) << "handle_mds_recovery mds." << who << dendl;
 
+  active_clients.insert(who);
+  if (!recovered) {
+    dout(7) << " still not recovered, delaying" << dendl;
+    return;
+  }
+
   uint64_t next_reqid = 0;
   // resend agrees for recovered mds
-  for (map<version_t,mds_table_pending_t>::iterator p = pending_for_mds.begin();
-       p != pending_for_mds.end();
-       ++p) {
+  for (auto p = pending_for_mds.begin(); p != pending_for_mds.end(); ++p) {
     if (p->second.mds != who)
       continue;
+    assert(!pending_notifies.count(p->second.tid));
+
     if (p->second.reqid >= next_reqid)
       next_reqid = p->second.reqid + 1;
+
     MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
     _get_reply_buffer(p->second.tid, &reply->bl);
     mds->send_message_mds(reply, who);
@@ -264,4 +350,36 @@ void MDSTableServer::handle_mds_recovery(mds_rank_t who)
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_SERVER_READY, next_reqid);
   mds->send_message_mds(reply, who);
+}
+
+void MDSTableServer::handle_mds_failure_or_stop(mds_rank_t who)
+{
+  dout(7) << __func__ << " mds." << who << dendl;
+
+  active_clients.erase(who);
+
+  list<MMDSTableRequest*> rollback;
+  for (auto p = pending_notifies.begin(); p != pending_notifies.end(); ) {
+    auto q = p++;
+    if (q->second.mds == who) {
+      // haven't sent reply yet.
+      rollback.push_back(q->second.reply);
+      pending_notifies.erase(q);
+    } else if (q->second.notify_ack_gather.erase(who)) {
+      // the failed mds will reload snaptable when it recovers.
+      // so we can remove it from the gather set.
+      if (q->second.notify_ack_gather.empty()) {
+	if (q->second.onfinish)
+	  q->second.onfinish->complete(0);
+	else
+	  mds->send_message_mds(q->second.reply, q->second.mds);
+	pending_notifies.erase(q);
+      }
+    }
+  }
+
+  for (auto p : rollback) {
+    p->op = TABLESERVER_OP_ROLLBACK;
+    handle_rollback(p);
+  }
 }

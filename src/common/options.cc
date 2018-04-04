@@ -4797,7 +4797,7 @@ std::vector<Option> get_global_options() {
                           "failures about managers that aren't online yet"),
 
     Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(60)
+    .set_default(120)
     .add_service("mon")
     .set_description("Period in seconds that the cluster may have no active "
                      "manager before this is reported as an ERR rather than "
@@ -7070,6 +7070,10 @@ std::vector<Option> get_mds_client_options() {
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("big_writes is deprecated in libfuse 3.0.0"),
+
+    Option("fuse_max_write", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Set the maximum number of bytes in a single write operation.  Because the FUSE default is 128kbytes, SO fuse_max_write default set to 0(The default does not take effect)"),
 
     Option("fuse_atomic_o_trunc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
