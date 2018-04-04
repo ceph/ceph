@@ -1337,6 +1337,8 @@ function test_is_clean() {
 
 #######################################################################
 
+calc() { awk "BEGIN{print $*}"; }
+
 ##
 # Return a list of numbers that are increasingly larger and whose
 # total is **timeout** seconds. It can be used to have short sleep
@@ -1356,29 +1358,29 @@ function get_timeout_delays() {
     local i
     local total="0"
     i=$first_step
-    while test "$(echo $total + $i \<= $timeout | bc -l)" = "1"; do
-        echo -n "$i "
-        total=$(echo $total + $i | bc -l)
-        i=$(echo $i \* 2 | bc -l)
+    while test "$(calc $total + $i \<= $timeout)" = "1"; do
+        echo -n "$(calc $i) "
+        total=$(calc $total + $i)
+        i=$(calc $i \* 2)
     done
-    if test "$(echo $total \< $timeout | bc -l)" = "1"; then
-        echo -n $(echo $timeout - $total | bc -l)
+    if test "$(calc $total \< $timeout)" = "1"; then
+        echo -n "$(calc $timeout - $total) "
     fi
     $trace && shopt -s -o xtrace
 }
 
 function test_get_timeout_delays() {
     test "$(get_timeout_delays 1)" = "1 " || return 1
-    test "$(get_timeout_delays 5)" = "1 2 2" || return 1
-    test "$(get_timeout_delays 6)" = "1 2 3" || return 1
+    test "$(get_timeout_delays 5)" = "1 2 2 " || return 1
+    test "$(get_timeout_delays 6)" = "1 2 3 " || return 1
     test "$(get_timeout_delays 7)" = "1 2 4 " || return 1
-    test "$(get_timeout_delays 8)" = "1 2 4 1" || return 1
-    test "$(get_timeout_delays 1 .1)" = ".1 .2 .4 .3" || return 1
-    test "$(get_timeout_delays 1.5 .1)" = ".1 .2 .4 .8 " || return 1
-    test "$(get_timeout_delays 5 .1)" = ".1 .2 .4 .8 1.6 1.9" || return 1
-    test "$(get_timeout_delays 6 .1)" = ".1 .2 .4 .8 1.6 2.9" || return 1
-    test "$(get_timeout_delays 6.3 .1)" = ".1 .2 .4 .8 1.6 3.2 " || return 1
-    test "$(get_timeout_delays 20 .1)" = ".1 .2 .4 .8 1.6 3.2 6.4 7.3" || return 1
+    test "$(get_timeout_delays 8)" = "1 2 4 1 " || return 1
+    test "$(get_timeout_delays 1 .1)" = "0.1 0.2 0.4 0.3 " || return 1
+    test "$(get_timeout_delays 1.5 .1)" = "0.1 0.2 0.4 0.8 " || return 1
+    test "$(get_timeout_delays 5 .1)" = "0.1 0.2 0.4 0.8 1.6 1.9 " || return 1
+    test "$(get_timeout_delays 6 .1)" = "0.1 0.2 0.4 0.8 1.6 2.9 " || return 1
+    test "$(get_timeout_delays 6.3 .1)" = "0.1 0.2 0.4 0.8 1.6 3.2 " || return 1
+    test "$(get_timeout_delays 20 .1)" = "0.1 0.2 0.4 0.8 1.6 3.2 6.4 7.3 " || return 1
 }
 
 #######################################################################
