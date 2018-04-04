@@ -9525,9 +9525,10 @@ void OSDShard::_prime_splits(set<spg_t> *pgids)
   while (p != pgids->end()) {
     unsigned shard_index = p->hash_to_shard(osd->num_shards);
     if (shard_index == shard_id) {
-      auto r = pg_slots.emplace(*p, make_unique<OSDShardPGSlot>());
+      auto r = pg_slots.emplace(*p, nullptr);
       if (r.second) {
 	dout(10) << "priming slot " << *p << dendl;
+	r.first->second = make_unique<OSDShardPGSlot>();
 	r.first->second->waiting_for_split = true;
       } else {
 	auto q = r.first;
@@ -9646,7 +9647,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     return;    // OSD shutdown, discard.
   }
   const auto token = item.get_ordering_token();
-  auto r = sdata->pg_slots.emplace(token, make_unique<OSDShardPGSlot>());
+  auto r = sdata->pg_slots.emplace(token, nullptr);
+  if (r.second) {
+    r.first->second = make_unique<OSDShardPGSlot>();
+  }
   OSDShardPGSlot *slot = r.first->second.get();
   dout(20) << __func__ << " " << token
 	   << (r.second ? " (new)" : "")
