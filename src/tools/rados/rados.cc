@@ -1533,6 +1533,15 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
 {
   dump_object_id(inc.object, f);
 
+  if (inc.ss_bl.length()) {
+    SnapSet ss;
+    bufferlist bl = inc.ss_bl;
+    bufferlist::iterator bliter = bl.begin();
+    decode(ss, bliter);  // Can't be corrupted
+    f.open_object_section("snapset");
+    ss.dump(&f);
+    f.close_section();
+  }
   f.open_array_section("errors");
   if (inc.snapset_missing())
     f.dump_string("error", "snapset_missing");

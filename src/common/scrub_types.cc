@@ -233,21 +233,25 @@ void inconsistent_snapset_wrapper::set_size_mismatch()
 
 void inconsistent_snapset_wrapper::encode(bufferlist& bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ::encode(errors, bl);
   ::encode(object, bl);
   ::encode(clones, bl);
   ::encode(missing, bl);
+  ::encode(ss_bl, bl);
   ENCODE_FINISH(bl);
 }
 
 void inconsistent_snapset_wrapper::decode(bufferlist::iterator& bp)
 {
-  DECODE_START(1, bp);
+  DECODE_START(2, bp);
   ::decode(errors, bp);
   ::decode(object, bp);
   ::decode(clones, bp);
   ::decode(missing, bp);
+  if (struct_v >= 2) {
+    ::decode(ss_bl, bp);
+  }
   DECODE_FINISH(bp);
 }
 
