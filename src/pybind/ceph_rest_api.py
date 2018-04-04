@@ -108,6 +108,9 @@ def api_setup(app, conf, cluster, clientname, clientid, args):
     clientname = clientname or 'client.' + clientid
 
     app.ceph_cluster = rados.Rados(name=clientname, conffile=conf)
+    app.ceph_cluster.conf_set("rados_mon_op_timeout", "10")
+    app.ceph_cluster.conf_set("rados_osd_op_timeout", "10")
+    app.ceph_cluster.conf_set("client_mount_timeout", "60")
     app.ceph_cluster.conf_parse_argv(args)
     app.ceph_cluster.connect()
 
