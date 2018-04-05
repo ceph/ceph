@@ -21,4 +21,6 @@
 #define likely(x)       __builtin_expect((x),1)
 #define unlikely(x)     __builtin_expect((x),0)
 
+#define expect(x, hint) __builtin_expect((x),(hint))
+
 #endif
