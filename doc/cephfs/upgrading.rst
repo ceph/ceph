@@ -1,3 +1,51 @@
+Upgrading the MDS Cluster
+=========================
+
+Currently the MDS cluster does not have built-in versioning or file system
+flags to support seamless upgrades of the MDSs without potentially causing
+assertions or other faults due to incompatible messages or other functional
+differences. For this reason, it's necessary during any cluster upgrade to
+reduce the number of active MDS for a file system to one first so that two
+active MDS do not communicate with different versions.  Further, it's also
+necessary to take standbys offline as any new CompatSet flags will propogate
+via the MDSMap to all MDS and cause older MDS to suicide.
+
+The proper sequence for upgrading the MDS cluster is:
+
+1. Reduce the number of ranks to 1:
+
+::
+
+    ceph fs set <fs_name> max_mds 1
+
+2. Deactivate all non-zero ranks, from the highest rank to the lowest, while waiting for each MDS to finish stopping:
+
+::
+
+    ceph mds deactivate <fs_name>:<n>
+    ceph status # wait for MDS to finish stopping
+
+3. Take all standbys offline, e.g. using systemctl:
+
+::
+
+    systemctl stop ceph-mds.target
+    ceph status # confirm only one MDS is online and is active
+
+4. Upgrade the single active MDS, e.g. using systemctl:
+
+::
+
+    systemctl restart ceph-mds.target
+
+5. Upgrade/start the standby daemons.
+
+6. Restore the previous max_mds for your cluster:
+
+::
+
+    ceph fs set <fs_name> max_mds <old_max_mds>
+
 
 Upgrading pre-Firefly filesystems past Jewel
 ============================================
