@@ -3470,6 +3470,7 @@ void PG::update_snap_map(
 	try {
 	  ::decode(snaps, p);
 	} catch (...) {
+	  derr << __func__ << " decode snaps failure on " << *i << dendl;
 	  snaps.clear();
 	}
 	set<snapid_t> _snaps(snaps.begin(), snaps.end());
@@ -4159,10 +4160,25 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << "...repaired";
 	}
 	snap_mapper.add_oid(hoid, obj_snaps, &_t);
-	r = osd->store->apply_transaction(osr.get(), std::move(t));
-	if (r != 0) {
-	  derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
-	       << dendl;
+
+	// wait for repair to apply to avoid confusing other bits of the system.
+	{
+	  Cond my_cond;
+	  Mutex my_lock("PG::_scan_snaps my_lock");
+	  int r = 0;
+	  bool done;
+	  t.register_on_applied_sync(
+	    new C_SafeCond(&my_lock, &my_cond, &done, &r));
+	  r = osd->store->apply_transaction(osr.get(), std::move(t));
+	  if (r != 0) {
+	    derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
+		 << dendl;
+	  } else {
+	    my_lock.Lock();
+	    while (!done)
+	      my_cond.Wait(my_lock);
+	    my_lock.Unlock();
+	  }
 	}
       }
     }
@@ -5626,37 +5642,9 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 
   update_history(oinfo.history);
 
-  if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
-    // DEBUG: verify that the snaps are empty in snap_mapper
-    if (cct->_conf->osd_debug_verify_snaps_on_info) {
-      interval_set<snapid_t> p;
-      p.union_of(oinfo.purged_snaps, info.purged_snaps);
-      p.subtract(info.purged_snaps);
-      if (!p.empty()) {
-	for (interval_set<snapid_t>::iterator i = p.begin();
-	     i != p.end();
-	     ++i) {
-	  for (snapid_t snap = i.get_start();
-	       snap != i.get_len() + i.get_start();
-	       ++snap) {
-	    vector<hobject_t> hoids;
-	    int r = snap_mapper.get_next_objects_to_trim(snap, 1, &hoids);
-	    if (r != 0 && r != -ENOENT) {
-	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
-		   << cpp_strerror(r) << dendl;
-	      ceph_abort();
-	    } else if (r != -ENOENT) {
-	      assert(!hoids.empty());
-	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
-		   << cpp_strerror(r) << " for object "
-		   << hoids[0] << " on snap " << snap
-		   << " which should have been fully trimmed " << dendl;
-	      ceph_abort();
-	    }
-	  }
-	}
-      }
-    }
+  if (!(info.purged_snaps == oinfo.purged_snaps)) {
+    dout(10) << __func__ << " updating purged_snaps to " << oinfo.purged_snaps
+	     << dendl;
     info.purged_snaps = oinfo.purged_snaps;
     dirty_info = true;
     dirty_big_info = true;
