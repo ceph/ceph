@@ -305,6 +305,12 @@ public:
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
       sync_module(nullptr),
       source_log(store, async_rados, observer), num_shards(0) {}
+  RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
+                           const string& _source_zone, const RGWSyncModuleInstanceRef& _sync_module,
+                           rgw::BucketChangeObserver *observer = nullptr)
+    : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
+      sync_module(_sync_module),
+      source_log(store, async_rados, observer), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
     finalize();
   }
