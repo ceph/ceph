@@ -6588,7 +6588,7 @@ std::vector<Option> get_mds_options() {
     .set_description("size in bytes of each MDS log segment"),
 
     Option("mds_log_max_segments", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(30)
+    .set_default(128)
     .set_description("maximum number of segments which may be untrimmed"),
 
     Option("mds_bal_export_pin", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
