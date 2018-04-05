@@ -1975,13 +1975,19 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
 
 void MDCache::broadcast_quota_to_client(CInode *in)
 {
+  if (!(mds->is_active() || mds->is_stopping()))
+    return;
+
   if (!in->is_auth() || in->is_frozen())
     return;
 
   auto i = in->get_projected_inode();
-
   if (!i->quota.is_enable())
     return;
+
+  // creaete snaprealm for quota inode (quota was set before mimic)
+  if (!in->get_projected_srnode())
+    mds->server->create_quota_realm(in);
 
   for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
