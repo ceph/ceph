@@ -10,6 +10,9 @@
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 
+#include "include/scope_guard.h"
+#include "common/async/throttle.h"
+
 #include "rgw_asio_client.h"
 #include "rgw_asio_frontend.h"
 
@@ -17,53 +20,13 @@
 
 namespace {
 
-class Pauser {
-  std::mutex mutex;
-  std::condition_variable cond_ready; // signaled on ready==true
-  std::condition_variable cond_paused; // signaled on waiters==thread_count
-  bool ready{false};
-  int waiters{0};
- public:
-  template <typename Func>
-  void pause(int thread_count, Func&& func);
-  void unpause();
-  void wait();
-};
-
-template <typename Func>
-void Pauser::pause(int thread_count, Func&& func)
-{
-  std::unique_lock<std::mutex> lock(mutex);
-  ready = false;
-  lock.unlock();
-
-  func();
-
-  // wait for all threads to pause
-  lock.lock();
-  cond_paused.wait(lock, [=] { return waiters == thread_count; });
-}
-
-void Pauser::unpause()
-{
-  std::lock_guard<std::mutex> lock(mutex);
-  ready = true;
-  cond_ready.notify_all();
-}
-
-void Pauser::wait()
-{
-  std::unique_lock<std::mutex> lock(mutex);
-  ++waiters;
-  cond_paused.notify_one(); // notify pause() that we're waiting
-  cond_ready.wait(lock, [this] { return ready; }); // wait for unpause()
-  --waiters;
-}
-
 using tcp = boost::asio::ip::tcp;
 namespace beast = boost::beast;
 
+using Throttle = ceph::async::Throttle<boost::asio::io_context::executor_type>;
+
 void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
+                       Throttle& request_throttle,
                        boost::asio::yield_context yield)
 {
   // limit header to 4k, since we read it all into a single flat_buffer
@@ -103,19 +66,32 @@ void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
       return;
     }
 
-    // process the request
-    RGWRequest req{env.store->get_new_req_id()};
+    // wait for request throttle or frontend unpause
+    request_throttle.async_get(1, yield[ec]);
+    if (ec == boost::asio::error::operation_aborted) {
+      return;
+    } else if (ec) {
+      ldout(cct, 1) << "failed to wait for request throttle: " << ec.message() << dendl;
+      return;
+    }
+    {
+      // return throttle when process_request() completes
+      auto g = make_scope_guard([&] { request_throttle.put(1); });
 
-    rgw::asio::ClientIO real_client{socket, parser, buffer};
+      // process the request
+      RGWRequest req{env.store->get_new_req_id()};
 
-    auto real_client_io = rgw::io::add_reordering(
-                            rgw::io::add_buffering(cct,
-                              rgw::io::add_chunking(
-                                rgw::io::add_conlen_controlling(
-                                  &real_client))));
-    RGWRestfulIO client(cct, &real_client_io);
-    process_request(env.store, env.rest, &req, env.uri_prefix,
-                    *env.auth_registry, &client, env.olog);
+      rgw::asio::ClientIO real_client{socket, parser, buffer};
+
+      auto real_client_io = rgw::io::add_reordering(
+          rgw::io::add_buffering(cct,
+                                 rgw::io::add_chunking(
+                                     rgw::io::add_conlen_controlling(
+                                         &real_client))));
+      RGWRestfulIO client(cct, &real_client_io);
+      process_request(env.store, env.rest, &req, env.uri_prefix,
+                      *env.auth_registry, &client, env.olog);
+    }
 
     if (!parser.keep_alive()) {
       return;
@@ -143,32 +119,47 @@ void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
   }
 }
 
-class AsioFrontend {
+class AsioFrontend : public md_config_obs_t {
   RGWProcessEnv env;
   RGWFrontendConfig* conf;
-  boost::asio::io_service service;
+  boost::asio::io_context service;
 
   struct Listener {
     tcp::endpoint endpoint;
     tcp::acceptor acceptor;
     tcp::socket socket;
 
-    Listener(boost::asio::io_service& service)
+    Listener(boost::asio::io_context& service)
       : acceptor(service), socket(service) {}
   };
   std::vector<Listener> listeners;
 
+  // work guard to keep run() threads busy while listeners are paused
+  using Executor = boost::asio::io_context::executor_type;
+  std::optional<boost::asio::executor_work_guard<Executor>> work;
+
+  Throttle request_throttle;
   std::vector<std::thread> threads;
-  Pauser pauser;
   std::atomic<bool> going_down{false};
+
+  struct Pauser {
+    std::mutex mutex;
+    bool paused{false};
+    size_t max_requests{0};
+  } pauser;
 
   CephContext* ctx() const { return env.store->ctx(); }
 
   void accept(Listener& listener, boost::system::error_code ec);
 
+  // config observer
+  const char **get_tracked_conf_keys() const override;
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set<std::string>& changed) override;
+
  public:
-  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
-    : env(env), conf(conf) {}
+  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf);
+  ~AsioFrontend();
 
   int init();
   int run();
@@ -177,6 +168,24 @@ class AsioFrontend {
   void pause();
   void unpause(RGWRados* store, rgw_auth_registry_ptr_t);
 };
+
+const auto build_counters = ceph::async::throttle_counters::build;
+
+AsioFrontend::AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
+  : env(env), conf(conf),
+    request_throttle(service.get_executor(), 0,
+                     build_counters(env.store->ctx(),
+                                    "throttle-frontend-requests"))
+{
+  auto _conf = env.store->ctx()->_conf;
+  _conf->add_observer(this);
+  pauser.max_requests = _conf->get_val<int64_t>("rgw_max_concurrent_requests");
+}
+
+AsioFrontend::~AsioFrontend()
+{
+  env.store->ctx()->_conf->remove_observer(this);
+}
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
 {
@@ -280,7 +289,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   // spawn a coroutine to handle the connection
   boost::asio::spawn(service,
     [this, socket=std::move(socket)] (boost::asio::yield_context yield) mutable {
-      handle_connection(env, socket, yield);
+      handle_connection(env, socket, request_throttle, yield);
     });
 }
 
@@ -292,17 +301,18 @@ int AsioFrontend::run()
 
   ldout(cct, 4) << "frontend spawning " << thread_count << " threads" << dendl;
 
+  // the worker threads call io_context::run(), which will return when there's
+  // no work left. hold a work guard to keep these threads going until join()
+  work.emplace(boost::asio::make_work_guard(service));
+
   for (int i = 0; i < thread_count; i++) {
     threads.emplace_back([=] {
-      for (;;) {
-        service.run();
-        if (going_down) {
-          break;
-        }
-        pauser.wait();
-      }
+      boost::system::error_code ec;
+      service.run(ec);
     });
   }
+
+  request_throttle.set_maximum(pauser.max_requests);
   return 0;
 }
 
@@ -327,6 +337,8 @@ void AsioFrontend::join()
   if (!going_down) {
     stop();
   }
+  work.reset();
+
   ldout(ctx(), 4) << "frontend joining threads..." << dendl;
   for (auto& thread : threads) {
     thread.join();
@@ -334,14 +346,61 @@ void AsioFrontend::join()
   ldout(ctx(), 4) << "frontend done" << dendl;
 }
 
+const char** AsioFrontend::get_tracked_conf_keys() const
+{
+  static const char* keys[] = {
+    "rgw_max_concurrent_requests",
+    nullptr
+  };
+  return keys;
+}
+
+void AsioFrontend::handle_conf_change(const md_config_t *conf,
+                                      const std::set<std::string>& changed)
+{
+  if (changed.count("rgw_max_concurrent_requests")) {
+    std::lock_guard lock{pauser.mutex};
+    pauser.max_requests = conf->get_val<int64_t>("rgw_max_concurrent_requests");
+    if (pauser.max_requests == 0) { // 0 = unlimited
+      pauser.max_requests = std::numeric_limits<size_t>::max();
+    }
+    if (!pauser.paused) { // don't apply until unpause
+      request_throttle.set_maximum(pauser.max_requests);
+    }
+  }
+}
+
 void AsioFrontend::pause()
 {
-  ldout(ctx(), 4) << "frontend pausing threads..." << dendl;
-  pauser.pause(threads.size(), [=] {
-    // unblock the run() threads
-    service.stop();
-  });
-  ldout(ctx(), 4) << "frontend paused" << dendl;
+  ldout(ctx(), 4) << "frontend pausing connections..." << dendl;
+
+  // cancel pending calls to accept(), but don't close the sockets
+  boost::system::error_code ec;
+  for (auto& l : listeners) {
+    l.acceptor.cancel(ec);
+  }
+
+  auto& mutex = pauser.mutex;
+  std::unique_lock lock{mutex};
+  pauser.paused = true;
+
+  std::condition_variable cond;
+  std::optional<boost::system::error_code> result;
+
+  // set max throttle to 0 and wait for outstanding requests to complete
+  request_throttle.async_set_maximum(0, [&] (boost::system::error_code ec) {
+      std::lock_guard lock{mutex};
+      result = ec;
+      cond.notify_one();
+    });
+
+  cond.wait(lock, [&] { return result; });
+
+  if (*result) {
+    ldout(ctx(), 1) << "frontend failed to pause: " << ec.message() << dendl;
+  } else {
+    ldout(ctx(), 4) << "frontend paused" << dendl;
+  }
 }
 
 void AsioFrontend::unpause(RGWRados* const store,
@@ -349,9 +408,25 @@ void AsioFrontend::unpause(RGWRados* const store,
 {
   env.store = store;
   env.auth_registry = std::move(auth_registry);
+
+  size_t max_requests;
+  {
+    std::lock_guard lock{pauser.mutex};
+    pauser.paused = false;
+    max_requests = pauser.max_requests;
+  }
+  // restore max throttle to unblock connections
+  request_throttle.set_maximum(max_requests);
+
+  // start accepting connections again
+  for (auto& l : listeners) {
+    l.acceptor.async_accept(l.socket,
+                            [this, &l] (boost::system::error_code ec) {
+                              accept(l, ec);
+                            });
+  }
+
   ldout(ctx(), 4) << "frontend unpaused" << dendl;
-  service.reset();
-  pauser.unpause();
 }
 
 } // anonymous namespace

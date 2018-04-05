@@ -152,6 +152,17 @@ instances or all radosgw-admin commands can be put into the ``[global]`` or the
 :Default: 100 threads.
 
 
+``rgw max concurrent requests``
+
+:Description: The maximum number of concurrent requests that the frontend will
+              process. This currently only applies to the beast frontend, as
+              civetweb is effectively limited by the number of frontend threads.
+              This limit is enforced by a Throttle, whose perf counters are
+              reported as "throttle-frontend-requests".
+:Type: Integer
+:Default: 8192
+
+
 ``rgw num rados handles``
 
 :Description: The number of `RADOS cluster handles`_ for Ceph Object Gateway.
