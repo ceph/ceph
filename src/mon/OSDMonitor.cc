@@ -11535,7 +11535,7 @@ int OSDMonitor::_prepare_remove_pool(
   {
     auto it = pending_inc.new_pg_upmap.begin();
     while (it != pending_inc.new_pg_upmap.end()) {
-      if (it->first.pool() == (uint64_t)pool) {
+      if (it->first.pool() == pool) {
         dout(10) << __func__ << " " << pool
                  << " removing pending pg_upmap "
                  << it->first << dendl;
@@ -11558,7 +11558,7 @@ int OSDMonitor::_prepare_remove_pool(
   {
     auto it = pending_inc.new_pg_upmap_items.begin();
     while (it != pending_inc.new_pg_upmap_items.end()) {
-      if (it->first.pool() == (uint64_t)pool) {
+      if (it->first.pool() == pool) {
         dout(10) << __func__ << " " << pool
                  << " removing pending pg_upmap_items "
                  << it->first << dendl;
