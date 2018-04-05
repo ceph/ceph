@@ -45,7 +45,6 @@ TEST_F(TmapMigratePP, DataScan) {
   ASSERT_EQ(0, ds.init());
   int r = ds.main({"tmap_upgrade", pool_name.c_str()});
   ASSERT_EQ(r, 0);
-  ds.shutdown();
 
   // Check that the TMAP object is now an omap object
   std::map<std::string, bufferlist> read_vals;
