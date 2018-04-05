@@ -9014,12 +9014,9 @@ int RGWRados::Object::Delete::delete_obj()
 
   store->remove_rgw_head_obj(op);
   r = ref.ioctx.operate(ref.oid, &op);
-  bool need_invalidate = false;
-  if (r == -ECANCELED) {
-    /* raced with another operation, we can regard it as removed */
-    need_invalidate = true;
-    r = 0;
-  }
+
+  /* raced with another operation, object state is indeterminate */
+  const bool need_invalidate = (r == -ECANCELED);
 
   int64_t poolid = ref.ioctx.get_id();
   if (r >= 0) {

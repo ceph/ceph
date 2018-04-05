@@ -4415,6 +4415,10 @@ void RGWDeleteObj::execute()
         op_ret = -ENOENT;
         return;
       }
+      // if delete raced with another write, we can regard it as removed
+      if (op_ret == -ECANCELED) {
+        op_ret = 0;
+      }
     }
 
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
