@@ -3281,6 +3281,7 @@ def systemd_disable(
 
 
 def systemd_start(
+    cluster,
     path,
     osd_id,
 ):
@@ -3293,14 +3294,14 @@ def systemd_start(
         [
             'systemctl',
             'enable',
-            'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+            '{cluster}-osd@{osd_id}'.format(cluster=cluster, osd_id=osd_id),
         ] + style,
     )
     command_check_call(
         [
             'systemctl',
             'start',
-            'ceph-osd@{osd_id}'.format(osd_id=osd_id),
+            '{cluster}-osd@{osd_id}'.format(cluster=cluster, osd_id=osd_id),
         ],
     )
 
@@ -3362,7 +3363,7 @@ def start_daemon(
                 ],
             )
         elif os.path.exists(os.path.join(path, 'systemd')):
-            systemd_start(path, osd_id)
+            systemd_start(cluster, path, osd_id)
         elif os.path.exists(os.path.join(path, 'openrc')):
             base_script = '/etc/init.d/ceph-osd'
             osd_script = '{base}.{osd_id}'.format(
