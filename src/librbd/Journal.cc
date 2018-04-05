@@ -351,6 +351,7 @@ Journal<I>::~Journal() {
     delete m_work_queue;
   }
 
+  Mutex::Locker locker(m_lock);
   assert(m_state == STATE_UNINITIALIZED || m_state == STATE_CLOSED);
   assert(m_journaler == NULL);
   assert(m_journal_replay == NULL);
@@ -1218,6 +1219,8 @@ void Journal<I>::handle_replay_ready() {
     m_processing_entry = true;
   }
 
+  m_async_journal_op_tracker.start_op();
+
   bufferlist data = replay_entry.get_data();
   auto it = data.cbegin();
 
@@ -1279,11 +1282,15 @@ void Journal<I>::handle_replay_complete(int r) {
       // ensure the commit position is flushed to disk
       m_journaler->flush_commit_position(ctx);
     });
+  ctx = new FunctionContext([this, ctx](int r) {
+      m_async_journal_op_tracker.wait(m_image_ctx, ctx);
+    });
   ctx = new FunctionContext([this, cct, cancel_ops, ctx](int r) {
       ldout(cct, 20) << this << " handle_replay_complete: "
                      << "shut down replay" << dendl;
       m_journal_replay->shut_down(cancel_ops, ctx);
     });
+
   m_journaler->stop_replay(ctx);
 }
 
@@ -1342,11 +1349,13 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
           m_journal_replay->shut_down(true, ctx);
         });
       m_journaler->stop_replay(ctx);
+      m_async_journal_op_tracker.finish_op();
       return;
     } else if (m_state == STATE_FLUSHING_REPLAY) {
       // end-of-replay flush in-progress -- we need to restart replay
       transition_state(STATE_FLUSHING_RESTART, r);
       m_lock.Unlock();
+      m_async_journal_op_tracker.finish_op();
       return;
     }
   } else {
@@ -1354,6 +1363,7 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
     m_journaler->committed(replay_entry);
   }
   m_lock.Unlock();
+  m_async_journal_op_tracker.finish_op();
 }
 
 template <typename I>
