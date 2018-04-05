@@ -392,6 +392,17 @@ class TestAnsibleTask(TestTask):
         assert args.count('--tags') == 1
         assert args[args.index('--tags') + 1] == 'user,pubkeys'
 
+    def test_build_args_skip_tags(self):
+        self.task_config.update(dict(
+            playbook=[],
+            skip_tags="user,pubkeys"
+        ))
+        task = self.klass(self.ctx, self.task_config)
+        task.setup()
+        args = task._build_args()
+        assert args.count('--skip-tags') == 1
+        assert args[args.index('--skip-tags') + 1] == 'user,pubkeys'
+
     def test_build_args_no_vars(self):
         self.task_config.update(dict(
             playbook=[],

@@ -62,6 +62,8 @@ class Ansible(Task):
                     not, we generate a temporary file to use.
         tags:       A string including any (comma-separated) tags to be passed
                     directly to ansible-playbook.
+        skip_tags:  A string of comma-separated tags that will be skipped by 
+                    passing them to ansible-playbook using --skip-tags.
         vars:       A dict of vars to be passed to ansible-playbook via the
                     --extra-vars flag
         group_vars: A dict with keys matching relevant group names in the
@@ -96,6 +98,7 @@ class Ansible(Task):
         inventory: /path/to/inventory
         playbook: /path/to/playbook.yml
         tags: my_tags
+        skip_tags: my_skipped_tags
         vars:
             var1: string_value
             var2:
@@ -353,6 +356,9 @@ class Ansible(Task):
         tags = self.config.get('tags')
         if tags:
             args.extend(['--tags', tags])
+        skip_tags = self.config.get('skip_tags')
+        if skip_tags:
+            args.extend(['--skip-tags', skip_tags])
         return args
 
     def teardown(self):
