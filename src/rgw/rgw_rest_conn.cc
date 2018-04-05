@@ -17,6 +17,9 @@ RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWRados *store,
     key = store->get_zone_params().system_key;
     self_zone_group = store->get_zonegroup().get_id();
   }
+
+  http_manager = new RGWHTTPManager(cct);
+  http_manager->set_threaded();
 }
 
 RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
@@ -25,8 +28,10 @@ RGWRESTConn::RGWRESTConn(RGWRESTConn&& other)
     key(std::move(other.key)),
     self_zone_group(std::move(other.self_zone_group)),
     remote_id(std::move(other.remote_id)),
-    counter(other.counter.load())
+    counter(other.counter.load()),
+    http_manager(other.http_manager)
 {
+  other.http_manager = nullptr;
 }
 
 RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
@@ -37,7 +42,16 @@ RGWRESTConn& RGWRESTConn::operator=(RGWRESTConn&& other)
   self_zone_group = std::move(other.self_zone_group);
   remote_id = std::move(other.remote_id);
   counter = other.counter.load();
+  http_manager = other.http_manager;
+  other.http_manager = nullptr;
   return *this;
+}
+
+RGWRESTConn::~RGWRESTConn()
+{
+  if (http_manager) {
+    delete http_manager;
+  }
 }
 
 int RGWRESTConn::get_url(string& endpoint)
@@ -206,12 +220,17 @@ int RGWRESTConn::get_obj(const rgw_user& uid, req_info *info /* optional */, rgw
     set_header(mod_pg_ver, extra_headers, "HTTP_DEST_PG_VER");
   }
 
-  int r = (*req)->send_request(key, extra_headers, obj);
+  int r = (*req)->send_request(key, extra_headers, obj, http_manager);
   if (r < 0) {
     delete *req;
     *req = nullptr;
   }
-  
+
+  r = (*req)->wait();
+  if (r < 0) {
+    delete *req;
+    *req = nullptr;
+  }
   return r;
 }
 

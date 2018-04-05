@@ -4,6 +4,10 @@
 #ifndef CEPH_RGW_HTTP_CLIENT_H
 #define CEPH_RGW_HTTP_CLIENT_H
 
+#include <curl/curl.h>
+#include <curl/easy.h>
+#include <curl/multi.h>
+
 #include "common/RWLock.h"
 #include "common/Cond.h"
 #include "rgw_common.h"
@@ -232,6 +236,12 @@ class RGWHTTPManager {
   int64_t max_threaded_req;
   int thread_pipe[2];
 
+  // indicate RGWHTTPManager will be used in multithread
+  // need lock when access curl_handle_cache
+  Mutex handle_cache_lock;
+  list<CURL*> curl_handle_cache;
+  int cached_handle_size {0};
+
   void register_request(rgw_http_req_data *req_data);
   void complete_request(rgw_http_req_data *req_data);
   void _complete_request(rgw_http_req_data *req_data);
@@ -273,6 +283,11 @@ public:
   int process_requests(bool wait_for_data, bool *done);
 
   int complete_requests();
+
+  bool is_enable_threaded() { return is_threaded; }
+
+  CURL* get_easy_handle();
+  void put_easy_handle(CURL* c);
 };
 
 #endif

@@ -689,7 +689,7 @@ int RGWRESTStreamRWRequest::send_request(RGWAccessKey *key, map<string, string>&
   if (r < 0)
     return r;
 
-  if (!mgr) {
+  if (!mgr || !pmanager->is_enable_threaded()) {
     r = pmanager->complete_requests();
     if (r < 0)
       return r;
