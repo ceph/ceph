@@ -228,7 +228,7 @@ class Module(MgrModule):
             self.set_health_checks({
                 'MGR_ZABBIX_NO_SERVER': {
                     'severity': 'warning',
-                    'summary': 'No Zabbix server not configured',
+                    'summary': 'No Zabbix server configured',
                     'detail': ['Configuration value zabbix_host not configured']
                 }
             })
