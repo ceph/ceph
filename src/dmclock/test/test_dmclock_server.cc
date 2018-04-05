@@ -1,7 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
 
 
@@ -239,6 +247,7 @@ namespace crimson {
 
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
 
       ClientId client1 = 17;
       ClientId client2 = 98;
@@ -269,15 +278,15 @@ namespace crimson {
       EXPECT_EQ(2u, pq.client_count());
       EXPECT_EQ(9u, pq.request_count());
 
-      pq.remove_by_req_filter([](const MyReq& r) -> bool {return 1 == r.id % 2;});
+      pq.remove_by_req_filter([](MyReqRef&& r) -> bool {return 1 == r->id % 2;});
 
       EXPECT_EQ(5u, pq.request_count());
 
       std::list<MyReq> capture;
       pq.remove_by_req_filter(
-	[&capture] (const MyReq& r) -> bool {
-	  if (0 == r.id % 2) {
-	    capture.push_front(r);
+	[&capture] (MyReqRef&& r) -> bool {
+	  if (0 == r->id % 2) {
+	    capture.push_front(*r);
 	    return true;
 	  } else {
 	    return false;
@@ -308,6 +317,7 @@ namespace crimson {
 
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
 
       ClientId client1 = 17;
 
@@ -338,9 +348,9 @@ namespace crimson {
 
       std::vector<MyReq> capture;
       pq.remove_by_req_filter(
-	[&capture] (const MyReq& r) -> bool {
-	  if (1 == r.id % 2) {
-	    capture.push_back(r);
+	[&capture] (MyReqRef&& r) -> bool {
+	  if (1 == r->id % 2) {
+	    capture.push_back(*r);
 	    return true;
 	  } else {
 	    return false;
@@ -359,9 +369,9 @@ namespace crimson {
 
       std::vector<MyReq> capture2;
       pq.remove_by_req_filter(
-	[&capture2] (const MyReq& r) -> bool {
-	  if (0 == r.id % 2) {
-	    capture2.insert(capture2.begin(), r);
+	[&capture2] (MyReqRef&& r) -> bool {
+	  if (0 == r->id % 2) {
+	    capture2.insert(capture2.begin(), *r);
 	    return true;
 	  } else {
 	    return false;
@@ -390,6 +400,7 @@ namespace crimson {
 
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
 
       ClientId client1 = 17;
 
@@ -420,9 +431,9 @@ namespace crimson {
 
       std::vector<MyReq> capture;
       pq.remove_by_req_filter(
-	[&capture] (const MyReq& r) -> bool {
-	  if (1 == r.id % 2) {
-	    capture.insert(capture.begin(), r);
+	[&capture] (MyReqRef&& r) -> bool {
+	  if (1 == r->id % 2) {
+	    capture.insert(capture.begin(), *r);
 	    return true;
 	  } else {
 	    return false;
@@ -440,9 +451,9 @@ namespace crimson {
 
       std::vector<MyReq> capture2;
       pq.remove_by_req_filter(
-	[&capture2] (const MyReq& r) -> bool {
-	  if (0 == r.id % 2) {
-	    capture2.push_back(r);
+	[&capture2] (MyReqRef&& r) -> bool {
+	  if (0 == r->id % 2) {
+	    capture2.push_back(*r);
 	    return true;
 	  } else {
 	    return false;
@@ -471,6 +482,7 @@ namespace crimson {
 
       using ClientId = int;
       using Queue = dmc::PullPriorityQueue<ClientId,MyReq>;
+      using MyReqRef = typename Queue::RequestRef;
 
       ClientId client1 = 17;
       ClientId client2 = 98;
@@ -505,8 +517,8 @@ namespace crimson {
 
       pq.remove_by_client(client1,
 			  true,
-			  [&removed] (const MyReq& r) {
-			    removed.push_front(r);
+			  [&removed] (MyReqRef&& r) {
+			    removed.push_front(*r);
 			  });
 
       EXPECT_EQ(3u, removed.size());

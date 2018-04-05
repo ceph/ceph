@@ -44,8 +44,7 @@ namespace ceph {
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
     static unsigned filter_list_pairs(ListPairs *l,
-				      std::function<bool (T&&)> f,
-				      std::list<T>* out = nullptr) {
+				      std::function<bool (T&&)> f) {
       unsigned ret = 0;
       for (typename ListPairs::iterator i = l->end();
 	   i != l->begin();
@@ -55,7 +54,6 @@ namespace ceph {
 	--next;
 	if (f(std::move(next->second))) {
 	  ++ret;
-	  if (out) out->push_back(std::move(next->second));
 	  l->erase(next);
 	} else {
 	  i = next;
@@ -246,7 +244,9 @@ namespace ceph {
     // to the list so items end up on list in front-to-back priority
     // order
     void remove_by_filter(std::function<bool (T&&)> filter_accum) {
-      queue.remove_by_req_filter(filter_accum, true);
+      queue.remove_by_req_filter([&] (std::unique_ptr<T>&& r) {
+          return filter_accum(std::move(*r));
+        }, true);
 
       for (auto i = queue_front.rbegin(); i != queue_front.rend(); /* no-inc */) {
 	if (filter_accum(std::move(i->second))) {
@@ -272,8 +272,8 @@ namespace ceph {
       if (out) {
 	queue.remove_by_client(k,
 			       true,
-			       [&out] (T&& t) {
-				 out->push_front(std::move(t));
+			       [&out] (std::unique_ptr<T>&& t) {
+				 out->push_front(std::move(*t));
 			       });
       } else {
 	queue.remove_by_client(k, true);
