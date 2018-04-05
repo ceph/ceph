@@ -352,6 +352,7 @@ Journal<I>::~Journal() {
     delete m_work_queue;
   }
 
+  std::lock_guard locker{m_lock};
   ceph_assert(m_state == STATE_UNINITIALIZED || m_state == STATE_CLOSED);
   ceph_assert(m_journaler == NULL);
   ceph_assert(m_journal_replay == NULL);
@@ -597,12 +598,12 @@ void Journal<I>::close(Context *on_finish) {
 
   Listeners listeners(m_listeners);
   m_listener_notify = true;
-  m_lock.unlock();
+  locker.unlock();
   for (auto listener : listeners) {
     listener->handle_close();
   }
 
-  m_lock.lock();
+  locker.lock();
   m_listener_notify = false;
   m_listener_cond.notify_all();
 
@@ -1248,6 +1249,8 @@ void Journal<I>::handle_replay_ready() {
     m_processing_entry = true;
   }
 
+  m_async_journal_op_tracker.start_op();
+
   bufferlist data = replay_entry.get_data();
   auto it = data.cbegin();
 
@@ -1309,11 +1312,16 @@ void Journal<I>::handle_replay_complete(int r) {
       // ensure the commit position is flushed to disk
       m_journaler->flush_commit_position(ctx);
     });
+  ctx = create_async_context_callback(m_image_ctx, ctx);
+  ctx = new LambdaContext([this, ctx](int r) {
+      m_async_journal_op_tracker.wait_for_ops(ctx);
+    });
   ctx = new LambdaContext([this, cct, cancel_ops, ctx](int r) {
       ldout(cct, 20) << this << " handle_replay_complete: "
                      << "shut down replay" << dendl;
       m_journal_replay->shut_down(cancel_ops, ctx);
     });
+
   m_journaler->stop_replay(ctx);
 }
 
@@ -1372,16 +1380,21 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
           m_journal_replay->shut_down(true, ctx);
         });
       m_journaler->stop_replay(ctx);
+      m_async_journal_op_tracker.finish_op();
       return;
     } else if (m_state == STATE_FLUSHING_REPLAY) {
       // end-of-replay flush in-progress -- we need to restart replay
       transition_state(STATE_FLUSHING_RESTART, r);
+      locker.unlock();
+      m_async_journal_op_tracker.finish_op();
       return;
     }
   } else {
     // only commit the entry if written successfully
     m_journaler->committed(replay_entry);
   }
+  locker.unlock();
+  m_async_journal_op_tracker.finish_op();
 }
 
 template <typename I>
@@ -1737,7 +1750,7 @@ void Journal<I>::handle_refresh_metadata(uint64_t refresh_sequence,
 
   Listeners listeners(m_listeners);
   m_listener_notify = true;
-  m_lock.unlock();
+  locker.unlock();
 
   if (promoted_to_primary) {
     for (auto listener : listeners) {
@@ -1749,7 +1762,7 @@ void Journal<I>::handle_refresh_metadata(uint64_t refresh_sequence,
     }
   }
 
-  m_lock.lock();
+  locker.lock();
   m_listener_notify = false;
   m_listener_cond.notify_all();
 }
