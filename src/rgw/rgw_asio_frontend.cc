@@ -452,6 +452,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
         }
+        s.shutdown(tcp::socket::shutdown_both, ec);
       });
   } else {
 #else
@@ -462,6 +463,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         beast::flat_buffer buffer;
         boost::system::error_code ec;
         handle_connection(env, s, buffer, false, ec, yield);
+        s.shutdown(tcp::socket::shutdown_both, ec);
       });
   }
 }
