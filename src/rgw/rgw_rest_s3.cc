@@ -258,7 +258,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     } else {
       auto iter = attrs.find(RGW_ATTR_ETAG);
       if (iter != attrs.end()) {
-        dump_etag(s, iter->second);
+        dump_etag(s, iter->second.to_str());
       }
     }
 
@@ -2185,9 +2185,8 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
   if (op_ret == 0) {
     dump_time(s, "LastModified", &mtime);
-    std::string etag_str = etag.c_str();
-    if (! etag_str.empty()) {
-      s->formatter->dump_string("ETag", std::move(etag_str));
+    if (! etag.empty()) {
+      s->formatter->dump_string("ETag", std::move(etag));
     }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
