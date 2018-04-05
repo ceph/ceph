@@ -1119,6 +1119,10 @@ if(WITH_LTTNG)
   add_dependencies(vstart tracepoint_libraries)
 endif(WITH_LTTNG)
 
+if(WITH_MGR_DASHBOARD_V2_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+  add_dependencies(vstart mgr-dashboard_v2-frontend-build)
+endif()
+
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
     vstart
