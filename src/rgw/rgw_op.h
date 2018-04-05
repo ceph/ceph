@@ -1306,7 +1306,7 @@ protected:
   string source_zone;
   string client_id;
   string op_id;
-  ceph::buffer::list etag;
+  string etag;
 
   off_t last_ofs;
 

@@ -7789,7 +7789,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *version_id,
                string *ptag,
-               ceph::buffer::list *petag,
+               string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                rgw_zone_set *zones_trace)
@@ -7938,7 +7938,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (petag) {
     const auto iter = cb.get_attrs().find(RGW_ATTR_ETAG);
     if (iter != cb.get_attrs().end()) {
-      *petag = iter->second;
+      *petag = iter->second.to_str();
     }
   }
 
@@ -8095,7 +8095,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *version_id,
                string *ptag,
-               ceph::buffer::list *petag,
+               string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data)
 {
@@ -8221,7 +8221,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (petag) {
     const auto iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
-      *petag = iter->second;
+      *petag = iter->second.to_str();
     }
   }
 
@@ -8358,7 +8358,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *version_id,
-               ceph::buffer::list *petag)
+               string *petag)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -8407,9 +8407,9 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   auto iter = attrs.find(RGW_ATTR_ETAG);
   if (iter != attrs.end()) {
     bufferlist& bl = iter->second;
-    etag = string(bl.c_str(), bl.length());
+    etag = bl.to_str();
     if (petag) {
-      *petag = bl;
+      *petag = etag;
     }
   }
 

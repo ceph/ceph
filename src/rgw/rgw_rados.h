@@ -3152,7 +3152,7 @@ public:
 		       ceph::real_time delete_at,
                        string *version_id,
                        string *ptag,
-                       ceph::buffer::list *petag,
+                       string *petag,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
                        rgw_zone_set *zones_trace= nullptr);
@@ -3195,7 +3195,7 @@ public:
 	       ceph::real_time delete_at,
                string *version_id,
                string *ptag,
-               ceph::buffer::list *petag,
+               string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data);
 
@@ -3209,7 +3209,7 @@ public:
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                string *version_id,
-               ceph::buffer::list *petag);
+               string *petag);
   
   int check_bucket_empty(RGWBucketInfo& bucket_info);
 
