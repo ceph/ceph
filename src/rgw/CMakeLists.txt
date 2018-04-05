@@ -60,6 +60,7 @@ set(rgw_a_srcs
   rgw_frontend.cc
   rgw_gc.cc
   rgw_http_client.cc
+  rgw_http_client_curl.cc
   rgw_json_enc.cc
   rgw_keystone.cc
   rgw_ldap.cc
@@ -153,6 +154,10 @@ target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
+
+if (WITH_CURL_OPENSSL)
+  target_link_libraries(rgw_a ${OPENSSL_LIBRARIES})
+endif (WITH_CURL_OPENSSL)
 
 set(radosgw_srcs
   rgw_loadgen_process.cc

@@ -2358,4 +2358,7 @@ static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 extern bool match_policy(boost::string_view pattern, boost::string_view input,
                          uint32_t flag);
 
+void rgw_setup_saved_curl_handles();
+void rgw_release_all_curl_handles();
+
 #endif
