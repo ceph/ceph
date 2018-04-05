@@ -17,6 +17,11 @@
 
 SCRIPTNAME="$(basename $0)"
 PYTHON_BINARY="python2.7"
+if [ `uname` == FreeBSD ]; then
+    GETOPT="/usr/local/bin/getopt"
+else
+    GETOPT=getopt
+fi
 
 function usage {
     echo
@@ -33,7 +38,7 @@ function usage {
     exit 1
 }
 
-TEMP=$(getopt --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
+TEMP=$($GETOPT --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
 test $? != 0 && usage
 eval set -- "$TEMP"
 
