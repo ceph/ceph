@@ -66,5 +66,5 @@ void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager)
   modules_manager->register_module("elasticsearch", es_module);
 
   RGWSyncModuleRef aws_module(std::make_shared<RGWAWSSyncModule>());
-  modules_manager->register_module("aws", aws_module);
+  modules_manager->register_module("cloud", aws_module);
 }

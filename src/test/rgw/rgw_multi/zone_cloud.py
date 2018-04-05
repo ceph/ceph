@@ -249,7 +249,7 @@ class CloudZone(Zone):
         return True
 
     def tier_type(self):
-        return "aws"
+        return "cloud"
 
     def create(self, cluster, args = None, check_retcode = True):
         """ create the object with the given arguments """
