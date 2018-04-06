@@ -35,9 +35,7 @@ void RGWProcess::RGWWQ::_dump_queue()
 int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
 		    RGWStreamIO* client_io, OpsLogSocket* olog)
 {
-  int ret = 0;
-
-  client_io->init(g_ceph_context);
+  int ret = client_io->init(g_ceph_context);
 
   req->log_init();
 
@@ -55,20 +53,26 @@ int process_request(RGWRados* store, RGWREST* rest, RGWRequest* req,
   RGWObjectCtx rados_ctx(store, s);
   s->obj_ctx = &rados_ctx;
 
+  if (ret < 0) {
+    s->cio = client_io;
+    abort_early(s, nullptr, ret, nullptr);
+    return ret;
+  }
+
   s->req_id = store->unique_id(req->id);
   s->trans_id = store->unique_trans_id(req->id);
   s->host_id = store->host_id;
 
   req->log_format(s, "initializing for trans_id = %s", s->trans_id.c_str());
 
-  RGWOp* op = NULL;
+  RGWOp* op = nullptr;
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
   RGWHandler_REST *handler = rest->get_handler(store, s, client_io, &mgr,
 					      &init_error);
   if (init_error != 0) {
-    abort_early(s, NULL, init_error, NULL);
+    abort_early(s, nullptr, init_error, nullptr);
     goto done;
   }
   dout(10) << "handler=" << typeid(*handler).name() << dendl;

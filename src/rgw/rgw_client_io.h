@@ -17,14 +17,14 @@ class RGWClientIO {
 
 protected:
   RGWEnv env;
-
-  virtual void init_env(CephContext *cct) = 0;
+  virtual int init_env(CephContext *cct) = 0;
 
 public:
   virtual ~RGWClientIO() {}
   RGWClientIO() : _account(false) {}
 
-  void init(CephContext *cct);
+  /* Initialize the BasicClient and inject CephContext. */
+  int init(CephContext *cct);
   RGWEnv& get_env() { return env; }
 
   bool account() { return _account; }

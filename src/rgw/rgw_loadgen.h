@@ -31,7 +31,7 @@ class RGWLoadGenIO : public RGWStreamIO
   uint64_t left_to_read;
   RGWLoadGenRequestEnv *req;
 public:
-  void init_env(CephContext *cct);
+  int init_env(CephContext *cct) override;
 
   int write_data(const char *buf, int len);
   int read_data(char *buf, int len);
