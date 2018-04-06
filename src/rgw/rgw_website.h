@@ -202,7 +202,7 @@ struct RGWBucketWebsiteConf
   void dump_xml(Formatter *f) const;
 
   bool should_redirect(const string& key, const int http_error_code, RGWBWRoutingRule *redirect);
-  void get_effective_key(const string& key, string *effective_key);
+  void get_effective_key(const string& key, string *effective_key, bool is_file);
 };
 WRITE_CLASS_ENCODER(RGWBucketWebsiteConf)
 

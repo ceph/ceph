@@ -17,6 +17,8 @@
 #include "rgw_rest_s3.h"
 
 class RGWHandler_REST_S3Website : public RGWHandler_REST_S3 {
+  std::string original_object_name; // object name before retarget()
+  bool web_dir() const;
 protected:
   int retarget(RGWOp *op, RGWOp **new_op);
   // TODO: this should be virtual I think, and ensure that it's always
@@ -36,6 +38,7 @@ protected:
 public:
   RGWHandler_REST_S3Website() : RGWHandler_REST_S3() {}
   virtual ~RGWHandler_REST_S3Website() {}
+  int init(RGWRados *store, req_state *s, RGWClientIO* cio) override;
   virtual int error_handler(int err_no, string *error_content);
 };
 
