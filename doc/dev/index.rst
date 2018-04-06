@@ -705,8 +705,8 @@ chapters examine the `make check`_ and integration tests in detail.
 
 .. _`make check`:
 
-Testing - make check
-====================
+Unit tests - make check
+-----------------------
 
 After compiling Ceph, the code can be run through a battery of tests covering
 various aspects of Ceph. For historical reasons, this battery of tests is often
@@ -735,7 +735,7 @@ different constraints). Depending on your hardware, it can take from 20
 minutes to three hours to complete, but it's worth the wait.
 
 How unit tests are declared
----------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Unit tests are declared in the ``CMakeLists.txt`` files (multiple files under
 ``./src``) using the ``add_ceph_test`` or ``add_ceph_unittest`` CMake functions,
@@ -745,7 +745,7 @@ build process.  The ``add_ceph_test`` function is used to declare unit test
 scripts, while ``add_ceph_unittest`` is used for unit test binaries.
 
 Unit testing of CLI tools
--------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Some of the CLI tools are tested using special files ending with the extension
 ``.t`` and stored under ``./src/test/cli``. These tests are run using a tool
@@ -757,15 +757,15 @@ the `cram task`_.
 .. _`cram task`: https://github.com/ceph/ceph/blob/master/qa/tasks/cram.py
 
 Caveats
--------
+^^^^^^^
 
 1. Unlike the various Ceph daemons and ``ceph-fuse``, the unit tests
    are linked against the default memory allocator (glibc) unless explicitly
    linked against something else. This enables tools like valgrind to be used
    in the tests.
 
-Testing - integration tests
-===========================
+Integration tests
+-----------------
 
 When a test requires multiple machines, root access or lasts for a
 longer time (for example, to simulate a realistic Ceph deployment), it
@@ -778,7 +778,7 @@ In the sections that follow we attempt to provide a detailed introduction
 to that framework from the perspective of a beginning Ceph developer.
 
 Teuthology consumes packages 
-----------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 It may take some time to understand the significance of this fact, but it
 is `very` significant. It means that automated tests can be conducted on
@@ -794,7 +794,7 @@ cloud-provisioned), installs the packages on them, and deploys Ceph
 clusters on them - all as called for by the test.
 
 The nightlies
--------------
+^^^^^^^^^^^^^
 
 A number of integration tests are run on a regular basis in the `Sepia
 lab`_ against the official Ceph repositories (on the ``master`` development
@@ -809,7 +809,7 @@ results are also reported on the `ceph-qa mailing list
 <https://ceph.com/irc/>`_ for analysis.
 
 Suites inventory
-----------------
+^^^^^^^^^^^^^^^^
 
 The ``suites`` directory of the `ceph/qa sub-directory`_ contains
 all the integration tests, for all the Ceph components.
@@ -863,7 +863,7 @@ all the integration tests, for all the Ceph components.
 .. _`ceph-disk man page`: ../../man/8/ceph-disk
 
 teuthology-describe-tests
--------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In February 2016, a new feature called ``teuthology-describe-tests`` was
 added to the `teuthology framework`_ to facilitate documentation and better
@@ -880,7 +880,7 @@ Developers are encouraged to improve the documentation, in terms of both
 coverage and quality.
 
 How integration tests are run
------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Given that - as a new Ceph developer - you will typically not have access
 to the `Sepia lab`_, you may rightly ask how you can run the integration
@@ -916,7 +916,7 @@ available by running the following command on the teuthology machine::
 .. _teuthology-suite: http://docs.ceph.com/teuthology/docs/teuthology.suite.html
 
 How integration tests are defined
----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Integration tests are defined by yaml files found in the ``suites``
 subdirectory of the `ceph/qa sub-directory`_ and implemented by python
@@ -926,7 +926,7 @@ directory tree containing yaml files that are combined, at runtime, into a
 larger yaml file.
 
 Reading a standalone test
--------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Let us first examine a standalone test, or "singleton". 
 
@@ -996,7 +996,7 @@ This test can be run with::
     $ teuthology-suite --suite rados/singleton/all/admin-socket.yaml fs/ext4.yaml
 
 Test descriptions 
------------------
+^^^^^^^^^^^^^^^^^
 
 Each test has a "test description", which is similar to a directory path,
 but not the same. In the case of a standalone test, like the one in
@@ -1025,7 +1025,7 @@ signifies the concatenation of two files:
 * ceph-disk/basic/tasks/ceph-disk.yaml
 
 How are tests built from directories?
--------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 As noted in the previous section, most tests are not defined in a single
 yaml file, but rather as a `combination` of files collected from a
@@ -1040,7 +1040,7 @@ operators.  The ``%`` file is the "convolution" operator and ``+``
 signifies concatenation.
 
 Convolution operator
---------------------
+^^^^^^^^^^^^^^^^^^^^
 
 The convolution operator, implemented as an empty file called ``%``, tells
 teuthology to construct a test matrix from yaml facets found in
@@ -1103,7 +1103,7 @@ An individual test from the `ceph-disk suite`_ can be run by adding the
    understands POSIX relative paths only.
 
 Concatenation operator
-----------------------
+^^^^^^^^^^^^^^^^^^^^^^
 
 For even greater flexibility in sharing yaml files between suites, the
 special file plus (``+``) can be used to concatenate files within a
@@ -1158,7 +1158,7 @@ A single test from the rbd/thrash suite can be run by adding the
       --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
 
 Filtering tests by their description
-------------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 When a few jobs fail and need to be run again, the ``--filter`` option
 can be used to select tests with a matching description. For instance, if the
@@ -1185,7 +1185,7 @@ Each string is looked up anywhere in the test description and has to
 be an exact match: they are not regular expressions.
 
 Reducing the number of tests
-----------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The ``rados`` suite generates thousands of tests out of a few hundred
 files. This happens because teuthology constructs test matrices from
