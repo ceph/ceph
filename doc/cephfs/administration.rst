@@ -74,6 +74,22 @@ appear to be eg. exabytes in size, causing load on the MDS as it tries
 to enumerate the objects during operations like stats or deletes.
 
 
+Taking the cluster down
+-----------------------
+
+Taking a CephFS cluster down is done by reducing the number of ranks to 1,
+setting the cluster_down flag, and then failing the last rank. For example:
+
+::
+    ceph fs set <fs_name> max_mds 1
+    ceph mds deactivate <fs_name>:1 # rank 2 of 2
+    ceph status # wait for rank 1 to finish stopping
+    ceph fs set <fs_name> cluster_down true
+    ceph mds fail <fs_name>:0
+
+Setting the ``cluster_down`` flag prevents standbys from taking over the failed
+rank.
+
 Daemons
 -------
 
