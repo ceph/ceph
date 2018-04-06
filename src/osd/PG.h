@@ -2861,6 +2861,10 @@ public:
     bool dirty_epoch,
     bool try_fast_info,
     PerfCounters *logger = nullptr);
+
+  void write_if_dirty(RecoveryCtx *rctx) {
+    write_if_dirty(*rctx->transaction);
+  }
 protected:
   void write_if_dirty(ObjectStore::Transaction& t);
 
