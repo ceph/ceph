@@ -220,13 +220,15 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	mds_metric_summary(metric.type));
       ostringstream ss;
       ss << "mds" << info.name << "(mds." << rank << "): " << metric.message;
-      for (auto p = metric.metadata.begin();
-	   p != metric.metadata.end();
-	   ++p) {
-	if (p != metric.metadata.begin()) {
+      bool first = true;
+      for (auto &p : metric.metadata) {
+	if (first) {
+	  ss << " ";
+	} else {
 	  ss << ", ";
-	}
-	ss << p->first << ": " << p->second;
+        }
+	ss << p.first << ": " << p.second;
+        first = false;
       }
       check->detail.push_back(ss.str());
     }
