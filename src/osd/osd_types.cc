@@ -1222,6 +1222,8 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_unsigned("pg_num_pending_dec_epoch", get_pg_num_pending_dec_epoch());
   f->dump_stream("last_change") << get_last_change();
   f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
+  f->dump_stream("last_force_op_resend_prenautilus")
+    << get_last_force_op_resend_prenautilus();
   f->dump_stream("last_force_op_resend_preluminous")
     << get_last_force_op_resend_preluminous();
   f->dump_unsigned("auid", get_auid());
@@ -1707,7 +1709,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(opts, bl);
   }
   if (v >= 25) {
-    encode(last_force_op_resend, bl);
+    encode(last_force_op_resend_prenautilus, bl);
   }
   if (v >= 26) {
     encode(application_metadata, bl);
@@ -1720,6 +1722,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(pgp_num_target, bl);
     encode(pg_num_pending, bl);
     encode(pg_num_pending_dec_epoch, bl);
+    encode(last_force_op_resend, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -1869,9 +1872,9 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
     decode(opts, bl);
   }
   if (struct_v >= 25) {
-    decode(last_force_op_resend, bl);
+    decode(last_force_op_resend_prenautilus, bl);
   } else {
-    last_force_op_resend = last_force_op_resend_preluminous;
+    last_force_op_resend_prenautilus = last_force_op_resend_preluminous;
   }
   if (struct_v >= 26) {
     decode(application_metadata, bl);
@@ -1884,10 +1887,12 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
     decode(pgp_num_target, bl);
     decode(pg_num_pending, bl);
     decode(pg_num_pending_dec_epoch, bl);
+    decode(last_force_op_resend, bl);
   } else {
     pg_num_target = pg_num;
     pgp_num_target = pgp_num;
     pg_num_pending = pg_num;
+    last_force_op_resend = last_force_op_resend_prenautilus;
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -1984,8 +1989,10 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   }
   out << " last_change " << p.get_last_change();
   if (p.get_last_force_op_resend() ||
+      p.get_last_force_op_resend_prenautilus() ||
       p.get_last_force_op_resend_preluminous())
     out << " lfor " << p.get_last_force_op_resend() << "/"
+	<< p.get_last_force_op_resend_prenautilus() << "/"
 	<< p.get_last_force_op_resend_preluminous();
   if (p.get_auid())
     out << " owner " << p.get_auid();
