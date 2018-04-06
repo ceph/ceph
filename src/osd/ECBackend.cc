@@ -1208,10 +1208,9 @@ void ECBackend::handle_sub_read_reply(
         have.insert(j->first.shard);
         dout(20) << __func__ << " have shard=" << j->first.shard << dendl;
       }
-      set<int> want_to_read, dummy_minimum;
-      get_want_to_read_shards(&want_to_read);
+      set<int> dummy_minimum;
       int err;
-      if ((err = ec_impl->minimum_to_decode(want_to_read, have, &dummy_minimum)) < 0) {
+      if ((err = ec_impl->minimum_to_decode(rop.want_to_read[iter->first], have, &dummy_minimum)) < 0) {
 	dout(20) << __func__ << " minimum_to_decode failed" << dendl;
         if (rop.in_progress.empty()) {
 	  // If we don't have enough copies and we haven't sent reads for all shards
