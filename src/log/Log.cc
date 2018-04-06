@@ -280,7 +280,7 @@ void Log::flush()
 
   // trim
   while (m_recent.m_len > m_max_recent) {
-    delete m_recent.dequeue();
+    m_recent.dequeue()->destroy();
   }
 
   m_flush_mutex_holder = 0;

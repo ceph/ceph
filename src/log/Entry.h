@@ -58,6 +58,10 @@ struct Entry {
     }
   }
 
+private:
+  ~Entry() = default;
+
+public:
   // function improves estimate for expected size of message
   void hint_size() {
     if (m_exp_len != NULL) {
@@ -90,6 +94,15 @@ struct Entry {
   // extracts up to avail chars of content
   int snprintf(char* dst, size_t avail) const {
     return m_streambuf.snprintf(dst, avail);
+  }
+
+  void destroy() {
+    if (m_exp_len != NULL) {
+      this->~Entry();
+      ::operator delete(this);
+    } else {
+      delete(this);
+    }
   }
 };
 
