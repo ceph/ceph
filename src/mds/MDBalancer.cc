@@ -164,8 +164,6 @@ void MDBalancer::tick()
   }
 
   // balance?
-  if (last_heartbeat == utime_t())
-    last_heartbeat = now;
   if (mds->get_nodeid() == 0 &&
       g_conf->mds_bal_interval > 0 &&
       (num_bal_times ||
@@ -229,7 +227,26 @@ mds_load_t MDBalancer::get_load(utime_t now)
     dout(20) << "get_load no root, no load" << dendl;
   }
 
-  load.req_rate = mds->get_req_rate();
+  uint64_t num_requests = mds->get_num_requests();
+  bool new_req_rate = false;
+  if (last_get_load != utime_t() &&
+      now > last_get_load &&
+      num_requests >= last_num_requests) {
+    utime_t el = now;
+    el -= last_get_load;
+    if (el.sec() >= 1) {
+      load.req_rate = (num_requests - last_num_requests) / (double)el;
+      new_req_rate = true;
+    }
+  }
+  if (!new_req_rate) {
+    auto p = mds_load.find(mds->get_nodeid());
+    if (p != mds_load.end())
+      load.req_rate = p->second.req_rate;
+  }
+  last_get_load = now;
+  last_num_requests = num_requests;
+
   load.queue_len = messenger->get_dispatch_queue_len();
 
   ifstream cpu(PROCPREFIX "/proc/loadavg");
@@ -300,12 +317,16 @@ void MDBalancer::send_heartbeat()
     return;
   }
 
-  mds_load.clear();
-  if (mds->get_nodeid() == 0)
+  if (mds->get_nodeid() == 0) {
     beat_epoch++;
+    mds_load.clear();
+  }
 
   // my load
   mds_load_t load = get_load(now);
+  mds->logger->set(l_mds_load_cent, 100 * load.mds_load());
+  mds->logger->set(l_mds_dispatch_queue_len, load.queue_len);
+
   map<mds_rank_t, mds_load_t>::value_type val(mds->get_nodeid(), load);
   mds_load.insert(val);
 
@@ -367,12 +388,29 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     goto out;
   }
 
-  if (who == 0) {
-    dout(20) << " from mds0, new epoch" << dendl;
+  if (mds->get_nodeid() != 0 && m->get_beat() > beat_epoch) {
+    dout(10) << "receive next epoch " << m->get_beat() << " from mds." << who << " before mds0" << dendl;
+
     beat_epoch = m->get_beat();
+    // clear the mds load info whose epoch is less than beat_epoch 
+    mds_load.clear();
+  }
+
+  if (who == 0) {
+    dout(20) << " from mds0, new epoch " << m->get_beat() << dendl;
+    if (beat_epoch != m->get_beat()) {
+      beat_epoch = m->get_beat();
+      mds_load.clear();
+    }
+
     send_heartbeat();
 
     mds->mdcache->show_subtrees();
+  } else if (mds->get_nodeid() == 0) {
+    if (beat_epoch != m->get_beat()) {
+      dout(10) << " old heartbeat epoch, ignoring" << dendl;
+      goto out;
+    }
   }
 
   {
@@ -602,6 +640,8 @@ void MDBalancer::prep_rebalance(int beat)
 	      << dendl;
     }
 
+    mds_meta_load.clear();
+
     double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
@@ -796,28 +836,24 @@ void MDBalancer::try_rebalance(balance_state_t& state)
   set<CDir*> fullauthsubs;
 
   mds->mdcache->get_fullauth_subtrees(fullauthsubs);
-  for (set<CDir*>::iterator it = fullauthsubs.begin();
-       it != fullauthsubs.end();
-       ++it) {
-    CDir *im = *it;
-    if (im->get_inode()->is_stray()) continue;
+  for (auto dir : fullauthsubs) {
+    CInode *diri = dir->get_inode();
 
-    double pop = im->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
+    mds_rank_t from = diri->authority().first;
+    double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
     if (g_conf->mds_bal_idle_threshold > 0 &&
 	pop < g_conf->mds_bal_idle_threshold &&
-	im->inode != mds->mdcache->get_root() &&
-	im->inode->authority().first != mds->get_nodeid()) {
-      dout(5) << " exporting idle (" << pop << ") import " << *im
-	      << " back to mds." << im->inode->authority().first
-	      << dendl;
-      mds->mdcache->migrator->export_dir_nicely(im, im->inode->authority().first);
+	diri != mds->mdcache->get_root() &&
+	from != mds->get_nodeid()) {
+      dout(5) << " exporting idle (" << pop << ") import " << *dir
+	      << " back to mds." << from << dendl;
+      mds->mdcache->migrator->export_dir_nicely(dir, from);
       continue;
     }
 
-    import_pop_map[ pop ] = im;
-    mds_rank_t from = im->inode->authority().first;
-    dout(15) << "  map: i imported " << *im << " from " << from << dendl;
-    import_from_map.insert(pair<mds_rank_t,CDir*>(from, im));
+    import_pop_map[pop] = dir;
+    dout(15) << "  map: i imported " << *dir << " from " << from << dendl;
+    import_from_map.insert(pair<mds_rank_t,CDir*>(from, dir));
   }
 
 
@@ -851,10 +887,10 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 	dout(5) << "considering " << *dir << " from " << (*p.first).first << dendl;
 	multimap<mds_rank_t,CDir*>::iterator plast = p.first++;
 
-	if (dir->inode->is_base() ||
-	    dir->inode->is_stray())
+	if (dir->inode->is_base())
 	  continue;
-	if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
+	if (dir->is_freezing() || dir->is_frozen())
+	  continue;  // export pbly already in progress
 	double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
 	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
 
@@ -876,57 +912,25 @@ void MDBalancer::try_rebalance(balance_state_t& state)
       continue;
     }
 
-    // any other imports
-    if (false)
-      for (map<double,CDir*>::iterator import = import_pop_map.begin();
-	   import != import_pop_map.end();
-	   import++) {
-	CDir *imp = (*import).second;
-	if (imp->inode->is_base() ||
-	    imp->inode->is_stray())
-	  continue;
-
-	double pop = (*import).first;
-	if (pop < amount-have || pop < MIN_REEXPORT) {
-	  dout(5) << "reexporting " << *imp
-		  << " pop " << pop
-		  << " back to mds." << imp->inode->authority()
-		  << dendl;
-	  have += pop;
-	  mds->mdcache->migrator->export_dir_nicely(imp, imp->inode->authority().first);
-	}
-	if (amount-have < MIN_OFFLOAD) break;
-      }
-    if (amount-have < MIN_OFFLOAD) {
-      //fudge = amount-have;
-      continue;
-    }
-
     // okay, search for fragments of my workload
-    set<CDir*> candidates;
-    mds->mdcache->get_fullauth_subtrees(candidates);
-
     list<CDir*> exports;
 
-    for (set<CDir*>::iterator pot = candidates.begin();
-	 pot != candidates.end();
-	 ++pot) {
-      if ((*pot)->get_inode()->is_stray()) continue;
-      find_exports(*pot, amount, exports, have, already_exporting);
+    for (auto dir : fullauthsubs) {
+      if (dir->get_inode()->is_mdsdir())
+	continue;
+      if (dir->is_freezing() || dir->is_frozen())
+	continue;  // export pbly already in progress
+      find_exports(dir, amount, exports, have, already_exporting);
       if (have > amount-MIN_OFFLOAD)
 	break;
     }
     //fudge = amount - have;
 
-    for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); ++it) {
-      dout(5) << "   - exporting "
-	       << (*it)->pop_auth_subtree
-	       << " "
-	       << (*it)->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate)
-	       << " to mds." << target
-	       << " " << **it
-	       << dendl;
-      mds->mdcache->migrator->export_dir_nicely(*it, target);
+    for (auto dir : exports) {
+      dout(5) << "   - exporting " << dir->pop_auth_subtree
+	      << " " << dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate)
+	      << " to mds." << target << " " << *dir << dendl;
+      mds->mdcache->migrator->export_dir_nicely(dir, target);
     }
   }
 
@@ -940,9 +944,19 @@ void MDBalancer::find_exports(CDir *dir,
                               double& have,
                               set<CDir*>& already_exporting)
 {
+  utime_t now = ceph_clock_now();
+  if ((double)(now - rebalance_time) > 0.1) {
+    derr << " balancer runs too long"  << dendl_impl;
+    have = amount;
+    return;
+  }
+
+  assert(dir->is_auth());
+
   double need = amount - have;
   if (need < amount * g_conf->mds_bal_min_start)
     return;   // good enough!
+
   double needmax = need * g_conf->mds_bal_need_max;
   double needmin = need * g_conf->mds_bal_need_min;
   double midchunk = need * g_conf->mds_bal_midchunk;
@@ -955,28 +969,39 @@ void MDBalancer::find_exports(CDir *dir,
   dout(7) << " find_exports in " << dir_pop << " " << *dir << " need " << need << " (" << needmin << " - " << needmax << ")" << dendl;
 
   double subdir_sum = 0;
-  for (auto it = dir->begin(); it != dir->end(); ++it) {
-    CInode *in = it->second->get_linkage()->get_inode();
-    if (!in) continue;
-    if (!in->is_dir()) continue;
+  for (elist<CInode*>::iterator it = dir->pop_lru_subdirs.begin_use_current();
+       !it.end(); ) {
+    CInode *in = *it;
+    ++it;
+
+    assert(in->is_dir());
 
     list<CDir*> dfls;
-    in->get_dirfrags(dfls);
+    in->get_nested_dirfrags(dfls);
+
+    size_t num_idle_frags = 0;
     for (list<CDir*>::iterator p = dfls.begin();
 	 p != dfls.end();
 	 ++p) {
       CDir *subdir = *p;
-      if (!subdir->is_auth()) continue;
-      if (already_exporting.count(subdir)) continue;
+      if (already_exporting.count(subdir))
+	continue;
 
-      if (subdir->is_frozen()) continue;  // can't export this right now!
+      // we know all ancestor dirfrags up to subtree root are not freezing or frozen.
+      // It's more efficient to use CDir::is_{freezing,frozen}_tree_root()
+      if (subdir->is_frozen_dir() || subdir->is_frozen_tree_root() ||
+	  subdir->is_freezing_dir() || subdir->is_freezing_tree_root())
+	continue;  // can't export this right now!
 
       // how popular?
       double pop = subdir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
       subdir_sum += pop;
       dout(15) << "   subdir pop " << pop << " " << *subdir << dendl;
 
-      if (pop < minchunk) continue;
+      if (pop < minchunk) {
+	num_idle_frags++;
+	continue;
+      }
 
       // lucky find?
       if (pop > needmin && pop < needmax) {
@@ -994,6 +1019,8 @@ void MDBalancer::find_exports(CDir *dir,
       } else
 	smaller.insert(pair<double,CDir*>(pop, subdir));
     }
+    if (dfls.size() == num_idle_frags)
+      in->item_pop_lru.remove_myself();
   }
   dout(15) << "   sum " << subdir_sum << " / " << dir_pop << dendl;
 
@@ -1047,10 +1074,9 @@ void MDBalancer::find_exports(CDir *dir,
     if (have > needmin)
       return;
   }
-
 }
 
-void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
+void MDBalancer::hit_inode(const utime_t& now, CInode *in, int type, int who)
 {
   // hit inode
   in->pop.get(type).hit(now, mds->mdcache->decayrate);
@@ -1091,10 +1117,10 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
   }
 }
 
-void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
+void MDBalancer::hit_dir(const utime_t& now, CDir *dir, int type, int who, double amount)
 {
   // hit me
-  double v = dir->pop_me.get(type).hit(now, amount);
+  double v = dir->pop_me.get(type).hit(now, mds->mdcache->decayrate, amount);
 
   const bool hot = (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
                    (v > g_conf->mds_bal_split_wr && type == META_POP_IWR);
@@ -1162,14 +1188,21 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   bool hit_subtree_nested = dir->is_auth();  // all nested auth subtrees
 
   while (true) {
-    dir->pop_nested.get(type).hit(now, amount);
+    CDir *pdir = dir->inode->get_parent_dir();
+    dir->pop_nested.get(type).hit(now, mds->mdcache->decayrate, amount);
     if (rd_adj != 0.0)
       dir->pop_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
 
     if (hit_subtree) {
-      dir->pop_auth_subtree.get(type).hit(now, amount);
+      dir->pop_auth_subtree.get(type).hit(now, mds->mdcache->decayrate, amount);
+
       if (rd_adj != 0.0)
 	dir->pop_auth_subtree.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
+
+      if (dir->is_subtree_root())
+	hit_subtree = false;                // end of auth domain, stop hitting auth counters.
+      else if (pdir)
+	pdir->pop_lru_subdirs.push_front(&dir->get_inode()->item_pop_lru);
     }
 
     if (hit_subtree_nested) {
@@ -1177,12 +1210,8 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
       if (rd_adj != 0.0)
 	dir->pop_auth_subtree_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
     }
-
-    if (dir->is_subtree_root())
-      hit_subtree = false;                // end of auth domain, stop hitting auth counters.
-
-    if (dir->inode->get_parent_dn() == 0) break;
-    dir = dir->inode->get_parent_dn()->get_dir();
+    if (!pdir) break;
+    dir = pdir;
   }
 }
 
@@ -1227,4 +1256,102 @@ void MDBalancer::handle_mds_failure(mds_rank_t who)
   if (0 == who) {
     last_epoch_under = 0;
   }
+}
+
+int MDBalancer::dump_loads(Formatter *f)
+{
+  utime_t now = ceph_clock_now();
+  DecayRate& decayrate = mds->mdcache->decayrate;
+
+  list<CDir*> dfs;
+  if (mds->mdcache->get_root()) {
+    mds->mdcache->get_root()->get_dirfrags(dfs);
+  } else {
+    dout(5) << "dump_load no root" << dendl;
+  }
+
+  f->open_object_section("loads");
+
+  f->open_array_section("dirfrags");
+  while (!dfs.empty()) {
+    CDir *dir = dfs.front();
+    dfs.pop_front();
+
+    if (f) {
+      f->open_object_section("dir");
+      dir->dump_load(f, now, decayrate);
+      f->close_section();
+    }
+
+    for (auto it = dir->begin(); it != dir->end(); ++it) {
+      CInode *in = it->second->get_linkage()->get_inode();
+      if (!in || !in->is_dir())
+	continue;
+
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (auto subdir : ls) {
+	if (subdir->pop_nested.meta_load() < .001)
+	  continue;
+	dfs.push_back(subdir);
+      }
+    }
+  }
+  f->close_section();  // dirfrags array
+
+  f->open_object_section("mds_load");
+  {
+
+    auto dump_mds_load = [this, f, now](mds_load_t& load) {
+      f->dump_float("request_rate", load.req_rate);
+      f->dump_float("cache_hit_rate", load.cache_hit_rate);
+      f->dump_float("queue_length", load.queue_len);
+      f->dump_float("cpu_load", load.cpu_load_avg);
+      f->dump_float("mds_load", load.mds_load());
+
+      DecayRate rate; // no decay
+      f->open_object_section("auth_dirfrags");
+      load.auth.dump(f, now, rate);
+      f->close_section();
+      f->open_object_section("all_dirfrags");
+      load.all.dump(f, now, rate);
+      f->close_section();
+    };
+
+    for (auto p : mds_load) {
+      stringstream name;
+      name << "mds." << p.first;
+      f->open_object_section(name.str().c_str());
+      dump_mds_load(p.second);
+      f->close_section();
+    }
+  }
+  f->close_section(); // mds_load
+
+  f->open_object_section("mds_meta_load");
+  for (auto p : mds_meta_load) {
+    stringstream name;
+    name << "mds." << p.first;
+    f->dump_float(name.str().c_str(), p.second);
+  }
+  f->close_section(); // mds_meta_load
+
+  f->open_object_section("mds_import_map");
+  for (auto p : mds_import_map) {
+    stringstream name1;
+    name1 << "mds." << p.first;
+    f->open_array_section(name1.str().c_str());
+    for (auto q : p.second) {
+      f->open_object_section("from");
+      stringstream name2;
+      name2 << "mds." << q.first;
+      f->dump_float(name2.str().c_str(), q.second);
+      f->close_section();
+    }
+    f->close_section(); // mds.? array
+  }
+  f->close_section(); // mds_import_map
+
+  f->close_section(); // loads
+  return 0;
 }

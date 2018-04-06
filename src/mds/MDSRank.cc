@@ -266,11 +266,7 @@ void MDSRankDispatcher::tick()
   }
 
   // log
-  mds_load_t load = balancer->get_load(ceph_clock_now());
-
   if (logger) {
-    logger->set(l_mds_load_cent, 100 * load.mds_load());
-    logger->set(l_mds_dispatch_queue_len, messenger->get_dispatch_queue_len());
     logger->set(l_mds_subtrees, mdcache->num_subtrees());
 
     mdcache->log_stat();
@@ -1990,6 +1986,13 @@ bool MDSRankDispatcher::handle_asok_command(
         ss << "Failed to dump tree: " << cpp_strerror(r);
         f->reset();
       }
+    }
+  } else if (command == "dump loads") {
+    Mutex::Locker l(mds_lock);
+    int r = balancer->dump_loads(f);
+    if (r != 0) {
+      ss << "Failed to dump loads: " << cpp_strerror(r);
+      f->reset();
     }
   } else if (command == "force_readonly") {
     Mutex::Locker l(mds_lock);

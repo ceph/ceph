@@ -38,14 +38,7 @@ class MDBalancer {
   friend class C_Bal_SendHeartbeat;
 public:
   MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) : 
-    mds(m),
-    messenger(msgr),
-    mon_client(monc),
-    beat_epoch(0),
-    last_epoch_under(0), my_load(0.0), target_load(0.0)
-    { }
-
-  mds_load_t get_load(utime_t);
+    mds(m), messenger(msgr), mon_client(monc) { }
 
   int proc_message(Message *m);
 
@@ -59,8 +52,8 @@ public:
   void subtract_export(CDir *ex, utime_t now);
   void add_import(CDir *im, utime_t now);
 
-  void hit_inode(utime_t now, CInode *in, int type, int who=-1);
-  void hit_dir(utime_t now, CDir *dir, int type, int who=-1, double amount=1.0);
+  void hit_inode(const utime_t& now, CInode *in, int type, int who=-1);
+  void hit_dir(const utime_t& now, CDir *dir, int type, int who=-1, double amount=1.0);
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
@@ -74,6 +67,8 @@ public:
   void maybe_fragment(CDir *dir, bool hot);
 
   void handle_mds_failure(mds_rank_t who);
+
+  int dump_loads(Formatter *f);
 
 private:
   typedef struct {
@@ -90,6 +85,8 @@ private:
   void handle_export_pins(void);
 
   void export_empties();
+
+  mds_load_t get_load(utime_t now);
   int localize_balancer();
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
@@ -122,15 +119,18 @@ private:
   MDSRank *mds;
   Messenger *messenger;
   MonClient *mon_client;
-  int beat_epoch;
+  int beat_epoch = 0;
 
-  int last_epoch_under;
+  int last_epoch_under = 0;
   string bal_code;
   string bal_version;
 
   utime_t last_heartbeat;
   utime_t last_sample;
   utime_t rebalance_time; //ensure a consistent view of load for rebalance
+
+  utime_t last_get_load;
+  uint64_t last_num_requests = 0;
 
   // Dirfrags which are marked to be passed on to MDCache::[split|merge]_dir
   // just as soon as a delayed context comes back and triggers it.
@@ -144,7 +144,8 @@ private:
   map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
 
   // per-epoch state
-  double          my_load, target_load;
+  double my_load = 0;
+  double target_load = 0;
 };
 
 #endif

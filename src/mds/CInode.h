@@ -631,6 +631,7 @@ public:
   int auth_pin_freeze_allowance = 0;
 
   inode_load_vec_t pop;
+  elist<CInode*>::item item_pop_lru;
 
   // friends
   friend class Server;
