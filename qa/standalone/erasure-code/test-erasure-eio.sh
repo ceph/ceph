@@ -380,6 +380,65 @@ function TEST_ec_recovery_errors() {
     delete_pool $poolname
 }
 
+# Test recovery when there's only one shard to recover, but multiple
+# objects recovering in one RecoveryOp
+function TEST_ec_recovery_multiple_objects() {
+    local dir=$1
+    local objname=myobject
+
+    export CEPH_ARGS
+    CEPH_ARGS+=' --osd-recovery-max-single-start 3 --osd-recovery-max-active 3 '
+    setup_osds 7 || return 1
+
+    local poolname=pool-jerasure
+    create_erasure_coded_pool $poolname 3 2 || return 1
+
+    rados_put $dir $poolname test1
+    rados_put $dir $poolname test2
+    rados_put $dir $poolname test3
+
+    ceph osd out 0 || return 1
+
+    # Cluster should recover these objects all at once
+    wait_for_clean || return 1
+
+    rados_get $dir $poolname test1
+    rados_get $dir $poolname test2
+    rados_get $dir $poolname test3
+
+    delete_erasure_coded_pool $poolname
+}
+
+# test multi-object recovery when the one missing shard gets EIO
+function TEST_ec_recovery_multiple_objects_eio() {
+    local dir=$1
+    local objname=myobject
+
+    export CEPH_ARGS
+    CEPH_ARGS+=' --osd-recovery-max-single-start 3 --osd-recovery-max-active 3 '
+    setup_osds 7 || return 1
+
+    local poolname=pool-jerasure
+    create_erasure_coded_pool $poolname 3 2 || return 1
+
+    rados_put $dir $poolname test1
+    rados_put $dir $poolname test2
+    rados_put $dir $poolname test3
+
+    # can't read from this shard anymore
+    inject_eio ec data $poolname $objname $dir 0 || return 1
+    ceph osd out 0 || return 1
+
+    # Cluster should recover these objects all at once
+    wait_for_clean || return 1
+
+    rados_get $dir $poolname test1
+    rados_get $dir $poolname test2
+    rados_get $dir $poolname test3
+
+    delete_erasure_coded_pool $poolname
+}
+
 # Test backfill with unfound object
 function TEST_ec_backfill_unfound() {
     local dir=$1
