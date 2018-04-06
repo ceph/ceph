@@ -14,7 +14,7 @@ import { CephfsService } from '../cephfs.service';
   styleUrls: ['./cephfs.component.scss']
 })
 export class CephfsComponent implements OnInit, OnDestroy {
-  @ViewChild('poolProgressTmpl') poolProgressTmpl: TemplateRef<any>;
+  @ViewChild('poolUsageTpl') poolUsageTpl: TemplateRef<any>;
   @ViewChild('activityTmpl') activityTmpl: TemplateRef<any>;
 
   routeParamsSubscribe: Subscription;
@@ -54,11 +54,10 @@ export class CephfsComponent implements OnInit, OnDestroy {
       columns: [
         { prop: 'pool' },
         { prop: 'type' },
-        { prop: 'used', pipe: this.dimlessBinary },
-        { prop: 'avail', pipe: this.dimlessBinary },
+        { prop: 'size', pipe: this.dimlessBinary },
         {
           name: 'Usage',
-          cellTemplate: this.poolProgressTmpl,
+          cellTemplate: this.poolUsageTpl,
           comparator: (valueA, valueB, rowA, rowB, sortDirection) => {
             const valA = rowA.used / rowA.avail;
             const valB = rowB.used / rowB.avail;
@@ -96,6 +95,9 @@ export class CephfsComponent implements OnInit, OnDestroy {
     this.cephfsService.getCephfs(this.id).subscribe((data: any) => {
       this.ranks.data = data.cephfs.ranks;
       this.pools.data = data.cephfs.pools;
+      this.pools.data.forEach((pool) => {
+        pool.size = pool.used + pool.avail;
+      });
       this.standbys = [
         {
           key: 'Standby daemons',
