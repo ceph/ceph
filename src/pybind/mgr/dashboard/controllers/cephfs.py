@@ -7,8 +7,9 @@ import cherrypy
 
 from ..services.ceph_service import CephService
 
+from . import ApiController, AuthRequired, BaseController
 from .. import mgr
-from ..tools import ApiController, AuthRequired, BaseController, ViewCache
+from ..tools import ViewCache
 
 
 @ApiController('cephfs')

@@ -5,8 +5,9 @@ import math
 import cherrypy
 import rbd
 
+from . import ApiController, AuthRequired, RESTController
 from .. import mgr
-from ..tools import ApiController, AuthRequired, RESTController, ViewCache
+from ..tools import ViewCache
 
 
 @ApiController('rbd')
@@ -26,6 +27,7 @@ class Rbd(RESTController):
     }
 
     def __init__(self):
+        super(Rbd, self).__init__()
         self.rbd = None
 
     @staticmethod

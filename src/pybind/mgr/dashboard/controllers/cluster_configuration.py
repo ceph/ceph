@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import cherrypy
 
 from .. import mgr
-from ..tools import ApiController, RESTController, AuthRequired
+from . import ApiController, RESTController, AuthRequired
 
 
 @ApiController('cluster_conf')
