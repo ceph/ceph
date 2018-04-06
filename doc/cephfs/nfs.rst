@@ -35,15 +35,15 @@ A sample ganesha.conf configured with FSAL_CEPH can be found here,
 `<https://github.com/nfs-ganesha/nfs-ganesha/blob/next/src/config_samples/ceph.conf>`_.
 It is suitable for a standalone NFS-Ganesha server, or an active/passive
 configuration of NFS-Ganesha servers managed by some sort of clustering
-software (e.g., Pacemaker). Important details about options are
+software (e.g., Pacemaker). Important details about the options are
 added as comments in the sample conf. There are options to do the following:
 
 - minimize Ganesha caching wherever possible since the libcephfs clients
   (of FSAL_CEPH) also cache aggressively
 
-- fetch Ganesha config files stored in RADOS objects
+- read from Ganesha config files stored in RADOS objects
 
-- store client recovery date in RADOS OMAP key-value interface
+- store client recovery data in RADOS OMAP key-value interface
 
 - mandate NFSv4.1+ access
 
@@ -78,4 +78,4 @@ Current limitations
 ===================
 
 - Per running ganesha daemon, FSAL_CEPH can only export one Ceph filesystem
-  although multiple directories in a Cephfile system may be exported.
+  although multiple directories in a Ceph filesystem may be exported.
