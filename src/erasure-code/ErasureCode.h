@@ -56,7 +56,7 @@ namespace ceph {
       return get_chunk_count() - get_data_chunk_count();
     }
 
-    virtual int get_sub_chunk_count() {
+    int get_sub_chunk_count() override{
       return 1;
     }
 
