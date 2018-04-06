@@ -550,7 +550,7 @@ protected:
   epoch_t get_min_last_epoch_clean() const;
 
   friend class C_UpdateCreatingPGs;
-  std::map<int, std::map<epoch_t, std::set<pg_t>>> creating_pgs_by_osd_epoch;
+  std::map<int, std::map<epoch_t, std::set<spg_t>>> creating_pgs_by_osd_epoch;
   std::vector<pg_t> pending_created_pgs;
   // the epoch when the pg mapping was calculated
   epoch_t creating_pgs_epoch = 0;

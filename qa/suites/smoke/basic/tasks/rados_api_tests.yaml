@@ -15,6 +15,9 @@ tasks:
       - \(TOO_FEW_PGS\)
       - reached quota
       - but it is still running
+    conf:
+      mon:
+        mon warn on pool no app: false
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1

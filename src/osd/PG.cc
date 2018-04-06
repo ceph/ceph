@@ -90,8 +90,6 @@ static ostream& _prefix(std::ostream *_dout, T *t)
   return *_dout << t->gen_prefix();
 }
 
-MEMPOOL_DEFINE_OBJECT_FACTORY(PGPeeringEvent, pg_peering_evt, osd);
-
 void PGStateHistory::enter(PG* pg, const utime_t entime, const char* state)
 {
   // Ignore trimming state machine for now
@@ -321,7 +319,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     p.get_split_bits(_pool.info.get_pg_num()),
     _pool.id,
     p.shard),
-  last_persisted_osdmap_ref(curmap),
+  last_persisted_osdmap(curmap->get_epoch()),
   deleting(false),
   trace_endpoint("0.0.0.0", 0, "PG"),
   dirty_info(false), dirty_big_info(false),
@@ -1755,7 +1753,6 @@ void PG::build_might_have_unfound()
 
 void PG::activate(ObjectStore::Transaction& t,
 		  epoch_t activation_epoch,
-		  list<Context*>& tfin,
 		  map<int, map<spg_t,pg_query_t> >& query_map,
 		  map<int,
 		      vector<
@@ -2286,52 +2283,44 @@ void PG::mark_clean()
 bool PG::set_force_recovery(bool b)
 {
   bool did = false;
-  lock();
-  if (!deleting) {
-    if (b) {
-      if (!(state & PG_STATE_FORCED_RECOVERY) &&
-	  (state & (PG_STATE_DEGRADED |		// XXX: Will this check be messed up?
-		    PG_STATE_RECOVERY_WAIT |
-		    PG_STATE_RECOVERING))) {
-	dout(20) << __func__ << " set" << dendl;
-	state_set(PG_STATE_FORCED_RECOVERY);
-	publish_stats_to_osd();
-	did = true;
-      }
-    } else if (state & PG_STATE_FORCED_RECOVERY) {
-      dout(20) << __func__ << " clear" << dendl;
-      state_clear(PG_STATE_FORCED_RECOVERY);
+  if (b) {
+    if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	(state & (PG_STATE_DEGRADED |
+		  PG_STATE_RECOVERY_WAIT |
+		  PG_STATE_RECOVERING))) {
+      dout(20) << __func__ << " set" << dendl;
+      state_set(PG_STATE_FORCED_RECOVERY);
       publish_stats_to_osd();
       did = true;
     }
+  } else if (state & PG_STATE_FORCED_RECOVERY) {
+    dout(20) << __func__ << " clear" << dendl;
+    state_clear(PG_STATE_FORCED_RECOVERY);
+    publish_stats_to_osd();
+    did = true;
   }
-  unlock();
   return did;
 }
 
 bool PG::set_force_backfill(bool b)
 {
   bool did = false;
-  lock();
-  if (!deleting) {
-    if (b) {
-      if (!(state & PG_STATE_FORCED_RECOVERY) &&
-	  (state & (PG_STATE_DEGRADED |		// XXX: Will this check be messed up?
-		    PG_STATE_BACKFILL_WAIT |
-		    PG_STATE_BACKFILLING))) {
-	dout(10) << __func__ << " set" << dendl;
-	state_set(PG_STATE_FORCED_RECOVERY);
-	publish_stats_to_osd();
-	did = true;
-      }
-    } else if (state & PG_STATE_FORCED_RECOVERY) {
-      dout(10) << __func__ << " clear" << dendl;
-      state_clear(PG_STATE_FORCED_RECOVERY);
+  if (b) {
+    if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	(state & (PG_STATE_DEGRADED |
+		  PG_STATE_BACKFILL_WAIT |
+		  PG_STATE_BACKFILLING))) {
+      dout(10) << __func__ << " set" << dendl;
+      state_set(PG_STATE_FORCED_RECOVERY);
       publish_stats_to_osd();
       did = true;
     }
+  } else if (state & PG_STATE_FORCED_RECOVERY) {
+    dout(10) << __func__ << " clear" << dendl;
+    state_clear(PG_STATE_FORCED_RECOVERY);
+    publish_stats_to_osd();
+    did = true;
   }
-  unlock();
   return did;
 }
 
@@ -2409,7 +2398,7 @@ unsigned PG::get_delete_priority()
   }
 }
 
-void PG::finish_recovery(list<Context*>& tfin)
+Context *PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
   assert(info.last_complete == info.last_update);
@@ -2420,7 +2409,7 @@ void PG::finish_recovery(list<Context*>& tfin)
    * sync all this before purging strays.  but don't block!
    */
   finish_sync_event = new C_PG_FinishRecovery(this);
-  tfin.push_back(finish_sync_event);
+  return finish_sync_event;
 }
 
 void PG::_finish_recovery(Context *c)
@@ -2568,6 +2557,8 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   release_backoffs(hobject_t(), hobject_t::get_max());
 
   child->on_new_interval();
+
+  child->send_notify = !child->is_primary();
 
   child->dirty_info = true;
   child->dirty_big_info = true;
@@ -3307,6 +3298,14 @@ void PG::init(
   write_if_dirty(*t);
 }
 
+void PG::shutdown()
+{
+  ch->flush();
+  lock();
+  on_shutdown();
+  unlock();
+}
+
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
@@ -3463,7 +3462,7 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
   assert(ret == 0);
   if (need_update_epoch)
     last_epoch = get_osdmap()->get_epoch();
-  last_persisted_osdmap_ref = osdmap_ref;
+  last_persisted_osdmap = last_epoch;
 
   dirty_info = false;
   dirty_big_info = false;
@@ -3570,31 +3569,6 @@ void PG::trim_log()
     // trim primary as well
     pg_log.trim(pg_trim_to, info);
     dirty_info = true;
-  }
-}
-
-void PG::handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t trim_to)
-{
-  if (epoch < info.history.same_interval_since) {
-    dout(10) << " got old trim to " << trim_to << ", ignoring" << dendl;
-    return;
-  }
-
-  if (is_primary()) {
-    // peer is informing us of their last_complete_ondisk
-    dout(10) << " replica osd." << from << " lcod " << trim_to << dendl;
-    peer_last_complete_ondisk[pg_shard_t(from, shard)] = trim_to;
-
-    // trim log when the pg is recovered
-    calc_min_last_complete_ondisk();
-  } else {
-    // primary is instructing us to trim
-    ObjectStore::Transaction t;
-    pg_log.trim(trim_to, info);
-    dirty_info = true;
-    write_if_dirty(t);
-    int tr = osd->store->queue_transaction(ch, std::move(t), NULL);
-    assert(tr == 0);
   }
 }
 
@@ -3798,8 +3772,10 @@ void PG::read_state(ObjectStore *store)
       set_role(-1);
   }
 
-  PG::RecoveryCtx rctx(0, 0, 0, 0, 0, new ObjectStore::Transaction);
-  handle_loaded(&rctx);
+  PG::RecoveryCtx rctx(0, 0, 0, new ObjectStore::Transaction);
+  handle_initialize(&rctx);
+  // note: we don't activate here because we know the OSD will advance maps
+  // during boot.
   write_if_dirty(*rctx.transaction);
   store->queue_transaction(ch, std::move(*rctx.transaction));
   delete rctx.transaction;
@@ -4719,7 +4695,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     int state = scrubber.state;
     auto scrub_requeue_callback =
         new FunctionContext([osds, pgid, state](int r) {
-          PG *pg = osds->osd->lookup_lock_pg(pgid);
+          PGRef pg = osds->osd->lookup_lock_pg(pgid);
           if (pg == nullptr) {
             lgeneric_dout(osds->osd->cct, 20)
                 << "scrub_requeue_callback: Could not find "
@@ -5810,17 +5786,14 @@ struct FlushState {
 };
 typedef ceph::shared_ptr<FlushState> FlushStateRef;
 
-void PG::start_flush(ObjectStore::Transaction *t,
-		     list<Context *> *on_applied,
-		     list<Context *> *on_safe)
+void PG::start_flush(ObjectStore::Transaction *t)
 {
   // flush in progress ops
   FlushStateRef flush_trigger (std::make_shared<FlushState>(
                                this, get_osdmap()->get_epoch()));
-  t->nop();
   flushes_in_progress++;
-  on_applied->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
-  on_safe->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
+  t->register_on_applied(new ContainerContext<FlushStateRef>(flush_trigger));
+  t->register_on_commit(new ContainerContext<FlushStateRef>(flush_trigger));
 }
 
 void PG::reset_interval_flush()
@@ -6344,25 +6317,19 @@ void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
   requeue_map_waiters();
-  for (auto i = peering_waiters.rbegin();
-       i != peering_waiters.rend();
-       ++i) {
-    osd->osd->enqueue_peering_evt_front(info.pgid, *i);
-  }
-  peering_waiters.clear();
 }
 
 void PG::do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rctx)
 {
   dout(10) << __func__ << ": " << evt->get_desc() << dendl;
-  if (!have_same_or_newer_map(evt->get_epoch_sent())) {
-    dout(10) << "deferring event " << evt->get_desc() << dendl;
-    peering_waiters.push_back(evt);
-    return;
+  assert(have_same_or_newer_map(evt->get_epoch_sent()));
+  if (old_peering_evt(evt)) {
+    dout(10) << "discard old " << evt->get_desc() << dendl;
+  } else {
+    recovery_state.handle_event(evt, rctx);
   }
-  if (old_peering_evt(evt))
-    return;
-  recovery_state.handle_event(evt, rctx);
+  // write_if_dirty regardless of path above to ensure we capture any work
+  // done by OSD::advance_pg().
   write_if_dirty(*rctx->transaction);
 }
 
@@ -6388,8 +6355,10 @@ void PG::queue_query(epoch_t msg_epoch,
 {
   dout(10) << "handle_query " << q << " from replica " << from << dendl;
   queue_peering_event(
-    PGPeeringEventRef(std::make_shared<PGPeeringEvent>(msg_epoch, query_epoch,
-					 MQuery(from, q, query_epoch))));
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+	msg_epoch, query_epoch,
+	MQuery(info.pgid, from, q, query_epoch))));
 }
 
 void PG::find_unfound(epoch_t queued, RecoveryCtx *rctx)
@@ -6442,6 +6411,7 @@ void PG::handle_advance_map(
 	   << " -- " << up_primary << "/" << acting_primary
 	   << dendl;
   update_osdmap_ref(osdmap);
+  osd_shard->update_pg_epoch(pg_slot, osdmap->get_epoch());
 
   pool.update(cct, osdmap);
 
@@ -6461,15 +6431,15 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
   dout(10) << "handle_activate_map " << dendl;
   ActMap evt;
   recovery_state.handle_event(evt, rctx);
-  if (osdmap_ref->get_epoch() - last_persisted_osdmap_ref->get_epoch() >
+  if (osdmap_ref->get_epoch() - last_persisted_osdmap >
     cct->_conf->osd_pg_epoch_persisted_max_stale) {
     dout(20) << __func__ << ": Dirtying info: last_persisted is "
-	     << last_persisted_osdmap_ref->get_epoch()
+	     << last_persisted_osdmap
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
     dirty_info = true;
   } else {
     dout(20) << __func__ << ": Not dirtying info: last_persisted is "
-	     << last_persisted_osdmap_ref->get_epoch()
+	     << last_persisted_osdmap
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
   }
   if (osdmap_ref->check_new_blacklist_entries()) {
@@ -6478,27 +6448,11 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
   write_if_dirty(*rctx->transaction);
 }
 
-void PG::handle_loaded(RecoveryCtx *rctx)
+void PG::handle_initialize(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_loaded" << dendl;
-  Load evt;
-  recovery_state.handle_event(evt, rctx);
-  write_if_dirty(*rctx->transaction);
-}
-
-void PG::handle_create(RecoveryCtx *rctx)
-{
-  dout(10) << "handle_create" << dendl;
-  rctx->created_pgs.insert(this);
+  dout(10) << __func__ << dendl;
   Initialize evt;
   recovery_state.handle_event(evt, rctx);
-  ActMap evt2;
-  recovery_state.handle_event(evt2, rctx);
-  write_if_dirty(*rctx->transaction);
-
-  rctx->on_applied->add(make_lambda_context([this]() {
-    update_store_with_options();
-  }));
 }
 
 void PG::handle_query_state(Formatter *f)
@@ -6513,22 +6467,6 @@ void PG::update_store_with_options()
   auto r = osd->store->set_collection_opts(ch, pool.info.opts);
   if(r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << " set_collection_opts returns error:" << r << dendl;
-  }
-}
-
-void PG::update_store_on_load()
-{
-  if (osd->store->get_type() == "filestore") {
-    // legacy filestore didn't store collection bit width; fix.
-    int bits = osd->store->collection_bits(ch);
-    if (bits < 0) {
-      assert(!coll.is_meta()); // otherwise OSD::load_pgs() did a bad thing
-      bits = info.pgid.get_split_bits(pool.info.get_pg_num());
-      lderr(cct) << __func__ << " setting bit width to " << bits << dendl;
-      ObjectStore::Transaction t;
-      t.collection_set_bits(coll, bits);
-      osd->store->queue_transaction(ch, std::move(t));
-    }
   }
 }
 
@@ -6550,12 +6488,11 @@ struct C_DeleteMore : public Context {
   }
 };
 
-void PG::_delete_some()
+void PG::_delete_some(ObjectStore::Transaction *t)
 {
   dout(10) << __func__ << dendl;
 
   vector<ghobject_t> olist;
-  ObjectStore::Transaction t;
   int max = std::min(osd->store->get_ideal_list_max(),
 		     (int)cct->_conf->osd_target_transaction_size);
   ghobject_t next;
@@ -6568,7 +6505,7 @@ void PG::_delete_some()
     &next);
   dout(20) << __func__ << " " << olist << dendl;
 
-  OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
   int64_t num = 0;
   for (auto& oid : olist) {
     if (oid.is_pgmeta()) {
@@ -6578,17 +6515,14 @@ void PG::_delete_some()
     if (r != 0 && r != -ENOENT) {
       ceph_abort();
     }
-    t.remove(coll, oid);
+    t->remove(coll, oid);
     ++num;
   }
   epoch_t e = get_osdmap()->get_epoch();
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, e);
-    t.register_on_commit(fin);
-    osd->store->queue_transaction(
-      ch,
-      std::move(t));
+    t->register_on_commit(fin);
   } else {
     dout(20) << __func__ << " finished" << dendl;
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
@@ -6598,32 +6532,23 @@ void PG::_delete_some()
     // final flush here to ensure completions drop refs.  Of particular concern
     // are the SnapMapper ContainerContexts.
     {
-      ObjectStore::Transaction t;
       PGRef pgref(this);
-      t.register_on_commit(new ContainerContext<PGRef>(pgref));
-      t.register_on_applied(new ContainerContext<PGRef>(pgref));
-      osd->store->queue_transaction(ch, std::move(t));
+      PGLog::clear_info_log(info.pgid, t);
+      t->remove_collection(coll);
+      t->register_on_commit(new ContainerContext<PGRef>(pgref));
+      t->register_on_applied(new ContainerContext<PGRef>(pgref));
+      osd->store->queue_transaction(ch, std::move(*t));
     }
     ch->flush();
 
-    ObjectStore::Transaction t;
-    PGLog::clear_info_log(info.pgid, &t);
-    t.remove_collection(coll);
-    PGRef pgref(this);
-    // keep pg ref around until txn completes to avoid any issues
-    // with Sequencer lifecycle (seen w/ filestore).
-    t.register_on_commit(new ContainerContext<PGRef>(pgref));
-    t.register_on_applied(new ContainerContext<PGRef>(pgref));
-    int r = osd->store->queue_transaction(
-      osd->meta_ch, std::move(t));
-    assert(r == 0);
-
-    osd->finish_pg_delete(this);
+    osd->finish_pg_delete(this, pool.info.get_pg_num());
     deleted = true;
 
     // cancel reserver here, since the PG is about to get deleted and the
     // exit() methods don't run when that happens.
     osd->local_reserver.cancel_reservation(info.pgid);
+
+    osd->logger->dec(l_osd_pg_removing);
   }
 }
 
@@ -6650,19 +6575,6 @@ PG::RecoveryState::Initial::Initial(my_context ctx)
     NamedState(context< RecoveryMachine >().pg, "Initial")
 {
   context< RecoveryMachine >().log_enter(state_name);
-}
-
-boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-
-  // do we tell someone we're here?
-  pg->send_notify = (!pg->is_primary());
-
-  pg->update_store_with_options();
-  pg->update_store_on_load();
-
-  return transit< Reset >();
 }
 
 boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& notify)
@@ -6907,6 +6819,53 @@ boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
   ldout(pg->cct, 7) << "handle ActMap primary" << dendl;
   pg->publish_stats_to_osd();
   pg->take_waiters();
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const SetForceRecovery&)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_force_recovery(true);
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const UnsetForceRecovery&)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_force_recovery(false);
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const RequestScrub& evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  if (pg->is_primary()) {
+    pg->unreg_next_scrub();
+    pg->scrubber.must_scrub = true;
+    pg->scrubber.must_deep_scrub = evt.deep || evt.repair;
+    pg->scrubber.must_repair = evt.repair;
+    pg->reg_next_scrub();
+    ldout(pg->cct,10) << "marking for scrub" << dendl;
+  }
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const SetForceBackfill&)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_force_backfill(true);
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const UnsetForceBackfill&)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_force_backfill(false);
   return discard_event();
 }
 
@@ -7803,12 +7762,13 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
   if (pg->info.last_complete != pg->info.last_update) {
     ceph_abort();
   }
-  pg->finish_recovery(*context< RecoveryMachine >().get_on_safe_context_list());
+  Context *c = pg->finish_recovery();
+  context< RecoveryMachine >().get_cur_transaction()->register_on_commit(c);
 
   if (pg->is_active()) {
     pg->mark_clean();
   }
-
+  pg->state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
   pg->share_pg_info();
   pg->publish_stats_to_osd();
   pg->requeue_ops(pg->waiting_for_clean_to_primary_repair);
@@ -7861,13 +7821,9 @@ PG::RecoveryState::Active::Active(my_context ctx)
   assert(!pg->backfill_reserved);
   assert(pg->is_primary());
   ldout(pg->cct, 10) << "In Active, about to call activate" << dendl;
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
+  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
 	       pg->get_osdmap()->get_epoch(),
-	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map(),
 	       context< RecoveryMachine >().get_recovery_ctx());
@@ -8088,6 +8044,20 @@ boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& not
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::Active::react(const MTrim& trim)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  assert(pg->is_primary());
+
+  // peer is informing us of their last_complete_ondisk
+  ldout(pg->cct,10) << " replica osd." << trim.from << " lcod " << trim.trim_to << dendl;
+  pg->peer_last_complete_ondisk[pg_shard_t(trim.from, trim.shard)] = trim.trim_to;
+
+  // trim log when the pg is recovered
+  pg->calc_min_last_complete_ondisk();
+  return discard_event();
+}
+
 boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -8203,6 +8173,9 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
   }
 
   // info.last_epoch_started is set during activate()
+  if (pg->info.history.last_epoch_started == 0) {
+    pg->osd->send_pg_created(pg->info.pgid.pgid);
+  }
   pg->info.history.last_epoch_started = pg->info.last_epoch_started;
   pg->info.history.last_interval_started = pg->info.last_interval_started;
   pg->dirty_info = true;
@@ -8258,10 +8231,7 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
+  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
 }
 
 
@@ -8272,7 +8242,6 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(
   map<int, map<spg_t, pg_query_t> > query_map;
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
 	       actevt.activation_epoch,
-	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       query_map, NULL, NULL);
   ldout(pg->cct, 10) << "Activate Finished" << dendl;
   return discard_event();
@@ -8294,6 +8263,15 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec&
   pg->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
   assert(pg->pg_log.get_head() == pg->info.last_update);
 
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MTrim& trim)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  // primary is instructing us to trim
+  pg->pg_log.trim(trim.trim_to, pg->info);
+  pg->dirty_info = true;
   return discard_event();
 }
 
@@ -8358,10 +8336,7 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
     ldout(pg->cct,10) << __func__ << " pool is deleted" << dendl;
     post_event(DeleteStart());
   } else {
-    pg->start_flush(
-      context< RecoveryMachine >().get_cur_transaction(),
-      context< RecoveryMachine >().get_on_applied_context_list(),
-      context< RecoveryMachine >().get_on_safe_context_list());
+    pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
   }
 }
 
@@ -8475,6 +8450,8 @@ void PG::RecoveryState::ToDelete::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  // note: on a successful removal, this path doesn't execute. see
+  // _delete_some().
   pg->osd->logger->dec(l_osd_pg_removing);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 }
@@ -8527,16 +8504,14 @@ PG::RecoveryState::Deleting::Deleting(my_context ctx)
   pg->deleting = true;
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   pg->on_removal(t);
-  RecoveryCtx *rctx = context<RecoveryMachine>().get_recovery_ctx();
-  Context *fin = new C_DeleteMore(pg, pg->get_osdmap()->get_epoch());
-  rctx->on_safe->contexts.push_back(fin);
+  t->register_on_commit(new C_DeleteMore(pg, pg->get_osdmap()->get_epoch()));
 }
 
 boost::statechart::result PG::RecoveryState::Deleting::react(
   const DeleteSome& evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  pg->_delete_some();
+  pg->_delete_some(context<RecoveryMachine>().get_cur_transaction());
   return discard_event();
 }
 
@@ -8800,10 +8775,7 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
 			msg->info, msg->log, msg->missing,
 			auth_log_shard);
   }
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
+  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
   return transit< GetMissing >();
 }
 

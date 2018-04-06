@@ -15,6 +15,8 @@ overrides:
         debug objecter: 20
         debug rados: 20
         debug monc: 20
+      mon:
+        mon warn on pool no app: false
 tasks:
 - workunit:
     timeout: 6h

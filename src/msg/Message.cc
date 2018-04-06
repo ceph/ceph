@@ -78,8 +78,10 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDScrub2.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
@@ -514,12 +516,18 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_PG_CREATE:
     m = new MOSDPGCreate;
     break;
+  case MSG_OSD_PG_CREATE2:
+    m = new MOSDPGCreate2;
+    break;
   case MSG_OSD_PG_TRIM:
     m = new MOSDPGTrim;
     break;
 
   case MSG_OSD_SCRUB:
     m = new MOSDScrub;
+    break;
+  case MSG_OSD_SCRUB2:
+    m = new MOSDScrub2;
     break;
   case MSG_OSD_SCRUB_RESERVE:
     m = new MOSDScrubReserve;
