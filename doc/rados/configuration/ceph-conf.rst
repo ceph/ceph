@@ -256,22 +256,9 @@ by preceding comments with a pound sign (#) or a semi-colon (;).  For example:
 Config file section names
 -------------------------
 
-The configuration file is divided into sections like ``[global]`` or
-``[mon.foo]``, where the section is a valid Ceph section name
-(`global`, a daemon type, or a daemon name) surrounded by square
-brackets.
-
-Global settings affect all instances of all daemon in the Ceph Storage Cluster.
-Use the ``[global]`` setting for values that are common for all daemons in the
-Ceph Storage Cluster. You can override each ``[global]`` setting by:
-
-#. Changing the setting in a particular process type
-   (*e.g.,* ``[osd]``, ``[mon]``, ``[mds]`` ).
-
-#. Changing the setting in a particular process (*e.g.,* ``[osd.1]`` ).
-
-Overriding a global setting affects all child processes, except those that
-you specifically override in a particular daemon.  For example,
+The configuration file is divided into sections. Each section must begin with a
+valid configuration section name (see `Configuration sections`_, above)
+surrounded by square brackets. For example,
 
 .. code-block:: ini
 
