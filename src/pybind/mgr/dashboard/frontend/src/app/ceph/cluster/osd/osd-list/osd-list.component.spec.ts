@@ -3,6 +3,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
+import { ComponentsModule } from '../../../../shared/components/components.module';
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { DimlessPipe } from '../../../../shared/pipes/dimless.pipe';
 import { FormatterService } from '../../../../shared/services/formatter.service';
@@ -24,7 +25,8 @@ describe('OsdListComponent', () => {
         HttpClientModule,
         PerformanceCounterModule,
         TabsModule.forRoot(),
-        DataTableModule
+        DataTableModule,
+        ComponentsModule
       ],
       declarations: [
         OsdListComponent,
