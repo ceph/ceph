@@ -1336,9 +1336,14 @@ public:
   map<string,string> properties;  ///< OBSOLETE
   string erasure_code_profile; ///< name of the erasure code profile in OSDMap
   epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
-  epoch_t last_force_op_resend; ///< last epoch that forced clients to resend
+
+  /// last epoch that forced clients to resend
+  epoch_t last_force_op_resend = 0;
+  /// last epoch that forced clients to resend (pre-nautilus clients only)
+  epoch_t last_force_op_resend_prenautilus = 0;
   /// last epoch that forced clients to resend (pre-luminous clients only)
-  epoch_t last_force_op_resend_preluminous;
+  epoch_t last_force_op_resend_preluminous = 0;
+
   epoch_t pg_num_pending_dec_epoch = 0;  ///< epoch pg_num_pending decremented
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
@@ -1454,8 +1459,6 @@ public:
     : flags(0), type(0), size(0), min_size(0),
       crush_rule(0), object_hash(0),
       last_change(0),
-      last_force_op_resend(0),
-      last_force_op_resend_preluminous(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
       quota_max_bytes(0), quota_max_objects(0),
@@ -1509,6 +1512,9 @@ public:
   }
   epoch_t get_last_change() const { return last_change; }
   epoch_t get_last_force_op_resend() const { return last_force_op_resend; }
+  epoch_t get_last_force_op_resend_prenautilus() const {
+    return last_force_op_resend_prenautilus;
+  }
   epoch_t get_last_force_op_resend_preluminous() const {
     return last_force_op_resend_preluminous;
   }
@@ -1609,6 +1615,7 @@ public:
 
   void set_last_force_op_resend(uint64_t t) {
     last_force_op_resend = t;
+    last_force_op_resend_prenautilus = t;
     last_force_op_resend_preluminous = t;
   }
 
