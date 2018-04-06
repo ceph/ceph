@@ -38,6 +38,11 @@
     mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
     obsolete.
 
+  * Each mds rank now maintains a table that tracks open files and their
+    ancestor directories. Recovering MDS can quickly get open files' pathes,
+    significantly reducing the time of loading inodes for open files. MDS
+    creates the table automatically if it does not exist.
+
 * *RBD*
 
   * The RBD C API's rbd_discard method now enforces a maximum length of
