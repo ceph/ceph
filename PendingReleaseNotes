@@ -58,6 +58,13 @@
 12.2.5
 ------
 
+* The ceph-rest-api command-line tool included in the ceph-mon package has been
+  obsoleted by the MGR "restful" module. The ceph-rest-api tool is hereby
+  declared deprecated and will be dropped in Mimic.
+
+  The MGR "restful" module provides similar functionality via a "pass through"
+  method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
+
 - *CephFS*:
 
   * Upgrading an MDS cluster to 12.2.3+ will result in all active MDS
@@ -71,3 +78,4 @@
     upgrade/start standbys. Finally, restore the previous max_mds.
 
     See also: https://tracker.ceph.com/issues/23172
+
