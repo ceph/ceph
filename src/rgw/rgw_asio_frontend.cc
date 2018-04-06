@@ -106,7 +106,7 @@ void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
     // process the request
     RGWRequest req{env.store->get_new_req_id()};
 
-    rgw::asio::ClientIO real_client{socket, parser, buffer};
+    rgw::asio::ClientIO real_client{socket, parser, buffer, yield};
 
     auto real_client_io = rgw::io::add_reordering(
                             rgw::io::add_buffering(cct,

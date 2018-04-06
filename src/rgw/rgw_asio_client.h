@@ -23,6 +23,7 @@ class ClientIO : public io::RestfulClient,
   tcp::socket& socket;
   parser_type& parser;
   beast::flat_buffer& buffer; //< parse buffer
+  boost::asio::yield_context yield;
 
   RGWEnv env;
 
@@ -33,7 +34,7 @@ class ClientIO : public io::RestfulClient,
 
  public:
   ClientIO(tcp::socket& socket, parser_type& parser,
-           beast::flat_buffer& buffer);
+           beast::flat_buffer& buffer, boost::asio::yield_context yield);
   ~ClientIO() override;
 
   int init_env(CephContext *cct) override;
