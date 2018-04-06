@@ -129,7 +129,6 @@
 /* Accelio conditional compilation */
 #cmakedefine HAVE_XIO
 
-
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA
 
@@ -335,5 +334,8 @@
 
 /* Defined if boost::context is available */
 #cmakedefine HAVE_BOOST_CONTEXT
+
+/* Define if libradosstriper is enabled: */
+#cmakedefine WITH_LIBRADOSSTRIPER
 
 #endif /* CONFIG_H */
