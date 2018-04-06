@@ -485,6 +485,14 @@ const char** Monitor::get_tracked_conf_keys() const
     // scrub interval
     "mon_scrub_interval",
     "mon_allow_pool_delete",
+    // osdmap pruning - observed, not handled.
+    "mon_osdmap_full_prune_enabled",
+    "mon_osdmap_full_prune_min",
+    "mon_osdmap_full_prune_interval",
+    "mon_osdmap_full_prune_txsize",
+    // debug options - observed, not handled
+    "mon_debug_extra_checks",
+    "mon_debug_block_osdmap_trim",
     NULL
   };
   return KEYS;
