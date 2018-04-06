@@ -207,7 +207,7 @@ int EventCenter::create_file_event(int fd, int mask, EventCallbackRef ctxt)
   int r = 0;
   if (fd >= nevent) {
     int new_size = nevent << 2;
-    while (fd > new_size)
+    while (fd >= new_size)
       new_size <<= 2;
     ldout(cct, 20) << __func__ << " event count exceed " << nevent << ", expand to " << new_size << dendl;
     r = driver->resize_events(new_size);
