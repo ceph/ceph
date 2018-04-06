@@ -1156,6 +1156,7 @@ void PGMap::calc_stats()
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
   num_pg_by_state.clear();
+  num_pg_by_pool_state.clear();
   num_pg_by_osd.clear();
 
   for (auto p = pg_stat.begin();
@@ -1177,6 +1178,7 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 
   num_pg++;
   num_pg_by_state[s.state]++;
+  num_pg_by_pool_state[pgid.pool()][s.state]++;
   num_pg_by_pool[pgid.pool()]++;
 
   if ((s.state & PG_STATE_CREATING) &&
@@ -1229,8 +1231,12 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   ceph_assert(end >= 0);
   if (end == 0)
     num_pg_by_state.erase(s.state);
+  if (--num_pg_by_pool_state[pgid.pool()][s.state] == 0) {
+    num_pg_by_pool_state[pgid.pool()].erase(s.state);
+  }
   end = --num_pg_by_pool[pgid.pool()];
   if (end == 0) {
+    num_pg_by_pool_state.erase(pgid.pool());
     num_pg_by_pool.erase(pgid.pool());
     pg_pool_sum.erase(pgid.pool());
   }
