@@ -1152,6 +1152,36 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
+    /* -- mon: osdmap prune (begin) -- */
+    Option("mon_osdmap_full_prune_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Enables pruning full osdmap versions when we go over a given number of maps")
+    .add_see_also("mon_osdmap_full_prune_min")
+    .add_see_also("mon_osdmap_full_prune_interval")
+    .add_see_also("mon_osdmap_full_prune_txsize"),
+
+    Option("mon_osdmap_full_prune_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10000)
+    .set_description("Minimum number of versions in the store to trigger full map pruning")
+    .add_see_also("mon_osdmap_full_prune_enabled")
+    .add_see_also("mon_osdmap_full_prune_interval")
+    .add_see_also("mon_osdmap_full_prune_txsize"),
+
+    Option("mon_osdmap_full_prune_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("Interval between maps that will not be pruned; maps in the middle will be pruned.")
+    .add_see_also("mon_osdmap_full_prune_enabled")
+    .add_see_also("mon_osdmap_full_prune_interval")
+    .add_see_also("mon_osdmap_full_prune_txsize"),
+
+    Option("mon_osdmap_full_prune_txsize", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(100)
+    .set_description("Number of maps we will prune per iteration")
+    .add_see_also("mon_osdmap_full_prune_enabled")
+    .add_see_also("mon_osdmap_full_prune_interval")
+    .add_see_also("mon_osdmap_full_prune_txsize"),
+    /* -- mon: osdmap prune (end) -- */
+
     Option("mon_osd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description(""),
@@ -1605,6 +1635,22 @@ std::vector<Option> get_global_options() {
     Option("mon_mds_skip_sanity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
+
+    Option("mon_debug_extra_checks", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Enable some additional monitor checks")
+    .set_long_description(
+        "Enable some additional monitor checks that would be too expensive "
+        "to run on production systems, or would only be relevant while "
+        "testing or debugging."),
+
+    Option("mon_debug_block_osdmap_trim", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Block OSDMap trimming while the option is enabled.")
+    .set_long_description(
+        "Blocking OSDMap trimming may be quite helpful to easily reproduce "
+        "states in which the monitor keeps (hundreds of) thousands of "
+        "osdmaps."),
 
     Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
