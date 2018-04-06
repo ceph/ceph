@@ -1,5 +1,6 @@
 tasks:
 - install:
+    install_packages: false
 - deepsea:
     repo: https://github.com/SUSE/DeepSea.git
     branch: master
