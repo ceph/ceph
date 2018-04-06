@@ -137,6 +137,33 @@ GenContext<ThreadPool::TPHandle&> *PrimaryLogPG::bless_gencontext(
     this, c, get_osdmap()->get_epoch());
 }
 
+template <typename T>
+class PrimaryLogPG::UnlockedBlessedGenContext : public GenContext<T> {
+  PrimaryLogPGRef pg;
+  unique_ptr<GenContext<T>> c;
+  epoch_t e;
+public:
+  UnlockedBlessedGenContext(PrimaryLogPG *pg, GenContext<T> *c, epoch_t e)
+    : pg(pg), c(c), e(e) {}
+  void finish(T t) override {
+    if (pg->pg_has_reset_since(e))
+      c.reset();
+    else
+      c.release()->complete(t);
+  }
+  bool sync_finish(T t) {
+    // we assume here all blessed/wrapped Contexts can complete synchronously.
+    c.release()->complete(t);
+    return true;
+  }
+};
+
+GenContext<ThreadPool::TPHandle&> *PrimaryLogPG::bless_unlocked_gencontext(
+  GenContext<ThreadPool::TPHandle&> *c) {
+  return new UnlockedBlessedGenContext<ThreadPool::TPHandle&>(
+    this, c, get_osdmap()->get_epoch());
+}
+
 class PrimaryLogPG::BlessedContext : public Context {
   PrimaryLogPGRef pg;
   unique_ptr<Context> c;
@@ -158,7 +185,6 @@ public:
     return true;
   }
 };
-
 
 Context *PrimaryLogPG::bless_context(Context *c) {
   return new BlessedContext(this, c, get_osdmap()->get_epoch());
@@ -485,7 +511,7 @@ void PrimaryLogPG::begin_peer_recover(
 void PrimaryLogPG::schedule_recovery_work(
   GenContext<ThreadPool::TPHandle&> *c)
 {
-  osd->recovery_gen_wq.queue(c);
+  osd->queue_recovery_context(this, c);
 }
 
 void PrimaryLogPG::send_message_osd_cluster(
@@ -1627,11 +1653,12 @@ void PrimaryLogPG::calc_trim_to()
 }
 
 PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
-			   const PGPool &_pool, spg_t p) :
+			   const PGPool &_pool,
+			   const map<string,string>& ec_profile, spg_t p) :
   PG(o, curmap, _pool, p),
   pgbackend(
     PGBackend::build_pg_backend(
-      _pool.info, curmap, this, coll_t(p), ch, o->store, cct)),
+      _pool.info, ec_profile, this, coll_t(p), ch, o->store, cct)),
   object_contexts(o->cct, o->cct->_conf->osd_pg_object_context_cache_count),
   snapset_contexts_lock("PrimaryLogPG::snapset_contexts_lock"),
   new_backfill(false),
@@ -11647,13 +11674,6 @@ void PrimaryLogPG::clear_async_reads()
              << dendl;
     close_op_ctx(i.second);
   }
-}
-
-void PrimaryLogPG::shutdown()
-{
-  lock();
-  on_shutdown();
-  unlock();
 }
 
 void PrimaryLogPG::on_shutdown()

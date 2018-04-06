@@ -390,7 +390,7 @@ struct pg_t {
   ps_t ps() const {
     return m_seed;
   }
-  uint64_t pool() const {
+  int64_t pool() const {
     return m_pool;
   }
 
@@ -520,6 +520,11 @@ struct spg_t {
   bool parse(const std::string& s) {
     return parse(s.c_str());
   }
+
+  spg_t get_ancestor(unsigned old_pg_num) const {
+    return spg_t(pgid.get_ancestor(old_pg_num), shard);
+  }
+
   bool is_split(unsigned old_pg_num, unsigned new_pg_num,
 		set<spg_t> *pchildren) const {
     set<pg_t> _children;
@@ -3132,6 +3137,7 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
   out << "query(" << q.get_type_name() << " " << q.since;
   if (q.type == pg_query_t::LOG)
     out << " " << q.history;
+  out << " epoch_sent " << q.epoch_sent;
   out << ")";
   return out;
 }

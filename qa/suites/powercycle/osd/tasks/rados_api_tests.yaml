@@ -3,6 +3,9 @@ overrides:
     log-whitelist:
       - reached quota
       - \(POOL_APP_NOT_ENABLED\)
+    conf:
+      mon:
+        mon warn on pool no app: false
 tasks:
 - ceph-fuse:
 - workunit:

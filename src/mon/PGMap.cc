@@ -2040,7 +2040,7 @@ void PGMap::get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
   for (auto i = pg_stat.begin();
        i != pg_stat.end();
        ++i) {
-    if ((poolid >= 0) && (uint64_t(poolid) != i->first.pool()))
+    if ((poolid >= 0) && (poolid != i->first.pool()))
       continue;
     if ((osdid >= 0) && !(i->second.is_acting_osd(osdid,primary)))
       continue;
@@ -3331,13 +3331,13 @@ void PGMapUpdater::check_osd_map(
       ldout(cct, 10) << __func__ << " pool " << p.first << " gone, removing pgs"
 		     << dendl;
       for (auto& q : pgmap.pg_stat) {
-	if (q.first.pool() == (uint64_t)p.first) {
+	if (q.first.pool() == p.first) {
 	  pending_inc->pg_remove.insert(q.first);
 	}
       }
       auto q = pending_inc->pg_stat_updates.begin();
       while (q != pending_inc->pg_stat_updates.end()) {
-	if (q->first.pool() == (uint64_t)p.first) {
+	if (q->first.pool() == p.first) {
 	  q = pending_inc->pg_stat_updates.erase(q);
 	} else {
 	  ++q;
