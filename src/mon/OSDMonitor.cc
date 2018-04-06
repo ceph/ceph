@@ -3281,6 +3281,11 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
 
   p.dec_pg_num();
   p.last_change = pending_inc.epoch;
+
+  // force pre-nautilus clients to resend their ops, since they
+  // don't understand pg_num_pending changes form a new interval
+  p.last_force_op_resend_prenautilus = pending_inc.epoch;
+
   pending_inc.new_pools[m->pgid.pool()] = p;
 
   wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
@@ -6872,14 +6877,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	ss << "nautilus OSDs are required to adjust pg_num_pending";
 	return -EPERM;
       }
-      if (osdmap.require_min_compat_client > 0 &&
-	  osdmap.require_min_compat_client < CEPH_RELEASE_MIMIC) {
-	ss << "require_min_compat_client "
-	   << ceph_release_name(osdmap.require_min_compat_client)
-	   << " < mimic, which is required for pg merging. "
-           << "Try 'ceph osd set-require-min-compat-client mimic'.";
-	return -EPERM;
-      }
       if (n < (int)p.get_pgp_num()) {
 	ss << "specified pg_num " << n << " < pgp_num " << p.get_pgp_num();
 	return -EINVAL;
@@ -6890,6 +6887,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EINVAL;
       }
       p.set_pg_num_pending(n, pending_inc.epoch);
+      // force pre-nautilus clients to resend their ops, since they
+      // don't understand pg_num_pending changes form a new interval
+      p.last_force_op_resend_prenautilus = pending_inc.epoch;
     }
     // force pre-luminous clients to resend their ops, since they
     // don't understand that split PGs now form a new interval.
@@ -6936,14 +6936,6 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     } else {
       if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
 	ss << "nautilus OSDs are required to adjust pg_num_pending";
-	return -EPERM;
-      }
-      if (osdmap.require_min_compat_client > 0 &&
-	  osdmap.require_min_compat_client < CEPH_RELEASE_MIMIC) {
-	ss << "require_min_compat_client "
-	   << ceph_release_name(osdmap.require_min_compat_client)
-	   << " < mimic, which is required for pg merging. "
-           << "Try 'ceph osd set-require-min-compat-client mimic'.";
 	return -EPERM;
       }
       if (n < (int)p.get_pgp_num_target()) {
