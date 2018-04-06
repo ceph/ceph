@@ -148,7 +148,7 @@ These sections include:
 
 :Description: Settings under ``client`` affect all Ceph Clients
               (e.g., mounted Ceph Filesystems, mounted Ceph Block Devices,
-              etc.).
+              etc.) as well as Rados Gateway (RGW) daemons.
 
 :Example: ``objecter_inflight_ops = 512``
 
