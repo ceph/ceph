@@ -3927,13 +3927,13 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
 
   PG::RecoveryCtx rctx = create_context();
 
-  OSDMapRef createmap = get_map(info->epoch);
+  OSDMapRef startmap = get_map(info->epoch);
   int up_primary, acting_primary;
   vector<int> up, acting;
-  createmap->pg_to_up_acting_osds(
+  startmap->pg_to_up_acting_osds(
     pgid.pgid, &up, &up_primary, &acting, &acting_primary);
 
-  const pg_pool_t* pp = createmap->get_pg_pool(pgid.pool());
+  const pg_pool_t* pp = startmap->get_pg_pool(pgid.pool());
   if (pp->has_flag(pg_pool_t::FLAG_EC_OVERWRITES) &&
       store->get_type() != "bluestore") {
     clog->warn() << "pg " << pgid
@@ -3944,12 +3944,12 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
   PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
   PG::_init(*rctx.transaction, pgid, pp);
 
-  int role = createmap->calc_pg_role(whoami, acting, acting.size());
+  int role = startmap->calc_pg_role(whoami, acting, acting.size());
   if (!pp->is_replicated() && role != pgid.shard) {
     role = -1;
   }
 
-  PGRef pg = _make_pg(createmap, pgid);
+  PGRef pg = _make_pg(startmap, pgid);
   pg->ch = store->create_new_collection(pg->coll);
 
   pg->lock(true);
@@ -8172,7 +8172,7 @@ void OSD::handle_pg_create(OpRequestRef op)
 	  true,
 	  new PGCreateInfo(
 	    pgid,
-	    created,
+	    osdmap->get_epoch(),
 	    history,
 	    pi,
 	    true)
