@@ -4178,13 +4178,7 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
   MOSDPGCreate *oldm = nullptr; // for pre-mimic OSD compat
   MOSDPGCreate2 *m = nullptr;
 
-  // for now, keep sending legacy creates.  Until we sort out how to address
-  // racing mon create resends and splits, we are better off with the less
-  // drastic impacts of http://tracker.ceph.com/issues/22165.  The legacy
-  // create message handling path in the OSD still does the old thing where
-  // the pg history is pregenerated and it's instantiated at the latest osdmap
-  // epoch; child pgs are simply not created.
-  bool old = true; // !HAVE_FEATURE(con->get_features(), SERVER_NAUTILUS);
+  bool old = osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS;
 
   epoch_t last = 0;
   for (auto epoch_pgs = creating_pgs_by_epoch->second.lower_bound(next);
