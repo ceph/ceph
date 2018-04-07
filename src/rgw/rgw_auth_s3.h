@@ -384,12 +384,55 @@ int parse_v4_credentials(const req_info& info,                     /* in */
 			 boost::string_view& date,                 /* out */
 			 const bool using_qs);                     /* in */
 
+static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
+{
+  if ((c >= 'a' && c <= 'z') ||
+      (c >= 'A' && c <= 'Z') ||
+      (c >= '0' && c <= '9')) {
+    return false;
+  }
+
+  switch (c) {
+    case '-':
+    case '_':
+    case '.':
+    case '~':
+      return false;
+  }
+
+  if (c == '/' && !encode_slash)
+    return false;
+
+  return true;
+}
+
+static inline std::string aws4_uri_encode(const std::string& src, bool encode_slash)
+{
+  std::string result;
+
+  for (const std::string::value_type c : src) {
+    if (char_needs_aws4_escaping(c, encode_slash)) {
+      rgw_uri_escape_char(c, result);
+    } else {
+      result.push_back(c);
+    }
+  }
+
+  return result;
+}
+
+static inline std::string aws4_uri_recode(const boost::string_view& src, bool encode_slash)
+{
+  std::string decoded = url_decode(src);
+  return aws4_uri_encode(decoded, encode_slash);
+}
+
 static inline std::string get_v4_canonical_uri(const req_info& info) {
   /* The code should normalize according to RFC 3986 but S3 does NOT do path
    * normalization that SigV4 typically does. This code follows the same
    * approach that boto library. See auth.py:canonical_uri(...). */
 
-  std::string canonical_uri = info.request_uri_aws4;
+  std::string canonical_uri = aws4_uri_recode(info.request_uri_aws4, false);
 
   if (canonical_uri.empty()) {
     canonical_uri = "/";
@@ -480,7 +523,6 @@ extern AWSEngine::VersionAbstractor::server_signature_t
 get_v2_signature(CephContext*,
                  const std::string& secret_key,
                  const AWSEngine::VersionAbstractor::string_to_sign_t& string_to_sign);
-
 } /* namespace s3 */
 } /* namespace auth */
 } /* namespace rgw */
