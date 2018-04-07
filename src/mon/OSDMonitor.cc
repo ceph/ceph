@@ -12005,6 +12005,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (creating_now) {
       ss << "pg " << pgidstr << " now creating, ok";
+      // set the pool's CREATING flag so that (1) the osd won't ignore our
+      // create message and (2) we won't propose any future pg_num changes
+      // until after the PG has been instantiated.
+      if (pending_inc.new_pools.count(pgid.pool()) == 0) {
+	pending_inc.new_pools[pgid.pool()] = *osdmap.get_pg_pool(pgid.pool());
+      }
+      pending_inc.new_pools[pgid.pool()].flags |= pg_pool_t::FLAG_CREATING;
       err = 0;
       goto update;
     } else {
