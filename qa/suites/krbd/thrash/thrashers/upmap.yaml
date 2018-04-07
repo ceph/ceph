@@ -11,6 +11,7 @@ tasks:
 - thrashosds:
     timeout: 1200
     chance_pgnum_grow: 1
+    chance_pgnum_shrink: 1
     chance_pgpnum_fix: 1
     chance_thrash_pg_upmap: 3
     chance_thrash_pg_upmap_items: 3
