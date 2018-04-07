@@ -108,7 +108,7 @@ void OpHistory::cleanup(utime_t now)
   }
 }
 
-void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters)
+void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters, bool by_duration)
 {
   Mutex::Locker history_lock(ops_history_lock);
   cleanup(now);
@@ -117,50 +117,20 @@ void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters)
   f->dump_int("duration", history_duration);
   {
     f->open_array_section("ops");
-    for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
-	   arrived.begin();
-	 i != arrived.end();
-	 ++i) {
-      if (!i->second->filter_out(filters))
-        continue;
-      f->open_object_section("op");
-      i->second->dump(now, f);
-      f->close_section();
-    }
-    f->close_section();
-  }
-  f->close_section();
-}
-
-void OpHistory::dump_ops_by_duration(utime_t now, Formatter *f, set<string> filters)
-{
-  Mutex::Locker history_lock(ops_history_lock);
-  cleanup(now);
-  f->open_object_section("op_history");
-  f->dump_int("size", history_size);
-  f->dump_int("duration", history_duration);
-  {
-    f->open_array_section("ops");
-    if (arrived.size()) {
-      vector<pair<double, TrackedOpRef> > durationvec;
-      durationvec.reserve(arrived.size());
-
-      for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
-	     arrived.begin();
-	   i != arrived.end();
-	   ++i) {
+    auto dump_fn = [&f, &now, &filters](auto begin_iter, auto end_iter) {
+      for (auto i=begin_iter; i!=end_iter; ++i) {
 	if (!i->second->filter_out(filters))
 	  continue;
-	durationvec.push_back(pair<double, TrackedOpRef>(i->second->get_duration(), i->second));
-      }
-
-      sort(durationvec.begin(), durationvec.end());
-
-      for (auto i = durationvec.rbegin(); i != durationvec.rend(); ++i) {
 	f->open_object_section("op");
 	i->second->dump(now, f);
 	f->close_section();
       }
+    };
+
+    if (by_duration) {
+      dump_fn(duration.rbegin(), duration.rend());
+    } else {
+      dump_fn(arrived.begin(), arrived.end());
     }
     f->close_section();
   }
@@ -203,11 +173,7 @@ bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration, set<string> fi
 
   RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
-  if (by_duration) {
-    history.dump_ops_by_duration(now, f, filters);
-  } else {
-    history.dump_ops(now, f, filters);
-  }
+  history.dump_ops(now, f, filters, by_duration);
   return true;
 }
 
