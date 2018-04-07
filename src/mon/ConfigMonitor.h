@@ -15,6 +15,9 @@ class ConfigMonitor : public PaxosService
   version_t version = 0;
   ConfigMap config_map;
   map<string,boost::optional<bufferlist>> pending;
+  string pending_description;
+
+  map<string,bufferlist> current;
 
 public:
   ConfigMonitor(Monitor *m, Paxos *p, const string& service_name);
@@ -22,6 +25,7 @@ public:
   void init() override;
 
   void load_config();
+  void load_changeset(version_t v, ConfigChangeSet *ch);
 
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
