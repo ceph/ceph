@@ -1817,66 +1817,6 @@ TEST(BufferList, clear) {
   EXPECT_EQ((unsigned)0, bl.get_num_buffers());
 }
 
-TEST(BufferList, push_front) {
-  //
-  // void push_front(ptr& bp)
-  //
-  {
-    bufferlist bl;
-    bufferptr ptr;
-    bl.push_front(ptr);
-    EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.get_num_buffers());
-  }
-  unsigned len = 17;
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(ptr);
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
-    EXPECT_EQ('B', bl.front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
-  }
-  //
-  // void push_front(raw *r)
-  //
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(ptr.get_raw());
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.get_num_buffers());
-    EXPECT_EQ('B', bl.front()[0]);
-    EXPECT_EQ(ptr.get_raw(), bl.front().get_raw());
-  }
-  //
-  // void push_front(ptr&& bp)
-  //
-  {
-    bufferlist bl;
-    bufferptr ptr;
-    bl.push_front(std::move(ptr));
-    EXPECT_EQ((unsigned)0, bl.length());
-    EXPECT_EQ((unsigned)0, bl.buffers().size());
-  }
-  {
-    bufferlist bl;
-    bl.append('A');
-    bufferptr ptr(len);
-    ptr.c_str()[0] = 'B';
-    bl.push_front(std::move(ptr));
-    EXPECT_EQ((unsigned)(1 + len), bl.length());
-    EXPECT_EQ((unsigned)2, bl.buffers().size());
-    EXPECT_EQ('B', bl.buffers().front()[0]);
-    EXPECT_FALSE(ptr.get_raw());
-  }
-}
-
 TEST(BufferList, push_back) {
   //
   // void push_back(ptr& bp)
@@ -2104,56 +2044,6 @@ TEST(BufferList, claim_append) {
   EXPECT_EQ((unsigned)2, to.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.get_num_buffers());
   EXPECT_EQ((unsigned)0, from.length());
-}
-
-TEST(BufferList, claim_prepend) {
-  bufferlist from;
-  {
-    bufferptr ptr(2);
-    from.append(ptr);
-  }
-  bufferlist to;
-  {
-    bufferptr ptr(4);
-    to.append(ptr);
-  }
-  EXPECT_EQ((unsigned)4, to.length());
-  EXPECT_EQ((unsigned)1, to.get_num_buffers());
-  to.claim_prepend(from);
-  EXPECT_EQ((unsigned)(2 + 4), to.length());
-  EXPECT_EQ((unsigned)2, to.front().length());
-  EXPECT_EQ((unsigned)4, to.back().length());
-  EXPECT_EQ((unsigned)2, to.get_num_buffers());
-  EXPECT_EQ((unsigned)0, from.get_num_buffers());
-  EXPECT_EQ((unsigned)0, from.length());
-}
-
-TEST(BufferList, claim_prepend_misc) {
-  bufferlist src_buf;
-  bufferlist dest_buf;
-  
-  bufferlist b1;
-  b1.append("12345", 5);
-  bufferlist b2;
-  b2.append("123456", 6);
-  bufferlist b3;
-  b3.append("1234567", 7);
-
-  EXPECT_EQ(5u, b1.length());
-  EXPECT_EQ(6u, b2.length());
-  EXPECT_EQ(7u, b3.length());
-  src_buf.claim_append(b1);
-  src_buf.claim_append(b2);
-  EXPECT_EQ((unsigned)(5+6), src_buf.length());
-  src_buf.splice(0, 3);
-  EXPECT_EQ((unsigned)(5-3), src_buf.front().length());
-  EXPECT_EQ((unsigned)(11-3), src_buf.length());
-  src_buf.claim_prepend(b3);
-  EXPECT_EQ((unsigned)(8+7), src_buf.length());
-  EXPECT_EQ(0u, b3.get_num_buffers());
-  EXPECT_EQ(0u, b3.length());
-  src_buf.copy(0, src_buf.length(), dest_buf);
-  EXPECT_EQ(3u, dest_buf.get_num_buffers()); 
 }
 
 TEST(BufferList, claim_append_piecewise) {
