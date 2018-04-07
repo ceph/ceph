@@ -2112,67 +2112,76 @@ int handle_opt_data_sync_run(const std::string& source_zone, const boost::intrus
 int RgwAdminMetadataSyncCommandsHandler::parse_command_and_parameters() {
   boost::program_options::options_description desc{"Metadata sync options"};
   boost::program_options::variables_map var_map;
-
   return parse_command(desc, var_map);
 }
 
 int RgwAdminPeriodCommandsHandler::parse_command_and_parameters() {
-  const char COMMIT[] = "commit";
-  const char PERIOD_EPOCH[] = "epoch";
-  const char REMOTE[] = "remote";
-  const char STAGING[] = "staging";
+  const rgw_admin_params::commandline_parameter COMMIT = {"commit", "Commit the period during 'period update'"};
+  const rgw_admin_params::commandline_parameter PERIOD_EPOCH = {"epoch", "Period epoch"};
+  const rgw_admin_params::commandline_parameter REMOTE = {"remote", "Zone or zonegroup id of remote gateway"};
+  const rgw_admin_params::commandline_parameter STAGING = {"staging", "Get staging period info"};
   boost::program_options::options_description desc{"Period options"};
   desc.add_options()
-      (rgw_admin_params::ACCESS_KEY, boost::program_options::value(&access_key), "S3 access key")
-      (rgw_admin_params::SECRET_KEY, boost::program_options::value(&secret_key),
-       "Specify secret key")
-      (COMMIT, "Commit the period during 'period update'")
-      (PERIOD_EPOCH, boost::program_options::value(&period_epoch), "Period epoch")
-      (rgw_admin_params::PERIOD_ID, boost::program_options::value(&period_id), "Period id")
-      (rgw_admin_params::REALM_ID, boost::program_options::value(&realm_id), "Realm id")
-      (rgw_admin_params::REALM_NAME, boost::program_options::value(&realm_name), "Realm name")
-      (REMOTE, boost::program_options::value(&remote), "Zone or zonegroup id of remote gateway")
-      (STAGING, "Get staging period info")
-      (rgw_admin_params::URL, boost::program_options::value(&url), "")
-      (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
+      (rgw_admin_params::ACCESS_KEY.name, boost::program_options::value(&access_key),
+       rgw_admin_params::ACCESS_KEY.description)
+      (COMMIT.name, COMMIT.description)
+      (PERIOD_EPOCH.name, boost::program_options::value(&period_epoch), PERIOD_EPOCH.description)
+      (rgw_admin_params::PERIOD_ID.name, boost::program_options::value(&period_id),
+       rgw_admin_params::PERIOD_ID.description)
+      (rgw_admin_params::REALM_ID.name, boost::program_options::value(&realm_id),
+       rgw_admin_params::REALM_ID.description)
+      (rgw_admin_params::REALM_NAME.name, boost::program_options::value(&realm_name),
+       rgw_admin_params::REALM_NAME.description)
+      (REMOTE.name, boost::program_options::value(&remote), REMOTE.description)
+      (rgw_admin_params::SECRET_KEY.name, boost::program_options::value(&secret_key),
+       rgw_admin_params::SECRET_KEY.description)
+      (STAGING.name, STAGING.description)
+      (rgw_admin_params::URL.name, boost::program_options::value(&url), rgw_admin_params::URL.description)
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name, rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
   boost::program_options::variables_map var_map;
 
   int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }
-  if (var_map.count(COMMIT)) {
+
+  if (var_map.count(COMMIT.name)) {
     commit = true;
   }
-  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT)) {
+  if (var_map.count(STAGING.name)) {
+    staging = true;
+  }
+  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT.name)) {
     yes_i_really_mean_it = true;
   }
   return 0;
 }
 
 int RgwAdminRealmCommandsHandler::parse_command_and_parameters() {
-  const char REALM_NEW_NAME[] = "realm-new-name";
+  const rgw_admin_params::commandline_parameter REALM_NEW_NAME = {"realm-new-name", ""};
   boost::program_options::options_description desc{"Realm options"};
   desc.add_options()
-      (rgw_admin_params::ACCESS_KEY, boost::program_options::value(&access_key), "S3 access key")
-      (rgw_admin_params::SECRET_KEY, boost::program_options::value(&secret_key),
-       "Specify secret key")
-      (rgw_admin_params::INFILE, boost::program_options::value(&infile),
-       "A file to read in when setting data")
-      (rgw_admin_params::REALM_ID, boost::program_options::value(&realm_id), "Realm id")
-      (rgw_admin_params::REALM_NAME, boost::program_options::value(&realm_name), "Realm name")
-      (REALM_NEW_NAME, boost::program_options::value(&realm_new_name), "Realm new name")
-      (rgw_admin_params::SET_DEFAULT, "Set realm as default")
-      (rgw_admin_params::URL, boost::program_options::value(&url), "");
+      (rgw_admin_params::ACCESS_KEY.name, boost::program_options::value(&access_key),
+       rgw_admin_params::ACCESS_KEY.description)
+      (rgw_admin_params::INFILE.name, boost::program_options::value(&infile), rgw_admin_params::INFILE.description)
+      (rgw_admin_params::REALM_ID.name, boost::program_options::value(&realm_id),
+       rgw_admin_params::REALM_ID.description)
+      (rgw_admin_params::REALM_NAME.name, boost::program_options::value(&realm_name),
+       rgw_admin_params::REALM_NAME.description)
+      (REALM_NEW_NAME.name, boost::program_options::value(&realm_new_name), REALM_NEW_NAME.description)
+      (rgw_admin_params::SECRET_KEY.name, boost::program_options::value(&secret_key),
+       rgw_admin_params::SECRET_KEY.description)
+      (rgw_admin_params::SET_DEFAULT.name, rgw_admin_params::SET_DEFAULT.description)
+      (rgw_admin_params::URL.name, boost::program_options::value(&url), rgw_admin_params::URL.description);
   boost::program_options::variables_map var_map;
 
   int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }
-  if (var_map.count(rgw_admin_params::SET_DEFAULT)) {
+
+  if (var_map.count(rgw_admin_params::SET_DEFAULT.name)) {
     set_default = true;
   }
   return 0;
-
 }

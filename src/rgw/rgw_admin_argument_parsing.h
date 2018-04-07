@@ -8,60 +8,67 @@
 #include "rgw_user.h"
 
 namespace rgw_admin_params {
-  const char ACCESS_KEY[] = "access-key";
-  const char BUCKET_ID[] = "bucket-id";
-  const char BUCKET_NAME[] = "bucket";
-  const char DELETE_CHILD_OBJECTS[] = "purge-objects";
+  struct commandline_parameter {
+    const char* name;
+    const char* description;
+  };
 
-  const char DATE[] = "date";
-  const char START_DATE[] = "start-date";
-  const char END_DATE[] = "end-date";
-
-  const char ENDPOINTS[] = "endpoints";
-  const char INFILE[] = "infile";
-  const char IS_MASTER[] = "master";
-
-  const char MARKER[] = "marker";
-  const char START_MARKER[] = "start-marker";
-  const char END_MARKER[] = "end-marker";
-
-  const char MAX_ENTRIES[] = "max-entries";
-  const char MAX_OBJECTS[] = "max-objects";
-  const char MAX_SIZE[] = "max-size";
-  const char MIN_REWRITE_STRIPE_SIZE[] = "min-rewrite-stripe-size";
-  const char MAX_CONCURRENT_IOS[] = "max-concurrent-ios";
-  const char NUM_SHARDS[] = "num-shards";
-  const char OBJECT[] = "object";
-  const char OBJECT_VERSION[] = "object-version";
-  const char PERIOD_ID[] = "period";
-  const char PLACEMENT_ID[] = "placement-id";
-  const char POOL[] = "pool";
-  const char PURGE_DATA[] = "purge-data";
-  const char QUOTA_SCOPE[] = "quota-scope";
-  const char READ_ONLY[] = "read-only";
-  const char REALM_ID[] = "realm-id";
-  const char REALM_NAME[] = "rgw-realm";
-  const char REDIRECT_ZONE[] = "redirect-zone";
-  const char ROLE_NAME[] = "role-name";
-  const char SECRET_KEY[] = "secret-key";
-  const char SET_DEFAULT[] = "default";
-  const char SHARD_ID[] = "shard-id";
-  const char SHOW_LOG_ENTRIES[] = "show-log-entries";
-  const char SHOW_LOG_SUM[] = "show-log-sum";
-  const char SOURCE_ZONE[] = "source-zone";
-  const char SYNC_FROM[] = "sync-from";
-  const char SYNC_FROM_ALL[] = "sync-from-all";
-  const char SYNC_FROM_RM[] = "sync-from-rm";
-  const char TENANT[] = "tenant";
-  const char TIER_CONFIG_ADD[] = "tier-config";
-  const char TIER_TYPE[] = "tier-type";
-  const char URL[] = "url";
-  const char USER_ID[] = "uid";
-  const char YES_I_REALLY_MEAN_IT[] = "yes-i-really-mean-it";
-  const char ZONEGROUP_ID[] = "zonegroup-id";
-  const char ZONEGROUP_NAME[] = "rgw-zonegroup";
-  const char ZONE_ID[] = "zone-id";
-  const char ZONE_NAME[] = "rgw-zone";
+  const commandline_parameter ACCESS_KEY = {"access-key", "S3 access key"};
+  const commandline_parameter BUCKET_ID = {"bucket-id", "Bucket id"};
+  const commandline_parameter BUCKET_NAME = {"bucket", "Bucket name"};
+  const commandline_parameter DELETE_CHILD_OBJECTS = {"purge-objects",
+                                                      "Remove a bucket's objects before deleting it.\n(NOTE: required to delete a non-empty bucket)"};
+  const commandline_parameter DATE = {"date", "Date in the format yyyy-mm-dd"};
+  const commandline_parameter START_DATE = {"start-date", "Start date in the format yyyy-mm-dd"};
+  const commandline_parameter END_DATE = {"end-date", "End date in the format yyyy-mm-dd"};
+  const commandline_parameter ENDPOINTS = {"endpoints", "Zone endpoints"};
+  const commandline_parameter INFILE = {"infile", "A file to read in when setting data"};
+  const commandline_parameter IS_MASTER = {"master", "Set as master"};
+  const commandline_parameter MARKER = {"marker", ""};
+  const commandline_parameter START_MARKER = {"start-marker", ""};
+  const commandline_parameter END_MARKER = {"end-marker", ""};
+  const commandline_parameter MAX_ENTRIES = {"max-entries", ""};
+  const commandline_parameter MAX_OBJECTS = {"max-objects", "Specify max objects (negative value to disable)"};
+  const commandline_parameter MAX_SIZE = {"max-size", "Specify max size (in B/K/M/G/T, negative value to disable)"};
+  const commandline_parameter MIN_REWRITE_STRIPE_SIZE = {"min-rewrite-stripe-size",
+                                                         "Min stripe size for object rewrite (default 0)"};
+  const commandline_parameter MAX_CONCURRENT_IOS = {"max-concurrent-ios",
+                                                    "Maximum concurrent ios for orphans find (default: 32)"};
+  const commandline_parameter NUM_SHARDS = {"num-shards", "Num of shards to use for keeping the temporary scan info"};
+  const commandline_parameter OBJECT = {"object", "Object name"};
+  const commandline_parameter OBJECT_VERSION = {"object-version", ""};
+  const commandline_parameter PERIOD_ID = {"period", "Period id"};
+  const commandline_parameter PLACEMENT_ID = {"placement-id", "Placement id for zonegroup placement commands"};
+  const commandline_parameter POOL = {"pool", "Pool name. Also used to scan for leaked rados objects."};
+  const commandline_parameter PURGE_DATA = {"purge-data",
+                                            "When specified, user removal will also purge all the user data"};
+  const commandline_parameter QUOTA_SCOPE = {"quota-scope", "Scope of quota (bucket, user)"};
+  const commandline_parameter READ_ONLY = {"read-only", "Set zone as read-only (when adding to zonegroup)"};
+  const commandline_parameter REALM_ID = {"realm-id", "Realm id"};
+  const commandline_parameter REALM_NAME = {"rgw-realm", "Realm name"};
+  const commandline_parameter REDIRECT_ZONE = {"redirect-zone",
+                                               "Specify zone id to redirect when response is 404 (not found)"};
+  const commandline_parameter ROLE_NAME = {"role-name", "Name of the role to create"};
+  const commandline_parameter SECRET_KEY = {"secret-key", "Secret key"};
+  const commandline_parameter SET_DEFAULT = {"default", "Set entity (realm, zonegroup, zone) as default"};
+  const commandline_parameter SHARD_ID = {"shard-id", ""};
+  const commandline_parameter SHOW_LOG_ENTRIES = {"show-log-entries", "Enable/disable dump of log entries on log show"};
+  const commandline_parameter SHOW_LOG_SUM = {"show-log-sum", "Enable/disable dump of log summation on log show"};
+  const commandline_parameter SOURCE_ZONE = {"source-zone", "Specify the source zone for data sync"};
+  const commandline_parameter SYNC_FROM = {"sync-from", "List of zones to sync from"};
+  const commandline_parameter SYNC_FROM_ALL = {"sync-from-all",
+                                               "Set/reset whether zone syncs from all zonegroup peers"};
+  const commandline_parameter SYNC_FROM_RM = {"sync-from-rm", "Remove zones from list of zones to sync from"};
+  const commandline_parameter TENANT = {"tenant", "Tenant name"};
+  const commandline_parameter TIER_CONFIG_ADD = {"tier-config", "Set zone tier config keys, values"};
+  const commandline_parameter TIER_TYPE = {"tier-type", "Zone tier type"};
+  const commandline_parameter URL = {"url", ""};
+  const commandline_parameter USER_ID = {"uid", "User id"};
+  const commandline_parameter YES_I_REALLY_MEAN_IT = {"yes-i-really-mean-it", ""};
+  const commandline_parameter ZONEGROUP_ID = {"zonegroup-id", "Zonegroup id"};
+  const commandline_parameter ZONEGROUP_NAME = {"rgw-zonegroup", "Zonegroup name"};
+  const commandline_parameter ZONE_ID = {"zone-id", "Zone id"};
+  const commandline_parameter ZONE_NAME = {"rgw-zone", "Zone name"};
 }
 
 void usage();

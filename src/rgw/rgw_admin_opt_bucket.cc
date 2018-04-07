@@ -1308,130 +1308,148 @@ int handle_opt_object_stat(const std::string& bucket_id, const std::string& buck
 }
 
 int RgwAdminBiCommandsHandler::parse_command_and_parameters() {
-  const char INDEX_TYPE[] = "index-type";
+  const rgw_admin_params::commandline_parameter INDEX_TYPE = {"index-type", ""};
   std::string bi_index_type_str;
   boost::program_options::options_description desc{"Bi options"};
   desc.add_options()
-      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
-      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
-      (rgw_admin_params::INFILE, boost::program_options::value(&infile), "A file to read in when setting data")
-      (INDEX_TYPE, boost::program_options::value(&bi_index_type_str), "")
-      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
-      (rgw_admin_params::MARKER, boost::program_options::value(&marker), "")
-      (rgw_admin_params::OBJECT, boost::program_options::value(&object), "Object name")
-      (rgw_admin_params::OBJECT_VERSION, boost::program_options::value(&object_version), "")
-      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name")
-      (rgw_admin_params::YES_I_REALLY_MEAN_IT, "Confirmation of purging certain information");
+      (rgw_admin_params::BUCKET_ID.name, boost::program_options::value(&bucket_id),
+       rgw_admin_params::BUCKET_ID.description)
+      (rgw_admin_params::BUCKET_NAME.name, boost::program_options::value(&bucket_name),
+       rgw_admin_params::BUCKET_NAME.description)
+      (INDEX_TYPE.name, boost::program_options::value(&bi_index_type_str), INDEX_TYPE.description)
+      (rgw_admin_params::INFILE.name, boost::program_options::value(&infile), rgw_admin_params::INFILE.description)
+      (rgw_admin_params::MARKER.name, boost::program_options::value(&marker), rgw_admin_params::MARKER.description)
+      (rgw_admin_params::MAX_ENTRIES.name, boost::program_options::value(&max_entries),
+       rgw_admin_params::MAX_ENTRIES.description)
+      (rgw_admin_params::OBJECT.name, boost::program_options::value(&object), rgw_admin_params::OBJECT.description)
+      (rgw_admin_params::OBJECT_VERSION.name, boost::program_options::value(&object_version),
+       rgw_admin_params::OBJECT_VERSION.description)
+      (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description)
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name, rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
   boost::program_options::variables_map var_map;
 
   int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }
-  if (var_map.count(INDEX_TYPE)) {
+
+  if (var_map.count(INDEX_TYPE.name)) {
     bi_index_type = get_bi_index_type(bi_index_type_str);
     if (bi_index_type == InvalidIdx) {
       return EINVAL;
     }
   }
-  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT)) {
+  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT.name)) {
     yes_i_really_mean_it = true;
   }
   return 0;
 }
 
 int RgwAdminBilogCommandsHandler::parse_command_and_parameters() {
-  std::string bi_index_type_str;
-  boost::program_options::options_description desc{"Bi options"};
+  boost::program_options::options_description desc{"Bilog options"};
   desc.add_options()
-      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
-      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
-      (rgw_admin_params::MARKER, boost::program_options::value(&marker), "")
-      (rgw_admin_params::START_MARKER, boost::program_options::value(&start_marker), "Start marker for bilog trim")
-      (rgw_admin_params::END_MARKER, boost::program_options::value(&end_marker), "End marker for bilog trim")
-      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
-      (rgw_admin_params::SHARD_ID, boost::program_options::value(&shard_id), "")
-      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
+      (rgw_admin_params::BUCKET_ID.name, boost::program_options::value(&bucket_id),
+       rgw_admin_params::BUCKET_ID.description)
+      (rgw_admin_params::BUCKET_NAME.name, boost::program_options::value(&bucket_name),
+       rgw_admin_params::BUCKET_NAME.description)
+      (rgw_admin_params::END_MARKER.name, boost::program_options::value(&end_marker),
+       rgw_admin_params::END_MARKER.description)
+      (rgw_admin_params::MARKER.name, boost::program_options::value(&marker), rgw_admin_params::MARKER.description)
+      (rgw_admin_params::MAX_ENTRIES.name, boost::program_options::value(&max_entries),
+       rgw_admin_params::MAX_ENTRIES.description)
+      (rgw_admin_params::SHARD_ID.name, boost::program_options::value(&shard_id),
+       rgw_admin_params::SHARD_ID.description)
+      (rgw_admin_params::START_MARKER.name, boost::program_options::value(&start_marker),
+       rgw_admin_params::START_MARKER.description)
+      (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description);
   boost::program_options::variables_map var_map;
 
   return parse_command(desc, var_map);
+
 }
 
 int RgwAdminBucketCommandsHandler::parse_command_and_parameters() {
-  const char BYPASS_GC[] = "bypass-gc";
-  const char CHECK_HOL[] = "check-head-obj-locator";
-  const char FIX[] = "fix";
-  const char INCONS_INDEX[] = "inconsistent-index";
-  const char REMOVE_BAD[] = "remove-bad";
-  const char VERBOSE[] = "verbose";
-  const char WARNINGS[] = "warnings-only";
-
+  const rgw_admin_params::commandline_parameter BYPASS_GC = {"bypass-gc", "When specified with bucket deletion,"
+      " triggers object deletions by not involving GC"};
+  const rgw_admin_params::commandline_parameter CHECK_HEAD_OBJ_LOCATOR = {"check-head-obj-locator", ""};
+  const rgw_admin_params::commandline_parameter FIX = {"fix", "Besides checking bucket index, will also fix it"};
+  const rgw_admin_params::commandline_parameter INCONSISTENT_INDEX = {"inconsistent-index ", "When specified with"
+      " bucket deletion and bypass-gc set to true, ignores bucket index consistency"};
+  const rgw_admin_params::commandline_parameter MAX_REWRITE_SIZE = {"max-rewrite-size", ""};
+  const rgw_admin_params::commandline_parameter MIN_REWRITE_SIZE = {"min-rewrite-size", "Min object size for "
+      "bucket rewrite (default 4M)"};
+  const rgw_admin_params::commandline_parameter REMOVE_BAD = {"remove-bad", ""};
+  const rgw_admin_params::commandline_parameter VERBOSE = {"verbose", ""};
+  const rgw_admin_params::commandline_parameter WARNINGS_ONLY = {"warnings-only",
+                                                                 "When specified with bucket limit check,"
+                                                                     " list only buckets nearing or over the current max objects per shard value"};
   boost::program_options::options_description desc{"Bucket options"};
   desc.add_options()
-      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "")
-      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name), "")
-      (BYPASS_GC, "When specified with bucket deletion, triggers object deletions by not "
-          "involving GC")
-      (CHECK_HOL, "")
-      (rgw_admin_params::DELETE_CHILD_OBJECTS, "remove a bucket's objects before deleting it\n"
-           "(NOTE: required to delete a non-empty bucket)")
-      (FIX, "Besides checking bucket index, will also fix it")
-      (INCONS_INDEX, "When specified with bucket deletion and bypass-gc set to true, ignores "
-          "bucket index consistency")
-      (rgw_admin_params::MARKER, boost::program_options::value(&marker), "")
-      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "")
-      ("min-rewrite-size", boost::program_options::value(&min_rewrite_size), "Min object size for "
-          "bucket rewrite (default 4M)")
-      ("max-rewrite-size", boost::program_options::value(&max_rewrite_size), "Max object size for "
-          "bucket rewrite (default ULLONG_MAX)")
-      (rgw_admin_params::MIN_REWRITE_STRIPE_SIZE, boost::program_options::value(&min_rewrite_stripe_size), "Min "
-          "stripe size for object rewrite (default 0)")
-      (rgw_admin_params::MAX_CONCURRENT_IOS, boost::program_options::value(&max_concurrent_ios), "")
-      (rgw_admin_params::NUM_SHARDS, boost::program_options::value(&num_shards), "Num of shards to use for keeping "
-          "the temporary scan info")
-      (REMOVE_BAD, "")
-      (rgw_admin_params::START_DATE, boost::program_options::value(&start_date), "Start date in the format yyyy-mm-dd")
-      (rgw_admin_params::END_DATE, boost::program_options::value(&end_date), "End date in the format yyyy-mm-dd")
-      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name")
-      (rgw_admin_params::USER_ID, boost::program_options::value(&user_id), "User id")
-      (VERBOSE, "")
-      (WARNINGS, "When specified with bucket limit check, list only buckets nearing or over the "
-          "current max objects per shard value")
-      (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
+      (rgw_admin_params::BUCKET_ID.name, boost::program_options::value(&bucket_id),
+       rgw_admin_params::BUCKET_ID.description)
+      (rgw_admin_params::BUCKET_NAME.name, boost::program_options::value(&bucket_name),
+       rgw_admin_params::BUCKET_NAME.description)
+      (BYPASS_GC.name, BYPASS_GC.description)
+      (CHECK_HEAD_OBJ_LOCATOR.name, CHECK_HEAD_OBJ_LOCATOR.description)
+      (rgw_admin_params::DELETE_CHILD_OBJECTS.name, rgw_admin_params::DELETE_CHILD_OBJECTS.description)
+      (rgw_admin_params::END_DATE.name, boost::program_options::value(&end_date),
+       rgw_admin_params::END_DATE.description)
+      (FIX.name, FIX.description)
+      (INCONSISTENT_INDEX.name, INCONSISTENT_INDEX.description)
+      (rgw_admin_params::MARKER.name, boost::program_options::value(&marker), rgw_admin_params::MARKER.description)
+      (rgw_admin_params::MAX_ENTRIES.name, boost::program_options::value(&max_entries),
+       rgw_admin_params::MAX_ENTRIES.description)
+      (rgw_admin_params::MAX_CONCURRENT_IOS.name, boost::program_options::value(&max_concurrent_ios),
+       rgw_admin_params::MAX_CONCURRENT_IOS.description)
+      (MAX_REWRITE_SIZE.name, boost::program_options::value(&max_rewrite_size), MAX_REWRITE_SIZE.description)
+      (MIN_REWRITE_SIZE.name, boost::program_options::value(&min_rewrite_size), MIN_REWRITE_SIZE.description)
+      (rgw_admin_params::MIN_REWRITE_STRIPE_SIZE.name, boost::program_options::value(&min_rewrite_stripe_size),
+       rgw_admin_params::MIN_REWRITE_STRIPE_SIZE.description)
+      (rgw_admin_params::NUM_SHARDS.name, boost::program_options::value(&num_shards),
+       rgw_admin_params::NUM_SHARDS.description)
+      (REMOVE_BAD.name, REMOVE_BAD.description)
+      (rgw_admin_params::START_DATE.name, boost::program_options::value(&start_date),
+       rgw_admin_params::START_DATE.description)
+      (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description)
+      (rgw_admin_params::USER_ID.name, boost::program_options::value(&user_id), rgw_admin_params::USER_ID.description)
+      (VERBOSE.name, VERBOSE.description)
+      (WARNINGS_ONLY.name, WARNINGS_ONLY.description)
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name, rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
   boost::program_options::variables_map var_map;
 
   int ret = parse_command(desc, var_map);
   if (ret > 0) {
     return ret;
   }
-  if (var_map.count(BYPASS_GC)) {
+
+  if (var_map.count(BYPASS_GC.name)) {
     bypass_gc = true;
   }
-  if (var_map.count(CHECK_HOL)) {
+  if (var_map.count(CHECK_HEAD_OBJ_LOCATOR.name)) {
     check_head_obj_locator = true;
   }
-  if (var_map.count(rgw_admin_params::DELETE_CHILD_OBJECTS)) {
+  if (var_map.count(rgw_admin_params::DELETE_CHILD_OBJECTS.name)) {
     delete_child_objects = true;
   }
-  if (var_map.count(FIX)) {
+  if (var_map.count(FIX.name)) {
     fix = true;
   }
-  if (var_map.count(INCONS_INDEX)) {
+  if (var_map.count(INCONSISTENT_INDEX.name)) {
     inconsistent_index = true;
   }
-  if (var_map.count(REMOVE_BAD)) {
+  if (var_map.count(REMOVE_BAD.name)) {
     remove_bad = true;
   }
-  if (var_map.count(rgw_admin_params::USER_ID)) {
+  if (var_map.count(rgw_admin_params::USER_ID.name)) {
     user.from_str(user_id);
   }
-  if (var_map.count(VERBOSE)) {
+  if (var_map.count(VERBOSE.name)) {
     verbose = true;
   }
-  if (var_map.count(WARNINGS)) {
+  if (var_map.count(WARNINGS_ONLY.name)) {
     warnings_only = true;
   }
-  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT)) {
+  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT.name)) {
     yes_i_really_mean_it = true;
   }
   return 0;
@@ -1452,33 +1470,39 @@ void RgwAdminBucketCommandsHandler::populate_bucket_op() {
 }
 
 int RgwAdminBucketSyncCommandsHandler::parse_command_and_parameters() {
-  std::string bi_index_type_str;
-  boost::program_options::options_description desc{"Bi options"};
+  boost::program_options::options_description desc{"Bucket sync options"};
   desc.add_options()
-      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
-      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name), "Specify the bucket name")
-      (rgw_admin_params::OBJECT, boost::program_options::value(&object), "Object name")
-      (rgw_admin_params::REALM_ID, boost::program_options::value(&realm_id), "Realm id")
-      (rgw_admin_params::REALM_NAME, boost::program_options::value(&realm_name), "Realm name")
-      (rgw_admin_params::SOURCE_ZONE, boost::program_options::value(&source_zone), "Specify the source zone for sync")
-      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
+      (rgw_admin_params::BUCKET_ID.name, boost::program_options::value(&bucket_id),
+       rgw_admin_params::BUCKET_ID.description)
+      (rgw_admin_params::BUCKET_NAME.name, boost::program_options::value(&bucket_name),
+       rgw_admin_params::BUCKET_NAME.description)
+      (rgw_admin_params::OBJECT.name, boost::program_options::value(&object), rgw_admin_params::OBJECT.description)
+      (rgw_admin_params::REALM_ID.name, boost::program_options::value(&realm_id),
+       rgw_admin_params::REALM_ID.description)
+      (rgw_admin_params::REALM_NAME.name, boost::program_options::value(&realm_name),
+       rgw_admin_params::REALM_NAME.description)
+      (rgw_admin_params::SOURCE_ZONE.name, boost::program_options::value(&source_zone),
+       rgw_admin_params::SOURCE_ZONE.description)
+      (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description);
   boost::program_options::variables_map var_map;
 
   return parse_command(desc, var_map);
+
 }
 
 int RgwAdminObjectCommandsHandler::parse_command_and_parameters() {
   boost::program_options::options_description desc{"Object options"};
   desc.add_options()
-      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
-      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name),
-       "Specify the bucket name")
-      (rgw_admin_params::MIN_REWRITE_STRIPE_SIZE,
-       boost::program_options::value(&min_rewrite_stripe_size),
-       "Min stripe size for object rewrite (default 0)")
-      (rgw_admin_params::OBJECT, boost::program_options::value(&object), "Object name")
-      (rgw_admin_params::OBJECT_VERSION, boost::program_options::value(&object_version), "")
-      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name");
+      (rgw_admin_params::BUCKET_ID.name, boost::program_options::value(&bucket_id),
+       rgw_admin_params::BUCKET_ID.description)
+      (rgw_admin_params::BUCKET_NAME.name, boost::program_options::value(&bucket_name),
+       rgw_admin_params::BUCKET_NAME.description)
+      (rgw_admin_params::MIN_REWRITE_STRIPE_SIZE.name, boost::program_options::value(&min_rewrite_stripe_size),
+       rgw_admin_params::MIN_REWRITE_STRIPE_SIZE.description)
+      (rgw_admin_params::OBJECT.name, boost::program_options::value(&object), rgw_admin_params::OBJECT.description)
+      (rgw_admin_params::OBJECT_VERSION.name, boost::program_options::value(&object_version),
+       rgw_admin_params::OBJECT_VERSION.description)
+      (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description);
   boost::program_options::variables_map var_map;
 
   return parse_command(desc, var_map);
@@ -1488,15 +1512,16 @@ int RgwAdminObjectCommandsHandler::parse_command_and_parameters() {
 int RgwAdminReshardCommandsHandler::parse_command_and_parameters() {
   boost::program_options::options_description desc{"Reshard options"};
   desc.add_options()
-      (rgw_admin_params::BUCKET_ID, boost::program_options::value(&bucket_id), "Bucket id")
-      (rgw_admin_params::BUCKET_NAME, boost::program_options::value(&bucket_name),
-       "Specify the bucket name")
-      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "")
-      (rgw_admin_params::NUM_SHARDS, boost::program_options::value(&num_shards),
-       "Num of shards to use for keeping "
-           "the temporary scan info")
-      (rgw_admin_params::TENANT, boost::program_options::value(&tenant), "Tenant name")
-      (rgw_admin_params::YES_I_REALLY_MEAN_IT, "");
+      (rgw_admin_params::BUCKET_ID.name, boost::program_options::value(&bucket_id),
+       rgw_admin_params::BUCKET_ID.description)
+      (rgw_admin_params::BUCKET_NAME.name, boost::program_options::value(&bucket_name),
+       rgw_admin_params::BUCKET_NAME.description)
+      (rgw_admin_params::MAX_ENTRIES.name, boost::program_options::value(&max_entries),
+       rgw_admin_params::MAX_ENTRIES.description)
+      (rgw_admin_params::NUM_SHARDS.name, boost::program_options::value(&num_shards),
+       rgw_admin_params::NUM_SHARDS.description)
+      (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description)
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name, rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
   boost::program_options::variables_map var_map;
 
   int ret = parse_command(desc, var_map);
@@ -1504,7 +1529,7 @@ int RgwAdminReshardCommandsHandler::parse_command_and_parameters() {
     return ret;
   }
 
-  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT)) {
+  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT.name)) {
     yes_i_really_mean_it = true;
   }
   return 0;

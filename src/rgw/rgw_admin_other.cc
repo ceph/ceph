@@ -1549,14 +1549,17 @@ void handle_opt_sync_status(RGWRados *store)
 }
 
 int RgwAdminMetadataCommandsHandler::parse_command_and_parameters() {
-  const char METADATA_KEY[] = "metadata-key";
+  const rgw_admin_params::commandline_parameter METADATA_KEY = {"metadata-key",
+                                                                "The key to retrieve metadata from with metadata get"};
   boost::program_options::options_description desc{"Metadata options"};
   desc.add_options()
-      (METADATA_KEY, boost::program_options::value(&metadata_key)->required(), "The key to retrieve metadata from with metadata get")
-      (rgw_admin_params::INFILE, boost::program_options::value(&infile), "A file to read in when setting data")
-      (rgw_admin_params::MAX_ENTRIES, boost::program_options::value(&max_entries), "The maximum number of entries to display")
-      (rgw_admin_params::MARKER, boost::program_options::value(&marker), "");
+      (rgw_admin_params::INFILE.name, boost::program_options::value(&infile), rgw_admin_params::INFILE.description)
+      (rgw_admin_params::MARKER.name, boost::program_options::value(&marker), rgw_admin_params::MARKER.description)
+      (rgw_admin_params::MAX_ENTRIES.name, boost::program_options::value(&max_entries),
+       rgw_admin_params::MAX_ENTRIES.description)
+      (METADATA_KEY.name, boost::program_options::value(&metadata_key), METADATA_KEY.description);
   boost::program_options::variables_map var_map;
 
   return parse_command(desc, var_map);
+
 }
