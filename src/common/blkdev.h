@@ -31,4 +31,11 @@ extern int block_device_model(const char *devname, char *model, size_t max);
 
 extern void get_dm_parents(const std::string& dev, std::set<std::string> *ls);
 
+// for VDO
+
+/// return an op fd for the sysfs stats dir, if this is a VDO device
+extern int get_vdo_stats_handle(const char *devname, std::string *vdo_name);
+extern int64_t get_vdo_stat(int fd, const char *property);
+extern bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail);
+
 #endif
