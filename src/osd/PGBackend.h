@@ -533,7 +533,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    int objects_list_range(
      const hobject_t &start,
      const hobject_t &end,
-     snapid_t seq,
      vector<hobject_t> *ls,
      vector<ghobject_t> *gen_obs=0);
 
