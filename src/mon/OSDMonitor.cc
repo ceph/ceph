@@ -11559,6 +11559,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -ENOENT;
       goto reply;
     }
+    string sure;
+    cmd_getval(cct, cmdmap, "sure", sure);
+    if (sure != "--yes-i-really-mean-it") {
+      ss << "This command will recreate a lost (as in data lost) PG with data in it, such that the cluster will give up ever trying to recover the lost data.  Do this only if you are certain that all copies of the PG are in fact lost and you are willing to accept that the data is permanently destroyed.  Pass --yes-i-really-mean-it to proceed.";
+      err = -EPERM;
+      goto reply;
+    }
     bool creating_now;
     {
       std::lock_guard<std::mutex> l(creating_pgs_lock);
