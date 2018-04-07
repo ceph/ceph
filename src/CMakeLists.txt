@@ -167,6 +167,17 @@ else()
   set(C_STANDARD_REQUIRED ON)
 endif()
 
+if(CXX_STDLIB STREQUAL "libc++")
+  include(CheckCXXSourceCompiles)
+  CHECK_CXX_SOURCE_COMPILES("
+#include <map>
+using Map = std::map<int, int>;
+int main() {
+  Map m;
+  m.merge(Map{});
+}
+" HAVE_STDLIB_MAP_SPLICING)
+endif()
 
 if(CMAKE_COMPILER_IS_GNUCXX AND
     CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.1)
