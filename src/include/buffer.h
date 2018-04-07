@@ -751,21 +751,6 @@ namespace buffer CEPH_BUFFER_API {
       last_p = begin();
       append_buffer = ptr();
     }
-    void push_front(ptr& bp) {
-      if (bp.length() == 0)
-	return;
-      _buffers.push_front(bp);
-      _len += bp.length();
-    }
-    void push_front(ptr&& bp) {
-      if (bp.length() == 0)
-	return;
-      _len += bp.length();
-      _buffers.push_front(std::move(bp));
-    }
-    void push_front(raw *r) {
-      push_front(ptr(r));
-    }
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
@@ -804,7 +789,6 @@ namespace buffer CEPH_BUFFER_API {
 
     void claim(list& bl, unsigned int flags = CLAIM_DEFAULT);
     void claim_append(list& bl, unsigned int flags = CLAIM_DEFAULT);
-    void claim_prepend(list& bl, unsigned int flags = CLAIM_DEFAULT);
     // only for bl is bufferlist::page_aligned_appender
     void claim_append_piecewise(list& bl);
 

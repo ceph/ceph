@@ -197,7 +197,8 @@ TEST_P(CompressorTest, compress_decompress)
   bufferlist prefix;
   prefix.append(string("some prefix"));
   size_t prefix_len = prefix.length();
-  out.claim_prepend(prefix);
+  prefix.claim_append(out);
+  out.swap(prefix);
   it = out.begin();
   it.advance(prefix_len);
   res = compressor->decompress(it, compressed_len, after);

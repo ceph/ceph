@@ -442,7 +442,7 @@ TEST_F(IsaErasureCodeTest, isa_vandermonde_exhaustive)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
 
   set<int>want_to_encode;
 
@@ -569,7 +569,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_exhaustive)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
 
   set<int>want_to_encode;
 
@@ -696,7 +696,7 @@ TEST_F(IsaErasureCodeTest, isa_cauchy_cache_trash)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
 
   set<int>want_to_encode;
 
@@ -822,7 +822,7 @@ TEST_F(IsaErasureCodeTest, isa_xor_codec)
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   in_ptr.append(payload, strlen(payload));
   bufferlist in;
-  in.push_front(in_ptr);
+  in.push_back(in_ptr);
 
   set<int>want_to_encode;
 
