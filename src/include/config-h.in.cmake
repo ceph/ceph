@@ -339,4 +339,7 @@
 /* Defined if OpenSSL is available for the rgw beast frontend */
 #cmakedefine WITH_RADOSGW_BEAST_OPENSSL
 
+/* Defined if std::map::merge() is supported */
+#cmakedefine HAVE_STDLIB_MAP_SPLICING
+
 #endif /* CONFIG_H */
