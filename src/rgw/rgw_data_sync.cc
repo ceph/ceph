@@ -954,6 +954,10 @@ public:
     marker_to_key[marker] = key;
     return true;
   }
+
+  RGWOrderCallCR *allocate_order_control_cr() {
+    return new RGWLastCallerWinsCR(sync_env->cct);
+  }
 };
 
 // ostream wrappers to print buckets without copying strings
@@ -2285,6 +2289,10 @@ public:
                                           rgw_raw_obj(store->get_zone_params().log_pool, marker_oid),
                                           attrs);
   }
+
+  RGWOrderCallCR *allocate_order_control_cr() {
+    return new RGWLastCallerWinsCR(sync_env->cct);
+  }
 };
 
 class RGWBucketIncSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, rgw_obj_key> {
@@ -2356,6 +2364,10 @@ public:
 
   bool can_do_op(const rgw_obj_key& key) {
     return (key_to_marker.find(key) == key_to_marker.end());
+  }
+
+  RGWOrderCallCR *allocate_order_control_cr() {
+    return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };
 
