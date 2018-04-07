@@ -1661,7 +1661,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     encode(flags, bl);
   } else {
     auto tmp = flags;
-    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS);
+    tmp &= ~(FLAG_SELFMANAGED_SNAPS | FLAG_POOL_SNAPS | FLAG_CREATING);
     encode(tmp, bl);
   }
   encode((uint32_t)0, bl); // crash_replay_interval
