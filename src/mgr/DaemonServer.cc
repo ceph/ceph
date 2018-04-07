@@ -2252,7 +2252,13 @@ void DaemonServer::adjust_pgs()
 		       << " pg_num " << p.get_pg_num()
 		       << " target " << p.get_pg_num_target()
 		       << dendl;
-	      if (p.get_pg_num() != p.get_pg_num_pending()) {
+	      if (p.has_flag(pg_pool_t::FLAG_CREATING)) {
+		dout(10) << "pool " << i.first
+			 << " target " << p.get_pg_num_target()
+			 << " pg_num " << p.get_pg_num()
+			 << " - still creating initial pgs"
+			 << dendl;
+	      } else if (p.get_pg_num() != p.get_pg_num_pending()) {
 		dout(10) << "pool " << i.first
 			 << " target " << p.get_pg_num_target()
 			 << " pg_num " << p.get_pg_num()
