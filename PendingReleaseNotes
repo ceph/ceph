@@ -116,3 +116,13 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
 
 * It is no longer possible to adjust ``pg_num`` on a pool that is
   still being created.
+
+13.0.3
+------
+
+* The ``osd_mon_report_interval_min`` option has been renamed to
+  ``osd_mon_report_interval``, and the ``osd_mon_report_interval_max``
+  (unused) has been eliminated.  If this value has been customized on
+  your cluster then your configuration should be adjusted in order to
+  avoid reverting to the default value.
+
