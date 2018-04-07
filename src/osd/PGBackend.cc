@@ -1120,7 +1120,10 @@ void PGBackend::be_large_omap_check(const map<pg_shard_t,ScrubMap*> &maps,
   // Iterate through objects and check large omap object flag
   for (const auto& k : master_set) {
     for (const auto& map : maps) {
-      ScrubMap::object& obj = map.second->objects[k];
+      auto it = map.second->objects.find(k);
+      if (it == map.second->objects.end())
+        continue;
+      ScrubMap::object& obj = it->second;
       if (obj.large_omap_object_found) {
         large_omap_objects++;
         warnstream << "Large omap object found. Object: " << k << " Key count: "
