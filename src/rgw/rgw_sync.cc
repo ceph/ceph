@@ -1159,6 +1159,21 @@ public:
 
 #define META_SYNC_UPDATE_MARKER_WINDOW 10
 
+
+int RGWLastCallerWinsCR::operate() {
+  RGWCoroutine *call_cr;
+  reenter(this) {
+    while (cr) {
+      call_cr = cr;
+      cr = nullptr;
+      yield call(call_cr);
+      /* cr might have been modified at this point */
+    }
+    return set_cr_done();
+  }
+  return 0;
+}
+
 class RGWMetaSyncShardMarkerTrack : public RGWSyncShardMarkerTrack<string, string> {
   RGWMetaSyncEnv *sync_env;
 
@@ -1194,6 +1209,10 @@ public:
                                                            store,
                                                            rgw_raw_obj(store->get_zone_params().log_pool, marker_oid),
                                                            sync_marker);
+  }
+
+  RGWOrderCallCR *allocate_order_control_cr() {
+    return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };
 
