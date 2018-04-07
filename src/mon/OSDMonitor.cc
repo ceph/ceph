@@ -1069,6 +1069,26 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
 
+    // update creating pgs first so that we can remove the created pgid and
+    // process the pool flag removal below in the same osdmap epoch.
+    auto pending_creatings = update_pending_pgs(pending_inc, tmp);
+    bufferlist creatings_bl;
+    encode(pending_creatings, creatings_bl);
+    t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
+
+    // remove any old POOL_CREATING flags
+    for (auto& i : tmp.get_pools()) {
+      if (i.second.has_flag(pg_pool_t::FLAG_CREATING) &&
+	  !pending_creatings.still_creating_pool(i.first)) {
+	dout(10) << __func__ << " done creating pool " << i.first
+		 << ", clearing CREATING flag" << dendl;
+	if (pending_inc.new_pools.count(i.first) == 0) {
+	  pending_inc.new_pools[i.first] = i.second;
+	}
+	pending_inc.new_pools[i.first].flags &= ~pg_pool_t::FLAG_CREATING;
+      }
+    }
+
     // remove any legacy osdmap nearfull/full flags
     {
       if (tmp.test_flag(CEPH_OSDMAP_FULL | CEPH_OSDMAP_NEARFULL)) {
@@ -1416,12 +1436,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     t->erase(OSD_METADATA_PREFIX, stringify(*p));
   pending_metadata.clear();
   pending_metadata_rm.clear();
-
-  // and pg creating, also!
-  auto pending_creatings = update_pending_pgs(pending_inc, tmp);
-  bufferlist creatings_bl;
-  encode(pending_creatings, creatings_bl);
-  t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
 
   // removed_snaps
   if (tmp.require_osd_release >= CEPH_RELEASE_MIMIC) {
@@ -6651,6 +6665,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->set_flag(pg_pool_t::FLAG_NOPGCHANGE);
   if (g_conf()->osd_pool_default_flag_nosizechange)
     pi->set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
+  pi->set_flag(pg_pool_t::FLAG_CREATING);
   if (g_conf()->osd_pool_use_gmt_hitset)
     pi->use_gmt_hitset = true;
   else
