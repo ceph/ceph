@@ -302,6 +302,7 @@ int md_config_t::set_mon_vals(CephContext *cct, const map<string,string>& kv)
     }
   }
   values_bl.clear();
+  _apply_changes(nullptr);
   return 0;
 }
 
