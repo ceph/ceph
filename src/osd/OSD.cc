@@ -3993,6 +3993,25 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
   PG::RecoveryCtx rctx = create_context();
 
   OSDMapRef startmap = get_map(info->epoch);
+
+  if (info->by_mon) {
+    int64_t pool_id = pgid.pgid.pool();
+    const pg_pool_t *pool = osdmap->get_pg_pool(pool_id);
+    if (!pool) {
+      dout(10) << __func__ << " ignoring " << pgid << ", pool dne" << dendl;
+      return nullptr;
+    }
+    if (osdmap->require_osd_release >= CEPH_RELEASE_NAUTILUS &&
+	!pool->has_flag(pg_pool_t::FLAG_CREATING)) {
+      // this ensures we do not process old creating messages after the
+      // pool's initial pgs have been created (and pg are subsequently
+      // allowed to split or merge).
+      dout(20) << __func__ << "  dropping " << pgid
+	       << "create, pool does not have CREATING flag set" << dendl;
+      return nullptr;
+    }
+  }
+
   int up_primary, acting_primary;
   vector<int> up, acting;
   startmap->pg_to_up_acting_osds(
@@ -8532,7 +8551,6 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
     utime_t created_stamp = p.second.second;
     dout(20) << __func__ << " " << pgid << " e" << created
 	     << "@" << created_stamp << dendl;
-
     pg_history_t h;
     h.epoch_created = created;
     h.epoch_pool_created = created;
