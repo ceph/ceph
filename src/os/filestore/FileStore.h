@@ -50,13 +50,13 @@
 
 #if defined(__linux__)
 # ifndef BTRFS_SUPER_MAGIC
-#define BTRFS_SUPER_MAGIC 0x9123683EL
+#define BTRFS_SUPER_MAGIC 0x9123683EUL
 # endif
 # ifndef XFS_SUPER_MAGIC
-#define XFS_SUPER_MAGIC 0x58465342L
+#define XFS_SUPER_MAGIC 0x58465342UL
 # endif
 # ifndef ZFS_SUPER_MAGIC
-#define ZFS_SUPER_MAGIC 0x2fc12fc1L
+#define ZFS_SUPER_MAGIC 0x2fc12fc1UL
 # endif
 #endif
 
@@ -158,7 +158,7 @@ private:
 
   FileStoreBackend *backend;
 
-  void create_backend(long f_type);
+  void create_backend(unsigned long f_type);
 
   int vdo_fd = -1;
   string vdo_name;
@@ -813,7 +813,7 @@ private:
   bool m_filestore_sloppy_crc;
   int m_filestore_sloppy_crc_block_size;
   uint64_t m_filestore_max_alloc_hint_size;
-  long m_fs_type;
+  unsigned long m_fs_type;
 
   //Determined xattr handling based on fs type
   void set_xattr_limits_via_conf();
@@ -893,7 +893,7 @@ public:
     return filestore->cct;
   }
 
-  static FileStoreBackend *create(long f_type, FileStore *fs);
+  static FileStoreBackend *create(unsigned long f_type, FileStore *fs);
 
   virtual const char *get_name() = 0;
   virtual int detect_features() = 0;

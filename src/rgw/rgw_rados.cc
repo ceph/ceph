@@ -3797,7 +3797,7 @@ int RGWRados::init_rados()
     }
   }
 
-  auto handles = std::vector<librados::Rados>{cct->_conf->rgw_num_rados_handles};
+  auto handles = std::vector<librados::Rados>{static_cast<size_t>(cct->_conf->rgw_num_rados_handles)};
 
   for (auto& r : handles) {
     ret = r.init_with_context(cct);
