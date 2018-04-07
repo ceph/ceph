@@ -196,6 +196,8 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
 {
   // version
   (*m)["ceph_version"] = pretty_version_to_str();
+  (*m)["ceph_version_short"] = ceph_version_to_str();
+  (*m)["ceph_release"] = ceph_release_to_str();
 
   // kernel info
   struct utsname u;
