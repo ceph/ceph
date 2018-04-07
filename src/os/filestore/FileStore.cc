@@ -708,6 +708,11 @@ void FileStore::collect_metadata(map<string,string> *pm)
     default:
       (*pm)["backend_filestore_partition_path"] = string(partition_path);
       (*pm)["backend_filestore_dev_node"] = string(dev_node);
+      if (vdo_fd >= 0) {
+	(*pm)["vdo"] = "true";
+	(*pm)["vdo_physical_size"] =
+	  stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
+      }
   }
 }
 
@@ -736,8 +741,17 @@ int FileStore::statfs(struct store_statfs_t *buf0)
     assert(r != -ENOENT);
     return r;
   }
-  buf0->total = buf.f_blocks * buf.f_bsize;
-  buf0->available = buf.f_bavail * buf.f_bsize;
+
+  uint64_t bfree = buf.f_bavail * buf.f_bsize;
+  uint64_t thin_total, thin_avail;
+  if (get_vdo_utilization(vdo_fd, &thin_total, &thin_avail)) {
+    buf0->total = thin_total;
+    bfree = std::min(bfree, thin_avail);
+  } else {
+    buf0->total = buf.f_blocks * buf.f_bsize;
+  }
+  buf0->available = bfree;
+
   // Adjust for writes pending in the journal
   if (journal) {
     uint64_t estimate = journal->get_journal_size_estimate();
@@ -1222,6 +1236,20 @@ int FileStore::_detect_fs()
   if (r < 0) {
     derr << __FUNC__ << ": detect_features error: " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  // vdo
+  {
+    char partition_path[PATH_MAX];
+    char dev_node[PATH_MAX];
+    int rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
+    if (rc == 0) {
+      vdo_fd = get_vdo_stats_handle(dev_node, &vdo_name);
+      if (vdo_fd >= 0) {
+	dout(0) << __func__ << " VDO volume " << vdo_name << " for " << dev_node
+		<< dendl;
+      }
+    }
   }
 
   // test xattrs
@@ -1985,6 +2013,10 @@ int FileStore::umount()
     (*it)->stop();
   }
 
+  if (vdo_fd >= 0) {
+    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
+    vdo_fd = -1;
+  }
   if (fsid_fd >= 0) {
     VOID_TEMP_FAILURE_RETRY(::close(fsid_fd));
     fsid_fd = -1;

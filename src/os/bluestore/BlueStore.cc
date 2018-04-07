@@ -6874,9 +6874,8 @@ int BlueStore::get_devices(set<string> *ls)
 int BlueStore::statfs(struct store_statfs_t *buf)
 {
   buf->reset();
-  buf->total = bdev->get_size();
-  buf->available = alloc->get_free();
 
+  uint64_t bfree = alloc->get_free();
   if (bluefs) {
     // part of our shared device is "free" according to BlueFS, but we
     // can't touch bluestore_bluefs_min of it.
@@ -6884,13 +6883,31 @@ int BlueStore::statfs(struct store_statfs_t *buf)
       bluefs->get_free(bluefs_shared_bdev),
       bluefs->get_total(bluefs_shared_bdev) - cct->_conf->bluestore_bluefs_min);
     if (shared_available > 0) {
-      buf->available += shared_available;
+      bfree += shared_available;
+    }
+  }
+
+  uint64_t thin_total, thin_avail;
+  if (bdev->get_thin_utilization(&thin_total, &thin_avail)) {
+    buf->total += thin_total;
+
+    // we are limited by both the size of the virtual device and the
+    // underlying physical device.
+    bfree = std::min(bfree, thin_avail);
+  } else {
+    buf->total = bdev->get_size();
+  }
+  buf->available += bfree;
+
+  if (bluefs) {
+    // include dedicated db, too, if that isn't the shared device.
+    if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
+      buf->total += bluefs->get_total(BlueFS::BDEV_DB);
     }
   }
 
   {
     std::lock_guard<std::mutex> l(vstatfs_lock);
-    
     buf->allocated = vstatfs.allocated();
     buf->stored = vstatfs.stored();
     buf->compressed = vstatfs.compressed();
@@ -6898,7 +6915,7 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     buf->compressed_allocated = vstatfs.compressed_allocated();
   }
 
-  dout(20) << __func__ << *buf << dendl;
+  dout(20) << __func__ << " " << *buf << dendl;
   return 0;
 }
 

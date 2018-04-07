@@ -30,6 +30,9 @@ class KernelDevice : public BlockDevice {
   std::string path;
   bool aio, dio;
 
+  int vdo_fd = -1;      ///< fd for vdo sysfs directory
+  string vdo_name;
+
   std::string devname;  ///< kernel dev name (/sys/block/$devname), if any
 
   Mutex debug_lock;
@@ -98,6 +101,8 @@ class KernelDevice : public BlockDevice {
   void debug_aio_link(aio_t& aio);
   void debug_aio_unlink(aio_t& aio);
 
+  void _detect_vdo();
+
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
 
@@ -113,6 +118,8 @@ public:
     return 0;
   }
   int get_devices(std::set<std::string> *ls) override;
+
+  bool get_thin_utilization(uint64_t *total, uint64_t *avail) const override;
 
   int read(uint64_t off, uint64_t len, bufferlist *pbl,
 	   IOContext *ioc,
