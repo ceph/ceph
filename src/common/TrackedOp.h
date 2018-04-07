@@ -84,8 +84,7 @@ public:
   }
 
   void _insert_delayed(const utime_t& now, TrackedOpRef op);
-  void dump_ops(utime_t now, Formatter *f, set<string> filters = {""});
-  void dump_ops_by_duration(utime_t now, Formatter *f, set<string> filters = {""});
+  void dump_ops(utime_t now, Formatter *f, set<string> filters = {""}, bool by_duration=false);
   void dump_slow_ops(utime_t now, Formatter *f, set<string> filters = {""});
   void on_shutdown();
   void set_size_and_duration(uint32_t new_size, uint32_t new_duration) {
