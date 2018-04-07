@@ -897,7 +897,7 @@ int BucketTrimPollCR::operate()
   reenter(this) {
     for (;;) {
       set_status("sleeping");
-      wait(utime_t{config.trim_interval_sec, 0});
+      wait(utime_t{static_cast<time_t>(config.trim_interval_sec), 0});
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
