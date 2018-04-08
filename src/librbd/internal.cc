@@ -3550,11 +3550,11 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     int r;
     do {
       std::map<std::string, std::string> mirror_images;
-      r =  cls_client::mirror_image_list(&io_ctx, last_read, max_read,
-                                             &mirror_images);
-      if (r < 0) {
+      r = cls_client::mirror_image_list(&io_ctx, last_read, max_read,
+                                        &mirror_images);
+      if (r < 0 && r != -ENOENT) {
         lderr(cct) << "error listing mirrored image directory: "
-             << cpp_strerror(r) << dendl;
+                   << cpp_strerror(r) << dendl;
         return r;
       }
       for (auto it = mirror_images.begin(); it != mirror_images.end(); ++it) {
@@ -3910,7 +3910,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
 
     std::map<cls::rbd::MirrorImageStatusState, int> states_;
     int r = cls_client::mirror_image_status_get_summary(&io_ctx, &states_);
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       lderr(cct) << "Failed to get mirror status summary: "
                  << cpp_strerror(r) << dendl;
       return r;
