@@ -14,6 +14,9 @@ namespace rgw_admin_params {
   };
 
   const commandline_parameter ACCESS_KEY = {"access-key", "S3 access key"};
+  const commandline_parameter GEN_ACCESS_KEY = {"gen-access-key", "Generate random access key (for S3)"};
+  const commandline_parameter SECRET_KEY = {"secret-key", "Secret key"};
+  const commandline_parameter GEN_SECRET_KEY = {"gen-secret", "Generate random secret key"};
   const commandline_parameter BUCKET_ID = {"bucket-id", "Bucket id"};
   const commandline_parameter BUCKET_NAME = {"bucket", "Bucket name"};
   const commandline_parameter DELETE_CHILD_OBJECTS = {"purge-objects",
@@ -49,7 +52,6 @@ namespace rgw_admin_params {
   const commandline_parameter REDIRECT_ZONE = {"redirect-zone",
                                                "Specify zone id to redirect when response is 404 (not found)"};
   const commandline_parameter ROLE_NAME = {"role-name", "Name of the role to create"};
-  const commandline_parameter SECRET_KEY = {"secret-key", "Secret key"};
   const commandline_parameter SET_DEFAULT = {"default", "Set entity (realm, zonegroup, zone) as default"};
   const commandline_parameter SHARD_ID = {"shard-id", ""};
   const commandline_parameter SHOW_LOG_ENTRIES = {"show-log-entries", "Enable/disable dump of log entries on log show"};
