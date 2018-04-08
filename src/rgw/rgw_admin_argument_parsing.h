@@ -77,6 +77,8 @@ void usage();
 
 BIIndexType get_bi_index_type(const std::string& type_str);
 
+void parse_tier_config_param(const std::string& s, map<std::string, std::string, ltstr_nocase>& out);
+
 int parse_command(const std::string& access_key, int gen_access_key, const std::string& secret_key, int gen_secret_key,
                   vector<const char*>& args, RgwAdminCommand& opt_cmd, std::string& metadata_key, std::string& tenant, rgw_user& user_id);
 

@@ -786,7 +786,7 @@ BIIndexType get_bi_index_type(const std::string& type_str) {
   return InvalidIdx;
 }
 
-static void parse_tier_config_param(const std::string& s, map<std::string, std::string, ltstr_nocase>& out)
+void parse_tier_config_param(const std::string& s, map<std::string, std::string, ltstr_nocase>& out)
 {
   list<std::string> confs;
   get_str_list(s, ",", confs);

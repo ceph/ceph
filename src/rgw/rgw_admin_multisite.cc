@@ -2166,3 +2166,230 @@ int RgwAdminRealmCommandsHandler::parse_command_and_parameters() {
 
   return parse_command(desc, var_map);
 }
+
+int RgwAdminDataSyncCommandsHandler::parse_command_and_parameters() {
+  boost::program_options::options_description desc{"Data sync options"};
+  desc.add_options()
+      (rgw_admin_params::SOURCE_ZONE.name, boost::program_options::value(&source_zone),
+       rgw_admin_params::SOURCE_ZONE.description);
+  boost::program_options::variables_map var_map;
+
+  return parse_command(desc, var_map);
+}
+
+int RgwAdminZoneCommandsHandler::parse_command_and_parameters() {
+  const rgw_admin_params::commandline_parameter ZONE_NEW_NAME = {"zone-new-name", ""};
+  const rgw_admin_params::commandline_parameter TIER_CONFIG_RM = {"tier-config-rm",
+                                                                  "Unset zone tier config keys. Set/reset whether zone syncs from all zonegroup peers"};
+  std::string endpoints_str, sync_from_str, sync_from_rm_str, tier_config_add_str, tier_config_rm_str;
+  boost::program_options::options_description desc{"Zone options"};
+  desc.add_options()
+      (rgw_admin_params::ACCESS_KEY.name, boost::program_options::value(&access_key),
+       rgw_admin_params::ACCESS_KEY.description)
+      (rgw_admin_params::ENDPOINTS.name, boost::program_options::value(&endpoints_str),
+       rgw_admin_params::ENDPOINTS.description)
+      (rgw_admin_params::INFILE.name, boost::program_options::value(&infile), rgw_admin_params::INFILE.description)
+      (rgw_admin_params::IS_MASTER.name, boost::program_options::value(&is_master),
+       rgw_admin_params::IS_MASTER.description)
+      (rgw_admin_params::READ_ONLY.name, boost::program_options::value(&read_only),
+       rgw_admin_params::READ_ONLY.description)
+      (rgw_admin_params::REALM_ID.name, boost::program_options::value(&realm_id),
+       rgw_admin_params::REALM_ID.description)
+      (rgw_admin_params::REALM_NAME.name, boost::program_options::value(&realm_name),
+       rgw_admin_params::REALM_NAME.description)
+      (rgw_admin_params::REDIRECT_ZONE.name, boost::program_options::value(&redirect_zone),
+       rgw_admin_params::REDIRECT_ZONE.description)
+      (rgw_admin_params::SECRET_KEY.name, boost::program_options::value(&secret_key),
+       rgw_admin_params::SECRET_KEY.description)
+      (rgw_admin_params::SET_DEFAULT.name, boost::program_options::value(&set_default)->implicit_value(true),
+       rgw_admin_params::SET_DEFAULT.description)
+      (rgw_admin_params::SYNC_FROM.name, boost::program_options::value(&sync_from_str),
+       rgw_admin_params::SYNC_FROM.description)
+      (rgw_admin_params::SYNC_FROM_RM.name, boost::program_options::value(&sync_from_rm_str),
+       rgw_admin_params::SYNC_FROM_RM.description)
+      (rgw_admin_params::SYNC_FROM_ALL.name, boost::program_options::value(&sync_from_all),
+       rgw_admin_params::SYNC_FROM_ALL.description)
+      (rgw_admin_params::TIER_TYPE.name, boost::program_options::value(&tier_type),
+       rgw_admin_params::TIER_TYPE.description)
+      (rgw_admin_params::TIER_CONFIG_ADD.name, boost::program_options::value(&tier_config_add_str),
+       rgw_admin_params::TIER_CONFIG_ADD.description)
+      (TIER_CONFIG_RM.name, boost::program_options::value(&tier_config_rm_str), TIER_CONFIG_RM.description)
+      (rgw_admin_params::ZONE_ID.name, boost::program_options::value(&zone_id), rgw_admin_params::ZONE_ID.description)
+      (rgw_admin_params::ZONE_NAME.name, boost::program_options::value(&zone_name),
+       rgw_admin_params::ZONE_NAME.description)
+      (ZONE_NEW_NAME.name, boost::program_options::value(&zone_new_name), ZONE_NEW_NAME.description)
+      (rgw_admin_params::ZONEGROUP_ID.name, boost::program_options::value(&zonegroup_id),
+       rgw_admin_params::ZONEGROUP_ID.description)
+      (rgw_admin_params::ZONEGROUP_NAME.name, boost::program_options::value(&zonegroup_name),
+       rgw_admin_params::ZONEGROUP_NAME.description);
+  boost::program_options::variables_map var_map;
+
+  int ret = parse_command(desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+
+  if (var_map.count(rgw_admin_params::ENDPOINTS.name)) {
+    get_str_list(endpoints_str, endpoints);
+  }
+  if (var_map.count(rgw_admin_params::SYNC_FROM.name)) {
+    get_str_list(sync_from_str, sync_from);
+  }
+  if (var_map.count(rgw_admin_params::SYNC_FROM_RM.name)) {
+    get_str_list(sync_from_rm_str, sync_from_rm);
+  }
+  if (var_map.count(rgw_admin_params::TIER_CONFIG_ADD.name)) {
+    parse_tier_config_param(tier_config_add_str, tier_config_add);
+  }
+  if (var_map.count(TIER_CONFIG_RM.name)) {
+    parse_tier_config_param(tier_config_rm_str, tier_config_rm);
+  }
+  return 0;
+}
+
+int RgwAdminZonePlacementCommandsHandler::parse_command_and_parameters() {
+  const rgw_admin_params::commandline_parameter COMPRESSION_TYPE = {"compression",
+                                                                    "Placement target compression type (plugin name or empty/none)"};
+  const rgw_admin_params::commandline_parameter DATA_EXTRA_POOL = {"data-extra-pool",
+                                                                   "Placement target data extra (non-ec) pool"};
+  const rgw_admin_params::commandline_parameter DATA_POOL = {"data-pool", "Placement target data pool"};
+  const rgw_admin_params::commandline_parameter INDEX_POOL = {"index-pool", "Placement target index pool"};
+  const rgw_admin_params::commandline_parameter PLACEMENT_INDEX_TYPE = {"placement-index-type", ""};
+  std::string index_type_str;
+  boost::program_options::options_description desc{"Zone placement options"};
+  desc.add_options()
+      (COMPRESSION_TYPE.name, boost::program_options::value(&compression_type), COMPRESSION_TYPE.description)
+      (DATA_EXTRA_POOL.name, boost::program_options::value(&data_extra_pool), DATA_EXTRA_POOL.description)
+      (DATA_POOL.name, boost::program_options::value(&data_pool), DATA_POOL.description)
+      (INDEX_POOL.name, boost::program_options::value(&index_pool), INDEX_POOL.description)
+      (rgw_admin_params::PLACEMENT_ID.name, boost::program_options::value(&placement_id),
+       rgw_admin_params::PLACEMENT_ID.description)
+      (PLACEMENT_INDEX_TYPE.name, boost::program_options::value(&index_type_str), PLACEMENT_INDEX_TYPE.description)
+      (rgw_admin_params::ZONE_ID.name, boost::program_options::value(&zone_id), rgw_admin_params::ZONE_ID.description)
+      (rgw_admin_params::ZONE_NAME.name, boost::program_options::value(&zone_name),
+       rgw_admin_params::ZONE_NAME.description);
+  boost::program_options::variables_map var_map;
+
+  int ret = parse_command(desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+
+  std::string err;
+  if (var_map.count(PLACEMENT_INDEX_TYPE.name)) {
+    if (index_type_str == "normal") {
+      placement_index_type = RGWBIType_Normal;
+    } else if (index_type_str == "indexless") {
+      placement_index_type = RGWBIType_Indexless;
+    } else {
+      placement_index_type = (RGWBucketIndexType) strict_strtol(index_type_str.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse index type index: " << err << std::endl;
+        return EINVAL;
+      }
+    }
+  }
+}
+
+int RgwAdminZonegroupCommandsHandler::parse_command_and_parameters() {
+  const rgw_admin_params::commandline_parameter API_NAME = {"api-name", ""};
+  const rgw_admin_params::commandline_parameter MASTER_ZONE = {"master-zone", "Master zone id"};
+  const rgw_admin_params::commandline_parameter ZONEGROUP_NEW_NAME = {"zonegroup-new-name", ""};
+  std::string endpoints_str, sync_from_str, sync_from_rm_str, tier_config_add_str;
+  boost::program_options::options_description desc{"Zonegroup options"};
+  desc.add_options()
+      (API_NAME.name, boost::program_options::value(&api_name), API_NAME.description)
+      (rgw_admin_params::ENDPOINTS.name, boost::program_options::value(&endpoints_str),
+       rgw_admin_params::ENDPOINTS.description)
+      (rgw_admin_params::INFILE.name, boost::program_options::value(&infile), rgw_admin_params::INFILE.description)
+      (rgw_admin_params::IS_MASTER.name, boost::program_options::value(&is_master),
+       rgw_admin_params::IS_MASTER.description)
+      (MASTER_ZONE.name, boost::program_options::value(&master_zone), MASTER_ZONE.description)
+      (rgw_admin_params::READ_ONLY.name, boost::program_options::value(&read_only),
+       rgw_admin_params::READ_ONLY.description)
+      (rgw_admin_params::REALM_ID.name, boost::program_options::value(&realm_id),
+       rgw_admin_params::REALM_ID.description)
+      (rgw_admin_params::REALM_NAME.name, boost::program_options::value(&realm_name),
+       rgw_admin_params::REALM_NAME.description)
+      (rgw_admin_params::REDIRECT_ZONE.name, boost::program_options::value(&redirect_zone),
+       rgw_admin_params::REDIRECT_ZONE.description)
+      (rgw_admin_params::SET_DEFAULT.name, boost::program_options::value(&set_default)->implicit_value(true),
+       rgw_admin_params::SET_DEFAULT.description)
+      (rgw_admin_params::SYNC_FROM.name, boost::program_options::value(&sync_from_str),
+       rgw_admin_params::SYNC_FROM.description)
+      (rgw_admin_params::SYNC_FROM_RM.name, boost::program_options::value(&sync_from_rm_str),
+       rgw_admin_params::SYNC_FROM_RM.description)
+      (rgw_admin_params::SYNC_FROM_ALL.name, boost::program_options::value(&sync_from_all),
+       rgw_admin_params::SYNC_FROM_ALL.description)
+      (rgw_admin_params::TIER_CONFIG_ADD.name, boost::program_options::value(&tier_config_add_str),
+       rgw_admin_params::TIER_CONFIG_ADD.description)
+      (rgw_admin_params::TIER_TYPE.name, boost::program_options::value(&tier_type),
+       rgw_admin_params::TIER_TYPE.description)
+      (rgw_admin_params::ZONE_ID.name, boost::program_options::value(&zone_id), rgw_admin_params::ZONE_ID.description)
+      (rgw_admin_params::ZONE_NAME.name, boost::program_options::value(&zone_name),
+       rgw_admin_params::ZONE_NAME.description)
+      (rgw_admin_params::ZONEGROUP_ID.name, boost::program_options::value(&zonegroup_id),
+       rgw_admin_params::ZONEGROUP_ID.description)
+      (rgw_admin_params::ZONEGROUP_NAME.name, boost::program_options::value(&zonegroup_name),
+       rgw_admin_params::ZONEGROUP_NAME.description)
+      (ZONEGROUP_NEW_NAME.name, boost::program_options::value(&zonegroup_new_name), ZONEGROUP_NEW_NAME.description);
+  boost::program_options::variables_map var_map;
+
+  int ret = parse_command(desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+
+  if (var_map.count(rgw_admin_params::ENDPOINTS.name)) {
+    get_str_list(endpoints_str, endpoints);
+  }
+  if (var_map.count(rgw_admin_params::SYNC_FROM.name)) {
+    get_str_list(sync_from_str, sync_from);
+  }
+  if (var_map.count(rgw_admin_params::SYNC_FROM_RM.name)) {
+    get_str_list(sync_from_rm_str, sync_from_rm);
+  }
+  if (var_map.count(rgw_admin_params::TIER_CONFIG_ADD.name)) {
+    parse_tier_config_param(tier_config_add_str, tier_config_add);
+  }
+  return 0;
+}
+
+int RgwAdminZonegroupPlacementCommandsHandler::parse_command_and_parameters() {
+  const rgw_admin_params::commandline_parameter TAGS = {"tags",
+                                                        "List of tags for zonegroup placement add and modify commands"};
+  const rgw_admin_params::commandline_parameter TAGS_ADD = {"tags-add",
+                                                            "List of tags to add for zonegroup placement modify command"};
+  const rgw_admin_params::commandline_parameter TAGS_RM = {"tags-rm",
+                                                           "List of tags to remove for zonegroup placement modify command"};
+  std::string tags_str, tags_add_str, tags_rm_str;
+  boost::program_options::options_description desc{"Zonegroup placement options"};
+  desc.add_options()
+      (rgw_admin_params::PLACEMENT_ID.name, boost::program_options::value(&placement_id),
+       rgw_admin_params::PLACEMENT_ID.description)
+      (TAGS.name, boost::program_options::value(&tags_str), TAGS.description)
+      (TAGS_ADD.name, boost::program_options::value(&tags_add_str), TAGS_ADD.description)
+      (TAGS_RM.name, boost::program_options::value(&tags_rm_str), TAGS_RM.description)
+      (rgw_admin_params::ZONEGROUP_ID.name, boost::program_options::value(&zonegroup_id),
+       rgw_admin_params::ZONEGROUP_ID.description)
+      (rgw_admin_params::ZONEGROUP_NAME.name, boost::program_options::value(&zonegroup_name),
+       rgw_admin_params::ZONEGROUP_NAME.description);
+  boost::program_options::variables_map var_map;
+
+  int ret = parse_command(desc, var_map);
+  if (ret > 0) {
+    return ret;
+  }
+
+  if (var_map.count(TAGS.name)) {
+    get_str_list(tags_str, tags);
+  }
+  if (var_map.count(TAGS_ADD.name)) {
+    get_str_list(tags_add_str, tags_add);
+  }
+  if (var_map.count(TAGS_RM.name)) {
+    get_str_list(tags_rm_str, tags_rm);
+  }
+  return 0;
+}
+

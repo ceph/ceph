@@ -465,4 +465,462 @@ private:
   std::string url;
 };
 
+class RgwAdminDataSyncCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminDataSyncCommandsHandler(std::vector<const char*>& args,
+                                  const std::vector<std::string>& prefix, RGWRados* store,
+                                  Formatter* formatter) : RgwAdminCommandGroupHandler(args, prefix,
+                                                                                      {{"init",   OPT_DATA_SYNC_INIT},
+                                                                                       {"run",    OPT_DATA_SYNC_RUN},
+                                                                                       {"status", OPT_DATA_SYNC_STATUS},},
+                                                                                      store, formatter) {
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
+    }
+  }
+
+  ~RgwAdminDataSyncCommandsHandler() override = default;
+
+  RgwAdminCommandGroup get_type() const override { return DATA_SYNC; }
+
+  int execute_command() override {
+    switch (command) {
+      case OPT_DATA_SYNC_INIT :
+        return handle_opt_data_sync_init();
+      case OPT_DATA_SYNC_RUN :
+        return handle_opt_data_sync_run();
+      case OPT_DATA_SYNC_STATUS :
+        return handle_opt_data_sync_status();
+      default:
+        return EINVAL;
+    }
+  }
+
+private:
+  int parse_command_and_parameters() override;
+
+  int handle_opt_data_sync_init() {
+    return ::handle_opt_data_sync_init(source_zone, cct, store);
+  }
+
+  int handle_opt_data_sync_run() {
+    return ::handle_opt_data_sync_run(source_zone, cct, store);
+  }
+
+  int handle_opt_data_sync_status() {
+    return ::handle_opt_data_sync_status(source_zone, store, formatter);
+  }
+
+  std::string source_zone;
+// TODO: initialize the following:
+  boost::intrusive_ptr<CephContext> cct;
+};
+
+class RgwAdminZoneCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminZoneCommandsHandler(std::vector<const char*>& args,
+                              const std::vector<std::string>& prefix, RGWRados* store,
+                              Formatter* formatter) : RgwAdminCommandGroupHandler(args, prefix,
+                                                                                  {{"create",  OPT_ZONE_CREATE},
+                                                                                   {"default", OPT_ZONE_DEFAULT},
+                                                                                   {"delete",  OPT_ZONE_DELETE},
+                                                                                   {"get",     OPT_ZONE_GET},
+                                                                                   {"list",    OPT_ZONE_LIST},
+                                                                                   {"modify",  OPT_ZONE_MODIFY},
+                                                                                   {"rename",  OPT_ZONE_RENAME},
+                                                                                   {"set",     OPT_ZONE_SET},},
+                                                                                  store, formatter) {
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
+    }
+  }
+
+  ~RgwAdminZoneCommandsHandler() override = default;
+
+  RgwAdminCommandGroup get_type() const override { return ZONE; }
+
+  int execute_command() override {
+    switch (command) {
+      case OPT_ZONE_CREATE :
+        return handle_opt_zone_create();
+      case OPT_ZONE_DEFAULT :
+        return handle_opt_zone_default();
+      case OPT_ZONE_DELETE :
+        return handle_opt_zone_delete();
+      case OPT_ZONE_GET :
+        return handle_opt_zone_get();
+      case OPT_ZONE_LIST :
+        return handle_opt_zone_list();
+      case OPT_ZONE_MODIFY :
+        return handle_opt_zone_modify();
+      case OPT_ZONE_RENAME :
+        return handle_opt_zone_rename();
+      case OPT_ZONE_SET :
+        return handle_opt_zone_set();
+      default:
+        return EINVAL;
+    }
+  }
+
+private:
+  int parse_command_and_parameters() override;
+
+  int handle_opt_zone_create() {
+    return ::handle_opt_zone_create(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id,
+                                    realm_name, access_key, secret_key, tier_type.is_initialized(),
+                                    &tier_type.value(), tier_config_add, sync_from_all.is_initialized(),
+                                    &sync_from_all.value(), redirect_zone.is_initialized(), &redirect_zone.value(),
+                                    is_master.is_initialized(), &is_master.value(), read_only.is_initialized(),
+                                    &read_only.value(),
+                                    endpoints, sync_from, sync_from_rm, set_default,
+                                    g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zone_default() {
+    return ::handle_opt_zone_default(zone_id, zone_name, zonegroup_id, zonegroup_name,
+                                     g_ceph_context, store);
+  }
+
+  int handle_opt_zone_delete() {
+    return ::handle_opt_zone_delete(zone_id, zone_name, zonegroup_id, zonegroup_name,
+                                    g_ceph_context, store);
+  }
+
+  int handle_opt_zone_get() {
+    return ::handle_opt_zone_get(zone_id, zone_name, g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zone_list() {
+    return ::handle_opt_zone_list(g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zone_modify() {
+    return ::handle_opt_zone_modify(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id,
+                                    realm_name, access_key, secret_key, tier_type.is_initialized(),
+                                    &tier_type.value(), tier_config_add, tier_config_rm,
+                                    sync_from_all.is_initialized(), &sync_from_all.value(),
+                                    redirect_zone.is_initialized(),
+                                    &redirect_zone.value(), is_master.is_initialized(), &is_master.value(),
+                                    read_only.is_initialized(),
+                                    &read_only.value(), endpoints, sync_from, sync_from_rm, set_default,
+                                    g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zone_rename() {
+    return ::handle_opt_zone_rename(zone_id, zone_name, zone_new_name, zonegroup_id,
+                                    zonegroup_name, g_ceph_context, store);
+  }
+
+  int handle_opt_zone_set() {
+    return ::handle_opt_zone_set(zone_name, realm_id, realm_name, infile, set_default,
+                                 g_ceph_context, store, formatter);
+  }
+
+  std::string access_key;
+  std::string infile;
+  boost::optional<bool> is_master; // default value: false
+  boost::optional<bool> read_only; // default value: false
+  std::string realm_id;
+  std::string realm_name;
+  boost::optional<std::string> redirect_zone;
+  std::string secret_key;
+  bool set_default = false;
+  boost::optional<bool> sync_from_all; // default value: false
+  boost::optional<std::string> tier_type;
+  std::string zone_id;
+  std::string zone_name;
+  std::string zone_new_name;
+  std::string zonegroup_id;
+  std::string zonegroup_name;
+
+  std::list<std::string> endpoints;
+  std::list<std::string> sync_from;
+  std::list<std::string> sync_from_rm;
+  std::map<std::string, std::string, ltstr_nocase> tier_config_add;
+  std::map<std::string, std::string, ltstr_nocase> tier_config_rm;
+};
+
+class RgwAdminZonePlacementCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminZonePlacementCommandsHandler(std::vector<const char*>& args,
+                                       const std::vector<std::string>& prefix, RGWRados* store,
+                                       Formatter* formatter) : RgwAdminCommandGroupHandler(args, prefix,
+                                                                                           {{"add",    OPT_ZONE_PLACEMENT_ADD},
+                                                                                            {"list",   OPT_ZONE_PLACEMENT_LIST},
+                                                                                            {"modify", OPT_ZONE_PLACEMENT_MODIFY},
+                                                                                            {"rm",     OPT_ZONE_PLACEMENT_RM},},
+                                                                                           store, formatter) {
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
+    }
+  }
+
+  ~RgwAdminZonePlacementCommandsHandler() override = default;
+
+  RgwAdminCommandGroup get_type() const override { return ZONE_PLACEMENT; }
+
+  int execute_command() override {
+    switch (command) {
+      case OPT_ZONE_PLACEMENT_ADD :
+        return handle_opt_zone_placement_add();
+      case OPT_ZONE_PLACEMENT_LIST :
+        return handle_opt_zone_placement_list();
+      case OPT_ZONE_PLACEMENT_MODIFY :
+        return handle_opt_zone_placement_modify();
+      case OPT_ZONE_PLACEMENT_RM :
+        return handle_opt_zone_placement_rm();
+      default:
+        return EINVAL;
+    }
+  }
+
+private:
+  int parse_command_and_parameters() override;
+
+  int handle_opt_zone_placement_add() {
+    return ::handle_opt_zone_placement_add(placement_id, zone_id, zone_name, compression_type,
+                                           index_pool, data_pool, data_extra_pool,
+                                           placement_index_type.is_initialized(), placement_index_type.value(),
+                                           g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zone_placement_list() {
+    return ::handle_opt_zone_placement_list(zone_id, zone_name, g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zone_placement_modify() {
+    return ::handle_opt_zone_placement_modify(placement_id, zone_id, zone_name, compression_type,
+                                              index_pool, data_pool, data_extra_pool,
+                                              placement_index_type.is_initialized(), placement_index_type.value(),
+                                              g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zone_placement_rm() {
+    return ::handle_opt_zone_placement_rm(placement_id, zone_id, zone_name, compression_type,
+                                          g_ceph_context, store, formatter);
+  }
+
+  boost::optional<std::string> compression_type;
+  boost::optional<std::string> data_extra_pool;
+  boost::optional<std::string> data_pool;
+  boost::optional<std::string> index_pool;
+  std::string placement_id;
+  std::string zone_id;
+  std::string zone_name;
+
+  boost::optional<RGWBucketIndexType> placement_index_type = RGWBIType_Normal;
+};
+
+class RgwAdminZonegroupCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminZonegroupCommandsHandler(std::vector<const char*>& args,
+                                   const std::vector<std::string>& prefix, RGWRados* store,
+                                   Formatter* formatter) : RgwAdminCommandGroupHandler(args, prefix,
+                                                                                       {{"add",     OPT_ZONEGROUP_ADD},
+                                                                                        {"create",  OPT_ZONEGROUP_CREATE},
+                                                                                        {"default", OPT_ZONEGROUP_DEFAULT},
+                                                                                        {"delete",  OPT_ZONEGROUP_DELETE},
+                                                                                        {"get",     OPT_ZONEGROUP_GET},
+                                                                                        {"list",    OPT_ZONEGROUP_LIST},
+                                                                                        {"modify",  OPT_ZONEGROUP_MODIFY},
+                                                                                        {"remove",  OPT_ZONEGROUP_REMOVE},
+                                                                                        {"rename",  OPT_ZONEGROUP_RENAME},
+                                                                                        {"set",     OPT_ZONEGROUP_SET},},
+                                                                                       store, formatter) {
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
+    }
+  }
+
+  ~RgwAdminZonegroupCommandsHandler() override = default;
+
+  RgwAdminCommandGroup get_type() const override { return ZONEGROUP; }
+
+  int execute_command() override {
+    switch (command) {
+      case OPT_ZONEGROUP_ADD :
+        return handle_opt_zonegroup_add();
+      case OPT_ZONEGROUP_CREATE :
+        return handle_opt_zonegroup_create();
+      case OPT_ZONEGROUP_DEFAULT :
+        return handle_opt_zonegroup_default();
+      case OPT_ZONEGROUP_DELETE :
+        return handle_opt_zonegroup_delete();
+      case OPT_ZONEGROUP_GET :
+        return handle_opt_zonegroup_get();
+      case OPT_ZONEGROUP_LIST :
+        return handle_opt_zonegroup_list();
+      case OPT_ZONEGROUP_MODIFY :
+        return handle_opt_zonegroup_modify();
+      case OPT_ZONEGROUP_REMOVE :
+        return handle_opt_zonegroup_remove();
+      case OPT_ZONEGROUP_RENAME :
+        return handle_opt_zonegroup_rename();
+      case OPT_ZONEGROUP_SET :
+        return handle_opt_zonegroup_set();
+      default:
+        return EINVAL;
+    }
+  }
+
+private:
+  int parse_command_and_parameters() override;
+
+  int handle_opt_zonegroup_add() {
+    return ::handle_opt_zonegroup_add(zonegroup_id, zonegroup_name, zone_id, zone_name,
+                                      tier_type.is_initialized(), &tier_type.value(), tier_config_add,
+                                      sync_from_all.is_initialized(), &sync_from_all.value(),
+                                      redirect_zone.is_initialized(),
+                                      &redirect_zone.value(), is_master.is_initialized(), &is_master.value(),
+                                      read_only.is_initialized(),
+                                      &read_only.value(), endpoints, sync_from, sync_from_rm,
+                                      g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zonegroup_create() {
+    return ::handle_opt_zonegroup_create(zonegroup_id, zonegroup_name, realm_id, realm_name,
+                                         api_name, set_default, is_master.get_value_or(false), endpoints,
+                                         g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zonegroup_default() {
+    return ::handle_opt_zonegroup_default(zonegroup_id, zonegroup_name, g_ceph_context, store);
+  }
+
+  int handle_opt_zonegroup_delete() {
+    return ::handle_opt_zonegroup_delete(zonegroup_id, zonegroup_name, g_ceph_context, store);
+  }
+
+  int handle_opt_zonegroup_get() {
+    return ::handle_opt_zonegroup_get(zonegroup_id, zonegroup_name, g_ceph_context, store,
+                                      formatter);
+  }
+
+  int handle_opt_zonegroup_list() {
+    return ::handle_opt_zonegroup_list(g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zonegroup_modify() {
+    return ::handle_opt_zonegroup_modify(zonegroup_id, zonegroup_name, realm_id, realm_name,
+                                         api_name, master_zone, is_master.is_initialized(),
+                                         is_master.get_value_or(false),
+                                         set_default, endpoints, g_ceph_context, store,
+                                         formatter);
+  }
+
+  int handle_opt_zonegroup_remove() {
+    return ::handle_opt_zonegroup_remove(zonegroup_id, zonegroup_name, zone_id, zone_name,
+                                         g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zonegroup_rename() {
+    return ::handle_opt_zonegroup_rename(zonegroup_id, zonegroup_name, zonegroup_new_name,
+                                         g_ceph_context, store);
+  }
+
+  int handle_opt_zonegroup_set() {
+    return ::handle_opt_zonegroup_set(zonegroup_id, zonegroup_name, realm_id, realm_name, infile,
+                                      set_default, endpoints, g_ceph_context, store, formatter);
+  }
+
+  std::string api_name;
+  std::string infile;
+  boost::optional<bool> is_master = false;
+  std::string master_zone;
+  boost::optional<bool> read_only = false;
+  std::string realm_id;
+  std::string realm_name;
+  boost::optional<std::string> redirect_zone;
+  bool set_default = false;
+  boost::optional<bool> sync_from_all = false;
+  boost::optional<std::string> tier_type;
+  std::string zone_id;
+  std::string zone_name;
+  std::string zonegroup_id;
+  std::string zonegroup_name;
+  std::string zonegroup_new_name;
+
+  std::list<std::string> endpoints;
+  std::list<std::string> sync_from;
+  std::list<std::string> sync_from_rm;
+  std::map<std::string, std::string, ltstr_nocase> tier_config_add;
+};
+
+class RgwAdminZonegroupPlacementCommandsHandler : public RgwAdminCommandGroupHandler {
+public:
+  RgwAdminZonegroupPlacementCommandsHandler(std::vector<const char*>& args,
+                                            const std::vector<std::string>& prefix, RGWRados* store,
+                                            Formatter* formatter) : RgwAdminCommandGroupHandler(args, prefix,
+                                                                                                {{"add",     OPT_ZONEGROUP_PLACEMENT_ADD},
+                                                                                                 {"default", OPT_ZONEGROUP_PLACEMENT_DEFAULT},
+                                                                                                 {"list",    OPT_ZONEGROUP_PLACEMENT_LIST},
+                                                                                                 {"modify",  OPT_ZONEGROUP_PLACEMENT_MODIFY},
+                                                                                                 {"rm",      OPT_ZONEGROUP_PLACEMENT_RM},},
+                                                                                                store, formatter) {
+    if (parse_command_and_parameters() == 0) {
+      std::cout << "Parsed command: " << command << std::endl;
+    }
+  }
+
+  ~RgwAdminZonegroupPlacementCommandsHandler() override = default;
+
+  RgwAdminCommandGroup get_type() const override { return ZONEGROUP_PLACEMENT; }
+
+  int execute_command() override {
+    switch (command) {
+      case OPT_ZONEGROUP_PLACEMENT_ADD :
+        return handle_opt_zonegroup_placement_add();
+      case OPT_ZONEGROUP_PLACEMENT_DEFAULT :
+        return handle_opt_zonegroup_placement_default();
+      case OPT_ZONEGROUP_PLACEMENT_LIST :
+        return handle_opt_zonegroup_placement_list();
+      case OPT_ZONEGROUP_PLACEMENT_MODIFY :
+        return handle_opt_zonegroup_placement_modify();
+      case OPT_ZONEGROUP_PLACEMENT_RM :
+        return handle_opt_zonegroup_placement_rm();
+      default:
+        return EINVAL;
+    }
+  }
+
+private:
+  int parse_command_and_parameters() override;
+
+  int handle_opt_zonegroup_placement_add() {
+    return ::handle_opt_zonegroup_placement_add(placement_id, zonegroup_id, zonegroup_name, tags,
+                                                g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zonegroup_placement_default() {
+    return ::handle_opt_zonegroup_placement_default(placement_id, zonegroup_id, zonegroup_name,
+                                                    g_ceph_context, store, formatter);
+  }
+
+  int handle_opt_zonegroup_placement_list() {
+    return ::handle_opt_zonegroup_placement_list(zonegroup_id, zonegroup_name, g_ceph_context,
+                                                 store, formatter);
+  }
+
+  int handle_opt_zonegroup_placement_modify() {
+    return ::handle_opt_zonegroup_placement_modify(placement_id, zonegroup_id, zonegroup_name,
+                                                   tags, tags_add, tags_rm, g_ceph_context, store,
+                                                   formatter);
+  }
+
+  int handle_opt_zonegroup_placement_rm() {
+    return ::handle_opt_zonegroup_placement_rm(placement_id, zonegroup_id, zonegroup_name,
+                                               g_ceph_context, store, formatter);
+  }
+
+  std::string placement_id;
+  std::string zonegroup_id;
+  std::string zonegroup_name;
+
+  std::list<std::string> tags;
+  std::list<std::string> tags_add;
+  std::list<std::string> tags_rm;
+};
+
+
+
 #endif //CEPH_RGW_ADMIN_MULTISITE_H
