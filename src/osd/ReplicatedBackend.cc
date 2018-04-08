@@ -1206,7 +1206,7 @@ void ReplicatedBackend::calc_head_subsets(
   uint64_t size = obc->obs.oi.size;
   if (size)
     data_subset.insert(0, size);
-  if (HAVE_FEATURE(parent->min_peer_features(), OSD_PARTIAL_RECOVERY)) {
+  if (HAVE_FEATURE(parent->min_peer_features(), SERVER_MIMIC)) {
     const auto it = missing.get_items().find(head);
     assert(it != missing.get_items().end());
     data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
@@ -1431,7 +1431,7 @@ void ReplicatedBackend::prepare_pull(
     // pulling head or unversioned object.
     // always pull the whole thing.
     recovery_info.copy_subset.insert(0, (uint64_t)-1);
-   if (HAVE_FEATURE(parent->min_peer_features(), OSD_PARTIAL_RECOVERY))
+    if (HAVE_FEATURE(parent->min_peer_features(), SERVER_MIMIC))
       recovery_info.copy_subset.intersection_of(missing_iter->second.clean_regions.get_dirty_regions()); 
     recovery_info.size = ((uint64_t)-1);
     recovery_info.object_exist = missing_iter->second.clean_regions.object_is_exist();
@@ -1445,7 +1445,7 @@ void ReplicatedBackend::prepare_pull(
   op.recovery_info.soid = soid;
   op.recovery_info.version = v;
   op.recovery_progress.data_complete = false;
-  op.recovery_progress.omap_complete = !missing_iter->second.clean_regions.omap_is_dirty() && HAVE_FEATURE(parent->min_peer_features(), OSD_PARTIAL_RECOVERY);
+  op.recovery_progress.omap_complete = !missing_iter->second.clean_regions.omap_is_dirty() && HAVE_FEATURE(parent->min_peer_features(), SERVER_MIMIC);
   op.recovery_progress.data_recovered_to = 0;
   op.recovery_progress.first = true;
 
@@ -1612,7 +1612,7 @@ void ReplicatedBackend::submit_push_data(
   if (first) {
     t->remove(coll, ghobject_t(target_oid));
     t->touch(coll, ghobject_t(target_oid));
- if (!complete) {
+    if (!complete) {
       bufferlist bv = attrs.at(OI_ATTR);
       object_info_t oi(bv);
       t->set_alloc_hint(coll, ghobject_t(target_oid),
@@ -1633,10 +1633,9 @@ void ReplicatedBackend::submit_push_data(
     if (!complete) {
       //clone overlap content in local object
       struct stat st;
-      int r = store->stat(coll, ghobject_t(recovery_info.soid), &st);
-      if (recovery_info.object_exist) {
-        assert(r == 0);
-        uint64_t local_size = MIN(recovery_info.size, (uint64_t)st.st_size);
+      int r = store->stat(ch, ghobject_t(recovery_info.soid), &st);
+      if (!r && recovery_info.object_exist) {
+        uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
         interval_set<uint64_t> local_intervals_included, local_intervals_excluded;
         if (local_size) {
           local_intervals_included.insert(0, local_size);
@@ -1823,7 +1822,7 @@ bool ReplicatedBackend::handle_pull_response(
   if(z_length)
     data_zeros.insert(z_offset, z_length);
   bool complete = pi.is_complete();
-  bool clear_omap = !pop.before_progress.omap_complete;
+  bool clear_omap = first;
   submit_push_data(pi.recovery_info, first,
 		   complete, clear_omap,
 		   pi.cache_dont_need, data_zeros,
@@ -2107,10 +2106,8 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     new_progress.data_complete = true;
     if (stat)
       stat->num_objects_recovered++;
-  } 
-  else {
-  // If omap is not changed, we need recovery omap when recovery cannot be completed once
-  if (progress.first && progress.omap_complete)
+  } else if (progress.first && progress.omap_complete) {
+    // If omap is not changed, we need recovery omap when recovery cannot be completed once
     new_progress.omap_complete = false;
   } 
 

@@ -3877,18 +3877,22 @@ bool ObjectCleanRegions::object_is_exist() const
 
 void ObjectCleanRegions::encode(bufferlist &bl) const
 {
+  ENCODE_START(1, 1, bl);
   using ceph::encode;
   encode(clean_offsets, bl);
   encode(clean_omap, bl);
   encode(new_object, bl);
+  ENCODE_FINISH(bl);
 }
 
 void ObjectCleanRegions::decode(bufferlist::iterator &bl)
 {
+  DECODE_START(1, bl);
   using ceph::decode;
   decode(clean_offsets, bl);
   decode(clean_omap, bl);
   decode(new_object, bl);
+  DECODE_FINISH(bl);
 }
 
 void ObjectCleanRegions::dump(Formatter *f) const
@@ -4084,7 +4088,7 @@ void pg_log_entry_t::dump(Formatter *f) const
     f->close_section();
   }
   {
-    f->open_object_section("clean_reginos");
+    f->open_object_section("clean_regions");
     clean_regions.dump(f);
     f->close_section();
   }

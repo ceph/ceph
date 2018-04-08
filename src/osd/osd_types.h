@@ -3748,15 +3748,19 @@ struct pg_missing_item {
 
   void encode(bufferlist& bl, uint64_t features) const {
     using ceph::encode;
-    //encoding two new eversion_t type variables to differentiate OSD_RECOVERY_DELETES, OSD_PARTIAL_RECOVERY and legacy unversioned encoding
+    /**
+    encoding two new eversion_t type variables to differentiate 
+    OSD_RECOVERY_DELETES, OSD_PARTIAL_RECOVERY and legacy 
+    unversioned encoding
+    */
     eversion_t e, l;
-    if (HAVE_FEATURE(features, OSD_PARTIAL_RECOVERY)) {
-	encode(e, bl);
-	encode(l, bl);// 0 0 -->support all
-	encode(need, bl);
-	encode(have, bl);
-	encode(static_cast<uint8_t>(flags), bl);
-	encode(clean_regions, bl);
+    if (HAVE_FEATURE(features, SERVER_MIMIC)) {
+      encode(e, bl);
+      encode(l, bl); // 0 0 -->support all
+      encode(need, bl);
+      encode(have, bl);
+      encode(static_cast<uint8_t>(flags), bl);
+      encode(clean_regions, bl);
       } else if (HAVE_FEATURE(features, OSD_RECOVERY_DELETES)) {
 	encode(e, bl);
 	encode(need, bl);// 0 need -->support delete
@@ -3973,8 +3977,6 @@ public:
       if (is_missing_divergent_item) {  // use iterator
 	rmissing.erase((missing_it->second).need.version);
 	missing_it->second = item(e.version, eversion_t(), e.is_delete(), false, false);  // .have = nil
-	(missing_it->second).need = e.version;
-	(missing_it->second).have = eversion_t();
 	(missing_it->second).clean_regions.merge(e.clean_regions);
 	(missing_it->second).clean_regions.mark_object_new();
       } else { // create new element in missing map

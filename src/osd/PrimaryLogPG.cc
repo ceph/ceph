@@ -6397,7 +6397,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  trim.insert(op.extent.offset, oi.size-op.extent.offset);
 	  ctx->modified_ranges.union_of(trim);
 	  ctx->clean_regions.mark_data_region_dirty(op.extent.offset, oi.size - op.extent.offset);
-	}
+  }
 	if (op.extent.offset != oi.size) {
           truncate_update_size_and_usage(ctx->delta_stats,
                                          oi,
@@ -9042,7 +9042,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   ctx->modified_ranges.union_of(ch);
 
   if (cb->get_data_size() != obs.oi.size) {
-    ctx->clean_regions.mark_data_region_dirty(0, MAX(obs.oi.size, cb->get_data_size()));
+    ctx->clean_regions.mark_data_region_dirty(0, std::max(obs.oi.size, cb->get_data_size()));
     ctx->delta_stats.num_bytes -= obs.oi.size;
     obs.oi.size = cb->get_data_size();
     ctx->delta_stats.num_bytes += obs.oi.size;
