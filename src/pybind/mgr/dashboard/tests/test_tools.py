@@ -29,7 +29,7 @@ class FooResource(RESTController):
     def bulk_delete(self):
         FooResource.elems = []
 
-    def set(self, data, key):
+    def set(self, key, data):
         FooResource.elems[int(key)] = data
         return dict(key=key, **data)
 
