@@ -137,6 +137,7 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]]; then
 fi
 
 filestore_path=
+kstore_path=
 
 VSTART_SEC="client.vstart.sh"
 
@@ -172,6 +173,7 @@ usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
 usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
 usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend (default)\n"
 usage=$usage"\t-f, --filestore use filestore as the osd objectstore backend\n"
+usage=$usage"\t-K, --kstore use kstore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
@@ -264,6 +266,10 @@ case $1 in
             rgw_compression=$2
             shift
             ;;
+    --kstore_path )
+	kstore_path=$2
+	shift
+	;;
     --filestore_path )
 	filestore_path=$2
 	shift
@@ -295,6 +301,9 @@ case $1 in
     -f | --filestore )
 	    objectstore="filestore"
 	    ;;
+    -K | --kstore )
+            objectstore="kstore"
+            ;;
     --hitset )
 	    hitset="$hitset $2 $3"
 	    shift
@@ -515,6 +524,9 @@ $DAEMONOPTS
 	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true
+
+        ; kstore
+        kstore fsck on mount = true
         osd objectstore = $objectstore
 $COSDSHORT
 $extra_conf
@@ -621,6 +633,8 @@ EOF
             fi
 	    if [ -n "$filestore_path" ]; then
 		ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
+	    elif [ -n "$kstore_path" ]; then
+		ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
 	    else
 		mkdir -p $CEPH_DEV_DIR/osd$osd
 	    fi

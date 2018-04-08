@@ -310,6 +310,7 @@ public:
 private:
   KeyValueDB *db;
   uuid_d fsid;
+  string basedir;
   int path_fd;  ///< open handle to $path
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   bool mounted;
