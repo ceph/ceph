@@ -885,11 +885,16 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "children list " << ictx->name << dendl;
 
+    int r = ictx->state->refresh_if_required();
+    if (r < 0) {
+      return r;
+    }
+
     RWLock::RLocker l(ictx->snap_lock);
     parent_spec parent_spec(ictx->md_ctx.get_id(), ictx->id, ictx->snap_id);
     map< pair<int64_t, string>, set<string> > image_info;
 
-    int r = list_children_info(ictx, parent_spec,image_info);
+    r = list_children_info(ictx, parent_spec,image_info);
     if (r < 0) {
       return r;
     }
@@ -920,12 +925,9 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
   }
 
   int list_children_info(ImageCtx *ictx, librbd::parent_spec parent_spec,
-                   map< pair<int64_t, string >, set<string> >& image_info)
+                         map< pair<int64_t, string >, set<string> >& image_info)
   {
     CephContext *cct = ictx->cct;
-    int r = ictx->state->refresh_if_required();
-    if (r < 0)
-      return r;
 
     // no children for non-layered or old format image
     if (!ictx->test_features(RBD_FEATURE_LAYERING, ictx->snap_lock))
@@ -935,7 +937,7 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     // search all pools for children depending on this snapshot
     Rados rados(ictx->md_ctx);
     std::list<std::pair<int64_t, string> > pools;
-    r = rados.pool_list2(pools);
+    int r = rados.pool_list2(pools);
     if (r < 0) {
       lderr(cct) << "error listing pools: " << cpp_strerror(r) << dendl; 
       return r;
