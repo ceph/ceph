@@ -2364,7 +2364,7 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     CLS_ERR("object map footer read failed");
     return r;
   }
- 
+
   try {
     bufferlist::iterator it = footer_bl.begin();
     object_map.decode_footer(it);
@@ -2400,13 +2400,14 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   }
 
   bool updated = false;
-  for (uint64_t object_no = start_object_no; object_no < end_object_no;
-       ++object_no) {
-    uint8_t state = object_map[object_no];
+  auto it = object_map.begin() + start_object_no;
+  auto end_it = object_map.begin() + end_object_no;
+  for (; it != end_it; ++it) {
+    uint8_t state = *it;
     if ((!current_object_state || state == *current_object_state ||
         (*current_object_state == OBJECT_EXISTS &&
          state == OBJECT_EXISTS_CLEAN)) && state != new_object_state) {
-      object_map[object_no] = new_object_state;
+      *it = new_object_state;
       updated = true;
     }
   }
@@ -2461,9 +2462,11 @@ int object_map_snap_add(cls_method_context_t hctx, bufferlist *in,
   }
 
   bool updated = false;
-  for (uint64_t i = 0; i < object_map.size(); ++i) {
-    if (object_map[i] == OBJECT_EXISTS) {
-      object_map[i] = OBJECT_EXISTS_CLEAN;
+  auto it = object_map.begin();
+  auto end_it = object_map.end();
+  for (; it != end_it; ++it) {
+    if (*it == OBJECT_EXISTS) {
+      *it = OBJECT_EXISTS_CLEAN;
       updated = true;
     }
   }
@@ -2504,12 +2507,19 @@ int object_map_snap_remove(cls_method_context_t hctx, bufferlist *in,
   }
 
   bool updated = false;
-  for (uint64_t i = 0; i < dst_object_map.size(); ++i) {
-    if (dst_object_map[i] == OBJECT_EXISTS_CLEAN &&
-        (i >= src_object_map.size() || src_object_map[i] == OBJECT_EXISTS)) {
-      dst_object_map[i] = OBJECT_EXISTS;
+  auto src_it = src_object_map.begin();
+  auto dst_it = dst_object_map.begin();
+  auto dst_it_end = dst_object_map.end();
+  uint64_t i = 0;
+  for (; dst_it != dst_it_end; ++dst_it) {
+    if (*dst_it == OBJECT_EXISTS_CLEAN &&
+        (i >= src_object_map.size() || *src_it == OBJECT_EXISTS)) {
+      *dst_it = OBJECT_EXISTS;
       updated = true;
     }
+    if (i < src_object_map.size())
+      ++src_it;
+    ++i;
   }
 
   if (updated) {
