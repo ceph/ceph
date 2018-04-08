@@ -158,6 +158,7 @@ public:
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
   typedef std::list<JournalMetadataListener*> Listeners;
+  typedef std::list<Context*> Contexts;
 
   struct CommitEntry {
     uint64_t object_num;
@@ -283,11 +284,9 @@ private:
     uint64_t minimum_set;
     uint64_t active_set;
     RegisteredClients registered_clients;
-    Context *on_finish;
 
-    C_Refresh(JournalMetadata *_journal_metadata, Context *_on_finish)
-      : journal_metadata(_journal_metadata), minimum_set(0), active_set(0),
-        on_finish(_on_finish) {
+    C_Refresh(JournalMetadata *_journal_metadata)
+      : journal_metadata(_journal_metadata), minimum_set(0), active_set(0) {
       Mutex::Locker locker(journal_metadata->m_lock);
       journal_metadata->m_async_op_tracker.start_op();
     }
@@ -334,10 +333,17 @@ private:
   size_t m_update_notifications;
   Cond m_update_cond;
 
+  size_t m_ignore_watch_notifies = 0;
+  size_t m_refreshes_in_progress = 0;
+  Contexts m_refresh_ctxs;
+
   uint64_t m_commit_position_tid = 0;
   ObjectSetPosition m_commit_position;
   Context *m_commit_position_ctx;
   Context *m_commit_position_task_ctx;
+
+  size_t m_flush_commits_in_progress = 0;
+  Contexts m_flush_commit_position_ctxs;
 
   AsyncOpTracker m_async_op_tracker;
 
@@ -356,7 +362,7 @@ private:
   void handle_watch_error(int err);
   void handle_notified(int r);
 
-  Context *schedule_laggy_clients_disconnect(Context *on_finish);
+  void schedule_laggy_clients_disconnect(Context *on_finish);
 
   friend std::ostream &operator<<(std::ostream &os,
 				  const JournalMetadata &journal_metadata);
