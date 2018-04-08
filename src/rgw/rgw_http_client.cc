@@ -398,6 +398,8 @@ int RGWHTTPClient::process(const char *method, const char *url)
   curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, simple_receive_http_data);
   curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void *)this);
   curl_easy_setopt(curl_handle, CURLOPT_ERRORBUFFER, (void *)error_buf);
+  curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_TIME, cct->_conf->rgw_curl_low_speed_time);
+  curl_easy_setopt(curl_handle, CURLOPT_LOW_SPEED_LIMIT, cct->_conf->rgw_curl_low_speed_limit);
   if (h) {
     curl_easy_setopt(curl_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
@@ -476,6 +478,8 @@ int RGWHTTPClient::init_request(const char *method, const char *url, rgw_http_re
   curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, receive_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_ERRORBUFFER, (void *)req_data->error_buf);
+  curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_TIME, cct->_conf->rgw_curl_low_speed_time);
+  curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_LIMIT, cct->_conf->rgw_curl_low_speed_limit);
   if (h) {
     curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
