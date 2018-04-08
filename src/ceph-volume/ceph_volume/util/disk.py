@@ -203,7 +203,7 @@ def is_device(dev):
     # use lsblk first, fall back to using stat
     TYPE = lsblk(dev).get('TYPE')
     if TYPE:
-        return TYPE == 'disk'
+        return TYPE == 'disk' or TYPE == 'loop'
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
