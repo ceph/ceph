@@ -215,13 +215,14 @@ bool ObjectCacherObjectDispatch<I>::discard(
   ldout(cct, 20) << "object_no=" << object_no << " " << object_off << "~"
                  << object_len << dendl;
 
-  // discard the cache state after changes are committed to disk
+  ObjectExtents object_extents;
+  object_extents.emplace_back(oid, object_no, object_off, object_len, 0);
+
+  // discard the cache state after changes are committed to disk (and to
+  // prevent races w/ readahead)
   auto ctx = *on_finish;
   *on_finish = new FunctionContext(
-    [this, oid, object_no, object_off, object_len, ctx](int r) {
-      ObjectExtents object_extents;
-      object_extents.emplace_back(oid, object_no, object_off, object_len, 0);
-
+    [this, object_extents, ctx](int r) {
       m_cache_lock.Lock();
       m_object_cacher->discard_set(m_object_set, object_extents);
       m_cache_lock.Unlock();
@@ -229,9 +230,19 @@ bool ObjectCacherObjectDispatch<I>::discard(
       ctx->complete(r);
     });
 
-  // pass-through the discard request since ObjectCacher won't
-  // writeback discards.
-  return false;
+  // ensure we aren't holding the cache lock post-write
+  on_dispatched = util::create_async_context_callback(*m_image_ctx,
+                                                      on_dispatched);
+
+  *dispatch_result = io::DISPATCH_RESULT_CONTINUE;
+
+  // ensure any in-flight writeback is complete before advancing
+  // the discard request
+  m_cache_lock.Lock();
+  m_object_cacher->discard_writeback(m_object_set, object_extents,
+                                     on_dispatched);
+  m_cache_lock.Unlock();
+  return true;
 }
 
 template <typename I>
