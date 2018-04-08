@@ -2124,7 +2124,7 @@ int RgwAdminPeriodCommandsHandler::parse_command_and_parameters() {
   desc.add_options()
       (rgw_admin_params::ACCESS_KEY.name, boost::program_options::value(&access_key),
        rgw_admin_params::ACCESS_KEY.description)
-      (COMMIT.name, COMMIT.description)
+      (COMMIT.name, boost::program_options::value(&commit)->implicit_value(true), COMMIT.description)
       (PERIOD_EPOCH.name, boost::program_options::value(&period_epoch), PERIOD_EPOCH.description)
       (rgw_admin_params::PERIOD_ID.name, boost::program_options::value(&period_id),
        rgw_admin_params::PERIOD_ID.description)
@@ -2135,26 +2135,14 @@ int RgwAdminPeriodCommandsHandler::parse_command_and_parameters() {
       (REMOTE.name, boost::program_options::value(&remote), REMOTE.description)
       (rgw_admin_params::SECRET_KEY.name, boost::program_options::value(&secret_key),
        rgw_admin_params::SECRET_KEY.description)
-      (STAGING.name, STAGING.description)
+      (STAGING.name, boost::program_options::value(&staging)->implicit_value(true), STAGING.description)
       (rgw_admin_params::URL.name, boost::program_options::value(&url), rgw_admin_params::URL.description)
-      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name, rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name,
+       boost::program_options::value(&yes_i_really_mean_it)->implicit_value(true),
+       rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
   boost::program_options::variables_map var_map;
 
-  int ret = parse_command(desc, var_map);
-  if (ret > 0) {
-    return ret;
-  }
-
-  if (var_map.count(COMMIT.name)) {
-    commit = true;
-  }
-  if (var_map.count(STAGING.name)) {
-    staging = true;
-  }
-  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT.name)) {
-    yes_i_really_mean_it = true;
-  }
-  return 0;
+  return parse_command(desc, var_map);
 }
 
 int RgwAdminRealmCommandsHandler::parse_command_and_parameters() {
@@ -2171,17 +2159,10 @@ int RgwAdminRealmCommandsHandler::parse_command_and_parameters() {
       (REALM_NEW_NAME.name, boost::program_options::value(&realm_new_name), REALM_NEW_NAME.description)
       (rgw_admin_params::SECRET_KEY.name, boost::program_options::value(&secret_key),
        rgw_admin_params::SECRET_KEY.description)
-      (rgw_admin_params::SET_DEFAULT.name, rgw_admin_params::SET_DEFAULT.description)
+      (rgw_admin_params::SET_DEFAULT.name, boost::program_options::value(&set_default)->implicit_value(true),
+       rgw_admin_params::SET_DEFAULT.description)
       (rgw_admin_params::URL.name, boost::program_options::value(&url), rgw_admin_params::URL.description);
   boost::program_options::variables_map var_map;
 
-  int ret = parse_command(desc, var_map);
-  if (ret > 0) {
-    return ret;
-  }
-
-  if (var_map.count(rgw_admin_params::SET_DEFAULT.name)) {
-    set_default = true;
-  }
-  return 0;
+  return parse_command(desc, var_map);
 }

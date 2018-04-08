@@ -99,13 +99,13 @@ int RgwAdminUserCommandsHandler::parse_command_and_parameters() {
       (ACCESS.name, boost::program_options::value(&access), ACCESS.description)
       (rgw_admin_params::ACCESS_KEY.name, boost::program_options::value(&access_key),
        rgw_admin_params::ACCESS_KEY.description)
-      (rgw_admin_params::GEN_ACCESS_KEY.name, boost::program_options::value(&gen_access_key),
+      (rgw_admin_params::GEN_ACCESS_KEY.name, boost::program_options::value(&gen_access_key)->implicit_value(true),
        rgw_admin_params::GEN_ACCESS_KEY.description)
       (rgw_admin_params::SECRET_KEY.name, boost::program_options::value(&secret_key),
        rgw_admin_params::SECRET_KEY.description)
-      (rgw_admin_params::GEN_SECRET_KEY.name, boost::program_options::value(&gen_secret_key),
+      (rgw_admin_params::GEN_SECRET_KEY.name, boost::program_options::value(&gen_secret_key)->implicit_value(true),
        rgw_admin_params::GEN_SECRET_KEY.description)
-      (ADMIN.name, boost::program_options::value(&set_admin), ADMIN.description)
+      (ADMIN.name, boost::program_options::value(&set_admin)->implicit_value(true), ADMIN.description)
       (rgw_admin_params::BUCKET_NAME.name, boost::program_options::value(&bucket_name),
        rgw_admin_params::BUCKET_NAME.description)
       (CAPS.name, boost::program_options::value(&caps), CAPS.description)
@@ -113,12 +113,12 @@ int RgwAdminUserCommandsHandler::parse_command_and_parameters() {
       (KEY_TYPE.name, boost::program_options::value(&key_type_str), KEY_TYPE.description)
       (MAX_BUCKETS.name, boost::program_options::value(&max_buckets), MAX_BUCKETS.description)
       (OP_MASK.name, boost::program_options::value(&op_mask_str), OP_MASK.description)
-      (rgw_admin_params::PURGE_DATA.name, boost::program_options::value(&purge_data),
+      (rgw_admin_params::PURGE_DATA.name, boost::program_options::value(&purge_data)->implicit_value(true),
        rgw_admin_params::PURGE_DATA.description)
-      (PURGE_KEYS.name, boost::program_options::value(&purge_keys), PURGE_KEYS.description)
+      (PURGE_KEYS.name, boost::program_options::value(&purge_keys)->implicit_value(true), PURGE_KEYS.description)
       (SUBUSER.name, boost::program_options::value(&subuser), SUBUSER.description)
-      (SYNC_STATS.name, boost::program_options::value(&sync_stats), SYNC_STATS.description)
-      (SYSTEM.name, boost::program_options::value(&set_system), SYSTEM.description)
+      (SYNC_STATS.name, boost::program_options::value(&sync_stats)->implicit_value(true), SYNC_STATS.description)
+      (SYSTEM.name, boost::program_options::value(&set_system)->implicit_value(true), SYSTEM.description)
       (TEMP_URL_KEY.name, boost::program_options::value(&tmp_url_keys[0]), TEMP_URL_KEY.description)
       (TEMP_URL_KEY_2.name, boost::program_options::value(&tmp_url_keys[0]), TEMP_URL_KEY_2.description)
       (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description)

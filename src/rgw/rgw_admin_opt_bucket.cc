@@ -1325,7 +1325,9 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters() {
       (rgw_admin_params::OBJECT_VERSION.name, boost::program_options::value(&object_version),
        rgw_admin_params::OBJECT_VERSION.description)
       (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description)
-      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name, rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name,
+       boost::program_options::value(&yes_i_really_mean_it)->implicit_value(true),
+       rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
   boost::program_options::variables_map var_map;
 
   int ret = parse_command(desc, var_map);
@@ -1338,9 +1340,6 @@ int RgwAdminBiCommandsHandler::parse_command_and_parameters() {
     if (bi_index_type == InvalidIdx) {
       return EINVAL;
     }
-  }
-  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT.name)) {
-    yes_i_really_mean_it = true;
   }
   return 0;
 }
@@ -1389,13 +1388,17 @@ int RgwAdminBucketCommandsHandler::parse_command_and_parameters() {
        rgw_admin_params::BUCKET_ID.description)
       (rgw_admin_params::BUCKET_NAME.name, boost::program_options::value(&bucket_name),
        rgw_admin_params::BUCKET_NAME.description)
-      (BYPASS_GC.name, BYPASS_GC.description)
-      (CHECK_HEAD_OBJ_LOCATOR.name, CHECK_HEAD_OBJ_LOCATOR.description)
-      (rgw_admin_params::DELETE_CHILD_OBJECTS.name, rgw_admin_params::DELETE_CHILD_OBJECTS.description)
+      (BYPASS_GC.name, boost::program_options::value(&bypass_gc)->implicit_value(true), BYPASS_GC.description)
+      (CHECK_HEAD_OBJ_LOCATOR.name, boost::program_options::value(&check_head_obj_locator)->implicit_value(true),
+       CHECK_HEAD_OBJ_LOCATOR.description)
+      (rgw_admin_params::DELETE_CHILD_OBJECTS.name,
+       boost::program_options::value(&delete_child_objects)->implicit_value(true),
+       rgw_admin_params::DELETE_CHILD_OBJECTS.description)
       (rgw_admin_params::END_DATE.name, boost::program_options::value(&end_date),
        rgw_admin_params::END_DATE.description)
-      (FIX.name, FIX.description)
-      (INCONSISTENT_INDEX.name, INCONSISTENT_INDEX.description)
+      (FIX.name, boost::program_options::value(&fix)->implicit_value(true), FIX.description)
+      (INCONSISTENT_INDEX.name, boost::program_options::value(&inconsistent_index)->implicit_value(true),
+       INCONSISTENT_INDEX.description)
       (rgw_admin_params::MARKER.name, boost::program_options::value(&marker), rgw_admin_params::MARKER.description)
       (rgw_admin_params::MAX_ENTRIES.name, boost::program_options::value(&max_entries),
        rgw_admin_params::MAX_ENTRIES.description)
@@ -1407,14 +1410,17 @@ int RgwAdminBucketCommandsHandler::parse_command_and_parameters() {
        rgw_admin_params::MIN_REWRITE_STRIPE_SIZE.description)
       (rgw_admin_params::NUM_SHARDS.name, boost::program_options::value(&num_shards),
        rgw_admin_params::NUM_SHARDS.description)
-      (REMOVE_BAD.name, REMOVE_BAD.description)
+      (REMOVE_BAD.name, boost::program_options::value(&remove_bad)->implicit_value(true), REMOVE_BAD.description)
       (rgw_admin_params::START_DATE.name, boost::program_options::value(&start_date),
        rgw_admin_params::START_DATE.description)
       (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description)
       (rgw_admin_params::USER_ID.name, boost::program_options::value(&user_id), rgw_admin_params::USER_ID.description)
-      (VERBOSE.name, VERBOSE.description)
-      (WARNINGS_ONLY.name, WARNINGS_ONLY.description)
-      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name, rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
+      (VERBOSE.name, boost::program_options::value(&verbose)->implicit_value(true), VERBOSE.description)
+      (WARNINGS_ONLY.name, boost::program_options::value(&warnings_only)->implicit_value(true),
+       WARNINGS_ONLY.description)
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name,
+       boost::program_options::value(&yes_i_really_mean_it)->implicit_value(true),
+       rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
   boost::program_options::variables_map var_map;
 
   int ret = parse_command(desc, var_map);
@@ -1422,35 +1428,8 @@ int RgwAdminBucketCommandsHandler::parse_command_and_parameters() {
     return ret;
   }
 
-  if (var_map.count(BYPASS_GC.name)) {
-    bypass_gc = true;
-  }
-  if (var_map.count(CHECK_HEAD_OBJ_LOCATOR.name)) {
-    check_head_obj_locator = true;
-  }
-  if (var_map.count(rgw_admin_params::DELETE_CHILD_OBJECTS.name)) {
-    delete_child_objects = true;
-  }
-  if (var_map.count(FIX.name)) {
-    fix = true;
-  }
-  if (var_map.count(INCONSISTENT_INDEX.name)) {
-    inconsistent_index = true;
-  }
-  if (var_map.count(REMOVE_BAD.name)) {
-    remove_bad = true;
-  }
   if (var_map.count(rgw_admin_params::USER_ID.name)) {
     user.from_str(user_id);
-  }
-  if (var_map.count(VERBOSE.name)) {
-    verbose = true;
-  }
-  if (var_map.count(WARNINGS_ONLY.name)) {
-    warnings_only = true;
-  }
-  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT.name)) {
-    yes_i_really_mean_it = true;
   }
   return 0;
 }
@@ -1521,16 +1500,10 @@ int RgwAdminReshardCommandsHandler::parse_command_and_parameters() {
       (rgw_admin_params::NUM_SHARDS.name, boost::program_options::value(&num_shards),
        rgw_admin_params::NUM_SHARDS.description)
       (rgw_admin_params::TENANT.name, boost::program_options::value(&tenant), rgw_admin_params::TENANT.description)
-      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name, rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
+      (rgw_admin_params::YES_I_REALLY_MEAN_IT.name,
+       boost::program_options::value(&yes_i_really_mean_it)->implicit_value(true),
+       rgw_admin_params::YES_I_REALLY_MEAN_IT.description);
   boost::program_options::variables_map var_map;
 
-  int ret = parse_command(desc, var_map);
-  if (ret > 0) {
-    return ret;
-  }
-
-  if (var_map.count(rgw_admin_params::YES_I_REALLY_MEAN_IT.name)) {
-    yes_i_really_mean_it = true;
-  }
-  return 0;
+  return parse_command(desc, var_map);
 }
