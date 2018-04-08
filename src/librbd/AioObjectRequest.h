@@ -294,6 +294,7 @@ public:
 protected:
   virtual void add_write_ops(librados::ObjectWriteOperation *wr) {
     if (has_parent()) {
+      wr->create(false);
       wr->truncate(0);
     } else {
       wr->remove();
@@ -302,7 +303,7 @@ protected:
 
   virtual const char* get_write_type() const {
     if (has_parent()) {
-      return "remove (trunc)";
+      return "remove (create+trunc)";
     }
     return "remove";
   }
