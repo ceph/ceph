@@ -2819,8 +2819,9 @@ void BlueStore::ExtentMap::dirty_range(
     assert((size_t)start < shards.size());
     auto p = &shards[start];
     if (!p->loaded) {
-      dout(20) << __func__ << " shard 0x" << std::hex << p->shard_info->offset
-	       << std::dec << " is not loaded, can't mark dirty" << dendl;
+      derr << __func__ << "on write 0x" << std::hex << offset
+	   << "~" << length << " shard 0x" << p->shard_info->offset
+	   << std::dec << " is not loaded, can't mark dirty" << dendl;
       assert(0 == "can't mark unloaded shard dirty");
     }
     if (!p->dirty) {
