@@ -2350,6 +2350,7 @@ int RGWListBucket::parse_max_keys()
     char *endptr;
     max = strtol(max_keys.c_str(), &endptr, 10);
     if (endptr) {
+      if (endptr == max_keys.c_str()) return -EINVAL;
       while (*endptr && isspace(*endptr)) // ignore white space
         endptr++;
       if (*endptr) {
