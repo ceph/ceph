@@ -1531,6 +1531,8 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
     int partial_r;
     librbd::NoOpProgressContext no_op;
     ImageCtx *c_imctx = NULL;
+    std::string last_metadata_key;
+    const size_t max_metadata_keys = 64;
     map<string, bufferlist> pairs;
     parent_spec pspec(p_imctx->md_ctx.get_id(), p_imctx->id, p_imctx->snap_id);
 
@@ -1624,17 +1626,27 @@ int mirror_image_disable_internal(ImageCtx *ictx, bool force,
       goto err_remove_child;
     }
 
-    r = cls_client::metadata_list(&p_imctx->md_ctx, p_imctx->header_oid, "", 0,
-                                  &pairs);
-    if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-      lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-      goto err_remove_child;
-    } else if (r == 0 && !pairs.empty()) {
+    while (true) {
+      r = cls_client::metadata_list(&p_imctx->md_ctx, p_imctx->header_oid,
+                                    last_metadata_key, max_metadata_keys,
+                                    &pairs);
+      if (r == -EOPNOTSUPP || r == -EIO) {
+        break;
+      } else if (r < 0) {
+        lderr(cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
+        goto err_remove_child;
+      }
+
       r = cls_client::metadata_set(&c_ioctx, c_imctx->header_oid, pairs);
       if (r < 0) {
         lderr(cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
         goto err_remove_child;
       }
+
+      if (pairs.size() < max_metadata_keys) {
+        break;
+      }
+      last_metadata_key = pairs.rbegin()->first;
     }
 
     ldout(cct, 2) << "done." << dendl;
