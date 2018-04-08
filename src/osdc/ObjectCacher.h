@@ -355,7 +355,7 @@ class ObjectCacher {
 
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
-    void discard(loff_t off, loff_t len);
+    void discard(loff_t off, loff_t len, C_GatherBuilder* commit_gather);
 
     // reference counting
     int get() {
@@ -620,6 +620,10 @@ private:
   void maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
+  void _discard(ObjectSet *oset, const vector<ObjectExtent>& exls,
+                C_GatherBuilder* gather);
+  void _discard_finish(ObjectSet *oset, bool was_dirty, Context* on_finish);
+
 public:
   bool set_is_empty(ObjectSet *oset);
   bool set_is_cached(ObjectSet *oset);
@@ -637,6 +641,8 @@ public:
   uint64_t release_all();
 
   void discard_set(ObjectSet *oset, const vector<ObjectExtent>& ex);
+  void discard_writeback(ObjectSet *oset, const vector<ObjectExtent>& ex,
+                         Context* on_finish);
 
   /**
    * Retry any in-flight reads that get -ENOENT instead of marking
