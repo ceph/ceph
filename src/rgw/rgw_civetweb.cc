@@ -57,7 +57,7 @@ size_t RGWCivetWeb::read_data(char *buf, size_t len)
     return 0;
   }
   for (c = 0; c < len; c += ret) {
-    ret = mg_read(conn, buf, len);
+    ret = mg_read(conn, buf+c, len-c);
     if (ret < 0) {
       throw rgw::io::Exception(EIO, std::system_category());
     }
