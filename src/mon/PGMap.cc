@@ -2577,19 +2577,24 @@ void PGMap::get_health_checks(
       if (!pi)
 	continue;   // in case osdmap changes haven't propagated to PGMap yet
       const string& name = osdmap.get_pool_name(p->first);
-      if (pi->get_pg_num() > pi->get_pgp_num() &&
+      // NOTE: we use pg_num_target and pgp_num_target for the purposes of
+      // the warnings.  If the cluster is failing to converge on the target
+      // values that is a separate issue!
+      if (pi->get_pg_num_target() > pi->get_pgp_num_target() &&
 	  !(name.find(".DELETED") != string::npos &&
 	    cct->_conf->mon_fake_pool_delete)) {
 	ostringstream ss;
 	ss << "pool " << name << " pg_num "
-	   << pi->get_pg_num() << " > pgp_num " << pi->get_pgp_num();
+	   << pi->get_pg_num_target()
+	   << " > pgp_num " << pi->get_pgp_num_target();
 	pgp_detail.push_back(ss.str());
       }
       int average_objects_per_pg = pg_sum.stats.sum.num_objects / pg_stat.size();
       if (average_objects_per_pg > 0 &&
           pg_sum.stats.sum.num_objects >= mon_pg_warn_min_objects &&
           p->second.stats.sum.num_objects >= mon_pg_warn_min_pool_objects) {
-	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
+	int objects_per_pg = p->second.stats.sum.num_objects /
+	  pi->get_pg_num_target();
 	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
 	if (mon_pg_warn_max_object_skew > 0 &&
 	    ratio > mon_pg_warn_max_object_skew) {
