@@ -46,4 +46,10 @@ describe('OsdListComponent', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('should test getSpikes', () => {
+    const test = [[500, 1], [1000, 12], [1500, 16], [2000, 25]];
+    const result = [11, 4, 9];
+    expect(component.getSpikes(test)).toEqual(result);
+  });
 });

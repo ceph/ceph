@@ -57,11 +57,28 @@ export class OsdListComponent implements OnInit {
       this.osds = data;
       data.map((osd) => {
         osd.collectedStates = this.collectStates(osd);
-        osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map(i => i[1]);
-        osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map(i => i[1]);
+        osd.stats_history.out_bytes = this.getSpikes(osd.stats_history.op_out_bytes);
+        osd.stats_history.in_bytes = this.getSpikes(osd.stats_history.op_in_bytes);
         return osd;
       });
     });
+  }
+
+  /**
+   * This function will remove the total from the history data through this we are getting spikes in
+   * the graph.
+   *
+   * Each data number array consists of the following two numbers:
+   * First number is a timestamp.
+   * Second number is the total of read or written bytes until the given time.
+   */
+  getSpikes(data: number[][]): number[] {
+    return data.map((d, i) => {
+      if (i === 0) {
+        return 0;
+      }
+      return d[1] - data[i - 1][1];
+    }).slice(1);
   }
 
   collectStates(osd) {
