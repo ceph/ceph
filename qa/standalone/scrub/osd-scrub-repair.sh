@@ -1326,7 +1326,7 @@ EOF
         jq '.' $dir/json > save1.json
     fi
 
-    if which jsonschema > /dev/null;
+    if test "$LOCALRUN" = "yes" && which jsonschema > /dev/null;
     then
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi
@@ -2456,7 +2456,7 @@ EOF
         jq '.' $dir/json > save2.json
     fi
 
-    if which jsonschema > /dev/null;
+    if test "$LOCALRUN" = "yes" && which jsonschema > /dev/null;
     then
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi
@@ -3196,7 +3196,7 @@ EOF
         jq '.' $dir/json > save3.json
     fi
 
-    if which jsonschema > /dev/null;
+    if test "$LOCALRUN" = "yes" && which jsonschema > /dev/null;
     then
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi
@@ -4616,7 +4616,7 @@ EOF
       jq '.' $dir/json > save${num}.json
     fi
 
-    if which jsonschema > /dev/null;
+    if test "$LOCALRUN" = "yes" && which jsonschema > /dev/null;
     then
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi
@@ -4976,7 +4976,7 @@ EOF
         jq '.' $dir/json > save6.json
     fi
 
-    if which jsonschema > /dev/null;
+    if test "$LOCALRUN" = "yes" && which jsonschema > /dev/null;
     then
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
     fi

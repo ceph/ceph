@@ -632,7 +632,7 @@ EOF
         jq '.' $dir/json > save1.json
     fi
 
-    if which jsonschema > /dev/null;
+    if test "$LOCALRUN" = "yes" && which jsonschema > /dev/null;
     then
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-snap.json || return 1
     fi
