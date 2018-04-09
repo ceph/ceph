@@ -604,7 +604,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         for server in self.list_servers():
             for service in server['services']:
-                if service['type'] not in ("mds", "osd", "mon"):
+                if service['type'] not in ("rgw", "mds", "osd", "mon"):
                     continue
 
                 schema = self.get_perf_schema(service['type'], service['id'])
