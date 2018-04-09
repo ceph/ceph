@@ -376,6 +376,15 @@ void KernelDevice::discard_drain()
   }
 }
 
+static bool is_expected_ioerr(const int r)
+{
+  // https://lxr.missinglinkelectronics.com/linux+v4.15/block/blk-core.c#L135
+  return (r == -EOPNOTSUPP || r == -ETIMEDOUT || r == -ENOSPC ||
+	  r == -ENOLINK || r == -EREMOTEIO || r == -EBADE ||
+	  r == -ENODATA || r == -EILSEQ || r == -ENOMEM ||
+	  r == -EAGAIN || r == -EREMCHG || r == -EIO);
+}
+
 void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -410,9 +419,12 @@ void KernelDevice::_aio_thread()
 
 	int r = aio[i]->get_return_value();
         if (r < 0) {
-          derr << __func__ << " got " << cpp_strerror(r) << dendl;
-          if (ioc->allow_eio && r == -EIO) {
-            ioc->set_return_value(r);
+          derr << __func__ << " got r=" << r << " (" << cpp_strerror(r) << ")"
+	       << dendl;
+          if (ioc->allow_eio && is_expected_ioerr(r)) {
+            derr << __func__ << " translating the error to EIO for upper layer"
+		 << dendl;
+            ioc->set_return_value(-EIO);
           } else {
             assert(0 == "got unexpected error from aio_t::get_return_value. "
 			"This may suggest HW issue. Please check your dmesg!");
