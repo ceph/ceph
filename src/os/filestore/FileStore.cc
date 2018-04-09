@@ -721,7 +721,22 @@ int FileStore::statfs(struct store_statfs_t *buf0)
     return r;
   }
   buf0->total = buf.f_blocks * buf.f_bsize;
-  buf0->available = buf.f_bavail * buf.f_bsize;
+
+  uint64_t bfree = buf.f_bavail * buf.f_bsize;
+
+  buf0->available = bfree;
+  buf0->allocated = bfree;
+  buf0->data_stored = bfree;
+
+  // assume all of leveldb/rocksdb is omap.
+  {
+    map<string,uint64_t> kv_usage;
+    buf0->omap_allocated += object_map->get_db()->get_estimated_size(kv_usage);
+  }
+
+  // FIXME: we don't know how to populate buf->internal_metadata; XFS doesn't
+  // tell us what its internal overhead is.
+
   // Adjust for writes pending in the journal
   if (journal) {
     uint64_t estimate = journal->get_journal_size_estimate();
@@ -730,6 +745,7 @@ int FileStore::statfs(struct store_statfs_t *buf0)
     else
       buf0->available = 0;
   }
+
   return 0;
 }
 
