@@ -234,6 +234,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 	tier->snap_epoch = base.snap_epoch;
 	tier->snaps = base.snaps;
 	tier->removed_snaps = base.removed_snaps;
+	tier->flags |= base.flags & (pg_pool_t::FLAG_SELFMANAGED_SNAPS|
+				     pg_pool_t::FLAG_POOL_SNAPS);
 
 	if (new_rem_it != new_removed_snaps.end()) {
 	  new_removed_snaps[tier_pool] = new_rem_it->second;

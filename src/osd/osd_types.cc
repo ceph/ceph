@@ -1557,8 +1557,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
     v = 21;
-  }
-  if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+  } else if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
     v = 24;
   }
 
