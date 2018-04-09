@@ -447,7 +447,7 @@ void KernelDevice::_aio_thread()
           if (ioc->allow_eio && r == -EIO) {
             ioc->set_return_value(r);
           } else {
-            assert(0 == "got unexpected error from io_getevents");
+            assert(0 == "got unexpected error from aio_t::get_return_value");
           }
         } else if (aio[i]->length != (uint64_t)r) {
           derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
