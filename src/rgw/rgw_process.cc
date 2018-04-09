@@ -6,7 +6,7 @@
 #include "common/WorkQueue.h"
 
 #include "rgw_rados.h"
-#include "rgw_dmclock_queue.h"
+#include "rgw_dmclock_scheduler.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
@@ -36,22 +36,9 @@ void RGWProcess::RGWWQ::_dump_queue()
   }
 } /* RGWProcess::RGWWQ::_dump_queue */
 
-struct Completer {
-  rgw::dmclock::PriorityQueue *queue = nullptr;
-  ~Completer() {
-    if (queue) {
-      queue->request_complete();
-    }
-  }
-};
-
-static int wait_for_dmclock(rgw::dmclock::PriorityQueue *dmclock_queue,
-                            req_state *s, RGWOp *op, Completer& completer)
+static int wait_for_dmclock(rgw::dmclock::AsyncScheduler *scheduler,
+                            req_state *s, RGWOp *op)
 {
-  if (!dmclock_queue || !s->yield) {
-    return 0;
-  }
-
   auto& yield = s->yield.get_yield_context();
   const auto client = op->dmclock_client();
   const auto cost = op->dmclock_cost();
@@ -59,8 +46,8 @@ static int wait_for_dmclock(rgw::dmclock::PriorityQueue *dmclock_queue,
       << static_cast<int>(client) << " cost=" << cost << "..." << dendl;
 
   boost::system::error_code ec;
-  dmclock_queue->async_request(client, {}, req_state::Clock::to_double(s->time),
-                               cost, yield[ec]);
+  scheduler->async_request(client, {}, req_state::Clock::to_double(s->time),
+                           cost, yield[ec]);
 
   if (ec == boost::system::errc::resource_unavailable_try_again) {
     lderr(s->cct) << "dmclock client over rate limit" << dendl;
@@ -70,7 +57,6 @@ static int wait_for_dmclock(rgw::dmclock::PriorityQueue *dmclock_queue,
     lderr(s->cct) << "dmclock queue failed with " << ec.message() << dendl;
     return -ec.value();
   }
-  completer.queue = dmclock_queue;
   return 0;
 }
 
@@ -166,7 +152,7 @@ int process_request(RGWRados* const store,
                     RGWRestfulIO* const client_io,
                     OpsLogSocket* const olog,
                     optional_yield_context yield,
-                    rgw::dmclock::PriorityQueue *dmclock_queue,
+                    rgw::dmclock::AsyncScheduler *scheduler,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
@@ -201,7 +187,11 @@ int process_request(RGWRados* const store,
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
 
-  Completer dmclock_scoped_completer;
+  struct Completer {
+    rgw::dmclock::AsyncScheduler *scheduler = nullptr;
+    ~Completer() { if (scheduler) scheduler->request_complete(); }
+  } dmclock_scoped_completer;
+
   RGWOp* op = nullptr;
   int init_error = 0;
   bool should_log = false;
@@ -225,10 +215,13 @@ int process_request(RGWRados* const store,
     goto done;
   }
 
-  ret = wait_for_dmclock(dmclock_queue, s, op, dmclock_scoped_completer);
-  if (ret < 0) {
-    abort_early(s, op, ret, handler);
-    goto done;
+  if (scheduler && s->yield) {
+    ret = wait_for_dmclock(scheduler, s, op);
+    if (ret < 0) {
+      abort_early(s, op, ret, handler);
+      goto done;
+    }
+    dmclock_scoped_completer.scheduler = scheduler;
   }
 
   req->op = op;

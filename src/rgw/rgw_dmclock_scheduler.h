@@ -12,8 +12,8 @@
  *
  */
 
-#ifndef RGW_DMCLOCK_QUEUE_H
-#define RGW_DMCLOCK_QUEUE_H
+#ifndef RGW_DMCLOCK_SCHEDULER_H
+#define RGW_DMCLOCK_SCHEDULER_H
 
 #include <boost/asio.hpp>
 #include "common/ceph_time.h"
@@ -53,17 +53,19 @@ using GetClientCounters = std::function<PerfCounters*(client_id)>;
 
 namespace async = ceph::async;
 
-
 /*
  * A dmclock request scheduling service for use with boost::asio.
+ *
+ * An asynchronous dmclock priority queue, where scheduled requests complete
+ * on a boost::asio executor.
  */
-class PriorityQueue : public md_config_obs_t {
+class AsyncScheduler : public md_config_obs_t {
  public:
   template <typename ...Args> // args forwarded to PullPriorityQueue ctor
-  PriorityQueue(CephContext *cct, boost::asio::io_context& context,
-                GetClientCounters&& counters, md_config_obs_t *observer,
-                Args&& ...args);
-  ~PriorityQueue();
+  AsyncScheduler(CephContext *cct, boost::asio::io_context& context,
+            GetClientCounters&& counters, md_config_obs_t *observer,
+            Args&& ...args);
+  ~AsyncScheduler();
 
   using executor_type = boost::asio::io_context::executor_type;
 
@@ -74,11 +76,13 @@ class PriorityQueue : public md_config_obs_t {
 
   /// submit an async request for dmclock scheduling. the given completion
   /// handler will be invoked with (error_code, PhaseType) when the request
-  /// is ready or canceled
+  /// is ready or canceled. on success, this grants a throttle unit that must
+  /// be returned with a call to request_complete()
   template <typename CompletionToken>
   auto async_request(const client_id& client, const ReqParams& params,
                      const Time& time, Cost cost, CompletionToken&& token);
 
+  /// returns a throttle unit granted by async_request()
   void request_complete();
 
   /// cancel all queued requests, invoking their completion handlers with an
@@ -127,9 +131,9 @@ class PriorityQueue : public md_config_obs_t {
 
 
 template <typename ...Args>
-PriorityQueue::PriorityQueue(CephContext *cct, boost::asio::io_context& context,
-                             GetClientCounters&& counters,
-                             md_config_obs_t *observer, Args&& ...args)
+AsyncScheduler::AsyncScheduler(CephContext *cct, boost::asio::io_context& context,
+                     GetClientCounters&& counters,
+                     md_config_obs_t *observer, Args&& ...args)
   : queue(std::forward<Args>(args)...),
     timer(context), cct(cct), observer(observer),
     counters(std::move(counters)),
@@ -144,17 +148,17 @@ PriorityQueue::PriorityQueue(CephContext *cct, boost::asio::io_context& context,
 }
 
 template <typename CompletionToken>
-auto PriorityQueue::async_request(const client_id& client,
-                                  const ReqParams& params,
-                                  const Time& time, Cost cost,
-                                  CompletionToken&& token)
+auto AsyncScheduler::async_request(const client_id& client,
+                              const ReqParams& params,
+                              const Time& time, Cost cost,
+                              CompletionToken&& token)
 {
   boost::asio::async_completion<CompletionToken, Signature> init(token);
 
   auto ex1 = get_executor();
   auto& handler = init.completion_handler;
 
-  // allocate the request and add it to the queue
+  // allocate the Request and add it to the queue
   auto completion = Completion::create(ex1, std::move(handler),
                                        Request{client, time, cost});
   // cast to unique_ptr<Request>
@@ -197,4 +201,4 @@ class ClientCounters {
 
 } // namespace rgw::dmclock
 
-#endif // RGW_DMCLOCK_QUEUE_H
+#endif // RGW_DMCLOCK_SCHEDULER_H

@@ -12,11 +12,11 @@
  *
  */
 
-#include "rgw_dmclock_queue.h"
+#include "rgw_dmclock_scheduler.h"
 
 namespace rgw::dmclock {
 
-PriorityQueue::~PriorityQueue()
+AsyncScheduler::~AsyncScheduler()
 {
   cancel();
   if (observer) {
@@ -24,7 +24,7 @@ PriorityQueue::~PriorityQueue()
   }
 }
 
-const char** PriorityQueue::get_tracked_conf_keys() const
+const char** AsyncScheduler::get_tracked_conf_keys() const
 {
   if (observer) {
     return observer->get_tracked_conf_keys();
@@ -33,8 +33,8 @@ const char** PriorityQueue::get_tracked_conf_keys() const
   return keys;
 }
 
-void PriorityQueue::handle_conf_change(const md_config_t *conf,
-                                       const std::set<std::string>& changed)
+void AsyncScheduler::handle_conf_change(const md_config_t *conf,
+                                   const std::set<std::string>& changed)
 {
   if (observer) {
     observer->handle_conf_change(conf, changed);
@@ -64,13 +64,13 @@ void inc(ClientSums& sums, client_id client, Cost cost)
 void on_cancel(PerfCounters *c, const ClientSum& sum);
 void on_process(PerfCounters* c, const ClientSum& rsum, const ClientSum& psum);
 
-void PriorityQueue::request_complete()
+void AsyncScheduler::request_complete()
 {
   --outstanding_requests;
   schedule(crimson::dmclock::TimeZero);
 }
 
-void PriorityQueue::cancel()
+void AsyncScheduler::cancel()
 {
   ClientSums sums;
 
@@ -91,7 +91,7 @@ void PriorityQueue::cancel()
   }
 }
 
-void PriorityQueue::cancel(const client_id& client)
+void AsyncScheduler::cancel(const client_id& client)
 {
   ClientSum sum;
 
@@ -109,19 +109,19 @@ void PriorityQueue::cancel(const client_id& client)
   schedule(crimson::dmclock::TimeZero);
 }
 
-void PriorityQueue::schedule(const Time& time)
+void AsyncScheduler::schedule(const Time& time)
 {
   timer.expires_at(Clock::from_double(time));
   timer.async_wait([this] (boost::system::error_code ec) {
       // process requests unless the wait was canceled. note that a canceled
-      // wait may execute after this PriorityQueue destructs
+      // wait may execute after this AsyncScheduler destructs
       if (ec != boost::asio::error::operation_aborted) {
         process(get_time());
       }
     });
 }
 
-void PriorityQueue::process(const Time& now)
+void AsyncScheduler::process(const Time& now)
 {
   // must run in the executor. we should only invoke completion handlers if the
   // executor is running

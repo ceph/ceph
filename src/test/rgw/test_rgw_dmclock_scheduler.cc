@@ -14,7 +14,7 @@
 
 //#define BOOST_ASIO_ENABLE_HANDLER_TRACKING
 
-#include "rgw/rgw_dmclock_queue.h"
+#include "rgw/rgw_dmclock_scheduler.h"
 #include <optional>
 #include <boost/asio/spawn.hpp>
 #include <gtest/gtest.h>
@@ -39,8 +39,8 @@ TEST(Queue, AsyncRequest)
 {
   boost::asio::io_context context;
   ClientCounters counters(g_ceph_context);
-  PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
-                      [] (client_id client) -> ClientInfo* {
+  Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+                  [] (client_id client) -> ClientInfo* {
       static ClientInfo clients[] = {
         {1, 1, 1}, // admin: satisfy by reservation
         {0, 1, 1}, // auth: satisfy by priority
@@ -90,14 +90,14 @@ TEST(Queue, RateLimit)
 {
   boost::asio::io_context context;
   ClientCounters counters(g_ceph_context);
-  PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
-                      [] (client_id client) -> ClientInfo* {
+  Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+                  [] (client_id client) -> ClientInfo* {
       static ClientInfo clients[] = {
         {1, 1, 1}, // admin
         {0, 1, 1}, // auth
       };
       return &clients[static_cast<size_t>(client)];
-    }, AtLimit::Reject);
+    }, TagCalc::Immediate, AtLimit::Reject);
 
   std::optional<error_code> ec1, ec2, ec3, ec4;
   std::optional<PhaseType> p1, p2, p3, p4;
@@ -151,8 +151,8 @@ TEST(Queue, Cancel)
 {
   boost::asio::io_context context;
   ClientCounters counters(g_ceph_context);
-  PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
-                      [] (client_id client) -> ClientInfo* {
+  Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+                  [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
     });
@@ -199,8 +199,8 @@ TEST(Queue, CancelClient)
 {
   boost::asio::io_context context;
   ClientCounters counters(g_ceph_context);
-  PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
-                      [] (client_id client) -> ClientInfo* {
+  Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+                  [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
     });
@@ -255,8 +255,8 @@ TEST(Queue, CancelOnDestructor)
 
   ClientCounters counters(g_ceph_context);
   {
-    PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
-                        [] (client_id client) -> ClientInfo* {
+    Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+                    [] (client_id client) -> ClientInfo* {
         static ClientInfo info{0, 1, 1};
         return &info;
       });
@@ -305,9 +305,9 @@ TEST(Queue, CrossExecutorRequest)
 {
   boost::asio::io_context queue_context;
   ClientCounters counters(g_ceph_context);
-  PriorityQueue queue(g_ceph_context, queue_context, std::ref(counters), nullptr,
-                      [] (client_id client) -> ClientInfo* {
-      static ClientInfo info{1, 1, 1};
+  Scheduler queue(g_ceph_context, queue_context, std::ref(counters), nullptr,
+                  [] (client_id client) -> ClientInfo* {
+      static ClientInfo info{0, 1, 1};
       return &info;
     });
 
@@ -361,8 +361,8 @@ TEST(Queue, SpawnAsyncRequest)
 
   boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
     ClientCounters counters(g_ceph_context);
-    PriorityQueue queue(g_ceph_context, context, std::ref(counters), nullptr,
-                        [] (client_id client) -> ClientInfo* {
+    Scheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+                    [] (client_id client) -> ClientInfo* {
         static ClientInfo clients[] = {
           {1, 1, 1}, // admin: satisfy by reservation
           {0, 1, 1}, // auth: satisfy by priority
