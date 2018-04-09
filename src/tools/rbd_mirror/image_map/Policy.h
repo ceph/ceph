@@ -96,6 +96,11 @@ private:
   ImageStates m_image_states;
   std::set<std::string> m_dead_instances;
 
+  bool m_initial_update = true;
+
+  void remove_instances(const RWLock& lock, const InstanceIds &instance_ids,
+                        GlobalImageIds* global_image_ids);
+
   bool set_state(ImageState* image_state, StateTransition::State state,
                  bool ignore_current_state);
 

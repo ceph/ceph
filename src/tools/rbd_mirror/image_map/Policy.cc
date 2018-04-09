@@ -114,6 +114,25 @@ void Policy::add_instances(const InstanceIds &instance_ids,
     m_map.emplace(instance, std::set<std::string>{});
   }
 
+  // post-failover, remove any dead instances and re-shuffle their images
+  if (m_initial_update) {
+    dout(5) << "initial instance update" << dendl;
+    m_initial_update = false;
+
+    std::set<std::string> alive_instances(instance_ids.begin(),
+                                          instance_ids.end());
+    InstanceIds dead_instances;
+    for (auto& map_pair : m_map) {
+      if (alive_instances.find(map_pair.first) == alive_instances.end()) {
+        dead_instances.push_back(map_pair.first);
+      }
+    }
+
+    if (!dead_instances.empty()) {
+      remove_instances(m_map_lock, dead_instances, global_image_ids);
+    }
+  }
+
   GlobalImageIds shuffle_global_image_ids;
   do_shuffle_add_instances(m_map, m_image_states.size(), instance_ids,
                            &shuffle_global_image_ids);
@@ -132,9 +151,16 @@ void Policy::add_instances(const InstanceIds &instance_ids,
 
 void Policy::remove_instances(const InstanceIds &instance_ids,
                               GlobalImageIds* global_image_ids) {
+  RWLock::WLocker map_lock(m_map_lock);
+  remove_instances(m_map_lock, instance_ids, global_image_ids);
+}
+
+void Policy::remove_instances(const RWLock& lock,
+                              const InstanceIds &instance_ids,
+                              GlobalImageIds* global_image_ids) {
+  assert(m_map_lock.is_wlocked());
   dout(5) << "instance_ids=" << instance_ids << dendl;
 
-  RWLock::WLocker map_lock(m_map_lock);
   for (auto& instance_id : instance_ids) {
     auto map_it = m_map.find(instance_id);
     if (map_it != m_map.end()) {
