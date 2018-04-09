@@ -236,8 +236,22 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
          << "Use 'mon config key max entry size' to manually adjust";
       goto out;
     }
-    // we'll reply to the message once the proposal has been handled
+
+    std::string mgr_prefix = "mgr/";
+    if (key.size() >= mgr_prefix.size() &&
+        key.substr(0, mgr_prefix.size()) == mgr_prefix) {
+      // In <= mimic, we used config-key for mgr module configuration,
+      // and we bring values forward in an upgrade, but subsequent
+      // `set` operations will not be picked up.  Warn user about this.
+      ss << "WARNING: it looks like you might be trying to set a ceph-mgr "
+            "module configuration key.  Since Ceph 13.0.0 (Mimic), mgr module "
+            "configuration is done with `config set`, and new values "
+            "set using `config-key set` will be ignored.\n";
+    }
+
     ss << "set " << key;
+
+    // we'll reply to the message once the proposal has been handled
     store_put(key, data,
 	      new Monitor::C_Command(mon, op, 0, ss.str(), 0));
     // return for now; we'll put the message once it's done.
