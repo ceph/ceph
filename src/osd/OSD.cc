@@ -1034,13 +1034,16 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
 }
 
 
-void OSDService::queue_want_pg_temp(pg_t pgid, vector<int>& want)
+void OSDService::queue_want_pg_temp(pg_t pgid,
+				    const vector<int>& want,
+				    bool forced)
 {
   Mutex::Locker l(pg_temp_lock);
-  map<pg_t,vector<int> >::iterator p = pg_temp_pending.find(pgid);
+  auto p = pg_temp_pending.find(pgid);
   if (p == pg_temp_pending.end() ||
-      p->second != want) {
-    pg_temp_wanted[pgid] = want;
+      p->second.acting != want ||
+      forced) {
+    pg_temp_wanted[pgid] = pg_temp_t{want, forced};
   }
 }
 
@@ -1053,10 +1056,8 @@ void OSDService::remove_want_pg_temp(pg_t pgid)
 
 void OSDService::_sent_pg_temp()
 {
-  for (map<pg_t,vector<int> >::iterator p = pg_temp_wanted.begin();
-       p != pg_temp_wanted.end();
-       ++p)
-    pg_temp_pending[p->first] = p->second;
+  pg_temp_pending.insert(make_move_iterator(begin(pg_temp_wanted)),
+			 make_move_iterator(end(pg_temp_wanted)));
   pg_temp_wanted.clear();
 }
 
@@ -1073,15 +1074,37 @@ void OSDService::requeue_pg_temp()
 	   << pg_temp_wanted.size() << dendl;
 }
 
+std::ostream& operator<<(std::ostream& out,
+			 const OSDService::pg_temp_t& pg_temp)
+{
+  out << pg_temp.acting;
+  if (pg_temp.forced) {
+    out << " (forced)";
+  }
+  return out;
+}
+
 void OSDService::send_pg_temp()
 {
   Mutex::Locker l(pg_temp_lock);
   if (pg_temp_wanted.empty())
     return;
   dout(10) << "send_pg_temp " << pg_temp_wanted << dendl;
-  MOSDPGTemp *m = new MOSDPGTemp(osdmap->get_epoch());
-  m->pg_temp = pg_temp_wanted;
-  monc->send_mon_message(m);
+  MOSDPGTemp *ms[2] = {nullptr, nullptr};
+  for (auto& pg_temp : pg_temp_wanted) {
+    auto& m = ms[pg_temp.second.forced];
+    if (!m) {
+      m = new MOSDPGTemp(osdmap->get_epoch());
+      m->forced = pg_temp.second.forced;
+    }
+    m->pg_temp.emplace(pg_temp.first,
+		       pg_temp.second.acting);
+  }
+  for (auto m : ms) {
+    if (m) {
+      monc->send_mon_message(m);
+    }
+  }
   _sent_pg_temp();
 }
 
@@ -4504,7 +4527,6 @@ void OSD::resume_creating_pg()
 {
   bool do_sub_pg_creates = false;
   bool have_pending_creates = false;
-  MOSDPGTemp *pgtemp = nullptr;
   {
     const auto max_pgs_per_osd =
       (cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd") *
@@ -4527,13 +4549,12 @@ void OSD::resume_creating_pg()
     }
     auto pg = pending_creates_from_osd.cbegin();
     while (spare_pgs > 0 && pg != pending_creates_from_osd.cend()) {
-      if (!pgtemp) {
-	pgtemp = new MOSDPGTemp{osdmap->get_epoch()};
-      }
+      dout(20) << __func__ << " pg " << pg->first << dendl;
       vector<int> acting;
       osdmap->pg_to_up_acting_osds(pg->first, nullptr, nullptr, &acting, nullptr);
-      pgtemp->pg_temp[pg->first] = twiddle(acting);
+      service.queue_want_pg_temp(pg->first, twiddle(acting), true);
       pg = pending_creates_from_osd.erase(pg);
+      do_sub_pg_creates = true;
       spare_pgs--;
     }
     have_pending_creates = (pending_creates_from_mon > 0 ||
@@ -4556,7 +4577,7 @@ void OSD::resume_creating_pg()
 	      << start << dendl;
       do_renew_subs = true;
     }
-  } else if (pgtemp || do_sub_pg_creates) {
+  } else if (do_sub_pg_creates) {
     // no need to subscribe the osdmap continuously anymore
     // once the pgtemp and/or mon_subscribe(pg_creates) is sent
     if (monc->sub_want_increment("osdmap", start, CEPH_SUBSCRIBE_ONETIME)) {
@@ -4570,10 +4591,7 @@ void OSD::resume_creating_pg()
     monc->renew_subs();
   }
 
-  if (pgtemp) {
-    pgtemp->forced = true;
-    monc->send_mon_message(pgtemp);
-  }
+  service.send_pg_temp();
 }
 
 void OSD::build_initial_pg_history(
