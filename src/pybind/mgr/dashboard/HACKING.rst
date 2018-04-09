@@ -72,8 +72,30 @@ Run ``npm run test`` to execute the unit tests via `Karma
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Run ``npm run e2e`` to execute the end-to-end tests via
-`Protractor <http://www.protractortest.org/>`__.
+We use `Protractor <http://www.protractortest.org/>`__ to run our frontend e2e
+tests.
+
+Our ``run-frontend-e2e-tests.sh`` script will check if Chrome or Docker is
+installed and run the tests if either is found.
+
+Start all frontend e2e tests by running::
+
+  $ ./run-frontend-e2e-tests.sh
+
+Device:
+  You can force the script to use a specific device with the ``-d`` flag::
+
+    $ ./run-frontend-e2e-tests.sh -d <chrome|docker>
+
+Remote:
+  If you want to run the tests outside the ceph environment, you will need to
+  manually define the dashboard url using ``-r``::
+
+    $ ./run-frontend-e2e-tests.sh -r <DASHBOARD_URL>
+
+Note:
+  When using docker, as your device, you might need to run the script with sudo
+  permissions.
 
 Further Help
 ~~~~~~~~~~~~
