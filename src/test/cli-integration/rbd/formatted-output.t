@@ -58,6 +58,7 @@ For now, use a more inclusive regex.
   rbd image 'foo':
   \tsize 1GiB in 256 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 1 (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info foo --format json | python -mjson.tool | sed 's/,$/, /'
@@ -69,7 +70,8 @@ For now, use a more inclusive regex.
       "object_size": 4194304, 
       "objects": 256, 
       "order": 22, 
-      "size": 1073741824
+      "size": 1073741824, 
+      "snapshot_count": 1
   }
 The version of xml_pp included in ubuntu precise always prints a 'warning'
 whenever it is run. grep -v to ignore it, but still work on other distros.
@@ -81,6 +83,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>256</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>1</snapshot_count>
     <block_name_prefix>rb.0.*</block_name_prefix> (glob)
     <format>1</format>
   </image>
@@ -88,6 +91,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'foo':
   \tsize 1GiB in 256 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 1 (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   \tprotected: False (esc)
@@ -101,7 +105,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "objects": 256, 
       "order": 22, 
       "protected": "false", 
-      "size": 1073741824
+      "size": 1073741824, 
+      "snapshot_count": 1
   }
   $ rbd info foo@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -111,6 +116,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>256</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>1</snapshot_count>
     <block_name_prefix>rb.0*</block_name_prefix> (glob)
     <format>1</format>
     <protected>false</protected>
@@ -119,6 +125,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'bar':
   \tsize 1GiB in 256 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 2 (esc)
   \tid:* (glob)
   [^^]+ (re)
   \tformat: 2 (esc)
@@ -145,7 +152,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "objects": 256, 
       "op_features": [], 
       "order": 22, 
-      "size": 1073741824
+      "size": 1073741824, 
+      "snapshot_count": 2
   }
   $ rbd info bar --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -155,6 +163,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>256</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>2</snapshot_count>
     <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
     <format>2</format>
     <features>
@@ -172,6 +181,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'bar':
   \tsize 512MiB in 128 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 2 (esc)
   \tid:* (glob)
   [^^]+ (re)
   \tformat: 2 (esc)
@@ -200,7 +210,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "op_features": [], 
       "order": 22, 
       "protected": "true", 
-      "size": 536870912
+      "size": 536870912, 
+      "snapshot_count": 2
   }
   $ rbd info bar@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -210,6 +221,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>128</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>2</snapshot_count>
     <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
     <format>2</format>
     <features>
@@ -228,6 +240,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'bar':
   \tsize 1GiB in 256 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 2 (esc)
   \tid:* (glob)
   [^^]+ (re)
   \tformat: 2 (esc)
@@ -256,7 +269,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "op_features": [], 
       "order": 22, 
       "protected": "false", 
-      "size": 1073741824
+      "size": 1073741824, 
+      "snapshot_count": 2
   }
   $ rbd info bar@snap2 --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -266,6 +280,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>256</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>2</snapshot_count>
     <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
     <format>2</format>
     <features>
@@ -284,6 +299,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'baz':
   \tsize 2GiB in 512 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 0 (esc)
   \tid:* (glob)
   [^^]+ (re)
   \tformat: 2 (esc)
@@ -306,7 +322,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "objects": 512, 
       "op_features": [], 
       "order": 22, 
-      "size": 2147483648
+      "size": 2147483648, 
+      "snapshot_count": 0
   }
   $ rbd info baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -316,6 +333,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>512</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>0</snapshot_count>
     <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
     <format>2</format>
     <features>
@@ -329,6 +347,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'quux':
   \tsize 1MiB in 1 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 0 (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info quux --format json | python -mjson.tool | sed 's/,$/, /'
@@ -340,7 +359,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "object_size": 4194304, 
       "objects": 1, 
       "order": 22, 
-      "size": 1048576
+      "size": 1048576, 
+      "snapshot_count": 0
   }
   $ rbd info quux --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -350,6 +370,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>1</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>0</snapshot_count>
     <block_name_prefix>rb.0.*</block_name_prefix> (glob)
     <format>1</format>
   </image>
@@ -357,6 +378,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'child':
   \tsize 512MiB in 128 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 1 (esc)
   \tid:* (glob)
   [^^]+ (re)
   \tformat: 2 (esc)
@@ -382,7 +404,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "objects": 128, 
       "op_features": [], 
       "order": 22, 
-      "size": 536870912
+      "size": 536870912, 
+      "snapshot_count": 1
   }
   $ rbd info rbd_other/child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -392,6 +415,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>128</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>1</snapshot_count>
     <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
     <format>2</format>
     <features>
@@ -408,6 +432,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'child':
   \tsize 512MiB in 128 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 1 (esc)
   \tid:* (glob)
   [^^]+ (re)
   \tformat: 2 (esc)
@@ -443,7 +468,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           "snapshot": "snap"
       }, 
       "protected": "false", 
-      "size": 536870912
+      "size": 536870912, 
+      "snapshot_count": 1
   }
   $ rbd info rbd_other/child@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -453,6 +479,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>128</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>1</snapshot_count>
     <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
     <format>2</format>
     <features>
@@ -476,6 +503,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'deep-flatten-child':
   \tsize 512MiB in 128 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 1 (esc)
   \tid:* (glob)
   [^^]+ (re)
   \tformat: 2 (esc)
@@ -502,7 +530,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "objects": 128, 
       "op_features": [], 
       "order": 22, 
-      "size": 536870912
+      "size": 536870912, 
+      "snapshot_count": 1
   }
   $ rbd info rbd_other/deep-flatten-child --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -512,6 +541,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>128</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>1</snapshot_count>
     <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
     <format>2</format>
     <features>
@@ -529,6 +559,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   rbd image 'deep-flatten-child':
   \tsize 512MiB in 128 objects (esc)
   \torder 22 (4MiB objects) (esc)
+  \tsnapshot_count: 1 (esc)
   \tid:* (glob)
   [^^]+ (re)
   \tformat: 2 (esc)
@@ -557,7 +588,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "op_features": [], 
       "order": 22, 
       "protected": "false", 
-      "size": 536870912
+      "size": 536870912, 
+      "snapshot_count": 1
   }
   $ rbd info rbd_other/deep-flatten-child@snap --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <image>
@@ -567,6 +599,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <objects>128</objects>
     <order>22</order>
     <object_size>4194304</object_size>
+    <snapshot_count>1</snapshot_count>
     <block_name_prefix>rbd_data.*</block_name_prefix> (glob)
     <format>2</format>
     <features>
