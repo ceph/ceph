@@ -892,13 +892,14 @@ def is_partition(dev):
     if not stmode_is_diskdevice(st.st_mode):
         raise Error('not a block device', dev)
 
+    major = os.major(st.st_rdev)
+    minor = os.minor(st.st_rdev)
+
     name = get_dev_name(dev)
-    if os.path.exists(os.path.join(BLOCKDIR, name)):
+    if os.path.exists(os.path.join(BLOCKDIR, name)) or os.path.exists(os.path.join(BLOCKDIR, "loop%d" % minor)):
         return False
 
     # make sure it is a partition of something else
-    major = os.major(st.st_rdev)
-    minor = os.minor(st.st_rdev)
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
 
