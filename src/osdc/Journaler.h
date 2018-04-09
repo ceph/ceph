@@ -310,7 +310,7 @@ private:
   // protect write_buf from bufferlist _len overflow 
   Throttle write_buf_throttle;
 
-  bool waiting_for_zero;
+  uint64_t waiting_for_zero_pos;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
   std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
@@ -407,7 +407,7 @@ public:
     prezeroing_pos(0), prezero_pos(0), write_pos(0), flush_pos(0),
     safe_pos(0), next_safe_pos(0),
     write_buf_throttle(cct, "write_buf_throttle", UINT_MAX - (UINT_MAX >> 3)),
-    waiting_for_zero(false),
+    waiting_for_zero_pos(0),
     read_pos(0), requested_pos(0), received_pos(0),
     fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL), called_write_error(false),
@@ -444,7 +444,7 @@ public:
     expire_pos = 0;
     trimming_pos = 0;
     trimmed_pos = 0;
-    waiting_for_zero = false;
+    waiting_for_zero_pos = 0;
   }
 
   // Asynchronous operations
