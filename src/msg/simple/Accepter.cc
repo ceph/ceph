@@ -26,7 +26,7 @@
 
 #include "common/debug.h"
 #include "common/errno.h"
-
+#include "common/HeartbeatMap.h"
 #define dout_subsys ceph_subsys_ms
 
 #undef dout_prefix
@@ -218,10 +218,18 @@ void *Accepter::entry()
   ldout(msgr->cct,10) << "accepter starting" << dendl;
   
   int errors = 0;
+  bool unhealthy = false;
 
   struct pollfd pfd;
   pfd.fd = listen_sd;
   pfd.events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
+	
+  std::stringstream ss;
+  ss << "Accepter thread " << (void *)pthread_self();
+  heartbeat_handle_d *hb = NULL;
+  if (msgr->cct->get_module_type() == CEPH_ENTITY_TYPE_OSD)
+    hb = msgr->cct->get_heartbeat_map()->add_worker(ss.str());
+	
   while (!done) {
     ldout(msgr->cct,20) << "accepter calling poll" << dendl;
     int r = poll(&pfd, 1, -1);
@@ -247,12 +255,26 @@ void *Accepter::entry()
     } else {
       ldout(msgr->cct,0) << "accepter no incoming connection?  sd = " << sd
 	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
-      if (++errors > 4)
-	break;
+      if (++errors > 4 && !unhealthy){
+	if (msgr->cct->get_module_type() == CEPH_ENTITY_TYPE_OSD && hb){
+	  ldout(msgr->cct,0) << "accetper has error numbers  exceeded four and reset heartbeat timeout." << dendl;
+          msgr->cct->get_heartbeat_map()->reset_timeout(hb,0,0);
+          unhealthy = true; 
+        }
+	else {
+	  break;
+	}
+      }
+      else{
+	sleep(1);
+      }
     }
   }
 
   ldout(msgr->cct,20) << "accepter closing" << dendl;
+  if (msgr->cct->get_module_type() == CEPH_ENTITY_TYPE_OSD && hb){
+    msgr->cct->get_heartbeat_map()->remove_worker(hb);
+  }
   // don't close socket, in case we start up again?  blech.
   if (listen_sd >= 0) {
     ::close(listen_sd);
