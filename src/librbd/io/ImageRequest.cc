@@ -208,7 +208,7 @@ void ImageReadRequest<I>::send_request() {
 
       auto req_comp = new io::ReadResult::C_ObjectReadRequest(
         aio_comp, extent.offset, extent.length,
-        std::move(extent.buffer_extents), true);
+        std::move(extent.buffer_extents));
       auto req = ObjectDispatchSpec::create_read(
         &image_ctx, OBJECT_DISPATCH_LAYER_NONE, extent.oid.name,
         extent.objectno, extent.offset, extent.length, snap_id, m_op_flags,
