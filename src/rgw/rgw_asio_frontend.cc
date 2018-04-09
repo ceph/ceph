@@ -82,7 +82,7 @@ template <typename Stream>
 void handle_connection(RGWProcessEnv& env, Stream& stream,
                        boost::beast::flat_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
-                       rgw::dmclock::PriorityQueue *dmclock_queue,
+                       rgw::dmclock::AsyncScheduler *scheduler,
                        boost::system::error_code& ec,
                        boost::asio::yield_context yield)
 {
@@ -152,7 +152,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       RGWRestfulIO client(cct, &real_client_io);
       auto y = optional_yield_context{&socket.get_io_context(), &yield};
       process_request(env.store, env.rest, &req, env.uri_prefix,
-                      *env.auth_registry, &client, env.olog, y, dmclock_queue);
+                      *env.auth_registry, &client, env.olog, y, scheduler);
     }
 
     if (!parser.keep_alive()) {
@@ -228,7 +228,7 @@ class AsioFrontend {
   int init_ssl();
 #endif
   SharedMutex pause_mutex;
-  rgw::dmclock::PriorityQueue *dmclock_queue;
+  rgw::dmclock::AsyncScheduler *scheduler;
 
   struct Listener {
     tcp::endpoint endpoint;
@@ -257,10 +257,10 @@ class AsioFrontend {
  public:
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
                boost::asio::io_context& context,
-               rgw::dmclock::PriorityQueue *dmclock_queue)
+               rgw::dmclock::AsyncScheduler *scheduler)
     : env(env), conf(conf), context(context),
       pause_mutex(context.get_executor()),
-      dmclock_queue(dmclock_queue)
+      scheduler(scheduler)
   {}
 
   int init();
@@ -528,7 +528,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         }
         buffer.consume(bytes);
         handle_connection(env, stream, buffer, true, pause_mutex,
-                          dmclock_queue, ec, yield);
+                          scheduler, ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
@@ -546,7 +546,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         boost::beast::flat_buffer buffer;
         boost::system::error_code ec;
         handle_connection(env, s, buffer, false, pause_mutex,
-                          dmclock_queue, ec, yield);
+                          scheduler, ec, yield);
         s.shutdown(tcp::socket::shutdown_both, ec);
       });
   }
@@ -651,15 +651,15 @@ class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
   Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf,
        boost::asio::io_context& context,
-       rgw::dmclock::PriorityQueue *dmclock_queue)
-    : AsioFrontend(env, conf, context, dmclock_queue) {}
+       rgw::dmclock::AsyncScheduler *scheduler)
+    : AsioFrontend(env, conf, context, scheduler) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env,
                                  RGWFrontendConfig* conf,
                                  boost::asio::io_context& context,
-                                 rgw::dmclock::PriorityQueue *dmclock_queue)
-  : impl(new Impl(env, conf, context, dmclock_queue))
+                                 rgw::dmclock::AsyncScheduler *scheduler)
+  : impl(new Impl(env, conf, context, scheduler))
 {
 }
 

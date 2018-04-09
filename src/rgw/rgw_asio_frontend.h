@@ -8,15 +8,15 @@
 #include "rgw_frontend.h"
 
 namespace boost::asio { class io_context; }
-namespace rgw::dmclock { class PriorityQueue; }
+namespace rgw::dmclock { class AsyncScheduler; }
 
 class RGWAsioFrontend : public RGWFrontend {
   class Impl;
   std::unique_ptr<Impl> impl;
 public:
   RGWAsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
-                  boost::asio::io_context& iocontext,
-                  rgw::dmclock::PriorityQueue *dmclock_queue);
+                  boost::asio::io_context& context,
+                  rgw::dmclock::AsyncScheduler *scheduler);
   ~RGWAsioFrontend() override;
 
   int init() override;
