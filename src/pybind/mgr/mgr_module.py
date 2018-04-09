@@ -255,17 +255,6 @@ class MgrModule(ceph_module.BaseMgrModule):
     def __del__(self):
         unconfigure_logger(self, self.module_name)
 
-    def update_perf_schema(self, daemon_type, daemon_name):
-        """
-        For plugins that use get_all_perf_counters, call this when
-        receiving a notification of type 'perf_schema_update', to
-        prompt MgrModule to update its cache of counter schemas.
-
-        :param daemon_type:
-        :param daemon_name:
-        :return:
-        """
-
     @property
     def log(self):
         return self._logger
