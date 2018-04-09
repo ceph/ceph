@@ -342,6 +342,30 @@ TEST_F(TestImageMapPolicy, ShuffleFailureAndRemove) {
   ASSERT_TRUE(info.instance_id == UNMAPPED_INSTANCE_ID);
 }
 
+TEST_F(TestImageMapPolicy, InitialInstanceUpdate) {
+  const std::string global_image_id = "global id 1";
+
+  m_policy->init({{global_image_id, {"9876", {}, {}}}});
+
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
+
+  auto instance_id = stringify(m_local_io_ctx.get_instance_id());
+  std::set<std::string> shuffle_global_image_ids;
+  m_policy->add_instances({instance_id}, &shuffle_global_image_ids);
+
+  ASSERT_EQ(0U, shuffle_global_image_ids.size());
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, -ENOENT));
+
+  ASSERT_EQ(ACTION_TYPE_RELEASE, m_policy->start_action(global_image_id));
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
+
+  ASSERT_EQ(ACTION_TYPE_MAP_UPDATE, m_policy->start_action(global_image_id));
+  ASSERT_TRUE(m_policy->finish_action(global_image_id, 0));
+
+  ASSERT_EQ(ACTION_TYPE_ACQUIRE, m_policy->start_action(global_image_id));
+  ASSERT_FALSE(m_policy->finish_action(global_image_id, 0));
+}
+
 } // namespace image_map
 } // namespace mirror
 } // namespace rbd

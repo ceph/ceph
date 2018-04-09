@@ -846,6 +846,9 @@ TEST_F(TestMockImageMap, AddInstance) {
                          &peer_ack_ctxs);
   wait_for_scheduled_task();
 
+  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
+  mock_image_map->update_instances_added({local_instance_id});
+
   std::set<std::string> shuffled_global_image_ids;
 
   // RELEASE+UPDATE_MAPPING+ACQUIRE
@@ -915,6 +918,9 @@ TEST_F(TestMockImageMap, RemoveInstance) {
   remote_peer_ack_nowait(mock_image_map.get(), global_image_ids_ack, 0,
                          &peer_ack_ctxs);
   wait_for_scheduled_task();
+
+  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
+  mock_image_map->update_instances_added({local_instance_id});
 
   std::set<std::string> shuffled_global_image_ids;
 
@@ -1005,6 +1011,8 @@ TEST_F(TestMockImageMap, AddInstancePingPongImageTest) {
   C_SaferCond cond;
   mock_image_map->init(&cond);
   ASSERT_EQ(0, cond.wait());
+
+  mock_image_map->update_instances_added({local_instance_id});
 
   std::set<std::string> global_image_ids_ack(global_image_ids);
 
@@ -1138,6 +1146,9 @@ TEST_F(TestMockImageMap, RemoveInstanceWithRemoveImage) {
                          &peer_ack_ctxs);
   wait_for_scheduled_task();
 
+  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
+  mock_image_map->update_instances_added({local_instance_id});
+
   std::set<std::string> shuffled_global_image_ids;
 
   // RELEASE+UPDATE_MAPPING+ACQUIRE
@@ -1206,6 +1217,9 @@ TEST_F(TestMockImageMap, AddErrorAndRemoveImage) {
   C_SaferCond cond;
   mock_image_map->init(&cond);
   ASSERT_EQ(0, cond.wait());
+
+  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
+  mock_image_map->update_instances_added({local_instance_id});
 
   std::set<std::string> global_image_ids{
     "global id 1", "global id 2", "global id 3", "remote id 4",
