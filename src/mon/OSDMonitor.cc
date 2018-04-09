@@ -6692,7 +6692,10 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->crush_rule = crush_rule;
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
-  pi->set_pg_num(1);
+  auto max = g_conf().get_val<int64_t>("mon_osd_max_initial_pgs");
+  pi->set_pg_num(
+    max > 0 ? std::min<uint64_t>(pg_num, std::max<int64_t>(1, max))
+    : pg_num);
   pi->set_pg_num_pending(pi->get_pg_num(), pending_inc.epoch);
   pi->set_pg_num_target(pg_num);
   pi->set_pgp_num(pi->get_pg_num());
