@@ -325,7 +325,7 @@ class Prepare(object):
 
         Optionally, can consume db and wal devices or logical volumes:
 
-            ceph-volume lvm prepare --data {vg/lv} --block.wal {device} --block-db {vg/lv}
+            ceph-volume lvm prepare --data {vg/lv} --block.wal {device} --block.db {vg/lv}
         """)
         parser = prepare_parser(
             prog='ceph-volume lvm prepare',
