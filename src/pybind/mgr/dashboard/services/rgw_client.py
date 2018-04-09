@@ -11,21 +11,64 @@ from .. import mgr, logger
 
 
 def _determine_rgw_addr():
+    """
+    Get a RGW daemon to determine the configured host (IP address) and port.
+    Note, the service id of the RGW daemons may differ depending on the setup.
+    Example 1:
+    {
+        ...
+        'services': {
+            'rgw': {
+                'daemons': {
+                    'summary': '',
+                    '0': {
+                        ...
+                        'metadata': {
+                            'frontend_config#0': 'civetweb port=7280',
+                        }
+                        ...
+                    }
+                }
+            }
+        }
+    }
+    Example 2:
+    {
+        ...
+        'services': {
+            'rgw': {
+                'daemons': {
+                    'summary': '',
+                    'rgw': {
+                        ...
+                        'metadata': {
+                            'frontend_config#0': 'civetweb port=8000',
+                        }
+                        ...
+                    }
+                }
+            }
+        }
+    }
+    """
     service_map = mgr.get('service_map')
+    if not dict_contains_path(service_map, ['services', 'rgw', 'daemons']):
+        raise LookupError('No RGW found.')
+    daemon = None
+    daemons = service_map['services']['rgw']['daemons']
+    for key in daemons.keys():
+        if dict_contains_path(daemons[key], ['metadata', 'frontend_config#0']):
+            daemon = daemons[key]
+            break
+    if daemon is None:
+        raise LookupError('No RGW daemon found.')
 
-    if not dict_contains_path(service_map, ['services', 'rgw', 'daemons', 'rgw']):
-        msg = 'No RGW found.'
-        raise LookupError(msg)
-
-    daemon = service_map['services']['rgw']['daemons']['rgw']
     addr = daemon['addr'].split(':')[0]
-    match = re.search(r'port=(\d+)',
-                      daemon['metadata']['frontend_config#0'])
+    match = re.search(r'port=(\d+)', daemon['metadata']['frontend_config#0'])
     if match:
         port = int(match.group(1))
     else:
-        msg = 'Failed to determine RGW port'
-        raise LookupError(msg)
+        raise LookupError('Failed to determine RGW port')
 
     return addr, port
 
