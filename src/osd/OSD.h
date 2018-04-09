@@ -1840,6 +1840,9 @@ public:
   void dec_num_pgs() {
     --num_pgs;
   }
+  int get_num_pgs() const {
+    return num_pgs;
+  }
 
 protected:
   // -- placement groups --
