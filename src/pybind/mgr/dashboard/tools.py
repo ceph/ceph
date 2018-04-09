@@ -8,10 +8,10 @@ import fnmatch
 import time
 import threading
 import socket
+from six.moves import urllib
 import cherrypy
 
 from . import logger
-from six.moves import urllib
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -673,13 +673,15 @@ def build_url(host, scheme=None, port=None):
 
 def dict_contains_path(dct, keys):
     """
-    Tests wheter the keys exist recursively in `dictionary`.
+    Tests whether the keys exist recursively in `dictionary`.
 
     :type dct: dict
     :type keys: list
     :rtype: bool
     """
     if keys:
+        if not isinstance(dct, dict):
+            return False
         key = keys.pop(0)
         if key in dct:
             dct = dct[key]

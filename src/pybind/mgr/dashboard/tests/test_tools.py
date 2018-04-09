@@ -153,5 +153,4 @@ class TestFunctions(unittest.TestCase):
         self.assertTrue(dict_contains_path(x, ['a', 'b', 'c']))
         self.assertTrue(dict_contains_path(x, ['a']))
         self.assertFalse(dict_contains_path(x, ['a', 'c']))
-
         self.assertTrue(dict_contains_path(x, []))
