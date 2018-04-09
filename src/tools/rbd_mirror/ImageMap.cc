@@ -479,6 +479,7 @@ void ImageMap<I>::shut_down(Context *on_finish) {
 
     if (m_timer_task != nullptr) {
       m_threads->timer->cancel_event(m_timer_task);
+      m_timer_task = nullptr;
     }
   }
 
