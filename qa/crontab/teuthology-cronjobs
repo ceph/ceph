@@ -15,18 +15,18 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 
 
 # Ensure teuthology is up-to-date
-00 * * * *   cd /home/teuthology/src/teuthology_master && /home/teuthology/bin/cron_wrapper git pull
-55 16 * * *  cd /home/teuthology/src/git.ceph.com_ceph_master && /home/teuthology/bin/cron_wrapper git pull
+@daily cd /home/teuthology/src/teuthology_master && /home/teuthology/bin/cron_wrapper git pull
+@daily cd /home/teuthology/src/git.ceph.com_ceph_master && /home/teuthology/bin/cron_wrapper git pull
 # Ensure ceph-sepia-secrets is up-to-date
 */5 * * * *  cd /home/teuthology/ceph-sepia-secrets && /home/teuthology/bin/cron_wrapper git pull
 
 
 #Publish this crontab to the Tracker page http://tracker.ceph.com/projects/ceph-releases/wiki/Crontab
-00 6 * * *  crontab=$(crontab -l | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h3. Crontab ; echo) ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-releases/wiki/sepia.xml?key=$(cat /etc/redmine-key)
+@daily crontab=$(crontab -l | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h3. Crontab ; echo) ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-releases/wiki/sepia.xml?key=$(cat /etc/redmine-key)
 
 ## This is an example only, don't remove !
 ## to see result open http://tracker.ceph.com/projects/ceph-qa-suite/wiki/ceph-ansible
-30 8 * * *  SUITE_NAME=~/src/ceph-qa-suite_master/suites/ceph-ansible; crontab=$(teuthology-describe-tests --show-facet no $SUITE_NAME | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h4. $SUITE_NAME ; echo " "; echo " ") ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-qa-suite/wiki/ceph-ansible.xml?key=$(cat /etc/redmine-key)
+@daily SUITE_NAME=~/src/ceph-qa-suite_master/suites/ceph-ansible; crontab=$(teuthology-describe-tests --show-facet no $SUITE_NAME | perl -p -e 's/</&lt;/g; s/>/&gt;/g; s/&/&amp;/g') ; header=$(echo h4. $SUITE_NAME ; echo " "; echo " ") ; curl --verbose -X PUT --header 'Content-type: application/xml' --data-binary '<?xml version="1.0"?><wiki_page><text>'"$header"'&lt;pre&gt;'"$crontab"'&lt;/pre&gt;</text></wiki_page>' http://tracker.ceph.com/projects/ceph-qa-suite/wiki/ceph-ansible.xml?key=$(cat /etc/redmine-key)
 
 
 ## ********** smoke tests on master branch
@@ -72,8 +72,8 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 55 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s rest -k distro -e $CEPH_QA_EMAIL
 59 03 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=mira;   /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
 05 04 * * 1,6 CEPH_BRANCH=master; MACHINE_NAME=ovh;    /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
-### The suite below must run on bare-metal because it's perfromance suite
-57 03 * * * CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL
+### The suite below must run on bare-metal because it's perfromance suite and run 3 times to produce more data points
+57 03 * * * CEPH_BRANCH=master; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 7 -m $MACHINE_NAME -s perf-basic -k distro -e $CEPH_QA_EMAIL -N 3
 
 
 #********** jewel branch
