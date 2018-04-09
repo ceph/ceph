@@ -1525,7 +1525,7 @@ std::vector<Option> get_global_options() {
     .set_default(30)
     .set_description(""),
 
-    Option("mon_data_size_warn", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_data_size_warn", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(15_G)
     .set_description(""),
 
