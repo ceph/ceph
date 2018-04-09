@@ -3,6 +3,7 @@ tasks:
     mon.a:
     mon.b:
     mon.c:
+    mgr.x:
     osd.0:
     osd.1:
     osd.2:
@@ -11,9 +12,10 @@ tasks:
     osd.5:
     client.0:
 - ceph.restart:
-    daemons: [mon.a, mon.b, mon.c]
+    daemons: [mon.a, mon.b, mon.c, mgr.x]
     wait-for-healthy: false
     wait-for-osds-up: false
+    mon-health-to-clog: false
 - ceph.restart:
     daemons: [osd.0, osd.1, osd.2]
     wait-for-healthy: false

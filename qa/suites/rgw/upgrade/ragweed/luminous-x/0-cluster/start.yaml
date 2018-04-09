@@ -8,6 +8,7 @@ overrides:
     conf:
       mon:
         mon warn on legacy crush tunables: false
+        mon warn on osd down out interval zero: false
     fs: xfs
     log-whitelist:
     - wrongly marked me down
@@ -22,4 +23,5 @@ roles:
 - - osd.3
   - osd.4
   - osd.5
+  - mgr.x
 - - client.0
