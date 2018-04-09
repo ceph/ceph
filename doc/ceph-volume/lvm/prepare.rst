@@ -158,9 +158,8 @@ any data** in the OSD)::
 
 The command line tool will not contact the monitor to generate an OSD ID and
 will format the LVM device in addition to storing the metadata on it so that it
-can later be startednot contact the monitor to generate an OSD ID and will
-format the LVM device in addition to storing the metadata on it so that it can
-later be started (for detailed metadata description see :ref:`ceph-volume-lvm-tags`).
+can be started later (for detailed metadata description see
+:ref:`ceph-volume-lvm-tags`).
 
 
 .. _ceph-volume-lvm-prepare_bluestore:
