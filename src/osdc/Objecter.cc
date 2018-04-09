@@ -4780,8 +4780,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << " not found" << dendl;
     m->put();
     sl.unlock();
-    if (s)
-      s->put();
+    s->put();
     return;
   }
 
@@ -4794,8 +4793,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << dendl;
     m->put();
     sl.unlock();
-    if (s)
-      s->put();
+    s->put();
     return;
   }
   if (c->poutbl) {
@@ -4807,8 +4805,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
 
   _finish_command(c, m->r, m->rs);
   m->put();
-  if (s)
-    s->put();
+  s->put();
 }
 
 void Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
