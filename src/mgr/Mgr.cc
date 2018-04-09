@@ -150,6 +150,44 @@ void Mgr::background_init(Context *completion)
   }));
 }
 
+std::map<std::string, std::string> Mgr::load_store()
+{
+  assert(lock.is_locked_by_me());
+
+  dout(10) << "listing keys" << dendl;
+  JSONCommand cmd;
+  cmd.run(monc, "{\"prefix\": \"config-key ls\"}");
+  lock.Unlock();
+  cmd.wait();
+  lock.Lock();
+  assert(cmd.r == 0);
+
+  std::map<std::string, std::string> loaded;
+  
+  for (auto &key_str : cmd.json_result.get_array()) {
+    std::string const key = key_str.get_str();
+    
+    dout(20) << "saw key '" << key << "'" << dendl;
+
+    const std::string config_prefix = PyModule::config_prefix;
+
+    if (key.substr(0, config_prefix.size()) == config_prefix) {
+      dout(20) << "fetching '" << key << "'" << dendl;
+      Command get_cmd;
+      std::ostringstream cmd_json;
+      cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
+      get_cmd.run(monc, cmd_json.str());
+      lock.Unlock();
+      get_cmd.wait();
+      lock.Lock();
+      assert(get_cmd.r == 0);
+      loaded[key] = get_cmd.outbl.to_str();
+    }
+  }
+
+  return loaded;
+}
+
 void Mgr::init()
 {
   Mutex::Locker l(lock);
@@ -205,21 +243,25 @@ void Mgr::init()
 
   dout(4) << "waiting for config-keys..." << dendl;
 
-  // Preload config keys (`get` for plugins is to be a fast local
-  // operation, we we don't have to synchronize these later because
-  // all sets will come via mgr)
-  auto loaded_config = load_config();
-
   // Wait for MgrDigest...
   dout(4) << "waiting for MgrDigest..." << dendl;
   while (!digest_received) {
     digest_cond.Wait(lock);
   }
 
+  // Load module KV store
+  auto kv_store = load_store();
+
+  // Migrate config from KV store on luminous->mimic
+  // drop lock because we do blocking config sets to mon
+  lock.Unlock();
+  py_module_registry->upgrade_config(monc, kv_store);
+  lock.Lock();
+
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
-  py_module_registry->active_start(loaded_config, daemon_state, cluster_state,
-      *monc, clog, *objecter, *client, finisher);
+  py_module_registry->active_start(daemon_state, cluster_state,
+      kv_store, *monc, clog, *objecter, *client, finisher);
 
   dout(4) << "Complete." << dendl;
   initializing = false;
@@ -315,43 +357,6 @@ void Mgr::load_all_metadata()
   }
 }
 
-PyModuleConfig Mgr::load_config()
-{
-  assert(lock.is_locked_by_me());
-
-  dout(10) << "listing keys" << dendl;
-  JSONCommand cmd;
-  cmd.run(monc, "{\"prefix\": \"config-key ls\"}");
-  lock.Unlock();
-  cmd.wait();
-  lock.Lock();
-  assert(cmd.r == 0);
-
-  PyModuleConfig loaded;
-  
-  for (auto &key_str : cmd.json_result.get_array()) {
-    std::string const key = key_str.get_str();
-    
-    dout(20) << "saw key '" << key << "'" << dendl;
-
-    const std::string config_prefix = PyModuleRegistry::config_prefix;
-
-    if (key.substr(0, config_prefix.size()) == config_prefix) {
-      dout(20) << "fetching '" << key << "'" << dendl;
-      Command get_cmd;
-      std::ostringstream cmd_json;
-      cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
-      get_cmd.run(monc, cmd_json.str());
-      lock.Unlock();
-      get_cmd.wait();
-      lock.Lock();
-      assert(get_cmd.r == 0);
-      loaded.config[key] = get_cmd.outbl.to_str();
-    }
-  }
-
-  return loaded;
-}
 
 void Mgr::shutdown()
 {

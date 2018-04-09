@@ -32,10 +32,9 @@
 
 
 StandbyPyModules::StandbyPyModules(
-    MonClient *monc_, const MgrMap &mgr_map_,
+    const MgrMap &mgr_map_,
     PyModuleConfig &module_config, LogChannelRef clog_)
-    : monc(monc_),
-      state(module_config),
+    : state(module_config),
       clog(clog_)
 {
   state.set_mgr_map(mgr_map_);
@@ -127,7 +126,7 @@ bool StandbyPyModule::get_config(const std::string &key,
   PyThreadState *tstate = PyEval_SaveThread();
   PyEval_RestoreThread(tstate);
 
-  const std::string global_key = PyModuleRegistry::config_prefix
+  const std::string global_key = PyModule::config_prefix
     + get_name() + "/" + key;
 
   dout(4) << __func__ << " key: " << global_key << dendl;
