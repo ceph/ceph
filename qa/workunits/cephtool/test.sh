@@ -547,7 +547,9 @@ function test_tiering_9()
 
 function test_auth()
 {
-  ceph auth add client.xx mon allow osd "allow *"
+  expect_false ceph auth add client.xx mon 'invalid' osd "allow *"
+  expect_false ceph auth add client.xx mon 'allow *' osd "allow *" invalid "allow *"
+  ceph auth add client.xx mon 'allow *' osd "allow *"
   ceph auth export client.xx >client.xx.keyring
   ceph auth add client.xx -i client.xx.keyring
   rm -f client.xx.keyring
@@ -571,7 +573,7 @@ function test_auth()
   expect_false ceph auth get client.xx
 
   # (almost) interactive mode
-  echo -e 'auth add client.xx mon allow osd "allow *"\n' | ceph
+  echo -e 'auth add client.xx mon "allow *" osd "allow *"\n' | ceph
   ceph auth get client.xx
   # script mode
   echo 'auth del client.xx' | ceph
