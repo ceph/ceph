@@ -159,11 +159,13 @@ void PyModuleConfig::set_config(
     JSONFormatter jf;
     jf.open_object_section("cmd");
     if (val) {
-      jf.dump_string("prefix", "config set mgr");
-      jf.dump_string("key", global_key);
-      jf.dump_string("val", *val);
+      jf.dump_string("prefix", "config set");
+      jf.dump_string("who", "mgr");
+      jf.dump_string("name", global_key);
+      jf.dump_string("value", *val);
     } else {
       jf.dump_string("prefix", "config rm");
+      jf.dump_string("name", "mgr");
       jf.dump_string("key", global_key);
     }
     jf.close_section();
