@@ -131,7 +131,7 @@ int MgrStandby::init()
   monc.register_config_callback([this](const std::string &k, const std::string &v){
       dout(10) << "config_callback: " << k << " : " << v << dendl;
       if (k.substr(0, 4) == "mgr/") {
-	const std::string global_key = PyModuleRegistry::config_prefix + k.substr(4);
+	const std::string global_key = PyModule::config_prefix + k.substr(4);
         py_module_registry.handle_config(global_key, v);
 
 	return true;
@@ -400,7 +400,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
       if (!py_module_registry.is_standby_running()) {
-        py_module_registry.standby_start(&monc);
+        py_module_registry.standby_start();
       }
     }
   }

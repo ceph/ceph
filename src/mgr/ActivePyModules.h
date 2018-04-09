@@ -47,6 +47,7 @@ class ActivePyModules
 
 public:
   ActivePyModules(PyModuleConfig &module_config,
+            std::map<std::string, std::string> store_data,
             DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
             LogChannelRef clog_, Objecter &objecter_, Client &client_,
             Finisher &f);

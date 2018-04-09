@@ -19,15 +19,11 @@
 #include "PyOSDMap.h"
 #include "BaseMgrStandbyModule.h"
 #include "Gil.h"
+#include "MgrContext.h"
 
 #include "ActivePyModules.h"
 
 #include "PyModuleRegistry.h"
-
-// definition for non-const static member
-std::string PyModuleRegistry::config_prefix;
-
-
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -40,9 +36,6 @@ std::string PyModuleRegistry::config_prefix;
 void PyModuleRegistry::init()
 {
   Mutex::Locker locker(lock);
-
-  // namespace in config-key prefixed by "mgr/"
-  config_prefix = std::string(g_conf->name.get_type_str()) + "/";
 
   // Set up global python interpreter
 #if PY_MAJOR_VERSION >= 3
@@ -129,7 +122,9 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
   }
 }
 
-void PyModuleRegistry::standby_start(MonClient *monc)
+
+
+void PyModuleRegistry::standby_start()
 {
   Mutex::Locker l(lock);
   assert(active_modules == nullptr);
@@ -142,7 +137,7 @@ void PyModuleRegistry::standby_start(MonClient *monc)
   dout(4) << "Starting modules in standby mode" << dendl;
 
   standby_modules.reset(new StandbyPyModules(
-        monc, mgr_map, module_config, clog));
+        mgr_map, module_config, clog));
 
   std::set<std::string> failed_modules;
   for (const auto &i : modules) {
@@ -173,10 +168,10 @@ void PyModuleRegistry::standby_start(MonClient *monc)
 }
 
 void PyModuleRegistry::active_start(
-            PyModuleConfig &module_config,
-            DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            LogChannelRef clog_, Objecter &objecter_, Client &client_,
-            Finisher &f)
+            DaemonStateIndex &ds, ClusterState &cs,
+            const std::map<std::string, std::string> &kv_store,
+            MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
+            Client &client_, Finisher &f)
 {
   Mutex::Locker locker(lock);
 
@@ -194,7 +189,8 @@ void PyModuleRegistry::active_start(
   }
 
   active_modules.reset(new ActivePyModules(
-              module_config, ds, cs, mc, clog_, objecter_, client_, f));
+              module_config, kv_store, ds, cs, mc,
+              clog_, objecter_, client_, f));
 
   for (const auto &i : modules) {
     // Anything we're skipping because of !can_run will be flagged
@@ -396,6 +392,27 @@ void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
     module_config.config[k] = v;
   } else {
     module_config.config.erase(k);
+  }
+}
+
+void PyModuleRegistry::upgrade_config(
+    MonClient *monc,
+    const std::map<std::string, std::string> &old_config)
+{
+  // Only bother doing anything if we didn't already have
+  // some new-style config.
+  if (module_config.config.empty()) {
+    // Upgrade luminous->mimic: migrate config-key configuration
+    // into main configuration store
+    for(auto &i : old_config) {
+      auto last_slash = i.first.rfind('/');
+      const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
+      const std::string key = i.first.substr(last_slash + 1);
+      module_config.set_config(monc, module_name, key, i.second);
+    }
+  } else {
+    dout(10) << "Module configuration contains "
+             << module_config.config.size() << " keys" << dendl;
   }
 }
 

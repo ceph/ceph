@@ -95,8 +95,6 @@ private:
   mutable Mutex lock{"StandbyPyModules::lock"};
   std::map<std::string, std::unique_ptr<StandbyPyModule>> modules;
 
-  MonClient *monc;
-
   StandbyPyModuleState state;
 
   LogChannelRef clog;
@@ -104,7 +102,6 @@ private:
 public:
 
   StandbyPyModules(
-      MonClient *monc_,
       const MgrMap &mgr_map_,
       PyModuleConfig &module_config,
       LogChannelRef clog_);

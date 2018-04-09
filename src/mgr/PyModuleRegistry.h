@@ -59,8 +59,6 @@ private:
   PyModuleConfig module_config;
 
 public:
-  static std::string config_prefix;
-
   void handle_config(const std::string &k, const std::string &v);
 
   /**
@@ -89,13 +87,16 @@ public:
 
   void init();
 
+  void upgrade_config(
+      MonClient *monc,
+      const std::map<std::string, std::string> &old_config);
+
   void active_start(
-                PyModuleConfig &module_config,
-                DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-                LogChannelRef clog_, Objecter &objecter_, Client &client_,
-                Finisher &f);
-  void standby_start(
-      MonClient *monc);
+                DaemonStateIndex &ds, ClusterState &cs,
+                const std::map<std::string, std::string> &kv_store,
+                MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
+                Client &client_, Finisher &f);
+  void standby_start();
 
   bool is_standby_running() const
   {

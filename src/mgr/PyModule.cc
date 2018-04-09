@@ -14,6 +14,7 @@
 #include "BaseMgrModule.h"
 #include "BaseMgrStandbyModule.h"
 #include "PyOSDMap.h"
+#include "MgrContext.h"
 
 #include "PyModule.h"
 
@@ -23,6 +24,9 @@
 
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
+
+// definition for non-const static member
+std::string PyModule::config_prefix = "mgr/";
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
 #include <boost/python.hpp>
@@ -130,6 +134,50 @@ PyModuleConfig::PyModuleConfig(PyModuleConfig &mconfig)
 {}
 
 PyModuleConfig::~PyModuleConfig() = default;
+
+
+void PyModuleConfig::set_config(
+    MonClient *monc,
+    const std::string &module_name,
+    const std::string &key, const boost::optional<std::string>& val)
+{
+  const std::string global_key = PyModule::config_prefix
+                                   + module_name + "/" + key;
+  {
+    Mutex::Locker l(lock);
+
+    if (val) {
+      config[global_key] = *val;
+    } else {
+      config.erase(global_key);
+    }
+  }
+
+  Command set_cmd;
+  {
+    std::ostringstream cmd_json;
+    JSONFormatter jf;
+    jf.open_object_section("cmd");
+    if (val) {
+      jf.dump_string("prefix", "config set mgr");
+      jf.dump_string("key", global_key);
+      jf.dump_string("val", *val);
+    } else {
+      jf.dump_string("prefix", "config rm");
+      jf.dump_string("key", global_key);
+    }
+    jf.close_section();
+    jf.flush(cmd_json);
+    set_cmd.run(monc, cmd_json.str());
+  }
+  set_cmd.wait();
+
+  if (set_cmd.r != 0) {
+    dout(0) << "`config set mgr" << global_key << " " << val << "` failed: "
+      << cpp_strerror(set_cmd.r) << dendl;
+    dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
+  }
+}
 
 std::string PyModule::get_site_packages()
 {
