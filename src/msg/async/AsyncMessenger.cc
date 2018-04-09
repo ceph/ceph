@@ -153,6 +153,10 @@ void Processor::start()
 
   // start thread
   if (listen_socket) {
+    if (listen_socket.fd() == -1) {
+      ldout(msgr->cct, 1) << __func__ << " Erro: processor restart after listen_socket.fd closed. " << this << dendl;
+      return;
+    }
     worker->center.submit_to(worker->center.get_id(), [this]() {
       worker->center.create_file_event(listen_socket.fd(), EVENT_READABLE, listen_handler); }, false);
   }
