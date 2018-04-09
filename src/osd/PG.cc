@@ -5828,6 +5828,7 @@ void PG::start_peering_interval(
   pg_shard_t old_acting_primary = get_primary();
   pg_shard_t old_up_primary = up_primary;
   bool was_old_primary = is_primary();
+  bool was_old_replica = is_replica();
 
   acting.swap(oldacting);
   up.swap(oldup);
@@ -5947,8 +5948,10 @@ void PG::start_peering_interval(
   acting_recovery_backfill.clear();
   scrub_queued = false;
 
-  // reset primary state?
+  // reset primary/replica state?
   if (was_old_primary || is_primary()) {
+    osd->remove_want_pg_temp(info.pgid.pgid);
+  } else if (was_old_replica || is_replica()) {
     osd->remove_want_pg_temp(info.pgid.pgid);
   }
   clear_primary_state();
