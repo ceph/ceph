@@ -807,6 +807,11 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
+    if (!valid_caps(caps_vec, &ss)) {
+      err = -EINVAL;
+      goto done;
+    }
+
     // are we about to have it?
     for (vector<Incremental>::iterator p = pending_auth.begin();
         p != pending_auth.end();
@@ -907,7 +912,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 						   get_last_committed() + 1));
     return true;
   } else if ((prefix == "auth get-or-create-key" ||
-	     prefix == "auth get-or-create") &&
+	      prefix == "auth get-or-create") &&
 	     !entity_name.empty()) {
     // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
 
