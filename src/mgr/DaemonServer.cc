@@ -339,19 +339,25 @@ void DaemonServer::shutdown()
   dout(10) << "done" << dendl;
 }
 
-
+static DaemonKey key_from_service(
+  const std::string& service_name,
+  int peer_type,
+  const std::string& daemon_name)
+{
+  if (!service_name.empty()) {
+    return DaemonKey(service_name, daemon_name);
+  } else {
+    return DaemonKey(ceph_entity_type_name(peer_type), daemon_name);
+  }
+}
 
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
   Mutex::Locker l(lock);
 
-  DaemonKey key;
-  if (!m->service_name.empty()) {
-    key.first = m->service_name;
-  } else {
-    key.first = ceph_entity_type_name(m->get_connection()->get_peer_type());
-  }
-  key.second = m->daemon_name;
+  DaemonKey key = key_from_service(m->service_name,
+				   m->get_connection()->get_peer_type(),
+				   m->daemon_name);
 
   dout(4) << "from " << m->get_connection() << "  " << key << dendl;
 
@@ -424,14 +430,9 @@ bool DaemonServer::handle_close(MMgrClose *m)
 {
   Mutex::Locker l(lock);
 
-  DaemonKey key;
-  if (!m->service_name.empty()) {
-    key.first = m->service_name;
-  } else {
-    key.first = ceph_entity_type_name(m->get_connection()->get_peer_type());
-  }
-  key.second = m->daemon_name;
-
+  DaemonKey key = key_from_service(m->service_name,
+				   m->get_connection()->get_peer_type(),
+				   m->daemon_name);
   dout(4) << "from " << m->get_connection() << "  " << key << dendl;
 
   if (daemon_state.exists(key)) {
