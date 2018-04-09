@@ -550,8 +550,7 @@ void AsyncConnection::process()
           // read front
           unsigned front_len = current_header.front_len;
           if (front_len) {
-            if (!front.length())
-              front.push_back(buffer::create(front_len));
+	     front.push_back(buffer::create(front_len));
 
             r = read_until(front_len, front.c_str());
             if (r < 0) {
@@ -571,8 +570,7 @@ void AsyncConnection::process()
           // read middle
           unsigned middle_len = current_header.middle_len;
           if (middle_len) {
-            if (!middle.length())
-              middle.push_back(buffer::create(middle_len));
+	     middle.push_back(buffer::create(middle_len));
 
             r = read_until(middle_len, middle.c_str());
             if (r < 0) {
