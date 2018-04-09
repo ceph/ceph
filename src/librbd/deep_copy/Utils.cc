@@ -16,16 +16,11 @@ void compute_snap_map(librados::snap_t snap_id_start,
     snap_ids.insert(snap_ids.begin(), it.second);
     if (it.first < snap_id_start) {
       continue;
-    } else if (snap_id_end != CEPH_NOSNAP && it.first > snap_id_end) {
+    } else if (it.first > snap_id_end) {
       break;
     }
 
     (*snap_map)[it.first] = snap_ids;
-  }
-
-  if (snap_id_end == CEPH_NOSNAP) {
-    snap_ids.insert(snap_ids.begin(), CEPH_NOSNAP);
-    (*snap_map)[CEPH_NOSNAP] = snap_ids;
   }
 }
 
