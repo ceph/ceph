@@ -1052,6 +1052,12 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     goto done;
   }
 
+  //if capability strings are malformed, return with error msg.
+  if (!valid_caps(caps_vec, &ss)) {
+    err = -EINVAL;
+    goto done;
+  }
+    
   cmd_getval(g_ceph_context, cmdmap, "entity", entity_name);
   if (!entity_name.empty() && !entity.from_str(entity_name)) {
     ss << "bad entity name";
@@ -1184,11 +1190,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	     prefix == "auth get-or-create") &&
 	     !entity_name.empty()) {
     // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
-
-    if (!valid_caps(caps_vec, &ss)) {
-      err = -EINVAL;
-      goto done;
-    }
 
     // Parse the list of caps into a map
     std::map<std::string, bufferlist> wanted_caps;
