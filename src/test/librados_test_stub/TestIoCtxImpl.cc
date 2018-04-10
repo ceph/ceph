@@ -136,7 +136,7 @@ int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
     m_client->get_aio_finisher()->queue(ctx, -EBLACKLISTED);
   } else {
     m_client->get_watch_notify()->aio_watch(m_client, o, get_instance_id(),
-                                            handle, watch_ctx, ctx);
+                                            handle, nullptr, watch_ctx, ctx);
   }
   return 0;
 }
