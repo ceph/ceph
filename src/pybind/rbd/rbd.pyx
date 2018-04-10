@@ -291,6 +291,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
     int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
                                   size_t prefix_len)
+    int64_t rbd_get_data_pool_id(rbd_image_t image)
     int rbd_get_parent_info2(rbd_image_t image,
                              char *parent_poolname, size_t ppoolnamelen,
                              char *parent_name, size_t pnamelen,
@@ -678,7 +679,9 @@ def cstr(val, name, encoding="utf-8", opt=False):
         return None
     if isinstance(val, bytes):
         return val
-    elif isinstance(val, unicode):
+    elif isinstance(val, str):
+        return val.encode(encoding)
+    elif sys.version_info < (3, 0) and isinstance(val, unicode):
         return val.encode(encoding)
     else:
         raise InvalidArgument('%s must be a string' % name)
@@ -863,6 +866,7 @@ class RBD(object):
         :raises: :class:`FunctionNotSupported`
         """
         name = cstr(name, 'name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_name = name
@@ -946,6 +950,7 @@ class RBD(object):
         p_snapname = cstr(p_snapname, 'p_snapname')
         p_name = cstr(p_name, 'p_name')
         c_name = cstr(c_name, 'c_name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _p_ioctx = convert_ioctx(p_ioctx)
             rados_ioctx_t _c_ioctx = convert_ioctx(c_ioctx)
@@ -1136,8 +1141,8 @@ class RBD(object):
             'id'          : decode_cstr(c_info.id),
             'name'        : decode_cstr(c_info.name),
             'source'      : __source_string[c_info.source],
-            'deletion_time' : datetime.fromtimestamp(c_info.deletion_time),
-            'deferment_end_time' : datetime.fromtimestamp(c_info.deferment_end_time)
+            'deletion_time' : datetime.utcfromtimestamp(c_info.deletion_time),
+            'deferment_end_time' : datetime.utcfromtimestamp(c_info.deferment_end_time)
             }
         rbd_trash_get_cleanup(&c_info)
         return info
@@ -1543,7 +1548,7 @@ cdef class MirrorImageStatusIterator(object):
                         },
                     'state'       : self.images[i].state,
                     'description' : decode_cstr(self.images[i].description),
-                    'last_update' : datetime.fromtimestamp(self.images[i].last_update),
+                    'last_update' : datetime.utcfromtimestamp(self.images[i].last_update),
                     'up'          : self.images[i].up,
                     }
             if self.size < self.max_read:
@@ -1991,6 +1996,14 @@ cdef class Image(object):
         finally:
             free(prefix)
 
+    def data_pool_id(self):
+        """
+        Get the pool id of the pool where the data of this RBD image is stored.
+
+        :returns: int - the pool id
+        """
+        return rbd_get_data_pool_id(self.image)
+
     def parent_info(self):
         """
         Get information about a cloned image's parent (if any)
@@ -2215,6 +2228,7 @@ cdef class Image(object):
         :raises: :class:`ArgumentOutOfRange`
         """
         dest_name = cstr(dest_name, 'dest_name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
             char *_dest_name = dest_name
@@ -2270,6 +2284,7 @@ cdef class Image(object):
         :raises: :class:`ArgumentOutOfRange`
         """
         dest_name = cstr(dest_name, 'dest_name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
             char *_dest_name = dest_name
@@ -2484,7 +2499,7 @@ cdef class Image(object):
             ret = rbd_snap_get_timestamp(self.image, _snap_id, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting snapshot timestamp for image: %s, snap_id: %d' % (self.name, snap_id))
-        return datetime.fromtimestamp(timestamp.tv_sec)
+        return datetime.utcfromtimestamp(timestamp.tv_sec)
 
     def remove_snap_limit(self):
         """
@@ -2730,7 +2745,7 @@ written." % (self.name, ret, length))
             ret = rbd_get_create_timestamp(self.image, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting create timestamp for image: %s' % (self.name))
-        return datetime.fromtimestamp(timestamp.tv_sec)
+        return datetime.utcfromtimestamp(timestamp.tv_sec)
 
     def flatten(self):
         """
@@ -3066,7 +3081,7 @@ written." % (self.name, ret, length))
                 },
             'state'       : c_status.state,
             'description' : decode_cstr(c_status.description),
-            'last_update' : datetime.fromtimestamp(c_status.last_update),
+            'last_update' : datetime.utcfromtimestamp(c_status.last_update),
             'up'          : c_status.up,
             }
         free(c_status.name)
@@ -3557,8 +3572,8 @@ cdef class TrashIterator(object):
                 'id'          : decode_cstr(self.entries[i].id),
                 'name'        : decode_cstr(self.entries[i].name),
                 'source'      : TrashIterator.__source_string[self.entries[i].source],
-                'deletion_time' : datetime.fromtimestamp(self.entries[i].deletion_time),
-                'deferment_end_time' : datetime.fromtimestamp(self.entries[i].deferment_end_time)
+                'deletion_time' : datetime.utcfromtimestamp(self.entries[i].deletion_time),
+                'deferment_end_time' : datetime.utcfromtimestamp(self.entries[i].deferment_end_time)
                 }
 
     def __dealloc__(self):
