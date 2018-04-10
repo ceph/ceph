@@ -13953,7 +13953,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   bool requeued = false;
   // Let delay play out
   if (agent_state->delaying) {
-    dout(20) << __func__ << this << " delaying, ignored" << dendl;
+    dout(20) << __func__ << " " << this << " delaying, ignored" << dendl;
     return requeued;
   }
 

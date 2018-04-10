@@ -3674,7 +3674,7 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
   shared_lock rl(rwlock);
   list_context->pos = hobject_t(object_t(), string(), CEPH_NOSNAP,
 				pos, list_context->pool_id, string());
-  ldout(cct, 10) << __func__ << list_context
+  ldout(cct, 10) << __func__ << " " << list_context
 		 << " pos " << pos << " -> " << list_context->pos << dendl;
   pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
   list_context->current_pg = actual.ps();

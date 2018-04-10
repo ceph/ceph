@@ -866,9 +866,9 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
     switch (m->get_type()) {
     case 43:
     // case 15:
-      ldout(cct,4) << __func__ << "stop 43 " << m->get_type() << " " << *m << dendl;
+      ldout(cct,4) << __func__ << " stop 43 " << m->get_type() << " " << *m << dendl;
       buffer::list &payload = m->get_payload();
-      ldout(cct,4) << __func__ << "payload dump:" << dendl;
+      ldout(cct,4) << __func__ << " payload dump:" << dendl;
       payload.hexdump(cout);
     }
   }

@@ -170,7 +170,7 @@ bool StandbyPyModule::get_config(const std::string &key,
   const std::string global_key = PyModuleRegistry::config_prefix
     + get_name() + "/" + key;
 
-  dout(4) << __func__ << "key: " << global_key << dendl;
+  dout(4) << __func__ << " key: " << global_key << dendl;
 
   return state.with_config([global_key, value](const PyModuleConfig &config){
     if (config.count(global_key)) {

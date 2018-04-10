@@ -562,7 +562,7 @@ int DPDKDevice::check_port_link_status()
         ldout(cct, 20) << __func__ << " not ready, continue to wait." << dendl;
         usleep(sleep_time);
       } else {
-        lderr(cct) << __func__ << "done port " << _port_idx << " link down" << dendl;
+        lderr(cct) << __func__ << " done port " << _port_idx << " link down" << dendl;
         return -1;
       }
     }
