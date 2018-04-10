@@ -163,7 +163,7 @@ void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
 
 void JSONFormatter::print_quoted_string(std::string_view s)
 {
-  m_ss << '\"' << json_stream_escaper(s.data()) << '\"';
+  m_ss << '\"' << json_stream_escaper(s) << '\"';
 }
 
 void JSONFormatter::print_name(const char *name)
@@ -447,7 +447,7 @@ void XMLFormatter::dump_string(const char *name, std::string_view s)
       [this](char c) { return this->to_lower_underscore(c); });
 
   print_spaces();
-  m_ss << "<" << e << ">" << xml_stream_escaper(s.data()) << "</" << e << ">";
+  m_ss << "<" << e << ">" << xml_stream_escaper(s) << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
 }
@@ -461,7 +461,7 @@ void XMLFormatter::dump_string_with_attrs(const char *name, std::string_view s, 
   std::string attrs_str;
   get_attrs_str(&attrs, attrs_str);
   print_spaces();
-  m_ss << "<" << e << attrs_str << ">" << xml_stream_escaper(s.data()) << "</" << e << ">";
+  m_ss << "<" << e << attrs_str << ">" << xml_stream_escaper(s) << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
 }
@@ -477,7 +477,7 @@ std::ostream& XMLFormatter::dump_stream(const char *name)
 void XMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted, const char *fmt, va_list ap)
 {
   char buf[LARGE_SIZE];
-  vsnprintf(buf, LARGE_SIZE, fmt, ap);
+  size_t len = vsnprintf(buf, LARGE_SIZE, fmt, ap);
   std::string e(name);
   std::transform(e.begin(), e.end(), e.begin(),
       [this](char c) { return this->to_lower_underscore(c); });
@@ -486,7 +486,7 @@ void XMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted,
   if (ns) {
     m_ss << "<" << e << " xmlns=\"" << ns << "\">" << buf << "</" << e << ">";
   } else {
-    m_ss << "<" << e << ">" << xml_stream_escaper(buf) << "</" << e << ">";
+    m_ss << "<" << e << ">" << xml_stream_escaper(std::string_view(buf, len)) << "</" << e << ">";
   }
 
   if (m_pretty)
