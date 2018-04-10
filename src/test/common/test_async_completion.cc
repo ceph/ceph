@@ -43,7 +43,7 @@ TEST(AsyncCompletion, BindHandler)
   auto b2 = bind_handler(std::move(h2), move_only{});
   std::move(b2)();
 
-  // references bound with std::ref() and passed to all operator() overloads
+  // references bound with std::ref() can be passed to all operator() overloads
   auto h3 = [] (int& c) { c++; };
   int count = 0;
   auto b3 = bind_handler(std::move(h3), std::ref(count));
@@ -57,12 +57,22 @@ TEST(AsyncCompletion, BindHandler)
   EXPECT_EQ(3, count);
 }
 
+TEST(AsyncCompletion, ForwardHandler)
+{
+  // move-only types can be forwarded with 'operator() &'
+  auto h = [] (move_only&& m) {};
+  auto b = bind_handler(std::move(h), move_only{});
+  auto f = forward_handler(std::move(b));
+  f();
+}
+
 TEST(AsyncCompletion, MoveOnly)
 {
   boost::asio::io_context context;
   auto ex1 = context.get_executor();
 
-  std::optional<error_code> ec1, ec2;
+  std::optional<error_code> ec1, ec2, ec3;
+  std::optional<move_only> arg3;
   {
     // move-only user data
     using Completion = Completion<void(error_code), move_only>;
@@ -77,6 +87,16 @@ TEST(AsyncCompletion, MoveOnly)
     Completion::post(std::move(c), boost::asio::error::operation_aborted);
     EXPECT_FALSE(ec2);
   }
+  {
+    // move-only arg in signature
+    using Completion = Completion<void(error_code, move_only)>;
+    auto c = Completion::create(ex1, [&] (error_code ec, move_only m) {
+        ec3 = ec;
+        arg3 = std::move(m);
+      });
+    Completion::post(std::move(c), boost::asio::error::operation_aborted, move_only{});
+    EXPECT_FALSE(ec3);
+  }
 
   context.poll();
   EXPECT_TRUE(context.stopped());
@@ -85,6 +105,9 @@ TEST(AsyncCompletion, MoveOnly)
   EXPECT_EQ(boost::asio::error::operation_aborted, *ec1);
   ASSERT_TRUE(ec2);
   EXPECT_EQ(boost::asio::error::operation_aborted, *ec2);
+  ASSERT_TRUE(ec3);
+  EXPECT_EQ(boost::asio::error::operation_aborted, *ec3);
+  ASSERT_TRUE(arg3);
 }
 
 TEST(AsyncCompletion, VoidCompletion)
