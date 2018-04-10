@@ -533,16 +533,22 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
     else:
         return -errno.EINVAL, '', 'invalid command'
 
+    next_header_print = 0
+    # Set extra options for polling commands only:
+    if valid_dict.get('poll', False):
+        valid_dict['width'] = Termsize().cols
     while True:
         try:
-            if next_header_print == 0:
+            # Only print the header for polling commands
+            if next_header_print == 0 and valid_dict.get('poll', False):
                 valid_dict['print_header'] = True
                 next_header_print = Termsize().rows - 3
             next_header_print -= 1
             ret, outbuf, outs = json_command(cluster_handle, target=target,
                 argdict=valid_dict, inbuf=inbuf)
-            valid_dict['print_header'] = False
-            if 'poll' not in valid_dict or not valid_dict['poll']:
+            if valid_dict.get('poll', False):
+                valid_dict['print_header'] = False
+            if not valid_dict.get('poll', False):
                 # Don't print here if it's not a polling command
                 break
             if ret:
