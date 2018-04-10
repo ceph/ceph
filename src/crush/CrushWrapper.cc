@@ -3310,7 +3310,8 @@ int CrushWrapper::try_remap_rule(
 	if (numrep <= 0)
 	  numrep += maxout;
 	type_stack.push_back(make_pair(type, numrep));
-	type_stack.push_back(make_pair(0, 1));
+        if (type > 0)
+	  type_stack.push_back(make_pair(0, 1));
 	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
 				   i, used, &w);
 	if (r < 0)
