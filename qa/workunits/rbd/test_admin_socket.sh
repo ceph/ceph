@@ -112,8 +112,6 @@ function rbd_watch_end()
        $(rbd_watch_out_file ${image}) $(rbd_watch_asok ${image})
 }
 
-wait_for_clean
-
 pool="rbd"
 image=testimg$$
 ceph_admin="ceph --admin-daemon $(rbd_watch_asok ${image})"
