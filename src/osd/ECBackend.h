@@ -386,6 +386,7 @@ public:
 
     ZTracer::Trace trace;
 
+    map<hobject_t, set<int>> want_to_read;
     map<hobject_t, read_request_t> to_read;
     map<hobject_t, read_result_t> complete;
 
@@ -402,9 +403,11 @@ public:
       bool do_redundant_reads,
       bool for_recovery,
       OpRequestRef op,
+      map<hobject_t, set<int>> &&_want_to_read,
       map<hobject_t, read_request_t> &&_to_read)
       : priority(priority), tid(tid), op(op), do_redundant_reads(do_redundant_reads),
-	for_recovery(for_recovery), to_read(std::move(_to_read)) {
+	for_recovery(for_recovery), want_to_read(std::move(_want_to_read)),
+	to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {
 	auto &returned = complete[hpair.first].returned;
 	for (auto &&extent: hpair.second.to_read) {
@@ -430,6 +433,7 @@ public:
   map<pg_shard_t, set<ceph_tid_t> > shard_to_read_map;
   void start_read_op(
     int priority,
+    map<hobject_t, set<int>> &want_to_read,
     map<hobject_t, read_request_t> &to_read,
     OpRequestRef op,
     bool do_redundant_reads, bool for_recovery);
