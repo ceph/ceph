@@ -32,8 +32,8 @@
 
 @import 'defaults';
 
-$fa-font-path: "../node_modules/font-awesome/fonts";
-@import "../node_modules/font-awesome/scss/font-awesome";
+$fa-font-path: "../node_modules/fork-awesome/fonts";
+@import "../node_modules/fork-awesome/scss/fork-awesome";
 
 /* Basics */
 html {
@@ -141,7 +141,7 @@ option {
 .breadcrumb>li+li:before {
   padding: 0 5px 0 7px;
   color: #474544;
-  font-family: "FontAwesome";
+  font-family: "ForkAwesome";
   content: "\f101";
 }
 .breadcrumb>li>span {
