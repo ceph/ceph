@@ -254,14 +254,17 @@ struct OnRecoveryReadComplete :
 struct RecoveryMessages {
   map<hobject_t,
       ECBackend::read_request_t> reads;
+  map<hobject_t, set<int>> want_to_read;
   void read(
     ECBackend *ec,
     const hobject_t &hoid, uint64_t off, uint64_t len,
+    set<int> &&_want_to_read,
     const map<pg_shard_t, vector<pair<int, int>>> &need,
     bool attrs) {
     list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     to_read.push_back(boost::make_tuple(off, len, 0));
     assert(!reads.count(hoid));
+    want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
     reads.insert(
       make_pair(
 	hoid,
@@ -526,6 +529,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     return;
   start_read_op(
     priority,
+    m.want_to_read,
     m.reads,
     OpRequestRef(),
     false, true);
@@ -571,6 +575,7 @@ void ECBackend::continue_recovery_op(
 	op.hoid,
 	op.recovery_progress.data_recovered_to,
 	amount,
+	std::move(want),
 	to_read,
 	op.recovery_progress.first && !op.obc);
       op.extent_requested = make_pair(
@@ -1580,6 +1585,7 @@ int ECBackend::get_remaining_shards(
 
 void ECBackend::start_read_op(
   int priority,
+  map<hobject_t, set<int>> &want_to_read,
   map<hobject_t, read_request_t> &to_read,
   OpRequestRef _op,
   bool do_redundant_reads,
@@ -1595,6 +1601,7 @@ void ECBackend::start_read_op(
       do_redundant_reads,
       for_recovery,
       _op,
+      std::move(want_to_read),
       std::move(to_read))).first->second;
   dout(10) << __func__ << ": starting " << op << dendl;
   if (_op) {
@@ -2242,6 +2249,7 @@ void ECBackend::objects_read_and_reconstruct(
     return;
   }
 
+  map<hobject_t, set<int>> obj_want_to_read;
   set<int> want_to_read;
   get_want_to_read_shards(&want_to_read);
     
@@ -2269,10 +2277,12 @@ void ECBackend::objects_read_and_reconstruct(
 	  shards,
 	  false,
 	  c)));
+    obj_want_to_read.insert(make_pair(to_read.first, want_to_read));
   }
 
   start_read_op(
     CEPH_MSG_PRIO_DEFAULT,
+    obj_want_to_read,
     for_read_op,
     OpRequestRef(),
     fast_read, false);
