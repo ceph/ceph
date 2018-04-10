@@ -2,9 +2,12 @@
 import time
 import requests
 import errno
+import logging
 from teuthology.exceptions import CommandFailedError
 
 from tasks.mgr.mgr_test_case import MgrTestCase
+
+log = logging.getLogger(__name__)
 
 
 class TestModuleSelftest(MgrTestCase):
@@ -48,6 +51,111 @@ class TestModuleSelftest(MgrTestCase):
     def test_selftest_run(self):
         self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "self-test", "run")
+
+    def test_selftest_config_update(self):
+        """
+        That configuration updates are seen by running mgr modules
+        """
+        self._load_module("selftest")
+
+        def get_value():
+            return self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "mgr", "self-test", "config", "get", "testkey").strip()
+
+        self.assertEqual(get_value(), "None")
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("config", "set",
+                "mgr", "mgr/selftest/testkey", "testvalue")
+
+        self.wait_until_equal(get_value, "testvalue",timeout=10)
+
+        active_id = self.mgr_cluster.get_active_id()
+
+        def get_localized_value():
+            return self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "mgr", "self-test", "config", "get_localized", "testlkey").strip()
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("config", "set",
+                "mgr", "mgr/selftest/{0}/testlkey".format(active_id),
+                "test localized value")
+
+        self.wait_until_equal(get_localized_value, "test localized value",
+                              timeout=10)
+
+    def test_selftest_config_upgrade(self):
+        """
+        That pre-mimic config-key config settings are migrated into
+        mimic-style config settings and visible from mgr modules.
+        """
+        self._load_module("selftest")
+
+        def get_value():
+            return self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "mgr", "self-test", "config", "get", "testkey").strip()
+
+        def get_config():
+            lines = self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "config", "dump")\
+                            .strip().split("\n")
+            result = []
+            for line in lines[1:]:
+                tokens = line.strip().split()
+                log.info("tokens: {0}".format(tokens))
+                subsys, key, value = tokens[0], tokens[2], tokens[3]
+                result.append((subsys, key, value))
+
+            return result
+
+        # Stop ceph-mgr while we synthetically create a pre-mimic
+        # configuration scenario
+        for mgr_id in self.mgr_cluster.mgr_daemons.keys():
+            self.mgr_cluster.mgr_stop(mgr_id)
+            self.mgr_cluster.mgr_fail(mgr_id)
+
+        # Blow away any modern-style mgr module config options
+        # (the ceph-mgr implementation may only do the upgrade if
+        #  it doesn't see new style options)
+        stash = []
+        for subsys, key, value in get_config():
+            if subsys == "mgr" and key.startswith("mgr/"):
+                log.info("Removing config key {0} ahead of upgrade".format(
+                    key))
+                self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                        "config", "rm", subsys, key)
+                stash.append((subsys, key, value))
+
+        # Inject an old-style configuration setting in config-key
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "config-key", "set", "mgr/selftest/testkey", "testvalue")
+
+        # Inject configuration settings that looks data-ish and should
+        # not be migrated to a config key
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "config-key", "set", "mgr/selftest/testnewline", "foo\nbar")
+
+        # Bring mgr daemons back online, the one that goes active
+        # should be doing the upgrade.
+        for mgr_id in self.mgr_cluster.mgr_daemons.keys():
+            self.mgr_cluster.mgr_restart(mgr_id)
+
+        # Wait for a new active 
+        self.wait_until_true(
+                lambda: self.mgr_cluster.get_active_id() != "", timeout=30)
+
+        # Check that the selftest module sees the upgraded value
+        self.assertEqual(get_value(), "testvalue")
+
+        # Check that the upgraded value is visible in the configuration
+        seen_keys = [k for s,k,v in get_config()]
+        self.assertIn("mgr/selftest/testkey", seen_keys)
+
+        # And that the non-config-looking one isn't
+        self.assertNotIn("mgr/selftest/testnewline", seen_keys)
+
+        # Restore previous configuration
+        for subsys, key, value in stash:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    "config", "set", subsys, key, value)
 
     def test_selftest_command_spam(self):
         # Use the selftest module to stress the mgr daemon
