@@ -351,17 +351,17 @@ class RESTController(BaseController):
 
     """
 
-    _method_mapping = {
-        ('GET', False): ('list', 200),
-        ('PUT', False): ('bulk_set', 200),
-        ('PATCH', False): ('bulk_set', 200),
-        ('POST', False): ('create', 201),
-        ('DELETE', False): ('bulk_delete', 204),
-        ('GET', True): ('get', 200),
-        ('PUT', True): ('set', 200),
-        ('PATCH', True): ('set', 200),
-        ('DELETE', True): ('delete', 204),
-    }
+    _method_mapping = collections.OrderedDict([
+        (('GET', False), ('list', 200)),
+        (('PUT', False), ('bulk_set', 200)),
+        (('PATCH', False), ('bulk_set', 200)),
+        (('POST', False), ('create', 201)),
+        (('DELETE', False), ('bulk_delete', 204)),
+        (('GET', True), ('get', 200)),
+        (('PUT', True), ('set', 200)),
+        (('PATCH', True), ('set', 200)),
+        (('DELETE', True), ('delete', 204)),
+    ])
 
     @classmethod
     def endpoints(cls):
@@ -453,7 +453,8 @@ class RESTController(BaseController):
                 kwargs.update(data.items())
                 return func(*args, **kwargs)
 
-            return func(data, *args, **kwargs)
+            kwargs['data'] = data
+            return func(*args, **kwargs)
         return inner
 
     @staticmethod
