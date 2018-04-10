@@ -41,6 +41,10 @@
     enabled by default. ceph fs set allow_dirfrags is now deprecated and
     will be removed in a future release.
 
+  * MDS daemons now activate and deactivate based on the value of
+    max_mds. Accordingly, ceph mds deactivate has been deprecated as it
+    is now redundant.
+
   * New CephFS file system attributes session_timeout and session_autoclose
     are configurable via `ceph fs set`. The MDS config options
     mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now

@@ -1295,38 +1295,7 @@ int MDSMonitor::filesystem_command(
   auto &pending = get_pending_fsmap_writeable();
 
   if (prefix == "mds deactivate") {
-    mds_role_t role;
-    r = parse_role(whostr, &role, ss);
-    if (r < 0 ) {
-      return r;
-    }
-    const auto &fs = pending.get_filesystem(role.fscid);
-
-    if (!fs->mds_map.is_active(role.rank)) {
-      r = -EEXIST;
-      ss << "mds." << role << " not active (" 
-	 << ceph_mds_state_name(fs->mds_map.get_state(role.rank)) << ")";
-    } else if (fs->mds_map.get_root() == role.rank ||
-		fs->mds_map.get_tableserver() == role.rank) {
-      r = -EINVAL;
-      ss << "can't tell the root (" << fs->mds_map.get_root()
-	 << ") or tableserver (" << fs->mds_map.get_tableserver()
-	 << ") to deactivate";
-    } else if (role.rank != fs->mds_map.get_last_in_mds()) {
-      r = -EINVAL;
-      ss << "mds." << role << " doesn't have the max rank ("
-	 << fs->mds_map.get_last_in_mds() << ")";
-    } else if (fs->mds_map.get_num_in_mds() <= size_t(fs->mds_map.get_max_mds())) {
-      r = -EBUSY;
-      ss << "must decrease max_mds or else MDS will immediately reactivate";
-    } else {
-      r = 0;
-      mds_gid_t gid = fs->mds_map.up.at(role.rank);
-      ss << "telling mds." << role << " "
-      pending.modify_daemon(gid, [](MDSMap::mds_info_t *info) {
-        info->state = MDSMap::STATE_STOPPING;
-      });
-    }
+    ss << "This command is deprecated because it is obsolete; to deactivate one or more MDS, decrease max_mds appropriately (ceph fs set <fsname> max_mds)";
   } else if (prefix == "mds set_state") {
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
