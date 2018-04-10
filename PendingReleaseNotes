@@ -165,3 +165,8 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
     has an error.  This head object is there to show the snapset that was used in
     determining errors.
 
+
+* The config-key interface can store arbitrary binary blobs but JSON
+  can only express printable strings.  If binary blobs are present,
+  the 'ceph config-key dump' command will show them as something like
+  ``<<< binary blob of length N >>>``.
