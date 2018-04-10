@@ -13,13 +13,12 @@ int main(int argc, const char **argv)
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  TableTool tt;
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
   if (ceph_argparse_need_usage(args)) {
-    tt.usage();
+    TableTool::usage();
     exit(0);
   }
 
@@ -27,6 +26,7 @@ int main(int argc, const char **argv)
                          CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
+  TableTool tt;
 
   // Connect to mon cluster, download MDS map etc
   int rc = tt.init();
