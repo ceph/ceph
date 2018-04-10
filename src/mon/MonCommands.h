@@ -306,9 +306,9 @@ COMMAND("mds compat show", "show mds compatibility settings", \
 	"mds", "r", "cli,rest")
 COMMAND_WITH_FLAG("mds stop name=role,type=CephString", "stop mds", \
 	"mds", "rw", "cli,rest", FLAG(OBSOLETE))
-COMMAND("mds deactivate name=role,type=CephString",
+COMMAND_WITH_FLAG("mds deactivate name=role,type=CephString",
         "clean up specified MDS rank (use with `set max_mds` to shrink cluster)", \
-	"mds", "rw", "cli,rest")
+	"mds", "rw", "cli,rest", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest", FLAG(OBSOLETE))
