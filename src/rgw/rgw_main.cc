@@ -468,8 +468,7 @@ int main(int argc, const char **argv)
       fe = new RGWLoadGenFrontend(env, config);
     }
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
-    else if ((framework == "beast") &&
-	cct->check_experimental_feature_enabled("rgw-beast-frontend")) {
+    else if (framework == "beast") {
       int port;
       config->get_val("port", 80, &port);
       std::string uri_prefix;
