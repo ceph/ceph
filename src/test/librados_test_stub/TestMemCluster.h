@@ -27,6 +27,8 @@ public:
   typedef std::map<std::string, bufferlist> FileTMaps;
   typedef std::map<std::string, bufferlist> XAttrs;
   typedef std::map<std::string, XAttrs> FileXAttrs;
+  typedef std::set<ObjectHandler*> ObjectHandlers;
+  typedef std::map<std::string, ObjectHandlers> FileHandlers;
 
   struct File {
     File();
@@ -61,12 +63,18 @@ public:
     FileOMaps file_omaps;
     FileTMaps file_tmaps;
     FileXAttrs file_xattrs;
+    FileHandlers file_handlers;
   };
 
   TestMemCluster();
   ~TestMemCluster() override;
 
   TestRadosClient *create_rados_client(CephContext *cct) override;
+
+  int register_object_handler(int64_t pool_id, const std::string& o,
+                              ObjectHandler* object_handler) override;
+  void unregister_object_handler(int64_t pool_id, const std::string& o,
+                                 ObjectHandler* object_handler) override;
 
   int pool_create(const std::string &pool_name);
   int pool_delete(const std::string &pool_name);
@@ -104,6 +112,8 @@ private:
 
   Cond m_transaction_cond;
   std::set<std::string> m_transactions;
+
+  Pool *get_pool(const Mutex& lock, int64_t pool_id);
 
 };
 
