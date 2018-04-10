@@ -25,7 +25,10 @@ class Module(MgrModule):
     def handle_command(self, command):
         rd = 0
         wr = 0
-        ops = 0
+        total = 0
+        rd_ops = 0
+        wr_ops = 0
+        total_ops = 0
         ret = ''
 
         if command['prefix'] == 'iostat':
@@ -35,9 +38,33 @@ class Module(MgrModule):
             if (stamp_delta > 0):
                 rd = int(r['pg_stats_delta']['stat_sum']['num_read_kb']) / stamp_delta
                 wr = int(r['pg_stats_delta']['stat_sum']['num_write_kb']) / stamp_delta
-                ops = ( int(r['pg_stats_delta']['stat_sum']['num_write']) + int(r['pg_stats_delta']['stat_sum']['num_read']) ) / stamp_delta
+                # The values are in kB, but to_pretty_iec() requires them to be in bytes
+                rd = int(rd) << 10
+                wr = int(wr) << 10
+                total = rd + wr
 
-            ret = "wr: {0} kB/s, rd: {1} kB/s, iops: {2}".format(int(wr), int(rd), int(ops))
+                rd_ops = int(r['pg_stats_delta']['stat_sum']['num_read']) / stamp_delta
+                wr_ops = int(r['pg_stats_delta']['stat_sum']['num_write']) / stamp_delta
+                total_ops = rd_ops + wr_ops
+
+            if 'width' in command:
+                width = command['width']
+            else:
+                width = 80
+
+            if command.get('print_header', False):
+                elems = ['Read', 'Write', 'Total', 'Read IOPS', 'Write IOPS', 'Total IOPS']
+                ret += self.get_pretty_header(elems, width)
+
+            elems = [
+                self.to_pretty_iec(rd) + 'B/s',
+                self.to_pretty_iec(wr) + 'B/s',
+                self.to_pretty_iec(total) + 'B/s',
+                int(rd_ops),
+                int(wr_ops),
+                int(total_ops)
+            ]
+            ret += self.get_pretty_row(elems, width)
 
         elif command['prefix'] == 'iostat self-test':
             r = self.get('io_rate')
