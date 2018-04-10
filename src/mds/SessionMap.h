@@ -557,13 +557,13 @@ public:
 	s.insert(p->second);
   }
 
-  void open_sessions(map<client_t,entity_inst_t>& client_map) {
+  void replay_open_sessions(map<client_t,entity_inst_t>& client_map) {
     for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
 	 ++p) {
       Session *s = get_or_add_session(p->second);
       set_state(s, Session::STATE_OPEN);
-      version++;
+      replay_dirty_session(s);
     }
   }
 
