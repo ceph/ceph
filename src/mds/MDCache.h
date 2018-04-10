@@ -1052,8 +1052,6 @@ private:
 public:
   SnapRealm *get_global_snaprealm() const { return global_snaprealm; }
   void create_global_snaprealm();
-  void snaprealm_create(MDRequestRef& mdr, CInode *in);
-  void _snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CInode *in);
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients=true);
   void send_snap_update(CInode *in, version_t stid, int snap_op);
   void handle_snap_update(MMDSSnapUpdate *m);

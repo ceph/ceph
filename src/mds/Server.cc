@@ -4581,6 +4581,10 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
     if (name == "quota") {
       string::iterator begin = value.begin();
       string::iterator end = value.end();
+      if (begin == end) {
+	// keep quota unchanged. (for create_quota_realm())
+	return 0;
+      }
       keys_and_values<string::iterator> p;    // create instance of parser
       std::map<string, string> m;             // map to receive results
       if (!qi::parse(begin, end, p, m)) {     // returns true if successful
@@ -4619,6 +4623,19 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
     return -EINVAL;
   }
   return 0;
+}
+
+void Server::create_quota_realm(CInode *in)
+{
+  dout(10) << __func__ << " " << *in << dendl;
+
+  MClientRequest *req = new MClientRequest(CEPH_MDS_OP_SETXATTR);
+  req->set_filepath(filepath(in->ino()));
+  req->set_string2("ceph.quota");
+  // empty vxattr value
+  req->set_tid(mds->issue_tid());
+
+  mds->send_message_mds(req, in->authority().first);
 }
 
 /*
