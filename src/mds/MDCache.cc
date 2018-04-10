@@ -5412,6 +5412,8 @@ bool MDCache::process_imported_caps()
     cap_imports_num_opening++;
     dout(10) << "  opening missing ino " << p->first << dendl;
     open_ino(p->first, (int64_t)-1, new C_MDC_RejoinOpenInoFinish(this, p->first), false);
+    if (!(cap_imports_num_opening % 1000))
+      mds->heartbeat_reset();
   }
 
   if (cap_imports_num_opening > 0)
