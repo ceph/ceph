@@ -134,7 +134,7 @@ class FullnessTestCase(CephFSTestCase):
                           the failed write.
         """
 
-        osd_mon_report_interval = int(self.fs.get_config("osd_mon_report_inverval", service_type='osd'))
+        osd_mon_report_interval = int(self.fs.get_config("osd_mon_report_interval", service_type='osd'))
 
         log.info("Writing {0}MB should fill this cluster".format(self.fill_mb))
 
