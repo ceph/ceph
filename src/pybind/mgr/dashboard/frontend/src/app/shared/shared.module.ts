@@ -1,17 +1,12 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
+import { ApiModule } from './api/api.module';
 import { ComponentsModule } from './components/components.module';
 import { DataTableModule } from './datatable/datatable.module';
 import { DimlessBinaryDirective } from './directives/dimless-binary.directive';
 import { PasswordButtonDirective } from './directives/password-button.directive';
 import { PipesModule } from './pipes/pipes.module';
-import { AuthGuardService } from './services/auth-guard.service';
-import { AuthStorageService } from './services/auth-storage.service';
-import { AuthService } from './services/auth.service';
-import { FormatterService } from './services/formatter.service';
-import { HostService } from './services/host.service';
-import { PoolService } from './services/pool.service';
 import { ServicesModule } from './services/services.module';
 
 @NgModule({
@@ -20,7 +15,8 @@ import { ServicesModule } from './services/services.module';
     PipesModule,
     ComponentsModule,
     ServicesModule,
-    DataTableModule
+    DataTableModule,
+    ApiModule
   ],
   declarations: [
     PasswordButtonDirective,
@@ -32,15 +28,8 @@ import { ServicesModule } from './services/services.module';
     ServicesModule,
     PasswordButtonDirective,
     DimlessBinaryDirective,
-    DataTableModule
-  ],
-  providers: [
-    AuthService,
-    AuthStorageService,
-    AuthGuardService,
-    PoolService,
-    FormatterService,
-    HostService
-  ],
+    DataTableModule,
+    ApiModule
+  ]
 })
 export class SharedModule {}

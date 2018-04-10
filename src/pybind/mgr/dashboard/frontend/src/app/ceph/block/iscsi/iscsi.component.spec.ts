@@ -1,7 +1,7 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AppModule } from '../../../app.module';
-import { TcmuIscsiService } from '../../../shared/services/tcmu-iscsi.service';
+import { TcmuIscsiService } from '../../../shared/api/tcmu-iscsi.service';
 import { IscsiComponent } from './iscsi.component';
 
 describe('IscsiComponent', () => {

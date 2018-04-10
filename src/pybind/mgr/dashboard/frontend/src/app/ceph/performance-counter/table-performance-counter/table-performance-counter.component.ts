@@ -1,7 +1,9 @@
 import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import {
+  TablePerformanceCounterService
+} from '../../../shared/api/table-performance-counter.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { TablePerformanceCounterService } from '../services/table-performance-counter.service';
 
 /**
  * Display the specified performance counters in a datatable.

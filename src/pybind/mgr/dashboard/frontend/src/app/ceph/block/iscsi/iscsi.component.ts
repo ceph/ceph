@@ -1,11 +1,11 @@
 import { Component } from '@angular/core';
 
+import { TcmuIscsiService } from '../../../shared/api/tcmu-iscsi.service';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { ListPipe } from '../../../shared/pipes/list.pipe';
 import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
-import { TcmuIscsiService } from '../../../shared/services/tcmu-iscsi.service';
 
 @Component({
   selector: 'cd-iscsi',
