@@ -1,4 +1,5 @@
-﻿commit 586538e22afba85c59beda49789ec42024e7a061
+commit 586538e22afba85c59beda49789ec42024e7a061
+Author: Gary Lowell <gary.lowell@inktank.com>
 Date:   Tue Jan 29 23:54:47 2013 -0800
 
     v0.56.2
