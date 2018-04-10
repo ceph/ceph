@@ -2119,7 +2119,7 @@ class CephManager:
         """
         return self.get_num_active_down() == self.get_num_pgs()
 
-    def wait_for_clean(self, timeout=None):
+    def wait_for_clean(self, timeout=600):
         """
         Returns true when all pgs are clean.
         """
