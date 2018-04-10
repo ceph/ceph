@@ -1,11 +1,11 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
+import { PoolService } from '../../../shared/api/pool.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { PoolService } from '../../../shared/services/pool.service';
 
 @Component({
   selector: 'cd-pool-detail',

@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
+import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
-import { CephfsService } from '../cephfs.service';
 
 @Component({
   selector: 'cd-clients',

@@ -1,6 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { ConfigurationService } from '../../../shared/services/configuration.service';
+import { ConfigurationService } from '../../../shared/api/configuration.service';
 
 @Component({
   selector: 'cd-configuration',

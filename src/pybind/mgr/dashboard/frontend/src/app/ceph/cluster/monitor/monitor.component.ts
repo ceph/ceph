@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 
+import { MonitorService } from '../../../shared/api/monitor.service';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { MonitorService } from '../monitor.service';
 
 @Component({
   selector: 'cd-monitor',

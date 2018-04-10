@@ -7,12 +7,12 @@ import { ComponentsModule } from '../../../../shared/components/components.modul
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { DimlessPipe } from '../../../../shared/pipes/dimless.pipe';
 import { FormatterService } from '../../../../shared/services/formatter.service';
+import { SharedModule } from '../../../../shared/shared.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
 import { OsdDetailsComponent } from '../osd-details/osd-details.component';
 import {
   OsdPerformanceHistogramComponent
 } from '../osd-performance-histogram/osd-performance-histogram.component';
-import { OsdService } from '../osd.service';
 import { OsdListComponent } from './osd-list.component';
 
 describe('OsdListComponent', () => {
@@ -26,14 +26,15 @@ describe('OsdListComponent', () => {
         PerformanceCounterModule,
         TabsModule.forRoot(),
         DataTableModule,
-        ComponentsModule
+        ComponentsModule,
+        SharedModule
       ],
       declarations: [
         OsdListComponent,
         OsdDetailsComponent,
         OsdPerformanceHistogramComponent
       ],
-      providers: [OsdService, DimlessPipe, FormatterService]
+      providers: [ DimlessPipe, FormatterService]
     })
     .compileComponents();
   }));

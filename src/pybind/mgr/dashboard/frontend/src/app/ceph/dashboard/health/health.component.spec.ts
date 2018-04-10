@@ -3,8 +3,8 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
+import { DashboardService } from '../../../shared/api/dashboard.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { DashboardService } from '../dashboard.service';
 import { HealthComponent } from './health.component';
 
 describe('HealthComponent', () => {

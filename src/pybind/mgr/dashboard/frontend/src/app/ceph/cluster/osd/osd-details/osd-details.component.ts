@@ -2,8 +2,8 @@ import { Component, Input, OnChanges } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { OsdService } from '../../../../shared/api/osd.service';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
-import { OsdService } from '../osd.service';
 
 @Component({
   selector: 'cd-osd-details',
