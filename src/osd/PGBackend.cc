@@ -570,58 +570,53 @@ PGBackend *PGBackend::build_pg_backend(
   }
 }
 
-/*
- * pg lock may or may not be held
- */
-void PGBackend::be_scan_list(
-  ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
-  ThreadPool::TPHandle &handle)
+int PGBackend::be_scan_list(
+  ScrubMap &map,
+  ScrubMapBuilder &pos)
 {
-  dout(10) << __func__ << " scanning " << ls.size() << " objects"
-           << (deep ? " deeply" : "") << dendl;
-  int i = 0;
-  for (vector<hobject_t>::const_iterator p = ls.begin();
-       p != ls.end();
-       ++p, i++) {
-    handle.reset_tp_timeout();
-    hobject_t poid = *p;
+  dout(10) << __func__ << " " << pos << dendl;
+  assert(!pos.done());
+  assert(pos.pos < pos.ls.size());
+  hobject_t& poid = pos.ls[pos.pos];
 
-    struct stat st;
-    int r = store->stat(
+  struct stat st;
+  int r = store->stat(
+    ch,
+    ghobject_t(
+      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    &st,
+    true);
+  if (r == 0) {
+    ScrubMap::object &o = map.objects[poid];
+    o.size = st.st_size;
+    assert(!o.negative);
+    store->getattrs(
       ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      &st,
-      true);
-    if (r == 0) {
-      ScrubMap::object &o = map.objects[poid];
-      o.size = st.st_size;
-      assert(!o.negative);
-      store->getattrs(
-	ch,
-	ghobject_t(
-	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	o.attrs);
+      o.attrs);
 
-      // calculate the CRC32 on deep scrubs
-      if (deep) {
-	be_deep_scrub(*p, seed, o, handle);
-      }
-
-      dout(25) << __func__ << "  " << poid << dendl;
-    } else if (r == -ENOENT) {
-      dout(25) << __func__ << "  " << poid << " got " << r
-	       << ", skipping" << dendl;
-    } else if (r == -EIO) {
-      dout(25) << __func__ << "  " << poid << " got " << r
-	       << ", stat_error" << dendl;
-      ScrubMap::object &o = map.objects[poid];
-      o.stat_error = true;
-    } else {
-      derr << __func__ << " got: " << cpp_strerror(r) << dendl;
-      ceph_abort();
+    if (pos.deep) {
+      r = be_deep_scrub(poid, map, pos, o);
     }
+    dout(25) << __func__ << "  " << poid << dendl;
+  } else if (r == -ENOENT) {
+    dout(25) << __func__ << "  " << poid << " got " << r
+	     << ", skipping" << dendl;
+  } else if (r == -EIO) {
+    dout(25) << __func__ << "  " << poid << " got " << r
+	     << ", stat_error" << dendl;
+    ScrubMap::object &o = map.objects[poid];
+    o.stat_error = true;
+  } else {
+    derr << __func__ << " got: " << cpp_strerror(r) << dendl;
+    ceph_abort();
   }
+  if (r == -EINPROGRESS) {
+    return -EINPROGRESS;
+  }
+  pos.next_object();
+  return 0;
 }
 
 bool PGBackend::be_compare_scrub_objects(
@@ -909,6 +904,7 @@ out:
 
 void PGBackend::be_compare_scrubmaps(
   const map<pg_shard_t,ScrubMap*> &maps,
+  const set<hobject_t> &master_set,
   bool repair,
   map<hobject_t, set<pg_shard_t>> &missing,
   map<hobject_t, set<pg_shard_t>> &inconsistent,
@@ -920,17 +916,7 @@ void PGBackend::be_compare_scrubmaps(
   const vector<int> &acting,
   ostream &errorstream)
 {
-  map<hobject_t,ScrubMap::object>::const_iterator i;
-  map<pg_shard_t, ScrubMap *>::const_iterator j;
-  set<hobject_t> master_set;
   utime_t now = ceph_clock_now();
-
-  // Construct master set
-  for (j = maps.begin(); j != maps.end(); ++j) {
-    for (i = j->second->objects.begin(); i != j->second->objects.end(); ++i) {
-      master_set.insert(i->first);
-    }
-  }
 
   // Check maps against master set and each other
   for (set<hobject_t>::const_iterator k = master_set.begin();
@@ -964,7 +950,7 @@ void PGBackend::be_compare_scrubmaps(
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
 
-    for (j = maps.begin(); j != maps.end(); ++j) {
+    for (auto  j = maps.cbegin(); j != maps.cend(); ++j) {
       if (j == auth)
 	shard_map[auth->first].selected_oi = true;
       if (j->second->objects.count(*k)) {
@@ -1103,6 +1089,38 @@ out:
       ++shallow_errors;
     if (object_error.errors || object_error.union_shards.errors) {
       store->add_object_error(k->pool, object_error);
+    }
+  }
+}
+
+void PGBackend::be_large_omap_check(const map<pg_shard_t,ScrubMap*> &maps,
+  const set<hobject_t> &master_set,
+  int& large_omap_objects,
+  ostream &warnstream) const
+{
+  bool needs_check = false;
+  for (const auto& map : maps) {
+    if (map.second->has_large_omap_object_errors) {
+      needs_check = true;
+      break;
+    }
+  }
+
+  if (!needs_check) {
+    return;
+  }
+
+  // Iterate through objects and check large omap object flag
+  for (const auto& k : master_set) {
+    for (const auto& map : maps) {
+      ScrubMap::object& obj = map.second->objects[k];
+      if (obj.large_omap_object_found) {
+        large_omap_objects++;
+        warnstream << "Large omap object found. Object: " << k << " Key count: "
+                   << obj.large_omap_object_key_count << " Size (bytes): "
+                   << obj.large_omap_object_value_size << '\n';
+        break;
+      }
     }
   }
 }

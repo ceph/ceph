@@ -48,6 +48,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--osd-skip-data-digest=false "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -1857,7 +1858,7 @@ function corrupt_scrub_erasure() {
           "primary": false
         }
       ],
-      "selected_object_info": "3:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest s 7 uv 1 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi",
         "obj_size_oi_mismatch"
@@ -1898,7 +1899,7 @@ function corrupt_scrub_erasure() {
           "primary": false
         }
       ],
-      "selected_object_info": "3:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "missing"
       ],
@@ -2016,7 +2017,7 @@ function corrupt_scrub_erasure() {
           ]
         }
       ],
-      "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest s 7 uv 6 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -2057,7 +2058,7 @@ function corrupt_scrub_erasure() {
           "primary": false
         }
       ],
-      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest s 7 uv 7 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi",
         "obj_size_oi_mismatch"
@@ -2139,7 +2140,7 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:9175b684:::EOBJ1:head(27'1 client.4155.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:9175b684:::EOBJ1:head(27'1 client.4155.0:1 dirty|data_digest s 7 uv 1 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "read_error",
         "size_mismatch_oi",
@@ -2185,7 +2186,7 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:b197b25d:::EOBJ3:head(41'3 client.4199.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:b197b25d:::EOBJ3:head(41'3 client.4199.0:1 dirty|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "missing"
       ],
@@ -2309,7 +2310,7 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:5e723e06:::EOBJ4:head(48'6 client.4223.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:5e723e06:::EOBJ4:head(48'6 client.4223.0:1 dirty|data_digest s 7 uv 6 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -2356,7 +2357,7 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4288.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4288.0:1 dirty|data_digest s 7 uv 7 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi",
         "obj_size_oi_mismatch"
@@ -2414,7 +2415,7 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest|omap_digest s 7 uv 1 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:9175b684:::EOBJ1:head(21'1 client.4179.0:1 dirty|data_digest s 7 uv 1 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "read_error",
         "size_mismatch_oi",
@@ -2461,7 +2462,7 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:9babd184:::EOBJ2:head(29'2 client.4217.0:1 dirty|data_digest|omap_digest s 7 uv 2 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:9babd184:::EOBJ2:head(29'2 client.4217.0:1 dirty|data_digest s 7 uv 2 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "ec_hash_error"
       ],
@@ -2503,7 +2504,7 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest|omap_digest s 7 uv 3 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:b197b25d:::EOBJ3:head(37'3 client.4251.0:1 dirty|data_digest s 7 uv 3 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "missing"
       ],
@@ -2627,7 +2628,7 @@ EOF
           ]
         }
       ],
-      "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest|omap_digest s 7 uv 6 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:5e723e06:::EOBJ4:head(45'6 client.4289.0:1 dirty|data_digest s 7 uv 6 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [],
       "errors": [
         "attr_value_mismatch",
@@ -2673,7 +2674,7 @@ EOF
           "primary": false
         }
       ],
-      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest|omap_digest s 7 uv 7 dd 2ddbf8f5 od ffffffff alloc_hint [0 0 0])",
+      "selected_object_info": "3:8549dfb5:::EOBJ5:head(65'7 client.4441.0:1 dirty|data_digest s 7 uv 7 dd 2ddbf8f5 alloc_hint [0 0 0])",
       "union_shard_errors": [
         "size_mismatch_oi",
         "ec_size_error",

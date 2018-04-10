@@ -1656,6 +1656,7 @@ struct object_stat_sum_t {
   int64_t num_objects_pinned;
   int64_t num_objects_missing;
   int64_t num_legacy_snapsets; ///< upper bound on pre-luminous-style SnapSets
+  int64_t num_large_omap_objects = 0;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1703,6 +1704,7 @@ struct object_stat_sum_t {
     FLOOR(num_wr);
     FLOOR(num_wr_kb);
     FLOOR(num_scrub_errors);
+    FLOOR(num_large_omap_objects);
     FLOOR(num_shallow_scrub_errors);
     FLOOR(num_deep_scrub_errors);
     FLOOR(num_objects_recovered);
@@ -1757,6 +1759,7 @@ struct object_stat_sum_t {
     SPLIT(num_wr);
     SPLIT(num_wr_kb);
     SPLIT(num_scrub_errors);
+    SPLIT(num_large_omap_objects);
     SPLIT(num_shallow_scrub_errors);
     SPLIT(num_deep_scrub_errors);
     SPLIT(num_objects_recovered);
@@ -1813,6 +1816,7 @@ struct object_stat_sum_t {
         sizeof(num_wr) +
         sizeof(num_wr_kb) +
         sizeof(num_scrub_errors) +
+        sizeof(num_large_omap_objects) +
         sizeof(num_objects_recovered) +
         sizeof(num_bytes_recovered) +
         sizeof(num_keys_recovered) +
@@ -4767,8 +4771,8 @@ struct object_info_t {
     omap_digest = -1;
   }
   void new_object() {
-    set_data_digest(-1);
-    set_omap_digest(-1);
+    clear_data_digest();
+    clear_omap_digest();
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
@@ -4929,12 +4933,16 @@ struct ScrubMap {
     bool stat_error:1;
     bool ec_hash_mismatch:1;
     bool ec_size_mismatch:1;
+    bool large_omap_object_found:1;
+    uint64_t large_omap_object_key_count = 0;
+    uint64_t large_omap_object_value_size = 0;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
       size(-1), omap_digest(0), digest(0),
-      negative(false), digest_present(false), omap_digest_present(false), 
-      read_error(false), stat_error(false), ec_hash_mismatch(false), ec_size_mismatch(false) {}
+      negative(false), digest_present(false), omap_digest_present(false),
+      read_error(false), stat_error(false), ec_hash_mismatch(false),
+      ec_size_mismatch(false), large_omap_object_found(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
@@ -4946,6 +4954,7 @@ struct ScrubMap {
   map<hobject_t,object> objects;
   eversion_t valid_through;
   eversion_t incr_since;
+  bool has_large_omap_object_errors:1;
 
   void merge_incr(const ScrubMap &l);
   void insert(const ScrubMap &r) {
@@ -4965,6 +4974,60 @@ struct ScrubMap {
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
+
+struct ScrubMapBuilder {
+  bool deep = false;
+  vector<hobject_t> ls;
+  size_t pos = 0;
+  int64_t data_pos = 0;
+  string omap_pos;
+  int ret = 0;
+  bufferhash data_hash, omap_hash;  ///< accumulatinng hash value
+  uint64_t omap_keys = 0;
+  uint64_t omap_bytes = 0;
+
+  bool empty() {
+    return ls.empty();
+  }
+  bool done() {
+    return pos >= ls.size();
+  }
+  void reset() {
+    *this = ScrubMapBuilder();
+  }
+
+  bool data_done() {
+    return data_pos < 0;
+  }
+
+  void next_object() {
+    ++pos;
+    data_pos = 0;
+    omap_pos.clear();
+    omap_keys = 0;
+    omap_bytes = 0;
+  }
+
+  friend ostream& operator<<(ostream& out, const ScrubMapBuilder& pos) {
+    out << "(" << pos.pos << "/" << pos.ls.size();
+    if (pos.pos < pos.ls.size()) {
+      out << " " << pos.ls[pos.pos];
+    }
+    if (pos.data_pos < 0) {
+      out << " byte " << pos.data_pos;
+    }
+    if (!pos.omap_pos.empty()) {
+      out << " key " << pos.omap_pos;
+    }
+    if (pos.deep) {
+      out << " deep";
+    }
+    if (pos.ret) {
+      out << " ret " << pos.ret;
+    }
+    return out << ")";
+  }
+};
 
 struct OSDOp {
   ceph_osd_op op;
