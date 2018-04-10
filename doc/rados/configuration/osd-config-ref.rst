@@ -357,24 +357,6 @@ scrubbing operations.
 Operations
 ==========
 
-Operations settings allow you to configure the number of threads for servicing
-requests. If you set ``osd op threads`` to ``0``, it disables multi-threading.
-By default, Ceph  uses two threads with a 30 second timeout and a 30 second
-complaint time if an operation doesn't complete within those time parameters.
-You can set operations priority weights between client operations and
-recovery operations to ensure optimal performance during recovery.
-
-
-``osd op threads`` 
-
-:Description: The number of threads to service Ceph OSD Daemon operations. 
-              Set to ``0`` to disable it. Increasing the number may increase 
-              the request processing rate.
-
-:Type: 32-bit Integer
-:Default: ``2`` 
-
-
 ``osd op queue``
 
 :Description: This sets the type of queue to be used for prioritizing ops
