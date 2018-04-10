@@ -395,6 +395,7 @@ if(WITH_RADOSGW)
     message(WARNING "disabling WITH_RADOSGW_BEAST_FRONTEND, which depends on WITH_BOOST_CONTEXT")
     set(WITH_RADOSGW_BEAST_FRONTEND OFF)
   endif()
+  find_package(liboath REQUIRED)
 
 # https://curl.haxx.se/docs/install.html mentions the
 # configure flags for various ssl backends

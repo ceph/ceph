@@ -84,6 +84,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_USER_SUSPENDED, {403, "UserSuspended" }},
     { ERR_REQUEST_TIME_SKEWED, {403, "RequestTimeTooSkewed" }},
     { ERR_QUOTA_EXCEEDED, {403, "QuotaExceeded" }},
+    { ERR_MFA_REQUIRED, {403, "AccessDenied" }},
     { ENOENT, {404, "NoSuchKey" }},
     { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket" }},
     { ERR_NO_SUCH_WEBSITE_CONFIGURATION, {404, "NoSuchWebsiteConfiguration" }},
@@ -276,32 +277,14 @@ void req_info::rebuild_from(req_info& src)
 
 
 req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
-  : cct(_cct), cio(NULL), op(OP_UNKNOWN), user(u), has_acl_header(false),
+  : cct(_cct), user(u),
     info(_cct, e)
 {
   enable_ops_log = e->get_enable_ops_log();
   enable_usage_log = e->get_enable_usage_log();
   defer_to_bucket_acls = e->get_defer_to_bucket_acls();
-  content_started = false;
-  format = 0;
-  formatter = NULL;
-  expect_cont = false;
-
-  obj_size = 0;
-  prot_flags = 0;
-
-  system_request = false;
 
   time = ceph_clock_now();
-  perm_mask = 0;
-  bucket_instance_shard_id = -1;
-  content_length = 0;
-  bucket_exists = false;
-  has_bad_meta = false;
-  length = NULL;
-  local_source = false;
-
-  obj_ctx = NULL;
 }
 
 req_state::~req_state() {

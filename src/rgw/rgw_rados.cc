@@ -40,6 +40,7 @@
 #include "cls/timeindex/cls_timeindex_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/user/cls_user_client.h"
+#include "cls/otp/cls_otp_client.h"
 #include "osd/osd_types.h"
 
 #include "rgw_tools.h"
@@ -1696,6 +1697,7 @@ int get_zones_pool_set(CephContext* cct,
       pool_names.insert(zone.user_email_pool);
       pool_names.insert(zone.user_swift_pool);
       pool_names.insert(zone.user_uid_pool);
+      pool_names.insert(zone.otp_pool);
       pool_names.insert(zone.roles_pool);
       pool_names.insert(zone.reshard_pool);
       for(auto& iter : zone.placement_pools) {
@@ -1769,6 +1771,7 @@ int RGWZoneParams::fix_pool_names()
   user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.uid", user_uid_pool);
   roles_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:roles", roles_pool);
   reshard_pool = fix_zone_pool_dup(pools, name, ".rgw.log:reshard", reshard_pool);
+  otp_pool = fix_zone_pool_dup(pools, name, ".rgw.otp", otp_pool);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
@@ -14157,3 +14160,210 @@ bool RGWRados::call_erase(const std::string&) {
 void RGWRados::call_zap() {
   return;
 }
+
+string RGWRados::get_mfa_oid(const rgw_user& user)
+{
+  return string("user:") + user.to_str();
+}
+
+int RGWRados::get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref)
+{
+  string oid = get_mfa_oid(user);
+  rgw_raw_obj obj(get_zone_params().otp_pool, oid);
+  return get_system_obj_ref(obj, ref);
+}
+
+int RGWRados::check_mfa(const rgw_user& user, const string& otp_id, const string& pin)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  rados::cls::otp::otp_check_t result;
+
+  r = rados::cls::otp::OTP::check(cct, ref.ioctx, ref.oid, otp_id, pin, &result);
+  if (r < 0)
+    return r;
+
+  ldout(cct, 20) << "OTP check, otp_id=" << otp_id << " result=" << (int)result.result << dendl;
+
+  return (result.result == rados::cls::otp::OTP_CHECK_SUCCESS ? 0 : -EACCES);
+}
+
+void RGWRados::prepare_mfa_write(librados::ObjectWriteOperation *op,
+                                 RGWObjVersionTracker *objv_tracker,
+                                 const ceph::real_time& mtime)
+{
+  RGWObjVersionTracker ot;
+
+  if (objv_tracker) {
+    ot = *objv_tracker;
+  }
+
+  if (ot.write_version.tag.empty()) {
+    if (ot.read_version.tag.empty()) {
+      ot.generate_new_write_ver(cct);
+    } else {
+      ot.write_version = ot.read_version;
+      ot.write_version.ver++;
+    }
+  }
+
+  ot.prepare_op_for_write(op);
+  struct timespec mtime_ts = real_clock::to_timespec(mtime);
+  op->mtime2(&mtime_ts);
+}
+
+int RGWRados::create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
+                         RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  prepare_mfa_write(&op, objv_tracker, mtime);
+  rados::cls::otp::OTP::create(&op, config);
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r < 0) {
+    ldout(cct, 20) << "OTP create, otp_id=" << config.id << " result=" << (int)r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::remove_mfa(const rgw_user& user, const string& id,
+                         RGWObjVersionTracker *objv_tracker,
+                         const ceph::real_time& mtime)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  prepare_mfa_write(&op, objv_tracker, mtime);
+  rados::cls::otp::OTP::remove(&op, id);
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r < 0) {
+    ldout(cct, 20) << "OTP remove, otp_id=" << id << " result=" << (int)r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  r = rados::cls::otp::OTP::get(nullptr, ref.ioctx, ref.oid, id, result);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  r = rados::cls::otp::OTP::get_all(nullptr, ref.ioctx, ref.oid, result);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::otp_get_current_time(const rgw_user& user, ceph::real_time *result)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  r = rados::cls::otp::OTP::get_current_time(ref.ioctx, ref.oid, result);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
+                      bool reset_obj, RGWObjVersionTracker *objv_tracker,
+                      const real_time& mtime)
+{
+  rgw_raw_obj obj(get_zone_params().otp_pool, oid);
+  rgw_rados_ref ref;
+  int r = get_system_obj_ref(obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  if (reset_obj) {
+    op.remove();
+    op.set_op_flags2(LIBRADOS_OP_FLAG_FAILOK);
+    op.create(false);
+  }
+  prepare_mfa_write(&op, objv_tracker, mtime);
+  rados::cls::otp::OTP::set(&op, entries);
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r < 0) {
+    ldout(cct, 20) << "OTP set entries.size()=" << entries.size() << " result=" << (int)r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result,
+                       RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime)
+{
+  rgw_raw_obj obj(get_zone_params().otp_pool, oid);
+  rgw_rados_ref ref;
+  int r = get_system_obj_ref(obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  librados::ObjectReadOperation op;
+  struct timespec mtime_ts;
+  if (pmtime) {
+    op.stat2(nullptr, &mtime_ts, nullptr);
+  }
+  objv_tracker->prepare_op_for_read(&op);
+  r = rados::cls::otp::OTP::get_all(&op, ref.ioctx, ref.oid, result);
+  if (r < 0) {
+    return r;
+  }
+  if (pmtime) {
+    *pmtime = ceph::real_clock::from_timespec(mtime_ts);
+  }
+
+  return 0;
+}
+
