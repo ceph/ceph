@@ -9855,7 +9855,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     default:
-      derr << __func__ << "bad op " << op->op << dendl;
+      derr << __func__ << " bad op " << op->op << dendl;
       ceph_abort();
     }
 
@@ -11405,7 +11405,7 @@ void BlueStore::_do_omap_clear(TransContext *txc, const string& omap_prefix,
   get_omap_header(id, &prefix);
   get_omap_tail(id, &tail);
   txc->t->rm_range_keys(omap_prefix, prefix, tail);
-  dout(20) << __func__ << "remove range start: "
+  dout(20) << __func__ << " remove range start: "
            << pretty_binary_string(prefix) << " end: "
            << pretty_binary_string(tail) << dendl;
 }
@@ -11549,7 +11549,7 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
     get_omap_key(o->onode.nid, first, &key_first);
     get_omap_key(o->onode.nid, last, &key_last);
     txc->t->rm_range_keys(prefix, key_first, key_last);
-    dout(20) << __func__ << "remove range start: "
+    dout(20) << __func__ << " remove range start: "
              << pretty_binary_string(key_first) << " end: "
              << pretty_binary_string(key_last) << dendl;
   }
@@ -12132,7 +12132,7 @@ void BlueStore::_flush_cache()
   }
   for (auto& p : coll_map) {
     if (!p.second->onode_map.empty()) {
-      derr << __func__ << "stray onodes on " << p.first << dendl;
+      derr << __func__ << " stray onodes on " << p.first << dendl;
       p.second->onode_map.dump<0>(cct);
     }
     if (!p.second->shared_blob_set.empty()) {

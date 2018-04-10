@@ -3458,7 +3458,7 @@ int RGWHandler_REST_S3Website::init(RGWRados *store, req_state *s,
 
 int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   *new_op = op;
-  ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
+  ldout(s->cct, 10) << __func__ << " Starting retarget" << dendl;
 
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;

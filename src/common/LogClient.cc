@@ -315,7 +315,7 @@ void LogClient::_send_to_mon()
   assert(log_lock.is_locked());
   assert(is_mon);
   assert(messenger->get_myname().is_mon());
-  ldout(cct,10) << __func__ << "log to self" << dendl;
+  ldout(cct,10) << __func__ << " log to self" << dendl;
   Message *log = _get_mon_log_message();
   messenger->get_loopback_connection()->send_message(log);
 }

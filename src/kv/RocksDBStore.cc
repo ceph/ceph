@@ -674,7 +674,7 @@ void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std
 void RocksDBStore::get_statistics(Formatter *f)
 {
   if (!g_conf->rocksdb_perf)  {
-    dout(20) << __func__ << "RocksDB perf is disabled, can't probe for stats"
+    dout(20) << __func__ << " RocksDB perf is disabled, can't probe for stats"
 	     << dendl;
     return;
   }
