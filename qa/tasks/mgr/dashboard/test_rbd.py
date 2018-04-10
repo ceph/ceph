@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-public-methods
 
 from __future__ import absolute_import
 
@@ -57,6 +58,14 @@ class RbdTest(DashboardTestCase):
                                 'rbd/snap/delete',
                                 {'pool_name': pool, 'image_name': image,
                                  'snapshot_name': snapshot})
+
+    @classmethod
+    def update_snapshot(cls, pool, image, snapshot, new_name, is_protected):
+        return cls._task_put('/api/rbd//{}/{}/snap/{}'.format(pool, image, snapshot),
+                             'rbd/snap/edit',
+                             {'pool_name': pool, 'image_name': image,
+                              'snapshot_name': snapshot},
+                             {'new_snap_name': new_name, 'is_protected': is_protected})
 
     @classmethod
     def setUpClass(cls):
@@ -139,6 +148,17 @@ class RbdTest(DashboardTestCase):
                 self.assertSetEqual(set(snap[k]), set(v))
             else:
                 self.assertEqual(snap[k], v)
+
+    def _validate_snapshot_list(self, snap_list, snap_name=None, **kwargs):
+        found = False
+        for snap in snap_list:
+            self.assertIn('name', snap)
+            if snap_name and snap['name'] == snap_name:
+                found = True
+                self._validate_snapshot(snap, **kwargs)
+                break
+        if snap_name and not found:
+            self.fail("Snapshot {} not found".format(snap_name))
 
     def test_list(self):
         data = self._view_cache_get('/api/rbd')
@@ -352,4 +372,28 @@ class RbdTest(DashboardTestCase):
         self._validate_image(img, features_name=['exclusive-lock',
                                                  'journaling', 'layering'])
         res = self.remove_image('rbd', 'edit_img')
+        self.assertTrue(res['success'])
+
+    def test_update_snapshot(self):
+        res = self.create_snapshot('rbd', 'img1', 'snap5')
+        self.assertTrue(res['success'])
+        img = self._get('/api/rbd/rbd/img1')
+        self._validate_snapshot_list(img['snapshots'], 'snap5', is_protected=False)
+
+        res = self.update_snapshot('rbd', 'img1', 'snap5', 'snap6', None)
+        self.assertTrue(res['success'])
+        img = self._get('/api/rbd/rbd/img1')
+        self._validate_snapshot_list(img['snapshots'], 'snap6', is_protected=False)
+
+        res = self.update_snapshot('rbd', 'img1', 'snap6', None, True)
+        self.assertTrue(res['success'])
+        img = self._get('/api/rbd/rbd/img1')
+        self._validate_snapshot_list(img['snapshots'], 'snap6', is_protected=True)
+
+        res = self.update_snapshot('rbd', 'img1', 'snap6', 'snap5', False)
+        self.assertTrue(res['success'])
+        img = self._get('/api/rbd/rbd/img1')
+        self._validate_snapshot_list(img['snapshots'], 'snap5', is_protected=False)
+
+        res = self.remove_snapshot('rbd', 'img1', 'snap5')
         self.assertTrue(res['success'])
