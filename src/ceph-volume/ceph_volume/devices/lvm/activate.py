@@ -112,6 +112,8 @@ def get_osd_device_path(osd_lv, lvs, device_type, dmcrypt_secret=None):
 def activate_bluestore(lvs):
     # find the osd
     osd_lv = lvs.get(lv_tags={'ceph.type': 'block'})
+    if not osd_lv:
+        raise RuntimeError('could not find a bluestore OSD to activate')
     is_encrypted = osd_lv.tags.get('ceph.encrypted', '0') == '1'
     dmcrypt_secret = None
     osd_id = osd_lv.tags['ceph.osd_id']
