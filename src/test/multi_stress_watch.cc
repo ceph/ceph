@@ -76,7 +76,7 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
 #pragma GCC diagnostic warning "-Wpragmas"
 
 void
-test_replicated(Rados &cluster, std::string pool_name, std::string obj_name)
+test_replicated(Rados &cluster, std::string pool_name, const std::string &obj_name)
 {
   // May already exist
   cluster.pool_create(pool_name.c_str());
@@ -85,7 +85,7 @@ test_replicated(Rados &cluster, std::string pool_name, std::string obj_name)
 }
 
 void
-test_erasure(Rados &cluster, std::string pool_name, std::string obj_name)
+test_erasure(Rados &cluster, const std::string &pool_name, const std::string &obj_name)
 {
   string outs;
   bufferlist inbl;

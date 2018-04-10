@@ -98,7 +98,7 @@ bool AdminSocketOutput::init_sockets() {
 
 std::pair<std::string, std::string>
 AdminSocketOutput::run_command(AdminSocketClient &client,
-                               const std::string raw_command,
+                               const std::string &raw_command,
                                bool send_untouched) {
   std::cout << "Sending command \"" << raw_command << "\"" << std::endl;
   std::string command;
@@ -188,8 +188,8 @@ bool AdminSocketOutput::gather_socket_output() {
   return true;
 }
 
-std::string AdminSocketOutput::get_result(const std::string target,
-                                          const std::string command) const {
+std::string AdminSocketOutput::get_result(const std::string &target,
+                                          const std::string &command) const {
   const auto& target_results = results.find(target);
   if (target_results == results.end())
     return std::string("");

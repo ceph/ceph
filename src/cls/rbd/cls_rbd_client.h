@@ -257,8 +257,8 @@ namespace librbd {
     int get_id_finish(bufferlist::iterator *it, std::string *id);
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
 
-    void set_id(librados::ObjectWriteOperation *op, std::string id);
-    int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id);
+    void set_id(librados::ObjectWriteOperation *op, const std::string &id);
+    int set_id(librados::IoCtx *ioctx, const std::string &oid, const std::string &id);
 
     // operations on rbd_directory objects
     int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,

@@ -227,7 +227,7 @@ protected:
 
   void do_matrix(const char *matrix[][10],
 	         boost::scoped_ptr<ObjectStore>& store,
-                 MatrixTest fn) {
+                 const MatrixTest &fn) {
     map<string,string> old;
     for (unsigned i=0; matrix[i][0]; ++i) {
       old[matrix[i][0]] = matrix_get(matrix[i][0]);

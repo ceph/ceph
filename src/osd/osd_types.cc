@@ -1084,7 +1084,7 @@ class pool_opts_encoder_t : public boost::static_visitor<>
 public:
   explicit pool_opts_encoder_t(bufferlist& bl_) : bl(bl_) {}
 
-  void operator()(std::string s) const {
+  void operator()(const std::string &s) const {
     encode(static_cast<int32_t>(pool_opts_t::STR), bl);
     encode(s, bl);
   }

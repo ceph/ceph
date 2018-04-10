@@ -10,7 +10,7 @@
 namespace ceph {
 namespace logging {
 
-Graylog::Graylog(const SubsystemMap * const s, std::string logger)
+Graylog::Graylog(const SubsystemMap * const s, const std::string &logger)
     : m_subs(s),
       m_log_dst_valid(false),
       m_hostname(""),
@@ -24,7 +24,7 @@ Graylog::Graylog(const SubsystemMap * const s, std::string logger)
   m_formatter_section = std::unique_ptr<Formatter>(Formatter::create("json"));
 }
 
-Graylog::Graylog(std::string logger)
+Graylog::Graylog(const std::string &logger)
     : m_subs(NULL),
       m_log_dst_valid(false),
       m_hostname(""),

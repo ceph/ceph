@@ -33,7 +33,7 @@ int PgFiles::init()
   return ceph_init(cmount);
 }
 
-PgFiles::PgFiles(Objecter *o, std::set<pg_t> pgs_)
+PgFiles::PgFiles(Objecter *o, const std::set<pg_t> &pgs_)
   : objecter(o), pgs(pgs_)
 {
   for (const auto &i : pgs) {

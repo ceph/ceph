@@ -333,7 +333,7 @@ public:
       ContentsGenerator::iterator iter;
 
       ContState(
-	ContDesc _cont,
+	const ContDesc &_cont,
 	ceph::shared_ptr<ContentsGenerator> _gen,
 	ContentsGenerator::iterator _iter)
 	: size(_gen->get_length(_cont)), cont(_cont), gen(_gen), iter(_iter) {

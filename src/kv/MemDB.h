@@ -65,7 +65,7 @@ public:
   int set_merge_operator(const std::string& prefix,
          std::shared_ptr<MergeOperator> mop) override;
 
-  std::shared_ptr<MergeOperator> _find_merge_op(std::string prefix);
+  std::shared_ptr<MergeOperator> _find_merge_op(const std::string &prefix);
 
   static
   int _test_init(const string& dir) { return 0; };

@@ -673,7 +673,7 @@ bool DaemonServer::handle_command(MCommand *m)
     bufferlist from_mon;
     string outs;
 
-    ReplyOnFinish(std::shared_ptr<CommandContext> cmdctx_)
+    ReplyOnFinish(const std::shared_ptr<CommandContext> &cmdctx_)
       : cmdctx(cmdctx_)
     {}
     void finish(int r) override {

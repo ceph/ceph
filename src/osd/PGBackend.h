@@ -299,7 +299,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, coll_t coll,
+   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, const coll_t &coll,
 	     ObjectStore::CollectionHandle &ch) :
      cct(cct),
      store(store),

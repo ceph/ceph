@@ -83,7 +83,7 @@ int destroy_ec_profile(rados_t *cluster,
 }
 
 int destroy_ruleset(rados_t *cluster,
-                    std::string ruleset,
+                    const std::string &ruleset,
                     std::ostream &oss)
 {
   char *cmd[2];
@@ -98,7 +98,7 @@ int destroy_ruleset(rados_t *cluster,
 }
 
 int destroy_ec_profile_and_ruleset(rados_t *cluster,
-                                   std::string ruleset,
+                                   const std::string &ruleset,
                                    std::ostream &oss)
 {
   int ret;
@@ -181,7 +181,7 @@ std::string create_one_pool_pp(const std::string &pool_name, Rados &cluster,
 }
 
 int destroy_ruleset_pp(Rados &cluster,
-                       std::string ruleset,
+                       const std::string &ruleset,
                        std::ostream &oss)
 {
   bufferlist inbl;
@@ -204,7 +204,7 @@ int destroy_ec_profile_pp(Rados &cluster, const std::string& pool_name,
 }
 
 int destroy_ec_profile_and_ruleset_pp(Rados &cluster,
-                                      std::string ruleset,
+                                      const std::string &ruleset,
                                       std::ostream &oss)
 {
   int ret;
