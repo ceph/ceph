@@ -860,8 +860,20 @@ OPTION(rocksdb_db_paths, OPT_STR, "")   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL, true)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_U64, 128*1024*1024)  // default rocksdb cache size
 OPTION(rocksdb_block_size, OPT_INT, 4*1024)  // default rocksdb block size
+OPTION(rocksdb_bloom_bits_per_key, OPT_INT, 20) // Number of bits per key for RocksDB's bloom filters
+OPTION(rocksdb_cache_index_and_filter_blocks, OPT_BOOL, true) // Whether to cache indices and filters in block cache
+OPTION(rocksdb_cache_index_and_filter_blocks_with_high_priority, OPT_BOOL, true) // Whether to cache indicies and filters in the block cache with high priority
+OPTION(rocksdb_pin_l0_filter_and_index_blocks_in_cache, OPT_BOOL, true) // Whether to pin Level 0 indices and bloom filters in the block cache
+OPTION(rocksdb_index_type, OPT_STR, "binary_search") // Type of index for SST files: binary_search, hash_search, two_level
+OPTION(rocksdb_partition_filters, OPT_BOOL, false) // (experimental) partition SST index/filters into smaller blocks
+OPTION(rocksdb_metadata_block_size, OPT_INT, 4*1024) // The block size for index partitions (0 = rocksdb default)
+OPTION(rocksdb_perf, OPT_BOOL, false) // Enabling this will have 5-10% impact on performance for the stats collection
+OPTION(rocksdb_collect_compaction_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+OPTION(rocksdb_collect_extended_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+OPTION(rocksdb_collect_memory_stats, OPT_BOOL, false) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
+
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
-OPTION(filestore_rocksdb_options, OPT_STR, "compaction_readahead_size=2097152")
+OPTION(filestore_rocksdb_options, OPT_STR, "max_background_compactions=8;compaction_readahead_size=2097152;compression=kNoCompression")
 // rocksdb options that will be used in monstore
 OPTION(mon_rocksdb_options, OPT_STR, "write_buffer_size=33554432,compression=kNoCompression")
 
@@ -1010,7 +1022,7 @@ OPTION(kstore_onode_map_size, OPT_U64, 1024)
 OPTION(kstore_cache_tails, OPT_BOOL, true)
 OPTION(kstore_default_stripe_size, OPT_INT, 65536)
 
-OPTION(filestore_omap_backend, OPT_STR, "leveldb")
+OPTION(filestore_omap_backend, OPT_STR, "rocksdb")
 
 OPTION(filestore_debug_disable_sharded_check, OPT_BOOL, false)
 

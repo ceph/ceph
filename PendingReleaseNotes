@@ -15,3 +15,10 @@
 * The RBD C API's rbd_discard method and the C++ API's Image::discard method
   now enforce a maximum length of 2GB. This restriction prevents overflow of
   the result code.
+
+* New OSDs will now use rocksdb for omap data by default, rather than
+  leveldb. omap is used by RGW bucket indexes and CephFS directories,
+  and when a single leveldb grows to 10s of GB with a high write or
+  delete workload, it can lead to high latency when leveldb's
+  single-threaded compaction cannot keep up. rocksdb supports multiple
+  threads for compaction, which avoids this problem.

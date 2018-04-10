@@ -119,6 +119,11 @@ using namespace ceph;
  */
 #define ceph_abort() assert(0)
 
+#define ceph_abort_msg(cct, msg) {					\
+		lgeneric_derr(cct) << "abort: " << msg << dendl;	\
+		abort();						\
+	}
+
 #endif
 
 // wipe any prior assert definition
