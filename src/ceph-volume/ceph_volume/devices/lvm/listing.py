@@ -52,6 +52,21 @@ def pretty_report(report):
     print(''.join(output))
 
 
+def direct_report():
+    """
+    Other non-cli consumers of listing information will want to consume the
+    report without the need to parse arguments or other flags. This helper
+    bypasses the need to deal with the class interface which is meant for cli
+    handling.
+    """
+    _list = List([])
+    # this is crucial: make sure that all paths will reflect current
+    # information. In the case of a system that has migrated, the disks will
+    # have changed paths
+    _list.update()
+    return _list.full_report()
+
+
 class List(object):
 
     help = 'list logical volumes and devices associated with Ceph'
