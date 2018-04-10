@@ -534,10 +534,6 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, strin
     }
   }
 
-  for (const auto& kv: new_env.get_map()) {
-    headers.emplace_back(kv);
-  }
-
   /* update acl headers */
   RGWAccessControlList& acl = policy.get_acl();
   multimap<string, ACLGrant>& grant_map = acl.get_grant_map();
