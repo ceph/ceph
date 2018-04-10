@@ -4,7 +4,8 @@ set(rados_srcs
   rados/RadosImport.cc
   rados/PoolDump.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
-  ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc)
+  ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
 add_executable(rados ${rados_srcs})
 target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} radosstriper)
 install(TARGETS rados DESTINATION bin)

@@ -40,19 +40,18 @@
             "type": "array",
             "items": {
               "enum": [
-                "ss_attr_missing",
-                "ss_attr_corrupted",
-                "oi_attr_missing",
-                "oi_attr_corrupted",
-                "snapset_mismatch",
-                "head_mismatch",
+                "snapset_missing",
+                "snapset_corrupted",
+                "info_missing",
+                "info_corrupted",
+                "snapset_error",
                 "headless",
                 "size_mismatch",
                 "extra_clones",
                 "clone_missing"
               ]
             },
-            "minItems": 1,
+            "minItems": 0,
             "uniqueItems": true
           },
           "missing": {

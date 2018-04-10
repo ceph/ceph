@@ -50,7 +50,9 @@
             ]
           },
           "selected_object_info": {
-              "type": "string"
+              "type": "object",
+              "description": "Selected object information",
+              "additionalProperties": true
           },
           "union_shard_errors": {
             "description": "Union of all shard errors",
@@ -60,16 +62,18 @@
                 "missing",
                 "stat_error",
                 "read_error",
-                "data_digest_mismatch_oi",
-                "omap_digest_mismatch_oi",
-                "size_mismatch_oi",
+                "data_digest_mismatch_info",
+                "omap_digest_mismatch_info",
+                "size_mismatch_info",
                 "ec_hash_error",
                 "ec_size_error",
-                "oi_attr_missing",
-                "oi_attr_corrupted",
-                "obj_size_oi_mismatch",
-                "ss_attr_missing",
-                "ss_attr_corrupted"
+                "info_missing",
+                "info_corrupted",
+                "obj_size_info_mismatch",
+                "snapset_missing",
+                "snapset_corrupted",
+                "hinfo_missing",
+                "hinfo_corrupted"
               ]
             },
             "minItems": 0,
@@ -86,7 +90,8 @@
                 "size_mismatch",
                 "attr_value_mismatch",
                 "attr_name_mismatch",
-                "snapset_inconsistency"
+                "snapset_inconsistency",
+                "hinfo_inconsistency"
               ]
             },
             "minItems": 0,
@@ -100,7 +105,40 @@
               "type": "object",
               "properties": {
                 "object_info": {
-                  "type": "string"
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "description": "Object information",
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "snapset": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "description": "Snap set information",
+                      "additionalProperties": true
+                    }
+                  ]
+                },
+                "hashinfo": {
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "object",
+                      "description": "Erasure code hash information",
+                      "additionalProperties": true
+                    }
+                  ]
                 },
                 "shard": {
                   "type": "integer"
@@ -130,16 +168,18 @@
                       "missing",
                       "stat_error",
                       "read_error",
-                      "data_digest_mismatch_oi",
-                      "omap_digest_mismatch_oi",
-                      "size_mismatch_oi",
+                      "data_digest_mismatch_info",
+                      "omap_digest_mismatch_info",
+                      "size_mismatch_info",
                       "ec_hash_error",
                       "ec_size_error",
-                      "oi_attr_missing",
-                      "oi_attr_corrupted",
-                      "obj_size_oi_mismatch",
-                      "ss_attr_missing",
-                      "ss_attr_corrupted"
+                      "info_missing",
+                      "info_corrupted",
+                      "obj_size_info_mismatch",
+                      "snapset_missing",
+                      "snapset_corrupted",
+                      "hinfo_missing",
+                      "hinfo_corrupted"
                     ]
                   },
                   "minItems": 0,
@@ -167,11 +207,11 @@
                       "value",
                       "Base64"
                     ],
-                    "additionalProperties": false,
-                    "minItems": 1
+                    "additionalProperties": false
                   }
                 }
               },
+              "additionalProperties": false,
               "required": [
                 "osd",
                 "primary",
