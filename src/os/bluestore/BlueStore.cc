@@ -7114,6 +7114,15 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     }
   }
 
+  {
+    std::lock_guard<std::mutex> l(vstatfs_lock);
+    buf->allocated = vstatfs.allocated();
+    buf->data_stored = vstatfs.stored();
+    buf->data_compressed = vstatfs.compressed();
+    buf->data_compressed_original = vstatfs.compressed_original();
+    buf->data_compressed_allocated = vstatfs.compressed_allocated();
+  }
+
   uint64_t thin_total, thin_avail;
   if (bdev->get_thin_utilization(&thin_total, &thin_avail)) {
     buf->total += thin_total;
@@ -7121,6 +7130,8 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     // we are limited by both the size of the virtual device and the
     // underlying physical device.
     bfree = std::min(bfree, thin_avail);
+
+    buf->allocated = thin_total - thin_avail;
   } else {
     buf->total = bdev->get_size();
   }
@@ -7136,15 +7147,6 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     buf->internal_metadata =
       std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
       - buf->omap_allocated;
-  }
-
-  {
-    std::lock_guard<std::mutex> l(vstatfs_lock);
-    buf->allocated = vstatfs.allocated();
-    buf->data_stored = vstatfs.stored();
-    buf->data_compressed = vstatfs.compressed();
-    buf->data_compressed_original = vstatfs.compressed_original();
-    buf->data_compressed_allocated = vstatfs.compressed_allocated();
   }
 
   dout(20) << __func__ << " " << *buf << dendl;
