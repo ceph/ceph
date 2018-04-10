@@ -366,3 +366,35 @@ class RbdSnapshot(RESTController):
         status, value = task.wait(1.0)
         cherrypy.response.status = 200
         return {'status': status, 'value': value}
+
+    @classmethod
+    def _edit_snapshot(cls, pool_name, image_name, snapshot_name,
+                       new_snap_name, is_protected):
+        ioctx = mgr.rados.open_ioctx(pool_name)
+        img = rbd.Image(ioctx, image_name)
+        try:
+            if new_snap_name and new_snap_name != snapshot_name:
+                img.rename_snap(snapshot_name, new_snap_name)
+                snapshot_name = new_snap_name
+            if is_protected is not None and \
+                    is_protected != img.is_protected_snap(snapshot_name):
+                if is_protected:
+                    img.protect_snap(snapshot_name)
+                else:
+                    img.unprotect_snap(snapshot_name)
+        except rbd.OSError as e:
+            return {'success': False, 'detail': str(e), 'errno': e.errno}
+        return {'success': True}
+
+    @RESTController.args_from_json
+    def set(self, pool_name, image_name, snapshot_name, new_snap_name=None,
+            is_protected=None):
+        task = TaskManager.run('rbd/snap/edit',
+                               {'pool_name': pool_name,
+                                'image_name': image_name,
+                                'snapshot_name': snapshot_name},
+                               self._edit_snapshot,
+                               [pool_name, image_name, snapshot_name,
+                                new_snap_name, is_protected])
+        status, value = task.wait(1.0)
+        return {'status': status, 'value': value}
