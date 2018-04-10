@@ -1975,13 +1975,19 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
 
 void MDCache::broadcast_quota_to_client(CInode *in)
 {
+  if (!(mds->is_active() || mds->is_stopping()))
+    return;
+
   if (!in->is_auth() || in->is_frozen())
     return;
 
   auto i = in->get_projected_inode();
-
   if (!i->quota.is_enable())
     return;
+
+  // creaete snaprealm for quota inode (quota was set before mimic)
+  if (!in->get_projected_srnode())
+    mds->server->create_quota_realm(in);
 
   for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
        it != in->client_caps.end();
@@ -9454,61 +9460,6 @@ void MDCache::create_global_snaprealm()
   global_snaprealm = in->snaprealm;
 }
 
-struct C_MDC_snaprealm_create_finish : public MDCacheLogContext {
-  MDRequestRef mdr;
-  MutationRef mut;
-  CInode *in;
-  C_MDC_snaprealm_create_finish(MDCache *c, MDRequestRef& m,
-                                MutationRef& mu, CInode *i) :
-    MDCacheLogContext(c), mdr(m), mut(mu), in(i) {}
-  void finish(int r) override {
-    mdcache->_snaprealm_create_finish(mdr, mut, in);
-  }
-};
-
-void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
-{
-  dout(10) << "snaprealm_create " << *in << dendl;
-  assert(!in->snaprealm);
-
-  // allocate an id..
-  if (!mdr->more()->stid) {
-    mds->snapclient->prepare_create_realm(in->ino(), &mdr->more()->stid, &mdr->more()->snapidbl,
-					  new C_MDS_RetryRequest(this, mdr));
-    return;
-  }
-
-  MutationRef mut(new MutationImpl());
-  mut->ls = mds->mdlog->get_current_segment();
-  EUpdate *le = new EUpdate(mds->mdlog, "snaprealm_create");
-  mds->mdlog->start_entry(le);
-
-  le->metablob.add_table_transaction(TABLE_SNAP, mdr->more()->stid);
-
-  auto &pi = in->project_inode(false, true);
-  pi.inode.version = in->pre_dirty();
-  pi.inode.rstat.rsnaprealms++;
-
-  bufferlist::iterator p = mdr->more()->snapidbl.begin();
-  snapid_t seq;
-  decode(seq, p);
-
-  auto &newsnap = *pi.snapnode;
-  newsnap.created = seq;
-  newsnap.seq = seq;
-  newsnap.last_created = seq;
-  
-  predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
-  journal_cow_inode(mut, &le->metablob, in);
-  le->metablob.add_primary_dentry(in->get_projected_parent_dn(), in, true);
-
-  mds->server->submit_mdlog_entry(le,
-                                  new C_MDC_snaprealm_create_finish(this, mdr,
-                                                                    mut, in),
-                                  mdr, __func__);
-  mds->mdlog->flush();
-}
-
 void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients)
 {
   dout(10) << "do_realm_invalidate_and_update_notify " << *in->snaprealm << " " << *in << dendl;
@@ -9612,43 +9563,6 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 	++p)
       maybe_eval_stray((*p)->inode, true);
   }
-}
-
-void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CInode *in)
-{
-  dout(10) << "_snaprealm_create_finish " << *in << dendl;
-
-  // apply
-  in->pop_and_dirty_projected_inode(mut->ls);
-  mut->apply();
-  mds->locker->drop_locks(mut.get());
-  mut->cleanup();
-
-  // tell table we've committed
-  mds->snapclient->commit(mdr->more()->stid, mut->ls);
-
-  // create
-  bufferlist::iterator p = mdr->more()->snapidbl.begin();
-  snapid_t seq;
-  decode(seq, p);
-
-  in->open_snaprealm();
-  in->snaprealm->srnode.seq = seq;
-  in->snaprealm->srnode.created = seq;
-  bool ok = in->snaprealm->_open_parents(NULL);
-  assert(ok);
-
-  do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
-
-  /*
-  static int count = 5;
-  if (--count == 0)
-    ceph_abort();  // hack test test **********
-  */
-
-  // done.
-  mdr->more()->stid = 0;  // caller will likely need to reuse this
-  dispatch_request(mdr);
 }
 
 void MDCache::send_snap_update(CInode *in, version_t stid, int snap_op)
