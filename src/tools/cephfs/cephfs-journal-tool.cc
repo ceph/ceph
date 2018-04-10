@@ -25,13 +25,12 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  JournalTool jt;
   if (args.empty()) {
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
   if (ceph_argparse_need_usage(args)) {
-    jt.usage();
+    JournalTool::usage();
     exit(0);
   }
 
@@ -39,6 +38,7 @@ int main(int argc, const char **argv)
 			     CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
+  JournalTool jt;
 
   // Connect to mon cluster, download MDS map etc
   int rc = jt.init();

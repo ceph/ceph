@@ -83,7 +83,7 @@ class JournalTool : public MDSUtility
     //validate type
     int validate_type(const std::string &type);
   public:
-    void usage();
+    static void usage();
     JournalTool() :
       rank(0), other_pool(false) {}
     int main(std::vector<const char*> &argv);
