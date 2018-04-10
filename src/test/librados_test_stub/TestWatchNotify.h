@@ -60,8 +60,8 @@ public:
 
   void aio_flush(TestRadosClient *rados_client, Context *on_finish);
   void aio_watch(TestRadosClient *rados_client, const std::string& o,
-                 uint64_t gid, uint64_t *handle, librados::WatchCtx2 *watch_ctx,
-                 Context *on_finish);
+                 uint64_t gid, uint64_t *handle, librados::WatchCtx *watch_ctx,
+                 librados::WatchCtx2 *watch_ctx2, Context *on_finish);
   void aio_unwatch(TestRadosClient *rados_client, uint64_t handle,
                    Context *on_finish);
   void aio_notify(TestRadosClient *rados_client, const std::string& oid,
@@ -95,6 +95,14 @@ private:
   FileWatchers	m_file_watchers;
 
   SharedWatcher get_watcher(const std::string& oid);
+
+  void execute_watch(TestRadosClient *rados_client, const std::string& o,
+                     uint64_t gid, uint64_t *handle,
+                     librados::WatchCtx *watch_ctx,
+                     librados::WatchCtx2 *watch_ctx2,
+                     Context *on_finish);
+  void execute_unwatch(TestRadosClient *rados_client, uint64_t handle,
+                       Context *on_finish);
 
   void execute_notify(TestRadosClient *rados_client, const std::string &oid,
                       bufferlist &bl, uint64_t notify_id);
