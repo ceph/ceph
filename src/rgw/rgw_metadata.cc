@@ -779,6 +779,38 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   return ret;
 }
 
+int RGWMetadataManager::prepare_mutate(RGWRados *store,
+                                       rgw_pool& pool, const string& oid,
+                                       const real_time& mtime,
+                                       RGWObjVersionTracker *objv_tracker,
+                                       RGWMetadataHandler::sync_type_t sync_mode)
+{
+  bufferlist bl;
+  real_time orig_mtime;
+  RGWObjectCtx obj_ctx(store);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid,
+                               bl, objv_tracker, &orig_mtime,
+                               nullptr, nullptr);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  if (ret != -ENOENT &&
+      !RGWMetadataHandler::check_versions(objv_tracker->read_version, orig_mtime,
+                                          objv_tracker->write_version, mtime, sync_mode)) {
+    return STATUS_NO_APPLY;
+  }
+
+  if (objv_tracker->write_version.tag.empty()) {
+    if (objv_tracker->read_version.tag.empty()) {
+      objv_tracker->generate_new_write_ver(store->ctx());
+    } else {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+  }
+  return 0;
+}
+
 int RGWMetadataManager::remove(string& metadata_key)
 {
   RGWMetadataHandler *handler;

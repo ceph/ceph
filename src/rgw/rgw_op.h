@@ -750,10 +750,11 @@ public:
 
 class RGWGetBucketVersioning : public RGWOp {
 protected:
-  bool versioned;
-  bool versioning_enabled;
+  bool versioned{false};
+  bool versioning_enabled{false};
+  bool mfa_enabled{false};
 public:
-  RGWGetBucketVersioning() : versioned(false), versioning_enabled(false) {}
+  RGWGetBucketVersioning() = default;
 
   int verify_permission() override;
   void pre_exec() override;
@@ -766,6 +767,7 @@ public:
 };
 
 enum BucketVersionStatus {
+  VersioningStatusInvalid = -1,
   VersioningNotChanged = 0,
   VersioningEnabled = 1,
   VersioningSuspended =2,
@@ -774,6 +776,8 @@ enum BucketVersionStatus {
 class RGWSetBucketVersioning : public RGWOp {
 protected:
   int versioning_status;
+  bool mfa_set_status{false};
+  bool mfa_status{false};
   bufferlist in_data;
 public:
   RGWSetBucketVersioning() : versioning_status(VersioningNotChanged) {}

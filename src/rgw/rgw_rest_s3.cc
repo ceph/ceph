@@ -14,6 +14,8 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
 
+#include <liboath/oath.h>
+
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
@@ -874,42 +876,43 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
   if (versioned) {
     const char *status = (versioning_enabled ? "Enabled" : "Suspended");
     s->formatter->dump_string("Status", status);
+    const char *mfa_status = (mfa_enabled ? "Enabled" : "Disabled");
+    s->formatter->dump_string("MfaDelete", mfa_status);
   }
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-class RGWSetBucketVersioningParser : public RGWXMLParser
-{
-  XMLObj *alloc_obj(const char *el) override {
-    return new XMLObj;
-  }
+struct ver_config_status {
+  int status{VersioningSuspended};
 
-public:
-  RGWSetBucketVersioningParser() {}
-  ~RGWSetBucketVersioningParser() override {}
+  enum MFAStatus {
+    MFA_UNKNOWN,
+    MFA_DISABLED,
+    MFA_ENABLED,
+  } mfa_status{MFA_UNKNOWN};
+  int retcode{0};
 
-  int get_versioning_status(int *status) {
-    XMLObj *config = find_first("VersioningConfiguration");
-    if (!config)
-      return -EINVAL;
-
-    *status = VersioningNotChanged;
-
-    XMLObj *field = config->find_first("Status");
-    if (!field)
-      return 0;
-
-    *status = VersioningSuspended;
-    string& s = field->get_data();
-
-    if (stringcasecmp(s, "Enabled") == 0) {
-      *status = VersioningEnabled;
-    } else if (stringcasecmp(s, "Suspended") != 0) {
-      return -EINVAL;
+  void decode_xml(XMLObj *obj) {
+    string status_str;
+    string mfa_str;
+    RGWXMLDecoder::decode_xml("Status", status_str, obj);
+    if (status_str == "Enabled") {
+      status = VersioningEnabled;
+    } else if (status_str != "Suspended") {
+      status = VersioningStatusInvalid;
     }
 
-    return 0;
+
+    if (RGWXMLDecoder::decode_xml("MfaDelete", mfa_str, obj)) {
+      if (mfa_str == "Enabled") {
+        mfa_status = MFA_ENABLED;
+      } else if (mfa_str == "Disabled") {
+        mfa_status = MFA_DISABLED;
+      } else {
+        retcode = -EINVAL;
+      }
+    }
   }
 };
 
@@ -930,18 +933,23 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     return r;
   }
 
-  RGWSetBucketVersioningParser parser;
-
+  RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
     ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
-    r = -EIO;
-    return r;
+    return -EIO;
   }
 
   if (!parser.parse(data, len, 1)) {
-    ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
+    ldout(s->cct, 10) << "NOTICE: failed to parse data: " << data << dendl;
     r = -EINVAL;
     return r;
+  }
+
+  ver_config_status status_conf;
+
+  if (!RGWXMLDecoder::decode_xml("VersioningConfiguration", status_conf, &parser)) {
+    ldout(s->cct, 10) << "NOTICE: bad versioning config input" << dendl;
+    return -EINVAL;
   }
 
   if (!store->is_meta_master()) {
@@ -949,8 +957,27 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     in_data.append(data, len);
   }
 
-  r = parser.get_versioning_status(&versioning_status);
-  
+  versioning_status = status_conf.status;
+  if (versioning_status == VersioningStatusInvalid) {
+    r = -EINVAL;
+  }
+
+  if (status_conf.mfa_status != ver_config_status::MFA_UNKNOWN) {
+    mfa_set_status = true;
+    switch (status_conf.mfa_status) {
+      case ver_config_status::MFA_DISABLED:
+        mfa_status = false;
+        break;
+      case ver_config_status::MFA_ENABLED:
+        mfa_status = true;
+        break;
+      default:
+        ldout(s->cct, 0) << "ERROR: RGWSetBucketVersioning_ObjStore_S3::get_params(): unexpected switch case mfa_status=" << status_conf.mfa_status << dendl;
+        r = -EIO;
+    }
+  } else if (status_conf.retcode < 0) {
+    r = status_conf.retcode;
+  }
   return r;
 }
 
@@ -3216,6 +3243,36 @@ int RGWHandler_REST_S3::init_from_header(struct req_state* s,
   return 0;
 }
 
+static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str, bool *verified)
+{
+  vector<string> params;
+  get_str_vec(mfa_str, " ", params);
+
+  if (params.size() != 2) {
+    ldout(store->ctx(), 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
+    return -EINVAL;
+  }
+
+  string& serial = params[0];
+  string& pin = params[1];
+
+  auto i = user->mfa_ids.find(serial);
+  if (i == user->mfa_ids.end()) {
+    ldout(store->ctx(), 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  int ret = store->check_mfa(user->user_id, serial, pin);
+  if (ret < 0) {
+    ldout(store->ctx(), 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  *verified = true;
+
+  return 0;
+}
+
 int RGWHandler_REST_S3::postauth_init()
 {
   struct req_init_state *t = &s->init_state;
@@ -3250,6 +3307,12 @@ int RGWHandler_REST_S3::postauth_init()
     if (ret)
       return ret;
   }
+
+  const char *mfa = s->info.env->get("HTTP_X_AMZ_MFA");
+  if (mfa) {
+    ret = verify_mfa(store, s->user, string(mfa), &s->mfa_verified);
+  }
+
   return 0;
 }
 

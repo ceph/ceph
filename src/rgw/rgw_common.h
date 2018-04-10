@@ -200,6 +200,7 @@ using ceph::crypto::MD5;
 #define ERR_NO_SUCH_LC           2041
 #define ERR_NO_SUCH_USER         2042
 #define ERR_NO_SUCH_SUBUSER      2043
+#define ERR_MFA_REQUIRED         2044
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -634,6 +635,7 @@ struct RGWUserInfo
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
   uint32_t type;
+  set<string> mfa_ids;
 
   RGWUserInfo()
     : auid(0),
@@ -653,7 +655,7 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(19, 9, bl);
+     ENCODE_START(20, 9, bl);
      encode(auid, bl);
      string access_key;
      string secret_key;
@@ -694,10 +696,11 @@ struct RGWUserInfo
      encode(user_id.tenant, bl);
      encode(admin, bl);
      encode(type, bl);
+     encode(mfa_ids, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-     DECODE_START_LEGACY_COMPAT_LEN_32(19, 9, 9, bl);
+     DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
      if (struct_v >= 2) decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
@@ -769,6 +772,9 @@ struct RGWUserInfo
     }
     if (struct_v >= 19) {
       decode(type, bl);
+    }
+    if (struct_v >= 20) {
+      decode(mfa_ids, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1178,6 +1184,7 @@ enum RGWBucketFlags {
   BUCKET_VERSIONED = 0x2,
   BUCKET_VERSIONS_SUSPENDED = 0x4,
   BUCKET_DATASYNC_DISABLED = 0X8,
+  BUCKET_MFA_ENABLED = 0X10,
 };
 
 enum RGWBucketIndexType {
@@ -1345,8 +1352,9 @@ struct RGWBucketInfo
   void decode_json(JSONObj *obj);
 
   bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
-  int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED); }
-  bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
+  int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED | BUCKET_MFA_ENABLED); }
+  bool versioning_enabled() { return (versioning_status() & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED)) == BUCKET_VERSIONED; }
+  bool mfa_enabled() { return (versioning_status() & BUCKET_MFA_ENABLED) != 0; }
   bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
 
   bool has_swift_versioning() const {
@@ -1766,25 +1774,25 @@ class RGWRequest;
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
   CephContext *cct;
-  rgw::io::BasicClient *cio;
+  rgw::io::BasicClient *cio{nullptr};
   RGWRequest *req{nullptr}; /// XXX: re-remove??
-  http_op op;
+  http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
-  bool content_started;
-  int format;
-  ceph::Formatter *formatter;
+  bool content_started{false};
+  int format{0};
+  ceph::Formatter *formatter{nullptr};
   string decoded_uri;
   string relative_uri;
-  const char *length;
-  int64_t content_length;
+  const char *length{nullptr};
+  int64_t content_length{0};
   map<string, string> generic_attrs;
   rgw_err err;
-  bool expect_cont;
-  uint64_t obj_size;
+  bool expect_cont{false};
+  uint64_t obj_size{0};
   bool enable_ops_log;
   bool enable_usage_log;
   uint8_t defer_to_bucket_acls;
-  uint32_t perm_mask;
+  uint32_t perm_mask{0};
 
   /* Set once when url_bucket is parsed and not violated thereafter. */
   string account_name;
@@ -1803,7 +1811,7 @@ struct req_state {
   string zonegroup_name;
   string zonegroup_endpoint;
   string bucket_instance_id;
-  int bucket_instance_shard_id;
+  int bucket_instance_shard_id{-1};
   string redirect_zone_endpoint;
 
   string redirect;
@@ -1811,9 +1819,9 @@ struct req_state {
   RGWBucketInfo bucket_info;
   real_time bucket_mtime;
   std::map<std::string, ceph::bufferlist> bucket_attrs;
-  bool bucket_exists;
+  bool bucket_exists{false};
 
-  bool has_bad_meta;
+  bool has_bad_meta{false};
 
   RGWUserInfo *user;
 
@@ -1856,13 +1864,13 @@ struct req_state {
 
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
-  bool system_request;
+  bool system_request{false};
 
   string canned_acl;
-  bool has_acl_header;
-  bool local_source; /* source is local */
+  bool has_acl_header{false};
+  bool local_source{false}; /* source is local */
 
-  int prot_flags;
+  int prot_flags{0};
 
   /* Content-Disposition override for TempURL of Swift API. */
   struct {
@@ -1876,10 +1884,12 @@ struct req_state {
   req_init_state init_state;
 
   utime_t time;
-  void *obj_ctx;
+  void *obj_ctx{nullptr};
   string dialect;
   string req_id;
   string trans_id;
+
+  bool mfa_verified{false};
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();

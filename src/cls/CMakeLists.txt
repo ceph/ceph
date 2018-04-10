@@ -69,6 +69,23 @@ add_library(cls_lock_client STATIC ${cls_lock_client_srcs})
 
 list(APPEND cls_embedded_srcs ${cls_lock_srcs} ${cls_lock_client_srcs})
 
+# cls_otp
+set(cls_otp_srcs otp/cls_otp.cc)
+add_library(cls_otp SHARED ${cls_otp_srcs})
+target_link_libraries(cls_otp oath)
+set_target_properties(cls_otp PROPERTIES
+  VERSION "1.0.0"
+  SOVERSION "1"
+  INSTALL_RPATH "")
+install(TARGETS cls_otp DESTINATION ${cls_dir})
+
+set(cls_otp_client_srcs
+  otp/cls_otp_client.cc
+  otp/cls_otp_types.cc
+  )
+add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+list(APPEND cls_embedded_srcs ${cls_otp_srcs} ${cls_otp_client_srcs})
+
 # cls_refcount
 set(cls_refcount_srcs
   refcount/cls_refcount.cc

@@ -3100,11 +3100,11 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_class_load_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "rbd refcount replica_log rgw statelog timeindex user version")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount replica_log rgw statelog timeindex user version")
     .set_description(""),
 
     Option("osd_class_default_list", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("cephfs hello journal lock log numops " "rbd refcount replica_log rgw statelog timeindex user version")
+    .set_default("cephfs hello journal lock log numops " "otp rbd refcount replica_log rgw statelog timeindex user version")
     .set_description(""),
 
     Option("osd_check_for_log_corruption", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)

@@ -19,6 +19,7 @@
 #include "cls/log/cls_log_types.h"
 #include "cls/statelog/cls_statelog_types.h"
 #include "cls/timeindex/cls_timeindex_types.h"
+#include "cls/otp/cls_otp_types.h"
 #include "rgw_log.h"
 #include "rgw_metadata.h"
 #include "rgw_meta_sync_status.h"
@@ -1188,6 +1189,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool user_uid_pool;
   rgw_pool roles_pool;
   rgw_pool reshard_pool;
+  rgw_pool otp_pool;
 
   RGWAccessKey system_key;
 
@@ -1241,6 +1243,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(tier_config, bl);
     encode(roles_pool, bl);
     encode(reshard_pool, bl);
+    encode(otp_pool, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1288,6 +1291,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
       decode(reshard_pool, bl);
     } else {
       reshard_pool = log_pool.name + ":reshard";
+    }
+    if (struct_v >= 11) {
+      ::decode(otp_pool, bl);
+    } else {
+      otp_pool = name + ".rgw.otp";
     }
     DECODE_FINISH(bl);
   }
@@ -3706,6 +3714,29 @@ public:
   int delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompletion *>& handles);
   int delete_obj_aio(const rgw_obj& obj, RGWBucketInfo& info, RGWObjState *astate,
                      list<librados::AioCompletion *>& handles, bool keep_index_consistent);
+
+  /* mfa/totp stuff */
+ private:
+  void prepare_mfa_write(librados::ObjectWriteOperation *op,
+                         RGWObjVersionTracker *objv_tracker,
+                         const ceph::real_time& mtime);
+ public:
+  string get_mfa_oid(const rgw_user& user);
+  int get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref);
+  int check_mfa(const rgw_user& user, const string& otp_id, const string& pin);
+  int create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
+                 RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime);
+  int remove_mfa(const rgw_user& user, const string& id,
+                 RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime);
+  int get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result);
+  int list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result);
+  int otp_get_current_time(const rgw_user& user, ceph::real_time *result);
+
+  /* mfa interfaces used by metadata engine */
+  int set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries, bool reset_obj,
+              RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime);
+  int list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result,
+               RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime);
  private:
   /**
    * This is a helper method, it generates a list of bucket index objects with the given
