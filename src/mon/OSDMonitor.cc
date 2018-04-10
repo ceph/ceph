@@ -6935,14 +6935,13 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	ss << "nautilus OSDs are required to adjust pg_num_pending";
 	return -EPERM;
       }
-      if (n < (int)p.get_pgp_num_target()) {
-	ss << "specified pg_num " << n
-	   << " < pgp_num " << p.get_pgp_num_target();
-	return -EINVAL;
-      }
     }
     // set target; mgr will adjust pg_num_actual later
     p.set_pg_num_target(n);
+    // adjust pgp_num_target down too (as needed)
+    if (p.get_pgp_num_target() > n) {
+      p.set_pgp_num_target(n);
+    }
   } else if (var == "pgp_num_actual") {
     if (p.has_flag(pg_pool_t::FLAG_NOPGCHANGE)) {
       ss << "pool pgp_num change is disabled; you must unset nopgchange flag for the pool first";
