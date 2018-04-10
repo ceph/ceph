@@ -263,7 +263,7 @@ void Watcher::rewatch() {
 }
 
 void Watcher::handle_rewatch(int r) {
-  ldout(m_cct, 10) "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   bool watch_error = false;
   Context *unregister_watch_ctx = nullptr;
