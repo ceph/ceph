@@ -71,3 +71,43 @@
     upgrade/start standbys. Finally, restore the previous max_mds.
 
     See also: https://tracker.ceph.com/issues/23172
+
+* *rados list-inconsistent-obj format changes:*
+
+  * Various error strings have been improved.  For example, the "oi" or "oi_attr"
+    in errors which stands for object info is now "info" (e.g. oi_attr_missing is
+    now info_missing).
+
+  * The object's "selected_object_info" is now in json format instead of string.
+
+  * The attribute errors (attr_value_mismatch, attr_name_mismatch) only apply to user
+    attributes.  Only user attributes are output and have the internal leading underscore
+    stripped.
+
+  * If there are hash information errors (hinfo_missing, hinfo_corrupted,
+    hinfo_inconsistency) then "hashinfo" is added with the json format of the
+    information.  If the information is corrupt then "hashinfo" is a string
+    containing the value.
+
+  * If there are snapset errors (snapset_missing, snapset_corrupted,
+    snapset_inconsistency) then "snapset" is added with the json format of the
+    information.  If the information is corrupt then "snapset" is a string containing
+    the value.
+
+  * If there are object information errors (info_missing, info_corrupted,
+    obj_size_info_mismatch, object_info_inconsistency) then "object_info" is added
+    with the json format of the information instead of a string.  If the information
+    is corrupt then "object_info" is a string containing the value.
+
+* *rados list-inconsistent-snapset format changes:*
+
+  * Various error strings have been improved.  For example, the "ss_attr" in
+    errors which stands for snapset info is now "snapset" (e.g. ss_attr_missing is
+    now snapset_missing).  The error snapset_mismatch has been renamed to snapset_error
+    to better reflect what it means.
+
+  * The head snapset information is output in json format as "snapset."  This means that
+    even when there are no head errors, the head object will be output when any shard
+    has an error.  This head object is there to show the snapset that was used in
+    determining errors.
+
