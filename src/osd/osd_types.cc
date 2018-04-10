@@ -547,7 +547,7 @@ pg_t pg_t::get_parent() const
 
 hobject_t pg_t::get_hobj_start() const
 {
-  return hobject_t(object_t(), string(), CEPH_NOSNAP, m_seed, m_pool,
+  return hobject_t(object_t(), string(), 0, m_seed, m_pool,
 		   string());
 }
 
