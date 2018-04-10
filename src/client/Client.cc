@@ -236,7 +236,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     remount_cb(NULL),
     ino_invalidate_cb(NULL),
     dentry_invalidate_cb(NULL),
-    getgroups_cb(NULL),
     umask_cb(NULL),
     can_invalidate_dentries(false),
     async_ino_invalidator(m->cct),
@@ -5135,63 +5134,6 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   m->put();
 }
 
-int Client::_getgrouplist(gid_t** sgids, uid_t uid, gid_t gid)
-{
-  // cppcheck-suppress variableScope
-  int sgid_count;
-  gid_t *sgid_buf;
-
-  if (getgroups_cb) {
-    sgid_count = getgroups_cb(callback_handle, &sgid_buf);
-    if (sgid_count > 0) {
-      *sgids = sgid_buf;
-      return sgid_count;
-    }
-  }
-
-#if HAVE_GETGROUPLIST
-  struct passwd *pw;
-  pw = getpwuid(uid);
-  if (pw == NULL) {
-    ldout(cct, 3) << "getting user entry failed" << dendl;
-    return -errno;
-  }
-  //use PAM to get the group list
-  // initial number of group entries, defaults to posix standard of 16
-  // PAM implementations may provide more than 16 groups....
-  sgid_count = 16;
-  sgid_buf = (gid_t*)malloc(sgid_count * sizeof(gid_t));
-  if (sgid_buf == NULL) {
-    ldout(cct, 3) << "allocating group memory failed" << dendl;
-    return -ENOMEM;
-  }
-
-  while (1) {
-#if defined(__APPLE__)
-    if (getgrouplist(pw->pw_name, gid, (int*)sgid_buf, &sgid_count) == -1) {
-#else
-    if (getgrouplist(pw->pw_name, gid, sgid_buf, &sgid_count) == -1) {
-#endif
-      // we need to resize the group list and try again
-      void *_realloc = NULL;
-      if ((_realloc = realloc(sgid_buf, sgid_count * sizeof(gid_t))) == NULL) {
-	ldout(cct, 3) << "allocating group memory failed" << dendl;
-	free(sgid_buf);
-	return -ENOMEM;
-      }
-      sgid_buf = (gid_t*)_realloc;
-      continue;
-    }
-    // list was successfully retrieved
-    break;
-  }
-  *sgids = sgid_buf;
-  return sgid_count;
-#else
-  return 0;
-#endif
-}
-
 int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
 {
   if (perms.uid() == 0)
@@ -10032,7 +9974,6 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
   ldout(cct, 10) << __func__ << " cb " << args->handle
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
-		 << " getgroups_cb" << args->getgroups_cb
 		 << " switch_interrupt_cb " << args->switch_intr_cb
 		 << " remount_cb " << args->remount_cb
 		 << dendl;
@@ -10053,7 +9994,6 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
     remount_cb = args->remount_cb;
     remount_finisher.start();
   }
-  getgroups_cb = args->getgroups_cb;
   umask_cb = args->umask_cb;
 }
 
@@ -13940,13 +13880,6 @@ void Client::handle_conf_change(const struct md_config_t *conf,
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
   }
-}
-
-void Client::init_groups(UserPerm *perms)
-{
-  gid_t *sgids;
-  int count = _getgrouplist(&sgids, perms->uid(), perms->gid());
-  perms->init_gids(sgids, count);
 }
 
 void intrusive_ptr_add_ref(Inode *in)
