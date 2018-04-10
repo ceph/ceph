@@ -90,7 +90,7 @@ is changed from two to three, an additional OSD will be assigned to
 the placement group and will receive copies of all objects in the
 placement group.
 
-Placement groups do not own the OSD, they share it with other
+Placement groups do not own the OSD; they share it with other
 placement groups from the same pool or even other pools. If OSD #2
 fails, the Placement Group #2 will also have to restore copies of
 objects, using OSD #3.
@@ -308,14 +308,11 @@ Set the Number of Placement Groups
 
 To set the number of placement groups in a pool, you must specify the
 number of placement groups at the time you create the pool.
-See `Create a Pool`_ for details. Once you have set placement groups for a
-pool, you may increase the number of placement groups (but you cannot
-decrease the number of placement groups). To increase the number of
-placement groups, execute the following::
+See `Create a Pool`_ for details.  Even after a pool is created you can also change the number of placement groups with::
 
         ceph osd pool set {pool-name} pg_num {pg_num}
 
-Once you increase the number of placement groups, you must also
+After you increase the number of placement groups, you must also
 increase the number of placement groups for placement (``pgp_num``)
 before your cluster will rebalance. The ``pgp_num`` will be the number of
 placement groups that will be considered for placement by the CRUSH
@@ -327,6 +324,8 @@ placement groups for placement, execute the following::
 
         ceph osd pool set {pool-name} pgp_num {pgp_num}
 
+Conversely, when decreasing the number of PGs, ``pgp_num`` must first
+be lowered before ``pg_num`` can be reduced.  (Note that support for reducing ``pg_num`` was first added in Mimic 13.2.z.)
 
 Get the Number of Placement Groups
 ==================================
