@@ -1318,7 +1318,7 @@ using namespace std;
 struct MapPredicate {
   map<int, pair<PastIntervals::osd_state_t, epoch_t>> states;
   MapPredicate(
-    vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> _states)
+    const vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> &_states)
    : states(_states.begin(), _states.end()) {}
   PastIntervals::osd_state_t operator()(epoch_t start, int osd, epoch_t *lost_at) {
     auto val = states.at(osd);

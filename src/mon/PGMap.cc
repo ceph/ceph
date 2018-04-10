@@ -2146,13 +2146,13 @@ void PGMap::get_health_checks(
     stuck_cb stuck_since;
     bool invert;
 
-    PgStateResponse(const pg_consequence_t &c, stuck_cb s)
-      : consequence(c), stuck_since(s), invert(false)
+    PgStateResponse(const pg_consequence_t& c, stuck_cb&& s)
+      : consequence(c), stuck_since(std::move(s)), invert(false)
     {
     }
 
-    PgStateResponse(const pg_consequence_t &c, stuck_cb s, bool i)
-      : consequence(c), stuck_since(s), invert(i)
+    PgStateResponse(const pg_consequence_t& c, stuck_cb&& s, bool i)
+      : consequence(c), stuck_since(std::move(s)), invert(i)
     {
     }
   };

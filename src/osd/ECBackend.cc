@@ -190,7 +190,7 @@ void ECBackend::RecoveryOp::dump(Formatter *f) const
 
 ECBackend::ECBackend(
   PGBackend::Listener *pg,
-  coll_t coll,
+  const coll_t &coll,
   ObjectStore::CollectionHandle &ch,
   ObjectStore *store,
   CephContext *cct,

@@ -37,14 +37,14 @@ class Graylog
    * @param s SubsystemMap
    * @param logger Value for key "_logger" in GELF
    */
-  Graylog(const SubsystemMap * const s, std::string logger);
+  Graylog(const SubsystemMap * const s, const std::string &logger);
 
   /**
    * Create Graylog without SubsystemMap. Logging will not be ready
    * until set_destination is called
    * @param logger Value for key "_logger" in GELF
    */
-  explicit Graylog(std::string logger);
+  explicit Graylog(const std::string &logger);
   virtual ~Graylog();
 
   void set_hostname(const std::string& host);

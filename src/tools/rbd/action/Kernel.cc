@@ -64,7 +64,7 @@ static std::string map_option_int_cb(const char *value_char)
   return stringify(d);
 }
 
-static void put_map_option(const std::string &key, std::string val)
+static void put_map_option(const std::string &key, const std::string &val)
 {
   map_options[key] = val;
 }

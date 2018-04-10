@@ -552,7 +552,7 @@ PyObject* ActivePyModules::get_counter_python(
 }
 
 PyObject* ActivePyModules::get_perf_schema_python(
-    const std::string svc_type,
+    const std::string &svc_type,
     const std::string &svc_id)
 {
   PyThreadState *tstate = PyEval_SaveThread();

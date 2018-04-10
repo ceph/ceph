@@ -39,7 +39,7 @@ public:
     ghobject_t hoid;
     ObjectStore::Transaction *t;
     OSTransaction(
-      coll_t cid,
+      const coll_t &cid,
       const ghobject_t &hoid,
       ObjectStore::Transaction *t)
       : cid(cid), hoid(hoid), t(t) {}

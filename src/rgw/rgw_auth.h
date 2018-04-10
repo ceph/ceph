@@ -431,7 +431,7 @@ public:
     virtual aplptr_t create_apl_remote(CephContext* cct,
                                        const req_state* s,
                                        acl_strategy_t&& extra_acl_strategy,
-                                       const AuthInfo info) const = 0;
+                                       const AuthInfo &info) const = 0;
   };
 };
 

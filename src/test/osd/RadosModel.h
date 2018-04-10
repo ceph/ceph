@@ -500,7 +500,7 @@ public:
     redirect_objs[oid] = target;
   }
 
-  void update_object_chunk_target(const string &oid, uint64_t offset, ChunkDesc info)
+  void update_object_chunk_target(const string &oid, uint64_t offset, const ChunkDesc &info)
   {
     for (map<int, map<string,ObjectDesc> >::const_reverse_iterator i = 
 	   pool_obj_cont.rbegin();
@@ -2013,7 +2013,7 @@ public:
   ChunkReadOp(int n,
 	 RadosTestContext *context,
 	 const string &oid,
-	 string tgt_pool_name,
+	 const string &tgt_pool_name,
 	 bool balance_reads,
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
