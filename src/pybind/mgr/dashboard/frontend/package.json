@@ -27,7 +27,7 @@
     "bootstrap": "^3.3.7",
     "chart.js": "^2.7.1",
     "core-js": "^2.4.1",
-    "font-awesome": "4.7.0",
+    "fork-awesome": "1.0.11",
     "lodash": "^4.17.4",
     "moment": "2.20.1",
     "ng2-charts": "^1.6.0",
