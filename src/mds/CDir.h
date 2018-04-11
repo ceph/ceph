@@ -379,6 +379,8 @@ protected:
 
   load_spread_t pop_spread;
 
+  elist<CInode*> pop_lru_subdirs;
+
   // and to provide density
   int num_dentries_nested;
   int num_dentries_auth_subtree;
@@ -703,6 +705,7 @@ public:
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);
+  void abort_import(utime_t now);
 
   // -- auth pins --
   bool can_auth_pin() const override { return is_auth() && !(is_frozen() || is_freezing()); }

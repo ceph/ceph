@@ -86,15 +86,15 @@ public:
     return val+delta;
   }
 
-  double get_last() {
+  double get_last() const {
     return val;
   }
   
-  double get_last_vel() {
+  double get_last_vel() const {
     return vel;
   }
 
-  utime_t get_last_decay() { 
+  utime_t get_last_decay() const {
     return last_decay; 
   }
 
@@ -115,10 +115,12 @@ public:
 
   void adjust(double a) {
     val += a;
+    if (val < 0)
+      val = 0;
   }
   void adjust(utime_t now, const DecayRate& rate, double a) {
     decay(now, rate);
-    val += a;
+    adjust(a);
   }
   void scale(double f) {
     val *= f;
