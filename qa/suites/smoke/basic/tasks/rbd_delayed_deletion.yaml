@@ -1,0 +1,15 @@
+tasks:
+- install:
+- ceph:
+    fs: xfs
+- workunit:
+    clients:
+      client.0:
+        - rbd/rbd_delayed_deletion.py
+
+# overrides to allow pool deletion 
+#overrides:
+#  ceph:
+#    conf:
+#      mon:
+#        mon_allow_pool_delete: true

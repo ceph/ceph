@@ -1,0 +1,8 @@
+tasks:
+- install:
+- ceph:
+    fs: xfs
+- workunit:
+    clients:
+      client.0:
+        - rbd/test_ceph_9825.py
