@@ -24,11 +24,20 @@ namespace ceph
   }
 }
 
-void do_init() {
-  static CephContext* cct = nullptr;
+static CephContext* cct;
+
+static void do_init() {
   if (cct == nullptr) {
     cct = new CephContext(0);
     lockdep_register_ceph_context(cct);
+  }
+}
+
+static void disable_lockdep() {
+  if (cct) {
+    lockdep_unregister_ceph_context(cct);
+    cct->put();
+    cct = nullptr;
   }
 }
 
@@ -40,7 +49,6 @@ TEST(Mutex, NormalAsserts) {
 
 TEST(Mutex, RecursiveWithLockdep) {
   do_init();
-  g_lockdep = 1;
   Mutex* m = new Mutex("Recursive1",true);
   m->Lock();
   m->Lock();
@@ -50,8 +58,7 @@ TEST(Mutex, RecursiveWithLockdep) {
 }
 
 TEST(Mutex, RecursiveWithoutLockdep) {
-  do_init();
-  g_lockdep = 0;
+  disable_lockdep();
   Mutex* m = new Mutex("Recursive2",true);
   m->Lock();
   m->Lock();
