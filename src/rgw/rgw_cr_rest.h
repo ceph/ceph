@@ -15,6 +15,10 @@ struct rgw_rest_obj {
   std::map<string, string> attrs;
   std::map<string, string> custom_attrs;
   RGWAccessControlPolicy acls;
+
+  void init(const rgw_obj_key& _key) {
+    key = _key;
+  }
 };
 
 class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine {
@@ -119,6 +123,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   string path;
   param_vec_t params;
   param_vec_t headers;
+  map<string, string> *attrs;
   T *result;
   bufferlist input_bl;
   bool send_content_length=false;
@@ -129,23 +134,19 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
                           RGWHTTPManager *_http_manager,
                           const string& _method, const string& _path,
                           rgw_http_param_pair *_params,
-                          map<string, string> *_headers,
+                          map<string, string> *_attrs,
                           bufferlist& _input, T *_result, bool _send_content_length)
    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_headers)), result(_result),
-    input_bl(_input), send_content_length(_send_content_length)
-    {}
+    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result),
+    input_bl(_input), send_content_length(_send_content_length) {}
 
- RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+  RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager,
                           const string& _method, const string& _path,
-                          rgw_http_param_pair *_params, map<string, string> *_headers,
+                          rgw_http_param_pair *_params, map<string, string> *_attrs,
                           T *_result)
    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_headers)), result(_result)
-    {}
-
-
+    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result) {}
 
   ~RGWSendRawRESTResourceCR() override {
     request_cleanup();
@@ -202,9 +203,9 @@ class RGWSendRESTResourceCR : public RGWSendRawRESTResourceCR<T> {
   RGWSendRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                            RGWHTTPManager *_http_manager,
                            const string& _method, const string& _path,
-                        rgw_http_param_pair *_params, map<string, string> *_headers,
+                        rgw_http_param_pair *_params, map<string, string> *_attrs,
                         S& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, _method, _path, _params, _headers, _result) {
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, _method, _path, _params, _attrs, _result) {
 
     JSONFormatter jf;
     encode_json("data", _input, &jf);
@@ -246,9 +247,9 @@ class RGWPostRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
                           RGWHTTPManager *_http_manager,
                           const string& _path,
                           rgw_http_param_pair *_params,
-                          map<string, string> * _headers,
+                          map<string, string> * _attrs,
                           bufferlist& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "POST", _path, _params, _headers, _input, _result, true){}
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "POST", _path, _params, _attrs, _input, _result, true){}
 
 };
 
@@ -427,7 +428,7 @@ public:
                                                                 env(_env),
                                                                 caller(_caller),
                                                                 http_manager(_http_manager) {
-    rest_obj.key = _src_key;
+    rest_obj.init(_src_key);
   }
 
   int init() override;
