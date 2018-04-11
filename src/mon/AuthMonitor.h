@@ -115,6 +115,9 @@ private:
   uint64_t max_global_id;
   uint64_t last_allocated_id;
 
+  bool _upgrade_format_to_dumpling();
+  bool _upgrade_format_to_luminous();
+  bool _upgrade_format_to_mimic();
   void upgrade_format() override;
 
   void export_keyring(KeyRing& keyring);
@@ -144,6 +147,8 @@ private:
 
   void on_active() override;
   bool should_propose(double& delay) override;
+  void get_initial_keyring(KeyRing *keyring);
+  void create_initial_keys(KeyRing *keyring);
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
