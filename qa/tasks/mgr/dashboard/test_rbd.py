@@ -29,42 +29,30 @@ class RbdTest(DashboardTestCase):
     def create_image(cls, pool, name, size, **kwargs):
         data = {'name': name, 'pool_name': pool, 'size': size}
         data.update(kwargs)
-        return cls._task_post('/api/rbd', 'rbd/create',
-                              {'pool_name': pool, 'image_name': name}, data)
+        return cls._task_post('/api/rbd', data)
 
     @classmethod
     def remove_image(cls, pool, image):
-        return cls._task_delete('/api/rbd/{}/{}'.format(pool, image),
-                                'rbd/delete',
-                                {'pool_name': pool, 'image_name': image})
+        return cls._task_delete('/api/rbd/{}/{}'.format(pool, image))
 
     # pylint: disable=too-many-arguments
     @classmethod
     def edit_image(cls, pool, image, name=None, size=None, features=None):
-        return cls._task_put('/api/rbd/{}/{}'.format(pool, image), 'rbd/edit',
-                             {'pool_name': pool, 'image_name': image},
+        return cls._task_put('/api/rbd/{}/{}'.format(pool, image),
                              {'name': name, 'size': size, 'features': features})
 
     @classmethod
     def create_snapshot(cls, pool, image, snapshot):
-        data = {'pool_name': pool, 'image_name': image, 'snapshot_name': snapshot}
         return cls._task_post('/api/rbd/{}/{}/snap'.format(pool, image),
-                              'rbd/snap/create', data,
                               {'snapshot_name': snapshot})
 
     @classmethod
     def remove_snapshot(cls, pool, image, snapshot):
-        return cls._task_delete('/api/rbd//{}/{}/snap/{}'.format(pool, image, snapshot),
-                                'rbd/snap/delete',
-                                {'pool_name': pool, 'image_name': image,
-                                 'snapshot_name': snapshot})
+        return cls._task_delete('/api/rbd//{}/{}/snap/{}'.format(pool, image, snapshot))
 
     @classmethod
     def update_snapshot(cls, pool, image, snapshot, new_name, is_protected):
         return cls._task_put('/api/rbd//{}/{}/snap/{}'.format(pool, image, snapshot),
-                             'rbd/snap/edit',
-                             {'pool_name': pool, 'image_name': image,
-                              'snapshot_name': snapshot},
                              {'new_snap_name': new_name, 'is_protected': is_protected})
 
     @classmethod
@@ -198,8 +186,8 @@ class RbdTest(DashboardTestCase):
 
     def test_create(self):
         rbd_name = 'test_rbd'
-        res = self.create_image('rbd', rbd_name, 10240)
-        self.assertEqual(res, {"success": True})
+        self.create_image('rbd', rbd_name, 10240)
+        self.assertStatus(201)
 
         img = self._get('/api/rbd/rbd/test_rbd')
         self.assertStatus(200)
@@ -220,8 +208,8 @@ class RbdTest(DashboardTestCase):
         self.create_pool('data_pool', 12, 'erasure')
 
         rbd_name = 'test_rbd_in_data_pool'
-        res = self.create_image('rbd', rbd_name, 10240, data_pool='data_pool')
-        self.assertEqual(res, {"success": True})
+        self.create_image('rbd', rbd_name, 10240, data_pool='data_pool')
+        self.assertStatus(201)
 
         img = self._get('/api/rbd/rbd/test_rbd_in_data_pool')
         self.assertStatus(200)
@@ -235,6 +223,7 @@ class RbdTest(DashboardTestCase):
                                             'object-map'])
 
         self.remove_image('rbd', rbd_name)
+        self.assertStatus(204)
         self._ceph_cmd(['osd', 'pool', 'delete', 'data_pool', 'data_pool',
                         '--yes-i-really-really-mean-it'])
 
@@ -242,9 +231,10 @@ class RbdTest(DashboardTestCase):
         res = self.create_image('rbd', 'test_rbd_twice', 10240)
 
         res = self.create_image('rbd', 'test_rbd_twice', 10240)
-        self.assertEqual(res, {"success": False, "errno": 17,
+        self.assertEqual(res, {"errno": 17,
                                "detail": "[errno 17] error creating image"})
         self.remove_image('rbd', 'test_rbd_twice')
+        self.assertStatus(204)
 
     def test_snapshots_and_clone_info(self):
         self.create_snapshot('rbd', 'img1', 'snap1')
@@ -279,6 +269,7 @@ class RbdTest(DashboardTestCase):
                                             'fast-diff', 'layering',
                                             'object-map'])
         self.remove_image('rbd_iscsi', 'img1_clone')
+        self.assertStatus(204)
 
     def test_disk_usage(self):
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '50M', 'rbd/img2'])
@@ -295,105 +286,105 @@ class RbdTest(DashboardTestCase):
 
     def test_delete_non_existent_image(self):
         res = self.remove_image('rbd', 'i_dont_exist')
-        self.assertEqual(res, {"success": False, "errno": 2,
+        self.assertEqual(res, {"errno": 2,
                                "detail": "[errno 2] error removing image"})
 
     def test_image_delete(self):
-        res = self.create_image('rbd', 'delete_me', 2**30)
-        self.assertTrue(res['success'])
-        res = self.create_snapshot('rbd', 'delete_me', 'snap1')
-        self.assertTrue(res['success'])
-        res = self.create_snapshot('rbd', 'delete_me', 'snap2')
-        self.assertTrue(res['success'])
+        self.create_image('rbd', 'delete_me', 2**30)
+        self.assertStatus(201)
+        self.create_snapshot('rbd', 'delete_me', 'snap1')
+        self.assertStatus(201)
+        self.create_snapshot('rbd', 'delete_me', 'snap2')
+        self.assertStatus(201)
 
         img = self._get('/api/rbd/rbd/delete_me')
         self.assertStatus(200)
         self._validate_image(img, name='delete_me', size=2**30)
         self.assertEqual(len(img['snapshots']), 2)
 
-        res = self.remove_snapshot('rbd', 'delete_me', 'snap1')
-        self.assertTrue(res['success'])
-        res = self.remove_snapshot('rbd', 'delete_me', 'snap2')
-        self.assertTrue(res['success'])
+        self.remove_snapshot('rbd', 'delete_me', 'snap1')
+        self.assertStatus(204)
+        self.remove_snapshot('rbd', 'delete_me', 'snap2')
+        self.assertStatus(204)
 
         img = self._get('/api/rbd/rbd/delete_me')
         self.assertStatus(200)
         self._validate_image(img, name='delete_me', size=2**30)
         self.assertEqual(len(img['snapshots']), 0)
 
-        res = self.remove_image('rbd', 'delete_me')
-        self.assertTrue(res['success'])
+        self.remove_image('rbd', 'delete_me')
+        self.assertStatus(204)
 
     def test_image_rename(self):
-        res = self.create_image('rbd', 'edit_img', 2**30)
-        self.assertTrue(res['success'])
+        self.create_image('rbd', 'edit_img', 2**30)
+        self.assertStatus(201)
         self._get('/api/rbd/rbd/edit_img')
         self.assertStatus(200)
-        res = self.edit_image('rbd', 'edit_img', 'new_edit_img')
-        self.assertTrue(res['success'])
+        self.edit_image('rbd', 'edit_img', 'new_edit_img')
+        self.assertStatus(200)
         self._get('/api/rbd/rbd/edit_img')
         self.assertStatus(404)
         self._get('/api/rbd/rbd/new_edit_img')
         self.assertStatus(200)
-        res = self.remove_image('rbd', 'new_edit_img')
-        self.assertTrue(res['success'])
+        self.remove_image('rbd', 'new_edit_img')
+        self.assertStatus(204)
 
     def test_image_resize(self):
-        res = self.create_image('rbd', 'edit_img', 2**30)
-        self.assertTrue(res['success'])
+        self.create_image('rbd', 'edit_img', 2**30)
+        self.assertStatus(201)
         img = self._get('/api/rbd/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, size=2**30)
-        res = self.edit_image('rbd', 'edit_img', size=2*2**30)
-        self.assertTrue(res['success'])
+        self.edit_image('rbd', 'edit_img', size=2*2**30)
+        self.assertStatus(200)
         img = self._get('/api/rbd/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, size=2*2**30)
-        res = self.remove_image('rbd', 'edit_img')
-        self.assertTrue(res['success'])
+        self.remove_image('rbd', 'edit_img')
+        self.assertStatus(204)
 
     def test_image_change_features(self):
-        res = self.create_image('rbd', 'edit_img', 2**30, features=["layering"])
-        self.assertTrue(res['success'])
+        self.create_image('rbd', 'edit_img', 2**30, features=["layering"])
+        self.assertStatus(201)
         img = self._get('/api/rbd/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=["layering"])
-        res = self.edit_image('rbd', 'edit_img',
-                              features=["fast-diff", "object-map", "exclusive-lock"])
+        self.edit_image('rbd', 'edit_img',
+                        features=["fast-diff", "object-map", "exclusive-lock"])
         img = self._get('/api/rbd/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
                                                  'fast-diff', 'layering',
                                                  'object-map'])
-        res = self.edit_image('rbd', 'edit_img',
-                              features=["journaling", "exclusive-lock"])
+        self.edit_image('rbd', 'edit_img',
+                        features=["journaling", "exclusive-lock"])
         img = self._get('/api/rbd/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
                                                  'journaling', 'layering'])
-        res = self.remove_image('rbd', 'edit_img')
-        self.assertTrue(res['success'])
+        self.remove_image('rbd', 'edit_img')
+        self.assertStatus(204)
 
     def test_update_snapshot(self):
-        res = self.create_snapshot('rbd', 'img1', 'snap5')
-        self.assertTrue(res['success'])
+        self.create_snapshot('rbd', 'img1', 'snap5')
+        self.assertStatus(201)
         img = self._get('/api/rbd/rbd/img1')
         self._validate_snapshot_list(img['snapshots'], 'snap5', is_protected=False)
 
-        res = self.update_snapshot('rbd', 'img1', 'snap5', 'snap6', None)
-        self.assertTrue(res['success'])
+        self.update_snapshot('rbd', 'img1', 'snap5', 'snap6', None)
+        self.assertStatus(200)
         img = self._get('/api/rbd/rbd/img1')
         self._validate_snapshot_list(img['snapshots'], 'snap6', is_protected=False)
 
-        res = self.update_snapshot('rbd', 'img1', 'snap6', None, True)
-        self.assertTrue(res['success'])
+        self.update_snapshot('rbd', 'img1', 'snap6', None, True)
+        self.assertStatus(200)
         img = self._get('/api/rbd/rbd/img1')
         self._validate_snapshot_list(img['snapshots'], 'snap6', is_protected=True)
 
-        res = self.update_snapshot('rbd', 'img1', 'snap6', 'snap5', False)
-        self.assertTrue(res['success'])
+        self.update_snapshot('rbd', 'img1', 'snap6', 'snap5', False)
+        self.assertStatus(200)
         img = self._get('/api/rbd/rbd/img1')
         self._validate_snapshot_list(img['snapshots'], 'snap5', is_protected=False)
 
-        res = self.remove_snapshot('rbd', 'img1', 'snap5')
-        self.assertTrue(res['success'])
+        self.remove_snapshot('rbd', 'img1', 'snap5')
+        self.assertStatus(204)

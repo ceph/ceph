@@ -150,17 +150,18 @@ class DashboardTestCase(MgrTestCase):
 
     # pylint: disable=too-many-arguments
     @classmethod
-    def _task_request(cls, method, url, task_name, task_metadata, data, timeout):
+    def _task_request(cls, method, url, data, timeout):
         res = cls._request(url, method, data)
-        cls._assertIn(cls._resp.status_code, [200, 201, 204])
-        cls._assertIsInst(res, dict)
-        cls._assertIn('status', res)
-        cls._assertIn(res['status'], ['done', 'executing'])
-        if res['status'] == 'done':
-            cls._assertIn('value', res)
-            log.info("task (%s, %s) finished immediately", task_name,
-                     task_metadata)
-            return res['value']
+        cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 409])
+
+        if cls._resp.status_code != 202:
+            log.info("task finished immediately")
+            return res
+
+        cls._assertIn('name', res)
+        cls._assertIn('metadata', res)
+        task_name = res['name']
+        task_metadata = res['metadata']
 
         class Waiter(threading.Thread):
             def __init__(self, task_name, task_metadata):
@@ -196,25 +197,26 @@ class DashboardTestCase(MgrTestCase):
                             .format(task_name, task_metadata))
         log.info("task (%s, %s) finished", task_name, task_metadata)
         if thread.res_task['success']:
+            if method == 'POST':
+                cls._resp.status_code = 201
+            elif method == 'PUT':
+                cls._resp.status_code = 200
+            elif method == 'DELETE':
+                cls._resp.status_code = 204
             return thread.res_task['ret_value']
         raise Exception(thread.res_task['exception'])
 
     @classmethod
-    def _task_post(cls, url, task_name, task_metadata, data=None,
-                   timeout=60):
-        return cls._task_request('POST', url, task_name, task_metadata, data,
-                                 timeout)
+    def _task_post(cls, url, data=None, timeout=60):
+        return cls._task_request('POST', url, data, timeout)
 
     @classmethod
-    def _task_delete(cls, url, task_name, task_metadata, data=None,
-                     timeout=60):
-        return cls._task_request('DELETE', url, task_name, task_metadata, data,
-                                 timeout)
+    def _task_delete(cls, url, timeout=60):
+        return cls._task_request('DELETE', url, None, timeout)
 
     @classmethod
-    def _task_put(cls, url, task_name, task_metadata, data=None, timeout=60):
-        return cls._task_request('PUT', url, task_name, task_metadata, data,
-                                 timeout)
+    def _task_put(cls, url, data=None, timeout=60):
+        return cls._task_request('PUT', url, data, timeout)
 
     @classmethod
     def cookies(cls):
