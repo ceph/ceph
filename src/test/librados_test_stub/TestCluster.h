@@ -21,6 +21,8 @@ public:
     virtual void handle_removed(TestRadosClient* test_rados_client) = 0;
   };
 
+  TestCluster() : m_watch_notify(this) {
+  }
   virtual ~TestCluster() {
   }
 

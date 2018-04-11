@@ -17,6 +17,7 @@ class Finisher;
 
 namespace librados {
 
+class TestCluster;
 class TestRadosClient;
 
 class TestWatchNotify : boost::noncopyable {
@@ -47,13 +48,24 @@ public:
 
   typedef std::map<uint64_t, WatchHandle> WatchHandles;
 
+  struct ObjectHandler;
+  typedef boost::shared_ptr<ObjectHandler> SharedObjectHandler;
+
   struct Watcher {
+    Watcher(int64_t pool_id, const std::string& oid)
+      : pool_id(pool_id), oid(oid) {
+    }
+
+    int64_t pool_id;
+    std::string oid;
+
+    SharedObjectHandler object_handler;
     WatchHandles watch_handles;
     NotifyHandles notify_handles;
   };
   typedef boost::shared_ptr<Watcher> SharedWatcher;
 
-  TestWatchNotify();
+  TestWatchNotify(TestCluster* test_cluster);
 
   int list_watchers(int64_t pool_id, const std::string& o,
                     std::list<obj_watch_t> *out_watchers);
@@ -88,6 +100,8 @@ private:
   typedef std::pair<int64_t, std::string> PoolFile;
   typedef std::map<PoolFile, SharedWatcher> FileWatchers;
 
+  TestCluster *m_test_cluster;
+
   uint64_t m_handle = 0;
   uint64_t m_notify_id = 0;
 
@@ -97,6 +111,7 @@ private:
   FileWatchers	m_file_watchers;
 
   SharedWatcher get_watcher(int64_t pool_id, const std::string& oid);
+  void maybe_remove_watcher(SharedWatcher shared_watcher);
 
   void execute_watch(TestRadosClient *rados_client, int64_t pool_id,
                      const std::string& o, uint64_t gid, uint64_t *handle,
@@ -114,6 +129,8 @@ private:
                   const WatcherID &watcher_id, const bufferlist &bl);
   void finish_notify(TestRadosClient *rados_client, int64_t pool_id,
                      const std::string &oid, uint64_t notify_id);
+
+  void handle_object_removed(int64_t pool_id, const std::string& oid);
 };
 
 } // namespace librados
