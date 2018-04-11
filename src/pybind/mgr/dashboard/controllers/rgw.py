@@ -2,10 +2,14 @@
 from __future__ import absolute_import
 
 import json
+import cherrypy
 
-from . import ApiController, RESTController, AuthRequired
+from . import ApiController, BaseController, RESTController, AuthRequired
 from .. import logger
 from ..services.ceph_service import CephService
+from ..services.rgw_client import RgwClient
+from ..rest_client import RequestException
+from ..exceptions import NoCredentialsException
 
 
 @ApiController('rgw')
@@ -59,3 +63,29 @@ class RgwDaemon(RESTController):
         daemon['rgw_metadata'] = metadata
         daemon['rgw_status'] = status
         return daemon
+
+
+@ApiController('rgw/proxy/{path:.*}')
+@AuthRequired()
+class RgwProxy(BaseController):
+    @cherrypy.expose
+    def __call__(self, path, **params):
+        try:
+            rgw_client = RgwClient.admin_instance()
+
+        except NoCredentialsException as e:
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 401
+            return json.dumps({'message': str(e)}).encode('utf-8')
+
+        method = cherrypy.request.method
+        data = None
+
+        if cherrypy.request.body.length:
+            data = cherrypy.request.body.read()
+
+        try:
+            return rgw_client.proxy(method, path, params, data)
+        except RequestException as e:
+            cherrypy.response.status = e.status_code
+            return e.content
