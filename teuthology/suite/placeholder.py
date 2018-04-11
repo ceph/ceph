@@ -70,7 +70,7 @@ dict_templ = {
                     'debug osd': 25
                 }
             },
-            'log-whitelist': ['slow request'],
+            'log-whitelist': ['slow request', '\(SLOW_OPS\)'],
             'sha1': Placeholder('ceph_hash'),
         },
         'ceph-deploy': {
