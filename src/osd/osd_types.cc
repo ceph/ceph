@@ -895,7 +895,7 @@ boost::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_STALE;
   else if (state == "remapped")
     type = PG_STATE_REMAPPED;
-  else if (state == "deep_scrub")
+  else if (state == "deep")
     type = PG_STATE_DEEP_SCRUB;
   else if (state == "backfilling")
     type = PG_STATE_BACKFILLING;
