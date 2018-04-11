@@ -212,6 +212,7 @@ int RGWStreamWriteHTTPResourceCRF::write(bufferlist& data, bool *io_pending)
       }
       yield req->add_send_data(data);
     }
+    return req->get_status();
   }
   return 0;
 }
