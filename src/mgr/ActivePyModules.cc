@@ -431,7 +431,7 @@ bool ActivePyModules::get_store(const std::string &module_name,
   const std::string global_key = PyModule::config_prefix
     + module_name + "/" + key;
 
-  dout(4) << __func__ << "key: " << global_key << dendl;
+  dout(4) << __func__ << " key: " << global_key << dendl;
 
   if (store_cache.count(global_key)) {
     *val = store_cache.at(global_key);
@@ -453,7 +453,6 @@ bool ActivePyModules::get_config(const std::string &module_name,
 
   dout(4) << __func__ << " key: " << global_key << dendl;
 
-  
   Mutex::Locker lock(module_config.lock);
   
   if (module_config.config.count(global_key)) {
