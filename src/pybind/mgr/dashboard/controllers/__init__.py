@@ -306,12 +306,19 @@ class Task(object):
                         md[k] = arg_map[v[1:-1]]
                 else:
                     md[k] = v
-            task = TaskManager.run(self.name, md, func, args, kwargs)
+            task = TaskManager.run(self.name, md, func, args, kwargs,
+                                   exception_handler=self.exception_handler)
             try:
                 status, value = task.wait(self.wait_for)
             except Exception as ex:
-                if self.exception_handler:
-                    return self.exception_handler(ex)
+                if task.ret_value:
+                    # exception was handled by task.exception_handler
+                    if 'status' in task.ret_value:
+                        status = task.ret_value['status']
+                    else:
+                        status = 500
+                    cherrypy.response.status = status
+                    return task.ret_value
                 raise ex
             if status == TaskManager.VALUE_EXECUTING:
                 cherrypy.response.status = 202

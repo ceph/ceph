@@ -107,8 +107,20 @@ class ControllerTestCase(helper.CPWebCase):
         logger.info("task (%s, %s) finished", task_name, task_metadata)
         if thread.res_task['success']:
             self.body = json.dumps(thread.res_task['ret_value'])
+            if method == 'POST':
+                self.status = '201 Created'
+            elif method == 'PUT':
+                self.status = '200 OK'
+            elif method == 'DELETE':
+                self.status = '204 No Content'
             return
-        raise Exception(thread.res_task['exception'])
+        else:
+            if 'status' in thread.res_task['exception']:
+                self.status = thread.res_task['exception']['status']
+            else:
+                self.status = 500
+            self.body = json.dumps(thread.rest_task['exception'])
+            return
 
     def _task_post(self, url, data=None, timeout=60):
         self._task_request('POST', url, data, timeout)
