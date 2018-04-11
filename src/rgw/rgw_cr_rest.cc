@@ -15,7 +15,13 @@ RGWCRHTTPGetDataCB::RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr
   req->set_in_cb(this);
 }
 
+#define GET_DATA_WINDOW_SIZE 2 * 1024 * 1024
+
 int RGWCRHTTPGetDataCB::handle_data(bufferlist& bl, bool *pause) {
+  if (data.length() < GET_DATA_WINDOW_SIZE / 2) {
+    notified = false;
+  }
+
   {
     uint64_t bl_len = bl.length();
 
@@ -34,9 +40,9 @@ int RGWCRHTTPGetDataCB::handle_data(bufferlist& bl, bool *pause) {
     data.append(bl);
   }
 
-#define GET_DATA_WINDOW_SIZE 2 * 1024 * 1024
   uint64_t data_len = data.length();
-  if (data_len >= GET_DATA_WINDOW_SIZE) {
+  if (data_len >= GET_DATA_WINDOW_SIZE && !notified) {
+    notified = true;
     env->manager->io_complete(cr, io_id);
   }
   if (data_len >= 2 * GET_DATA_WINDOW_SIZE) {
