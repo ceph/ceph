@@ -998,7 +998,7 @@ def main():
             # Filter on channel
             if (channel == parsed_args.watch_channel or \
                            parsed_args.watch_channel == "*"):
-                print(line)
+                print(line.decode('utf-8'))
                 sys.stdout.flush()
 
         # first do a ceph status
@@ -1006,7 +1006,7 @@ def main():
         if ret:
             print("status query failed: ", outs, file=sys.stderr)
             return ret
-        print(outbuf)
+        print(outbuf.decode('utf-8'))
 
         # this instance keeps the watch connection alive, but is
         # otherwise unused
