@@ -346,3 +346,11 @@ class RbdSnapshot(RESTController):
                     img.unprotect_snap(snapshot_name)
 
         return _rbd_image_call(pool_name, image_name, _edit, snapshot_name)
+
+    @RbdTask('snap/rollback',
+             ['{pool_name}', '{image_name}', '{snapshot_name}'], 5.0)
+    @RESTController.resource(['POST'])
+    def rollback(self, pool_name, image_name, snapshot_name):
+        def _rollback(ioctx, img, snapshot_name):
+            img.rollback_to_snap(snapshot_name)
+        return _rbd_image_call(pool_name, image_name, _rollback, snapshot_name)
