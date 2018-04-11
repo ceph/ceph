@@ -93,6 +93,7 @@ Depends: binutils,
          gdisk,
          grep,
          logrotate,
+         parted,
          psmisc,
          xfsprogs,
          ${misc:Depends},
@@ -236,7 +237,6 @@ Description: debugging symbols for ceph-mon
 Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
-         parted,
          lvm2,
          ${misc:Depends},
          ${python:Depends},

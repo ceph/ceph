@@ -254,6 +254,7 @@ Requires:      grep
 Requires:      xfsprogs
 Requires:      e2fsprogs
 Requires:      logrotate
+Requires:      parted
 Requires:      util-linux
 Requires:      cryptsetup
 Requires:      findutils
@@ -432,7 +433,6 @@ Summary:	Ceph Object Storage Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-Requires:	parted
 Requires:	lvm2
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
