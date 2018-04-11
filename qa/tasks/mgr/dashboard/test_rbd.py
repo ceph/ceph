@@ -390,3 +390,34 @@ class RbdTest(DashboardTestCase):
 
         self.remove_snapshot('rbd', 'img1', 'snap5')
         self.assertStatus(204)
+
+    def test_snapshot_rollback(self):
+        self.create_image('rbd', 'rollback_img', 2**30,
+                          features=["layering", "exclusive-lock", "fast-diff",
+                                    "object-map"])
+        self.assertStatus(201)
+        self.create_snapshot('rbd', 'rollback_img', 'snap1')
+        self.assertStatus(201)
+
+        img = self._get('/api/rbd/rbd/rollback_img')
+        self.assertStatus(200)
+        self.assertEqual(img['disk_usage'], 0)
+
+        self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M',
+                       'rbd/rollback_img'])
+
+        img = self._get('/api/rbd/rbd/rollback_img')
+        self.assertStatus(200)
+        self.assertGreater(img['disk_usage'], 0)
+
+        self._task_post('/api/rbd/rbd/rollback_img/snap/snap1/rollback')
+        self.assertStatus([201, 200])
+
+        img = self._get('/api/rbd/rbd/rollback_img')
+        self.assertStatus(200)
+        self.assertEqual(img['disk_usage'], 0)
+
+        self.remove_snapshot('rbd', 'rollback_img', 'snap1')
+        self.assertStatus(204)
+        self.remove_image('rbd', 'rollback_img')
+        self.assertStatus(204)
