@@ -55,35 +55,38 @@ public:
 
   TestWatchNotify();
 
-  int list_watchers(const std::string& o,
+  int list_watchers(int64_t pool_id, const std::string& o,
                     std::list<obj_watch_t> *out_watchers);
 
   void aio_flush(TestRadosClient *rados_client, Context *on_finish);
-  void aio_watch(TestRadosClient *rados_client, const std::string& o,
-                 uint64_t gid, uint64_t *handle, librados::WatchCtx *watch_ctx,
-                 librados::WatchCtx2 *watch_ctx2, Context *on_finish);
+  void aio_watch(TestRadosClient *rados_client, int64_t pool_id,
+                 const std::string& o, uint64_t gid, uint64_t *handle,
+                 librados::WatchCtx *watch_ctx, librados::WatchCtx2 *watch_ctx2,
+                 Context *on_finish);
   void aio_unwatch(TestRadosClient *rados_client, uint64_t handle,
                    Context *on_finish);
-  void aio_notify(TestRadosClient *rados_client, const std::string& oid,
-                  const bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
-                  Context *on_notify);
+  void aio_notify(TestRadosClient *rados_client, int64_t pool_id,
+                  const std::string& oid, const bufferlist& bl,
+                  uint64_t timeout_ms, bufferlist *pbl, Context *on_notify);
 
   void flush(TestRadosClient *rados_client);
-  int notify(TestRadosClient *rados_client, const std::string& o,
-             const bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl);
-  void notify_ack(TestRadosClient *rados_client, const std::string& o,
-                  uint64_t notify_id, uint64_t handle, uint64_t gid,
-                  bufferlist& bl);
-  int watch(TestRadosClient *rados_client, const std::string& o, uint64_t gid,
-            uint64_t *handle, librados::WatchCtx *ctx,
-            librados::WatchCtx2 *ctx2);
+  int notify(TestRadosClient *rados_client, int64_t pool_id,
+             const std::string& o, bufferlist& bl, uint64_t timeout_ms,
+             bufferlist *pbl);
+  void notify_ack(TestRadosClient *rados_client, int64_t pool_id,
+                  const std::string& o, uint64_t notify_id, uint64_t handle,
+                  uint64_t gid, bufferlist& bl);
+
+  int watch(TestRadosClient *rados_client, int64_t pool_id,
+            const std::string& o, uint64_t gid, uint64_t *handle,
+            librados::WatchCtx *ctx, librados::WatchCtx2 *ctx2);
   int unwatch(TestRadosClient *rados_client, uint64_t handle);
 
   void blacklist(uint32_t nonce);
 
 private:
-
-  typedef std::map<std::string, SharedWatcher> FileWatchers;
+  typedef std::pair<int64_t, std::string> PoolFile;
+  typedef std::map<PoolFile, SharedWatcher> FileWatchers;
 
   uint64_t m_handle = 0;
   uint64_t m_notify_id = 0;
@@ -93,24 +96,24 @@ private:
 
   FileWatchers	m_file_watchers;
 
-  SharedWatcher get_watcher(const std::string& oid);
+  SharedWatcher get_watcher(int64_t pool_id, const std::string& oid);
 
-  void execute_watch(TestRadosClient *rados_client, const std::string& o,
-                     uint64_t gid, uint64_t *handle,
+  void execute_watch(TestRadosClient *rados_client, int64_t pool_id,
+                     const std::string& o, uint64_t gid, uint64_t *handle,
                      librados::WatchCtx *watch_ctx,
                      librados::WatchCtx2 *watch_ctx2,
                      Context *on_finish);
   void execute_unwatch(TestRadosClient *rados_client, uint64_t handle,
                        Context *on_finish);
 
-  void execute_notify(TestRadosClient *rados_client, const std::string &oid,
-                      const bufferlist &bl, bufferlist *pbl,
-                      Context *on_notify);
-  void ack_notify(TestRadosClient *rados_client, const std::string &oid,
-                  uint64_t notify_id, const WatcherID &watcher_id,
-                  const bufferlist &bl);
-  void finish_notify(TestRadosClient *rados_client, const std::string &oid,
-                     uint64_t notify_id);
+  void execute_notify(TestRadosClient *rados_client, int64_t pool_id,
+                      const std::string &oid, const bufferlist &bl,
+                      bufferlist *pbl, Context *on_notify);
+  void ack_notify(TestRadosClient *rados_client, int64_t pool_id,
+                  const std::string &oid, uint64_t notify_id,
+                  const WatcherID &watcher_id, const bufferlist &bl);
+  void finish_notify(TestRadosClient *rados_client, int64_t pool_id,
+                     const std::string &oid, uint64_t notify_id);
 };
 
 } // namespace librados
