@@ -350,8 +350,13 @@ static curl_slist *headers_to_slist(param_vec_t& headers)
       }
     }
 
-    val.append(": ");
-    val.append(p.second);
+    // curl won't send headers with empty values unless it ends with a ; instead
+    if (p.second.empty()) {
+      val.append(1, ';');
+    } else {
+      val.append(": ");
+      val.append(p.second);
+    }
     h = curl_slist_append(h, val.c_str());
   }
 
