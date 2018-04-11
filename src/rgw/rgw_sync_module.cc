@@ -29,7 +29,7 @@ int RGWCallStatRemoteObjCR::operate() {
     yield {
       call(new RGWStatRemoteObjCR(sync_env->async_rados, sync_env->store,
                                   sync_env->source_zone,
-                                  bucket_info, key, &mtime, &size, &etag, &attrs));
+                                  bucket_info, key, &mtime, &size, &etag, &attrs, &headers));
     }
     if (retcode < 0) {
       ldout(sync_env->cct, 0) << "RGWStatRemoteObjCR() returned " << retcode << dendl;
@@ -37,11 +37,11 @@ int RGWCallStatRemoteObjCR::operate() {
     }
     ldout(sync_env->cct, 20) << "stat of remote obj: z=" << sync_env->source_zone
       << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
-      << " attrs=" << attrs << dendl;
+      << " attrs=" << attrs << " headers=" << headers << dendl;
     yield {
       RGWStatRemoteObjCBCR *cb = allocate_callback();
       if (cb) {
-        cb->set_result(mtime, size, etag, std::move(attrs));
+        cb->set_result(mtime, size, etag, std::move(attrs), std::move(headers));
         call(cb);
       }
     }
