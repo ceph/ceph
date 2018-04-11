@@ -153,6 +153,15 @@ int main(int argc, const char *argv[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
+
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
