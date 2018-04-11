@@ -193,6 +193,15 @@ If a module implements the ``serve()`` method, it should also implement
 the ``shutdown()`` method to shutdown cleanly: misbehaving modules
 may otherwise prevent clean shutdown of ceph-mgr.
 
+Limitations
+-----------
+
+It is not possible to call back into C++ code from a module's
+``__init__()`` method.  For example calling ``self.get_config()`` at
+this point will result in an assertion failure in ceph-mgr.  For modules
+that implement the ``serve()`` method, it usually makes sense to do most
+initialization inside that method instead.
+
 Is something missing?
 ---------------------
 
