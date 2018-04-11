@@ -5,10 +5,13 @@
 #include "include/assert.h"
 #include "include/stringify.h"
 #include "common/Formatter.h"
+#include <iostream>
 
 namespace rbd {
 namespace mirror {
 namespace image_map {
+
+const std::string UNMAPPED_INSTANCE_ID("");
 
 namespace {
 
@@ -104,6 +107,30 @@ void PolicyData::dump(Formatter *f) const {
 
 void PolicyData::generate_test_instances(std::list<PolicyData *> &o) {
   o.push_back(new PolicyData(PolicyMetaNone()));
+}
+
+std::ostream &operator<<(std::ostream &os, const ActionType& action_type) {
+  switch (action_type) {
+  case ACTION_TYPE_NONE:
+    os << "NONE";
+    break;
+  case ACTION_TYPE_MAP_UPDATE:
+    os << "MAP_UPDATE";
+    break;
+  case ACTION_TYPE_MAP_REMOVE:
+    os << "MAP_REMOVE";
+    break;
+  case ACTION_TYPE_ACQUIRE:
+    os << "ACQUIRE";
+    break;
+  case ACTION_TYPE_RELEASE:
+    os << "RELEASE";
+    break;
+  default:
+    os << "UNKNOWN (" << static_cast<uint32_t>(action_type) << ")";
+    break;
+  }
+  return os;
 }
 
 } // namespace image_map
