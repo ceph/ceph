@@ -389,6 +389,7 @@ void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
   Mutex::Locker l(module_config.lock);
 
   if (!v.empty()) {
+    dout(4) << "Loaded module_config entry " << k << ":" << v << dendl;
     module_config.config[k] = v;
   } else {
     module_config.config.erase(k);
@@ -402,6 +403,7 @@ void PyModuleRegistry::upgrade_config(
   // Only bother doing anything if we didn't already have
   // some new-style config.
   if (module_config.config.empty()) {
+    dout(1) << "Upgrading module configuration for Mimic" << dendl;
     // Upgrade luminous->mimic: migrate config-key configuration
     // into main configuration store
     for(auto &i : old_config) {
@@ -409,6 +411,8 @@ void PyModuleRegistry::upgrade_config(
       const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
       const std::string key = i.first.substr(last_slash + 1);
       module_config.set_config(monc, module_name, key, i.second);
+      dout(4) << "Rewrote configuration module:key "
+              << module_name << ":" << key << dendl;
     }
   } else {
     dout(10) << "Module configuration contains "
