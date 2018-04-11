@@ -17,8 +17,6 @@ if [ -z $CEPH_BUILD_DIR ]; then
     export CEPH_BUILD_DIR=$(dirname ${TOX_PATH})
 fi
 
-source ${MGR_DASHBOARD_VIRTUALENV}/bin/activate
-
 if [ "$WITH_PYTHON2" = "ON" ]; then
   ENV_LIST+="py27-cov,py27-lint,"
 fi

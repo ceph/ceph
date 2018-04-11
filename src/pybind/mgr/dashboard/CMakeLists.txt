@@ -1,13 +1,3 @@
-set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
-
-add_custom_target(mgr-dashboard-test-venv
-  COMMAND
-  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${MGR_DASHBOARD_VIRTUALENV} &&
-  ${MGR_DASHBOARD_VIRTUALENV}/bin/pip install --no-index --find-links=file:${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/wheelhouse -r requirements.txt
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard
-  COMMENT "dashboard tests virtualenv is being created")
-add_dependencies(tests mgr-dashboard-test-venv)
-
 if(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
 
 set(mgr-dashboard-nodeenv ${CMAKE_CURRENT_BINARY_DIR}/node-env)
