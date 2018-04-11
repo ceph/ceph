@@ -3,6 +3,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 
 import { NotificationService } from '../../../shared/services/notification.service';
+import { SharedModule } from '../../../shared/shared.module';
 import { NotificationsComponent } from './notifications.component';
 
 describe('NotificationsComponent', () => {
@@ -14,7 +15,7 @@ describe('NotificationsComponent', () => {
   beforeEach(
     async(() => {
       TestBed.configureTestingModule({
-        imports: [PopoverModule.forRoot()],
+        imports: [PopoverModule.forRoot(), SharedModule],
         declarations: [NotificationsComponent],
         providers: [{ provide: NotificationService, useValue: fakeService }]
       }).compileComponents();
