@@ -32,6 +32,16 @@ class RbdTest(DashboardTestCase):
         return cls._task_post('/api/rbd', data)
 
     @classmethod
+    def clone_image(cls, parent_pool, parent_image, parent_snap, pool, name,
+                    **kwargs):
+        # pylint: disable=too-many-arguments
+        data = {'child_image_name': name, 'child_pool_name': pool}
+        data.update(kwargs)
+        return cls._task_post('/api/rbd/{}/{}/snap/{}/clone'
+                              .format(parent_pool, parent_image, parent_snap),
+                              data)
+
+    @classmethod
     def remove_image(cls, pool, image):
         return cls._task_delete('/api/rbd/{}/{}'.format(pool, image))
 
@@ -115,7 +125,9 @@ class RbdTest(DashboardTestCase):
         self.assertIn('parent', img)
         self.assertIn('data_pool', img)
         self.assertIn('snapshots', img)
+        self.assertIn('timestamp', img)
         self.assertIn('disk_usage', img)
+        self.assertIn('total_disk_usage', img)
 
         for k, v in kwargs.items():
             if isinstance(v, list):
@@ -420,4 +432,38 @@ class RbdTest(DashboardTestCase):
         self.remove_snapshot('rbd', 'rollback_img', 'snap1')
         self.assertStatus(204)
         self.remove_image('rbd', 'rollback_img')
+        self.assertStatus(204)
+
+    def test_clone(self):
+        self.create_image('rbd', 'cimg', 2**30, features=["layering"])
+        self.assertStatus(201)
+        self.create_snapshot('rbd', 'cimg', 'snap1')
+        self.assertStatus(201)
+        self.update_snapshot('rbd', 'cimg', 'snap1', None, True)
+        self.assertStatus(200)
+        self.clone_image('rbd', 'cimg', 'snap1', 'rbd', 'cimg-clone',
+                         features=["layering", "exclusive-lock", "fast-diff",
+                                   "object-map"])
+        self.assertStatus([200, 201])
+
+        img = self._get('/api/rbd/rbd/cimg-clone')
+        self.assertStatus(200)
+        self._validate_image(img, features_name=['exclusive-lock',
+                                                 'fast-diff', 'layering',
+                                                 'object-map'],
+                             parent={'pool_name': 'rbd', 'image_name': 'cimg',
+                                     'snap_name': 'snap1'})
+
+        res = self.remove_image('rbd', 'cimg')
+        self.assertStatus(409)
+        self.assertIn('errno', res)
+        self.assertEqual(res['errno'], 39)
+
+        self.remove_image('rbd', 'cimg-clone')
+        self.assertStatus(204)
+        self.update_snapshot('rbd', 'cimg', 'snap1', None, False)
+        self.assertStatus(200)
+        self.remove_snapshot('rbd', 'cimg', 'snap1')
+        self.assertStatus(204)
+        self.remove_image('rbd', 'cimg')
         self.assertStatus(204)
