@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
+import * as _ from 'lodash';
+
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdNotification } from '../../../shared/models/cd-notification';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -18,8 +20,8 @@ export class NotificationsComponent implements OnInit {
   }
 
   ngOnInit() {
-    this.notificationService.data$.subscribe((notifications) => {
-      this.notifications = notifications;
+    this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
+      this.notifications = _.orderBy(notifications, ['timestamp'], ['desc']);
     });
   }
 
