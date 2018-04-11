@@ -145,7 +145,7 @@ namespace librbd {
     aio_comp->set_request_count(1);
 
     auto req_comp = new io::ReadResult::C_ObjectReadRequest(
-      aio_comp, off, len, {{0, len}}, false);
+      aio_comp, off, len, {{0, len}});
 
     auto req = io::ObjectDispatchSpec::create_read(
       m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, oid.name, object_no, off, len,

@@ -108,10 +108,9 @@ void ReadResult::C_ImageReadRequest::finish(int r) {
 
 ReadResult::C_ObjectReadRequest::C_ObjectReadRequest(
     AioCompletion *aio_completion, uint64_t object_off, uint64_t object_len,
-    Extents&& buffer_extents, bool ignore_enoent)
+    Extents&& buffer_extents)
   : aio_completion(aio_completion), object_off(object_off),
-    object_len(object_len), buffer_extents(std::move(buffer_extents)),
-    ignore_enoent(ignore_enoent) {
+    object_len(object_len), buffer_extents(std::move(buffer_extents)) {
   aio_completion->add_request();
 }
 
@@ -120,7 +119,7 @@ void ReadResult::C_ObjectReadRequest::finish(int r) {
   ldout(cct, 10) << "C_ObjectReadRequest: r=" << r
                  << dendl;
 
-  if (ignore_enoent && r == -ENOENT) {
+  if (r == -ENOENT) {
     r = 0;
   }
   if (r >= 0) {
