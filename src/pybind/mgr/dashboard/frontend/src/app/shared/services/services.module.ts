@@ -4,6 +4,7 @@ import { NgModule } from '@angular/core';
 import { AuthGuardService } from './auth-guard.service';
 import { AuthStorageService } from './auth-storage.service';
 import { FormatterService } from './formatter.service';
+import { NotificationService } from './notification.service';
 import { SummaryService } from './summary.service';
 
 @NgModule({
@@ -13,7 +14,8 @@ import { SummaryService } from './summary.service';
     AuthGuardService,
     AuthStorageService,
     FormatterService,
-    SummaryService
+    SummaryService,
+    NotificationService
   ]
 })
 export class ServicesModule {}
