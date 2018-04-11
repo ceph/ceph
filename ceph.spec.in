@@ -296,8 +296,12 @@ Requires:      python%{_python_buildid}-setuptools
 Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
+%if 0%{?fedora} || 0%{?rhel}
+Requires:      gdisk
+%endif
 %if 0%{?suse_version}
 Recommends:    chrony
+Requires:      gptfdisk
 %endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
@@ -469,13 +473,6 @@ Summary:	Ceph Object Storage Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-# for sgdisk, used by ceph-disk
-%if 0%{?fedora} || 0%{?rhel}
-Requires:	gdisk
-%endif
-%if 0%{?suse_version}
-Requires:	gptfdisk
-%endif
 Requires:	parted
 Requires:	lvm2
 %description osd
