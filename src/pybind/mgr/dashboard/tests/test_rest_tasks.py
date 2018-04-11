@@ -31,6 +31,18 @@ class TaskTest(RESTController):
         # pylint: disable=unused-argument
         time.sleep(TaskTest.sleep_time)
 
+    @Task('task/foo', ['{param}'])
+    @RESTController.collection(['POST'])
+    @RESTController.args_from_json
+    def foo(self, param):
+        return {'my_param': param}
+
+    @Task('task/bar', ['{key}', '{param}'])
+    @RESTController.resource(['PUT'])
+    @RESTController.args_from_json
+    def bar(self, key, param=None):
+        return {'my_param': param, 'key': key}
+
 
 class TaskControllerTest(ControllerTestCase):
     @classmethod
@@ -59,3 +71,11 @@ class TaskControllerTest(ControllerTestCase):
 
     def test_delete_task(self):
         self._task_delete('/test/task/hello')
+
+    def test_foo_task(self):
+        self._task_post('/test/task/foo', {'param': 'hello'})
+        self.assertJsonBody({'my_param': 'hello'})
+
+    def test_bar_task(self):
+        self._task_put('/test/task/3/bar', {'param': 'hello'})
+        self.assertJsonBody({'my_param': 'hello', 'key': '3'})
