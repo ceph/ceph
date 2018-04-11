@@ -1317,11 +1317,12 @@ void MDSRank::replay_done()
   mdlog->get_journaler()->set_writeable();
   mdlog->get_journaler()->trim_tail();
 
-  if (snapserver->get_version() == 0) {
+  if (mdsmap->get_tableserver() == whoami &&
+      snapserver->get_version() == 0) {
     // upgraded from old filesystem. version 0 snaptable confuses current code.
     dout(1) << "upgrading snaptable version from 0 to 1" << dendl;
     snapserver->reset();
-    sessionmap.save(new C_MDSInternalNoop);
+    snapserver->save(new C_MDSInternalNoop);
   }
 
   if (g_conf->mds_wipe_sessions) {
@@ -1524,7 +1525,6 @@ void MDSRank::boot_create()
 
   mdcache->init_layouts();
 
-  snapserver->set_rank(whoami);
   inotable->set_rank(whoami);
   sessionmap.set_rank(whoami);
 
@@ -1560,6 +1560,7 @@ void MDSRank::boot_create()
   // initialize tables
   if (mdsmap->get_tableserver() == whoami) {
     dout(10) << "boot_create creating fresh snaptable" << dendl;
+    snapserver->set_rank(whoami);
     snapserver->reset();
     snapserver->save(fin.new_sub());
   }
