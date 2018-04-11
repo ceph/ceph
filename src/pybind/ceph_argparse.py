@@ -1087,7 +1087,7 @@ def validate_command(sigdict, args, verbose=False):
 
         if found:
             if not valid_dict:
-                print("Invalid command:", e, file=sys.stderr)
+                print("Invalid command:", ex, file=sys.stderr)
                 print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
         else:
             bestcmds = bestcmds[:10]
