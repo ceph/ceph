@@ -352,7 +352,10 @@ struct es_obj_metadata {
     }
     ::encode_json("bucket", bucket_info.bucket.name, f);
     ::encode_json("name", key.name, f);
-    ::encode_json("instance", key.instance, f);
+    string instance = key.instance;
+    if (instance.empty())
+      instance = "null";
+    ::encode_json("instance", instance, f);
     ::encode_json("versioned_epoch", versioned_epoch, f);
     ::encode_json("owner", policy.get_owner(), f);
     ::encode_json("permissions", permissions, f);
