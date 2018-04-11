@@ -19,7 +19,7 @@ struct aio_t {
   int fd;
   boost::container::small_vector<iovec,4> iov;
   uint64_t offset, length;
-  int rval;
+  long rval;
   bufferlist bl;  ///< write payload (so that it remains stable for duration)
 
   boost::intrusive::list_member_hook<> queue_item;
@@ -40,7 +40,7 @@ struct aio_t {
     bl.append(std::move(p));
   }
 
-  int get_return_value() {
+  long get_return_value() {
     return rval;
   }
 };
