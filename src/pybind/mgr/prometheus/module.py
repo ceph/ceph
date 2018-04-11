@@ -43,10 +43,37 @@ def health_status_to_number(status):
     elif status == 'HEALTH_ERR':
         return 2
 
-PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'deep', 'degraded',
-        'inconsistent', 'peering', 'repair', 'recovering', 'forced-recovery',
-        'backfill', 'forced-backfill', 'wait-backfill', 'backfill-toofull',
-        'incomplete', 'stale', 'remapped', 'undersized', 'peered']
+PG_STATES = [
+        "active",
+        "clean",
+        "down",
+        "recovery_unfound",
+        "backfill_unfound",
+        "scrubbing",
+        "degraded",
+        "inconsistent",
+        "peering",
+        "repair",
+        "recovering",
+        "forced_recovery",
+        "backfill_wait",
+        "incomplete",
+        "stale",
+        "remapped",
+        "deep",
+        "backfilling",
+        "forced_backfill",
+        "backfill_toofull",
+        "recovery_wait",
+        "recovery_toofull",
+        "undersized",
+        "activating",
+        "peered",
+        "snaptrim",
+        "snaptrim_wait",
+        "snaptrim_error",
+        "creating",
+        "unknown"]
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 
