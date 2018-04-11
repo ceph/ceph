@@ -428,6 +428,7 @@ class RESTController(BaseController):
 
     @classmethod
     def endpoints(cls):
+        # pylint: disable=too-many-branches
 
         def isfunction(m):
             return inspect.isfunction(m) or inspect.ismethod(m)
@@ -454,6 +455,18 @@ class RESTController(BaseController):
         if methods:
             result.append((methods, None, '_element', args))
 
+        for attr, val in inspect.getmembers(cls, predicate=isfunction):
+            if hasattr(val, '_collection_method_'):
+                result.append(
+                    (val._collection_method_, attr, '_handle_detail_method', []))
+
+        for attr, val in inspect.getmembers(cls, predicate=isfunction):
+            if hasattr(val, '_resource_method_'):
+                res_params = [":{}".format(arg) for arg in args]
+                url_suffix = "{}/{}".format("/".join(res_params), attr)
+                result.append(
+                    (val._resource_method_, url_suffix, '_handle_detail_method', []))
+
         return result
 
     @cherrypy.expose
@@ -463,6 +476,18 @@ class RESTController(BaseController):
     @cherrypy.expose
     def _element(self, *vpath, **params):
         return self._rest_request(True, *vpath, **params)
+
+    def _handle_detail_method(self, *vpath, **params):
+        method = getattr(self, cherrypy.request.path_info.split('/')[-1])
+
+        if cherrypy.request.method not in ['GET', 'DELETE']:
+            method = RESTController._takes_json(method)
+
+        method = RESTController._returns_json(method)
+
+        cherrypy.response.status = 200
+
+        return method(*vpath, **params)
 
     def _rest_request(self, is_element, *vpath, **params):
         method_name, status_code = self._method_mapping[
@@ -526,3 +551,17 @@ class RESTController(BaseController):
             ret = func(*args, **kwargs)
             return json.dumps(ret).encode('utf8')
         return inner
+
+    @staticmethod
+    def resource(methods=None):
+        def _wrapper(func):
+            func._resource_method_ = methods
+            return func
+        return _wrapper
+
+    @staticmethod
+    def collection(methods=None):
+        def _wrapper(func):
+            func._collection_method_ = methods
+            return func
+        return _wrapper
