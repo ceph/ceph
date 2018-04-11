@@ -42,20 +42,75 @@ def _rbd_image_call(pool_name, image_name, func, *args, **kwargs):
     return _rbd_call(pool_name, _ioctx_func, image_name, func, *args, **kwargs)
 
 
+RBD_FEATURES_NAME_MAPPING = {
+    rbd.RBD_FEATURE_LAYERING: "layering",
+    rbd.RBD_FEATURE_STRIPINGV2: "striping",
+    rbd.RBD_FEATURE_EXCLUSIVE_LOCK: "exclusive-lock",
+    rbd.RBD_FEATURE_OBJECT_MAP: "object-map",
+    rbd.RBD_FEATURE_FAST_DIFF: "fast-diff",
+    rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
+    rbd.RBD_FEATURE_JOURNALING: "journaling",
+    rbd.RBD_FEATURE_DATA_POOL: "data-pool",
+}
+
+
+def _format_bitmask(features):
+    """
+    Formats the bitmask:
+
+    >>> _format_bitmask(45)
+    ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
+    """
+    names = [val for key, val in RBD_FEATURES_NAME_MAPPING.items()
+             if key & features == key]
+    return sorted(names)
+
+
+def _format_features(features):
+    """
+    Converts the features list to bitmask:
+
+    >>> _format_features(['deep-flatten', 'exclusive-lock', 'layering', 'object-map'])
+    45
+
+    >>> _format_features(None) is None
+    True
+
+    >>> _format_features('not a list') is None
+    True
+    """
+    if not isinstance(features, list):
+        return None
+
+    res = 0
+    for key, value in RBD_FEATURES_NAME_MAPPING.items():
+        if value in features:
+            res = key | res
+    return res
+
+
+def _sort_features(features, enable=True):
+    """
+    Sorts image features according to feature dependencies:
+
+    object-map depends on exclusive-lock
+    journaling depends on exclusive-lock
+    fast-diff depends on object-map
+    """
+    ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']
+
+    def key_func(feat):
+        try:
+            return ORDER.index(feat)
+        except ValueError:
+            return id(feat)
+
+    features.sort(key=key_func, reverse=not enable)
+
+
 @ApiController('rbd')
 @AuthRequired()
 class Rbd(RESTController):
-
-    RBD_FEATURES_NAME_MAPPING = {
-        rbd.RBD_FEATURE_LAYERING: "layering",
-        rbd.RBD_FEATURE_STRIPINGV2: "striping",
-        rbd.RBD_FEATURE_EXCLUSIVE_LOCK: "exclusive-lock",
-        rbd.RBD_FEATURE_OBJECT_MAP: "object-map",
-        rbd.RBD_FEATURE_FAST_DIFF: "fast-diff",
-        rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
-        rbd.RBD_FEATURE_JOURNALING: "journaling",
-        rbd.RBD_FEATURE_DATA_POOL: "data-pool",
-    }
 
     # set of image features that can be enable on existing images
     ALLOW_ENABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
@@ -64,60 +119,6 @@ class Rbd(RESTController):
     # set of image features that can be disabled on existing images
     ALLOW_DISABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
                                   "deep-flatten", "journaling"])
-
-    @staticmethod
-    def _format_bitmask(features):
-        """
-        Formats the bitmask:
-
-        >>> Rbd._format_bitmask(45)
-        ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
-        """
-        names = [val for key, val in Rbd.RBD_FEATURES_NAME_MAPPING.items()
-                 if key & features == key]
-        return sorted(names)
-
-    @staticmethod
-    def _format_features(features):
-        """
-        Converts the features list to bitmask:
-
-        >>> Rbd._format_features(['deep-flatten', 'exclusive-lock', 'layering', 'object-map'])
-        45
-
-        >>> Rbd._format_features(None) is None
-        True
-
-        >>> Rbd._format_features('not a list') is None
-        True
-        """
-        if not isinstance(features, list):
-            return None
-
-        res = 0
-        for key, value in Rbd.RBD_FEATURES_NAME_MAPPING.items():
-            if value in features:
-                res = key | res
-        return res
-
-    @classmethod
-    def _sort_features(cls, features, enable=True):
-        """
-        Sorts image features according to feature dependencies:
-
-        object-map depends on exclusive-lock
-        journaling depends on exclusive-lock
-        fast-diff depends on object-map
-        """
-        ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']
-
-        def key_func(feat):
-            try:
-                return ORDER.index(feat)
-            except ValueError:
-                return id(feat)
-
-        features.sort(key=key_func, reverse=not enable)
 
     @classmethod
     def _rbd_disk_usage(cls, image, snaps):
@@ -150,7 +151,7 @@ class Rbd(RESTController):
         stat['pool_name'] = pool_name
         features = img.features()
         stat['features'] = features
-        stat['features_name'] = self._format_bitmask(features)
+        stat['features_name'] = _format_bitmask(features)
 
         # the following keys are deprecated
         del stat['parent_pool']
@@ -257,6 +258,7 @@ class Rbd(RESTController):
     @RESTController.args_from_json
     def create(self, name, pool_name, size, obj_size=None, features=None,
                stripe_unit=None, stripe_count=None, data_pool=None):
+
         def _create(ioctx):
             rbd_inst = rbd.RBD()
 
@@ -266,7 +268,7 @@ class Rbd(RESTController):
                 l_order = int(round(math.log(float(obj_size), 2)))
 
             # Set features
-            feature_bitmask = self._format_features(features)
+            feature_bitmask = _format_features(features)
 
             rbd_inst.create(ioctx, name, size, order=l_order, old_format=False,
                             features=feature_bitmask, stripe_unit=stripe_unit,
@@ -294,18 +296,18 @@ class Rbd(RESTController):
 
             # check enable/disable features
             if features is not None:
-                curr_features = self._format_bitmask(image.features())
+                curr_features = _format_bitmask(image.features())
                 # check disabled features
-                self._sort_features(curr_features, enable=False)
+                _sort_features(curr_features, enable=False)
                 for feature in curr_features:
                     if feature not in features and feature in self.ALLOW_DISABLE_FEATURES:
-                        f_bitmask = self._format_features([feature])
+                        f_bitmask = _format_features([feature])
                         image.update_features(f_bitmask, False)
                 # check enabled features
-                self._sort_features(features)
+                _sort_features(features)
                 for feature in features:
                     if feature not in curr_features and feature in self.ALLOW_ENABLE_FEATURES:
-                        f_bitmask = self._format_features([feature])
+                        f_bitmask = _format_features([feature])
                         image.update_features(f_bitmask, True)
 
         return _rbd_image_call(pool_name, image_name, _edit)
@@ -358,3 +360,34 @@ class RbdSnapshot(RESTController):
         def _rollback(ioctx, img, snapshot_name):
             img.rollback_to_snap(snapshot_name)
         return _rbd_image_call(pool_name, image_name, _rollback, snapshot_name)
+
+    @RbdTask('clone',
+             {'parent_pool_name': '{pool_name}',
+              'parent_image_name': '{image_name}',
+              'parent_snap_name': '{snapshot_name}',
+              'child_pool_name': '{child_pool_name}',
+              'child_image_name': '{child_image_name}'}, 2.0)
+    @RESTController.resource(['POST'])
+    @RESTController.args_from_json
+    def clone(self, pool_name, image_name, snapshot_name, child_pool_name,
+              child_image_name, obj_size=None, features=None,
+              stripe_unit=None, stripe_count=None, data_pool=None):
+
+        def _parent_clone(p_ioctx):
+            def _clone(ioctx):
+                # Set order
+                l_order = None
+                if obj_size and obj_size > 0:
+                    l_order = int(round(math.log(float(obj_size), 2)))
+
+                # Set features
+                feature_bitmask = _format_features(features)
+
+                rbd_inst = rbd.RBD()
+                rbd_inst.clone(p_ioctx, image_name, snapshot_name, ioctx,
+                               child_image_name, feature_bitmask, l_order,
+                               stripe_unit, stripe_count, data_pool)
+
+            return _rbd_call(child_pool_name, _clone)
+
+        return _rbd_call(pool_name, _parent_clone)
