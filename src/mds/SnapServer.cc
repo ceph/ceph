@@ -120,8 +120,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       decode(info.name, p);
       decode(info.stamp, p);
 
-      // bump last_snap... we use it as a version value on the snaprealm.
-      ++last_snap;
       pending_update[version] = info;
       dout(10) << "prepare v" << version << " update " << info << dendl;
 
