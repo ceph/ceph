@@ -7010,8 +7010,9 @@ done:
     }
 
     bool implicit_ruleset_creation = false;
-    string ruleset_name;
-    cmd_getval(g_ceph_context, cmdmap, "ruleset", ruleset_name);
+    int64_t expected_num_objects = 0;
+    string rule_name;
+    cmd_getval(g_ceph_context, cmdmap, "rule", rule_name);
     string erasure_code_profile;
     cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
 
@@ -7037,24 +7038,41 @@ done:
 	  goto wait;
 	}
       }
-      if (ruleset_name == "") {
+      if (rule_name == "") {
 	implicit_ruleset_creation = true;
 	if (erasure_code_profile == "default") {
-	  ruleset_name = "erasure-code";
+	  rule_name = "erasure-code";
 	} else {
 	  dout(1) << "implicitly use ruleset named after the pool: "
 		<< poolstr << dendl;
-	  ruleset_name = poolstr;
+	  rule_name = poolstr;
 	}
       }
+      cmd_getval(g_ceph_context, cmdmap, "expected_num_objects",
+                 expected_num_objects, int64_t(0));
     } else {
-      //NOTE:for replicated pool,cmd_map will put ruleset_name to erasure_code_profile field
-      ruleset_name = erasure_code_profile;
+      //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
+      //     and put expected_num_objects to rule field
+      if (erasure_code_profile != "") { // cmd is from CLI
+        if (rule_name != "") {
+          string interr;
+          expected_num_objects = strict_strtoll(rule_name.c_str(), 10, &interr);
+          if (interr.length()) {
+            ss << "error parsing integer value '" << rule_name << "': " << interr;
+            err = -EINVAL;
+            goto reply;
+          }
+        }
+        rule_name = erasure_code_profile;
+      } else { // cmd is well-formed
+        cmd_getval(g_ceph_context, cmdmap, "expected_num_objects",
+                   expected_num_objects, int64_t(0));
+      }
     }
 
-    if (!implicit_ruleset_creation && ruleset_name != "") {
+    if (!implicit_ruleset_creation && rule_name != "") {
       int ruleset;
-      err = get_crush_ruleset(ruleset_name, &ruleset, &ss);
+      err = get_crush_ruleset(rule_name, &ruleset, &ss);
       if (err == -EAGAIN) {
 	wait_for_finished_proposal(op, new C_RetryMessage(this, op));
 	return true;
@@ -7063,8 +7081,6 @@ done:
 	goto reply;
     }
 
-    int64_t expected_num_objects;
-    cmd_getval(g_ceph_context, cmdmap, "expected_num_objects", expected_num_objects, int64_t(0));
     if (expected_num_objects < 0) {
       ss << "'expected_num_objects' must be non-negative";
       err = -EINVAL;
@@ -7081,7 +7097,7 @@ done:
     
     err = prepare_new_pool(poolstr, 0, // auid=0 for admin created pool
 			   -1, // default crush rule
-			   ruleset_name,
+			   rule_name,
 			   pg_num, pgp_num,
 			   erasure_code_profile, pool_type,
                            (uint64_t)expected_num_objects,
