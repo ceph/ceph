@@ -42,7 +42,9 @@ walk(if type == "object" then del(.mtime) else . end)
 | walk(if type == "object" then del(.local_mtime) else . end)
 | walk(if type == "object" then del(.last_reqid) else . end)
 | walk(if type == "object" then del(.version) else . end)
-| walk(if type == "object" then del(.prior_version) else . end)'
+| walk(if type == "object" then del(.prior_version) else . end)
+| walk(if type == "object" then del(.redirect_target) else . end)
+| walk(if type == "object" then del(.legacy_snaps) else . end)'
 
 sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
 
@@ -665,12 +667,13 @@ function TEST_corrupt_scrub_replicated() {
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": 769390837,
-            "omap_digest": 4294967295,
+            "omap_digest": 4126909126,
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -709,12 +712,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 4126909126,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -775,12 +779,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 108998762,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -838,12 +843,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 1682015565,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -921,12 +927,13 @@ function TEST_corrupt_scrub_replicated() {
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": 769390837,
-            "omap_digest": 4294967295,
+            "omap_digest": 757747054,
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -970,12 +977,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 757747054,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1066,12 +1074,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 11755005,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1152,12 +1161,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 3602809308,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1203,12 +1213,13 @@ function TEST_corrupt_scrub_replicated() {
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": 727918093,
-            "omap_digest": 4294967295,
+            "omap_digest": 787268921,
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -1244,12 +1255,13 @@ function TEST_corrupt_scrub_replicated() {
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": 769390837,
-            "omap_digest": 4294967295,
+            "omap_digest": 787268921,
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -1287,12 +1299,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 727918093,
-        "omap_digest": 4294967295,
+        "omap_digest": 787268921,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1398,12 +1411,13 @@ EOF
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": 769390837,
-            "omap_digest": 4294967295,
+            "omap_digest": 4126909126,
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -1445,12 +1459,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 4126909126,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1483,7 +1498,7 @@ EOF
           "omap_digest": "0xa8dd5adc",
           "size": 7,
           "errors": [
-            "omap_digest_mismatch_oi"
+            "omap_digest_mismatch_info"
           ],
           "osd": 0,
           "primary": false
@@ -1493,15 +1508,50 @@ EOF
           "omap_digest": "0xa8dd5adc",
           "size": 7,
           "errors": [
-            "omap_digest_mismatch_oi"
+            "omap_digest_mismatch_info"
           ],
           "osd": 1,
           "primary": true
         }
       ],
-      "selected_object_info": "3:b1f19cbd:::ROBJ10:head(47'51 osd.0.0:50 dirty|omap|data_digest|omap_digest s 7 uv 30 dd 2ddbf8f5 od c2025a24 alloc_hint [0 0 0])",
+     "selected_object_info": {
+       "alloc_hint_flags": 0,
+       "data_digest": 769390837,
+       "expected_object_size": 0,
+       "expected_write_size": 0,
+       "flags": [
+         "dirty",
+         "omap",
+         "data_digest",
+         "omap_digest"
+       ],
+       "last_reqid": "osd.0.0:50",
+       "local_mtime": "2018-04-05 14:33:26.762368",
+       "lost": 0,
+      "manifest": {
+         "type": 0
+       },
+       "mtime": "2018-04-05 14:33:26.762368",
+       "oid": {
+         "hash": 3174666125,
+         "key": "",
+         "max": 0,
+         "namespace": "",
+         "oid": "ROBJ10",
+         "pool": 3,
+         "snapid": -2
+       },
+       "omap_digest": 3254934052,
+       "prior_version": "41'33",
+       "size": 7,
+       "truncate_seq": 0,
+       "truncate_size": 0,
+       "user_version": 30,
+       "version": "47'51",
+       "watchers": {}
+      },
       "union_shard_errors": [
-        "omap_digest_mismatch_oi"
+        "omap_digest_mismatch_info"
       ],
       "errors": [],
       "object": {
@@ -1552,12 +1602,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 2688347907,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1617,12 +1668,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 108998762,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1735,12 +1787,13 @@ EOF
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": 769390837,
-            "omap_digest": 4294967295,
+            "omap_digest": 757747054,
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -1788,12 +1841,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 757747054,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1893,12 +1947,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 4175501592,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1960,12 +2015,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 11755005,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1993,7 +2049,7 @@ EOF
           "omap_digest": "0xd7178dfe",
           "size": 7,
           "errors": [
-            "omap_digest_mismatch_oi"
+            "omap_digest_mismatch_info"
           ],
           "osd": 0,
           "primary": false
@@ -2028,12 +2084,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 3805572772,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2043,7 +2100,7 @@ EOF
         "watchers": {}
       },
       "union_shard_errors": [
-        "omap_digest_mismatch_oi"
+        "omap_digest_mismatch_info"
       ],
       "errors": [
         "omap_digest_mismatch"
@@ -2071,7 +2128,7 @@ EOF
           "omap_digest": "0x06cac8f6",
           "size": 7,
           "errors": [
-            "omap_digest_mismatch_oi"
+            "omap_digest_mismatch_info"
           ],
           "osd": 1,
           "primary": true
@@ -2098,12 +2155,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 445000257,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2113,7 +2171,7 @@ EOF
         "watchers": {}
       },
       "union_shard_errors": [
-        "omap_digest_mismatch_oi"
+        "omap_digest_mismatch_info"
       ],
       "errors": [
         "omap_digest_mismatch"
@@ -2133,7 +2191,7 @@ EOF
           "omap_digest": "0x689ee887",
           "size": 7,
           "errors": [
-            "omap_digest_mismatch_oi"
+            "omap_digest_mismatch_info"
           ],
           "osd": 0,
           "primary": false
@@ -2168,12 +2226,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 396136863,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2183,7 +2242,7 @@ EOF
         "watchers": {}
       },
       "union_shard_errors": [
-        "omap_digest_mismatch_oi"
+        "omap_digest_mismatch_info"
       ],
       "errors": [
         "omap_digest_mismatch"
@@ -2211,7 +2270,7 @@ EOF
           "omap_digest": "0x6a73cc07",
           "size": 7,
           "errors": [
-            "omap_digest_mismatch_oi"
+            "omap_digest_mismatch_info"
           ],
           "osd": 1,
           "primary": true
@@ -2238,12 +2297,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 4023309690,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2253,7 +2313,7 @@ EOF
         "watchers": {}
       },
       "union_shard_errors": [
-        "omap_digest_mismatch_oi"
+        "omap_digest_mismatch_info"
       ],
       "errors": [
         "omap_digest_mismatch"
@@ -2330,12 +2390,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 769390837,
-        "omap_digest": 4294967295,
+        "omap_digest": 3602809308,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2381,12 +2442,13 @@ EOF
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": 769390837,
-            "omap_digest": 4294967295,
+            "omap_digest": 787268921,
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -2426,12 +2488,13 @@ EOF
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": 522648358,
-            "omap_digest": 4294967295,
+            "omap_digest": 787268921,
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -2469,12 +2532,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": 522648358,
-        "omap_digest": 4294967295,
+        "omap_digest": 787268921,
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2655,7 +2719,8 @@ function corrupt_scrub_erasure() {
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -2706,7 +2771,8 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -2780,7 +2846,8 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -2886,7 +2953,8 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -2943,7 +3011,8 @@ function corrupt_scrub_erasure() {
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -2994,7 +3063,8 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3052,7 +3122,8 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3147,7 +3218,8 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3303,7 +3375,8 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3357,7 +3430,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3436,7 +3510,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3548,7 +3623,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3609,7 +3685,8 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3662,7 +3739,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3725,7 +3803,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3821,7 +3900,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3958,7 +4038,8 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -4012,7 +4093,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4092,7 +4174,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4167,7 +4250,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4279,7 +4363,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4338,7 +4423,8 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -4392,7 +4478,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4456,7 +4543,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4554,7 +4642,8 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4908,6 +4997,7 @@ function TEST_corrupt_snapset_scrub_rep() {
                 ]
               }
             ],
+            "head_exists": 1,
             "snap_context": {
               "seq": 1,
               "snaps": [
@@ -4923,6 +5013,7 @@ function TEST_corrupt_snapset_scrub_rep() {
           "size": 21,
           "snapset": {
             "clones": [],
+            "head_exists": 0,
             "snap_context": {
               "seq": 0,
               "snaps": []
@@ -4986,6 +5077,7 @@ function TEST_corrupt_snapset_scrub_rep() {
           "size": 21,
           "snapset": {
             "clones": [],
+            "head_exists": 0,
             "snap_context": {
               "seq": 0,
               "snaps": []
@@ -5008,6 +5100,7 @@ function TEST_corrupt_snapset_scrub_rep() {
                 ]
               }
             ],
+            "head_exists": 1,
             "snap_context": {
               "seq": 1,
               "snaps": [
