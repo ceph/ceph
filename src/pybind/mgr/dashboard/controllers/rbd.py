@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import math
 import cherrypy
+import rados
 import rbd
 
 from . import ApiController, AuthRequired, RESTController, Task
@@ -15,8 +16,11 @@ from ..tools import ViewCache
 # pylint: disable=inconsistent-return-statements
 def _rbd_exception_handler(ex):
     if isinstance(ex, rbd.OSError):
-        cherrypy.response.status = 409
-        return {'detail': str(ex), 'errno': ex.errno}
+        return {'status': 409, 'detail': str(ex), 'errno': ex.errno,
+                'component': 'rbd'}
+    elif isinstance(ex, rados.OSError):
+        return {'status': 409, 'detail': str(ex), 'errno': ex.errno,
+                'component': 'rados'}
     raise ex
 
 

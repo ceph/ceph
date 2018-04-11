@@ -204,7 +204,12 @@ class DashboardTestCase(MgrTestCase):
             elif method == 'DELETE':
                 cls._resp.status_code = 204
             return thread.res_task['ret_value']
-        raise Exception(thread.res_task['exception'])
+        else:
+            if 'status' in thread.res_task['exception']:
+                cls._resp.status_code = thread.res_task['exception']['status']
+            else:
+                cls._resp.status_code = 500
+            return thread.res_task['exception']
 
     @classmethod
     def _task_post(cls, url, data=None, timeout=60):
