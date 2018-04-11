@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212
+# pylint: disable=W0212,too-many-arguments
 from __future__ import absolute_import
 
 import json
+import threading
+import time
 
 import cherrypy
 from cherrypy.test import helper
 
+from .. import logger
 from ..controllers.auth import Auth
 from ..controllers import json_error_page, generate_controller_routes
 from ..tools import SessionExpireAtBrowserCloseTool
@@ -52,6 +55,69 @@ class ControllerTestCase(helper.CPWebCase):
 
     def _put(self, url, data=None):
         self._request(url, 'PUT', data)
+
+    def _task_request(self, method, url, data, timeout):
+        self._request(url, method, data)
+        if self.status != '202 Accepted':
+            logger.info("task finished immediately")
+            return
+
+        res = self.jsonBody()
+        self.assertIsInstance(res, dict)
+        self.assertIn('name', res)
+        self.assertIn('metadata', res)
+
+        task_name = res['name']
+        task_metadata = res['metadata']
+
+        class Waiter(threading.Thread):
+            def __init__(self, task_name, task_metadata, tc):
+                super(Waiter, self).__init__()
+                self.task_name = task_name
+                self.task_metadata = task_metadata
+                self.ev = threading.Event()
+                self.abort = False
+                self.res_task = None
+                self.tc = tc
+
+            def run(self):
+                running = True
+                while running and not self.abort:
+                    logger.info("task (%s, %s) is still executing", self.task_name,
+                                self.task_metadata)
+                    time.sleep(1)
+                    self.tc._get('/task?name={}'.format(self.task_name))
+                    res = self.tc.jsonBody()
+                    for task in res['finished_tasks']:
+                        if task['metadata'] == self.task_metadata:
+                            # task finished
+                            running = False
+                            self.res_task = task
+                            self.ev.set()
+
+        thread = Waiter(task_name, task_metadata, self)
+        thread.start()
+        status = thread.ev.wait(timeout)
+        if not status:
+            # timeout expired
+            thread.abort = True
+            thread.join()
+            raise Exception("Waiting for task ({}, {}) to finish timed out"
+                            .format(task_name, task_metadata))
+        logger.info("task (%s, %s) finished", task_name, task_metadata)
+        if thread.res_task['success']:
+            self.body = json.dumps(thread.res_task['ret_value'])
+            return
+        raise Exception(thread.res_task['exception'])
+
+    def _task_post(self, url, data=None, timeout=60):
+        self._task_request('POST', url, data, timeout)
+
+    def _task_delete(self, url, timeout=60):
+        self._task_request('DELETE', url, None, timeout)
+
+    def _task_put(self, url, data=None, timeout=60):
+        self._task_request('PUT', url, data, timeout)
 
     def jsonBody(self):
         body_str = self.body.decode('utf-8') if isinstance(self.body, bytes) else self.body

@@ -5,6 +5,7 @@ from __future__ import absolute_import
 import collections
 from datetime import datetime, timedelta
 import fnmatch
+from functools import wraps
 import importlib
 import inspect
 import json
@@ -20,7 +21,7 @@ from six import add_metaclass
 
 from .. import logger
 from ..settings import Settings
-from ..tools import Session
+from ..tools import Session, TaskManager
 
 
 def ApiController(path):
@@ -259,6 +260,67 @@ def browsable_api_view(meth):
     return wrapper
 
 
+class Task(object):
+    def __init__(self, name, metadata, wait_for=5.0, exception_handler=None):
+        self.name = name
+        if isinstance(metadata, list):
+            self.metadata = dict([(e[1:-1], e) for e in metadata])
+        else:
+            self.metadata = metadata
+        self.wait_for = wait_for
+        self.exception_handler = exception_handler
+
+    def _gen_arg_map(self, func, args, kwargs):
+        # pylint: disable=deprecated-method
+        arg_map = {}
+        if sys.version_info > (3, 0):  # pylint: disable=no-else-return
+            sig = inspect.signature(func)
+            arg_list = [a for a in sig.parameters]
+        else:
+            sig = inspect.getargspec(func)
+            arg_list = [a for a in sig.args]
+
+        for idx, arg in enumerate(arg_list):
+            if idx < len(args):
+                arg_map[arg] = args[idx]
+            else:
+                if arg in kwargs:
+                    arg_map[arg] = kwargs[arg]
+            if arg in arg_map:
+                arg_map[idx] = arg_map[arg]
+
+        return arg_map
+
+    def __call__(self, func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            arg_map = self._gen_arg_map(func, args, kwargs)
+            md = {}
+            for k, v in self.metadata.items():
+                if isinstance(v, str) and v and v[0] == '{' and v[-1] == '}':
+                    param = v[1:-1]
+                    try:
+                        pos = int(param)
+                        md[k] = arg_map[pos]
+                    except ValueError:
+                        md[k] = arg_map[v[1:-1]]
+                else:
+                    md[k] = v
+            task = TaskManager.run(self.name, md, func, args, kwargs)
+            try:
+                status, value = task.wait(self.wait_for)
+            except Exception as ex:
+                if self.exception_handler:
+                    return self.exception_handler(ex)
+                raise ex
+            if status == TaskManager.VALUE_EXECUTING:
+                cherrypy.response.status = 202
+                return {'name': self.name, 'metadata': md}
+            return value
+        wrapper.__wrapped__ = func
+        return wrapper
+
+
 class BaseControllerMeta(type):
     def __new__(mcs, name, bases, dct):
         new_cls = type.__new__(mcs, name, bases, dct)
@@ -294,6 +356,7 @@ class BaseController(object):
                      (v.kind == inspect.Parameter.POSITIONAL_ONLY or
                       v.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD)]
         else:
+            func = getattr(func, '__wrapped__', func)
             args = inspect.getargspec(func)
             nd = len(args.args) if not args.defaults else -len(args.defaults)
             cargs = args.args[1:nd]
