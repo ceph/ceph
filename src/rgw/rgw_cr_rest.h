@@ -332,6 +332,7 @@ class RGWCRHTTPGetDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
   bufferlist extra_data;
   bool got_all_extra_data{false};
   bool paused{false};
+  bool notified{false};
 public:
   RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, RGWHTTPStreamRWRequest *_req);
 
