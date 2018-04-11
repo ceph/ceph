@@ -51,7 +51,6 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_time.h"
 #include "common/version.h"
-#include "common/io_priority.h"
 #include "common/pick_address.h"
 #include "common/SubProcess.h"
 #include "common/PluginRegistry.h"
@@ -8960,8 +8959,6 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_map_cache_size",
     "osd_pg_epoch_max_lag_factor",
     "osd_pg_epoch_persisted_max_stale",
-    "osd_disk_thread_ioprio_class",
-    "osd_disk_thread_ioprio_priority",
     // clog & admin clog
     "clog_to_monitors",
     "clog_to_syslog",
