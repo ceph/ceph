@@ -441,8 +441,8 @@ class RESTController(BaseController):
             content_length = int(cherrypy.request.headers['Content-Length'])
             body = cherrypy.request.body.read(content_length)
             if not body:
-                raise cherrypy.HTTPError(400, 'Empty body. Content-Length={}'
-                                         .format(content_length))
+                return func(*args, **kwargs)
+
             try:
                 data = json.loads(body.decode('utf-8'))
             except Exception as e:
