@@ -1,15 +1,41 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=too-many-arguments,too-many-locals
+# pylint: disable=too-many-arguments,too-many-locals,unused-argument
 from __future__ import absolute_import
 
 import math
 import cherrypy
 import rbd
 
-from . import ApiController, AuthRequired, RESTController
+from . import ApiController, AuthRequired, RESTController, Task
 from .. import mgr
 from ..services.ceph_service import CephService
-from ..tools import ViewCache, TaskManager
+from ..tools import ViewCache
+
+
+# pylint: disable=inconsistent-return-statements
+def _rbd_exception_handler(ex):
+    if isinstance(ex, rbd.OSError):
+        cherrypy.response.status = 409
+        return {'detail': str(ex), 'errno': ex.errno}
+    raise ex
+
+
+def RbdTask(name, metadata, wait_for):
+    return Task("rbd/{}".format(name), metadata, wait_for,
+                _rbd_exception_handler)
+
+
+def _rbd_call(pool_name, func, *args, **kwargs):
+    with mgr.rados.open_ioctx(pool_name) as ioctx:
+        func(ioctx, *args, **kwargs)
+
+
+def _rbd_image_call(pool_name, image_name, func, *args, **kwargs):
+    def _ioctx_func(ioctx, image_name, func, *args, **kwargs):
+        with rbd.Image(ioctx, image_name) as img:
+            func(ioctx, img, *args, **kwargs)
+
+    return _rbd_call(pool_name, _ioctx_func, image_name, func, *args, **kwargs)
 
 
 @ApiController('rbd')
@@ -69,6 +95,25 @@ class Rbd(RESTController):
             if value in features:
                 res = key | res
         return res
+
+    @classmethod
+    def _sort_features(cls, features, enable=True):
+        """
+        Sorts image features according to feature dependencies:
+
+        object-map depends on exclusive-lock
+        journaling depends on exclusive-lock
+        fast-diff depends on object-map
+        """
+        ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']
+
+        def key_func(feat):
+            try:
+                return ORDER.index(feat)
+            except ValueError:
+                return id(feat)
+
+        features.sort(key=key_func, reverse=not enable)
 
     @classmethod
     def _rbd_disk_usage(cls, image, snaps):
@@ -203,176 +248,93 @@ class Rbd(RESTController):
         except rbd.ImageNotFound:
             raise cherrypy.HTTPError(404)
 
-    @classmethod
-    def _create_image(cls, name, pool_name, size, obj_size=None, features=None,
-                      stripe_unit=None, stripe_count=None, data_pool=None):
-        # pylint: disable=too-many-locals
-        rbd_inst = rbd.RBD()
-
-        # Set order
-        order = None
-        if obj_size and obj_size > 0:
-            order = int(round(math.log(float(obj_size), 2)))
-
-        # Set features
-        feature_bitmask = cls._format_features(features)
-
-        ioctx = mgr.rados.open_ioctx(pool_name)
-
-        try:
-            rbd_inst.create(ioctx, name, size, order=order, old_format=False,
-                            features=feature_bitmask, stripe_unit=stripe_unit,
-                            stripe_count=stripe_count, data_pool=data_pool)
-        except rbd.OSError as e:
-            return {'success': False, 'detail': str(e), 'errno': e.errno}
-        return {'success': True}
-
+    @RbdTask('create',
+             {'pool_name': '{pool_name}', 'image_name': '{name}'}, 2.0)
     @RESTController.args_from_json
     def create(self, name, pool_name, size, obj_size=None, features=None,
                stripe_unit=None, stripe_count=None, data_pool=None):
-        task = TaskManager.run('rbd/create',
-                               {'pool_name': pool_name, 'image_name': name},
-                               self._create_image,
-                               [name, pool_name, size, obj_size, features,
-                                stripe_unit, stripe_count, data_pool])
-        status, value = task.wait(1.0)
-        return {'status': status, 'value': value}
+        def _create(ioctx):
+            rbd_inst = rbd.RBD()
 
-    @classmethod
-    def _remove_image(cls, pool_name, image_name):
-        rbd_inst = rbd.RBD()
-        ioctx = mgr.rados.open_ioctx(pool_name)
-        try:
-            rbd_inst.remove(ioctx, image_name)
-        except rbd.OSError as e:
-            return {'success': False, 'detail': str(e), 'errno': e.errno}
-        return {'success': True}
+            # Set order
+            l_order = None
+            if obj_size and obj_size > 0:
+                l_order = int(round(math.log(float(obj_size), 2)))
 
+            # Set features
+            feature_bitmask = self._format_features(features)
+
+            rbd_inst.create(ioctx, name, size, order=l_order, old_format=False,
+                            features=feature_bitmask, stripe_unit=stripe_unit,
+                            stripe_count=stripe_count, data_pool=data_pool)
+
+        return _rbd_call(pool_name, _create)
+
+    @RbdTask('delete', ['{pool_name}', '{image_name}'], 2.0)
     def delete(self, pool_name, image_name):
-        task = TaskManager.run('rbd/delete',
-                               {'pool_name': pool_name, 'image_name': image_name},
-                               self._remove_image, [pool_name, image_name])
-        status, value = task.wait(2.0)
-        cherrypy.response.status = 200
-        return {'status': status, 'value': value}
-
-    @classmethod
-    def _sort_features(cls, features, enable=True):
-        """
-        Sorts image features according to feature dependencies:
-
-        object-map depends on exclusive-lock
-        journaling depends on exclusive-lock
-        fast-diff depends on object-map
-        """
-        ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']
-
-        def key_func(feat):
-            try:
-                return ORDER.index(feat)
-            except ValueError:
-                return id(feat)
-
-        features.sort(key=key_func, reverse=not enable)
-
-    @classmethod
-    def _edit_image(cls, pool_name, image_name, name, size, features):
         rbd_inst = rbd.RBD()
-        ioctx = mgr.rados.open_ioctx(pool_name)
-        image = rbd.Image(ioctx, image_name)
+        return _rbd_call(pool_name, rbd_inst.remove, image_name)
 
-        # check rename image
-        if name and name != image_name:
-            try:
-                rbd_inst.rename(ioctx, image_name, name)
-            except rbd.OSError as e:
-                return {'success': False, 'detail': str(e), 'errno': e.errno}
-
-        # check resize
-        if size and size != image.size():
-            try:
-                image.resize(size)
-            except rbd.OSError as e:
-                return {'success': False, 'detail': str(e), 'errno': e.errno}
-
-        # check enable/disable features
-        if features is not None:
-            curr_features = cls._format_bitmask(image.features())
-            # check disabled features
-            cls._sort_features(curr_features, enable=False)
-            for feature in curr_features:
-                if feature not in features and feature in cls.ALLOW_DISABLE_FEATURES:
-                    f_bitmask = cls._format_features([feature])
-                    image.update_features(f_bitmask, False)
-            # check enabled features
-            cls._sort_features(features)
-            for feature in features:
-                if feature not in curr_features and feature in cls.ALLOW_ENABLE_FEATURES:
-                    f_bitmask = cls._format_features([feature])
-                    image.update_features(f_bitmask, True)
-
-        return {'success': True}
-
+    @RbdTask('edit', ['{pool_name}', '{image_name}'], 4.0)
     @RESTController.args_from_json
     def set(self, pool_name, image_name, name=None, size=None, features=None):
-        task = TaskManager.run('rbd/edit',
-                               {'pool_name': pool_name, 'image_name': image_name},
-                               self._edit_image,
-                               [pool_name, image_name, name, size, features])
-        status, value = task.wait(4.0)
-        return {'status': status, 'value': value}
+        def _edit(ioctx, image):
+            rbd_inst = rbd.RBD()
+            # check rename image
+            if name and name != image_name:
+                rbd_inst.rename(ioctx, image_name, name)
+
+            # check resize
+            if size and size != image.size():
+                image.resize(size)
+
+            # check enable/disable features
+            if features is not None:
+                curr_features = self._format_bitmask(image.features())
+                # check disabled features
+                self._sort_features(curr_features, enable=False)
+                for feature in curr_features:
+                    if feature not in features and feature in self.ALLOW_DISABLE_FEATURES:
+                        f_bitmask = self._format_features([feature])
+                        image.update_features(f_bitmask, False)
+                # check enabled features
+                self._sort_features(features)
+                for feature in features:
+                    if feature not in curr_features and feature in self.ALLOW_ENABLE_FEATURES:
+                        f_bitmask = self._format_features([feature])
+                        image.update_features(f_bitmask, True)
+
+        return _rbd_image_call(pool_name, image_name, _edit)
 
 
 @ApiController('rbd/:pool_name/:image_name/snap')
 class RbdSnapshot(RESTController):
 
-    @classmethod
-    def _create_snapshot(cls, pool_name, image_name, snapshot_name):
-        ioctx = mgr.rados.open_ioctx(pool_name)
-        img = rbd.Image(ioctx, image_name)
-        try:
-            img.create_snap(snapshot_name)
-        except rbd.OSError as e:
-            return {'success': False, 'detail': str(e), 'errno': e.errno}
-        return {'success': True}
-
+    @RbdTask('snap/create',
+             ['{pool_name}', '{image_name}', '{snapshot_name}'], 2.0)
     @RESTController.args_from_json
     def create(self, pool_name, image_name, snapshot_name):
-        task = TaskManager.run('rbd/snap/create',
-                               {'pool_name': pool_name, 'image_name': image_name,
-                                'snapshot_name': snapshot_name},
-                               self._create_snapshot,
-                               [pool_name, image_name, snapshot_name])
-        status, value = task.wait(1.0)
-        return {'status': status, 'value': value}
+        def _create_snapshot(ioctx, img, snapshot_name):
+            img.create_snap(snapshot_name)
 
-    @classmethod
-    def _remove_snapshot(cls, pool_name, image_name, snapshot_name):
-        ioctx = mgr.rados.open_ioctx(pool_name)
-        img = rbd.Image(ioctx, image_name)
-        try:
-            img.remove_snap(snapshot_name)
-        except rbd.OSError as e:
-            return {'success': False, 'detail': str(e), 'errno': e.errno}
-        return {'success': True}
+        return _rbd_image_call(pool_name, image_name, _create_snapshot,
+                               snapshot_name)
 
+    @RbdTask('snap/delete',
+             ['{pool_name}', '{image_name}', '{snapshot_name}'], 2.0)
     def delete(self, pool_name, image_name, snapshot_name):
-        task = TaskManager.run('rbd/snap/delete',
-                               {'pool_name': pool_name,
-                                'image_name': image_name,
-                                'snapshot_name': snapshot_name},
-                               self._remove_snapshot,
-                               [pool_name, image_name, snapshot_name])
-        status, value = task.wait(1.0)
-        cherrypy.response.status = 200
-        return {'status': status, 'value': value}
+        def _remove_snapshot(ioctx, img, snapshot_name):
+            img.remove_snap(snapshot_name)
 
-    @classmethod
-    def _edit_snapshot(cls, pool_name, image_name, snapshot_name,
-                       new_snap_name, is_protected):
-        ioctx = mgr.rados.open_ioctx(pool_name)
-        img = rbd.Image(ioctx, image_name)
-        try:
+        return _rbd_image_call(pool_name, image_name, _remove_snapshot,
+                               snapshot_name)
+
+    @RbdTask('snap/edit',
+             ['{pool_name}', '{image_name}', '{snapshot_name}'], 4.0)
+    @RESTController.args_from_json
+    def set(self, pool_name, image_name, snapshot_name, new_snap_name=None,
+            is_protected=None):
+        def _edit(ioctx, img, snapshot_name):
             if new_snap_name and new_snap_name != snapshot_name:
                 img.rename_snap(snapshot_name, new_snap_name)
                 snapshot_name = new_snap_name
@@ -382,19 +344,5 @@ class RbdSnapshot(RESTController):
                     img.protect_snap(snapshot_name)
                 else:
                     img.unprotect_snap(snapshot_name)
-        except rbd.OSError as e:
-            return {'success': False, 'detail': str(e), 'errno': e.errno}
-        return {'success': True}
 
-    @RESTController.args_from_json
-    def set(self, pool_name, image_name, snapshot_name, new_snap_name=None,
-            is_protected=None):
-        task = TaskManager.run('rbd/snap/edit',
-                               {'pool_name': pool_name,
-                                'image_name': image_name,
-                                'snapshot_name': snapshot_name},
-                               self._edit_snapshot,
-                               [pool_name, image_name, snapshot_name,
-                                new_snap_name, is_protected])
-        status, value = task.wait(1.0)
-        return {'status': status, 'value': value}
+        return _rbd_image_call(pool_name, image_name, _edit, snapshot_name)
