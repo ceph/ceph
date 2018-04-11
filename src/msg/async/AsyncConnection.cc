@@ -970,7 +970,8 @@ ssize_t AsyncConnection::_process_connection()
         ldout(async_msgr->cct, 20) << __func__ << " connect peer addr for me is " << peer_addr_for_me << dendl;
         lock.unlock();
         async_msgr->learned_addr(peer_addr_for_me);
-        if (async_msgr->cct->_conf->ms_inject_internal_delays) {
+        if (async_msgr->cct->_conf->ms_inject_internal_delays
+            && async_msgr->cct->_conf->ms_inject_socket_failures) {
           if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
             ldout(msgr->cct, 10) << __func__ << " sleep for "
                                  << async_msgr->cct->_conf->ms_inject_internal_delays << dendl;
