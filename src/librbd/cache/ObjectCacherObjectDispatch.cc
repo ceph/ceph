@@ -132,7 +132,6 @@ void ObjectCacherObjectDispatch<I>::init() {
 
   m_object_set = new ObjectCacher::ObjectSet(nullptr,
                                              m_image_ctx->data_ctx.get_id(), 0);
-  m_object_set->return_enoent = true;
   m_object_cacher->start();
   m_cache_lock.Unlock();
 
