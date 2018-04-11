@@ -39,7 +39,7 @@ py3k = False
 try:
     from urlparse import urlparse, unquote
     from base64 import encodestring
-except:
+except ImportError:
     py3k = True
     from urllib.parse import urlparse, unquote
     from base64 import encodebytes as encodestring
@@ -113,7 +113,7 @@ class S3Auth(AuthBase):
             lk = key.lower()
             try:
                 lk = lk.decode('utf-8')
-            except:
+            except UnicodeDecodeError:
                 pass
             if headers[key] and (lk in interesting_headers.keys()
                                  or lk.startswith('x-amz-')):
