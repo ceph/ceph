@@ -249,7 +249,10 @@ class DashboardTestCase(MgrTestCase):
         self.assertEqual(self._resp.text, body)
 
     def assertStatus(self, status):
-        self.assertEqual(self._resp.status_code, status)
+        if isinstance(status, list):
+            self.assertIn(self._resp.status_code, status)
+        else:
+            self.assertEqual(self._resp.status_code, status)
 
     @classmethod
     def _ceph_cmd(cls, cmd):
