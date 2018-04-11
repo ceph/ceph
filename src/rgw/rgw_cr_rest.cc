@@ -113,7 +113,7 @@ void RGWStreamReadHTTPResourceCRF::get_attrs(std::map<string, string> *attrs)
   req->get_out_headers(attrs);
 }
 
-int RGWStreamReadHTTPResourceCRF::decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) {
+int RGWStreamReadHTTPResourceCRF::decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) {
   /* basic generic implementation */
   for (auto header : headers) {
     const string& val = header.second;
@@ -142,7 +142,7 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
         extra_data.claim_append(in_cb->get_extra_data());
         map<string, string> attrs;
         req->get_out_headers(&attrs);
-        int ret = decode_rest_obj(attrs, extra_data, &rest_obj);
+        int ret = decode_rest_obj(attrs, extra_data);
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: " << __func__ << " decode_rest_obj() returned ret=" << ret << dendl;
           return ret;
