@@ -175,6 +175,14 @@ OPTION(ms_async_rdma_dscp, OPT_INT)            // in RoCE, this means DSCP
 OPTION(ms_async_rdma_cm, OPT_BOOL)
 OPTION(ms_async_rdma_type, OPT_STR)
 
+// In simple Accepter:entry, when there more than 4 accept errors
+// then break out accepter entry thread. Here we make it configurable.
+OPTION(ms_accept_error_nums, OPT_INT)
+// In simple Accepter:entry, when there are some unrecoverable error
+// break out the Accepter:entry, But for osd daemons, we want the 
+// Accepter:entry to continue to work so that the unhealthy state can
+// last before the monitor mark it down.
+OPTION(ms_simple_accepter_sleep_time, OPT_INT)
 OPTION(ms_dpdk_port_id, OPT_INT)
 SAFE_OPTION(ms_dpdk_coremask, OPT_STR)        // it is modified in unittest so that use SAFE_OPTION to declare 
 OPTION(ms_dpdk_memory_channel, OPT_STR)

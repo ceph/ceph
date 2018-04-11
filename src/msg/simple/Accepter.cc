@@ -295,11 +295,19 @@ int Accepter::start()
   return 0;
 }
 
+void Accepter::set_hb()
+{
+  if (!hb) {
+    hb = msgr->cct->get_heartbeat_map()->add_worker("Accepter thread", pthread_self());
+  }
+}
+
 void *Accepter::entry()
 {
   ldout(msgr->cct,1) << __func__ << " start" << dendl;
   
   int errors = 0;
+  bool unhealthy = false;
 
   struct pollfd pfd[2];
   memset(pfd, 0, sizeof(pfd));
@@ -308,6 +316,7 @@ void *Accepter::entry()
   pfd[0].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
   pfd[1].fd = shutdown_rd_fd;
   pfd[1].events = POLLIN | POLLERR | POLLNVAL | POLLHUP;
+
   while (!done) {
     ldout(msgr->cct,20) << __func__ << " calling poll for sd:" << listen_sd << dendl;
     int r = poll(pfd, 2, -1);
@@ -315,8 +324,19 @@ void *Accepter::entry()
       if (errno == EINTR) {
         continue;
       }
-      ldout(msgr->cct,1) << __func__ << " poll got error"  
- 			  << " errno " << errno << " " << cpp_strerror(errno) << dendl;
+      ldout(msgr->cct,1) << __func__ << " poll got error"
+                         << " errno " << errno << " " << cpp_strerror(errno) << dendl;	  
+      if (hb) {
+        if (!unhealthy) {
+          lderr(msgr->cct) << "poll got error"
+                           << " reset heartbeat timeout"<< dendl;
+          msgr->cct->get_heartbeat_map()->reset_timeout(hb,0,0);
+          unhealthy = true;
+        } else {
+          sleep(msgr->cct->_conf->ms_simple_accepter_sleep_time);
+          continue;
+        }
+      }
       break;
     }
     ldout(msgr->cct,10) << __func__ << " poll returned oke: " << r << dendl;
@@ -326,6 +346,17 @@ void *Accepter::entry()
     if (pfd[0].revents & (POLLERR | POLLNVAL | POLLHUP)) {
       ldout(msgr->cct,1) << __func__ << " poll got errors in revents "  
  			 <<  pfd[0].revents << dendl;
+      if (hb) {
+        if (!unhealthy) {
+          lderr(msgr->cct) << "poll got errors in revents"
+                           << " reset heartbeat timeout"<< dendl;
+          msgr->cct->get_heartbeat_map()->reset_timeout(hb,0,0);
+          unhealthy = true;
+        } else {
+          sleep(msgr->cct->_conf->ms_simple_accepter_sleep_time);
+          continue;
+        }
+      }
       break;
     }
     if (pfd[1].revents & (POLLIN | POLLERR | POLLNVAL | POLLHUP)) {
@@ -358,12 +389,27 @@ void *Accepter::entry()
     } else {
       ldout(msgr->cct,0) << __func__ << " no incoming connection?  sd = " << sd
 	      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
-      if (++errors > 4)
+
+      if (++errors > msgr->cct->_conf->ms_accept_error_nums) {
+        if (hb) {
+          if (!unhealthy) {
+            lderr(msgr->cct) << "accetper has encoutered enough errors,  reset heartbeat timeout." << dendl;
+            msgr->cct->get_heartbeat_map()->reset_timeout(hb, 0, 0);
+            unhealthy = true; 
+          } else {
+            sleep(msgr->cct->_conf->ms_simple_accepter_sleep_time);
+            continue;
+          } 
+        }
 	break;
+      }
     }
   }
 
   ldout(msgr->cct,20) << __func__ << " closing" << dendl;
+  if (hb) {
+    msgr->cct->get_heartbeat_map()->remove_worker(hb);
+  }
   // socket is closed right after the thread has joined.
   // closing it here might race
   if (shutdown_rd_fd >= 0) {
