@@ -141,6 +141,7 @@ public:
     size = _size;
     etag = _etag;
     attrs = std::move(_attrs);
+    headers = std::move(_headers);
   }
 };
 

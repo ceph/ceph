@@ -676,7 +676,7 @@ struct AWSSyncInstanceEnv {
   }
 };
 
-int do_decode_rest_obj(CephContext *cct, map<string, bufferlist>& attrs, map<string, string>& headers, rgw_rest_obj *info)
+static int do_decode_rest_obj(CephContext *cct, map<string, bufferlist>& attrs, map<string, string>& headers, rgw_rest_obj *info)
 {
   for (auto header : headers) {
     const string& val = header.second;
@@ -778,6 +778,11 @@ public:
   }
 };
 
+static std::set<string> keep_headers = { "CONTENT_TYPE",
+                                         "CONTENT_ENCODING",
+                                         "CONTENT_DISPOSITION",
+                                         "CONTENT_LANGUAGE" };
+
 class RGWAWSStreamPutCRF : public RGWStreamWriteHTTPResourceCRF
 {
   RGWDataSyncEnv *sync_env;
@@ -816,6 +821,11 @@ public:
     return RGWStreamWriteHTTPResourceCRF::init();
   }
 
+  static bool keep_attr(const string& h) {
+    return (keep_headers.find(h) != keep_headers.end() ||
+            boost::algorithm::starts_with(h, "X_AMZ_"));
+  }
+
   static void init_send_attrs(CephContext *cct,
                               const rgw_rest_obj& rest_obj,
                               const rgw_sync_aws_src_obj_properties& src_properties,
@@ -823,7 +833,13 @@ public:
                               map<string, string> *attrs) {
     auto& new_attrs = *attrs;
 
-    new_attrs = rest_obj.attrs;
+    new_attrs.clear();
+
+    for (auto& hi : rest_obj.attrs) {
+      if (keep_attr(hi.first)) {
+        new_attrs.insert(hi);
+      }
+    }
 
     auto acl = rest_obj.acls.get_acl();
 
@@ -938,8 +954,6 @@ public:
     map<string, string> new_attrs;
     if (!multipart.is_multipart) {
       init_send_attrs(sync_env->cct, rest_obj, src_properties, target.get(), &new_attrs);
-    } else {
-      new_attrs = rest_obj.attrs;
     }
 
     r->set_send_length(rest_obj.content_len);
@@ -1131,7 +1145,7 @@ class RGWAWSInitMultipartCR : public RGWCoroutine {
   rgw_obj dest_obj;
 
   uint64_t obj_size;
-  map<string, string> obj_headers;
+  map<string, string> attrs;
 
   bufferlist out_bl;
 
@@ -1154,13 +1168,13 @@ public:
                         RGWRESTConn *_dest_conn,
                         const rgw_obj& _dest_obj,
                         uint64_t _obj_size,
-                        const map<string, string>& _obj_headers,
+                        const map<string, string>& _attrs,
                         string *_upload_id) : RGWCoroutine(_sync_env->cct),
                                                    sync_env(_sync_env),
                                                    dest_conn(_dest_conn),
                                                    dest_obj(_dest_obj),
                                                    obj_size(_obj_size),
-                                                   obj_headers(_obj_headers),
+                                                   attrs(_attrs),
                                                    upload_id(_upload_id) {}
 
   int operate() {
@@ -1170,7 +1184,7 @@ public:
         rgw_http_param_pair params[] = { { "uploads", nullptr }, {nullptr, nullptr} };
         bufferlist bl;
         call(new RGWPostRawRESTResourceCR <bufferlist> (sync_env->cct, dest_conn, sync_env->http_manager,
-                                                 obj_to_aws_path(dest_obj), params, &obj_headers, bl, &out_bl));
+                                                 obj_to_aws_path(dest_obj), params, &attrs, bl, &out_bl));
       }
 
       if (retcode < 0) {
@@ -1379,7 +1393,7 @@ class RGWAWSStreamObjToCloudMultipartCR : public RGWCoroutine {
 
   rgw_sync_aws_multipart_upload_info status;
 
-  map<string, string> obj_headers;
+  map<string, string> new_attrs;
 
   rgw_sync_aws_multipart_part_info *pcur_part_info{nullptr};
 
@@ -1432,9 +1446,9 @@ public:
       }
 
       if (retcode == -ENOENT) {
-        RGWAWSStreamPutCRF::init_send_attrs(sync_env->cct, rest_obj, src_properties, target.get(), &obj_headers);
+        RGWAWSStreamPutCRF::init_send_attrs(sync_env->cct, rest_obj, src_properties, target.get(), &new_attrs);
 
-        yield call(new RGWAWSInitMultipartCR(sync_env, target->conn.get(), dest_obj, status.obj_size, std::move(obj_headers), &status.upload_id));
+        yield call(new RGWAWSInitMultipartCR(sync_env, target->conn.get(), dest_obj, status.obj_size, std::move(new_attrs), &status.upload_id));
         if (retcode < 0) {
           return set_cr_error(retcode);
         }
@@ -1655,6 +1669,7 @@ public:
                                                  dest_obj));
         } else {
           rgw_rest_obj rest_obj;
+          rest_obj.init(key);
           if (do_decode_rest_obj(sync_env->cct, attrs, headers, &rest_obj)) {
             ldout(sync_env->cct, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
             return set_cr_error(-EINVAL);

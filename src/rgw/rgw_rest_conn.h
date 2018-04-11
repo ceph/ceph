@@ -152,7 +152,12 @@ public:
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
               bool skip_decrypt, bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
-  int complete_request(RGWRESTStreamRWRequest *req, string& etag, ceph::real_time *mtime, uint64_t *psize, map<string, string>& attrs);
+  int complete_request(RGWRESTStreamRWRequest *req,
+                       string *etag,
+                       ceph::real_time *mtime,
+                       uint64_t *psize,
+                       map<string, string> *pattrs,
+                       map<string, string> *pheaders);
 
   int get_resource(const string& resource,
 		   param_vec_t *extra_params,

@@ -25,7 +25,6 @@ protected:
   bufferlist response;
 
   virtual int handle_header(const string& name, const string& val);
-  void append_param(string& dest, const string& name, const string& val);
   void get_params_str(map<string, string>& extra_args, string& dest);
 
 public:
@@ -76,6 +75,25 @@ public:
   virtual void notify(uint64_t pending_size) = 0;
 };
 
+class RGWRESTGenerateHTTPHeaders {
+  CephContext *cct;
+  RGWEnv *new_env;
+  req_info *new_info;
+  string method;
+  string url;
+  string resource;
+
+public:
+  RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv *_env, req_info *_info) : cct(_cct), new_env(_env), new_info(_info) {}
+  void init(const string& method, const string& url, const string& resource, const param_vec_t& params);
+  void set_extra_headers(const map<string, string>& extra_headers);
+  int set_obj_attrs(map<string, bufferlist>& rgw_attrs);
+  void set_http_attrs(const map<string, string>& http_attrs);
+  void set_policy(RGWAccessControlPolicy& policy);
+  int sign(RGWAccessKey& key);
+
+  const string& get_url() { return url; }
+};
 
 class RGWHTTPStreamRWRequest : public RGWHTTPSimpleRequest {
 public:
@@ -159,7 +177,11 @@ public:
   int send_request(RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr);
   int send_request(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, RGWHTTPManager *mgr, bufferlist *send_data = nullptr /* optional input data */);
 
-  int complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
+  int complete_request(string *etag = nullptr,
+                       real_time *mtime = nullptr,
+                       uint64_t *psize = nullptr,
+                       map<string, string> *pattrs = nullptr,
+                       map<string, string> *pheaders = nullptr);
 
   void add_params(param_vec_t *params);
 
@@ -183,16 +205,18 @@ class RGWRESTStreamS3PutObj : public RGWRESTStreamRWRequest {
   RGWGetDataCB *out_cb;
   RGWEnv new_env;
   req_info new_info;
+  RGWRESTGenerateHTTPHeaders headers_gen;
 public:
   RGWRESTStreamS3PutObj(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
 		param_vec_t *_params, HostStyle _host_style) : RGWRESTStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params, _host_style),
-                out_cb(NULL), new_info(cct, &new_env) {}
+                out_cb(NULL), new_info(cct, &new_env), headers_gen(_cct, &new_env, &new_info) {}
   ~RGWRESTStreamS3PutObj() override;
 
   void send_init(rgw_obj& obj);
   int send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send);
   int send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
                  RGWAccessControlPolicy& policy, bool send);
+  int send_ready(RGWAccessKey& key, bool send);
 
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
 
