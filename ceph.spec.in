@@ -290,6 +290,7 @@ Requires:      cryptsetup
 Requires:      findutils
 Requires:      grep
 Requires:      logrotate
+Requires:      parted
 Requires:      psmisc
 Requires:      python%{_python_buildid}-requests
 Requires:      python%{_python_buildid}-setuptools
@@ -473,7 +474,6 @@ Summary:	Ceph Object Storage Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-Requires:	parted
 Requires:	lvm2
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
