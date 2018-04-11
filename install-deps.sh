@@ -105,8 +105,10 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
+	www/py-routes \
         www/py-flask \
         www/fcgi \
+	security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
 
