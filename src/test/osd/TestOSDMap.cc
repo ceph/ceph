@@ -92,7 +92,62 @@ public:
     osdmap.apply_incremental(new_pool_inc);
   }
   unsigned int get_num_osds() { return num_osds; }
-
+  void get_crush(CrushWrapper& newcrush) {
+    bufferlist bl;
+    osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    bufferlist::iterator p = bl.begin();
+    newcrush.decode(p);
+  }
+  int crush_move(const string &name, const vector<string> &argvec) {
+    map<string,string> loc;
+    CrushWrapper::parse_loc_map(argvec, &loc);
+    CrushWrapper newcrush;
+    get_crush(newcrush);
+    if (!newcrush.name_exists(name)) {
+       return -ENOENT;
+    }
+    int id = newcrush.get_item_id(name);
+    int err;
+    if (!newcrush.check_item_loc(g_ceph_context, id, loc, (int *)NULL)) {
+      if (id >= 0) {
+        err = newcrush.create_or_move_item(g_ceph_context, id, 0, name, loc);
+      } else {
+        err = newcrush.move_bucket(g_ceph_context, id, loc);
+      }
+      if (err >= 0) {
+        OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+        pending_inc.crush.clear();
+        newcrush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+        osdmap.apply_incremental(pending_inc);
+        err = 0;
+      }
+    } else {
+      // already there
+      err = 0;
+    }
+    return err;
+  }
+  int crush_rule_create_replicated(const string &name,
+                                   const string &root,
+                                   const string &type) {
+    if (osdmap.crush->rule_exists(name)) {
+      return osdmap.crush->get_rule_id(name);
+    }
+    CrushWrapper newcrush;
+    get_crush(newcrush);
+    string device_class;
+    stringstream ss;
+    int ruleno = newcrush.add_simple_rule(
+              name, root, type, device_class,
+              "firstn", pg_pool_t::TYPE_REPLICATED, &ss);
+    if (ruleno >= 0) {
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      osdmap.apply_incremental(pending_inc);
+    }
+    return ruleno;
+  }
   void test_mappings(int pool,
 		     int num,
 		     vector<int> *any,
@@ -482,6 +537,240 @@ TEST_F(OSDMapTest, parse_osd_id_list) {
 
   ASSERT_EQ(-EINVAL, osdmap.parse_osd_id_list({"foo"}, &out, &cout));
   ASSERT_EQ(-EINVAL, osdmap.parse_osd_id_list({"-12"}, &out, &cout));
+}
+
+TEST_F(OSDMapTest, CleanPGUpmaps) {
+  set_up_map();
+
+  // build a crush rule of type host
+  const int expected_host_num = 3;
+  int osd_per_host = get_num_osds() / expected_host_num;
+  ASSERT_GE(2, osd_per_host);
+  int index = 0;
+  for (int i = 0; i < (int)get_num_osds(); i++) {
+    if (i && i % osd_per_host == 0) {
+      ++index;
+    }
+    stringstream osd_name;
+    stringstream host_name;
+    vector<string> move_to;
+    osd_name << "osd." << i;
+    host_name << "host-" << index;
+    move_to.push_back("root=default");
+    string host_loc = "host=" + host_name.str();
+    move_to.push_back(host_loc);
+    int r = crush_move(osd_name.str(), move_to);
+    ASSERT_EQ(0, r);
+  }
+  const string upmap_rule = "upmap";
+  int upmap_rule_no = crush_rule_create_replicated(
+    upmap_rule, "default", "host");
+  ASSERT_LT(0, upmap_rule_no);
+
+  // create a replicated pool which references the above rule
+  OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+  new_pool_inc.new_pool_max = osdmap.get_pool_max();
+  new_pool_inc.fsid = osdmap.get_fsid();
+  pg_pool_t empty;
+  uint64_t upmap_pool_id = ++new_pool_inc.new_pool_max;
+  pg_pool_t *p = new_pool_inc.get_new_pool(upmap_pool_id, &empty);
+  p->size = 2;
+  p->set_pg_num(64);
+  p->set_pgp_num(64);
+  p->type = pg_pool_t::TYPE_REPLICATED;
+  p->crush_rule = upmap_rule_no;
+  p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+  new_pool_inc.new_pool_names[upmap_pool_id] = "upmap_pool";
+  osdmap.apply_incremental(new_pool_inc);
+
+  pg_t rawpg(0, upmap_pool_id);
+  pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
+  vector<int> up;
+  int up_primary;
+  osdmap.pg_to_raw_up(pgid, &up, &up_primary);
+  ASSERT_LT(1U, up.size());
+  {
+    // validate we won't have two OSDs from a same host
+    int parent_0 = osdmap.crush->get_parent_of_type(up[0],
+      osdmap.crush->get_type_id("host"));
+    int parent_1 = osdmap.crush->get_parent_of_type(up[1],
+      osdmap.crush->get_type_id("host"));
+    ASSERT_TRUE(parent_0 != parent_1);
+  }
+
+  {
+    // TEST pg_upmap
+    {
+      // STEP-1: enumerate all children of up[0]'s parent,
+      // replace up[1] with one of them (other than up[0])
+      int parent = osdmap.crush->get_parent_of_type(up[0],
+        osdmap.crush->get_type_id("host"));
+      set<int> candidates;
+      osdmap.crush->get_leaves(osdmap.crush->get_item_name(parent), &candidates);
+      ASSERT_LT(1U, candidates.size());
+      int replaced_by = -1;
+      for (auto c: candidates) {
+        if (c != up[0]) {
+          replaced_by = c;
+          break;
+        }
+      }
+      ASSERT_NE(-1, replaced_by);
+      // generate a new pg_upmap item and apply
+      vector<int32_t> new_pg_upmap;
+      new_pg_upmap.push_back(up[0]);
+      new_pg_upmap.push_back(replaced_by); // up[1] -> replaced_by
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      pending_inc.new_pg_upmap[pgid] = mempool::osdmap::vector<int32_t>(
+        new_pg_upmap.begin(), new_pg_upmap.end());
+      osdmap.apply_incremental(pending_inc);
+      {
+        // validate pg_upmap is there
+        vector<int> new_up;
+        int new_up_primary;
+        osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+        ASSERT_TRUE(up.size() == new_up.size());
+        ASSERT_TRUE(new_up[0] == new_pg_upmap[0]);
+        ASSERT_TRUE(new_up[1] == new_pg_upmap[1]);
+        // and we shall have two OSDs from a same host now..
+        int parent_0 = osdmap.crush->get_parent_of_type(new_up[0],
+          osdmap.crush->get_type_id("host"));
+        int parent_1 = osdmap.crush->get_parent_of_type(new_up[1],
+          osdmap.crush->get_type_id("host"));
+        ASSERT_TRUE(parent_0 == parent_1);
+      }
+    }
+    {
+      // STEP-2: apply cure
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, &pending_inc);
+      osdmap.apply_incremental(pending_inc);
+      {
+        // validate pg_upmap is gone (reverted)
+        vector<int> new_up;
+        int new_up_primary;
+        osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+        ASSERT_TRUE(new_up == up);
+        ASSERT_TRUE(new_up_primary = up_primary);
+      }
+    }
+  }
+
+  {
+    // TEST pg_upmap_items
+    // enumerate all used hosts first
+    set<int> parents;
+    for (auto u: up) {
+      int parent = osdmap.crush->get_parent_of_type(u,
+        osdmap.crush->get_type_id("host"));
+      ASSERT_GT(0, parent);
+      parents.insert(parent);
+    }
+    int candidate_parent = 0;
+    set<int> candidate_children;
+    vector<int> up_after_out;
+    {
+      // STEP-1: try mark out up[1] and all other OSDs from the same host
+      int parent = osdmap.crush->get_parent_of_type(up[1],
+        osdmap.crush->get_type_id("host"));
+      set<int> children;
+      osdmap.crush->get_leaves(osdmap.crush->get_item_name(parent),
+        &children);
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      for (auto c: children) {
+        pending_inc.new_weight[c] = CEPH_OSD_OUT;
+      }
+      OSDMap tmpmap;
+      tmpmap.deepish_copy_from(osdmap);
+      tmpmap.apply_incremental(pending_inc);
+      vector<int> new_up;
+      int new_up_primary;
+      tmpmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+      // verify that we'll have OSDs from a different host..
+      int will_choose = -1;
+      for (auto o: new_up) {
+        int parent = tmpmap.crush->get_parent_of_type(o,
+          osdmap.crush->get_type_id("host"));
+        if (!parents.count(parent)) {
+          will_choose = o;
+          candidate_parent = parent; // record
+          break;
+        }
+      }
+      ASSERT_LT(-1, will_choose); // it is an OSD!
+      ASSERT_TRUE(candidate_parent != 0);
+      osdmap.crush->get_leaves(osdmap.crush->get_item_name(candidate_parent),
+        &candidate_children);
+      ASSERT_TRUE(candidate_children.count(will_choose));
+      candidate_children.erase(will_choose);
+      ASSERT_TRUE(!candidate_children.empty());
+      up_after_out = new_up; // needed for verification..
+    }
+    {
+      // STEP-2: generating a new pg_upmap_items entry by
+      // replacing up[0] with one coming from candidate_children
+      int victim = up[0];
+      int replaced_by = *candidate_children.begin();
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      new_pg_upmap_items.push_back(make_pair(victim, replaced_by));
+      // apply
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      pending_inc.new_pg_upmap_items[pgid] =
+        mempool::osdmap::vector<pair<int32_t,int32_t>>(
+        new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+      osdmap.apply_incremental(pending_inc);
+      {
+        // validate pg_upmap_items is there
+        vector<int> new_up;
+        int new_up_primary;
+        osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+        ASSERT_TRUE(up.size() == new_up.size());
+        ASSERT_TRUE(std::find(new_up.begin(), new_up.end(), replaced_by) !=
+          new_up.end());
+        // and up[1] too
+        ASSERT_TRUE(std::find(new_up.begin(), new_up.end(), up[1]) !=
+          new_up.end());
+      }
+    }
+    {
+      // STEP-3: mark out up[1] and all other OSDs from the same host
+      int parent = osdmap.crush->get_parent_of_type(up[1],
+        osdmap.crush->get_type_id("host"));
+      set<int> children;
+      osdmap.crush->get_leaves(osdmap.crush->get_item_name(parent),
+        &children);
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      for (auto c: children) {
+        pending_inc.new_weight[c] = CEPH_OSD_OUT;
+      }
+      osdmap.apply_incremental(pending_inc);
+      {
+        // validate we have two OSDs from the same host now..
+        vector<int> new_up;
+        int new_up_primary;
+        osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+        ASSERT_TRUE(up.size() == new_up.size());
+        int parent_0 = osdmap.crush->get_parent_of_type(new_up[0],
+          osdmap.crush->get_type_id("host"));
+        int parent_1 = osdmap.crush->get_parent_of_type(new_up[1],
+          osdmap.crush->get_type_id("host"));
+        ASSERT_TRUE(parent_0 == parent_1);
+      } 
+    }
+    {
+      // STEP-4: apply cure
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      osdmap.maybe_remove_pg_upmaps(g_ceph_context, osdmap, &pending_inc);
+      osdmap.apply_incremental(pending_inc);
+      {
+        // validate pg_upmap_items is gone (reverted)
+        vector<int> new_up;
+        int new_up_primary;
+        osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
+        ASSERT_TRUE(new_up == up_after_out);
+      }
+    }
+  }
 }
 
 TEST(PGTempMap, basic)
