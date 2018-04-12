@@ -257,3 +257,27 @@ target_link_libraries(rgw LINK_PRIVATE
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+set(librgw_admin_user_srcs
+  librgw_admin_user.cc
+  rgw_admin_user.cc)
+add_library(rgw_admin_user SHARED ${librgw_admin_user_srcs})
+target_link_libraries(rgw_admin_user PRIVATE
+  rgw_a
+  librados
+  cls_rgw_client
+  cls_lock_client
+  cls_refcount_client
+  cls_log_client
+  cls_statelog_client
+  cls_timeindex_client
+  cls_version_client
+  cls_replica_log_client
+  cls_user_client
+  global
+  ${LIB_RESOLV}
+  ${CURL_LIBRARIES}
+  ${EXPAT_LIBRARIES})
+set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
+  SOVERSION 0)
+install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})
