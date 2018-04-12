@@ -73,12 +73,14 @@ using rgw::IAM::s3ListBucket;
 using rgw::IAM::s3ListBucketMultipartUploads;
 using rgw::IAM::s3ListBucketVersions;
 using rgw::IAM::s3ListMultipartUploadParts;
-using rgw::IAM::s3None;
+using rgw::IAM::None;
 using rgw::IAM::s3PutBucketAcl;
 using rgw::IAM::s3PutBucketPolicy;
 using rgw::IAM::Service;
 using rgw::IAM::TokenID;
 using rgw::IAM::Version;
+using rgw::IAM::Action_t;
+using rgw::IAM::NotAction_t;
 
 class FakeIdentity : public Identity {
   const Principal id;
@@ -146,8 +148,10 @@ TEST_F(PolicyTest, Parse1) {
   EXPECT_TRUE(p->statements[0].princ.empty());
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[0].action, s3ListBucket);
-  EXPECT_EQ(p->statements[0].notaction, s3None);
+  Action_t act;
+  act[s3ListBucket] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
   ASSERT_FALSE(p->statements[0].resource.empty());
   ASSERT_EQ(p->statements[0].resource.size(), 1U);
   EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
@@ -200,8 +204,12 @@ TEST_F(PolicyTest, Parse2) {
 	    Principal::tenant("ACCOUNT-ID-WITHOUT-HYPHENS"));
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[0].action, s3All);
-  EXPECT_EQ(p->statements[0].notaction, s3None);
+  Action_t act;
+  for (auto i = 0ULL; i < s3Count; i++)
+    act[i] = 1;
+  act[s3All] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
   ASSERT_FALSE(p->statements[0].resource.empty());
   ASSERT_EQ(p->statements[0].resource.size(), 2U);
   EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
@@ -232,29 +240,29 @@ TEST_F(PolicyTest, Eval2) {
   auto notacct = FakeIdentity(
     Principal::tenant("some-other-account"));
   for (auto i = 0ULL; i < s3Count; ++i) {
-    EXPECT_EQ(p.eval(e, trueacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, trueacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket")),
 	      Effect::Allow);
-    EXPECT_EQ(p.eval(e, trueacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, trueacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket/myobject")),
 	      Effect::Allow);
 
-    EXPECT_EQ(p.eval(e, notacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, notacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket")),
 	      Effect::Pass);
-    EXPECT_EQ(p.eval(e, notacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, notacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket/myobject")),
 	      Effect::Pass);
 
-    EXPECT_EQ(p.eval(e, trueacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, trueacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "notyourbucket")),
 	      Effect::Pass);
-    EXPECT_EQ(p.eval(e, trueacct, 1ULL << i,
+    EXPECT_EQ(p.eval(e, trueacct, i,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "notyourbucket/notyourobject")),
 	      Effect::Pass);
@@ -279,8 +287,10 @@ TEST_F(PolicyTest, Parse3) {
   EXPECT_TRUE(p->statements[0].princ.empty());
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[0].action, s3PutBucketPolicy);
-  EXPECT_EQ(p->statements[0].notaction, s3None);
+  Action_t act;
+  act[s3PutBucketPolicy] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
   ASSERT_FALSE(p->statements[0].resource.empty());
   ASSERT_EQ(p->statements[0].resource.size(), 1U);
   EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::wildcard);
@@ -295,8 +305,10 @@ TEST_F(PolicyTest, Parse3) {
   EXPECT_TRUE(p->statements[1].princ.empty());
   EXPECT_TRUE(p->statements[1].noprinc.empty());
   EXPECT_EQ(p->statements[1].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[1].action, s3ListAllMyBuckets);
-  EXPECT_EQ(p->statements[1].notaction, s3None);
+  Action_t act1;
+  act1[s3ListAllMyBuckets] = 1;
+  EXPECT_EQ(p->statements[1].action, act1);
+  EXPECT_EQ(p->statements[1].notaction, None);
   ASSERT_FALSE(p->statements[1].resource.empty());
   ASSERT_EQ(p->statements[1].resource.size(), 1U);
   EXPECT_EQ(p->statements[1].resource.begin()->partition, Partition::wildcard);
@@ -311,29 +323,36 @@ TEST_F(PolicyTest, Parse3) {
   EXPECT_TRUE(p->statements[2].princ.empty());
   EXPECT_TRUE(p->statements[2].noprinc.empty());
   EXPECT_EQ(p->statements[2].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[2].action, (s3ListMultipartUploadParts |
-				      s3ListBucket | s3ListBucketVersions |
-				      s3ListAllMyBuckets |
-				      s3ListBucketMultipartUploads |
-				      s3GetObject | s3GetObjectVersion |
-				      s3GetObjectAcl | s3GetObjectVersionAcl |
-				      s3GetObjectTorrent |
-				      s3GetObjectVersionTorrent |
-				      s3GetAccelerateConfiguration |
-				      s3GetBucketAcl | s3GetBucketCORS |
-				      s3GetBucketVersioning |
-				      s3GetBucketRequestPayment |
-				      s3GetBucketLocation |
-				      s3GetBucketPolicy |
-				      s3GetBucketNotification |
-				      s3GetBucketLogging |
-				      s3GetBucketTagging |
-				      s3GetBucketWebsite |
-				      s3GetLifecycleConfiguration |
-				      s3GetReplicationConfiguration |
-				      s3GetObjectTagging |
-				      s3GetObjectVersionTagging));
-  EXPECT_EQ(p->statements[2].notaction, s3None);
+  Action_t act2;
+  act2[s3ListMultipartUploadParts] = 1;
+  act2[s3ListBucket] = 1;
+  act2[s3ListBucketVersions] = 1;
+  act2[s3ListAllMyBuckets] = 1;
+  act2[s3ListBucketMultipartUploads] = 1;
+  act2[s3GetObject] = 1;
+  act2[s3GetObjectVersion] = 1;
+  act2[s3GetObjectAcl] = 1;
+  act2[s3GetObjectVersionAcl] = 1;
+  act2[s3GetObjectTorrent] = 1;
+  act2[s3GetObjectVersionTorrent] = 1;
+  act2[s3GetAccelerateConfiguration] = 1;
+  act2[s3GetBucketAcl] = 1;
+  act2[s3GetBucketCORS] = 1;
+  act2[s3GetBucketVersioning] = 1;
+  act2[s3GetBucketRequestPayment] = 1;
+  act2[s3GetBucketLocation] = 1;
+  act2[s3GetBucketPolicy] = 1;
+  act2[s3GetBucketNotification] = 1;
+  act2[s3GetBucketLogging] = 1;
+  act2[s3GetBucketTagging] = 1;
+  act2[s3GetBucketWebsite] = 1;
+  act2[s3GetLifecycleConfiguration] = 1;
+  act2[s3GetReplicationConfiguration] = 1;
+  act2[s3GetObjectTagging] = 1;
+  act2[s3GetObjectVersionTagging] = 1;
+
+  EXPECT_EQ(p->statements[2].action, act2);
+  EXPECT_EQ(p->statements[2].notaction, None);
   ASSERT_FALSE(p->statements[2].resource.empty());
   ASSERT_EQ(p->statements[2].resource.size(), 2U);
   EXPECT_EQ(p->statements[2].resource.begin()->partition, Partition::aws);
@@ -367,19 +386,33 @@ TEST_F(PolicyTest, Eval3) {
   Environment tr = { { "aws:MultiFactorAuthPresent", "true" } };
   Environment fa = { { "aws:MultiFactorAuthPresent", "false" } };
 
-  auto s3allow = (s3ListMultipartUploadParts | s3ListBucket |
-		  s3ListBucketVersions | s3ListAllMyBuckets |
-		  s3ListBucketMultipartUploads | s3GetObject |
-		  s3GetObjectVersion | s3GetObjectAcl | s3GetObjectVersionAcl |
-		  s3GetObjectTorrent | s3GetObjectVersionTorrent |
-		  s3GetAccelerateConfiguration | s3GetBucketAcl |
-		  s3GetBucketCORS | s3GetBucketVersioning |
-		  s3GetBucketRequestPayment | s3GetBucketLocation |
-		  s3GetBucketPolicy | s3GetBucketNotification |
-		  s3GetBucketLogging | s3GetBucketTagging |
-		  s3GetBucketWebsite | s3GetLifecycleConfiguration |
-		  s3GetReplicationConfiguration |
-		  s3GetObjectTagging | s3GetObjectVersionTagging);
+  Action_t s3allow;
+  s3allow[s3ListMultipartUploadParts] = 1;
+  s3allow[s3ListBucket] = 1;
+  s3allow[s3ListBucketVersions] = 1;
+  s3allow[s3ListAllMyBuckets] = 1;
+  s3allow[s3ListBucketMultipartUploads] = 1;
+  s3allow[s3GetObject] = 1;
+  s3allow[s3GetObjectVersion] = 1;
+  s3allow[s3GetObjectAcl] = 1;
+  s3allow[s3GetObjectVersionAcl] = 1;
+  s3allow[s3GetObjectTorrent] = 1;
+  s3allow[s3GetObjectVersionTorrent] = 1;
+  s3allow[s3GetAccelerateConfiguration] = 1;
+  s3allow[s3GetBucketAcl] = 1;
+  s3allow[s3GetBucketCORS] = 1;
+  s3allow[s3GetBucketVersioning] = 1;
+  s3allow[s3GetBucketRequestPayment] = 1;
+  s3allow[s3GetBucketLocation] = 1;
+  s3allow[s3GetBucketPolicy] = 1;
+  s3allow[s3GetBucketNotification] = 1;
+  s3allow[s3GetBucketLogging] = 1;
+  s3allow[s3GetBucketTagging] = 1;
+  s3allow[s3GetBucketWebsite] = 1;
+  s3allow[s3GetLifecycleConfiguration] = 1;
+  s3allow[s3GetReplicationConfiguration] = 1;
+  s3allow[s3GetObjectTagging] = 1;
+  s3allow[s3GetObjectVersionTagging] = 1;
 
   EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy,
 		   ARN(Partition::aws, Service::s3,
@@ -392,12 +425,10 @@ TEST_F(PolicyTest, Eval3) {
 	    Effect::Allow);
 
 
-  for (auto i = 0ULL; i < s3Count; ++i) {
-    auto op = 1ULL << i;
+  for (auto op = 0ULL; op < s3Count; ++op) {
     if ((op == s3ListAllMyBuckets) || (op == s3PutBucketPolicy)) {
       continue;
     }
-
     EXPECT_EQ(p.eval(em, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
@@ -405,7 +436,7 @@ TEST_F(PolicyTest, Eval3) {
     EXPECT_EQ(p.eval(tr, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
-	      op & s3allow ? Effect::Allow : Effect::Pass);
+	      s3allow[op] ? Effect::Allow : Effect::Pass);
     EXPECT_EQ(p.eval(fa, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
@@ -418,7 +449,7 @@ TEST_F(PolicyTest, Eval3) {
     EXPECT_EQ(p.eval(tr, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo")),
-	      op & s3allow ? Effect::Allow : Effect::Pass);
+	      s3allow[op] ? Effect::Allow : Effect::Pass);
     EXPECT_EQ(p.eval(fa, none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo")),
@@ -639,8 +670,10 @@ TEST_F(IPPolicyTest, ParseIPAddress) {
 	    Principal::wildcard());
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
-  EXPECT_EQ(p->statements[0].action, s3ListBucket);
-  EXPECT_EQ(p->statements[0].notaction, s3None);
+  Action_t act;
+  act[s3ListBucket] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
   ASSERT_FALSE(p->statements[0].resource.empty());
   ASSERT_EQ(p->statements[0].resource.size(), 2U);
   EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);

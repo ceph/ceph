@@ -292,7 +292,7 @@ void RGWDeleteUserPolicy::execute()
   if (op_ret < 0) {
     return;
   }
-  
+
   RGWUserInfo info;
   rgw_user user_id(user_name);
   op_ret = rgw_get_user_info_by_uid(store, user_id, info);
@@ -300,7 +300,7 @@ void RGWDeleteUserPolicy::execute()
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
-  
+
   map<string, bufferlist> uattrs;
   op_ret = rgw_get_user_attrs_by_uid(store, user_id, uattrs);
   if (op_ret == -ENOENT) {
