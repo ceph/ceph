@@ -80,7 +80,7 @@ WRITE_CLASS_ENCODER(RGWBWRedirectInfo)
 struct RGWBWRoutingRuleCondition
 {
   std::string key_prefix_equals;
-  uint16_t http_error_code_returned_equals;
+  uint16_t http_error_code_returned_equals = 0;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
