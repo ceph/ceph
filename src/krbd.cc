@@ -657,7 +657,7 @@ static bool dump_one_image(Formatter *f, TextTable *tbl,
 static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
 {
   struct udev_enumerate *enm;
-  struct udev_list_entry *l;
+  struct udev_list_entry *l = NULL;
   bool have_output = false;
   int r;
 
