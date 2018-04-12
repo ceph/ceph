@@ -9,7 +9,7 @@ describe('NotificationsComponent', () => {
   let component: NotificationsComponent;
   let fixture: ComponentFixture<NotificationsComponent>;
 
-  const fakeService = new NotificationService(null);
+  const fakeService = new NotificationService(null, null);
 
   beforeEach(
     async(() => {
