@@ -428,29 +428,57 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 
     // We'll apply this twice, once while counting out lines
     // and once while outputting them.
-    auto match = [level, channel](const LogEntry &entry) {
-      return entry.prio >= level && (entry.channel == channel || channel == "*");
+    auto match = [level](const LogEntry &entry) {
+      return entry.prio >= level;
     };
 
-    auto rp = summary.tail.rbegin();
-    for (; num > 0 && rp != summary.tail.rend(); ++rp) {
-      if (match(*rp)) {
-        num--;
-      }
-    }
-    if (rp == summary.tail.rend()) {
-      --rp;
-    }
     ostringstream ss;
-    for (; rp != summary.tail.rbegin(); --rp) {
-      if (!match(*rp)) {
-        continue;
+    if (channel == "*") {
+      list<LogEntry> full_tail;
+      summary.build_ordered_tail(&full_tail);
+      derr << "full " << full_tail << dendl;
+      auto rp = full_tail.rbegin();
+      for (; num > 0 && rp != full_tail.rend(); ++rp) {
+	if (match(*rp)) {
+	  num--;
+	}
       }
-
-      if (f) {
-	f->dump_object("entry", *rp);
-      } else {
-	ss << *rp << "\n";
+      if (rp == full_tail.rend()) {
+	--rp;
+      }
+      for (; rp != full_tail.rbegin(); --rp) {
+	if (!match(*rp)) {
+	  continue;
+	}
+	if (f) {
+	  f->dump_object("entry", *rp);
+	} else {
+	  ss << *rp << "\n";
+	}
+      }
+    } else {
+      derr << "bar" << dendl;
+      auto p = summary.tail_by_channel.find(channel);
+      if (p != summary.tail_by_channel.end()) {
+	auto rp = p->second.rbegin();
+	for (; num > 0 && rp != p->second.rend(); ++rp) {
+	  if (match(rp->second)) {
+	    num--;
+	  }
+	}
+	if (rp == p->second.rend()) {
+	  --rp;
+	}
+	for (; rp != p->second.rbegin(); --rp) {
+	  if (!match(rp->second)) {
+	    continue;
+	  }
+	  if (f) {
+	    f->dump_object("entry", rp->second);
+	  } else {
+	    ss << rp->second << "\n";
+	  }
+	}
       }
     }
     if (f) {

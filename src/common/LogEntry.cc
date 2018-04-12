@@ -263,33 +263,86 @@ void LogEntry::generate_test_instances(list<LogEntry*>& o)
 
 // -----
 
+void LogSummary::build_ordered_tail(list<LogEntry> *tail) const
+{
+  tail->clear();
+  // channel -> (begin, end)
+  map<string,pair<list<pair<uint64_t,LogEntry>>::const_iterator,
+		  list<pair<uint64_t,LogEntry>>::const_iterator>> pos;
+  for (auto& i : tail_by_channel) {
+    pos.emplace(i.first, make_pair(i.second.begin(), i.second.end()));
+  }
+  while (true) {
+    uint64_t min_seq = 0;
+    list<pair<uint64_t,LogEntry>>::const_iterator *minp = 0;
+    for (auto& i : pos) {
+      if (i.second.first == i.second.second) {
+	continue;
+      }
+      if (min_seq == 0 || i.second.first->first < min_seq) {
+	min_seq = i.second.first->first;
+	minp = &i.second.first;
+      }
+    }
+    if (min_seq == 0) {
+      break; // done
+    }
+    tail->push_back((*minp)->second);
+    ++(*minp);
+  }
+}
+
 void LogSummary::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(2, 2, bl);
+  if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    ENCODE_START(2, 2, bl);
+    encode(version, bl);
+    list<LogEntry> tail;
+    build_ordered_tail(&tail);
+    encode(tail, bl, features);
+    ENCODE_FINISH(bl);
+    return;
+  }
+  ENCODE_START(3, 3, bl);
   encode(version, bl);
-  encode(tail, bl, features);
+  encode(seq, bl);
+  encode(tail_by_channel, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void LogSummary::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);
-  decode(tail, bl);
+  if (struct_v < 3) {
+    list<LogEntry> tail;
+    decode(tail, bl);
+    for (auto& i : tail) {
+      add(i);
+    }
+  } else {
+    decode(seq, bl);
+    decode(tail_by_channel, bl);
+  }
   DECODE_FINISH(bl);
   keys.clear();
-  for (auto& p : tail) {
-    keys.insert(p.key());
+  for (auto& i : tail_by_channel) {
+    for (auto& e : i.second) {
+      keys.insert(e.second.key());
+    }
   }
 }
 
 void LogSummary::dump(Formatter *f) const
 {
   f->dump_unsigned("version", version);
-  f->open_array_section("tail");
-  for (list<LogEntry>::const_iterator p = tail.begin(); p != tail.end(); ++p) {
-    f->open_object_section("entry");
-    p->dump(f);
+  f->open_object_section("tail_by_channel");
+  for (auto& i : tail_by_channel) {
+    f->open_object_section(i.first.c_str());
+    for (auto& j : i.second) {
+      string s = stringify(j.first);
+      f->dump_object(s.c_str(), j.second);
+    }
     f->close_section();
   }
   f->close_section();
