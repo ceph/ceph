@@ -951,6 +951,11 @@ namespace rgw {
   }
 
   RGWFileHandle::~RGWFileHandle() {
+    /* !recycle case, handle may STILL be in handle table, BUT
+     * the partition lock is not held in this path */
+    if (fh_hook.is_linked()) {
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+    }
     /* cond-unref parent */
     if (parent && (! parent->is_mount())) {
       /* safe because if parent->unref causes its deletion,
