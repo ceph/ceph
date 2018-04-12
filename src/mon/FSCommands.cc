@@ -261,7 +261,15 @@ public:
       if (n <= 0) {
         ss << "You must specify at least one MDS";
         return -EINVAL;
-      } else if (n > MAX_MDS) {
+      }
+      if (n > 1 && n > fs->mds_map.get_max_mds()) {
+	if (fs->mds_map.was_snaps_ever_allowed() &&
+	    !fs->mds_map.allows_multimds_snaps()) {
+	  ss << "multi-active MDS is not allowed while there are snapshots possibly created by pre-mimic MDS";
+	  return -EINVAL;
+	}
+      }
+      if (n > MAX_MDS) {
         ss << "may not have more than " << MAX_MDS << " MDS ranks";
         return -EINVAL;
       }
