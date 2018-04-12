@@ -102,7 +102,7 @@ class LZ4Compressor : public Compressor {
         c_out += compressed_pairs[i].first;
       } else if (r < 0) {
         return -1;
-      } else if (r != (int)compressed_pairs[i].first) {
+      } else {
         return -2;
       }
     }
