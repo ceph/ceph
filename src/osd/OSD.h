@@ -838,11 +838,22 @@ public:
   // -- pg_temp --
 private:
   Mutex pg_temp_lock;
-  map<pg_t, vector<int> > pg_temp_wanted;
-  map<pg_t, vector<int> > pg_temp_pending;
+  struct pg_temp_t {
+    pg_temp_t()
+    {}
+    pg_temp_t(vector<int> v, bool f)
+      : acting{v}, forced{f}
+    {}
+    vector<int> acting;
+    bool forced = false;
+  };
+  map<pg_t, pg_temp_t> pg_temp_wanted;
+  map<pg_t, pg_temp_t> pg_temp_pending;
   void _sent_pg_temp();
+  friend std::ostream& operator<<(std::ostream&, const pg_temp_t&);
 public:
-  void queue_want_pg_temp(pg_t pgid, vector<int>& want);
+  void queue_want_pg_temp(pg_t pgid, const vector<int>& want,
+			  bool forced = false);
   void remove_want_pg_temp(pg_t pgid);
   void requeue_pg_temp();
   void send_pg_temp();
