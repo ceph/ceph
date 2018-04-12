@@ -42,6 +42,10 @@ EOF
 
 function allocate() {
     xfs_io -c "pwrite -b $OBJECT_SIZE -W 0 $IMAGE_SIZE" $DEV
+    assert_allocated
+}
+
+function assert_allocated() {
     cmp <(od -xAx $DEV) - <<EOF
 000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
 *
@@ -125,6 +129,25 @@ assert_zeroes_unaligned $NUM_OBJECTS
 allocate
 py_fallocate FALLOC_FL_PUNCH_HOLE\|FALLOC_FL_KEEP_SIZE $((OBJECT_SIZE / 2))
 assert_zeroes_unaligned $NUM_OBJECTS
+
+sudo rbd unmap $DEV
+
+DEV=$(sudo rbd map -o notrim $IMAGE_NAME)
+
+# blkdev_issue_discard
+allocate
+py_blkdiscard 0 |& grep 'Operation not supported'
+assert_allocated
+
+# blkdev_issue_zeroout w/ BLKDEV_ZERO_NOUNMAP
+allocate
+py_fallocate FALLOC_FL_ZERO_RANGE\|FALLOC_FL_KEEP_SIZE 0
+assert_zeroes $NUM_OBJECTS
+
+# blkdev_issue_zeroout w/ BLKDEV_ZERO_NOFALLBACK
+allocate
+py_fallocate FALLOC_FL_PUNCH_HOLE\|FALLOC_FL_KEEP_SIZE 0 |& grep 'Operation not supported'
+assert_allocated
 
 sudo rbd unmap $DEV
 
