@@ -5,7 +5,7 @@
 #define CEPH_TEST_WATCH_NOTIFY_H
 
 #include "include/rados/librados.hpp"
-#include "common/Cond.h"
+#include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include <boost/noncopyable.hpp>
 #include <boost/shared_ptr.hpp>
@@ -65,12 +65,12 @@ public:
   void aio_unwatch(TestRadosClient *rados_client, uint64_t handle,
                    Context *on_finish);
   void aio_notify(TestRadosClient *rados_client, const std::string& oid,
-                  bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
+                  const bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
                   Context *on_notify);
 
   void flush(TestRadosClient *rados_client);
   int notify(TestRadosClient *rados_client, const std::string& o,
-             bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl);
+             const bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl);
   void notify_ack(TestRadosClient *rados_client, const std::string& o,
                   uint64_t notify_id, uint64_t handle, uint64_t gid,
                   bufferlist& bl);
@@ -89,9 +89,8 @@ private:
   uint64_t m_notify_id = 0;
 
   Mutex m_lock;
-  uint64_t m_pending_notifies = 0;
+  AsyncOpTracker m_async_op_tracker;
 
-  Cond m_file_watcher_cond;
   FileWatchers	m_file_watchers;
 
   SharedWatcher get_watcher(const std::string& oid);
@@ -105,7 +104,8 @@ private:
                        Context *on_finish);
 
   void execute_notify(TestRadosClient *rados_client, const std::string &oid,
-                      bufferlist &bl, uint64_t notify_id);
+                      const bufferlist &bl, bufferlist *pbl,
+                      Context *on_notify);
   void ack_notify(TestRadosClient *rados_client, const std::string &oid,
                   uint64_t notify_id, const WatcherID &watcher_id,
                   const bufferlist &bl);
