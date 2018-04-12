@@ -22,3 +22,8 @@
   delete workload, it can lead to high latency when leveldb's
   single-threaded compaction cannot keep up. rocksdb supports multiple
   threads for compaction, which avoids this problem.
+
+* In 10.2.10 and earlier releases, keyring caps were not checked for validity,
+  so the caps string could be anything. As of 10.2.11, caps strings are
+  validated and providing a keyring with an invalid caps string to, e.g.,
+  "ceph auth add" will result in an error.
