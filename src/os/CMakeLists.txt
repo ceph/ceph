@@ -32,6 +32,7 @@ if(WITH_BLUESTORE)
     bluestore/FreelistManager.cc
     bluestore/StupidAllocator.cc
     bluestore/BitmapAllocator.cc
+    bluestore/StupidAllocator2.cc
   )
 endif(WITH_BLUESTORE)
 

@@ -18,6 +18,7 @@
 
 #include "os/bluestore/BlueFS.h"
 #include "os/bluestore/StupidAllocator.h"
+#include "os/bluestore/StupidAllocator2.h"
 
 
 #define dout_context cct
@@ -34,6 +35,7 @@ class AllocatorTest : public ::testing::Test {
 };
 
 typedef ::testing::Types<
+  StupidAllocator2,
   StupidAllocator
   > IntervalSetTypes;
 
@@ -128,9 +130,10 @@ TYPED_TEST(AllocatorTest, test_add_free_rm_free_Fibonnaci_CantorSet) {
 
   set[M] = {0};
   aset_t deleted;
-
   aset_t new_set,new_deleted;
   sa.init_add_free(0, M);
+  ASSERT_EQ(sa.get_free(), size(set));
+
   for (int i=0;i<10;i++) {
     nextI(set,deleted,new_set,new_deleted);
     for(auto &d: deleted) {
@@ -145,10 +148,92 @@ TYPED_TEST(AllocatorTest, test_add_free_rm_free_Fibonnaci_CantorSet) {
         sa.init_rm_free(dr, d.first);
       }
     }
+
     set.swap(new_set);
     deleted.swap(new_deleted);
     ASSERT_EQ(sa.get_free(), size(set));
   }
+}
+
+
+TYPED_TEST(AllocatorTest, test_fragmentation) {
+  typename TestFixture::Allocator sa(g_ceph_context);
+  constexpr size_t M = 1<<20;
+  constexpr size_t P = 4096;
+  sa.init_add_free(0, M);
+
+  for (int i=0; i<100;i++) {
+    uint64_t offset;
+    uint32_t v = rand() % (M / P);
+    uint32_t scale = cbits(M / P) - cbits(v);
+    uint64_t size = ( (rand() % (1 << scale)) + 1 ) * P;
+    if (0 == sa.reserve(size)) {
+      uint32_t allocated = 0;
+      if (0 == sa.allocate_int(size, P, 0, &offset, &allocated)) {
+        interval_set<uint64_t> tr;
+        tr.insert(offset, allocated);
+        sa.release(tr);
+      }
+      sa.unreserve(size - allocated);
+    }
+    ASSERT_EQ(sa.get_free(), M);
+  }
+  sa.reserve(M);
+  uint64_t offset;
+  uint32_t allocated;
+  ASSERT_EQ(0, sa.allocate_int(M, P, 0, &offset, &allocated));
+  ASSERT_EQ(allocated, M);
+}
+
+
+
+TYPED_TEST(AllocatorTest, test_fragmentation_dragged) {
+  typename TestFixture::Allocator sa(g_ceph_context);
+  constexpr size_t M = 1<<26;
+  constexpr size_t P = 4096;
+  sa.init_add_free(0, M);
+  typedef std::pair<uint64_t, uint32_t> allocation_t;
+  typedef std::list<allocation_t> allocation_list_t;
+  allocation_list_t allocation_list;
+  std::vector<allocation_list_t::iterator> allocation_vector;
+
+  for (int i=0; i<10000;i++) {
+    uint64_t offset;
+    uint32_t v = rand() % (M / P);
+    uint32_t scale = cbits(M / P) - cbits(v);
+    uint64_t size = ( (rand() % (1 << scale)) + 1 ) * P;
+    if (0 == sa.reserve(size)) {
+      uint32_t allocated = 0;
+      if (0 == sa.allocate_int(size, P, 1, &offset, &allocated)) {
+        auto n = allocation_list.emplace(allocation_list.end(), allocation_t{offset,allocated});
+        allocation_vector.push_back(n);
+      }
+      sa.unreserve(size - allocated);
+      if (allocation_vector.size() > 100) {
+        size_t r = rand()%allocation_vector.size();
+        auto it = allocation_vector[r];
+        interval_set<uint64_t> tr;
+        tr.insert(it->first, it->second);
+        sa.release(tr);
+        allocation_vector[r] = allocation_vector.back();
+        allocation_vector.resize(allocation_vector.size() - 1);
+      }
+    }
+  }
+  interval_set<uint64_t> tr;
+  for (size_t i = 0; i < allocation_vector.size(); i++) {
+    auto it = allocation_vector[i];
+    tr.insert(it->first, it->second);
+  }
+  sa.release(tr);
+
+  ASSERT_EQ(sa.get_free(), M);
+
+  sa.reserve(M);
+  uint64_t offset;
+  uint32_t allocated;
+  ASSERT_EQ(0, sa.allocate_int(M, P, 0, &offset, &allocated));
+  ASSERT_EQ(allocated, M);
 }
 
 int main(int argc, char **argv) {
