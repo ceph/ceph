@@ -45,6 +45,8 @@ export class SubmitButtonComponent implements OnInit {
   }
 
   submit() {
+    this.focusButton();
+
     if (this.form.invalid) {
       this.focusInvalid();
       return;
@@ -52,6 +54,12 @@ export class SubmitButtonComponent implements OnInit {
 
     this.loading = true;
     this.submitAction.emit();
+  }
+
+  focusButton() {
+    this.elRef.nativeElement.offsetParent.querySelector(
+      'button[type="submit"]'
+    ).focus();
   }
 
   focusInvalid() {
