@@ -563,12 +563,7 @@ void LogMonitor::check_sub(Subscription *s)
 
   if (s->next == 0) { 
     /* First timer, heh? */
-    bool ret = _create_sub_summary(mlog, sub_level);
-    if (!ret) {
-      dout(1) << __func__ << " ret = " << ret << dendl;
-      mlog->put();
-      return;
-    }
+    _create_sub_incremental(mlog, sub_level, get_last_committed());
   } else {
     /* let us send you an incremental log... */
     _create_sub_incremental(mlog, sub_level, s->next);
@@ -587,37 +582,6 @@ void LogMonitor::check_sub(Subscription *s)
     mon->session_map.remove_sub(s);
   else
     s->next = summary_version+1;
-}
-
-/**
- * Create a log message containing only the last message in the summary.
- *
- * @param mlog	Log message we'll send to the client.
- * @param level Maximum log level the client is interested in.
- * @return	'true' if we consider we successfully populated @mlog;
- *		'false' otherwise.
- */
-bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
-{
-  dout(10) << __func__ << dendl;
-
-  assert(mlog != NULL);
-
-  if (!summary.tail.size())
-    return false;
-
-  list<LogEntry>::reverse_iterator it = summary.tail.rbegin();
-  for (; it != summary.tail.rend(); ++it) {
-    LogEntry e = *it;
-    if (e.prio < level)
-      continue;
-
-    mlog->entries.push_back(e);
-    mlog->version = summary.version;
-    break;
-  }
-
-  return true;
 }
 
 /**
