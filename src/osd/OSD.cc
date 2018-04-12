@@ -4690,7 +4690,14 @@ void OSD::heartbeat()
 
   // get CPU load avg
   double loadavgs[1];
-  int n_samples = 86400 / cct->_conf->osd_heartbeat_interval;
+  int hb_interval = cct->_conf->osd_heartbeat_interval;
+  int n_samples = 86400;
+  if (hb_interval > 1) {
+    n_samples /= hb_interval;
+    if (n_samples < 1)
+      n_samples = 1;
+  }
+
   if (getloadavg(loadavgs, 1) == 1) {
     logger->set(l_osd_loadavg, 100 * loadavgs[0]);
     daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavgs[0]) / n_samples;
