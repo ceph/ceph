@@ -1,0 +1,25 @@
+Ceph is a distributed object store and file system designed to provide
+excellent performance, reliability and scalability.
+
+* Object Storage
+  Ceph provides seamless access to objects using native language bindings
+  or radosgw, a REST interface that\xe2\x80\x99s compatible with applications
+  written for S3 and Swift.
+* Block Storage
+  Ceph's RADOS Block Device (RBD) provides access to block device images
+  that are striped and replicated across the entire storage cluster.
+   * File System
+  Ceph provides a POSIX-compliant network file system that aims for high
+  performance, large data storage, and maximum compatibility with legacy
+  applications.
+
+I started looking into Ceph, because the HAST solution with CARP and
+ggate did not really do what I was looking for. But I'm aiming for
+running a Ceph storage cluster of storagenodes that are running ZFS.
+Endstation would be running bhyve on RBD disk that are stored in Ceph.
+
+The FreeBSD build will build most of the tools in Ceph.
+
+WWW: http://ceph.com
+
+

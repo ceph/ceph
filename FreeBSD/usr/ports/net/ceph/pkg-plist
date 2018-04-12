@@ -1,0 +1,208 @@
+%%DATADIR%%/id_rsa_drop.ceph.com
+%%DATADIR%%/id_rsa_drop.ceph.com.pub
+%%DATADIR%%/known_hosts_drop.ceph.com
+@dir /etc/ceph
+@dir /var/lib/ceph/bootstrap-mds
+@dir /var/lib/ceph/bootstrap-osd
+@dir /var/lib/ceph/mds
+@dir /var/lib/ceph/mon
+@dir /var/lib/ceph/osd
+@dir /var/lib/ceph/tmp
+@dir /var/log/ceph
+bin/ceph
+bin/ceph-authtool
+bin/ceph-brag
+bin/ceph-clsinfo
+bin/ceph-conf
+bin/ceph-coverage
+bin/ceph-crush-location
+bin/ceph-debugpack
+bin/ceph-dencoder
+bin/ceph-detect-init
+bin/ceph-mds
+bin/ceph-mgr
+bin/ceph-mon
+bin/ceph-monstore-tool
+bin/ceph-objectstore-tool
+bin/ceph-osd
+bin/ceph-osdomap-tool
+bin/ceph-post-file
+bin/ceph-rest-api
+bin/ceph-run
+bin/crushtool
+bin/librados-config
+bin/monmaptool
+bin/osdmaptool
+bin/rados
+bin/radosgw
+bin/radosgw-admin
+bin/radosgw-object-expirer
+bin/radosgw-token
+bin/ceph-rbdnamer
+bin/rbd
+bin/rbd-replay
+bin/rbd-replay-many
+@comment bin/rbd-replay-prep
+sbin/ceph-create-keys
+sbin/ceph-disk
+sbin/ceph-disk-udev
+etc/rc.d/ceph
+@comment /etc/bash_completion.d/rbd
+@comment /etc/ceph/rbdmap
+@comment /etc/init.d/rbdmap
+@comment /etc/init/rbdmap.conf
+@comment etc/bash_completion.d/ceph
+@comment etc/bash_completion.d/rados
+@comment etc/bash_completion.d/radosgw-admin
+@comment etc/init.d/ceph
+lib/ceph/ceph-monstore-update-crush.sh
+lib/ceph/compressor/libceph_snappy.so
+lib/ceph/compressor/libceph_snappy.so.2
+lib/ceph/compressor/libceph_snappy.so.2.0.0
+lib/ceph/compressor/libceph_zlib.so
+lib/ceph/compressor/libceph_zlib.so.2
+lib/ceph/compressor/libceph_zlib.so.2.0.0
+lib/ceph/erasure-code/libec_isa.so
+lib/ceph/erasure-code/libec_isa.so.2
+lib/ceph/erasure-code/libec_isa.so.2.14.0
+lib/ceph/erasure-code/libec_jerasure.so
+lib/ceph/erasure-code/libec_jerasure_generic.so
+lib/ceph/erasure-code/libec_jerasure_sse3.so
+lib/ceph/erasure-code/libec_jerasure_sse4.so
+lib/ceph/erasure-code/libec_lrc.so
+lib/ceph/erasure-code/libec_shec.so
+lib/ceph/erasure-code/libec_shec_generic.so
+lib/ceph/erasure-code/libec_shec_sse3.so
+lib/ceph/erasure-code/libec_shec_sse4.so
+lib/librados.so
+lib/librados.so.2
+lib/librados.so.2.0.0
+lib/libradosstriper.so
+lib/libradosstriper.so.1
+lib/libradosstriper.so.1.0.0
+lib/librbd.so
+lib/librbd.so.1
+lib/librbd.so.1.0.0
+lib/librgw.so
+lib/librgw.so.2
+lib/librgw.so.2.0.0
+lib/python2.7/site-packages/ceph_argparse.py
+lib/python2.7/site-packages/ceph_daemon.py
+lib/python2.7/site-packages/ceph_disk-1.0.0-py2.7.egg-info/PKG-INFO
+lib/python2.7/site-packages/ceph_disk-1.0.0-py2.7.egg-info/SOURCES.txt
+lib/python2.7/site-packages/ceph_disk-1.0.0-py2.7.egg-info/dependency_links.txt
+lib/python2.7/site-packages/ceph_disk-1.0.0-py2.7.egg-info/entry_points.txt
+lib/python2.7/site-packages/ceph_disk-1.0.0-py2.7.egg-info/requires.txt
+lib/python2.7/site-packages/ceph_disk-1.0.0-py2.7.egg-info/top_level.txt
+lib/python2.7/site-packages/ceph_disk/__init__.py
+lib/python2.7/site-packages/ceph_disk/__init__.pyc
+lib/python2.7/site-packages/ceph_disk/main.py
+lib/python2.7/site-packages/ceph_disk/main.pyc
+lib/python2.7/site-packages/ceph_rest_api.py
+lib/python2.7/site-packages/ceph_volume_client.py
+lib/python2.7/site-packages/rados-2.0.0-py2.7.egg-info/PKG-INFO
+lib/python2.7/site-packages/rados-2.0.0-py2.7.egg-info/SOURCES.txt
+lib/python2.7/site-packages/rados-2.0.0-py2.7.egg-info/dependency_links.txt
+lib/python2.7/site-packages/rados-2.0.0-py2.7.egg-info/top_level.txt
+lib/python2.7/site-packages/rados.so
+lib/python2.7/site-packages/rgw-2.0.0-py2.7.egg-info/PKG-INFO
+lib/python2.7/site-packages/rgw-2.0.0-py2.7.egg-info/SOURCES.txt
+lib/python2.7/site-packages/rgw-2.0.0-py2.7.egg-info/dependency_links.txt
+lib/python2.7/site-packages/rgw-2.0.0-py2.7.egg-info/top_level.txt
+lib/python2.7/site-packages/rgw.so
+lib/rados-classes/libcls_hello.so
+lib/rados-classes/libcls_hello.so.1
+lib/rados-classes/libcls_hello.so.1.0.0
+lib/rados-classes/libcls_journal.so
+lib/rados-classes/libcls_journal.so.1
+lib/rados-classes/libcls_journal.so.1.0.0
+lib/rados-classes/libcls_lock.so
+lib/rados-classes/libcls_lock.so.1
+lib/rados-classes/libcls_lock.so.1.0.0
+lib/rados-classes/libcls_log.so
+lib/rados-classes/libcls_log.so.1
+lib/rados-classes/libcls_log.so.1.0.0
+lib/rados-classes/libcls_lua.so
+lib/rados-classes/libcls_lua.so.1
+lib/rados-classes/libcls_lua.so.1.0.0
+lib/rados-classes/libcls_numops.so
+lib/rados-classes/libcls_numops.so.1
+lib/rados-classes/libcls_numops.so.1.0.0
+lib/rados-classes/libcls_rbd.so
+lib/rados-classes/libcls_rbd.so.1
+lib/rados-classes/libcls_rbd.so.1.0.0
+lib/rados-classes/libcls_refcount.so
+lib/rados-classes/libcls_refcount.so.1
+lib/rados-classes/libcls_refcount.so.1.0.0
+lib/rados-classes/libcls_replica_log.so
+lib/rados-classes/libcls_replica_log.so.1
+lib/rados-classes/libcls_replica_log.so.1.0.0
+lib/rados-classes/libcls_rgw.so
+lib/rados-classes/libcls_rgw.so.1
+lib/rados-classes/libcls_rgw.so.1.0.0
+lib/rados-classes/libcls_statelog.so
+lib/rados-classes/libcls_statelog.so.1
+lib/rados-classes/libcls_statelog.so.1.0.0
+lib/rados-classes/libcls_timeindex.so
+lib/rados-classes/libcls_timeindex.so.1
+lib/rados-classes/libcls_timeindex.so.1.0.0
+lib/rados-classes/libcls_user.so
+lib/rados-classes/libcls_user.so.1
+lib/rados-classes/libcls_user.so.1.0.0
+lib/rados-classes/libcls_version.so
+lib/rados-classes/libcls_version.so.1
+lib/rados-classes/libcls_version.so.1.0.0
+libexec/ceph/ceph-osd-prestart.sh
+libexec/ceph/ceph_common.sh
+@comment share/doc/ceph-common
+@comment share/doc/ceph-common/ChangeLog
+@comment share/doc/ceph-common/copyright
+@comment share/doc/ceph/ChangeLog
+@comment share/doc/ceph/README
+@comment share/doc/ceph/copyright
+%%PORTDOCS%%%%DOCSDIR%%/sample.ceph.conf
+%%PORTDOCS%%%%DOCSDIR%%/sample.fetch_config
+share/man/man8/ceph-authtool.8
+share/man/man8/ceph-clsinfo.8
+share/man/man8/ceph-conf.8
+share/man/man8/ceph-create-keys.8
+share/man/man8/ceph-debugpack.8
+share/man/man8/ceph-dencoder.8
+share/man/man8/ceph-deploy.8
+share/man/man8/ceph-detect-init.8
+share/man/man8/ceph-disk.8
+share/man/man8/ceph-mon.8
+share/man/man8/ceph-osd.8
+share/man/man8/ceph-post-file.8
+share/man/man8/ceph-rbdnamer.8
+share/man/man8/ceph-rest-api.8
+share/man/man8/ceph-run.8
+share/man/man8/ceph-syn.8
+share/man/man8/ceph.8
+share/man/man8/crushtool.8
+share/man/man8/monmaptool.8
+share/man/man8/osdmaptool.8
+share/man/man8/rados.8
+share/man/man8/rbd-replay-many.8
+share/man/man8/rbd-replay-prep.8
+share/man/man8/rbd-replay.8
+share/man/man8/rbd.8
+lib/python2.7/site-packages/ceph_detect_init-1.0.1-py2.7.egg-info/SOURCES.txt
+lib/python2.7/site-packages/ceph_detect_init-1.0.1-py2.7.egg-info/entry_points.txt
+lib/python2.7/site-packages/ceph_detect_init-1.0.1-py2.7.egg-info/requires.txt
+lib/python2.7/site-packages/ceph_detect_init-1.0.1-py2.7.egg-info/dependency_links.txt
+lib/python2.7/site-packages/ceph_detect_init-1.0.1-py2.7.egg-info/PKG-INFO
+lib/python2.7/site-packages/ceph_detect_init-1.0.1-py2.7.egg-info/top_level.txt
+lib/python2.7/site-packages/ceph_detect_init/suse/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/gentoo/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/alpine/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/rhel/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/exc.py
+lib/python2.7/site-packages/ceph_detect_init/debian/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/fedora/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/centos/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/main.py
+lib/python2.7/site-packages/ceph_detect_init/freebsd/__init__.py
+lib/python2.7/site-packages/ceph_detect_init/arch/__init__.py
+

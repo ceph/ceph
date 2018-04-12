@@ -1,0 +1,21 @@
+Ceph is a distributed object store and file system designed to provide
+excellent performance, reliability and scalability.
+
+* Object Storage
+  Ceph provides seamless access to objects using native language bindings or 
+  radosgw, a REST interface for applications written with S3 and Swift.
+* Block Storage
+  Ceph's RADOS Block Device (RBD) provides access to block device images
+  that are striped and replicated across the entire storage cluster.
+* File System
+  Ceph provides a POSIX-compliant network file system aiming for large data
+  storage, high performance, and maximum compatibility with legacy applications.
+
+This FreeBSD build will build most of the tools in Ceph:
+* Mon, OSD, rados, RadosGW, rbd
+* init-ceph, and etc/rc.d/ceph on top of that
+* ceph-disk {prepare, activate}
+With these tools one can build a multi server, multi osd cluster fully 
+running on FreeBSD and do some testing...
+
+WWW: http://ceph.com
