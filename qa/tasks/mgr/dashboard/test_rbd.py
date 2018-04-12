@@ -42,6 +42,14 @@ class RbdTest(DashboardTestCase):
                               data)
 
     @classmethod
+    def copy_image(cls, src_pool, src_image, dest_pool, dest_image, **kwargs):
+        # pylint: disable=too-many-arguments
+        data = {'dest_image_name': dest_image, 'dest_pool_name': dest_pool}
+        data.update(kwargs)
+        return cls._task_post('/api/rbd/{}/{}/copy'
+                              .format(src_pool, src_image), data)
+
+    @classmethod
     def remove_image(cls, pool, image):
         return cls._task_delete('/api/rbd/{}/{}'.format(pool, image))
 
@@ -466,4 +474,34 @@ class RbdTest(DashboardTestCase):
         self.remove_snapshot('rbd', 'cimg', 'snap1')
         self.assertStatus(204)
         self.remove_image('rbd', 'cimg')
+        self.assertStatus(204)
+
+    def test_copy(self):
+        self.create_image('rbd', 'coimg', 2**30,
+                          features=["layering", "exclusive-lock", "fast-diff",
+                                    "object-map"])
+        self.assertStatus(201)
+
+        self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M',
+                       'rbd/coimg'])
+
+        self.copy_image('rbd', 'coimg', 'rbd_iscsi', 'coimg-copy',
+                        features=["layering", "fast-diff", "exclusive-lock",
+                                  "object-map"])
+        self.assertStatus([200, 201])
+
+        img = self._get('/api/rbd/rbd/coimg')
+        self.assertStatus(200)
+        self._validate_image(img, features_name=['layering', 'exclusive-lock',
+                                                 'fast-diff', 'object-map'])
+
+        img_copy = self._get('/api/rbd/rbd_iscsi/coimg-copy')
+        self._validate_image(img_copy, features_name=['exclusive-lock',
+                                                      'fast-diff', 'layering',
+                                                      'object-map'],
+                             disk_usage=img['disk_usage'])
+
+        self.remove_image('rbd', 'coimg')
+        self.assertStatus(204)
+        self.remove_image('rbd_iscsi', 'coimg-copy')
         self.assertStatus(204)
