@@ -31,6 +31,7 @@ class TestModuleSelftest(MgrTestCase):
         self._selftest_plugin("zabbix")
 
     def test_prometheus(self):
+        self._assign_ports("prometheus", "server_port", min_port=8100)
         self._selftest_plugin("prometheus")
 
     def test_influx(self):
