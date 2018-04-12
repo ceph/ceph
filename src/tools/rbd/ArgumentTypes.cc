@@ -367,6 +367,11 @@ void add_export_format_option(boost::program_options::options_description *opt) 
     ("export-format", po::value<ExportFormat>(), "format of image file");
 }
 
+void add_force_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (FORCE.c_str(), po::bool_switch(), "force to operate");
+}
+
 std::string get_short_features_help(bool append_suffix) {
   std::ostringstream oss;
   bool first_feature = true;
