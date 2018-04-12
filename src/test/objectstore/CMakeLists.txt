@@ -134,6 +134,13 @@ if(WITH_BLUESTORE)
     )
   add_ceph_unittest(unittest_bluestore_types)
   target_link_libraries(unittest_bluestore_types os global)
+
+  # unittest_stupid_allocator
+  add_executable(unittest_stupid_allocator
+    test_stupid_allocator.cc
+    )
+  add_ceph_unittest(unittest_stupid_allocator)
+  target_link_libraries(unittest_stupid_allocator os global)
 endif(WITH_BLUESTORE)
 
 # unittest_transaction
