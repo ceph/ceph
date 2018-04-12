@@ -102,6 +102,11 @@ if(WITH_RADOSGW)
   target_link_libraries(test_build_librgw rgw_a pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_RADOSGW)
 
+if(WITH_RADOSGW)
+  add_executable(test_build_librgw_admin_user buildtest_skeleton.cc)
+  target_link_libraries(test_build_librgw_admin_user pthread ${CRYPTO_LIBS} ${EXTRALIBS})
+endif(WITH_RADOSGW)
+
 if(WITH_LIBCEPHFS)
   # From src/test/Makefile-client.am: I dont get this one... testing the osdc build but link in libcephfs?
   add_executable(test_build_libcephfs buildtest_skeleton.cc)
@@ -386,6 +391,18 @@ target_link_libraries(test_rgw_ldap
   ${OPENLDAP_LIBRARIES}
   ${UNITTEST_LIBS}
   )
+
+# unittest_librgw_admin_user
+add_executable(ceph_test_librgw_admin_user test_librgw_admin_user.cc)
+set_target_properties(ceph_test_librgw_admin_user PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_librgw_admin_user
+  rgw_admin_user
+  cls_otp_client
+  librados
+  ceph-common
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+   )
 
 endif(${WITH_RADOSGW})
 
