@@ -284,8 +284,8 @@ class FuseMount(CephFSMount):
                 # Permit a timeout, so that we do not block forever
                 run.wait([self.fuse_daemon], 900)
         except MaxWhileTries:
-            log.error("process failed to terminate after unmount.  This probably"
-                      "indicates a bug within ceph-fuse.")
+            log.error("process failed to terminate after unmount. This probably"
+                      " indicates a bug within ceph-fuse.")
             raise
         except CommandFailedError:
             if require_clean:
