@@ -1733,7 +1733,7 @@ protected:
 	auto &&sdata = osd->shards[i];
 
 	char queue_name[32] = {0};
-	snprintf(queue_name, sizeof(queue_name), "%s%d", "OSD:ShardedOpWQ:", i);
+	snprintf(queue_name, sizeof(queue_name), "%s%" PRIu32, "OSD:ShardedOpWQ:", i);
 	assert(NULL != sdata);
 
 	sdata->shard_lock.Lock();
