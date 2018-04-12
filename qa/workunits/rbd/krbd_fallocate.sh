@@ -51,12 +51,14 @@ EOF
 }
 
 function assert_deallocated() {
+    local num_objects_expected=$1
+
     cmp <(od -xAx $DEV) - <<EOF
 000000 0000 0000 0000 0000 0000 0000 0000 0000
 *
 $(printf %x $IMAGE_SIZE)
 EOF
-    [[ $(rados -p rbd ls | grep -c rbd_data.$IMAGE_ID) -eq 0 ]]
+    [[ $(rados -p rbd ls | grep -c rbd_data.$IMAGE_ID) -eq $num_objects_expected ]]
 }
 
 function assert_deallocated_unaligned() {
@@ -90,24 +92,24 @@ IMAGE_ID="$(rbd info --format=json $IMAGE_NAME |
 DEV=$(sudo rbd map $IMAGE_NAME)
 
 # make sure -ENOENT is hidden
-assert_deallocated
+assert_deallocated 0
 py_blkdiscard 0
-assert_deallocated
+assert_deallocated 0
 
 # blkdev_issue_discard
 allocate
 py_blkdiscard 0
-assert_deallocated
+assert_deallocated 0
 
 # blkdev_issue_zeroout w/ BLKDEV_ZERO_NOUNMAP
 allocate
 py_fallocate FALLOC_FL_ZERO_RANGE\|FALLOC_FL_KEEP_SIZE 0
-assert_deallocated
+assert_deallocated 0
 
 # blkdev_issue_zeroout w/ BLKDEV_ZERO_NOFALLBACK
 allocate
 py_fallocate FALLOC_FL_PUNCH_HOLE\|FALLOC_FL_KEEP_SIZE 0
-assert_deallocated
+assert_deallocated 0
 
 # unaligned blkdev_issue_discard
 allocate
