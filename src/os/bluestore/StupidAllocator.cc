@@ -4,6 +4,7 @@
 #include "StupidAllocator.h"
 #include "bluestore_types.h"
 #include "common/debug.h"
+#include "boost/container/small_vector.hpp"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -312,6 +313,7 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
 		     << std::dec << dendl;
       auto it = overlap.begin();
       auto it_end = overlap.end();
+      boost::container::small_vector<pair<uint64_t, uint64_t>, 5> claimed_blocks;
       while (it != it_end) {
         auto o = it.get_start();
         auto l = it.get_len();
@@ -322,14 +324,16 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
             if (newbin != i) {
               ldout(cct, 30) << __func__ << " demoting1 0x" << std::hex << off << "~" << len
                              << std::dec << " to bin " << newbin << dendl;
-              _insert_free(off, len);
+              claimed_blocks.emplace_back(pair{off, len});
               return true;
             }
             return false;
           });
         ++it;
       }
-
+      for (auto &i:claimed_blocks) {
+        _insert_free(i.first, i.second);
+      }
       rm.subtract(overlap);
     }
   }
