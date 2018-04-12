@@ -312,6 +312,34 @@ class Rbd(RESTController):
 
         return _rbd_image_call(pool_name, image_name, _edit)
 
+    @RbdTask('copy',
+             {'src_pool_name': '{pool_name}',
+              'src_image_name': '{image_name}',
+              'dest_pool_name': '{dest_pool_name}',
+              'dest_image_name': '{dest_image_name}'}, 2.0)
+    @RESTController.resource(['POST'])
+    @RESTController.args_from_json
+    def copy(self, pool_name, image_name, dest_pool_name, dest_image_name,
+             obj_size=None, features=None, stripe_unit=None,
+             stripe_count=None, data_pool=None):
+
+        def _src_copy(s_ioctx, s_img):
+            def _copy(d_ioctx):
+                # Set order
+                l_order = None
+                if obj_size and obj_size > 0:
+                    l_order = int(round(math.log(float(obj_size), 2)))
+
+                # Set features
+                feature_bitmask = _format_features(features)
+
+                s_img.copy(d_ioctx, dest_image_name, feature_bitmask, l_order,
+                           stripe_unit, stripe_count, data_pool)
+
+            return _rbd_call(dest_pool_name, _copy)
+
+        return _rbd_image_call(pool_name, image_name, _src_copy)
+
 
 @ApiController('rbd/:pool_name/:image_name/snap')
 class RbdSnapshot(RESTController):
