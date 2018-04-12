@@ -10,7 +10,7 @@ import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
 import { CoreModule } from './core/core.module';
-import { AuthInterceptorService } from './shared/services/auth-interceptor.service';
+import { ApiInterceptorService } from './shared/services/api-interceptor.service';
 import { SharedModule } from './shared/shared.module';
 
 export class CustomOption extends ToastOptions {
@@ -41,7 +41,7 @@ export class CustomOption extends ToastOptions {
   providers: [
     {
       provide: HTTP_INTERCEPTORS,
-      useClass: AuthInterceptorService,
+      useClass: ApiInterceptorService,
       multi: true
     },
     {
