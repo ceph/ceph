@@ -4107,6 +4107,8 @@ void BlueStore::_init_logger()
 		    "collection");
   b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
                     "Read EIO errors propagated to high level callers");
+  b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
+            "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -8740,6 +8742,8 @@ void BlueStore::_txc_finish(TransContext *txc)
       dout(10) << __func__ << " empty zombie osr " << osr << " already reaped" << dendl;
     }
   }
+  logger->set(l_bluestore_fragmentation,
+    (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
 }
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
