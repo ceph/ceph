@@ -290,6 +290,58 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
   EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, &extents));
 }
 
+TEST_P(AllocTest, test_alloc_fragmentation)
+{
+  if (GetParam() == std::string("bitmap")) {
+    return;
+  }
+  uint64_t capacity = 4 * 1024 * 1024;
+  uint64_t alloc_unit = 4096;
+  uint64_t want_size = alloc_unit;
+  PExtentVector allocated, tmp;
+  
+  init_alloc(capacity, alloc_unit);
+  alloc->init_add_free(0, capacity);
+  
+  EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+  for (size_t i = 0; i < capacity / alloc_unit; ++i)
+  {
+    tmp.clear();
+    EXPECT_EQ(0, alloc->reserve(want_size));
+    EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+    allocated.insert(allocated.end(), tmp.begin(), tmp.end());
+    EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+  }
+  EXPECT_EQ(-ENOSPC, alloc->reserve(want_size));
+
+  for (size_t i = 0; i < allocated.size(); i += 2)
+  {
+    interval_set<uint64_t> release_set;
+    release_set.insert(allocated[i].offset, allocated[i].length);
+    alloc->release(release_set);
+  }
+  EXPECT_EQ(1.0, alloc->get_fragmentation(alloc_unit));
+  for (size_t i = 1; i < allocated.size() / 2; i += 2)
+  {
+    interval_set<uint64_t> release_set;
+    release_set.insert(allocated[i].offset, allocated[i].length);
+    alloc->release(release_set);
+  }
+  // fragmentation approx = 257 intervals / 768 max intervals
+  EXPECT_EQ(33, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+
+  for (size_t i = allocated.size() / 2 + 1; i < allocated.size(); i += 2)
+  {
+    interval_set<uint64_t> release_set;
+    release_set.insert(allocated[i].offset, allocated[i].length);
+    alloc->release(release_set);
+  }
+  // doing some rounding trick as stupid allocator doesn't merge all the 
+  // extents that causes some minor fragmentation (minor bug or by-design behavior?).
+  // Hence leaving just two 
+  // digits after decimal point due to this.
+  EXPECT_EQ(0, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+}
 
 INSTANTIATE_TEST_CASE_P(
   Allocator,
