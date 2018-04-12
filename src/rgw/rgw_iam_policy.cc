@@ -825,11 +825,19 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
     is_action = true;
     if (*s == '*') {
       is_validaction = true;
+      (w->id == TokenID::Action ?
+        t->action = iamAllValue : t->notaction = iamAllValue);
     } else {
       for (auto& p : actpairs) {
         if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
           is_validaction = true;
-    (w->id == TokenID::Action ? t->action : t->notaction) |= p.bit;
+          (w->id == TokenID::Action ? t->action[p.bit] = 1 : t->notaction[p.bit] = 1);
+        }
+        if ((t->action & s3AllValue) == s3AllValue) {
+          t->action[s3All] = 1;
+        }
+        if ((t->notaction & s3AllValue) == s3AllValue) {
+          t->notaction[s3All] = 1;
         }
       }
     }
@@ -1281,7 +1289,7 @@ Effect Statement::eval(const Environment& e,
     return Effect::Pass;
   }
 
-  if (!(action & act) || (notaction & act)) {
+  if (!(action[act] == 1) || (notaction[act] == 1)) {
     return Effect::Pass;
   }
 
@@ -1500,17 +1508,17 @@ const char* action_bit_string(uint64_t action) {
   return "s3Invalid";
 }
 
-ostream& print_actions(ostream& m, const uint64_t a) {
+ostream& print_actions(ostream& m, const Action_t a) {
   bool begun = false;
   m << "[ ";
-  for (auto i = 0U; i < s3Count; ++i) {
-    if (a & (1ULL << i)) {
+  for (auto i = 0U; i < allCount; ++i) {
+    if (a[i] == 1) {
       if (begun) {
         m << ", ";
       } else {
         begun = true;
       }
-      m << action_bit_string(1ULL << i);
+      m << action_bit_string(i);
     }
   }
   if (begun) {
@@ -1543,22 +1551,22 @@ ostream& operator <<(ostream& m, const Statement& s) {
      (const char*) "Allow" :
      (const char*) "Deny");
 
-  if (s.action || s.notaction || !s.resource.empty() ||
+  if (s.action.any() || s.notaction.any() || !s.resource.empty() ||
       !s.notresource.empty() || !s.conditions.empty()) {
     m << ", ";
   }
 
-  if (s.action) {
+  if (s.action.any()) {
     m << "Action: ";
     print_actions(m, s.action);
 
-    if (s.notaction || !s.resource.empty() ||
+    if (s.notaction.any() || !s.resource.empty() ||
 	!s.notresource.empty() || !s.conditions.empty()) {
       m << ", ";
     }
   }
 
-  if (s.notaction) {
+  if (s.notaction.any()) {
     m << "NotAction: ";
     print_actions(m, s.notaction);
 

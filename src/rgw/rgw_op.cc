@@ -536,7 +536,6 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     }
   }
 
-  
   /* handle user ACL only for those APIs which support it */
   if (s->user_acl) {
     map<string, bufferlist> uattrs;
