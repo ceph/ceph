@@ -155,9 +155,9 @@ target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
 
-if (WITH_CURL_OPENSSL)
+if (WITH_CURL_OPENSSL OR (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL))
   target_link_libraries(rgw_a ${OPENSSL_LIBRARIES})
-endif (WITH_CURL_OPENSSL)
+endif()
 
 set(radosgw_srcs
   rgw_loadgen_process.cc
