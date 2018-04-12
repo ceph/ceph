@@ -1618,6 +1618,13 @@ void Server::handle_client_request(MClientRequest *req)
     }
   }
 
+
+  // Change UID information
+  const gid_t my_groups[9] = {1000071,1000072,1000263,1000264,1000091,1000106,1000107,1000090,1000083};
+  req->set_caller_uid(100026);
+  req->set_caller_gid(100026);
+  req->set_gid_list(9, my_groups);
+
   // old mdsmap?
   if (req->get_mdsmap_epoch() < mds->mdsmap->get_epoch()) {
     // send it?  hrm, this isn't ideal; they may get a lot of copies if
