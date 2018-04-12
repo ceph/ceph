@@ -50,7 +50,7 @@ EOF
     [[ $(rados -p rbd ls | grep -c rbd_data.$IMAGE_ID) -eq $NUM_OBJECTS ]]
 }
 
-function assert_deallocated() {
+function assert_zeroes() {
     local num_objects_expected=$1
 
     cmp <(od -xAx $DEV) - <<EOF
@@ -61,7 +61,7 @@ EOF
     [[ $(rados -p rbd ls | grep -c rbd_data.$IMAGE_ID) -eq $num_objects_expected ]]
 }
 
-function assert_deallocated_unaligned() {
+function assert_zeroes_unaligned() {
     local num_objects_expected=$1
 
     cmp <(od -xAx $DEV) - <<EOF
@@ -92,39 +92,39 @@ IMAGE_ID="$(rbd info --format=json $IMAGE_NAME |
 DEV=$(sudo rbd map $IMAGE_NAME)
 
 # make sure -ENOENT is hidden
-assert_deallocated 0
+assert_zeroes 0
 py_blkdiscard 0
-assert_deallocated 0
+assert_zeroes 0
 
 # blkdev_issue_discard
 allocate
 py_blkdiscard 0
-assert_deallocated 0
+assert_zeroes 0
 
 # blkdev_issue_zeroout w/ BLKDEV_ZERO_NOUNMAP
 allocate
 py_fallocate FALLOC_FL_ZERO_RANGE\|FALLOC_FL_KEEP_SIZE 0
-assert_deallocated 0
+assert_zeroes 0
 
 # blkdev_issue_zeroout w/ BLKDEV_ZERO_NOFALLBACK
 allocate
 py_fallocate FALLOC_FL_PUNCH_HOLE\|FALLOC_FL_KEEP_SIZE 0
-assert_deallocated 0
+assert_zeroes 0
 
 # unaligned blkdev_issue_discard
 allocate
 py_blkdiscard $((OBJECT_SIZE / 2))
-assert_deallocated_unaligned 1
+assert_zeroes_unaligned 1
 
 # unaligned blkdev_issue_zeroout w/ BLKDEV_ZERO_NOUNMAP
 allocate
 py_fallocate FALLOC_FL_ZERO_RANGE\|FALLOC_FL_KEEP_SIZE $((OBJECT_SIZE / 2))
-assert_deallocated_unaligned $NUM_OBJECTS
+assert_zeroes_unaligned $NUM_OBJECTS
 
 # unaligned blkdev_issue_zeroout w/ BLKDEV_ZERO_NOFALLBACK
 allocate
 py_fallocate FALLOC_FL_PUNCH_HOLE\|FALLOC_FL_KEEP_SIZE $((OBJECT_SIZE / 2))
-assert_deallocated_unaligned $NUM_OBJECTS
+assert_zeroes_unaligned $NUM_OBJECTS
 
 sudo rbd unmap $DEV
 
