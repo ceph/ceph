@@ -380,6 +380,37 @@ public:
            << " parameter to control the number of active MDSs"
            << " allowed. This command is DEPRECATED and will be"
            << " REMOVED from future releases.";
+    } else if (var == "allow_multimds_snaps") {
+      bool enable = false;
+      int r = parse_bool(val, &enable, ss);
+      if (r != 0) {
+        return r;
+      }
+
+      string confirm;
+      if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
+	  confirm != "--yes-i-am-really-a-mds") {
+	ss << "Warning! This command is for MDS only. Do not run it manually";
+	return -EPERM;
+      }
+
+      if (enable) {
+	ss << "enabled multimds with snapshot";
+        fsmap.modify_filesystem(
+            fs->fscid,
+            [](std::shared_ptr<Filesystem> fs)
+        {
+	  fs->mds_map.set_multimds_snaps_allowed();
+        });
+      } else {
+	ss << "disabled multimds with snapshot";
+        fsmap.modify_filesystem(
+            fs->fscid,
+            [](std::shared_ptr<Filesystem> fs)
+        {
+	  fs->mds_map.clear_multimds_snaps_allowed();
+        });
+      }
     } else if (var == "allow_dirfrags") {
         ss << "Directory fragmentation is now permanently enabled."
            << " This command is DEPRECATED and will be REMOVED from future releases.";

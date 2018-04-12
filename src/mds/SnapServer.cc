@@ -60,6 +60,7 @@ void SnapServer::reset_state()
   }
   last_created = last_snap;
   last_destroyed = last_snap;
+  snaprealm_v2_since = last_snap + 1;
   version++;
 }
 

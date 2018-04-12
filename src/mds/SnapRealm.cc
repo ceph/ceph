@@ -154,6 +154,13 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
   if (!srnode.past_parent_snaps.empty())
     assert(mdcache->mds->snapclient->get_cached_version() > 0);
 
+  if (!srnode.past_parents.empty() &&
+      mdcache->mds->allows_multimds_snaps()) {
+    dout(10) << " skip non-empty past_parents since multimds_snaps is allowed" << dendl;
+    open = true;
+    return true;
+  }
+
   // and my past parents too!
   assert(srnode.past_parents.size() >= num_open_past_parents);
   if (srnode.past_parents.size() > num_open_past_parents) {
@@ -204,6 +211,13 @@ bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last) const
 
   if (!srnode.past_parent_snaps.empty())
     assert(mdcache->mds->snapclient->get_cached_version() > 0);
+
+  if (!srnode.past_parents.empty() &&
+      mdcache->mds->allows_multimds_snaps()) {
+    dout(10) << " skip non-empty past_parents since multimds_snaps is allowed" << dendl;
+    open = true;
+    return true;
+  }
 
   for (auto p = srnode.past_parents.lower_bound(first);
        p != srnode.past_parents.end();
