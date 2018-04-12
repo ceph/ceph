@@ -4192,6 +4192,8 @@ void BlueStore::_init_logger()
                     "Read EIO errors propagated to high level callers");
   b.add_u64_counter(l_bluestore_reads_with_retries, "bluestore_reads_with_retries",
                     "Read operations that required at least one retry due to failed checksum validation");
+  b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
+            "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -8522,6 +8524,8 @@ void BlueStore::_txc_finish(TransContext *txc)
     dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
     osr->_unregister();
   }
+  logger->set(l_bluestore_fragmentation,
+    (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
 }
 
 void BlueStore::_txc_release_alloc(TransContext *txc)

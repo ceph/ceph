@@ -119,6 +119,7 @@ enum {
   l_bluestore_gc_merged,
   l_bluestore_read_eio,
   l_bluestore_reads_with_retries,
+  l_bluestore_fragmentation,
   l_bluestore_last
 };
 
