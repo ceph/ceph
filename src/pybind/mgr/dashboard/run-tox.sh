@@ -24,4 +24,4 @@ if [ "$WITH_PYTHON3" = "ON" ]; then
   ENV_LIST+="py3-cov,py3-lint"
 fi
 
-tox -c ${TOX_PATH} -e $ENV_LIST --workdir ${CEPH_BUILD_DIR}
+tox -c ${TOX_PATH} -e $ENV_LIST
