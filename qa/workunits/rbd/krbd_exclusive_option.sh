@@ -126,7 +126,7 @@ dd if=/dev/urandom of=$OTHER_DEV bs=4k count=10 oflag=direct &
 PID=$!
 sleep 20
 assert_locked $DEV
-[ "$(ps -o stat= $PID)" = "D" ]
+[[ "$(ps -o stat= $PID)" =~ ^D ]]
 sudo rbd unmap $DEV
 wait $PID
 assert_locked $OTHER_DEV
@@ -140,7 +140,7 @@ SUDO_PID=$!
 sleep 20
 assert_locked $DEV
 PID="$(ps -o pid= --ppid $SUDO_PID)"
-[ "$(ps -o stat= $PID)" = "Dl" ]
+[[ "$(ps -o stat= $PID)" =~ ^D ]]
 sudo rbd unmap $DEV
 wait $SUDO_PID
 assert_locked $OTHER_DEV
