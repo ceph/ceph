@@ -546,7 +546,7 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
          * libudev does not provide the "wait until the queue is empty"
          * API or the sufficient amount of primitives to build it from.
          */
-        string err = run_cmd("udevadm", "settle", "--timeout", "10", NULL);
+        string err = run_cmd("udevadm", "settle", "--timeout", "10", (char*)NULL);
         if (!err.empty())
           cerr << "rbd: " << err << std::endl;
       }
