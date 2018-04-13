@@ -36,6 +36,10 @@ export class RgwBucketListComponent {
     this.rgwBucketService.list()
       .subscribe((resp: object[]) => {
         this.buckets = resp;
+      }, () => {
+        // Force datatable to hide the loading indicator in
+        // case of an error.
+        this.buckets = [];
       });
   }
 
