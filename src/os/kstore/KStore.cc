@@ -18,6 +18,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif
 
 #include "KStore.h"
 #include "osd/osd_types.h"
