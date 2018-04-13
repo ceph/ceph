@@ -135,6 +135,20 @@ assert_unlocked
 
 DEV=$(sudo rbd map -o exclusive $IMAGE_NAME)
 assert_locked $DEV
+OTHER_DEV=$(sudo rbd map -o noshare,lock_timeout=30 $IMAGE_NAME)
+dd if=/dev/urandom of=$OTHER_DEV bs=4k count=10 oflag=direct &
+PID=$!
+sleep 20
+assert_locked $DEV
+[[ "$(ps -o stat= $PID)" =~ ^D ]]
+expect_false wait $PID
+assert_locked $DEV
+sudo rbd unmap $DEV
+sudo rbd unmap $OTHER_DEV
+assert_unlocked
+
+DEV=$(sudo rbd map -o exclusive $IMAGE_NAME)
+assert_locked $DEV
 sudo rbd map -o noshare,lock_on_read $IMAGE_NAME &
 SUDO_PID=$!
 sleep 20
