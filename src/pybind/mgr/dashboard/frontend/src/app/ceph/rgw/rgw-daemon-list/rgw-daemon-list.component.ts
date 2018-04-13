@@ -42,6 +42,10 @@ export class RgwDaemonListComponent {
     this.rgwDaemonService.list()
       .subscribe((resp: object[]) => {
         this.daemons = resp;
+      }, () => {
+        // Force datatable to hide the loading indicator in
+        // case of an error.
+        this.daemons = [];
       });
   }
 

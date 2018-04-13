@@ -51,6 +51,10 @@ export class RgwUserListComponent {
     this.rgwUserService.list()
       .subscribe((resp: object[]) => {
         this.users = resp;
+      }, () => {
+        // Force datatable to hide the loading indicator in
+        // case of an error.
+        this.users = [];
       });
   }
 
