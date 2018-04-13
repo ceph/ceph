@@ -1,9 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
-import { ConfigurationService } from '../api/configuration.service';
-import { RbdMirroringService } from '../api/rbd-mirroring.service';
-import { TcmuIscsiService } from '../api/tcmu-iscsi.service';
 import { AuthGuardService } from './auth-guard.service';
 import { AuthStorageService } from './auth-storage.service';
 import { FormatterService } from './formatter.service';
@@ -21,9 +18,6 @@ import { TaskManagerService } from './task-manager.service';
     FormatterService,
     SummaryService,
     NotificationService,
-    TcmuIscsiService,
-    ConfigurationService,
-    RbdMirroringService,
     TaskManagerService,
     TaskManagerMessageService
   ]
