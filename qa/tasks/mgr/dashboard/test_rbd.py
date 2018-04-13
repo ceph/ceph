@@ -3,7 +3,7 @@
 
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase
+from .helper import DashboardTestCase, JObj, JLeaf, JList
 
 
 class RbdTest(DashboardTestCase):
@@ -118,24 +118,29 @@ class RbdTest(DashboardTestCase):
                               "object-map"]
         }
         """
-        self.assertIn('size', img)
-        self.assertIn('obj_size', img)
-        self.assertIn('num_objs', img)
-        self.assertIn('order', img)
-        self.assertIn('block_name_prefix', img)
-        self.assertIn('name', img)
-        self.assertIn('id', img)
-        self.assertIn('pool_name', img)
-        self.assertIn('features', img)
-        self.assertIn('features_name', img)
-        self.assertIn('stripe_count', img)
-        self.assertIn('stripe_unit', img)
-        self.assertIn('parent', img)
-        self.assertIn('data_pool', img)
-        self.assertIn('snapshots', img)
-        self.assertIn('timestamp', img)
-        self.assertIn('disk_usage', img)
-        self.assertIn('total_disk_usage', img)
+        schema = JObj(sub_elems={
+            'size': JLeaf(int),
+            'obj_size': JLeaf(int),
+            'num_objs': JLeaf(int),
+            'order': JLeaf(int),
+            'block_name_prefix': JLeaf(str),
+            'name': JLeaf(str),
+            'id': JLeaf(str),
+            'pool_name': JLeaf(str),
+            'features': JLeaf(int),
+            'features_name': JList(JLeaf(str)),
+            'stripe_count': JLeaf(int, none=True),
+            'stripe_unit': JLeaf(int, none=True),
+            'parent': JObj(sub_elems={'pool_name': JLeaf(str),
+                                      'image_name': JLeaf(str),
+                                      'snap_name': JLeaf(str)}, none=True),
+            'data_pool': JLeaf(str, none=True),
+            'snapshots': JList(JLeaf(dict)),
+            'timestamp': JLeaf(str, none=True),
+            'disk_usage': JLeaf(int, none=True),
+            'total_disk_usage': JLeaf(int, none=True),
+        })
+        self.assertSchema(img, schema)
 
         for k, v in kwargs.items():
             if isinstance(v, list):
