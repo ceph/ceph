@@ -28,6 +28,5 @@ Routes==2.4.1
 singledispatch==3.4.0.3
 six==1.11.0
 tempora==1.10
-tox==2.9.1
 virtualenv==15.1.0
 wrapt==1.10.11
