@@ -472,3 +472,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.mount()
         self.mount_b.wait_until_mounted()
         self.mount_b.run_shell(["ls", "subdir/childfile"])
+
+    def test_unmount_for_evicted_client(self):
+        """Test if client hangs on unmount after evicting the client."""
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+
+        self.mount_a.umount_wait(require_clean=True, timeout=30)
