@@ -15,6 +15,9 @@ import nose.core
 from rgw_multi import multisite
 from rgw_multi.zone_rados import RadosZone as RadosZone
 from rgw_multi.zone_es  import ESZone as ESZone
+from rgw_multi.zone_es  import ESZoneConfig as ESZoneConfig
+from rgw_multi.zone_cloud  import CloudZone as CloudZone
+from rgw_multi.zone_cloud  import CloudZoneConfig as CloudZoneConfig
 
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
@@ -156,6 +159,7 @@ def init(parse_args):
                                          'num_zonegroups': 1,
                                          'num_zones': 3,
                                          'num_es_zones': 0,
+                                         'num_cloud_zones': 0,
                                          'gateways_per_zone': 2,
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
@@ -165,7 +169,6 @@ def init(parse_args):
                                          'checkpoint_retries': 60,
                                          'checkpoint_delay': 5,
                                          'reconfigure_delay': 5,
-                                         'es_endpoint': None,
                                          })
     try:
         path = os.environ['RGW_MULTI_TEST_CONF']
@@ -186,7 +189,6 @@ def init(parse_args):
     section = 'DEFAULT'
     parser.add_argument('--num-zonegroups', type=int, default=cfg.getint(section, 'num_zonegroups'))
     parser.add_argument('--num-zones', type=int, default=cfg.getint(section, 'num_zones'))
-    parser.add_argument('--num-es-zones', type=int, default=cfg.getint(section, 'num_es_zones'))
     parser.add_argument('--gateways-per-zone', type=int, default=cfg.getint(section, 'gateways_per_zone'))
     parser.add_argument('--no-bootstrap', action='store_true', default=cfg.getboolean(section, 'no_bootstrap'))
     parser.add_argument('--log-level', type=int, default=cfg.getint(section, 'log_level'))
@@ -196,7 +198,15 @@ def init(parse_args):
     parser.add_argument('--checkpoint-retries', type=int, default=cfg.getint(section, 'checkpoint_retries'))
     parser.add_argument('--checkpoint-delay', type=int, default=cfg.getint(section, 'checkpoint_delay'))
     parser.add_argument('--reconfigure-delay', type=int, default=cfg.getint(section, 'reconfigure_delay'))
-    parser.add_argument('--es-endpoint', type=str, default=cfg.get(section, 'es_endpoint'))
+
+    es_cfg = []
+    cloud_cfg = []
+
+    for s in cfg.sections():
+        if s.startswith('elasticsearch'):
+            es_cfg.append(ESZoneConfig(cfg, s))
+        elif s.startswith('cloud'):
+            cloud_cfg.append(CloudZoneConfig(cfg, s))
 
     argv = []
 
@@ -205,9 +215,6 @@ def init(parse_args):
 
     args = parser.parse_args(argv)
     bootstrap = not args.no_bootstrap
-
-    # if num_es_zones is defined, need to have es_endpoint defined too
-    assert(args.num_es_zones == 0 or args.es_endpoint)
 
     setup_logging(args.log_level, args.log_file, args.file_log_level)
 
@@ -233,7 +240,10 @@ def init(parse_args):
     period = multisite.Period(realm=realm)
     realm.current_period = period
 
-    num_zones = args.num_zones + args.num_es_zones
+    num_es_zones = len(es_cfg)
+    num_cloud_zones = len(cloud_cfg)
+
+    num_zones = args.num_zones + num_es_zones + num_cloud_zones
 
     for zg in range(0, args.num_zonegroups):
         zonegroup = multisite.ZoneGroup(zonegroup_name(zg), period)
@@ -271,12 +281,19 @@ def init(parse_args):
                 else:
                     zonegroup.get(cluster)
 
-            es_zone = (z >= args.num_zones)
+            es_zone = (z >= args.num_zones and z < args.num_zones + num_es_zones)
+            cloud_zone = (z >= args.num_zones + num_es_zones)
 
             # create the zone in its zonegroup
             zone = multisite.Zone(zone_name(zg, z), zonegroup, cluster)
             if es_zone:
-                zone = ESZone(zone_name(zg, z), args.es_endpoint, zonegroup, cluster)
+                zone_index = z - args.num_zones
+                zone = ESZone(zone_name(zg, z), es_cfg[zone_index].endpoint, zonegroup, cluster)
+            elif cloud_zone:
+                zone_index = z - args.num_zones - num_es_zones
+                ccfg = cloud_cfg[zone_index]
+                zone = CloudZone(zone_name(zg, z), ccfg.endpoint, ccfg.credentials, ccfg.source_bucket,
+                                 ccfg.target_path, zonegroup, cluster)
             else:
                 zone = RadosZone(zone_name(zg, z), zonegroup, cluster)
 

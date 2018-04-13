@@ -6,8 +6,6 @@
 
 #include "include/types.h"
 
-class Formatter;
-
 struct cls_refcount_get_op {
   string tag;
   bool implicit_ref;

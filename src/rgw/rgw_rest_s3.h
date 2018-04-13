@@ -50,8 +50,8 @@ public:
   int send_response_data_error() override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }
-  int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
-                         RGWGetDataCB* cb,
+  int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
+                         RGWGetObj_Filter* cb,
                          bufferlist* manifest_bl) override;
 };
 
@@ -215,8 +215,8 @@ public:
 
   int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor>* filter,
                          RGWPutObjDataProcessor* cb) override;
-  int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
-                         RGWGetDataCB* cb,
+  int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
+                         RGWGetObj_Filter* cb,
                          map<string, bufferlist>& attrs,
                          bufferlist* manifest_bl) override;
 };

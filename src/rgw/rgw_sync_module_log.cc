@@ -63,12 +63,8 @@ public:
   }
 };
 
-int RGWLogSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
-  string prefix;
-  auto i = config.find("prefix");
-  if (i != config.end()) {
-    prefix = i->second;
-  }
+int RGWLogSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  string prefix = config["prefix"];
   instance->reset(new RGWLogSyncModuleInstance(prefix));
   return 0;
 }

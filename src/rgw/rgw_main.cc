@@ -298,7 +298,8 @@ int main(int argc, const char **argv)
 
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
-
+  rgw_http_client_init(g_ceph_context);
+  
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
 #endif
@@ -571,6 +572,7 @@ int main(int argc, const char **argv)
   rgw::auth::s3::LDAPEngine::shutdown();
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
+  rgw_http_client_cleanup();
   rgw::curl::cleanup_curl();
 
   rgw_perf_stop(g_ceph_context);

@@ -618,7 +618,7 @@ int RGWAsyncStatRemoteObj::_send_request()
                        pattrs,
                        nullptr,
                        nullptr, /* string *ptag, */
-                       nullptr); /* string *petag, */
+                       petag); /* string *petag, */
 
   if (r < 0) {
     ldout(store->ctx(), 0) << "store->fetch_remote_obj() returned r=" << r << dendl;

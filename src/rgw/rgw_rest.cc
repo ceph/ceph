@@ -420,13 +420,6 @@ void dump_etag(struct req_state* const s,
   }
 }
 
-void dump_etag(struct req_state* const s,
-               ceph::buffer::list& bl_etag,
-               const bool quoted)
-{
-  return dump_etag(s, get_sanitized_hdrval(bl_etag), quoted);
-}
-
 void dump_bucket_from_state(struct req_state *s)
 {
   if (g_conf->rgw_expose_bucket && ! s->bucket_name.empty()) {

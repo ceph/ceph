@@ -53,7 +53,7 @@ int RGWPutObj_Compress::handle_data(bufferlist& bl, off_t ofs, void **phandle, r
 RGWGetObj_Decompress::RGWGetObj_Decompress(CephContext* cct_, 
                                            RGWCompressionInfo* cs_info_, 
                                            bool partial_content_,
-                                           RGWGetDataCB* next): RGWGetObj_Filter(next),
+                                           RGWGetObj_Filter* next): RGWGetObj_Filter(next),
                                                                 cct(cct_),
                                                                 cs_info(cs_info_),
                                                                 partial_content(partial_content_),
