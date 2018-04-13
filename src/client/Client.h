@@ -860,7 +860,6 @@ private:
     MAY_READ = 4,
   };
 
-  int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
   int may_setattr(Inode *in, struct ceph_statx *stx, int mask,
@@ -1123,6 +1122,9 @@ public:
 
   int mksnap(const char *path, const char *name, const UserPerm& perm);
   int rmsnap(const char *path, const char *name, const UserPerm& perm);
+
+  // Inode permission checking
+  int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
 
   // expose caps
   int get_caps_issued(int fd);
