@@ -90,7 +90,7 @@ struct rgw_log_entry {
         uint64_t id;
         decode(id, p);
         char buf[32];
-        snprintf(buf, sizeof(buf), "%llu", (long long)id);
+        snprintf(buf, sizeof(buf), "%" PRIu64, id);
         bucket_id = buf;
       } else {
         decode(bucket_id, p);
