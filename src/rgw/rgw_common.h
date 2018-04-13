@@ -283,6 +283,11 @@ enum RGWObjCategory {
   RGW_OBJ_CATEGORY_MULTIMETA = 3,
 };
 
+enum HostStyle {
+  PathStyle = 0,
+  VirtualStyle = 1,
+};
+
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
   rgw_err();
@@ -2184,7 +2189,8 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
   if (!s)
     return def_val;
 
-  return (strcasecmp(s, "on") == 0 ||
+  return (strcasecmp(s, "true") == 0 ||
+          strcasecmp(s, "on") == 0 ||
           strcasecmp(s, "yes") == 0 ||
           strcasecmp(s, "1") == 0);
 }
@@ -2299,9 +2305,9 @@ extern bool verify_object_permission_no_policy(struct req_state *s,
 extern void rgw_uri_escape_char(char c, string& dst);
 extern std::string url_decode(const boost::string_view& src_str,
                               bool in_query = false);
-extern void url_encode(const std::string& src,
-                       string& dst);
-extern std::string url_encode(const std::string& src);
+extern void url_encode(const std::string& src, string& dst,
+                       bool encode_slash = true);
+extern std::string url_encode(const std::string& src, bool encode_slash = true);
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);

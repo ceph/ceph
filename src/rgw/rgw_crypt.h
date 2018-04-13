@@ -96,7 +96,7 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 public:
   RGWGetObj_BlockDecrypt(CephContext* cct,
-                         RGWGetDataCB* next,
+                         RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt);
   virtual ~RGWGetObj_BlockDecrypt();
 

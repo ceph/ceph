@@ -1089,6 +1089,7 @@ public:
   explicit StoreDestructor(RGWRados *_s) : store(_s) {}
   ~StoreDestructor() {
     RGWStoreManager::close_storage(store);
+    rgw_http_client_cleanup();
   }
 };
 
@@ -1671,7 +1672,7 @@ static int send_to_url(const string& url, const string& access,
   key.key = secret;
 
   param_vec_t params;
-  RGWRESTSimpleRequest req(g_ceph_context, url, NULL, &params);
+  RGWRESTSimpleRequest req(g_ceph_context, info.method, url, NULL, &params);
 
   bufferlist response;
   int ret = req.forward_request(key, info, MAX_REST_RESPONSE, &in_data, &response);
@@ -2300,8 +2301,28 @@ static void sync_status(Formatter *formatter)
 
 static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
 {
+  int level = 0;
+  string cur_conf;
   list<string> confs;
-  get_str_list(s, ",", confs);
+  for (auto c : s) {
+    if (c == ',') {
+      if (level == 0) {
+        confs.push_back(cur_conf);
+        cur_conf.clear();
+        continue;
+      }
+    }
+    if (c == '{') {
+      ++level;
+    } else if (c == '}') {
+      --level;
+    }
+    cur_conf += c;
+  }
+  if (!cur_conf.empty()) {
+    confs.push_back(cur_conf);
+  }
+
   for (auto c : confs) {
     ssize_t pos = c.find("=");
     if (pos < 0) {
@@ -3163,6 +3184,7 @@ int main(int argc, const char **argv)
   rgw_bucket_init(store->meta_mgr);
   rgw_otp_init(store);
 
+  rgw_http_client_init(g_ceph_context);
 
   struct rgw_curl_setup {
     rgw_curl_setup() {
@@ -3698,7 +3720,14 @@ int main(int argc, const char **argv)
         }
 
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
-        zone.tier_config = tier_config_add;
+
+        for (auto a : tier_config_add) {
+          int r = zone.tier_config.set(a.first, a.second);
+          if (r < 0) {
+            cerr << "ERROR: failed to set configurable: " << a << std::endl;
+            return EINVAL;
+          }
+        }
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
         string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
@@ -4114,7 +4143,13 @@ int main(int argc, const char **argv)
         zone.system_key.id = access_key;
         zone.system_key.key = secret_key;
 	zone.realm_id = realm_id;
-        zone.tier_config = tier_config_add;
+        for (auto a : tier_config_add) {
+          int r = zone.tier_config.set(a.first, a.second);
+          if (r < 0) {
+            cerr << "ERROR: failed to set configurable: " << a << std::endl;
+            return EINVAL;
+          }
+        }
 
 	ret = zone.create();
 	if (ret < 0) {
@@ -4375,16 +4410,20 @@ int main(int argc, const char **argv)
 
         if (tier_config_add.size() > 0) {
           for (auto add : tier_config_add) {
-            zone.tier_config[add.first] = add.second;
+            int r = zone.tier_config.set(add.first, add.second);
+            if (r < 0) {
+              cerr << "ERROR: failed to set configurable: " << add << std::endl;
+              return EINVAL;
+            }
           }
           need_zone_update = true;
         }
 
-        if (tier_config_rm.size() > 0) {
-          for (auto rm : tier_config_rm) {
+        for (auto rm : tier_config_rm) {
+          if (!rm.first.empty()) { /* otherwise will remove the entire config */
             zone.tier_config.erase(rm.first);
+            need_zone_update = true;
           }
-          need_zone_update = true;
         }
 
         if (need_zone_update) {
@@ -6527,7 +6566,7 @@ next:
 
     RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
     RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
-    int ret = http.set_threaded();
+    int ret = http.start();
     if (ret < 0) {
       cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
       return -ret;
@@ -7048,7 +7087,7 @@ next:
   if (opt_cmd == OPT_BILOG_AUTOTRIM) {
     RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
     RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
-    int ret = http.set_threaded();
+    int ret = http.start();
     if (ret < 0) {
       cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
       return -ret;

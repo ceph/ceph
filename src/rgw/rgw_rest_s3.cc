@@ -258,7 +258,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     } else {
       auto iter = attrs.find(RGW_ATTR_ETAG);
       if (iter != attrs.end()) {
-        dump_etag(s, iter->second);
+        dump_etag(s, iter->second.to_str());
       }
     }
 
@@ -339,7 +339,7 @@ send_data:
   return 0;
 }
 
-int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *filter, RGWGetDataCB* cb, bufferlist* manifest_bl)
+int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
   if (skip_decrypt) { // bypass decryption for multisite sync requests
     return 0;
@@ -1473,8 +1473,8 @@ static inline void set_attr(map<string, bufferlist>& attrs, const char* key, con
 }
 
 int RGWPutObj_ObjStore_S3::get_decrypt_filter(
-    std::unique_ptr<RGWGetDataCB>* filter,
-    RGWGetDataCB* cb,
+    std::unique_ptr<RGWGetObj_Filter>* filter,
+    RGWGetObj_Filter* cb,
     map<string, bufferlist>& attrs,
     bufferlist* manifest_bl)
 {
@@ -2192,9 +2192,8 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
   if (op_ret == 0) {
     dump_time(s, "LastModified", &mtime);
-    std::string etag_str = etag.c_str();
-    if (! etag_str.empty()) {
-      s->formatter->dump_string("ETag", std::move(etag_str));
+    if (! etag.empty()) {
+      s->formatter->dump_string("ETag", std::move(etag));
     }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);

@@ -364,6 +364,16 @@ int read_history(RGWRados *store, RGWMetadataLogHistory *state,
   if (ret < 0) {
     return ret;
   }
+  if (bl.length() == 0) {
+    /* bad history object, remove it */
+    rgw_raw_obj obj(pool, oid);
+    ret = store->delete_system_obj(obj);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
+      return ret;
+    }
+    return -ENOENT;
+  }
   try {
     auto p = bl.begin();
     state->decode(p);

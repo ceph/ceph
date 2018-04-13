@@ -2978,7 +2978,7 @@ class RGWMetaNotifierManager : public RGWCoroutinesManager {
 public:
   RGWMetaNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                              http_manager(store->ctx(), completion_mgr) {
-    http_manager.set_threaded();
+    http_manager.start();
   }
 
   int notify_all(map<string, RGWRESTConn *>& conn_map, set<int>& shards) {
@@ -3005,7 +3005,7 @@ class RGWDataNotifierManager : public RGWCoroutinesManager {
 public:
   RGWDataNotifierManager(RGWRados *_store) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                              http_manager(store->ctx(), completion_mgr) {
-    http_manager.set_threaded();
+    http_manager.start();
   }
 
   int notify_all(map<string, RGWRESTConn *>& conn_map, map<int, set<string> >& shards) {
@@ -3272,7 +3272,7 @@ public:
   {}
 
   int init() override {
-    return http.set_threaded();
+    return http.start();
   }
   int process() override {
     list<RGWCoroutinesStack*> stacks;
@@ -7150,7 +7150,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(name.c_str(), bl);
 
     if (name.compare(RGW_ATTR_ETAG) == 0) {
-      etag = bl.c_str();
+      etag = bl.to_str();
     } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
       content_type = bl.c_str();
     } else if (name.compare(RGW_ATTR_ACL) == 0) {
@@ -7489,7 +7489,7 @@ bool RGWRados::aio_completed(void *handle)
   return c->is_safe();
 }
 
-class RGWRadosPutObj : public RGWGetDataCB
+class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
 {
   CephContext* cct;
   rgw_obj obj;
@@ -7504,6 +7504,8 @@ class RGWRadosPutObj : public RGWGetDataCB
   uint64_t extra_data_left;
   uint64_t data_len;
   map<string, bufferlist> src_attrs;
+  off_t ofs{0};
+  off_t lofs{0}; /* logical ofs */
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -7545,9 +7547,9 @@ public:
     return 0;
   }
 
-  int handle_data(bufferlist& bl, off_t ofs, off_t len) override {
+  int handle_data(bufferlist& bl, bool *pause) override {
     if (progress_cb) {
-      progress_cb(ofs, progress_data);
+      progress_cb(lofs, progress_data);
     }
     if (extra_data_left) {
       size_t extra_len = bl.length();
@@ -7564,15 +7566,15 @@ public:
         if (res < 0)
           return res;
       }
+      ofs += extra_len;
       if (bl.length() == 0) {
         return 0;
       }
-      ofs += extra_len;
     }
-    // adjust ofs based on extra_data_len, so the result is a logical offset
-    // into the object data
+
     assert(uint64_t(ofs) >= extra_data_len);
-    ofs -= extra_data_len;
+
+    lofs = ofs - extra_data_len;
 
     data_len += bl.length();
     bool again = false;
@@ -7583,9 +7585,11 @@ public:
       void *handle = NULL;
       rgw_raw_obj obj;
       uint64_t size = bl.length();
-      int ret = filter->handle_data(bl, ofs, &handle, &obj, &again);
+      int ret = filter->handle_data(bl, lofs, &handle, &obj, &again);
       if (ret < 0)
         return ret;
+
+      ofs += size;
 
       if (need_opstate && opstate) {
         /* need to update opstate repository with new state. This is ratelimited, so we're not
@@ -7618,7 +7622,7 @@ public:
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
-    RGWGetDataCB::set_extra_data_len(len);
+    RGWHTTPStreamRWRequest::ReceiveCB::set_extra_data_len(len);
   }
 
   uint64_t get_data_len() {
@@ -7714,6 +7718,10 @@ struct obj_time_weight {
     if (l < r) {
       return true;
     }
+    if (!zone_short_id || !rhs.zone_short_id) {
+      /* don't compare zone ids, if one wasn't provided */
+      return false;
+    }
     if (zone_short_id != rhs.zone_short_id) {
       return (zone_short_id < rhs.zone_short_id);
     }
@@ -7730,6 +7738,10 @@ struct obj_time_weight {
     }
     if (mtime < rhs.mtime) {
       return true;
+    }
+    if (!zone_short_id || !rhs.zone_short_id) {
+      /* don't compare zone ids, if one wasn't provided */
+      return false;
     }
     if (zone_short_id != rhs.zone_short_id) {
       return (zone_short_id < rhs.zone_short_id);
@@ -7760,11 +7772,12 @@ inline ostream& operator<<(ostream& out, const obj_time_weight &o) {
   return out;
 }
 
-class RGWGetExtraDataCB : public RGWGetDataCB {
+class RGWGetExtraDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
   bufferlist extra_data;
 public:
   RGWGetExtraDataCB() {}
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+  int handle_data(bufferlist& bl, bool *pause) override {
+    int bl_len = (int)bl.length();
     if (extra_data.length() < extra_data_len) {
       off_t max = extra_data_len - extra_data.length();
       if (max > bl_len) {
@@ -7847,7 +7860,8 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
   int ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt, &cb, &in_stream_req);
+                      sync_manifest, skip_decrypt,
+                      true, &cb, &in_stream_req);
   if (ret < 0) {
     return ret;
   }
@@ -7879,6 +7893,9 @@ int RGWRados::stat_remote_obj(RGWObjectCtx& obj_ctx,
     if (iter != src_attrs.end()) {
       bufferlist& etagbl = iter->second;
       *petag = etagbl.to_str();
+      while (petag->size() > 0 && (*petag)[petag->size() - 1] == '\0') {
+        *petag = petag->substr(0, petag->size() - 1);
+      }
     }
   }
 
@@ -7915,7 +7932,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *version_id,
                string *ptag,
-               ceph::buffer::list *petag,
+               string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
                rgw_zone_set *zones_trace)
@@ -8023,7 +8040,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   ret = conn->get_obj(user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt, &cb, &in_stream_req);
+                      sync_manifest, skip_decrypt,
+                      true,
+                      &cb, &in_stream_req);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -8062,7 +8081,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (petag) {
     const auto iter = cb.get_attrs().find(RGW_ATTR_ETAG);
     if (iter != cb.get_attrs().end()) {
-      *petag = iter->second;
+      *petag = iter->second.to_str();
     }
   }
 
@@ -8159,9 +8178,9 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
 {
   string etag;
 
-  RGWRESTStreamWriteRequest *out_stream_req;
+  RGWRESTStreamS3PutObj *out_stream_req;
 
-  int ret = rest_master_conn->put_obj_init(user_id, dest_obj, astate->size, src_attrs, &out_stream_req);
+  int ret = rest_master_conn->put_obj_async(user_id, dest_obj, astate->size, src_attrs, true, &out_stream_req);
   if (ret < 0) {
     return ret;
   }
@@ -8219,7 +8238,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 	       real_time delete_at,
                string *version_id,
                string *ptag,
-               ceph::buffer::list *petag,
+               string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data)
 {
@@ -8345,7 +8364,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (petag) {
     const auto iter = attrs.find(RGW_ATTR_ETAG);
     if (iter != attrs.end()) {
-      *petag = iter->second;
+      *petag = iter->second.to_str();
     }
   }
 
@@ -8482,7 +8501,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *version_id,
-               ceph::buffer::list *petag)
+               string *petag)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -8531,9 +8550,9 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   auto iter = attrs.find(RGW_ATTR_ETAG);
   if (iter != attrs.end()) {
     bufferlist& bl = iter->second;
-    etag = string(bl.c_str(), bl.length());
+    etag = bl.to_str();
     if (petag) {
-      *petag = bl;
+      *petag = etag;
     }
   }
 
@@ -9462,7 +9481,18 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
   s->has_attrs = true;
   s->accounted_size = s->size;
 
-  auto iter = s->attrset.find(RGW_ATTR_COMPRESSION);
+  auto iter = s->attrset.find(RGW_ATTR_ETAG);
+  if (iter != s->attrset.end()) {
+    /* get rid of extra null character at the end of the etag, as we used to store it like that */
+    bufferlist& bletag = iter->second;
+    if (bletag.length() > 0 && bletag[bletag.length() - 1] == '\0') {
+      bufferlist newbl;
+      bletag.splice(0, bletag.length() - 1, &newbl);
+      bletag.claim(newbl);
+    }
+  }
+
+  iter = s->attrset.find(RGW_ATTR_COMPRESSION);
   const bool compressed = (iter != s->attrset.end());
   if (compressed) {
     // use uncompressed size for accounted_size
@@ -10105,18 +10135,20 @@ int RGWRados::Object::Read::prepare()
     if (r < 0)
       return r;
 
+    
+
     if (conds.if_match) {
       string if_match_str = rgw_string_unquote(conds.if_match);
-      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-Match: " << if_match_str << dendl;
-      if (if_match_str.compare(etag.c_str()) != 0) {
+      ldout(cct, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-Match: " << if_match_str << dendl;
+      if (if_match_str.compare(0, etag.length(), etag.c_str(), etag.length()) != 0) {
         return -ERR_PRECONDITION_FAILED;
       }
     }
 
     if (conds.if_nomatch) {
       string if_nomatch_str = rgw_string_unquote(conds.if_nomatch);
-      ldout(cct, 10) << "ETag: " << etag.c_str() << " " << " If-NoMatch: " << if_nomatch_str << dendl;
-      if (if_nomatch_str.compare(etag.c_str()) == 0) {
+      ldout(cct, 10) << "ETag: " << string(etag.c_str(), etag.length()) << " " << " If-NoMatch: " << if_nomatch_str << dendl;
+      if (if_nomatch_str.compare(0, etag.length(), etag.c_str(), etag.length()) == 0) {
         return -ERR_NOT_MODIFIED;
       }
     }
@@ -13480,11 +13512,11 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
 
   map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_ETAG);
   if (iter != astate->attrset.end()) {
-    etag = iter->second.c_str();
+    etag = iter->second.to_str();
   }
   iter = astate->attrset.find(RGW_ATTR_CONTENT_TYPE);
   if (iter != astate->attrset.end()) {
-    content_type = iter->second.c_str();
+    content_type = iter->second.to_str();
   }
   iter = astate->attrset.find(RGW_ATTR_ACL);
   if (iter != astate->attrset.end()) {
