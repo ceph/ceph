@@ -3675,6 +3675,30 @@ public:
     return divergent;
   }
 
+  void merge_from(const vector<pg_log_t*>& slogs, eversion_t last_update) {
+    log.clear();
+
+    // sort and merge dups
+    multimap<eversion_t,pg_log_dup_t> sorted;
+    for (auto& d : dups) {
+      sorted.emplace(d.version, d);
+    }
+    for (auto l : slogs) {
+      for (auto& d : l->dups) {
+	sorted.emplace(d.version, d);
+      }
+    }
+    dups.clear();
+    for (auto& i : sorted) {
+      dups.push_back(i.second);
+    }
+
+    head = last_update;
+    tail = last_update;
+    can_rollback_to = last_update;
+    rollback_info_trimmed_to = last_update;
+  }
+
   bool empty() const {
     return log.empty();
   }
