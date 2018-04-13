@@ -288,6 +288,7 @@ void usage()
   cout << "                             (NOTE: required to delete a non-empty bucket)\n";
   cout << "   --sync-stats              option to 'user stats', update user stats with current\n";
   cout << "                             stats reported by user's buckets indexes\n";
+  cout << "   --reset-stats             option to 'user stats', reset stats in accordance with user buckets\n";
   cout << "   --show-log-entries=<flag> enable/disable dump of log entries on log show\n";
   cout << "   --show-log-sum=<flag>     enable/disable dump of log summation on log show\n";
   cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
@@ -2436,6 +2437,7 @@ int main(int argc, const char **argv)
   int include_all = false;
 
   int sync_stats = false;
+  int reset_stats = false;
   int bypass_gc = false;
   int warnings_only = false;
   int inconsistent_index = false;
@@ -2672,6 +2674,8 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &reset_stats, NULL, "--reset-stats", (char*)NULL)) {
+      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &extra_info, NULL, "--extra-info", (char*)NULL)) {
@@ -6056,6 +6060,24 @@ next:
   }
 
   if (opt_cmd == OPT_USER_STATS) {
+    if (user_id.empty()) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+
+    string user_str = user_id.to_str();
+    if (reset_stats) {
+      if (!bucket_name.empty()){
+	cerr << "ERROR: recalculate doesn't work on buckets" << std::endl;
+	return EINVAL;
+      }
+      ret = store->cls_user_reset_stats(user_str);
+      if (ret < 0) {
+	cerr << "ERROR: could not clear user stats: " << cpp_strerror(-ret) << std::endl;
+	return -ret;
+      }
+    }
+
     if (sync_stats) {
       if (!bucket_name.empty()) {
         int ret = rgw_bucket_sync_user_stats(store, tenant, bucket_name);
@@ -6072,12 +6094,7 @@ next:
       }
     }
 
-    if (user_id.empty()) {
-      cerr << "ERROR: uid not specified" << std::endl;
-      return EINVAL;
-    }
     cls_user_header header;
-    string user_str = user_id.to_str();
     int ret = store->cls_user_get_header(user_str, &header);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */

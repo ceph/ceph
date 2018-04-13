@@ -3581,6 +3581,7 @@ public:
   int fix_tail_obj_locator(const RGWBucketInfo& bucket_info, rgw_obj_key& key, bool fix, bool *need_fix);
 
   int cls_user_get_header(const string& user_id, cls_user_header *header);
+  int cls_user_reset_stats(const string& user_id);
   int cls_user_get_header_async(const string& user_id, RGWGetUserHeader_CB *ctx);
   int cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketInfo& bucket_info);
   int cls_user_list_buckets(rgw_raw_obj& obj,
