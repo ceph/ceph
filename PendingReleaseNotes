@@ -27,8 +27,8 @@
       - mds stop -> mds deactivate
       - mds set_max_mds -> fs set max_mds
       - mds set -> fs set
-      - mds cluster_down -> fs set cluster_down true
-      - mds cluster_up -> fs set cluster_down false
+      - mds cluster_down -> fs set joinable false
+      - mds cluster_up -> fs set joinable true
       - mds add_data_pool -> fs add_data_pool
       - mds remove_data_pool -> fs rm_data_pool
       - mds rm_data_pool -> fs rm_data_pool
@@ -46,12 +46,12 @@
     is now redundant.
 
   * Taking a CephFS cluster down is now done by setting the down flag which
-    deactivates all MDS.
+    deactivates all MDS. For example: `ceph fs set cephfs down true`.
 
-  * Preventing standbys from joining as new actives (formerly the cluster_down
-    flag) on a file system is now accomplished by setting the joinable flag.
-    This is useful mostly for testing so that a file system may be quickly
-    brought down and deleted.
+  * Preventing standbys from joining as new actives (formerly the now
+    deprecated cluster_down flag) on a file system is now accomplished by
+    setting the joinable flag.  This is useful mostly for testing so that a
+    file system may be quickly brought down and deleted.
 
   * New CephFS file system attributes session_timeout and session_autoclose
     are configurable via `ceph fs set`. The MDS config options
