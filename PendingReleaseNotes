@@ -45,6 +45,14 @@
     max_mds. Accordingly, ceph mds deactivate has been deprecated as it
     is now redundant.
 
+  * Taking a CephFS cluster down is now done by setting the down flag which
+    deactivates all MDS.
+
+  * Preventing standbys from joining as new actives (formerly the cluster_down
+    flag) on a file system is now accomplished by setting the joinable flag.
+    This is useful mostly for testing so that a file system may be quickly
+    brought down and deleted.
+
   * New CephFS file system attributes session_timeout and session_autoclose
     are configurable via `ceph fs set`. The MDS config options
     mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
