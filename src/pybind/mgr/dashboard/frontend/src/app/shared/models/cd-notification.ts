@@ -32,7 +32,7 @@ export class CdNotification {
       case NotificationType.error:
         return 'fa-exclamation-triangle';
       case NotificationType.info:
-        return 'text-info';
+        return 'fa-info';
       case NotificationType.success:
         return 'fa-check';
     }
