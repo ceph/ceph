@@ -809,7 +809,11 @@ int JSONFormattable::erase(const string& name)
     if (last_entity.is_obj) {
       parent->obj.erase(last_entity.name);
     } else {
-      parent->arr.erase(parent->arr.begin() + last_entity.index);
+      int index = (last_entity.index >= 0 ? last_entity.index : parent->arr.size() + last_entity.index);
+      if (index < 0 || (size_t)index >= parent->arr.size()) {
+        return 0;
+      }
+      parent->arr.erase(parent->arr.begin() + index);
     }
   }
 
