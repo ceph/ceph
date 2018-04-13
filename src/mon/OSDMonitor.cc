@@ -5541,7 +5541,7 @@ void OSDMonitor::clear_pool_flags(int64_t pool_id, uint64_t flags)
 string OSDMonitor::make_snap_epoch_key(int64_t pool, epoch_t epoch)
 {
   char k[80];
-  snprintf(k, sizeof(k), "removed_epoch_%lld_%08lx",
+  snprintf(k, sizeof(k), "removed_epoch_%llu_%08lx",
 	   (unsigned long long)pool, (unsigned long)epoch);
   return k;
 }
@@ -5549,7 +5549,7 @@ string OSDMonitor::make_snap_epoch_key(int64_t pool, epoch_t epoch)
 string OSDMonitor::make_snap_key(int64_t pool, snapid_t snap)
 {
   char k[80];
-  snprintf(k, sizeof(k), "removed_snap_%lld_%016llx",
+  snprintf(k, sizeof(k), "removed_snap_%llu_%016llx",
 	   (unsigned long long)pool, (unsigned long long)snap);
   return k;
 }
@@ -5570,7 +5570,7 @@ string OSDMonitor::make_snap_key_value(
 string OSDMonitor::make_snap_purged_key(int64_t pool, snapid_t snap)
 {
   char k[80];
-  snprintf(k, sizeof(k), "purged_snap_%lld_%016llx",
+  snprintf(k, sizeof(k), "purged_snap_%llu_%016llx",
 	   (unsigned long long)pool, (unsigned long long)snap);
   return k;
 }
