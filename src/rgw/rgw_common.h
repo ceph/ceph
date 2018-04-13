@@ -1048,7 +1048,7 @@ struct rgw_bucket {
         uint64_t id;
         decode(id, bl);
         char buf[16];
-        snprintf(buf, sizeof(buf), "%llu", (long long)id);
+        snprintf(buf, sizeof(buf), "%" PRIu64, id);
         bucket_id = buf;
       } else {
         decode(bucket_id, bl);
