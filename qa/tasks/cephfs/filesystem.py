@@ -432,13 +432,6 @@ class Filesystem(MDSCluster):
             raise RuntimeError("cannot specify fscid when configuring overlay")
         self.metadata_overlay = overlay
 
-    def deactivate(self, rank):
-        if rank < 0:
-            raise RuntimeError("invalid rank")
-        elif rank == 0:
-            raise RuntimeError("cannot deactivate rank 0")
-        self.mon_manager.raw_cluster_cmd("mds", "deactivate", "%d:%d" % (self.id, rank))
-
     def set_var(self, var, *args):
         a = map(str, args)
         self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)

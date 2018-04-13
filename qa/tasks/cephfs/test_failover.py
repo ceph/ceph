@@ -277,7 +277,6 @@ class TestStandbyReplay(CephFSTestCase):
 
         # Shrink the cluster
         fs_a.set_max_mds(1)
-        fs_a.mon_manager.raw_cluster_cmd("mds", "deactivate", "{0}:1".format(fs_a.name))
         self.wait_until_equal(
             lambda: fs_a.get_active_names(), [mds_a],
             60
@@ -424,7 +423,6 @@ class TestMultiFilesystems(CephFSTestCase):
 
         # Shrink fs_b back to 1, see a daemon go back to standby
         fs_b.set_max_mds(1)
-        fs_b.deactivate(1)
         self.wait_until_equal(lambda: len(fs_b.get_active_names()), 1, 30,
                               reject_fn=lambda v: v > 2 or v < 1)
 
