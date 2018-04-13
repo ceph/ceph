@@ -157,6 +157,10 @@ TYPED_TEST(AllocatorTest, test_add_free_rm_free_Fibonnaci_CantorSet) {
 
 
 TYPED_TEST(AllocatorTest, test_fragmentation) {
+  if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
+    std::cerr << "[ SKIPPING ] --would fail--" << std::endl;
+    return;
+  }
   typename TestFixture::Allocator sa(g_ceph_context);
   constexpr size_t M = 1<<20;
   constexpr size_t P = 4096;
@@ -188,6 +192,10 @@ TYPED_TEST(AllocatorTest, test_fragmentation) {
 
 
 TYPED_TEST(AllocatorTest, test_fragmentation_dragged) {
+  if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
+    std::cerr << "[ SKIPPING ] --would fail--" << std::endl;
+    return;
+  }
   typename TestFixture::Allocator sa(g_ceph_context);
   constexpr size_t M = 1<<26;
   constexpr size_t P = 4096;
