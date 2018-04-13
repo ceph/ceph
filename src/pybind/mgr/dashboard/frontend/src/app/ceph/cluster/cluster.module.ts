@@ -5,7 +5,6 @@ import { RouterModule } from '@angular/router';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { ComponentsModule } from '../../shared/components/components.module';
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { ConfigurationComponent } from './configuration/configuration.component';
@@ -24,7 +23,6 @@ import {
   imports: [
     CommonModule,
     PerformanceCounterModule,
-    ComponentsModule,
     TabsModule.forRoot(),
     SharedModule,
     RouterModule,
