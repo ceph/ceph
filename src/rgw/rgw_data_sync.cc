@@ -714,7 +714,7 @@ int RGWRemoteDataLog::read_recovering_shards(const int num_shards, set<int>& rec
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
   int ret = http_manager.start();
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "failed in http_manager.set_threaded() ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
   }
   RGWDataSyncEnv sync_env_local = sync_env;
@@ -2249,7 +2249,7 @@ int RGWRemoteDataLog::read_shard_status(int shard_id, set<string>& pending_bucke
   // cannot run concurrently with run_sync(), so run in a separate manager
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   RGWHTTPManager http_manager(store->ctx(), crs.get_completion_mgr());
-  int ret = http_manager.set_threaded();
+  int ret = http_manager.start();
   if (ret < 0) {
     ldout(store->ctx(), 0) << "failed in http_manager.start() ret=" << ret << dendl;
     return ret;
