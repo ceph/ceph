@@ -78,7 +78,7 @@ def get_api_vgs():
 
     Command and sample delimeted output, should look like::
 
-        $ vgs --noheadings --separator=';' \
+        $ vgs --noheadings --readonly --separator=';' \
           -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
           ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
           osd_vg;3;1;0;wz--n-;29.21g;9.21g
@@ -86,7 +86,7 @@ def get_api_vgs():
     """
     fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--separator=";"', '-o', fields]
+        ['vgs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
@@ -98,14 +98,14 @@ def get_api_lvs():
 
     Command and delimeted output, should look like::
 
-        $ lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
+        $ lvs --noheadings --readonly --separator=';' -o lv_tags,lv_path,lv_name,vg_name
           ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
     fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid'
     stdout, stderr, returncode = process.call(
-        ['lvs', '--noheadings', '--separator=";"', '-o', fields]
+        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
@@ -119,7 +119,7 @@ def get_api_pvs():
 
     Command and delimeted output, should look like::
 
-        $ pvs --noheadings --separator=';' -o pv_name,pv_tags,pv_uuid
+        $ pvs --noheadings --readonly --separator=';' -o pv_name,pv_tags,pv_uuid
           /dev/sda1;;
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
@@ -127,7 +127,7 @@ def get_api_pvs():
     fields = 'pv_name,pv_tags,pv_uuid,vg_name'
 
     stdout, stderr, returncode = process.call(
-        ['pvs', '--no-heading', '--separator=";"', '-o', fields]
+        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields]
     )
 
     return _output_parser(stdout, fields)
