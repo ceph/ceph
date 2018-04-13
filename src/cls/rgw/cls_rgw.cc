@@ -2920,6 +2920,8 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   string user_key;
   bool truncated_status = false;
 
+  assert(truncated != nullptr);
+
   if (!by_user) {
     usage_record_prefix_by_time(end, end_key);
   } else {
@@ -2942,9 +2944,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   if (ret < 0)
     return ret;
 
-  if (truncated) {
-    *truncated = truncated_status;
-  }
+  *truncated = truncated_status;
       
   map<string, bufferlist>::iterator iter = keys.begin();
   if (iter == keys.end())
@@ -2958,12 +2958,14 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
 
     if (!by_user && key.compare(end_key) >= 0) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+      *truncated = false;
       key_iter = key;
       return 0;
     }
 
     if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+      *truncated = false;
       key_iter = key;
       return 0;
     }
@@ -2976,8 +2978,10 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
       continue;
 
     /* keys are sorted by epoch, so once we're past end we're done */
-    if (e.epoch >= end)
+    if (e.epoch >= end) {
+      *truncated = false;
       return 0;
+    }
 
     ret = cb(hctx, key, e, param);
     if (ret < 0)
@@ -3040,6 +3044,10 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
 
 static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_usage_log_entry& entry, void *param)
 {
+  bool *found = (bool *)param;
+  if (found) {
+    *found = true;
+  }
   string key_by_time;
   string key_by_user;
 
@@ -3075,12 +3083,13 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
 
   string iter;
   bool more;
+  bool found = false;
 #define MAX_USAGE_TRIM_ENTRIES 128
-  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, NULL);
+  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
   if (ret < 0)
     return ret;
 
-  if (!more && iter.empty())
+  if (!more && !found)
     return -ENODATA;
 
   return 0;
