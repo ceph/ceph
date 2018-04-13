@@ -93,8 +93,8 @@ def wait_for_scrub():
     osds.add(json.loads(out)['acting_primary'])
     pgs[json.loads(out)['pgid']] = get_deep_scrub_timestamp(json.loads(out)['pgid'])
 
-    for osd in osds:
-        command = "ceph osd deep-scrub osd." + str(osd)
+    for pg in pgs:
+        command = "ceph pg deep-scrub " + str(pg)
         subprocess.check_call(shlex.split(command))
 
     for pg in pgs:
