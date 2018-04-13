@@ -190,6 +190,7 @@ BuildRequires:	python%{_python_buildid}-Cython
 BuildRequires:	python%{_python_buildid}-PrettyTable
 BuildRequires:	python%{_python_buildid}-Sphinx
 BuildRequires:  rdma-core-devel
+BuildRequires:	liblz4-devel >= 1.7
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
@@ -205,6 +206,7 @@ BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython%{_python_buildid}
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
+BuildRequires:	lz4-devel >= 1.7
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
 %if 0%{?rhel}

@@ -128,6 +128,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         net/openldap-client \
         security/nss \
         archivers/snappy \
+        archivers/liblz4 \
         ftp/curl \
         misc/e2fsprogs-libuuid \
         misc/getopt \

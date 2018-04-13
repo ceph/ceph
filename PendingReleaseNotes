@@ -170,3 +170,6 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
   can only express printable strings.  If binary blobs are present,
   the 'ceph config-key dump' command will show them as something like
   ``<<< binary blob of length N >>>``.
+
+* The Ceph LZ4 compression plugin is now enabled by default, and introduces
+  a new build depdendency.
