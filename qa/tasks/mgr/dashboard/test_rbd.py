@@ -29,7 +29,7 @@ class RbdTest(DashboardTestCase):
     def create_image(cls, pool, name, size, **kwargs):
         data = {'name': name, 'pool_name': pool, 'size': size}
         data.update(kwargs)
-        return cls._task_post('/api/rbd', data)
+        return cls._task_post('/api/block/image', data)
 
     @classmethod
     def clone_image(cls, parent_pool, parent_image, parent_snap, pool, name,
@@ -37,7 +37,7 @@ class RbdTest(DashboardTestCase):
         # pylint: disable=too-many-arguments
         data = {'child_image_name': name, 'child_pool_name': pool}
         data.update(kwargs)
-        return cls._task_post('/api/rbd/{}/{}/snap/{}/clone'
+        return cls._task_post('/api/block/image/{}/{}/snap/{}/clone'
                               .format(parent_pool, parent_image, parent_snap),
                               data)
 
@@ -46,31 +46,31 @@ class RbdTest(DashboardTestCase):
         # pylint: disable=too-many-arguments
         data = {'dest_image_name': dest_image, 'dest_pool_name': dest_pool}
         data.update(kwargs)
-        return cls._task_post('/api/rbd/{}/{}/copy'
+        return cls._task_post('/api/block/image/{}/{}/copy'
                               .format(src_pool, src_image), data)
 
     @classmethod
     def remove_image(cls, pool, image):
-        return cls._task_delete('/api/rbd/{}/{}'.format(pool, image))
+        return cls._task_delete('/api/block/image/{}/{}'.format(pool, image))
 
     # pylint: disable=too-many-arguments
     @classmethod
     def edit_image(cls, pool, image, name=None, size=None, features=None):
-        return cls._task_put('/api/rbd/{}/{}'.format(pool, image),
+        return cls._task_put('/api/block/image/{}/{}'.format(pool, image),
                              {'name': name, 'size': size, 'features': features})
 
     @classmethod
     def create_snapshot(cls, pool, image, snapshot):
-        return cls._task_post('/api/rbd/{}/{}/snap'.format(pool, image),
+        return cls._task_post('/api/block/image/{}/{}/snap'.format(pool, image),
                               {'snapshot_name': snapshot})
 
     @classmethod
     def remove_snapshot(cls, pool, image, snapshot):
-        return cls._task_delete('/api/rbd//{}/{}/snap/{}'.format(pool, image, snapshot))
+        return cls._task_delete('/api/block/image/{}/{}/snap/{}'.format(pool, image, snapshot))
 
     @classmethod
     def update_snapshot(cls, pool, image, snapshot, new_name, is_protected):
-        return cls._task_put('/api/rbd//{}/{}/snap/{}'.format(pool, image, snapshot),
+        return cls._task_put('/api/block/image/{}/{}/snap/{}'.format(pool, image, snapshot),
                              {'new_snap_name': new_name, 'is_protected': is_protected})
 
     @classmethod
@@ -169,7 +169,7 @@ class RbdTest(DashboardTestCase):
             self.fail("Snapshot {} not found".format(snap_name))
 
     def test_list(self):
-        data = self._view_cache_get('/api/rbd')
+        data = self._view_cache_get('/api/block/image')
         self.assertStatus(200)
         self.assertEqual(len(data), 2)
 
@@ -209,7 +209,7 @@ class RbdTest(DashboardTestCase):
         self.create_image('rbd', rbd_name, 10240)
         self.assertStatus(201)
 
-        img = self._get('/api/rbd/rbd/test_rbd')
+        img = self._get('/api/block/image/rbd/test_rbd')
         self.assertStatus(200)
 
         self._validate_image(img, name=rbd_name, size=10240,
@@ -231,7 +231,7 @@ class RbdTest(DashboardTestCase):
         self.create_image('rbd', rbd_name, 10240, data_pool='data_pool')
         self.assertStatus(201)
 
-        img = self._get('/api/rbd/rbd/test_rbd_in_data_pool')
+        img = self._get('/api/block/image/rbd/test_rbd_in_data_pool')
         self.assertStatus(200)
 
         self._validate_image(img, name=rbd_name, size=10240,
@@ -263,7 +263,7 @@ class RbdTest(DashboardTestCase):
         self._rbd_cmd(['snap', 'protect', 'rbd/img1@snap1'])
         self._rbd_cmd(['clone', 'rbd/img1@snap1', 'rbd_iscsi/img1_clone'])
 
-        img = self._get('/api/rbd/rbd/img1')
+        img = self._get('/api/block/image/rbd/img1')
         self.assertStatus(200)
         self._validate_image(img, name='img1', size=1073741824,
                              num_objs=256, obj_size=4194304, parent=None,
@@ -280,7 +280,7 @@ class RbdTest(DashboardTestCase):
             elif snap['name'] == 'snap2':
                 self._validate_snapshot(snap, is_protected=False)
 
-        img = self._get('/api/rbd/rbd_iscsi/img1_clone')
+        img = self._get('/api/block/image/rbd_iscsi/img1_clone')
         self.assertStatus(200)
         self._validate_image(img, name='img1_clone', size=1073741824,
                              num_objs=256, obj_size=4194304,
@@ -300,7 +300,7 @@ class RbdTest(DashboardTestCase):
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '10M', 'rbd/img2'])
         self.create_snapshot('rbd', 'img2', 'snap3')
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M', 'rbd/img2'])
-        img = self._get('/api/rbd/rbd/img2')
+        img = self._get('/api/block/image/rbd/img2')
         self.assertStatus(200)
         self._validate_image(img, name='img2', size=2147483648,
                              total_disk_usage=268435456, disk_usage=67108864)
@@ -319,7 +319,7 @@ class RbdTest(DashboardTestCase):
         self.create_snapshot('rbd', 'delete_me', 'snap2')
         self.assertStatus(201)
 
-        img = self._get('/api/rbd/rbd/delete_me')
+        img = self._get('/api/block/image/rbd/delete_me')
         self.assertStatus(200)
         self._validate_image(img, name='delete_me', size=2**30)
         self.assertEqual(len(img['snapshots']), 2)
@@ -329,7 +329,7 @@ class RbdTest(DashboardTestCase):
         self.remove_snapshot('rbd', 'delete_me', 'snap2')
         self.assertStatus(204)
 
-        img = self._get('/api/rbd/rbd/delete_me')
+        img = self._get('/api/block/image/rbd/delete_me')
         self.assertStatus(200)
         self._validate_image(img, name='delete_me', size=2**30)
         self.assertEqual(len(img['snapshots']), 0)
@@ -340,13 +340,13 @@ class RbdTest(DashboardTestCase):
     def test_image_rename(self):
         self.create_image('rbd', 'edit_img', 2**30)
         self.assertStatus(201)
-        self._get('/api/rbd/rbd/edit_img')
+        self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self.edit_image('rbd', 'edit_img', 'new_edit_img')
         self.assertStatus(200)
-        self._get('/api/rbd/rbd/edit_img')
+        self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(404)
-        self._get('/api/rbd/rbd/new_edit_img')
+        self._get('/api/block/image/rbd/new_edit_img')
         self.assertStatus(200)
         self.remove_image('rbd', 'new_edit_img')
         self.assertStatus(204)
@@ -354,12 +354,12 @@ class RbdTest(DashboardTestCase):
     def test_image_resize(self):
         self.create_image('rbd', 'edit_img', 2**30)
         self.assertStatus(201)
-        img = self._get('/api/rbd/rbd/edit_img')
+        img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, size=2**30)
         self.edit_image('rbd', 'edit_img', size=2*2**30)
         self.assertStatus(200)
-        img = self._get('/api/rbd/rbd/edit_img')
+        img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, size=2*2**30)
         self.remove_image('rbd', 'edit_img')
@@ -368,19 +368,19 @@ class RbdTest(DashboardTestCase):
     def test_image_change_features(self):
         self.create_image('rbd', 'edit_img', 2**30, features=["layering"])
         self.assertStatus(201)
-        img = self._get('/api/rbd/rbd/edit_img')
+        img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=["layering"])
         self.edit_image('rbd', 'edit_img',
                         features=["fast-diff", "object-map", "exclusive-lock"])
-        img = self._get('/api/rbd/rbd/edit_img')
+        img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
                                                  'fast-diff', 'layering',
                                                  'object-map'])
         self.edit_image('rbd', 'edit_img',
                         features=["journaling", "exclusive-lock"])
-        img = self._get('/api/rbd/rbd/edit_img')
+        img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
                                                  'journaling', 'layering'])
@@ -390,22 +390,22 @@ class RbdTest(DashboardTestCase):
     def test_update_snapshot(self):
         self.create_snapshot('rbd', 'img1', 'snap5')
         self.assertStatus(201)
-        img = self._get('/api/rbd/rbd/img1')
+        img = self._get('/api/block/image/rbd/img1')
         self._validate_snapshot_list(img['snapshots'], 'snap5', is_protected=False)
 
         self.update_snapshot('rbd', 'img1', 'snap5', 'snap6', None)
         self.assertStatus(200)
-        img = self._get('/api/rbd/rbd/img1')
+        img = self._get('/api/block/image/rbd/img1')
         self._validate_snapshot_list(img['snapshots'], 'snap6', is_protected=False)
 
         self.update_snapshot('rbd', 'img1', 'snap6', None, True)
         self.assertStatus(200)
-        img = self._get('/api/rbd/rbd/img1')
+        img = self._get('/api/block/image/rbd/img1')
         self._validate_snapshot_list(img['snapshots'], 'snap6', is_protected=True)
 
         self.update_snapshot('rbd', 'img1', 'snap6', 'snap5', False)
         self.assertStatus(200)
-        img = self._get('/api/rbd/rbd/img1')
+        img = self._get('/api/block/image/rbd/img1')
         self._validate_snapshot_list(img['snapshots'], 'snap5', is_protected=False)
 
         self.remove_snapshot('rbd', 'img1', 'snap5')
@@ -419,21 +419,21 @@ class RbdTest(DashboardTestCase):
         self.create_snapshot('rbd', 'rollback_img', 'snap1')
         self.assertStatus(201)
 
-        img = self._get('/api/rbd/rbd/rollback_img')
+        img = self._get('/api/block/image/rbd/rollback_img')
         self.assertStatus(200)
         self.assertEqual(img['disk_usage'], 0)
 
         self._rbd_cmd(['bench', '--io-type', 'write', '--io-total', '5M',
                        'rbd/rollback_img'])
 
-        img = self._get('/api/rbd/rbd/rollback_img')
+        img = self._get('/api/block/image/rbd/rollback_img')
         self.assertStatus(200)
         self.assertGreater(img['disk_usage'], 0)
 
-        self._task_post('/api/rbd/rbd/rollback_img/snap/snap1/rollback')
+        self._task_post('/api/block/image/rbd/rollback_img/snap/snap1/rollback')
         self.assertStatus([201, 200])
 
-        img = self._get('/api/rbd/rbd/rollback_img')
+        img = self._get('/api/block/image/rbd/rollback_img')
         self.assertStatus(200)
         self.assertEqual(img['disk_usage'], 0)
 
@@ -454,7 +454,7 @@ class RbdTest(DashboardTestCase):
                                    "object-map"])
         self.assertStatus([200, 201])
 
-        img = self._get('/api/rbd/rbd/cimg-clone')
+        img = self._get('/api/block/image/rbd/cimg-clone')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
                                                  'fast-diff', 'layering',
@@ -490,12 +490,12 @@ class RbdTest(DashboardTestCase):
                                   "object-map"])
         self.assertStatus([200, 201])
 
-        img = self._get('/api/rbd/rbd/coimg')
+        img = self._get('/api/block/image/rbd/coimg')
         self.assertStatus(200)
         self._validate_image(img, features_name=['layering', 'exclusive-lock',
                                                  'fast-diff', 'object-map'])
 
-        img_copy = self._get('/api/rbd/rbd_iscsi/coimg-copy')
+        img_copy = self._get('/api/block/image/rbd_iscsi/coimg-copy')
         self._validate_image(img_copy, features_name=['exclusive-lock',
                                                       'fast-diff', 'layering',
                                                       'object-map'],

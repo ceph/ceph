@@ -109,7 +109,7 @@ def _sort_features(features, enable=True):
     features.sort(key=key_func, reverse=not enable)
 
 
-@ApiController('rbd')
+@ApiController('block/image')
 @AuthRequired()
 class Rbd(RESTController):
 
@@ -350,7 +350,7 @@ class Rbd(RESTController):
         return _rbd_image_call(pool_name, image_name, _src_copy)
 
 
-@ApiController('rbd/:pool_name/:image_name/snap')
+@ApiController('block/image/:pool_name/:image_name/snap')
 class RbdSnapshot(RESTController):
 
     @RbdTask('snap/create',
