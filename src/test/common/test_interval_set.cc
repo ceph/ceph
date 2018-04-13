@@ -647,3 +647,79 @@ TYPED_TEST(IntervalSetTest, span_of) {
   ASSERT_EQ( iset1.num_intervals(), 0);
   ASSERT_EQ( iset1.size(), 0);
 }
+
+TYPED_TEST(IntervalSetTest, Cantor_Fibonnaci) {
+  //Uses CantorSet idea, but:
+  //1) in step lower half of regions is retained, higher is deleted
+  //2) in step I, after deletion, inserts back intervals that were deleted in iteration I-1
+  //In effect this causes set to be mostly full, not mostly empty.
+  typedef std::vector<uint64_t> interval_left;
+  typedef std::map<uint64_t, interval_left> aset_t;
+
+  auto nextI = [](const aset_t& I, const aset_t& I1deleted, aset_t& Inext, aset_t& deleted){
+    Inext.clear();
+    deleted.clear();
+
+    //1. move upper halves to deleted regions
+    for (auto &ww: I) {
+      uint64_t width = ww.first;
+      assert (width >= 2);
+      assert ( (width & (width - 1)) == 0);
+      auto elems = ww.second;
+      size_t count = elems.size();
+      auto &d = deleted[width/2];
+      d.resize(count);
+      for (size_t i=0; i<count; i++) {
+        d[i] = elems[i] + width/2;
+      }
+    }
+    //2. move lower half of regions to Inext
+    for (auto &ww: I) {
+      uint64_t width = ww.first;
+      Inext[width/2] = ww.second;
+    }
+    //3. append previously deleted to Inext
+    for (auto &dd: I1deleted) {
+      uint64_t width = dd.first;
+      Inext[width].insert(Inext[width].end(), dd.second.begin(), dd.second.end());
+    }
+  };
+
+  auto size = [](const aset_t& S) -> uint64_t {
+    size_t sum=0;
+    for (auto &s: S) {
+      sum+=s.first * s.second.size();
+    }
+    return sum;
+  };
+
+  typedef typename TestFixture::ISet ISet;
+  ISet iset;
+
+  constexpr size_t M = 1 << 22;
+  aset_t set;
+
+  set[M] = {0};
+  aset_t deleted;
+
+  aset_t new_set,new_deleted;
+  iset.insert(0, M);
+  for (int i = 0; i < 21; i++) {
+    nextI(set,deleted,new_set,new_deleted);
+    for(auto &d: deleted) {
+      //these are previosly deleted - are now added
+      for(auto &dr: d.second) {
+        iset.insert(dr, d.first);
+      }
+    }
+    for(auto &d: new_deleted) {
+      //really deleted
+      for(auto &dr: d.second) {
+        iset.erase(dr, d.first);
+      }
+    }
+    set.swap(new_set);
+    deleted.swap(new_deleted);
+    ASSERT_EQ(iset.size(), size(set));
+  }
+}
