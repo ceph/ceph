@@ -1357,6 +1357,17 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS &&
 	tmp.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
       dout(10) << __func__ << " first nautilus+ epoch" << dendl;
+      // add creating flags?
+      for (auto& i : tmp.get_pools()) {
+	if (pending_creatings.still_creating_pool(i.first)) {
+	  dout(10) << __func__ << " adding CREATING flag to pool " << i.first
+		   << dendl;
+	  if (pending_inc.new_pools.count(i.first) == 0) {
+	    pending_inc.new_pools[i.first] = i.second;
+	  }
+	  pending_inc.new_pools[i.first].flags |= pg_pool_t::FLAG_CREATING;
+	}
+      }
     }
   }
 
