@@ -766,7 +766,15 @@ static void fuse_ll_fsyncdir(fuse_req_t req, fuse_ino_t ino, int datasync,
 
 static void fuse_ll_access(fuse_req_t req, fuse_ino_t ino, int mask)
 {
-  fuse_reply_err(req, 0);
+  CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
+  const struct fuse_ctx *ctx = fuse_req_ctx(req);
+  Inode *in = cfuse->iget(ino);
+  UserPerm perms(ctx->uid, ctx->gid);
+  get_fuse_groups(perms, req);
+
+  int r = cfuse->client->inode_permission(in, perms, mask);
+  fuse_reply_err(req, -r);
+  cfuse->iput(in);
 }
 
 static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
