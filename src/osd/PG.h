@@ -1892,14 +1892,15 @@ protected:
   public:
   TrivialEvent(DeleteStart)
   TrivialEvent(DeleteSome)
-  protected:
-  TrivialEvent(DeleteReserved)
-  TrivialEvent(DeleteInterrupted)
 
   TrivialEvent(SetForceRecovery)
   TrivialEvent(UnsetForceRecovery)
   TrivialEvent(SetForceBackfill)
   TrivialEvent(UnsetForceBackfill)
+
+  protected:
+  TrivialEvent(DeleteReserved)
+  TrivialEvent(DeleteInterrupted)
 
   /* Encapsulates PG recovery process */
   class RecoveryState {
