@@ -209,8 +209,10 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
     }
     for (const auto& entry : trash_entries) {
        if (f) {
+         f->open_object_section("image");
          f->dump_string("id", entry.id);
          f->dump_string("name", entry.name);
+         f->close_section();
        } else {
          std::cout << entry.id << " " << entry.name << std::endl;
        }
