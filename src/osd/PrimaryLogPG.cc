@@ -7899,7 +7899,8 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
   } else if (length)
     ch.insert(offset, length);
   modified.union_of(ch);
-  if (write_full || offset + length > oi.size) {
+  if (write_full ||
+      (offset + length > oi.size && length)) {
     uint64_t new_size = offset + length;
     delta_stats.num_bytes -= oi.size;
     delta_stats.num_bytes += new_size;
