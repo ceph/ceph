@@ -115,6 +115,7 @@ class ViewCache(object):
         def run(self):
             try:
                 t0 = time.time()
+                logger.debug("VC: starting execution of %s", self.fn)
                 val = self.fn(*self.args, **self.kwargs)
                 t1 = time.time()
             except Exception as ex:
@@ -132,6 +133,8 @@ class ViewCache(object):
                     self._view.getter_thread = None
                     self._view.exception = None
 
+            logger.debug("VC: execution of %s finished in: %s", self.fn,
+                         t1 - t0)
             self.event.set()
 
     class RemoteViewCache(object):
@@ -173,6 +176,8 @@ class ViewCache(object):
                     self.getter_thread = ViewCache.GetterThread(self, fn, args,
                                                                 kwargs)
                     self.getter_thread.start()
+                else:
+                    logger.debug("VC: getter_thread still alive for: %s", fn)
 
                 ev = self.getter_thread.event
 
