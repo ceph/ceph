@@ -10,6 +10,130 @@ from tasks.cephfs.fuse_mount import FuseMount
 log = logging.getLogger(__name__)
 
 
+class TestClusterResize(CephFSTestCase):
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 3
+
+    def grow(self, n):
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+
+        fscid = self.fs.id
+        status = self.fs.status()
+        log.info("status = {0}".format(status))
+
+        original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
+        original_standbys = set([info['gid'] for info in status.get_standbys()])
+
+        oldmax = self.fs.get_mds_map(status)['max_mds']
+        self.assertTrue(n > oldmax)
+        self.fs.set_max_mds(n)
+
+        log.info("Waiting for cluster to grow.")
+        status = self.fs.wait_for_daemons(timeout=60+grace*2)
+        ranks = set([info['gid'] for info in status.get_ranks(fscid)])
+        self.assertTrue(original_ranks.issubset(ranks) and len(ranks) == n)
+        return status
+
+    def shrink(self, n):
+        grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
+
+        fscid = self.fs.id
+        status = self.fs.status()
+        log.info("status = {0}".format(status))
+
+        original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
+        original_standbys = set([info['gid'] for info in status.get_standbys()])
+
+        oldmax = self.fs.get_mds_map(status)['max_mds']
+        self.assertTrue(n < oldmax)
+        self.fs.set_max_mds(n)
+
+        # Wait until the monitor finishes stopping ranks >= n
+        log.info("Waiting for cluster to shink.")
+        status = self.fs.wait_for_daemons(timeout=60+grace*2)
+        ranks = set([info['gid'] for info in status.get_ranks(fscid)])
+        self.assertTrue(ranks.issubset(original_ranks) and len(ranks) == n)
+        return status
+
+
+    def test_grow(self):
+        """
+        That the MDS cluster grows after increasing max_mds.
+        """
+
+        # Need all my standbys up as well as the active daemons
+        # self.wait_for_daemon_start() necessary?
+
+        self.grow(2)
+        self.grow(3)
+
+
+    def test_shrink(self):
+        """
+        That the MDS cluster shrinks automatically after decreasing max_mds.
+        """
+
+        self.grow(3)
+        self.shrink(1)
+
+    def test_up_less_than_max(self):
+        """
+        That a health warning is generated when max_mds is greater than active count.
+        """
+
+        status = self.fs.status()
+        mdss = [info['gid'] for info in status.get_all()]
+        self.fs.set_max_mds(len(mdss)+1)
+        self.wait_for_health("MDS_UP_LESS_THAN_MAX", 30)
+        self.shrink(2)
+        self.wait_for_health_clear(30)
+
+    def test_all_down(self):
+        """
+        That a health error is generated when FS has no active MDS.
+        """
+
+        self.fs.set_down()
+        self.wait_for_health("MDS_ALL_DOWN", 30)
+        self.fs.set_down(False)
+        self.wait_for_health_clear(30)
+        self.fs.set_down()
+        self.wait_for_health("MDS_ALL_DOWN", 30)
+        self.grow(1)
+        self.wait_for_health_clear(30)
+
+    def test_hole(self):
+        """
+        Test that a hole cannot be created in the FS ranks.
+        """
+
+        fscid = self.fs.id
+
+        self.grow(2)
+
+        self.fs.set_max_mds(1)
+        log.info("status = {0}".format(self.fs.status()))
+
+        self.fs.set_max_mds(3)
+        # Don't wait for rank 1 to stop
+
+        self.fs.set_max_mds(2)
+        # Prevent another MDS from taking rank 1
+        # XXX This is a little racy because rank 1 may have stopped and a
+        #     standby assigned to rank 1 before joinable=0 is set.
+        self.fs.set_joinable(False) # XXX keep in mind changing max_mds clears this flag
+
+        try:
+            status = self.fs.wait_for_daemons(timeout=90)
+            raise RuntimeError("should not be able to successfully shrink cluster!")
+        except:
+            # could not shrink to max_mds=2 and reach 2 actives (because joinable=False)
+            status = self.fs.status()
+            ranks = set([info['rank'] for info in status.get_ranks(fscid)])
+            self.assertTrue(ranks == set([0]))
+        finally:
+            log.info("status = {0}".format(status))
+
 class TestFailover(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 2
