@@ -1581,9 +1581,27 @@ void MDSRank::stopping_start()
   dout(2) << "stopping_start" << dendl;
 
   if (mdsmap->get_num_in_mds() == 1 && !sessionmap.empty()) {
-    // we're the only mds up!
-    dout(0) << "we are the last MDS, and have mounted clients: we cannot flush our journal.  suicide!" << dendl;
-    suicide();
+    std::vector<Session*> victims;
+    const auto sessions = sessionmap.get_sessions();
+    for (const auto p : sessions)  {
+      if (!p.first.is_client()) {
+        continue;
+      }
+
+      Session *s = p.second;
+      victims.push_back(s);
+    }
+
+    dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
+    assert(!victims.empty());
+
+    C_GatherBuilder gather(g_ceph_context, new C_MDSInternalNoop);
+    for (const auto &s : victims) {
+      std::stringstream ss;
+      evict_client(s->get_client().v, false,
+                   g_conf->mds_session_blacklist_on_evict, ss, gather.new_sub());
+    }
+    gather.activate();
   }
 
   mdcache->shutdown_start();
