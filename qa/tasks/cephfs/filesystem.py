@@ -762,6 +762,7 @@ class Filesystem(MDSCluster):
                 elapsed += 1
 
             if elapsed > timeout:
+                log.info("status = {0}".format(status))
                 raise RuntimeError("Timed out waiting for MDS daemons to become healthy")
 
     def get_lone_mds_id(self):
