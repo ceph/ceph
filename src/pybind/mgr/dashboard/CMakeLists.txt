@@ -48,9 +48,9 @@ file(
   frontend/src/*/*/*/*/*/*.html)
 
 if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
-  set(npm_command npm run build -- --prod)
+  set(npm_command npx ng build --prod)
 else()
-  set(npm_command npm run build)
+  set(npm_command npx ng build)
 endif()
 
 add_custom_command(
