@@ -144,7 +144,7 @@ def format_device(device):
     process.run(command)
 
 
-def _normalize_mount_flags(flags):
+def _normalize_mount_flags(flags, extras=None):
     """
     Mount flag options have to be a single string, separated by a comma. If the
     flags are separated by spaces, or with commas and spaces in ceph.conf, the
@@ -159,20 +159,27 @@ def _normalize_mount_flags(flags):
         [" rw ,", "exec"]
 
     :param flags: A list of flags, or a single string of mount flags
+    :param extras: Extra set of mount flags, useful when custom devices like VDO need
+                   ad-hoc mount configurations
     """
     if isinstance(flags, list):
+        if extras:
+            flags.extend(extras)
         # ensure that spaces and commas are removed so that they can join
         # correctly
         return ','.join([f.strip().strip(',') for f in flags if f])
 
     # split them, clean them, and join them back again
     flags = flags.strip().split(' ')
+    if extras:
+        flags.extend(extras)
     return ','.join(
         [f.strip().strip(',') for f in flags if f]
     )
 
 
-def mount_osd(device, osd_id):
+def mount_osd(device, osd_id, **kw):
+    is_vdo = kw.get('is_vdo', 0)
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     command = ['mount', '-t', 'xfs', '-o']
     flags = conf.ceph.get_list(
