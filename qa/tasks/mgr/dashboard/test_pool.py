@@ -31,6 +31,7 @@ class PoolTest(DashboardTestCase):
         for pool in data:
             self.assertIn('pool_name', pool)
             self.assertIn('type', pool)
+            self.assertIn('application_metadata', pool)
             self.assertIn('flags', pool)
             self.assertIn('flags_names', pool)
             self.assertNotIn('stats', pool)
@@ -61,6 +62,7 @@ class PoolTest(DashboardTestCase):
         for pool in data:
             self.assertIn('pool_name', pool)
             self.assertIn('type', pool)
+            self.assertIn('application_metadata', pool)
             self.assertIn('flags', pool)
             self.assertIn('stats', pool)
             self.assertIn('flags_names', pool)
@@ -93,7 +95,7 @@ class PoolTest(DashboardTestCase):
                         self.assertEqual(pool[k], int(v), '{}: {} != {}'.format(k, pool[k], v))
                     elif k == 'application_metadata':
                         self.assertEqual(pool[k],
-                                         {name: {} for name in data['application_metadata'].split(',')})
+                                         data['application_metadata'].split(','))
                     elif k == 'pool':
                         self.assertEqual(pool['pool_name'], v)
                     elif k in ['compression_mode', 'compression_algorithm',
