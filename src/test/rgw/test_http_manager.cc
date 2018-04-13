@@ -53,9 +53,11 @@ int main(int argc, char** argv)
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
-  curl_global_init(CURL_GLOBAL_ALL);
+  rgw_http_client_init(cct->get());
+  rgw_setup_saved_curl_handles();
   ::testing::InitGoogleTest(&argc, argv);
   int r = RUN_ALL_TESTS();
-  curl_global_cleanup();
+  rgw_release_all_curl_handles();
+  rgw_http_client_cleanup();
   return r;
 }
