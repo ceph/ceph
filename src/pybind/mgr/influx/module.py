@@ -79,7 +79,7 @@ class Module(MgrModule):
     def get_df_stats(self):
         df = self.get("df")
         data = []
-
+        timestamp = datetime.utcnow().isoformat() + 'Z'
         df_types = [
             'bytes_used',
             'kb_used',
@@ -158,7 +158,7 @@ class Module(MgrModule):
 
     def get_daemon_stats(self):
         data = []
-
+        timestamp = datetime.utcnow().isoformat() + 'Z'
         for daemon, counters in self.get_all_perf_counters().iteritems():
             svc_type, svc_id = daemon.split(".")
             metadata = self.get_metadata(svc_type, svc_id)
