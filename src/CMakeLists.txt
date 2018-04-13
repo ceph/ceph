@@ -1078,6 +1078,15 @@ if(WITH_RADOSGW)
       APPEND PROPERTY COMPILE_DEFINITIONS CRYPTO_LIB="${LIBCRYPTO_SONAME}")
   endif()
 
+  if (OPENSSL_FOUND)
+    # Use cmake to determine openssl version, a TODO is to make
+    # civetweb itself do this based on openssl_api_compat strings
+    if (NOT (OPENSSL_VERSION VERSION_LESS "1.1"))
+      message(STATUS "Setting civetweb to use OPENSSL >= 1.1")
+      set_property(TARGET civetweb_common_objs
+        APPEND PROPERTY COMPILE_DEFINITIONS OPENSSL_API_1_1=1)
+    endif()
+  endif(OPENSSL_FOUND)
   add_subdirectory(rgw)
 
 endif(WITH_RADOSGW)
