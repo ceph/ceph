@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=too-many-arguments,too-many-locals,unused-argument
+# pylint: disable=too-many-arguments,too-many-locals,unused-argument,
+# pylint: disable=too-many-statements,too-many-branches
 from __future__ import absolute_import
 
 import math
@@ -121,7 +122,7 @@ class Rbd(RESTController):
                                   "deep-flatten", "journaling"])
 
     @classmethod
-    def _rbd_disk_usage(cls, image, snaps):
+    def _rbd_disk_usage(cls, image, snaps, whole_object=True):
         class DUCallback(object):
             def __init__(self):
                 self.used_size = 0
@@ -136,7 +137,8 @@ class Rbd(RESTController):
         for _, size, name in snaps:
             image.set_snap(name)
             du_callb = DUCallback()
-            image.diff_iterate(0, size, prev_snap, du_callb, whole_object=True)
+            image.diff_iterate(0, size, prev_snap, du_callb,
+                               whole_object=whole_object)
             snap_map[name] = du_callb.used_size
             total_used_size += du_callb.used_size
             prev_snap = name
@@ -144,90 +146,97 @@ class Rbd(RESTController):
         return total_used_size, snap_map
 
     def _rbd_image(self, ioctx, pool_name, image_name):
-        img = rbd.Image(ioctx, image_name)
-        stat = img.stat()
-        stat['name'] = image_name
-        stat['id'] = img.id()
-        stat['pool_name'] = pool_name
-        features = img.features()
-        stat['features'] = features
-        stat['features_name'] = _format_bitmask(features)
+        with rbd.Image(ioctx, image_name) as img:
+            stat = img.stat()
+            stat['name'] = image_name
+            stat['id'] = img.id()
+            stat['pool_name'] = pool_name
+            features = img.features()
+            stat['features'] = features
+            stat['features_name'] = _format_bitmask(features)
 
-        # the following keys are deprecated
-        del stat['parent_pool']
-        del stat['parent_name']
+            # the following keys are deprecated
+            del stat['parent_pool']
+            del stat['parent_name']
 
-        stat['timestamp'] = "{}Z".format(img.create_timestamp().isoformat())
+            stat['timestamp'] = "{}Z".format(img.create_timestamp()
+                                             .isoformat())
 
-        stat['stripe_count'] = img.stripe_count()
-        stat['stripe_unit'] = img.stripe_unit()
+            stat['stripe_count'] = img.stripe_count()
+            stat['stripe_unit'] = img.stripe_unit()
 
-        data_pool_name = CephService.get_pool_name_from_id(img.data_pool_id())
-        if data_pool_name == pool_name:
-            data_pool_name = None
-        stat['data_pool'] = data_pool_name
+            data_pool_name = CephService.get_pool_name_from_id(
+                img.data_pool_id())
+            if data_pool_name == pool_name:
+                data_pool_name = None
+            stat['data_pool'] = data_pool_name
 
-        try:
-            parent_info = img.parent_info()
-            stat['parent'] = {
-                'pool_name': parent_info[0],
-                'image_name': parent_info[1],
-                'snap_name': parent_info[2]
-            }
-        except rbd.ImageNotFound:
-            # no parent image
-            stat['parent'] = None
+            try:
+                parent_info = img.parent_info()
+                stat['parent'] = {
+                    'pool_name': parent_info[0],
+                    'image_name': parent_info[1],
+                    'snap_name': parent_info[2]
+                }
+            except rbd.ImageNotFound:
+                # no parent image
+                stat['parent'] = None
 
-        # snapshots
-        stat['snapshots'] = []
-        for snap in img.list_snaps():
-            snap['timestamp'] = "{}Z".format(img.get_snap_timestamp(snap['id']).isoformat())
-            snap['is_protected'] = img.is_protected_snap(snap['name'])
-            snap['used_bytes'] = None
-            snap['children'] = []
-            img.set_snap(snap['name'])
-            for child_pool_name, child_image_name in img.list_children():
-                snap['children'].append({
-                    'pool_name': child_pool_name,
-                    'image_name': child_image_name
-                })
-            stat['snapshots'].append(snap)
+            # snapshots
+            stat['snapshots'] = []
+            for snap in img.list_snaps():
+                snap['timestamp'] = "{}Z".format(
+                    img.get_snap_timestamp(snap['id']).isoformat())
+                snap['is_protected'] = img.is_protected_snap(snap['name'])
+                snap['used_bytes'] = None
+                snap['children'] = []
+                img.set_snap(snap['name'])
+                for child_pool_name, child_image_name in img.list_children():
+                    snap['children'].append({
+                        'pool_name': child_pool_name,
+                        'image_name': child_image_name
+                    })
+                stat['snapshots'].append(snap)
 
-        # disk usage
-        if 'fast-diff' in stat['features_name']:
-            snaps = [(s['id'], s['size'], s['name']) for s in stat['snapshots']]
-            snaps.sort(key=lambda s: s[0])
-            snaps += [(snaps[-1][0]+1 if snaps else 0, stat['size'], None)]
-            total_used_bytes, snaps_used_bytes = self._rbd_disk_usage(img, snaps)
-            stat['total_disk_usage'] = total_used_bytes
-            for snap, used_bytes in snaps_used_bytes.items():
-                if snap is None:
-                    stat['disk_usage'] = used_bytes
-                    continue
-                for ss in stat['snapshots']:
-                    if ss['name'] == snap:
-                        ss['disk_usage'] = used_bytes
-                        break
-        else:
-            stat['total_disk_usage'] = None
-            stat['disk_usage'] = None
+            # disk usage
+            img_flags = img.flags()
+            if 'fast-diff' in stat['features_name'] and \
+                    not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags:
+                snaps = [(s['id'], s['size'], s['name'])
+                         for s in stat['snapshots']]
+                snaps.sort(key=lambda s: s[0])
+                snaps += [(snaps[-1][0]+1 if snaps else 0, stat['size'], None)]
+                total_prov_bytes, snaps_prov_bytes = self._rbd_disk_usage(
+                    img, snaps, True)
+                stat['total_disk_usage'] = total_prov_bytes
+                for snap, prov_bytes in snaps_prov_bytes.items():
+                    if snap is None:
+                        stat['disk_usage'] = prov_bytes
+                        continue
+                    for ss in stat['snapshots']:
+                        if ss['name'] == snap:
+                            ss['disk_usage'] = prov_bytes
+                            break
+            else:
+                stat['total_disk_usage'] = None
+                stat['disk_usage'] = None
 
-        return stat
+            return stat
 
     @ViewCache()
     def _rbd_pool_list(self, pool_name):
         rbd_inst = rbd.RBD()
-        ioctx = mgr.rados.open_ioctx(pool_name)
-        names = rbd_inst.list(ioctx)
-        result = []
-        for name in names:
-            try:
-                stat = self._rbd_image(ioctx, pool_name, name)
-            except rbd.ImageNotFound:
-                # may have been removed in the meanwhile
-                continue
-            result.append(stat)
-        return result
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            names = rbd_inst.list(ioctx)
+            result = []
+            for name in names:
+                try:
+                    stat = self._rbd_image(ioctx, pool_name, name)
+                except rbd.ImageNotFound:
+                    # may have been removed in the meanwhile
+                    continue
+                result.append(stat)
+            return result
 
     def _rbd_list(self, pool_name=None):
         if pool_name:
