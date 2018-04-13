@@ -289,6 +289,7 @@ Requires:      librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:      ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
 Requires:      cryptsetup
+Requires:      e2fsprogs
 Requires:      findutils
 Requires:      grep
 Requires:      logrotate
