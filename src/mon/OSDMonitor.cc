@@ -1076,8 +1076,14 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     encode(pending_creatings, creatings_bl);
     t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
 
-    // remove any old POOL_CREATING flags
+    // remove any old (or incompat) POOL_CREATING flags
     for (auto& i : tmp.get_pools()) {
+      if (tmp.require_osd_release < CEPH_RELEASE_NAUTILUS) {
+	// pre-nautilus OSDMaps shouldn't get this flag.
+	if (pending_inc.new_pools.count(i.first)) {
+	  pending_inc.new_pools[i.first].flags &= ~pg_pool_t::FLAG_CREATING;
+	}
+      }
       if (i.second.has_flag(pg_pool_t::FLAG_CREATING) &&
 	  !pending_creatings.still_creating_pool(i.first)) {
 	dout(10) << __func__ << " done creating pool " << i.first
