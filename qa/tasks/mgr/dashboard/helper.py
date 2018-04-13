@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212
+# pylint: disable=W0212,too-many-return-statements
 from __future__ import absolute_import
 
 import json
@@ -301,14 +301,14 @@ JList = namedtuple('JList', ['elem_typ'])
 JTuple = namedtuple('JList', ['elem_typs'])
 
 
-class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown'])):
-    def __new__(cls, sub_elems, allow_unknown=False):
+class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none'])):
+    def __new__(cls, sub_elems, allow_unknown=False, none=False):
         """
         :type sub_elems: dict[str, JAny | JLeaf | JList | JObj]
         :type allow_unknown: bool
         :return:
         """
-        return super(JObj, cls).__new__(cls, sub_elems, allow_unknown)
+        return super(JObj, cls).__new__(cls, sub_elems, allow_unknown, none)
 
 
 JAny = namedtuple('JAny', ['none'])
@@ -344,6 +344,10 @@ def _validate_json(val, schema, path=[]):
         return all(_validate_json(val[i], typ, path + [i])
                    for i, typ in enumerate(schema.elem_typs))
     if isinstance(schema, JObj):
+        if val is None and schema.none:
+            return True
+        elif val is None:
+            raise _ValError('val is None', path)
         missing_keys = set(schema.sub_elems.keys()).difference(set(val.keys()))
         if missing_keys:
             raise _ValError('missing keys: {}'.format(missing_keys), path)
