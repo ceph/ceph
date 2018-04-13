@@ -160,6 +160,7 @@ class Prepare(object):
         if device_name is None:
             return '', '', tags
         tags['ceph.type'] = device_type
+        tags['ceph.vdo'] = api.is_vdo(device_name)
         lv = self.get_lv(device_name)
         if lv:
             uuid = lv.lv_uuid
@@ -263,6 +264,7 @@ class Prepare(object):
             tags['ceph.data_uuid'] = data_lv.lv_uuid
             tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
             tags['ceph.encrypted'] = encrypted
+            tags['ceph.vdo'] = api.is_vdo(data_lv.lv_path)
 
             journal_device, journal_uuid, tags = self.setup_device('journal', args.journal, tags)
 
@@ -286,6 +288,7 @@ class Prepare(object):
             tags['ceph.block_uuid'] = block_lv.lv_uuid
             tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
             tags['ceph.encrypted'] = encrypted
+            tags['ceph.vdo'] = api.is_vdo(block_lv.lv_path)
 
             wal_device, wal_uuid, tags = self.setup_device('wal', args.block_wal, tags)
             db_device, db_uuid, tags = self.setup_device('db', args.block_db, tags)
