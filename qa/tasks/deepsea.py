@@ -205,11 +205,17 @@ class DeepSea(Task):
                 'sudo', 'sh', '-c',
                 'systemctl stop ceph-osd.target ; sleep 10'
                 ])
-            self.log.info("unmounting OSD data devices on {}"
+            self.log.info("unmounting OSD partitions on {}"
                 .format(_remote.hostname))
+            # bluestore XFS partition is vd?1 - unmount up to five OSDs
             _remote.run(args=[
                 'sudo', 'sh', '-c',
-                'for f in vdb2 vdc2 ; do test -b /dev/$f && umount /dev/$f || true ; done'
+                'for f in vdb1 vdc1 vdd1 vde1 vdf1 ; do test -b /dev/$f && umount /dev/$f || true ; done'
+                ])
+            # filestore XFS partition is vd?2 - unmount up to five OSDs
+            _remote.run(args=[
+                'sudo', 'sh', '-c',
+                'for f in vdb2 vdc2 vdd2 vde2 vdf2; do test -b /dev/$f && umount /dev/$f || true ; done'
                 ])
 
     def gather_logs(self, logdir):
