@@ -293,6 +293,19 @@ int RGWBucketReshard::create_new_bucket_instance(int new_num_shards,
   return ::create_new_bucket_instance(store, new_num_shards, bucket_info, bucket_attrs, new_bucket_info);
 }
 
+int RGWBucketReshard::cancel()
+{
+  int ret = lock_bucket();
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = clear_resharding();
+
+  unlock_bucket();
+  return 0;
+}
+
 class BucketInfoReshardUpdate
 {
   RGWRados *store;
@@ -664,7 +677,10 @@ int RGWReshard::get(cls_rgw_reshard_entry& entry)
 
   int ret = cls_rgw_reshard_get(store->reshard_pool_ctx, logshard_oid, entry);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant << " bucket=" << entry.bucket_name << dendl;
+    if (ret != -ENOENT) {
+      lderr(store->ctx()) << "ERROR: failed to get entry from reshard log, oid=" << logshard_oid << " tenant=" << entry.tenant <<
+	" bucket=" << entry.bucket_name << dendl;
+    }
     return ret;
   }
 
