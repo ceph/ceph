@@ -7,5 +7,5 @@ workload:
         branch: luminous
         clients:
           client.0:
-            - rbd/test_librbd_python.sh
+            - rbd/test_librbd_python-upgrade.sh
     - print: "**** done rbd/test_librbd_python.sh 2-workload"
