@@ -8,8 +8,6 @@ from . import ApiController, BaseController, RESTController, AuthRequired
 from .. import logger
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
-from ..rest_client import RequestException
-from ..exceptions import NoCredentialsException
 
 
 @ApiController('rgw')
@@ -73,19 +71,17 @@ class RgwProxy(BaseController):
         try:
             rgw_client = RgwClient.admin_instance()
 
-        except NoCredentialsException as e:
-            cherrypy.response.headers['Content-Type'] = 'application/json'
-            cherrypy.response.status = 401
-            return json.dumps({'message': str(e)}).encode('utf-8')
+            method = cherrypy.request.method
+            data = None
 
-        method = cherrypy.request.method
-        data = None
+            if cherrypy.request.body.length:
+                data = cherrypy.request.body.read()
 
-        if cherrypy.request.body.length:
-            data = cherrypy.request.body.read()
-
-        try:
             return rgw_client.proxy(method, path, params, data)
-        except RequestException as e:
-            cherrypy.response.status = e.status_code
-            return e.content
+        except Exception as e:  # pylint: disable=broad-except
+            # Always use status code 500 and NOT the status that may delivered
+            # by the exception. That's because we do not want to forward e.g.
+            # 401 or 404 that may trigger unwanted actions in the UI.
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 500
+            return json.dumps({'detail': str(e)}).encode('utf-8')
