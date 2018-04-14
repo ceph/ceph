@@ -134,6 +134,18 @@ class TestClusterResize(CephFSTestCase):
         finally:
             log.info("status = {0}".format(status))
 
+    def test_thrash(self):
+        """
+        Test that thrashing max_mds does not fail.
+        """
+
+        max_mds = 2
+        for i in range(0, 100):
+            self.fs.set_max_mds(max_mds)
+            max_mds = (max_mds+1)%3+1
+
+        self.fs.wait_for_daemons(timeout=90)
+
 class TestFailover(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 2
