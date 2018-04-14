@@ -1776,10 +1776,10 @@ bool OSDMonitor::_prune_sanitize_options() const
     r = false;
   }
 
-  if (txsize <= prune_interval) {
+  if (txsize < prune_interval - 1) {
     derr << __func__
          << "'mon_osdmap_full_prune_txsize' (" << txsize
-         << ") <= 'mon_osdmap_full_prune_interval' (" << prune_interval
+         << ") < 'mon_osdmap_full_prune_interval-1' (" << prune_interval - 1
          << "); abort." << dendl;
     r = false;
   }
