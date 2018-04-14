@@ -51,9 +51,11 @@ EOF
 	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
 	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
 
-    $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+    if [ -f /usr/bin/g++-${old} ]; then
+      $SUDO update-alternatives \
+  	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
+  	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+    fi
 
     $SUDO update-alternatives --auto gcc
 
