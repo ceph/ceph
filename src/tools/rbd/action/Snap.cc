@@ -114,7 +114,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       }
       f->close_section();
     } else {
-      t << s->id << s->name << stringify(prettybyte_t(s->size)) << tt_str;
+      t << s->id << s->name << stringify(byte_u_t(s->size)) << tt_str;
 
       if (all_snaps) {
 	ostringstream oss;
