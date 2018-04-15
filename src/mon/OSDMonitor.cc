@@ -4083,6 +4083,10 @@ unsigned OSDMonitor::scan_for_creating_pgs(
   unsigned queued = 0;
   for (auto& p : pools) {
     int64_t poolid = p.first;
+    if (creating_pgs->created_pools.count(poolid)) {
+      dout(10) << __func__ << " already created " << poolid << dendl;
+      continue;
+    }
     const pg_pool_t& pool = p.second;
     int ruleno = osdmap.crush->find_rule(pool.get_crush_rule(),
 					 pool.get_type(), pool.get_size());
@@ -4103,10 +4107,9 @@ unsigned OSDMonitor::scan_for_creating_pgs(
     }
     dout(10) << __func__ << " queueing pool create for " << poolid
 	     << " " << pool << dendl;
-    if (creating_pgs->create_pool(poolid, pool.get_pg_num(),
-				  created, modified)) {
-      queued++;
-    }
+    creating_pgs->create_pool(poolid, pool.get_pg_num(),
+			      created, modified);
+    queued++;
   }
   return queued;
 }
