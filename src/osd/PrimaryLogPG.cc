@@ -3392,6 +3392,74 @@ void PrimaryLogPG::do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing
   } 
 }
 
+struct RefCountCallback : public Context {
+public:
+  PrimaryLogPG *pg;
+  PrimaryLogPG::OpContext *ctx;
+  OSDOp& osd_op;
+  epoch_t last_peering_reset;
+    
+  RefCountCallback(PrimaryLogPG *pg, PrimaryLogPG::OpContext *ctx,
+                  OSDOp &osd_op, epoch_t lpr) 
+    : pg(pg), ctx(ctx), osd_op(osd_op), last_peering_reset(lpr)
+  {}
+  void finish(int r) override {
+    pg->lock();
+    if (last_peering_reset == pg->get_last_peering_reset()) {
+      if (r >= 0) {
+       osd_op.rval = 0;
+       pg->execute_ctx(ctx);
+      } else {
+       if (ctx->op) {
+         pg->osd->reply_op_error(ctx->op, r);
+       }
+       pg->close_op_ctx(ctx);
+      }
+    }
+    pg->unlock();
+  }
+};
+
+struct SetManifestFinisher : public PrimaryLogPG::OpFinisher {
+  OSDOp& osd_op;
+
+  SetManifestFinisher(OSDOp& osd_op) : osd_op(osd_op) {
+  }
+
+  int execute() override {
+    return osd_op.rval;
+  }
+};
+
+void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
+                                     SnapContext snapc, bool get, Context *cb, uint64_t offset)
+{
+  unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
+                   CEPH_OSD_FLAG_RWORDERED;                      
+
+  dout(10) << __func__ << " Start refcount for " << soid << dendl;
+    
+  ObjectOperation obj_op;
+  bufferlist in;
+  if (get) {             
+    cls_chunk_refcount_get_op call;
+    call.source = obc->obs.oi.soid;
+    ::encode(call, in);                             
+    obj_op.call("refcount", "chunk_get", in);         
+  } else {                    
+    cls_chunk_refcount_put_op call;                
+    call.source = obc->obs.oi.soid;
+    ::encode(call, in);          
+    obj_op.call("refcount", "chunk_put", in);         
+  }                                                     
+  
+  unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
+  osd->objecter->mutate(
+    soid.oid, oloc, obj_op, snapc,
+    ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+    flags, new C_OnFinisher(cb, osd->objecter_finishers[n]));
+}  
+
 void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 					 uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
 					 uint64_t req_total_len, bool write_ordered)
@@ -6496,6 +6564,27 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
       {
+	if (oi.has_manifest()) {
+	  if ((oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE) && oi.manifest.is_redirect()) {
+	    ctx->register_on_commit(
+	      [oi, ctx, this](){
+	      object_locator_t target_oloc(oi.manifest.redirect_target);
+	      refcount_manifest(ctx->obc, target_oloc, oi.manifest.redirect_target, 
+				SnapContext(), false, NULL, 0);
+	    });
+	  } else if (oi.manifest.is_chunked()) {
+	    ctx->register_on_commit(
+	      [oi, ctx, this](){
+	      for (auto p : oi.manifest.chunk_map) {
+		if (p.second.flags & chunk_info_t::FLAG_HAS_REFERENCE) {
+		  object_locator_t target_oloc(p.second.oid);
+		  refcount_manifest(ctx->obc, target_oloc, p.second.oid, 
+				    SnapContext(), false, NULL, p.first);
+		}
+	      }
+	    });
+	  } 
+	} 
 	result = _delete_oid(ctx, false, ctx->ignore_cache);
       }
       break;
@@ -6669,36 +6758,63 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
-	if (!oi.has_manifest() && !oi.manifest.is_redirect())
-	  ctx->delta_stats.num_objects_manifest++;
 
-        oi.set_flag(object_info_t::FLAG_MANIFEST);
-	oi.manifest.redirect_target = target;
-	oi.manifest.type = object_manifest_t::TYPE_REDIRECT;
-	t->truncate(soid, 0);
-	if (oi.is_omap() && pool.info.supports_omap()) {
-	  t->omap_clear(soid);
-	  obs.oi.clear_omap_digest();
-	  obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+	bool need_reference = (osd_op.op.flags & CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+	bool has_reference = (oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE);
+	if (has_reference) {
+	  result = -EINVAL;
+	  dout(5) << " the object is already a manifest " << dendl;
+	  break;
 	}
-        ctx->delta_stats.num_bytes -= oi.size;
-	oi.size = 0;
-	oi.new_object();
-	oi.user_version = target_version;
-	ctx->user_at_version = target_version;
-	/* rm_attrs */
-	map<string,bufferlist> rmattrs;
-	result = getattrs_maybe_cache(ctx->obc,
-		    &rmattrs);
-	if (result < 0) {
-	  return result;
+	if (op_finisher == nullptr && need_reference) {
+	  // start
+	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
+	    new SetManifestFinisher(osd_op));
+	  RefCountCallback *fin = new RefCountCallback(
+	    this, ctx, osd_op, get_last_peering_reset());
+	  refcount_manifest(ctx->obc, target_oloc, target, SnapContext(),
+			    true, fin, 0);
+	  result = -EINPROGRESS;
+	} else {
+	  // finish
+	  if (op_finisher) {
+	    result = op_finisher->execute();
+	    assert(result == 0);
+	  }
+
+	  if (!oi.has_manifest() && !oi.manifest.is_redirect())
+	    ctx->delta_stats.num_objects_manifest++;
+
+	  oi.set_flag(object_info_t::FLAG_MANIFEST);
+	  oi.manifest.redirect_target = target;
+	  oi.manifest.type = object_manifest_t::TYPE_REDIRECT;
+	  t->truncate(soid, 0);
+	  if (oi.is_omap() && pool.info.supports_omap()) {
+	    t->omap_clear(soid);
+	    obs.oi.clear_omap_digest();
+	    obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+	  }
+	  ctx->delta_stats.num_bytes -= oi.size;
+	  oi.size = 0;
+	  oi.new_object();
+	  oi.user_version = target_version;
+	  ctx->user_at_version = target_version;
+	  /* rm_attrs */
+	  map<string,bufferlist> rmattrs;
+	  result = getattrs_maybe_cache(ctx->obc, &rmattrs);
+	  if (result < 0) {
+	    return result;
+	  }
+	  map<string, bufferlist>::iterator iter;
+	  for (iter = rmattrs.begin(); iter != rmattrs.end(); ++iter) {
+	    const string& name = iter->first;
+	    t->rmattr(soid, name);
+	  }
+	  dout(10) << "set-redirect oid:" << oi.soid << " user_version: " << oi.user_version << dendl;
+	  if (op_finisher) {
+	    ctx->op_finishers.erase(ctx->current_osd_subop_num);
+	  }
 	}
-	map<string, bufferlist>::iterator iter;
-	for (iter = rmattrs.begin(); iter != rmattrs.end(); ++iter) {
-	  const string& name = iter->first;
-	  t->rmattr(soid, name);
-	}
-	dout(10) << "set-redirect oid:" << oi.soid << " user_version: " << oi.user_version << dendl;
       }
 
       break;
@@ -6759,20 +6875,47 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	hobject_t target(tgt_name, tgt_oloc.key, snapid_t(),
 			 raw_pg.ps(), raw_pg.pool(),
 			 tgt_oloc.nspace);
-	chunk_info.flags = chunk_info_t::FLAG_MISSING;
-	chunk_info.oid = target;
-	chunk_info.offset = tgt_offset;
-	chunk_info.length= src_length;
-	oi.manifest.chunk_map[src_offset] = chunk_info;
-	if (!oi.has_manifest() && !oi.manifest.is_chunked()) 
-	  ctx->delta_stats.num_objects_manifest++;
+	bool need_reference = (osd_op.op.flags & CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+	bool has_reference = (oi.manifest.chunk_map.find(src_offset) != oi.manifest.chunk_map.end()) &&
+			     (oi.manifest.chunk_map[src_offset].flags & chunk_info_t::FLAG_HAS_REFERENCE);
+	if (has_reference) {
+	  result = -EINVAL;
+	  dout(5) << " the object is already a manifest " << dendl;
+	  break;
+	}
+	if (op_finisher == nullptr && need_reference) {
+	  // start
+	  ctx->op_finishers[ctx->current_osd_subop_num].reset(
+	    new SetManifestFinisher(osd_op));
+	  RefCountCallback *fin = new RefCountCallback(
+	    this, ctx, osd_op, get_last_peering_reset());
+	  refcount_manifest(ctx->obc, tgt_oloc, target, SnapContext(),
+			    true, fin, src_offset);
+	  result = -EINPROGRESS;
+	} else {
+	  if (op_finisher) {
+	    result = op_finisher->execute();
+	    assert(result == 0);
+	  }
 
-        oi.set_flag(object_info_t::FLAG_MANIFEST);
-        oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
-        ctx->modify = true;
+	  chunk_info_t chunk_info;
+	  chunk_info.flags = chunk_info_t::FLAG_MISSING;
+	  chunk_info.oid = target;
+	  chunk_info.offset = tgt_offset;
+	  chunk_info.length= src_length;
+	  oi.manifest.chunk_map[src_offset] = chunk_info;
+	  if (!oi.has_manifest() && !oi.manifest.is_chunked()) 
+	    ctx->delta_stats.num_objects_manifest++;
+	  oi.set_flag(object_info_t::FLAG_MANIFEST);
+	  oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
+	  ctx->modify = true;
 
-	dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
-		 << " chunk_info: " << chunk_info << dendl;
+	  dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
+		   << " chunk_info: " << chunk_info << dendl;
+	  if (op_finisher) {
+	    ctx->op_finishers.erase(ctx->current_osd_subop_num);
+	  }
+	}
       }
 
       break;

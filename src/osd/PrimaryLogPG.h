@@ -27,6 +27,7 @@
 #include "common/sharedptr_registry.hpp"
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
+#include "cls/refcount/cls_refcount_ops.h"
 
 class CopyFromCallback;
 class PromoteCallback;
@@ -1405,11 +1406,14 @@ protected:
 			     uint64_t last_offset);
   void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
 			     uint64_t offset, uint64_t last_offset);
+  void refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
+                         SnapContext snapc, bool get, Context *cb, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
   friend class C_CopyChunk;
   friend struct C_ManifestFlush;
+  friend struct RefCountCallback;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
