@@ -51,6 +51,7 @@ int main(int argc, const char **argv)
   }
   if (ceph_argparse_need_usage(args)) {
     usage();
+    exit(0);
   }
 
   map<string,string> defaults = {
