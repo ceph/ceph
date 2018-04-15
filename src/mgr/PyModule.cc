@@ -26,6 +26,7 @@
 
 // Courtesy of http://stackoverflow.com/questions/1418015/how-to-get-python-exception-text
 #include <boost/python.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include "include/assert.h"  // boost clobbers this
 // decode a Python exception into a string
 std::string handle_pyerror()
@@ -383,6 +384,15 @@ int PyModule::load_commands()
     PyObject *pPerm = PyDict_GetItemString(command, "perm");
     assert(pPerm != nullptr);
     item.perm = PyString_AsString(pPerm);
+
+    item.polling = false;
+    PyObject *pPoll = PyDict_GetItemString(command, "poll");
+    if (pPoll) {
+      std::string polling = PyString_AsString(pPoll);
+      if (boost::iequals(polling, "true")) {
+        item.polling = true;
+      }
+    }
 
     item.module_name = module_name;
 

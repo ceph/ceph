@@ -23,8 +23,9 @@ import threading
 import uuid
 
 
+# Flags are from MonCommand.h
 FLAG_MGR = 8   # command is intended for mgr
-
+FLAG_POLL = 16 # command is intended to be ran continuously by the client
 
 try:
     basestring
@@ -999,6 +1000,9 @@ def validate(args, signature, flags=0, partial=False):
     if flags & FLAG_MGR:
         d['target'] = ('mgr','')
 
+    if flags & FLAG_POLL:
+        d['poll'] = True
+
     # Finally, success
     return d
 
@@ -1239,7 +1243,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                  verbose=False):
     """
     Send a command to a daemon using librados's
-    mon_command, osd_command, or pg_command.  Any bulk input data
+    mon_command, osd_command, mgr_command, or pg_command.  Any bulk input data
     comes in inbuf.
 
     Returns (ret, outbuf, outs); ret is the return code, outbuf is
@@ -1351,7 +1355,6 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
             except:
                 # use the target we were originally given
                 pass
-
         ret, outbuf, outs = send_command_retry(cluster,
                                                target, [json.dumps(cmddict)],
                                                inbuf, timeout, verbose)

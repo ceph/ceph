@@ -112,6 +112,8 @@
  *  OBSOLETE  - command is considered obsolete
  *  DEPRECATED - command is considered deprecated
  *  MGR       - command goes to ceph-mgr (for luminous+)
+ *  POLL      - command is intended to be called periodically by the
+ *              client (see iostat)
  *
  * A command should always be first considered DEPRECATED before being
  * considered OBSOLETE, giving due consideration to users and conforming
