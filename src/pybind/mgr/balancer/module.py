@@ -747,11 +747,13 @@ class Module(MgrModule):
         for root, wm in pe.target_by_root.iteritems():
             for osd in wm.iterkeys():
                 if osd in visited:
-                    overlap[osd] = 1
-                visited[osd] = 1
+                    if osd not in overlap:
+                        overlap[osd] = [ visited[osd] ]
+                    overlap[osd].append(root)
+                visited[osd] = root
         if len(overlap) > 0:
             detail = 'Some osds belong to multiple subtrees: %s' % \
-                     overlap.keys()
+                     overlap
             self.log.error(detail)
             return -errno.EOPNOTSUPP, detail
 
