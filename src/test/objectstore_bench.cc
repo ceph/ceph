@@ -47,7 +47,7 @@ struct byte_units {
 
 bool byte_units::parse(const std::string &val, std::string *err)
 {
-  v = strict_sistrtoll(val.c_str(), err);
+  v = strict_iecstrtoll(val.c_str(), err);
   return err->empty();
 }
 

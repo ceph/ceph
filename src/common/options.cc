@@ -249,7 +249,7 @@ int Option::parse_value(
     }
     *out = uuid;
   } else if (type == Option::TYPE_SIZE) {
-    Option::size_t sz{strict_sistrtoll(val.c_str(), error_message)};
+    Option::size_t sz{strict_iecstrtoll(val.c_str(), error_message)};
     if (!error_message->empty()) {
       return -EINVAL;
     }
@@ -1555,7 +1555,7 @@ std::vector<Option> get_global_options() {
     .set_default(30)
     .set_description(""),
 
-    Option("mon_data_size_warn", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_data_size_warn", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(15_G)
     .set_description(""),
 
