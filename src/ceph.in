@@ -658,6 +658,9 @@ def ping_monitor(cluster_handle, name, timeout):
         print('"ping" expects a monitor to ping; try "ping mon.<id>"', file=sys.stderr)
         return 1
 
+    if timeout != None:
+        cluster_handle.conf_set("client_mount_timeout", str(timeout))
+
     mon_id = name[len('mon.'):]
     if mon_id == '*':
         run_in_thread(cluster_handle.connect, timeout=timeout)
