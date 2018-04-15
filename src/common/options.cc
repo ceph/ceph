@@ -2862,7 +2862,8 @@ std::vector<Option> get_global_options() {
 
     Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(6)
-    .set_description(""),
+    .set_min_max(1, 86400)
+    .set_description("Interval (in seconds) between peer pings"),
 
     Option("osd_heartbeat_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(20)
@@ -2878,7 +2879,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_heartbeat_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2000)
-    .set_description(""),
+    .set_description("Minimum heartbeat packet size in bytes. Will add dummy payload if heartbeat packet is smaller than this."),
 
     Option("osd_pg_max_concurrent_snap_trims", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2)
