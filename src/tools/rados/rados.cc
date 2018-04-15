@@ -126,9 +126,9 @@ void usage(ostream& out)
 "   listwatchers <obj-name>          list the watchers of this object\n"
 "   set-alloc-hint <obj-name> <expected-object-size> <expected-write-size>\n"
 "                                    set allocation hint for an object\n"
-"   set-redirect <object A> --target-pool <caspool> <target object A>\n"
+"   set-redirect <object A> --target-pool <caspool> <target object A> [--with-reference]\n"
 "                                    set redirect target\n"
-"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset>\n"
+"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset> [--with-reference]\n"
 "                                    convert an object to chunked object\n"
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
 "\n"
@@ -1725,6 +1725,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool omap_key_valid = false;
   std::string omap_key;
   std::string omap_key_pretty;
+  bool with_reference = false;
 
   Rados rados;
   IoCtx io_ctx;
@@ -1939,6 +1940,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
                          (int (*)(int))isprint) != omap_key.end()) {
         omap_key_pretty = "(binary key)";
     }
+  }
+  i = opts.find("with-reference");
+  if (i != opts.end()) {
+    with_reference = true;
   }
 
   // open rados
@@ -3597,7 +3602,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     ObjectWriteOperation op;
-    op.set_redirect(target_obj, target_ctx, 0);
+    if (with_reference) {
+      op.set_redirect(target_obj, target_ctx, 0, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    } else {
+      op.set_redirect(target_obj, target_ctx, 0);
+    }
     ret = io_ctx.operate(nargs[1], &op);
     if (ret < 0) {
       cerr << "error set-redirect " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << cpp_strerror(ret) << std::endl;
@@ -3643,7 +3652,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     IoCtx target_ctx;
     ret = rados.ioctx_create(target, target_ctx);
     ObjectWriteOperation op;
-    op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset);
+    if (with_reference) {
+      op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    } else {
+      op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset);
+    }
     ret = io_ctx.operate(nargs[1], &op);
     if (ret < 0) {
       cerr << "error set-chunk " << pool_name << "/" << nargs[1] << " " << " offset " << offset
@@ -3908,6 +3921,8 @@ int main(int argc, const char **argv)
       opts["with-clones"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--omap-key-file", (char*)NULL)) {
       opts["omap-key-file"] = val;
+    } else if (ceph_argparse_flag(args, i, "--with-reference", (char*)NULL)) {
+      opts["with-reference"] = "true";
     } else {
       if (val[0] == '-')
         usage_exit();

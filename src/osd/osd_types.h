@@ -4567,6 +4567,7 @@ struct chunk_info_t {
   enum {
     FLAG_DIRTY = 1, 
     FLAG_MISSING = 2,
+    FLAG_HAS_REFERENCE = 4,
   };
   uint32_t offset;
   uint32_t length;
@@ -4582,6 +4583,9 @@ struct chunk_info_t {
     }
     if (flags & FLAG_MISSING) {
       r += "|missing";
+    }
+    if (flags & FLAG_HAS_REFERENCE) {
+      r += "|has_reference";
     }
     if (r.length())
       return r.substr(1);
@@ -4666,6 +4670,7 @@ struct object_info_t {
     FLAG_CACHE_PIN   = 1<<6, // pin the object in cache tier
     FLAG_MANIFEST    = 1<<7, // has manifest
     FLAG_USES_TMAP   = 1<<8, // deprecated; no longer used
+    FLAG_REDIRECT_HAS_REFERENCE = 1<<9, // has reference
   } flag_t;
 
   flag_t flags;
@@ -4700,6 +4705,8 @@ struct object_info_t {
       sv.insert(sv.end(), "cache_pin");
     if (flags & FLAG_MANIFEST)
       sv.insert(sv.end(), "manifest");
+    if (flags & FLAG_REDIRECT_HAS_REFERENCE)
+      sv.insert(sv.end(), "redirect_has_reference");
     return sv;
   }
   string get_flag_string() const {
