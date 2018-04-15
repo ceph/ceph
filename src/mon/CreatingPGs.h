@@ -58,18 +58,14 @@ struct creating_pgs_t {
     }
     return false;
   }
-  bool create_pool(int64_t poolid, uint32_t pg_num,
+  void create_pool(int64_t poolid, uint32_t pg_num,
 		   epoch_t created, utime_t modified) {
-    if (created_pools.count(poolid) == 0) {
-      auto& c = queue[poolid];
-      c.created = created;
-      c.modified = modified;
-      c.end = pg_num;
-      created_pools.insert(poolid);
-      return true;
-    } else {
-      return false;
-    }
+    ceph_assert(created_pools.count(poolid) == 0);
+    auto& c = queue[poolid];
+    c.created = created;
+    c.modified = modified;
+    c.end = pg_num;
+    created_pools.insert(poolid);
   }
   unsigned remove_pool(int64_t removed_pool) {
     const unsigned total = pgs.size();
