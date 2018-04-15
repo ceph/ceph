@@ -42,7 +42,8 @@ int main(int argc, const char **argv)
     exit(1);
   }
   if (ceph_argparse_need_usage(args)) {
-    usage_exit();
+    usage();
+    exit(0);
   }
 
   bool opt_version = false;
