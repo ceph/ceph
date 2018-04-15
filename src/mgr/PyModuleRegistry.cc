@@ -316,8 +316,12 @@ std::vector<MonCommand> PyModuleRegistry::get_commands() const
   std::vector<ModuleCommand> commands = get_py_commands();
   std::vector<MonCommand> result;
   for (auto &pyc: commands) {
+    uint64_t flags = MonCommand::FLAG_MGR;
+    if (pyc.polling) {
+      flags |= MonCommand::FLAG_POLL;
+    }
     result.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
-                        pyc.perm, "cli", MonCommand::FLAG_MGR});
+                        pyc.perm, "cli", flags});
   }
   return result;
 }

@@ -20,6 +20,7 @@ Foundation.  See file COPYING.
 """
 
 from __future__ import print_function
+from time import sleep
 import codecs
 import os
 import sys
@@ -42,6 +43,7 @@ CEPH_RELEASE_TYPE = "@CEPH_RELEASE_TYPE@"
 FLAG_NOFORWARD = (1 << 0)
 FLAG_OBSOLETE = (1 << 1)
 FLAG_DEPRECATED = (1 << 2)
+FLAG_POLL = (1 << 4)
 
 # priorities from src/common/perf_counters.h
 PRIO_CRITICAL = 10
@@ -317,6 +319,9 @@ def parse_cmdargs(args=None, target=''):
 
     parser.add_argument('--block', action='store_true',
                         help='block until completion (scrub and deep-scrub only)')
+    parser.add_argument('--period', '-p', default=1, type=float,
+                        help='polling period, default 1.0 second (for ' \
+                        'polling commands only)')
 
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
@@ -515,6 +520,41 @@ else:
                 return line
 
 
+def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
+    ''' Validate a command, and handle the polling flag '''
+
+    valid_dict = validate_command(sigdict, cmdargs, verbose)
+    # Validate input args against list of sigs
+    if valid_dict:
+        if parsed_args.output_format:
+            valid_dict['format'] = parsed_args.output_format
+        if verbose:
+            print("Submitting command: ", valid_dict, file=sys.stderr)
+    else:
+        return -errno.EINVAL, '', 'invalid command'
+
+    while True:
+        ret, outbuf, outs = json_command(cluster_handle, target=target, argdict=valid_dict,
+                inbuf=inbuf)
+        if 'poll' not in valid_dict or not valid_dict['poll']:
+            # Don't print here if it's not a polling command
+            break
+        if ret:
+            ret = abs(ret)
+            print('Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown')),
+                    file=sys.stderr)
+            break
+        if outbuf:
+            print(outbuf.decode('utf-8'))
+        if outs:
+            print(outs, file=sys.stderr)
+        if parsed_args.period <= 0:
+            break
+        sleep(parsed_args.period)
+
+    return ret, outbuf, outs
+
+
 def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
     """
     Do new-style command dance.
@@ -531,14 +571,10 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
 
     if True:
         if cmdargs:
-            # Validate input args against list of sigs
-            valid_dict = validate_command(sigdict, cmdargs, verbose)
-            if valid_dict:
-                if parsed_args.output_format:
-                    valid_dict['format'] = parsed_args.output_format
-            else:
-                return -errno.EINVAL, '', 'invalid command'
+            # Non interactive mode
+            ret, outbuf, outs = do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
         else:
+            # Interactive mode (ceph cli)
             if sys.stdin.isatty():
                 # do the command-interpreter looping
                 # for input to do readline cmd editing
@@ -563,30 +599,9 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                     print('Can not use \'tell\' in interactive mode.',
                           file=sys.stderr)
                     continue
-                valid_dict = validate_command(sigdict, cmdargs, verbose)
-                if valid_dict:
-                    if parsed_args.output_format:
-                        valid_dict['format'] = parsed_args.output_format
-                    if verbose:
-                        print("Submitting command: ", valid_dict, file=sys.stderr)
-                    ret, outbuf, outs = json_command(cluster_handle,
-                                                     target=target,
-                                                     argdict=valid_dict)
-                    if ret:
-                        ret = abs(ret)
-                        print('Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown')),
-                              file=sys.stderr)
-                    if outbuf:
-                        print(outbuf)
-                    if outs:
-                        print('Status:\n', outs, file=sys.stderr)
-                else:
-                    print("Invalid command", file=sys.stderr)
+                do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose)
 
-    if verbose:
-        print("Submitting command: ", valid_dict, file=sys.stderr)
-    return json_command(cluster_handle, target=target, argdict=valid_dict,
-                        inbuf=inbuf)
+    return ret, outbuf, outs
 
 
 def complete(sigdict, args, target):

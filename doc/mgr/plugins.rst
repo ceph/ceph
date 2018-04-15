@@ -51,13 +51,16 @@ like this::
         {
             "cmd": "foobar name=myarg,type=CephString",
             "desc": "Do something awesome",
-            "perm": "rw"
+            "perm": "rw",
+            # optional:
+            "poll": "true"
         }
     ]
 
 The ``cmd`` part of each entry is parsed in the same way as internal
 Ceph mon and admin socket commands (see mon/MonCommands.h in
-the Ceph source for examples)
+the Ceph source for examples). Note that the "poll" field is optional,
+and is set to False by default.
 
 Config settings
 ---------------

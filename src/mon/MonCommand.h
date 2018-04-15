@@ -30,6 +30,7 @@ struct MonCommand {
   static const uint64_t FLAG_OBSOLETE   = 1 << 1;
   static const uint64_t FLAG_DEPRECATED = 1 << 2;
   static const uint64_t FLAG_MGR        = 1 << 3;
+  static const uint64_t FLAG_POLL       = 1 << 4;
 
   bool has_flag(uint64_t flag) const { return (flags & flag) != 0; }
   void set_flag(uint64_t flag) { flags |= flag; }

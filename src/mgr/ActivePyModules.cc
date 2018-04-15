@@ -282,6 +282,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
         }
     );
     return f.get();
+  } else if (what == "io_rate") {
+    PyFormatter f;
+    cluster_state.with_pgmap(
+      [&f](const PGMap &pg_map) {
+        pg_map.dump_delta(&f);
+      }
+    );
+    return f.get();
   } else if (what == "df") {
     PyFormatter f;
 

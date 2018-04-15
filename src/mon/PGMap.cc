@@ -1395,6 +1395,7 @@ void PGMap::dump_delta(Formatter *f) const
 {
   f->open_object_section("pg_stats_delta");
   pg_sum_delta.dump(f);
+  f->dump_stream("stamp_delta") << stamp_delta;
   f->close_section();
 }
 
