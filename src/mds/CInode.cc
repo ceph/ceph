@@ -4046,35 +4046,24 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
     bool _start(int rval) {
       if (in->is_dirty()) {
-        MDCache *mdcache = in->mdcache;
-        mempool_inode& inode = in->inode;
-        dout(20) << "validating a dirty CInode; results will be inconclusive"
-                 << dendl;
+	MDCache *mdcache = in->mdcache;
+	mempool_inode& inode = in->inode;
+	dout(20) << "validating a dirty CInode; results will be inconclusive"
+		 << dendl;
       }
       if (in->is_symlink()) {
-        // there's nothing to do for symlinks!
-        return true;
+	// there's nothing to do for symlinks!
+	return true;
       }
 
       C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
-                                            in->mdcache->mds->finisher);
+					    in->mdcache->mds->finisher);
 
-      // Whether we have a tag to apply depends on ScrubHeader (if one is
-      // present)
-      if (in->scrub_infop) {
-        // I'm a non-orphan, so look up my ScrubHeader via my linkage
-        std::string_view tag = in->scrub_infop->header->get_tag();
-        // Rather than using the usual CInode::fetch_backtrace,
-        // use a special variant that optionally writes a tag in the same
-        // operation.
-        fetch_backtrace_and_tag(in, tag, conf,
-                                &results->backtrace.ondisk_read_retval, &bl);
-      } else {
-        // When we're invoked outside of ScrubStack we might be called
-        // on an orphaned inode like /
-        fetch_backtrace_and_tag(in, {}, conf,
-                                &results->backtrace.ondisk_read_retval, &bl);
-      }
+      std::string_view tag = in->scrub_infop->header->get_tag();
+      // Rather than using the usual CInode::fetch_backtrace,
+      // use a special variant that optionally writes a tag in the same
+      // operation.
+      fetch_backtrace_and_tag(in, tag, conf, &results->backtrace.ondisk_read_retval, &bl);
       return false;
     }
 
@@ -4139,10 +4128,6 @@ next:
                            false);
         // Flag that we repaired this BT so that it won't go into damagetable
         results->backtrace.repaired = true;
-
-        // Flag that we did some repair work so that our repair operation
-        // can be flushed at end of scrub
-        in->scrub_infop->header->set_repaired();
       }
 
       // If the inode's number was free in the InoTable, fix that
@@ -4273,8 +4258,7 @@ next:
 	assert(dir->get_version() > 0);
 	nest_info.add(dir->fnode.accounted_rstat);
 	dir_info.add(dir->fnode.accounted_fragstat);
-	if (dir->scrub_infop &&
-	    dir->scrub_infop->pending_scrub_error) {
+	if (dir->scrub_infop->pending_scrub_error) {
 	  dir->scrub_infop->pending_scrub_error = false;
 	  if (dir->scrub_infop->header->get_repair()) {
             results->raw_stats.repaired = true;
@@ -4291,8 +4275,7 @@ next:
       // ...and that their sum matches our inode settings
       if (!dir_info.same_sums(in->inode.dirstat) ||
 	  !nest_info.same_sums(in->inode.rstat)) {
-	if (in->scrub_infop &&
-	    in->scrub_infop->header->get_repair()) {
+	if (in->scrub_infop->header->get_repair()) {
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
@@ -4315,10 +4298,16 @@ next:
       if ((!results->raw_stats.checked || results->raw_stats.passed) &&
 	  (!results->backtrace.checked || results->backtrace.passed) &&
 	  (!results->inode.checked || results->inode.passed))
-        results->passed_validation = true;
-      if (fin) {
-        fin->complete(get_rval());
-      }
+	results->passed_validation = true;
+
+      // Flag that we did some repair work so that our repair operation
+      // can be flushed at end of scrub
+      if (results->backtrace.repaired ||
+	  results->inode.repaired ||
+	  results->raw_stats.repaired)
+	in->scrub_infop->header->set_repaired();
+      if (fin)
+	fin->complete(get_rval());
     }
   };
 
