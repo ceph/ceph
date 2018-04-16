@@ -175,7 +175,7 @@ class TestMountOSD(object):
         prepare.mount_osd('/dev/sda1', 1)
         expected = [
             'mount', '-t', 'xfs', '-o',
-            'rw,inode64,noatime', # default flags
+            'rw,noatime,inode64', # default flags
             '/dev/sda1', '/var/lib/ceph/osd/ceph-1']
         assert expected == fake_run.calls[0]['args'][0]
 
@@ -201,7 +201,7 @@ class TestMountOSD(object):
         prepare.mount_osd('/dev/sda1', 1)
         expected = [
             'mount', '-t', 'xfs', '-o',
-            'auto,rw,exec',
+            'rw,auto,exec',
             '/dev/sda1', '/var/lib/ceph/osd/ceph-1']
         assert expected == fake_run.calls[0]['args'][0]
 
@@ -214,7 +214,7 @@ class TestMountOSD(object):
         prepare.mount_osd('/dev/sda1', 1)
         expected = [
             'mount', '-t', 'xfs', '-o',
-            'auto,rw,exec',
+            'rw,auto,exec',
             '/dev/sda1', '/var/lib/ceph/osd/ceph-1']
         assert expected == fake_run.calls[0]['args'][0]
 
