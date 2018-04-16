@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212
+# pylint: disable=W0212,too-many-return-statements
 from __future__ import absolute_import
 
 import json
 import logging
-import os
-import subprocess
-import sys
 from collections import namedtuple
+import threading
+import time
 
 import requests
 import six
@@ -33,6 +32,9 @@ class DashboardTestCase(MgrTestCase):
     REQUIRE_FILESYSTEM = True
     CLIENTS_REQUIRED = 1
     CEPHFS = False
+
+    _session = None
+    _resp = None
 
     @classmethod
     def setUpClass(cls):
@@ -67,56 +69,171 @@ class DashboardTestCase(MgrTestCase):
             # wait for mds restart to complete...
             cls.fs.wait_for_daemons()
 
+        cls._session = requests.Session()
+        cls._resp = None
+
     @classmethod
     def tearDownClass(cls):
         super(DashboardTestCase, cls).tearDownClass()
 
-    def __init__(self, *args, **kwargs):
-        super(DashboardTestCase, self).__init__(*args, **kwargs)
-        self._session = requests.Session()
-        self._resp = None
-
-    def _request(self, url, method, data=None, params=None):
-        url = "{}{}".format(self.base_uri, url)
-
+    # pylint: disable=inconsistent-return-statements
+    @classmethod
+    def _request(cls, url, method, data=None, params=None):
+        url = "{}{}".format(cls.base_uri, url)
         log.info("request %s to %s", method, url)
         if method == 'GET':
-            self._resp = self._session.get(url, params=params)
-            try:
-                return self._resp.json()
-            except ValueError as ex:
-                log.exception("Failed to decode response: %s", self._resp.text)
-                raise ex
+            cls._resp = cls._session.get(url, params=params)
         elif method == 'POST':
-            self._resp = self._session.post(url, json=data, params=params)
+            cls._resp = cls._session.post(url, json=data, params=params)
         elif method == 'DELETE':
-            self._resp = self._session.delete(url, json=data, params=params)
+            cls._resp = cls._session.delete(url, json=data, params=params)
         elif method == 'PUT':
-            self._resp = self._session.put(url, json=data, params=params)
+            cls._resp = cls._session.put(url, json=data, params=params)
         else:
             assert False
-        return None
+        try:
+            if cls._resp.text and cls._resp.text != "":
+                return cls._resp.json()
+            return cls._resp.text
+        except ValueError as ex:
+            log.exception("Failed to decode response: %s", cls._resp.text)
+            raise ex
 
-    def _get(self, url, params=None):
-        return self._request(url, 'GET', params=params)
+    @classmethod
+    def _get(cls, url, params=None):
+        return cls._request(url, 'GET', params=params)
 
-    def _post(self, url, data=None, params=None):
-        self._request(url, 'POST', data, params=params)
+    @classmethod
+    def _view_cache_get(cls, url, retries=5):
+        retry = True
+        while retry and retries > 0:
+            retry = False
+            res = cls._get(url)
+            if isinstance(res, dict):
+                res = [res]
+            for view in res:
+                assert 'value' in view
+                if not view['value']:
+                    retry = True
+            retries -= 1
+        if retries == 0:
+            raise Exception("{} view cache exceeded number of retries={}"
+                            .format(url, retries))
+        return res
 
-    def _delete(self, url, data=None, params=None):
-        self._request(url, 'DELETE', data, params=params)
+    @classmethod
+    def _post(cls, url, data=None, params=None):
+        cls._request(url, 'POST', data, params)
 
-    def _put(self, url, data=None, params=None):
-        self._request(url, 'PUT', data, params=params)
+    @classmethod
+    def _delete(cls, url, data=None, params=None):
+        cls._request(url, 'DELETE', data, params)
 
-    def cookies(self):
-        return self._resp.cookies
+    @classmethod
+    def _put(cls, url, data=None, params=None):
+        cls._request(url, 'PUT', data, params)
 
-    def jsonBody(self):
-        return self._resp.json()
+    @classmethod
+    def _assertEq(cls, v1, v2):
+        if not v1 == v2:
+            raise Exception("assertion failed: {} != {}".format(v1, v2))
 
-    def reset_session(self):
-        self._session = requests.Session()
+    @classmethod
+    def _assertIn(cls, v1, v2):
+        if v1 not in v2:
+            raise Exception("assertion failed: {} not in {}".format(v1, v2))
+
+    @classmethod
+    def _assertIsInst(cls, v1, v2):
+        if not isinstance(v1, v2):
+            raise Exception("assertion failed: {} not instance of {}".format(v1, v2))
+
+    # pylint: disable=too-many-arguments
+    @classmethod
+    def _task_request(cls, method, url, data, timeout):
+        res = cls._request(url, method, data)
+        cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 409])
+
+        if cls._resp.status_code != 202:
+            log.info("task finished immediately")
+            return res
+
+        cls._assertIn('name', res)
+        cls._assertIn('metadata', res)
+        task_name = res['name']
+        task_metadata = res['metadata']
+
+        class Waiter(threading.Thread):
+            def __init__(self, task_name, task_metadata):
+                super(Waiter, self).__init__()
+                self.task_name = task_name
+                self.task_metadata = task_metadata
+                self.ev = threading.Event()
+                self.abort = False
+                self.res_task = None
+
+            def run(self):
+                running = True
+                while running and not self.abort:
+                    log.info("task (%s, %s) is still executing", self.task_name,
+                             self.task_metadata)
+                    time.sleep(1)
+                    res = cls._get('/api/task?name={}'.format(self.task_name))
+                    for task in res['finished_tasks']:
+                        if task['metadata'] == self.task_metadata:
+                            # task finished
+                            running = False
+                            self.res_task = task
+                            self.ev.set()
+
+        thread = Waiter(task_name, task_metadata)
+        thread.start()
+        status = thread.ev.wait(timeout)
+        if not status:
+            # timeout expired
+            thread.abort = True
+            thread.join()
+            raise Exception("Waiting for task ({}, {}) to finish timed out"
+                            .format(task_name, task_metadata))
+        log.info("task (%s, %s) finished", task_name, task_metadata)
+        if thread.res_task['success']:
+            if method == 'POST':
+                cls._resp.status_code = 201
+            elif method == 'PUT':
+                cls._resp.status_code = 200
+            elif method == 'DELETE':
+                cls._resp.status_code = 204
+            return thread.res_task['ret_value']
+        else:
+            if 'status' in thread.res_task['exception']:
+                cls._resp.status_code = thread.res_task['exception']['status']
+            else:
+                cls._resp.status_code = 500
+            return thread.res_task['exception']
+
+    @classmethod
+    def _task_post(cls, url, data=None, timeout=60):
+        return cls._task_request('POST', url, data, timeout)
+
+    @classmethod
+    def _task_delete(cls, url, timeout=60):
+        return cls._task_request('DELETE', url, None, timeout)
+
+    @classmethod
+    def _task_put(cls, url, data=None, timeout=60):
+        return cls._task_request('PUT', url, data, timeout)
+
+    @classmethod
+    def cookies(cls):
+        return cls._resp.cookies
+
+    @classmethod
+    def jsonBody(cls):
+        return cls._resp.json()
+
+    @classmethod
+    def reset_session(cls):
+        cls._session = requests.Session()
 
     def assertJsonBody(self, data):
         body = self._resp.json()
@@ -132,7 +249,10 @@ class DashboardTestCase(MgrTestCase):
         self.assertEqual(self._resp.text, body)
 
     def assertStatus(self, status):
-        self.assertEqual(self._resp.status_code, status)
+        if isinstance(status, list):
+            self.assertIn(self._resp.status_code, status)
+        else:
+            self.assertEqual(self._resp.status_code, status)
 
     @classmethod
     def _ceph_cmd(cls, cmd):
@@ -181,14 +301,14 @@ JList = namedtuple('JList', ['elem_typ'])
 JTuple = namedtuple('JList', ['elem_typs'])
 
 
-class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown'])):
-    def __new__(cls, sub_elems, allow_unknown=False):
+class JObj(namedtuple('JObj', ['sub_elems', 'allow_unknown', 'none'])):
+    def __new__(cls, sub_elems, allow_unknown=False, none=False):
         """
         :type sub_elems: dict[str, JAny | JLeaf | JList | JObj]
         :type allow_unknown: bool
         :return:
         """
-        return super(JObj, cls).__new__(cls, sub_elems, allow_unknown)
+        return super(JObj, cls).__new__(cls, sub_elems, allow_unknown, none)
 
 
 JAny = namedtuple('JAny', ['none'])
@@ -200,6 +320,7 @@ class _ValError(Exception):
         super(_ValError, self).__init__('In `input{}`: {}'.format(path_str, msg))
 
 
+# pylint: disable=dangerous-default-value,inconsistent-return-statements
 def _validate_json(val, schema, path=[]):
     """
     >>> d = {'a': 1, 'b': 'x', 'c': range(10)}
@@ -223,6 +344,10 @@ def _validate_json(val, schema, path=[]):
         return all(_validate_json(val[i], typ, path + [i])
                    for i, typ in enumerate(schema.elem_typs))
     if isinstance(schema, JObj):
+        if val is None and schema.none:
+            return True
+        elif val is None:
+            raise _ValError('val is None', path)
         missing_keys = set(schema.sub_elems.keys()).difference(set(val.keys()))
         if missing_keys:
             raise _ValError('missing keys: {}'.format(missing_keys), path)
@@ -235,6 +360,3 @@ def _validate_json(val, schema, path=[]):
         )
 
     assert False, str(path)
-
-
-
