@@ -433,9 +433,41 @@ void PyModuleRegistry::upgrade_config(
         continue;
       }
 
-      module_config.set_config(monc, module_name, key, i.second);
-      dout(4) << "Rewrote configuration module:key "
-              << module_name << ":" << key << dendl;
+      // Check that the named module exists
+      auto module_iter = modules.find(module_name);
+      if (module_iter == modules.end()) {
+        dout(1) << "KV store contains data for unknown module '"
+                << module_name << "'" << dendl;
+        continue;
+      }
+      PyModuleRef module = module_iter->second;
+
+      // Parse option name out of key
+      std::string option_name;
+      auto slash_loc = key.find("/");
+      if (slash_loc != std::string::npos) {
+        if (key.size() > slash_loc + 1) {
+          // Localized option
+          option_name = key.substr(slash_loc + 1);
+        } else {
+          // Trailing slash: garbage.
+          derr << "Invalid mgr store key: '" << key << "'" << dendl;
+          continue;
+        }
+      } else {
+        option_name = key;
+      }
+
+      // Consult module schema to see if this is really
+      // a configuration value
+      if (!option_name.empty() && module->is_option(option_name)) {
+        module_config.set_config(monc, module_name, key, i.second);
+        dout(4) << "Rewrote configuration module:key "
+                << module_name << ":" << key << dendl;
+      } else {
+        dout(4) << "Leaving store module:key " << module_name
+                << ":" << key << " in store, not config" << dendl;
+      }
     }
   } else {
     dout(10) << "Module configuration contains "
