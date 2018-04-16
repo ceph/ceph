@@ -166,20 +166,27 @@ def _normalize_mount_flags(flags, extras=None):
         if extras:
             flags.extend(extras)
         # ensure that spaces and commas are removed so that they can join
-        # correctly
-        return ','.join([f.strip().strip(',') for f in flags if f])
+        # correctly, remove duplicates
+        flags = set([f.strip().strip(',') for f in flags if f])
+        return ','.join(flags)
 
     # split them, clean them, and join them back again
     flags = flags.strip().split(' ')
     if extras:
         flags.extend(extras)
-    return ','.join(
-        [f.strip().strip(',') for f in flags if f]
-    )
+
+    # remove possible duplicates
+    flags = ','.join([f.strip().strip(',') for f in flags if f])
+    # Before returning, split them again, since strings can be mashed up
+    # together, preventing removal of duplicate entries
+    return ','.join(set(flags.split(',')))
 
 
 def mount_osd(device, osd_id, **kw):
-    is_vdo = kw.get('is_vdo', 0)
+    extras = []
+    is_vdo = kw.get('is_vdo', '0')
+    if is_vdo == '1':
+        extras = ['discard']
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     command = ['mount', '-t', 'xfs', '-o']
     flags = conf.ceph.get_list(
@@ -188,7 +195,9 @@ def mount_osd(device, osd_id, **kw):
         default=constants.mount.get('xfs'),
         split=' ',
     )
-    command.append(_normalize_mount_flags(flags))
+    command.append(
+        _normalize_mount_flags(flags, extras=extras)
+    )
     command.append(device)
     command.append(destination)
     process.run(command)
