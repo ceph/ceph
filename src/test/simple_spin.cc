@@ -5,25 +5,20 @@
 
 #include "include/spinlock.h"
 
-using ceph::spin_lock;
-using ceph::spin_unlock;
-
-static std::atomic_flag lock = ATOMIC_FLAG_INIT;
+static ceph::spinlock lock;
 static int64_t counter = 0;
 
 TEST(SimpleSpin, Test0)
 {
-  std::atomic_flag lock0 = ATOMIC_FLAG_INIT;
-  spin_lock(&lock0);
-  spin_unlock(&lock0);
+  ceph::spinlock lock0;
+  std::lock_guard<ceph::spinlock> g(lock0);
 }
 
 static void* mythread(void *v)
 {
   for (int j = 0; j < 1000000; ++j) {
-    spin_lock(&lock);
+    std::lock_guard<ceph::spinlock> g(lock);
     counter++;
-    spin_unlock(&lock);
   }
   return NULL;
 }
@@ -51,9 +46,8 @@ TEST(SimpleSpin, Test1)
   counter = 0;
   async(std::launch::async, []() {
         for(int i = 0; n != i; ++i) {
-            spin_lock(lock);
+            std::lock_guard<ceph::spinlock> g(lock);
             counter++;
-            spin_unlock(lock);
         }
        });
   ASSERT_EQ(n, counter);
@@ -66,9 +60,8 @@ int64_t check_lock_unlock(const int64_t n, int64_t& cntr, LockT& lock)
         int64_t i = 0;
 
         for(; n != i; ++i) {
-           spin_lock(lock);
+           std::lock_guard<ceph::spinlock> g(lock);
            cntr++;
-           spin_unlock(lock);
         }
 
         return i;

@@ -17,14 +17,18 @@
 #ifndef CEPH_COMMON_ALIGN_H
 #define CEPH_COMMON_ALIGN_H
 
-template <typename T>
-inline constexpr T align_up(T v, T align) {
+#include <type_traits>
+
+template <typename T, typename U>
+inline constexpr T align_up(T v, U align) {
+  static_assert(std::is_convertible_v<U, T>);
   return (v + align - 1) & ~(align - 1);
 }
 
-template <typename T>
-inline constexpr T align_down(T v, T align) {
-  return v & ~(align - 1);
+template <typename T, typename U>
+inline constexpr T align_down(T v, U align) {
+  static_assert(std::is_convertible_v<U, T>);
+  return v & ~(static_cast<T>(align) - 1);
 }
 
 #endif /* CEPH_COMMON_ALIGN_H */

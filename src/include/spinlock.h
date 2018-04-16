@@ -18,75 +18,141 @@
 #define CEPH_SPINLOCK_HPP
 
 #include <atomic>
+#include <thread>
 
-namespace ceph {
+#if defined(__i386__) || defined(__x86_64__)
+#  include <immintrin.h>
+#endif
+
+#include "common/likely.h"
+
+namespace ceph::spin {
 inline namespace version_1_0 {
 
-class spinlock;
+static inline void emit_pause() {
+#if defined(__i386__) || defined(__x86_64__)
+  // The spinning part is indistinguishable for CPU without
+  // additional hint. On x86 there is PAUSE instruction for
+  // that. We definitely want to use it because of:
+  //   * not disturbing second thread on the same core (SMT),
+  //   * saving power.
+  // Although the instruction is available since P4, binary
+  // transcription into `rep; nop` allows its decoding even
+  // on i386, so no need for `cpuid` or other costly things.
+  // For details please refer to:
+  //  * "Long Duration Spin-wait Loops on Hyper-Threading
+  //     Technology Enabled Intel Processors",
+  //  * "Benefitting Power and Performance Sleep Loops".
+  _mm_pause();
+#endif
+}
 
-inline void spin_lock(std::atomic_flag& lock);
-inline void spin_unlock(std::atomic_flag& lock);
-inline void spin_lock(ceph::spinlock& lock);
-inline void spin_unlock(ceph::spinlock& lock);
 
-/* A pre-packaged spinlock type modelling BasicLockable: */
-class spinlock final
+template <class MutexT, std::size_t MaxTriesV = 64>
+struct trying_guard final
 {
-  std::atomic_flag af = ATOMIC_FLAG_INIT;
+  typedef MutexT mutex_type;
 
-  public:
-  void lock() {
-    ceph::spin_lock(af);
+  trying_guard(mutex_type& m)
+    : m(m)
+  {
+    if (likely(m.try_lock())) {
+      return;
+    }
+
+    std::size_t tries = MaxTriesV;
+    do {
+      emit_pause();
+    } while (!m.try_lock() && --tries > 0);
+
+    if (!tries) {
+      m.lock();
+    }
   }
- 
-  void unlock() noexcept {
-    ceph::spin_unlock(af);
+
+  trying_guard(const trying_guard&) = delete;
+
+  ~trying_guard()
+  {
+    m.unlock();
   }
+
+private:
+  mutex_type& m;
 };
 
-// Free functions:
-inline void spin_lock(std::atomic_flag& lock)
+
+/* A pre-packaged spinlock type modelling BasicLockable: */
+template <std::size_t MaxTriesV = 32>
+class spinlock final
 {
- while(lock.test_and_set(std::memory_order_acquire))
-  ;
+  // Not using atomic_flag anymore because it doesn't
+  // provide the load nor store operation.
+  std::atomic_bool locked = false;
+
+  // In contrast to atomic_flag, atomic_bool might be
+  // implemented on top of e.g. mutex. However, it is
+  // very unlikely we'll face such situation in Ceph.
+  static_assert(std::atomic_bool::is_always_lock_free);
+
+public:
+  void lock();
+  void unlock() noexcept;
+};
+
+template <std::size_t MaxTriesV>
+inline void spinlock<MaxTriesV>::lock()
+{
+  bool expected = false;
+  if (likely(locked.compare_exchange_weak(expected, true,
+                                          std::memory_order_acquire,
+                                          std::memory_order_relaxed))) {
+    return;
+  }
+
+  // The contention part.
+  do {
+    std::size_t tries = 0;
+
+    // There is no need to constantly try LOCK CMPXCHG and enforce
+    // x86 CPUs to do costly mem fencing. The algorithm comes from
+    // NPTL's pthread_spin_lock() implementation of glibc.
+    do {
+      emit_pause();
+
+      if constexpr (MaxTriesV) if (++tries == MaxTriesV) {
+        // Oops, things went really bad. There was no state change
+        // for many iterations. This could happen when lock holder
+        // gets stuck because of e.g. being preempted. Most likely
+        // other waiters started spinning as well. The best we can
+        // do is to limit our losses and yield CPU. Luckily kernel
+        // (it's perfectly unaware about the whole situation) will
+        // switch to something useful or, at least, blocked holder
+        // will get its time quantum faster.
+        std::this_thread::yield();
+        tries = 0;
+      }
+    } while (locked.load(std::memory_order_relaxed));
+
+    // The specification of compare_exchange() does not say a word
+    // that the value of `expected` can't change, so let's refresh.
+    expected = false;
+  } while (!locked.compare_exchange_weak(expected, true,
+                                         std::memory_order_acquire,
+                                         std::memory_order_relaxed));
 }
 
-inline void spin_unlock(std::atomic_flag& lock)
+template <std::size_t MaxTriesV>
+inline void spinlock<MaxTriesV>::unlock() noexcept
 {
- lock.clear(std::memory_order_release);
-}
-
-inline void spin_lock(std::atomic_flag *lock)
-{
- spin_lock(*lock);
-}
-
-inline void spin_unlock(std::atomic_flag *lock)
-{
- spin_unlock(*lock);
-}
-
-inline void spin_lock(ceph::spinlock& lock)
-{
- lock.lock();
-}
-
-inline void spin_unlock(ceph::spinlock& lock)
-{
- lock.unlock();
-}
-
-inline void spin_lock(ceph::spinlock *lock)
-{
- spin_lock(*lock);
-}
-
-inline void spin_unlock(ceph::spinlock *lock)
-{
- spin_unlock(*lock);
+  locked.store(false, std::memory_order_release);
 }
 
 } // inline namespace (version)
-} // namespace ceph
+} // namespace ceph::lock
 
+
+namespace ceph {
+  using spinlock = ceph::spin::spinlock<32>;
+} // namespace ceph
 #endif

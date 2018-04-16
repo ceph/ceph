@@ -16,6 +16,7 @@
 
 #include <atomic>
 #include "common/histogram.h"
+#include "common/containers.h"
 #include "msg/Message.h"
 #include "common/RWLock.h"
 
@@ -23,26 +24,41 @@
 
 class TrackedOp;
 class OpHistory;
+class OpTracker;
 
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 
 class OpHistoryServiceThread : public Thread
 {
-private:
-  list<pair<utime_t, TrackedOpRef>> _external_queue;
+  struct queue_item_t : public boost::intrusive::list_base_hook<> {
+    utime_t time;
+    TrackedOpRef op;
+
+    queue_item_t(utime_t time, TrackedOpRef&& op)
+      : time(std::move(time)),
+        op(std::move(op)) {
+    }
+  };
+  typedef boost::intrusive::list<queue_item_t> queue_t;
+
+  queue_t _external_queue;
   OpHistory* _ophistory;
-  mutable ceph::spinlock queue_spinlock;
+  mutable std::mutex queue_lock;
   bool _break_thread;
+
 public:
   explicit OpHistoryServiceThread(OpHistory* parent)
     : _ophistory(parent),
       _break_thread(false) { }
+  ~OpHistoryServiceThread();
 
   void break_thread();
-  void insert_op(const utime_t& now, TrackedOpRef op) {
-    queue_spinlock.lock();
-    _external_queue.emplace_back(now, op);
-    queue_spinlock.unlock();
+  void insert_op(const utime_t& now, TrackedOpRef&& op) {
+    auto item = new queue_item_t(now, std::move(op));
+    {
+      ceph::spin::trying_guard<std::mutex> sl(queue_lock);
+      _external_queue.push_back(*item);
+    }
   }
 
   void *entry() override;
@@ -75,12 +91,12 @@ public:
     assert(duration.empty());
     assert(slow_op.empty());
   }
-  void insert(const utime_t& now, TrackedOpRef op)
+  void insert(const utime_t& now, TrackedOpRef&& op)
   {
     if (shutdown)
       return;
 
-    opsvc.insert_op(now, op);
+    opsvc.insert_op(now, std::move(op));
   }
 
   void _insert_delayed(const utime_t& now, TrackedOpRef op);
@@ -94,104 +110,6 @@ public:
   void set_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
     history_slow_op_size = new_size;
     history_slow_op_threshold = new_threshold;
-  }
-};
-
-struct ShardedTrackingData;
-class OpTracker {
-  friend class OpHistory;
-  std::atomic<int64_t> seq = { 0 };
-  vector<ShardedTrackingData*> sharded_in_flight_list;
-  OpHistory history;
-  uint32_t num_optracker_shards;
-  float complaint_time;
-  int log_threshold;
-  std::atomic<bool> tracking_enabled;
-  RWLock       lock;
-
-public:
-  CephContext *cct;
-  OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards);
-      
-  void set_complaint_and_threshold(float time, int threshold) {
-    complaint_time = time;
-    log_threshold = threshold;
-  }
-  void set_history_size_and_duration(uint32_t new_size, uint32_t new_duration) {
-    history.set_size_and_duration(new_size, new_duration);
-  }
-  void set_history_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
-    history.set_slow_op_size_and_threshold(new_size, new_threshold);
-  }
-  bool is_tracking() const {
-    return tracking_enabled;
-  }
-  void set_tracking(bool enable) {
-    tracking_enabled = enable;
-  }
-  bool dump_ops_in_flight(Formatter *f, bool print_only_blocked = false, set<string> filters = {""});
-  bool dump_historic_ops(Formatter *f, bool by_duration = false, set<string> filters = {""});
-  bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
-  bool register_inflight_op(TrackedOp *i);
-  void unregister_inflight_op(TrackedOp *i);
-
-  void get_age_ms_histogram(pow2_hist_t *h);
-
-  /**
-   * walk through ops in flight
-   *
-   * @param oldest_sec the amount of time since the oldest op was initiated
-   * @param check a function consuming tracked ops, the function returns
-   *              false if it don't want to be fed with more ops
-   * @return True if there are any Ops to warn on, false otherwise
-   */
-  bool visit_ops_in_flight(utime_t* oldest_secs,
-			   std::function<bool(TrackedOp&)>&& visit);
-  /**
-   * walk through slow ops in flight
-   *
-   * @param[out] oldest_sec the amount of time since the oldest op was initiated
-   * @param[out] num_slow_ops total number of slow ops
-   * @param on_warn a function consuming tracked ops, the function returns
-   *                false if it don't want to be fed with more ops
-   * @return True if there are any Ops to warn on, false otherwise
-   */
-  bool with_slow_ops_in_flight(utime_t* oldest_secs,
-			       int* num_slow_ops,
-			       std::function<void(TrackedOp&)>&& on_warn);
-  /**
-   * Look for Ops which are too old, and insert warning
-   * strings for each Op that is too old.
-   *
-   * @param summary[out] a string summarizing slow Ops.
-   * @param warning_strings[out] A vector<string> reference which is filled
-   * with a warning string for each old Op.
-   * @param slow[out] total number of slow ops
-   * @return True if there are any Ops to warn on, false otherwise.
-   */
-  bool check_ops_in_flight(std::string* summary,
-			   std::vector<string> &warning_strings,
-			   int* slow = nullptr);
-
-  void on_shutdown() {
-    history.on_shutdown();
-  }
-  ~OpTracker();
-
-  template <typename T, typename U>
-  typename T::Ref create_request(U params)
-  {
-    typename T::Ref retval(new T(params, this));
-    retval->tracking_start();
-
-    if (is_tracking()) {
-      retval->mark_event("header_read", params->get_recv_stamp());
-      retval->mark_event("throttled", params->get_throttle_stamp());
-      retval->mark_event("all_read", params->get_recv_complete_stamp());
-      retval->mark_event("dispatched", params->get_dispatch_stamp());
-    }
-
-    return retval;
   }
 };
 
@@ -300,28 +218,8 @@ public:
   void get() {
     ++nref;
   }
-  void put() {
-    if (--nref == 0) {
-      switch (state.load()) {
-      case STATE_UNTRACKED:
-	_unregistered();
-	delete this;
-	break;
 
-      case STATE_LIVE:
-	mark_event("done");
-	tracker->unregister_inflight_op(this);
-	break;
-
-      case STATE_HISTORY:
-	delete this;
-	break;
-
-      default:
-	ceph_abort();
-      }
-    }
-  }
+  void put();
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
@@ -367,12 +265,7 @@ public:
 
   void dump(utime_t now, Formatter *f) const;
 
-  void tracking_start() {
-    if (tracker->register_inflight_op(this)) {
-      events.emplace_back(initiated_at, "initiated");
-      state = STATE_LIVE;
-    }
-  }
+  void tracking_start();
 
   // ref counting via intrusive_ptr, with special behavior on final
   // put for historical op tracking
@@ -384,5 +277,157 @@ public:
   }
 };
 
+
+class OpTracker {
+  struct ShardedTrackingData {
+    mutable Mutex ops_in_flight_lock_sharded;
+    TrackedOp::tracked_op_list_t ops_in_flight_sharded;
+    explicit ShardedTrackingData(string lock_name):
+      ops_in_flight_lock_sharded(lock_name.c_str()) {
+    }
+  };
+
+  friend class OpHistory;
+  std::atomic<int64_t> seq = { 0 };
+  // preallocate space for 32 shards because of the default
+  // value for osd_num_op_tracker_shard
+  ceph::containers::shard_vector<
+    ShardedTrackingData, 32> sharded_in_flight_list;
+  OpHistory history;
+  float complaint_time;
+  int log_threshold;
+  std::atomic<bool> tracking_enabled;
+
+public:
+  CephContext *cct;
+  OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards);
+      
+  void set_complaint_and_threshold(float time, int threshold) {
+    complaint_time = time;
+    log_threshold = threshold;
+  }
+  void set_history_size_and_duration(uint32_t new_size, uint32_t new_duration) {
+    history.set_size_and_duration(new_size, new_duration);
+  }
+  void set_history_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
+    history.set_slow_op_size_and_threshold(new_size, new_threshold);
+  }
+  bool is_tracking() const {
+    return tracking_enabled;
+  }
+  void set_tracking(bool enable) {
+    tracking_enabled = enable;
+  }
+  bool dump_ops_in_flight(Formatter *f, bool print_only_blocked = false, set<string> filters = {""});
+  bool dump_historic_ops(Formatter *f, bool by_duration = false, set<string> filters = {""});
+  bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
+  bool register_inflight_op(TrackedOp *i);
+  void unregister_inflight_op(TrackedOpRef&& i);
+
+  void get_age_ms_histogram(pow2_hist_t *h);
+
+  /**
+   * walk through ops in flight
+   *
+   * @param oldest_sec the amount of time since the oldest op was initiated
+   * @param check a function consuming tracked ops, the function returns
+   *              false if it don't want to be fed with more ops
+   * @return True if there are any Ops to warn on, false otherwise
+   */
+  bool visit_ops_in_flight(utime_t* oldest_secs,
+			   std::function<bool(TrackedOp&)>&& visit);
+  /**
+   * walk through slow ops in flight
+   *
+   * @param[out] oldest_sec the amount of time since the oldest op was initiated
+   * @param[out] num_slow_ops total number of slow ops
+   * @param on_warn a function consuming tracked ops, the function returns
+   *                false if it don't want to be fed with more ops
+   * @return True if there are any Ops to warn on, false otherwise
+   */
+  bool with_slow_ops_in_flight(utime_t* oldest_secs,
+			       int* num_slow_ops,
+			       std::function<void(TrackedOp&)>&& on_warn);
+  /**
+   * Look for Ops which are too old, and insert warning
+   * strings for each Op that is too old.
+   *
+   * @param summary[out] a string summarizing slow Ops.
+   * @param warning_strings[out] A vector<string> reference which is filled
+   * with a warning string for each old Op.
+   * @param slow[out] total number of slow ops
+   * @return True if there are any Ops to warn on, false otherwise.
+   */
+  bool check_ops_in_flight(std::string* summary,
+			   std::vector<string> &warning_strings,
+			   int* slow = nullptr);
+
+  void on_shutdown() {
+    history.on_shutdown();
+  }
+  ~OpTracker();
+
+  template <typename T, typename U>
+  typename T::Ref create_request(U params)
+  {
+    typename T::Ref retval(new T(params, this));
+    retval->tracking_start();
+
+    if (is_tracking()) {
+      retval->mark_event("header_read", params->get_recv_stamp());
+      retval->mark_event("throttled", params->get_throttle_stamp());
+      retval->mark_event("all_read", params->get_recv_complete_stamp());
+      retval->mark_event("dispatched", params->get_dispatch_stamp());
+    }
+
+    return retval;
+  }
+};
+
+/* Defining the methods outside the TrackedOp to avoid circular
+ * dependency with OpTracker while preserving their inlineability.
+ * The `inline` marking allows to bypass the ODR rule:
+ *
+ *   "3.2/3 Every program shall contain exactly one definition
+ *   of every non-inline function or object that is used in that
+ *   program"
+ *
+ * See: https://stackoverflow.com/questions/7833941/putting- \
+        function-definitions-in-header-files#comment9553758_7834555
+ */
+inline void TrackedOp::tracking_start() {
+  if (tracker->register_inflight_op(this)) {
+    events.emplace_back(initiated_at, "initiated");
+    state = STATE_LIVE;
+  }
+}
+
+inline void TrackedOp::put() {
+  if (nref.load() == 1) {
+    switch (state.load()) {
+    case STATE_UNTRACKED:
+      --nref;
+      _unregistered();
+      delete this;
+      break;
+
+    case STATE_LIVE:
+      mark_event("done");
+      tracker->unregister_inflight_op(
+	TrackedOpRef(this, false /* = add_ref */));
+      break;
+
+    case STATE_HISTORY:
+      --nref;
+      delete this;
+      break;
+
+    default:
+      ceph_abort();
+    }
+  } else {
+    --nref;
+  }
+}
 
 #endif
