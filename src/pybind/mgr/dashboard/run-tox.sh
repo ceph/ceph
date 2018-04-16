@@ -13,9 +13,7 @@ else
     TOX_PATH=`readlink -f $(dirname $0)/tox.ini`
 fi
 
-if [ -z $CEPH_BUILD_DIR ]; then
-    export CEPH_BUILD_DIR=$(dirname ${TOX_PATH})
-fi
+export CEPH_BUILD_DIR=$CEPH_BUILD_DIR
 
 if [ "$WITH_PYTHON2" = "ON" ]; then
   ENV_LIST+="py27-cov,py27-lint,"
