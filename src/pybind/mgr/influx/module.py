@@ -15,6 +15,46 @@ except ImportError:
 
 
 class Module(MgrModule):
+    OPTIONS = [
+            {
+                'name': 'hostname',
+                'default': None
+            },
+            {
+                'name': 'port',
+                'default': 8086
+            },
+            {
+                'name': 'database',
+                'default': 'ceph'
+            },
+            {
+                'name': 'username',
+                'default': None
+            },
+            {
+                'name': 'password',
+                'default': None
+            },
+            {
+                'name': 'interval',
+                'default': 30
+            },
+            {
+                'name': 'ssl',
+                'default': 'false'
+            },
+            {
+                'name': 'verify_ssl',
+                'default': 'true'
+            },
+    ]
+
+    @property
+    def config_keys(self):
+        return dict((o['name'], o.get('default', None))
+                for o in self.OPTIONS)
+
     COMMANDS = [
         {
             "cmd": "influx config-set name=key,type=CephString "
@@ -38,17 +78,6 @@ class Module(MgrModule):
             "perm": "rw"
         },
     ]
-
-    config_keys = {
-        'hostname': None,
-        'port': 8086,
-        'database': 'ceph',
-        'username': None,
-        'password': None,
-        'interval': 30,
-        'ssl': 'false',
-        'verify_ssl': 'true'
-    }
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)

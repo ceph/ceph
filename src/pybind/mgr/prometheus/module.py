@@ -337,6 +337,11 @@ class Module(MgrModule):
         },
     ]
 
+    OPTIONS = [
+            {'name': 'server_addr'},
+            {'name': 'server_port'},
+    ]
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.metrics = Metrics()

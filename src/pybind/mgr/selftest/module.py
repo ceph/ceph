@@ -25,6 +25,14 @@ class Module(MgrModule):
 
     WORKLOADS = (WORKLOAD_COMMAND_SPAM, WORKLOAD_THROW_EXCEPTION)
 
+    # The test code in qa/ relies on these options existing -- they
+    # are of course not really used for anything in the module
+    OPTIONS = [
+            {'name': 'testkey'},
+            {'name': 'testlkey'},
+            {'name': 'testnewline'}
+    ]
+
     COMMANDS = [
             {
                 "cmd": "mgr self-test run",

@@ -203,6 +203,12 @@ class CommandsRequest(object):
 
 
 class Module(MgrModule):
+    OPTIONS = [
+        {'name': 'server_addr'},
+        {'name': 'server_port'},
+        {'name': 'key_file'},
+    ]
+
     COMMANDS = [
         {
             "cmd": "restful create-key name=key_name,type=CephString",
