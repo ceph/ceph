@@ -98,8 +98,8 @@ void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
   m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
-  m_client->get_watch_notify()->aio_notify(m_client, oid, bl, timeout_ms, pbl,
-                                           ctx);
+  m_client->get_watch_notify()->aio_notify(m_client, m_pool_id, oid, bl,
+                                           timeout_ms, pbl, ctx);
 }
 
 int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
@@ -135,8 +135,9 @@ int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
   if (m_client->is_blacklisted()) {
     m_client->get_aio_finisher()->queue(ctx, -EBLACKLISTED);
   } else {
-    m_client->get_watch_notify()->aio_watch(m_client, o, get_instance_id(),
-                                            handle, watch_ctx, ctx);
+    m_client->get_watch_notify()->aio_watch(m_client, m_pool_id, o,
+                                            get_instance_id(), handle, nullptr,
+                                            watch_ctx, ctx);
   }
   return 0;
 }
@@ -176,7 +177,8 @@ int TestIoCtxImpl::list_watchers(const std::string& o,
     return -EBLACKLISTED;
   }
 
-  return m_client->get_watch_notify()->list_watchers(o, out_watchers);
+  return m_client->get_watch_notify()->list_watchers(m_pool_id, o,
+                                                     out_watchers);
 }
 
 int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
@@ -185,13 +187,15 @@ int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
     return -EBLACKLISTED;
   }
 
-  return m_client->get_watch_notify()->notify(m_client, o, bl, timeout_ms, pbl);
+  return m_client->get_watch_notify()->notify(m_client, m_pool_id, o, bl,
+                                              timeout_ms, pbl);
 }
 
 void TestIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
                                uint64_t handle, bufferlist& bl) {
-  m_client->get_watch_notify()->notify_ack(m_client, o, notify_id, handle,
-                                           m_client->get_instance_id(), bl);
+  m_client->get_watch_notify()->notify_ack(m_client, m_pool_id, o, notify_id,
+                                           handle, m_client->get_instance_id(),
+                                           bl);
 }
 
 int TestIoCtxImpl::operate(const std::string& oid, TestObjectOperationImpl &ops) {
@@ -331,8 +335,9 @@ int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
     return -EBLACKLISTED;
   }
 
-  return m_client->get_watch_notify()->watch(m_client, o, get_instance_id(),
-                                             handle, ctx, ctx2);
+  return m_client->get_watch_notify()->watch(m_client, m_pool_id, o,
+                                             get_instance_id(), handle, ctx,
+                                             ctx2);
 }
 
 int TestIoCtxImpl::execute_operation(const std::string& oid,

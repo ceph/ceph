@@ -547,6 +547,70 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
   delete instance_watcher;
 }
 
+TEST_F(TestMockInstanceWatcher, PeerImageAcquireWatchDNE) {
+  MockManagedLock mock_managed_lock;
+  librados::MockTestMemIoCtxImpl &mock_io_ctx(get_mock_io_ctx(m_local_io_ctx));
+
+  MockInstanceReplayer mock_instance_replayer;
+  auto instance_watcher = new MockInstanceWatcher(
+    m_local_io_ctx, m_mock_threads->work_queue, &mock_instance_replayer,
+    m_instance_id);
+  InSequence seq;
+
+  // Init
+  expect_register_instance(mock_io_ctx, 0);
+  expect_register_watch(mock_io_ctx);
+  expect_acquire_lock(mock_managed_lock, 0);
+  ASSERT_EQ(0, instance_watcher->init());
+
+  // Acquire image on dead (blacklisted) instance
+  C_SaferCond on_acquire;
+  instance_watcher->notify_image_acquire("dead instance", "global image id",
+                                         &on_acquire);
+  ASSERT_EQ(-ENOENT, on_acquire.wait());
+
+  // Shutdown
+  expect_release_lock(mock_managed_lock, 0);
+  expect_unregister_watch(mock_io_ctx);
+  expect_unregister_instance(mock_io_ctx, 0);
+  instance_watcher->shut_down();
+
+  expect_destroy_lock(mock_managed_lock);
+  delete instance_watcher;
+}
+
+TEST_F(TestMockInstanceWatcher, PeerImageReleaseWatchDNE) {
+  MockManagedLock mock_managed_lock;
+  librados::MockTestMemIoCtxImpl &mock_io_ctx(get_mock_io_ctx(m_local_io_ctx));
+
+  MockInstanceReplayer mock_instance_replayer;
+  auto instance_watcher = new MockInstanceWatcher(
+    m_local_io_ctx, m_mock_threads->work_queue, &mock_instance_replayer,
+    m_instance_id);
+  InSequence seq;
+
+  // Init
+  expect_register_instance(mock_io_ctx, 0);
+  expect_register_watch(mock_io_ctx);
+  expect_acquire_lock(mock_managed_lock, 0);
+  ASSERT_EQ(0, instance_watcher->init());
+
+  // Release image on dead (blacklisted) instance
+  C_SaferCond on_acquire;
+  instance_watcher->notify_image_release("dead instance", "global image id",
+                                         &on_acquire);
+  ASSERT_EQ(-ENOENT, on_acquire.wait());
+
+  // Shutdown
+  expect_release_lock(mock_managed_lock, 0);
+  expect_unregister_watch(mock_io_ctx);
+  expect_unregister_instance(mock_io_ctx, 0);
+  instance_watcher->shut_down();
+
+  expect_destroy_lock(mock_managed_lock);
+  delete instance_watcher;
+}
+
 TEST_F(TestMockInstanceWatcher, PeerImageRemovedCancel) {
   MockManagedLock mock_managed_lock;
   librados::MockTestMemIoCtxImpl &mock_io_ctx(get_mock_io_ctx(m_local_io_ctx));
@@ -592,7 +656,6 @@ TEST_F(TestMockInstanceWatcher, PeerImageRemovedCancel) {
   expect_destroy_lock(mock_managed_lock);
   delete instance_watcher;
 }
-
 
 class TestMockInstanceWatcher_NotifySync : public TestMockInstanceWatcher {
 public:

@@ -325,11 +325,24 @@ int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
   }
   file = get_file(oid, true, snapc);
 
-  RWLock::WLocker l2(file->lock);
-  file->exists = false;
+  {
+    RWLock::WLocker l2(file->lock);
+    file->exists = false;
+  }
 
   TestMemCluster::Files::iterator it = m_pool->files.find(oid);
   assert(it != m_pool->files.end());
+
+  if (*it->second.rbegin() == file) {
+    TestMemCluster::ObjectHandlers object_handlers;
+    std::swap(object_handlers, m_pool->file_handlers[oid]);
+    m_pool->file_handlers.erase(oid);
+
+    for (auto object_handler : object_handlers) {
+      object_handler->handle_removed(m_client);
+    }
+  }
+
   if (it->second.size() == 1) {
     m_pool->files.erase(it);
     m_pool->file_omaps.erase(oid);
