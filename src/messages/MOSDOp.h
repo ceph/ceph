@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 
@@ -34,7 +34,7 @@ class OSD;
 
 class MOSDOp : public MOSDFastDispatchOp {
 
-  static const int HEAD_VERSION = 10;
+  static const int HEAD_VERSION = 8;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -256,7 +256,7 @@ public:
   bool has_flag(__u32 flag) const { return flags & flag; };
 
   bool is_retry_attempt() const { return flags & CEPH_OSD_FLAG_RETRY; }
-  void set_retry_attempt(unsigned a) { 
+  void set_retry_attempt(unsigned a) {
     if (a)
       flags |= CEPH_OSD_FLAG_RETRY;
     else
@@ -314,7 +314,7 @@ struct ceph_osd_request_head {
       encode(snap_seq, payload);
       __u32 num_snaps = snaps.size();
       encode(num_snaps, payload);
-      
+
       //::encode(ops, payload);
       __u16 num_ops = ops.size();
       encode(num_ops, payload);
@@ -378,24 +378,14 @@ struct ceph_osd_request_head {
       encode(retry_attempt, payload);
       encode(features, payload);
     } else {
-      // v10 encoding for dmclock use, otherwise v8.
-      // v8 encoding with hobject_t hash separate from pgid, no
-      // reassert version.
-      if (HAVE_FEATURE(features, QOS_DMC)) {
-	header.version = HEAD_VERSION;
-      } else {
-	header.version = 8;
-      }
+      header.version = HEAD_VERSION;
 
       encode(pgid, payload);
       encode(hobj.get_hash(), payload);
       encode(osdmap_epoch, payload);
       encode(flags, payload);
       encode(reqid, payload);
-      if (header.version >= 10) {
-	encode(qos_req_params, payload);
-	encode(qos_profile_params, payload);
-      }
+
       encode_trace(payload, features);
 
       // -- above decoded up front; below decoded post-dispatch thread --
@@ -416,8 +406,14 @@ struct ceph_osd_request_head {
 
       encode(retry_attempt, payload);
       encode(features, payload);
+
+      if (HAVE_FEATURE(features, QOS_DMC)) {
+	// assert(header.version >= 8);
+	encode(qos_req_params, payload);
+	encode(qos_profile_params, payload);
+      }
     }
-  }
+  } // encode_payload
 
   void decode_payload() override {
     assert(partial_decode_needed && final_decode_needed);
@@ -432,12 +428,6 @@ struct ceph_osd_request_head {
       decode(osdmap_epoch, p);
       decode(flags, p);
       decode(reqid, p);
-      if (header.version >= 9) {
-	decode(qos_req_params, p);
-	if (header.version >= 10) {
-	  decode(qos_profile_params, p);
-	}
-      }
       decode_trace(p);
     } else if (header.version == 7) {
       decode(pgid.pgid, p);      // raw pgid
@@ -470,7 +460,7 @@ struct ceph_osd_request_head {
       decode(snap_seq, p);
       __u32 num_snaps;
       decode(num_snaps, p);
-      
+
       //::decode(ops, p);
       __u16 num_ops;
       decode(num_ops, p);
@@ -588,6 +578,12 @@ struct ceph_osd_request_head {
     decode(retry_attempt, p);
 
     decode(features, p);
+
+    if (HAVE_FEATURE(features, QOS_DMC)) {
+      assert(header.version >= 8);
+      decode(qos_req_params, p);
+      decode(qos_profile_params, p);
+    }
 
     hobj.pool = pgid.pgid.pool();
     hobj.set_key(oloc.key);

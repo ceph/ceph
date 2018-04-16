@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,7 +7,7 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
  * 
  */
@@ -33,7 +33,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 10;
+  static const int HEAD_VERSION = 9;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -59,11 +59,11 @@ public:
 
   bool     is_ondisk() const { return get_flags() & CEPH_OSD_FLAG_ONDISK; }
   bool     is_onnvram() const { return get_flags() & CEPH_OSD_FLAG_ONNVRAM; }
-  
+
   int get_result() const { return result; }
   const eversion_t& get_replay_version() const { return replay_version; }
   const version_t& get_user_version() const { return user_version; }
-  
+
   void set_result(int r) { result = r; }
 
   void set_reply_versions(eversion_t v, version_t uv) {
@@ -123,7 +123,7 @@ public:
   int get_retry_attempt() const {
     return retry_attempt;
   }
-  
+
   // osdmap
   epoch_t get_map_epoch() const { return osdmap_epoch; }
 
@@ -212,27 +212,33 @@ public:
         header.version = 6;
         encode(redirect, payload);
       } else {
+	// header.version is at least 8 at this point
         do_redirect = !redirect.empty();
         encode(do_redirect, payload);
         if (do_redirect) {
           encode(redirect, payload);
         }
-        if ((features & CEPH_FEATURE_QOS_DMC) == 0) {
-          header.version = 8;
-        } else {
+
+	// With header.version == 8, we end here. With header.version
+	// == 9 we encode features at this point so we can then add
+	// features individually
+	encode(features, payload);
+
+	if (HAVE_FEATURE(features, QOS_DMC)) {
           encode(qos_phase, payload);
           encode(qos_cost, payload);
-        }
+	}
       }
       encode_trace(payload, features);
     }
   }
+
   void decode_payload() override {
     using ceph::decode;
     bufferlist::iterator p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    if (header.version >= 8) {
       decode(oid, p);
       decode(pgid, p);
       decode(flags, p);
@@ -257,8 +263,16 @@ public:
       decode(do_redirect, p);
       if (do_redirect)
 	decode(redirect, p);
-      decode(qos_phase, p);
-      decode(qos_cost, p);
+
+      // header.version >= 9
+      uint64_t features;
+      decode(features, p);
+      if (HAVE_FEATURE(features, QOS_DMC)) {
+	decode(qos_phase, p);
+	decode(qos_cost, p);
+      }
+
+      // header.version >= 8
       decode_trace(p);
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
@@ -321,18 +335,22 @@ public:
       }
       if (header.version >= 8) {
 	if (header.version >= 9) {
-	  decode(qos_phase, p);
-	  if (header.version >= 10) {
+	  uint64_t features;
+	  decode(features, p);
+
+	  if (HAVE_FEATURE(features, QOS_DMC)) {
+	    decode(qos_phase, p);
 	    decode(qos_cost, p);
 	  }
 	}
-        decode_trace(p);
+
+	decode_trace(p);
       }
     }
   }
 
   const char *get_type_name() const override { return "osd_op_reply"; }
-  
+
   void print(ostream& out) const override {
     out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops
