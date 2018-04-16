@@ -112,7 +112,6 @@
 
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDScrub2.h"
-#include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
 
 #include "messages/MMonCommand.h"
