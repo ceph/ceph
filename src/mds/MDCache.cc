@@ -12262,8 +12262,13 @@ void MDCache::enqueue_scrub(
 {
   dout(10) << __func__ << " " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
-  filepath fp(path);
-  mdr->set_filepath(fp);
+  if (path == "~mdsdir") {
+    filepath fp(MDS_INO_MDSDIR(mds->get_nodeid()));
+    mdr->set_filepath(fp);
+  } else {
+    filepath fp(path);
+    mdr->set_filepath(path);
+  }
 
   C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
   cs->header = std::make_shared<ScrubHeader>(
