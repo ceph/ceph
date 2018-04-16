@@ -61,7 +61,7 @@ public:
     if (alloced_gids)
       delete[] gids;
   }
-  UserPerm& operator=(const UserPerm o) {
+  UserPerm& operator=(const UserPerm& o) {
     deep_copy_from(o);
     return *this;
   }
