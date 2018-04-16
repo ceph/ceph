@@ -15,10 +15,23 @@ class TestWatchNotify;
 
 class TestCluster {
 public:
+  struct ObjectHandler {
+    virtual ~ObjectHandler() {}
+
+    virtual void handle_removed(TestRadosClient* test_rados_client) = 0;
+  };
+
+  TestCluster() : m_watch_notify(this) {
+  }
   virtual ~TestCluster() {
   }
 
   virtual TestRadosClient *create_rados_client(CephContext *cct) = 0;
+
+  virtual int register_object_handler(int64_t pool_id, const std::string& o,
+                                      ObjectHandler* object_handler) = 0;
+  virtual void unregister_object_handler(int64_t pool_id, const std::string& o,
+                                         ObjectHandler* object_handler) = 0;
 
   TestWatchNotify *get_watch_notify() {
     return &m_watch_notify;
