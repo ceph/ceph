@@ -162,13 +162,21 @@ def _normalize_mount_flags(flags, extras=None):
     :param extras: Extra set of mount flags, useful when custom devices like VDO need
                    ad-hoc mount configurations
     """
+    # Instead of using set(), we append to this new list here, because set()
+    # will create an arbitrary order on the items that is made worst when
+    # testing with tools like tox that includes a randomizer seed. By
+    # controlling the order, it is easier to correctly assert the expectation
+    unique_flags = []
     if isinstance(flags, list):
         if extras:
             flags.extend(extras)
+
         # ensure that spaces and commas are removed so that they can join
         # correctly, remove duplicates
-        flags = set([f.strip().strip(',') for f in flags if f])
-        return ','.join(flags)
+        for f in flags:
+            if f and f not in unique_flags:
+                unique_flags.append(f.strip().strip(','))
+        return ','.join(unique_flags)
 
     # split them, clean them, and join them back again
     flags = flags.strip().split(' ')
@@ -176,7 +184,10 @@ def _normalize_mount_flags(flags, extras=None):
         flags.extend(extras)
 
     # remove possible duplicates
-    flags = ','.join([f.strip().strip(',') for f in flags if f])
+    for f in flags:
+        if f and f not in unique_flags:
+            unique_flags.append(f.strip().strip(','))
+    flags = ','.join(unique_flags)
     # Before returning, split them again, since strings can be mashed up
     # together, preventing removal of duplicate entries
     return ','.join(set(flags.split(',')))
