@@ -25,7 +25,6 @@
 #include "mgr/MgrContext.h"
 
 // For ::config_prefix
-#include "PyModuleRegistry.h"
 #include "PyModule.h"
 
 #include "ActivePyModules.h"
@@ -463,7 +462,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
   }
 }
 
-PyObject *ActivePyModules::get_config_prefix(const std::string &module_name,
+PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
     const std::string &prefix) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
@@ -479,8 +478,8 @@ PyObject *ActivePyModules::get_config_prefix(const std::string &module_name,
   
   Mutex::Locker lock(module_config.lock);
   
-  for (auto p = module_config.config.lower_bound(global_prefix);
-       p != module_config.config.end() && p->first.find(global_prefix) == 0;
+  for (auto p = store_cache.lower_bound(global_prefix);
+       p != store_cache.end() && p->first.find(global_prefix) == 0;
        ++p) {
     f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
   }

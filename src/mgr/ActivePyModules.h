@@ -77,7 +77,7 @@ public:
 
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
-  PyObject *get_config_prefix(const std::string &module_name,
+  PyObject *get_store_prefix(const std::string &module_name,
 			      const std::string &prefix) const;
   void set_store(const std::string &module_name,
       const std::string &key, const boost::optional<std::string> &val);
