@@ -28,11 +28,11 @@ void DecayCounter::decode(const utime_t &t, bufferlist::iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
   if (struct_v < 2) {
-    double half_life;
+    double half_life = 0.0;
     decode(half_life, p);
   }
   if (struct_v < 3) {
-    double k;
+    double k = 0.0;
     decode(k, p);
   }
   decode(val, p);

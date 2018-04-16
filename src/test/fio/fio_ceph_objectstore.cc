@@ -504,8 +504,8 @@ int fio_ceph_os_getevents(thread_data* td, unsigned int min,
 {
   auto job = static_cast<Job*>(td->io_ops_data);
   unsigned int events = 0;
-  io_u* u;
-  unsigned int i;
+  io_u* u = NULL;
+  unsigned int i = 0;
 
   // loop through inflight ios until we find 'min' completions
   do {
