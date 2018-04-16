@@ -67,7 +67,7 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
 }
 
 SnapRealm::SnapRealm(MDCache *c, CInode *in) :
-    mdcache(c), inode(in), open(false), parent(0),
+    mdcache(c), inode(in), parent(nullptr),
     num_open_past_parents(0), inodes_with_caps(0)
 {
   global = (inode->ino() == MDS_INO_GLOBAL_SNAPREALM);
@@ -118,8 +118,10 @@ struct C_SR_RetryOpenParents : public MDSInternalContextBase {
   void finish(int r) override {
     if (r < 0)
       sr->_remove_missing_parent(parent_last, parent, r);
-    if (sr->_open_parents(fin, first, last))
-      fin->complete(0);
+    if (sr->_open_parents(fin, first, last)) {
+      if (fin)
+	fin->complete(0);
+    }
     sr->inode->put(CInode::PIN_OPENINGSNAPPARENTS);
   }
 };
@@ -131,6 +133,7 @@ void SnapRealm::_remove_missing_parent(snapid_t snapid, inodeno_t parent, int er
     dout(10) << __func__ << " " << parent << " [" << p->second.first << ","
 	     << p->first << "]  errno " << err << dendl;
     srnode.past_parents.erase(p);
+    past_parents_dirty = true;
   } else {
     dout(10) << __func__ << " " << parent << " not found" << dendl;
   }
@@ -178,6 +181,7 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
       if (parent->state_test(CInode::STATE_PURGING)) {
 	dout(10) << " skip purging past_parent " << *parent << dendl;
 	srnode.past_parents.erase(p++);
+	past_parents_dirty = true;
 	continue;
       }
       assert(parent->snaprealm);  // hmm!
@@ -702,6 +706,7 @@ void SnapRealm::prune_past_parents()
 	srnode.past_parent_snaps.insert(*p);
     }
     srnode.past_parents.clear();
+    past_parents_dirty = true;
   }
 
   for (auto p = srnode.past_parent_snaps.begin();
