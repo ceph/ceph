@@ -432,8 +432,9 @@ bool ActivePyModules::get_store(const std::string &module_name,
 
   dout(4) << __func__ << " key: " << global_key << dendl;
 
-  if (store_cache.count(global_key)) {
-    *val = store_cache.at(global_key);
+  auto i = store_cache.find(global_key);
+  if (i != store_cache.end()) {
+    *val = i->second;
     return true;
   } else {
     return false;
@@ -454,8 +455,9 @@ bool ActivePyModules::get_config(const std::string &module_name,
 
   Mutex::Locker lock(module_config.lock);
   
-  if (module_config.config.count(global_key)) {
-    *val = module_config.config.at(global_key);
+  auto i = module_config.config.find(global_key);
+  if (i != module_config.config.end()) {
+    *val = i->second;
     return true;
   } else {
     return false;
