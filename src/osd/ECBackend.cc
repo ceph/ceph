@@ -233,7 +233,6 @@ struct OnRecoveryReadComplete :
   public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
   ECBackend *pg;
   hobject_t hoid;
-  set<int> want;
   OnRecoveryReadComplete(ECBackend *pg, const hobject_t &hoid)
     : pg(pg), hoid(hoid) {}
   void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
@@ -2078,9 +2077,7 @@ void ECBackend::objects_read_async(
       sinfo.offset_len_to_stripe_bounds(
 	make_pair(i->first.get<0>(), i->first.get<1>()));
 
-    extent_set esnew;
-    esnew.insert(tmp.first, tmp.second);
-    es.union_of(esnew);
+    es.union_insert(tmp.first, tmp.second);
     flags |= i->first.get<2>();
   }
 
@@ -2192,7 +2189,6 @@ struct CallClientContexts :
     if (res.r != 0)
       goto out;
     assert(res.returned.size() == to_read.size());
-    assert(res.r == 0);
     assert(res.errors.empty());
     for (auto &&read: to_read) {
       pair<uint64_t, uint64_t> adjusted =
