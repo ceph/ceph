@@ -8,7 +8,6 @@
 
 #include "Allocator.h"
 #include "BitAllocator.h"
-#include "include/btree_interval_set.h"
 
 class BitMapAllocator : public Allocator {
   CephContext* cct;
