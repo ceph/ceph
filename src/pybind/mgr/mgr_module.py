@@ -213,6 +213,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
 
 class MgrModule(ceph_module.BaseMgrModule):
     COMMANDS = []
+    OPTIONS = []
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -474,6 +475,23 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_mgr_id()
 
+    def _validate_option(self, key):
+        """
+        Helper: don't allow get/set config callers to 
+        access config options that they didn't declare
+        in their schema.
+        """
+        if key not in [o['name'] for o in self.OPTIONS]:
+            raise RuntimeError("Config option '{0}' is not in {1}.OPTIONS".\
+                    format(key, self.__class__.__name__))
+
+    def _get_config(self, key, default):
+        r = self._ceph_get_config(key)
+        if r is None:
+            return default
+        else:
+            return r
+
     def get_config(self, key, default=None):
         """
         Retrieve the value of a persistent configuration setting
@@ -481,11 +499,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str key:
         :return: str
         """
-        r = self._ceph_get_config(key)
-        if r is None:
-            return default
-        else:
-            return r
+        self._validate_option(key)
+        return self._get_config(key, default)
 
     def get_store_prefix(self, key_prefix):
         """
@@ -498,12 +513,10 @@ class MgrModule(ceph_module.BaseMgrModule):
         return self._ceph_get_store_prefix(key_prefix)
 
     def _get_localized(self, key, default, getter):
-        r = getter(self.get_mgr_id() + '/' + key)
+        r = getter(self.get_mgr_id() + '/' + key, None)
         if r is None:
-            r = getter(key)
+            r = getter(key, default)
 
-        if r is None:
-            r = default
         return r
 
     def _set_localized(self, key, val, setter):
@@ -516,7 +529,11 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str default:
         :return: str
         """
-        return self._get_localized(key, default, self.get_config)
+        self._validate_option(key)
+        return self._get_localized(key, default, self._get_config)
+
+    def _set_config(self, key, val):
+        return self._ceph_set_config(key, val)
 
     def set_config(self, key, val):
         """
@@ -525,7 +542,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str key:
         :param str val:
         """
-        self._ceph_set_config(key, val)
+        self._validate_option(key)
+        return self._set_config(key, val)
 
     def set_localized_config(self, key, val):
         """
@@ -534,7 +552,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str default:
         :return: str
         """
-        return self._set_localized(key, val, self.set_config)
+        self._validate_option(key)
+        return self._set_localized(key, val, self._set_config)
 
     def set_store_json(self, key, val):
         """
