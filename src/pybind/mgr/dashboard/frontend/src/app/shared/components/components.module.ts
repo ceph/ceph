@@ -9,7 +9,7 @@ import { PipesModule } from '../pipes/pipes.module';
 import {
   DeleteConfirmationComponent
 } from './delete-confirmation-modal/delete-confirmation-modal.component';
-import { DeletionLinkComponent } from './deletion-link/deletion-link.component';
+import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
 import { HelperComponent } from './helper/helper.component';
 import { ModalComponent } from './modal/modal.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
@@ -38,7 +38,10 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     UsageBarComponent,
     DeleteConfirmationComponent,
     ModalComponent,
-    DeletionLinkComponent
+    DeletionModalComponent
+  ],
+  entryComponents: [
+    DeletionModalComponent
   ],
   providers: [],
   exports: [
@@ -52,7 +55,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
   entryComponents: [
     DeleteConfirmationComponent,
     ModalComponent,
-    DeletionLinkComponent
+    DeletionModalComponent
   ]
 })
 export class ComponentsModule { }
