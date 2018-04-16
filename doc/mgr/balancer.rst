@@ -50,7 +50,7 @@ such that the percentage of PGs that are misplaced (i.e., that need to
 be moved) is below a threshold of (by default) 5%.  The
 ``max_misplaced`` threshold can be adjusted with::
 
-  ceph config-key set mgr/balancer/max_misplaced .07   # 7%
+  ceph config set mgr mgr/balancer/max_misplaced .07   # 7%
 
 
 Modes
