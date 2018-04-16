@@ -133,6 +133,11 @@ class TestModuleSelftest(MgrTestCase):
         self.mgr_cluster.mon_manager.raw_cluster_cmd(
                 "config-key", "set", "mgr/selftest/testnewline", "foo\nbar")
 
+        # Inject configuration setting that does not appear in the
+        # module's config schema
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "config-key", "set", "mgr/selftest/kvitem", "foo\nbar")
+
         # Bring mgr daemons back online, the one that goes active
         # should be doing the upgrade.
         for mgr_id in self.mgr_cluster.mgr_daemons.keys():
@@ -149,8 +154,11 @@ class TestModuleSelftest(MgrTestCase):
         seen_keys = [k for s,k,v in get_config()]
         self.assertIn("mgr/selftest/testkey", seen_keys)
 
-        # And that the non-config-looking one isn't
+        # ...and that the non-config-looking one isn't
         self.assertNotIn("mgr/selftest/testnewline", seen_keys)
+
+        # ...and that the not-in-schema one isn't
+        self.assertNotIn("mgr/selftest/kvitem", seen_keys)
 
         # Restore previous configuration
         for subsys, key, value in stash:
