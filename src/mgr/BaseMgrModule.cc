@@ -369,15 +369,15 @@ ceph_config_get(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
-ceph_config_get_prefix(BaseMgrModule *self, PyObject *args)
+ceph_store_get_prefix(BaseMgrModule *self, PyObject *args)
 {
   char *prefix = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_config_get", &prefix)) {
+  if (!PyArg_ParseTuple(args, "s:ceph_store_get_prefix", &prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
 
-  return self->py_modules->get_config_prefix(self->this_module->get_name(),
+  return self->py_modules->get_store_prefix(self->this_module->get_name(),
       prefix);
 }
 
@@ -579,8 +579,8 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_config", (PyCFunction)ceph_config_get, METH_VARARGS,
    "Get a configuration value"},
 
-  {"_ceph_get_config_prefix", (PyCFunction)ceph_config_get_prefix, METH_VARARGS,
-   "Get all configuration values with a given prefix"},
+  {"_ceph_get_store_prefix", (PyCFunction)ceph_store_get_prefix, METH_VARARGS,
+   "Get all KV store values with a given prefix"},
 
   {"_ceph_set_config", (PyCFunction)ceph_config_set, METH_VARARGS,
    "Set a configuration value"},
