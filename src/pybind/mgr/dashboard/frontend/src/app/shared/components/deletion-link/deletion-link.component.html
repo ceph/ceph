@@ -1,9 +1,7 @@
-<button type="button"
-        [class]="btnClasses"
-        (click)="showModal(deletionModal)">
+<a (click)="showModal(deletionModal)">
   <i class="fa fa-fw fa-trash-o"></i>
   <ng-container *ngTemplateOutlet="deletionHeading"></ng-container>
-</button>
+</a>
 
 <ng-template #deletionModal>
   <cd-modal #modal
