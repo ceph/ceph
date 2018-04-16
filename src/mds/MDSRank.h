@@ -427,6 +427,8 @@ class MDSRank {
     bool evict_client(int64_t session_id, bool wait, bool blacklist,
                       std::stringstream& ss, Context *on_killed=nullptr);
 
+    void mark_base_recursively_scrubbed(inodeno_t ino);
+
   protected:
     void dump_clientreplay_status(Formatter *f) const;
     void command_scrub_path(Formatter *f, std::string_view path, vector<string>& scrubop_vec);
