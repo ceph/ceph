@@ -101,7 +101,6 @@ class ViewCache(object):
     VALUE_OK = 0
     VALUE_STALE = 1
     VALUE_NONE = 2
-    VALUE_EXCEPTION = 3
 
     class GetterThread(threading.Thread):
         def __init__(self, view, fn, args, kwargs):
@@ -116,6 +115,7 @@ class ViewCache(object):
         def run(self):
             try:
                 t0 = time.time()
+                logger.debug("VC: starting execution of %s", self.fn)
                 val = self.fn(*self.args, **self.kwargs)
                 t1 = time.time()
             except Exception as ex:
@@ -133,6 +133,8 @@ class ViewCache(object):
                     self._view.getter_thread = None
                     self._view.exception = None
 
+            logger.debug("VC: execution of %s finished in: %s", self.fn,
+                         t1 - t0)
             self.event.set()
 
     class RemoteViewCache(object):
@@ -174,6 +176,8 @@ class ViewCache(object):
                     self.getter_thread = ViewCache.GetterThread(self, fn, args,
                                                                 kwargs)
                     self.getter_thread.start()
+                else:
+                    logger.debug("VC: getter_thread still alive for: %s", fn)
 
                 ev = self.getter_thread.event
 
@@ -184,7 +188,8 @@ class ViewCache(object):
                     # We fetched the data within the timeout
                     if self.exception:
                         # execution raised an exception
-                        return ViewCache.VALUE_EXCEPTION, self.exception
+                        # pylint: disable=raising-bad-type
+                        raise self.exception
                     return ViewCache.VALUE_OK, self.value
                 elif self.value_when is not None:
                     # We have some data, but it doesn't meet freshness requirements
@@ -413,14 +418,16 @@ class TaskManager(object):
             cls._finished_tasks.append(task)
 
     @classmethod
-    def run(cls, name, metadata, fn, args=None, kwargs=None, executor=None):
+    def run(cls, name, metadata, fn, args=None, kwargs=None, executor=None,
+            exception_handler=None):
         if not args:
             args = []
         if not kwargs:
             kwargs = {}
         if not executor:
             executor = ThreadedExecutor()
-        task = Task(name, metadata, fn, args, kwargs, executor)
+        task = Task(name, metadata, fn, args, kwargs, executor,
+                    exception_handler)
         with cls._lock:
             if task in cls._executing_tasks:
                 logger.debug("TM: task already executing: %s", task)
@@ -488,8 +495,9 @@ class TaskManager(object):
             'duration': t.duration,
             'progress': t.progress,
             'success': not t.exception,
-            'ret_value': t.ret_value,
-            'exception': str(t.exception) if t.exception else None
+            'ret_value': t.ret_value if not t.exception else None,
+            'exception': t.ret_value if t.exception and t.ret_value else (
+                {'detail': str(t.exception)} if t.exception else None)
         } for t in fn_t]
 
 
@@ -539,13 +547,15 @@ class ThreadedExecutor(TaskExecutor):
 
 
 class Task(object):
-    def __init__(self, name, metadata, fn, args, kwargs, executor):
+    def __init__(self, name, metadata, fn, args, kwargs, executor,
+                 exception_handler=None):
         self.name = name
         self.metadata = metadata
         self.fn = fn
         self.fn_args = args
         self.fn_kwargs = kwargs
         self.executor = executor
+        self.ex_handler = exception_handler
         self.running = False
         self.event = threading.Event()
         self.progress = None
@@ -577,6 +587,12 @@ class Task(object):
 
     def _complete(self, ret_value, exception=None):
         now = time.time()
+        if exception and self.ex_handler:
+            # pylint: disable=broad-except
+            try:
+                ret_value = self.ex_handler(exception)
+            except Exception as ex:
+                exception = ex
         with self.lock:
             assert self.running, "_complete cannot be called before _run"
             self.end_time = now

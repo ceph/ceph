@@ -1,136 +1,431 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-arguments,too-many-locals,unused-argument,
+# pylint: disable=too-many-statements,too-many-branches
 from __future__ import absolute_import
 
 import math
 import cherrypy
+import rados
 import rbd
 
-from . import ApiController, AuthRequired, RESTController
+from . import ApiController, AuthRequired, RESTController, Task
 from .. import mgr
+from ..services.ceph_service import CephService
 from ..tools import ViewCache
 
 
-@ApiController('rbd')
+# pylint: disable=inconsistent-return-statements
+def _rbd_exception_handler(ex):
+    if isinstance(ex, rbd.OSError):
+        return {'status': 409, 'detail': str(ex), 'errno': ex.errno,
+                'component': 'rbd'}
+    elif isinstance(ex, rados.OSError):
+        return {'status': 409, 'detail': str(ex), 'errno': ex.errno,
+                'component': 'rados'}
+    raise ex
+
+
+def RbdTask(name, metadata, wait_for):
+    return Task("rbd/{}".format(name), metadata, wait_for,
+                _rbd_exception_handler)
+
+
+def _rbd_call(pool_name, func, *args, **kwargs):
+    with mgr.rados.open_ioctx(pool_name) as ioctx:
+        func(ioctx, *args, **kwargs)
+
+
+def _rbd_image_call(pool_name, image_name, func, *args, **kwargs):
+    def _ioctx_func(ioctx, image_name, func, *args, **kwargs):
+        with rbd.Image(ioctx, image_name) as img:
+            func(ioctx, img, *args, **kwargs)
+
+    return _rbd_call(pool_name, _ioctx_func, image_name, func, *args, **kwargs)
+
+
+RBD_FEATURES_NAME_MAPPING = {
+    rbd.RBD_FEATURE_LAYERING: "layering",
+    rbd.RBD_FEATURE_STRIPINGV2: "striping",
+    rbd.RBD_FEATURE_EXCLUSIVE_LOCK: "exclusive-lock",
+    rbd.RBD_FEATURE_OBJECT_MAP: "object-map",
+    rbd.RBD_FEATURE_FAST_DIFF: "fast-diff",
+    rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
+    rbd.RBD_FEATURE_JOURNALING: "journaling",
+    rbd.RBD_FEATURE_DATA_POOL: "data-pool",
+    rbd.RBD_FEATURE_OPERATIONS: "operations",
+}
+
+
+def _format_bitmask(features):
+    """
+    Formats the bitmask:
+
+    >>> _format_bitmask(45)
+    ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
+    """
+    names = [val for key, val in RBD_FEATURES_NAME_MAPPING.items()
+             if key & features == key]
+    return sorted(names)
+
+
+def _format_features(features):
+    """
+    Converts the features list to bitmask:
+
+    >>> _format_features(['deep-flatten', 'exclusive-lock', 'layering', 'object-map'])
+    45
+
+    >>> _format_features(None) is None
+    True
+
+    >>> _format_features('not a list') is None
+    True
+    """
+    if not isinstance(features, list):
+        return None
+
+    res = 0
+    for key, value in RBD_FEATURES_NAME_MAPPING.items():
+        if value in features:
+            res = key | res
+    return res
+
+
+def _sort_features(features, enable=True):
+    """
+    Sorts image features according to feature dependencies:
+
+    object-map depends on exclusive-lock
+    journaling depends on exclusive-lock
+    fast-diff depends on object-map
+    """
+    ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']
+
+    def key_func(feat):
+        try:
+            return ORDER.index(feat)
+        except ValueError:
+            return id(feat)
+
+    features.sort(key=key_func, reverse=not enable)
+
+
+@ApiController('block/image')
 @AuthRequired()
 class Rbd(RESTController):
 
-    RBD_FEATURES_NAME_MAPPING = {
-        rbd.RBD_FEATURE_LAYERING: "layering",
-        rbd.RBD_FEATURE_STRIPINGV2: "striping",
-        rbd.RBD_FEATURE_EXCLUSIVE_LOCK: "exclusive-lock",
-        rbd.RBD_FEATURE_OBJECT_MAP: "object-map",
-        rbd.RBD_FEATURE_FAST_DIFF: "fast-diff",
-        rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
-        rbd.RBD_FEATURE_JOURNALING: "journaling",
-        rbd.RBD_FEATURE_DATA_POOL: "data-pool",
-        rbd.RBD_FEATURE_OPERATIONS: "operations",
-    }
+    # set of image features that can be enable on existing images
+    ALLOW_ENABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
+                                 "journaling"])
 
-    def __init__(self):
-        super(Rbd, self).__init__()
-        self.rbd = None
+    # set of image features that can be disabled on existing images
+    ALLOW_DISABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
+                                  "deep-flatten", "journaling"])
 
-    @staticmethod
-    def _format_bitmask(features):
-        """
-        Formats the bitmask:
+    @classmethod
+    def _rbd_disk_usage(cls, image, snaps, whole_object=True):
+        class DUCallback(object):
+            def __init__(self):
+                self.used_size = 0
 
-        >>> Rbd._format_bitmask(45)
-        ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
-        """
-        names = [val for key, val in Rbd.RBD_FEATURES_NAME_MAPPING.items()
-                 if key & features == key]
-        return sorted(names)
+            def __call__(self, offset, length, exists):
+                if exists:
+                    self.used_size += length
 
-    @staticmethod
-    def _format_features(features):
-        """
-        Converts the features list to bitmask:
+        snap_map = {}
+        prev_snap = None
+        total_used_size = 0
+        for _, size, name in snaps:
+            image.set_snap(name)
+            du_callb = DUCallback()
+            image.diff_iterate(0, size, prev_snap, du_callb,
+                               whole_object=whole_object)
+            snap_map[name] = du_callb.used_size
+            total_used_size += du_callb.used_size
+            prev_snap = name
 
-        >>> Rbd._format_features(['deep-flatten', 'exclusive-lock', 'layering', 'object-map'])
-        45
+        return total_used_size, snap_map
 
-        >>> Rbd._format_features(None) is None
-        True
-
-        >>> Rbd._format_features('not a list') is None
-        True
-        """
-        if not features or not isinstance(features, list):
-            return None
-
-        res = 0
-        for key, value in Rbd.RBD_FEATURES_NAME_MAPPING.items():
-            if value in features:
-                res = key | res
-        return res
-
-    @ViewCache()
-    def _rbd_list(self, pool_name):
-        ioctx = mgr.rados.open_ioctx(pool_name)
-        self.rbd = rbd.RBD()
-        names = self.rbd.list(ioctx)
-        result = []
-        for name in names:
-            i = rbd.Image(ioctx, name)
-            stat = i.stat()
-            stat['name'] = name
-            stat['id'] = i.id()
-            features = i.features()
+    def _rbd_image(self, ioctx, pool_name, image_name):
+        with rbd.Image(ioctx, image_name) as img:
+            stat = img.stat()
+            stat['name'] = image_name
+            stat['id'] = img.id()
+            stat['pool_name'] = pool_name
+            features = img.features()
             stat['features'] = features
-            stat['features_name'] = self._format_bitmask(features)
+            stat['features_name'] = _format_bitmask(features)
 
             # the following keys are deprecated
             del stat['parent_pool']
             del stat['parent_name']
 
+            stat['timestamp'] = "{}Z".format(img.create_timestamp()
+                                             .isoformat())
+
+            stat['stripe_count'] = img.stripe_count()
+            stat['stripe_unit'] = img.stripe_unit()
+
+            data_pool_name = CephService.get_pool_name_from_id(
+                img.data_pool_id())
+            if data_pool_name == pool_name:
+                data_pool_name = None
+            stat['data_pool'] = data_pool_name
+
             try:
-                parent_info = i.parent_info()
-                parent = "{}@{}".format(parent_info[0], parent_info[1])
-                if parent_info[0] != pool_name:
-                    parent = "{}/{}".format(parent_info[0], parent)
-                stat['parent'] = parent
+                parent_info = img.parent_info()
+                stat['parent'] = {
+                    'pool_name': parent_info[0],
+                    'image_name': parent_info[1],
+                    'snap_name': parent_info[2]
+                }
             except rbd.ImageNotFound:
-                pass
-            result.append(stat)
+                # no parent image
+                stat['parent'] = None
+
+            # snapshots
+            stat['snapshots'] = []
+            for snap in img.list_snaps():
+                snap['timestamp'] = "{}Z".format(
+                    img.get_snap_timestamp(snap['id']).isoformat())
+                snap['is_protected'] = img.is_protected_snap(snap['name'])
+                snap['used_bytes'] = None
+                snap['children'] = []
+                img.set_snap(snap['name'])
+                for child_pool_name, child_image_name in img.list_children():
+                    snap['children'].append({
+                        'pool_name': child_pool_name,
+                        'image_name': child_image_name
+                    })
+                stat['snapshots'].append(snap)
+
+            # disk usage
+            img_flags = img.flags()
+            if 'fast-diff' in stat['features_name'] and \
+                    not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags:
+                snaps = [(s['id'], s['size'], s['name'])
+                         for s in stat['snapshots']]
+                snaps.sort(key=lambda s: s[0])
+                snaps += [(snaps[-1][0]+1 if snaps else 0, stat['size'], None)]
+                total_prov_bytes, snaps_prov_bytes = self._rbd_disk_usage(
+                    img, snaps, True)
+                stat['total_disk_usage'] = total_prov_bytes
+                for snap, prov_bytes in snaps_prov_bytes.items():
+                    if snap is None:
+                        stat['disk_usage'] = prov_bytes
+                        continue
+                    for ss in stat['snapshots']:
+                        if ss['name'] == snap:
+                            ss['disk_usage'] = prov_bytes
+                            break
+            else:
+                stat['total_disk_usage'] = None
+                stat['disk_usage'] = None
+
+            return stat
+
+    @ViewCache()
+    def _rbd_pool_list(self, pool_name):
+        rbd_inst = rbd.RBD()
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            names = rbd_inst.list(ioctx)
+            result = []
+            for name in names:
+                try:
+                    stat = self._rbd_image(ioctx, pool_name, name)
+                except rbd.ImageNotFound:
+                    # may have been removed in the meanwhile
+                    continue
+                result.append(stat)
+            return result
+
+    def _rbd_list(self, pool_name=None):
+        if pool_name:
+            pools = [pool_name]
+        else:
+            pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
+
+        result = []
+        for pool in pools:
+            # pylint: disable=unbalanced-tuple-unpacking
+            status, value = self._rbd_pool_list(pool)
+            result.append({'status': status, 'value': value, 'pool_name': pool})
         return result
 
-    def get(self, pool_name):
+    def list(self, pool_name=None):
         # pylint: disable=unbalanced-tuple-unpacking
-        status, value = self._rbd_list(pool_name)
-        if status == ViewCache.VALUE_EXCEPTION:
-            raise value
-        return {'status': status, 'value': value}
+        return self._rbd_list(pool_name)
 
-    def create(self, data):
-        if not self.rbd:
-            self.rbd = rbd.RBD()
-
-        # Get input values
-        name = data.get('name')
-        pool_name = data.get('pool_name')
-        size = data.get('size')
-        obj_size = data.get('obj_size')
-        features = data.get('features')
-        stripe_unit = data.get('stripe_unit')
-        stripe_count = data.get('stripe_count')
-        data_pool = data.get('data_pool')
-
-        # Set order
-        order = None
-        if obj_size and obj_size > 0:
-            order = int(round(math.log(float(obj_size), 2)))
-
-        # Set features
-        feature_bitmask = self._format_features(features)
-
+    def get(self, pool_name, image_name):
         ioctx = mgr.rados.open_ioctx(pool_name)
-
         try:
-            self.rbd.create(ioctx, name, size, order=order, old_format=False,
+            return self._rbd_image(ioctx, pool_name, image_name)
+        except rbd.ImageNotFound:
+            raise cherrypy.HTTPError(404)
+
+    @RbdTask('create',
+             {'pool_name': '{pool_name}', 'image_name': '{name}'}, 2.0)
+    @RESTController.args_from_json
+    def create(self, name, pool_name, size, obj_size=None, features=None,
+               stripe_unit=None, stripe_count=None, data_pool=None):
+
+        def _create(ioctx):
+            rbd_inst = rbd.RBD()
+
+            # Set order
+            l_order = None
+            if obj_size and obj_size > 0:
+                l_order = int(round(math.log(float(obj_size), 2)))
+
+            # Set features
+            feature_bitmask = _format_features(features)
+
+            rbd_inst.create(ioctx, name, size, order=l_order, old_format=False,
                             features=feature_bitmask, stripe_unit=stripe_unit,
                             stripe_count=stripe_count, data_pool=data_pool)
-        except rbd.OSError as e:
-            cherrypy.response.status = 400
-            return {'success': False, 'detail': str(e), 'errno': e.errno}
-        return {'success': True}
+
+        return _rbd_call(pool_name, _create)
+
+    @RbdTask('delete', ['{pool_name}', '{image_name}'], 2.0)
+    def delete(self, pool_name, image_name):
+        rbd_inst = rbd.RBD()
+        return _rbd_call(pool_name, rbd_inst.remove, image_name)
+
+    @RbdTask('edit', ['{pool_name}', '{image_name}'], 4.0)
+    @RESTController.args_from_json
+    def set(self, pool_name, image_name, name=None, size=None, features=None):
+        def _edit(ioctx, image):
+            rbd_inst = rbd.RBD()
+            # check rename image
+            if name and name != image_name:
+                rbd_inst.rename(ioctx, image_name, name)
+
+            # check resize
+            if size and size != image.size():
+                image.resize(size)
+
+            # check enable/disable features
+            if features is not None:
+                curr_features = _format_bitmask(image.features())
+                # check disabled features
+                _sort_features(curr_features, enable=False)
+                for feature in curr_features:
+                    if feature not in features and feature in self.ALLOW_DISABLE_FEATURES:
+                        f_bitmask = _format_features([feature])
+                        image.update_features(f_bitmask, False)
+                # check enabled features
+                _sort_features(features)
+                for feature in features:
+                    if feature not in curr_features and feature in self.ALLOW_ENABLE_FEATURES:
+                        f_bitmask = _format_features([feature])
+                        image.update_features(f_bitmask, True)
+
+        return _rbd_image_call(pool_name, image_name, _edit)
+
+    @RbdTask('copy',
+             {'src_pool_name': '{pool_name}',
+              'src_image_name': '{image_name}',
+              'dest_pool_name': '{dest_pool_name}',
+              'dest_image_name': '{dest_image_name}'}, 2.0)
+    @RESTController.resource(['POST'])
+    @RESTController.args_from_json
+    def copy(self, pool_name, image_name, dest_pool_name, dest_image_name,
+             obj_size=None, features=None, stripe_unit=None,
+             stripe_count=None, data_pool=None):
+
+        def _src_copy(s_ioctx, s_img):
+            def _copy(d_ioctx):
+                # Set order
+                l_order = None
+                if obj_size and obj_size > 0:
+                    l_order = int(round(math.log(float(obj_size), 2)))
+
+                # Set features
+                feature_bitmask = _format_features(features)
+
+                s_img.copy(d_ioctx, dest_image_name, feature_bitmask, l_order,
+                           stripe_unit, stripe_count, data_pool)
+
+            return _rbd_call(dest_pool_name, _copy)
+
+        return _rbd_image_call(pool_name, image_name, _src_copy)
+
+
+@ApiController('block/image/:pool_name/:image_name/snap')
+class RbdSnapshot(RESTController):
+
+    @RbdTask('snap/create',
+             ['{pool_name}', '{image_name}', '{snapshot_name}'], 2.0)
+    @RESTController.args_from_json
+    def create(self, pool_name, image_name, snapshot_name):
+        def _create_snapshot(ioctx, img, snapshot_name):
+            img.create_snap(snapshot_name)
+
+        return _rbd_image_call(pool_name, image_name, _create_snapshot,
+                               snapshot_name)
+
+    @RbdTask('snap/delete',
+             ['{pool_name}', '{image_name}', '{snapshot_name}'], 2.0)
+    def delete(self, pool_name, image_name, snapshot_name):
+        def _remove_snapshot(ioctx, img, snapshot_name):
+            img.remove_snap(snapshot_name)
+
+        return _rbd_image_call(pool_name, image_name, _remove_snapshot,
+                               snapshot_name)
+
+    @RbdTask('snap/edit',
+             ['{pool_name}', '{image_name}', '{snapshot_name}'], 4.0)
+    @RESTController.args_from_json
+    def set(self, pool_name, image_name, snapshot_name, new_snap_name=None,
+            is_protected=None):
+        def _edit(ioctx, img, snapshot_name):
+            if new_snap_name and new_snap_name != snapshot_name:
+                img.rename_snap(snapshot_name, new_snap_name)
+                snapshot_name = new_snap_name
+            if is_protected is not None and \
+                    is_protected != img.is_protected_snap(snapshot_name):
+                if is_protected:
+                    img.protect_snap(snapshot_name)
+                else:
+                    img.unprotect_snap(snapshot_name)
+
+        return _rbd_image_call(pool_name, image_name, _edit, snapshot_name)
+
+    @RbdTask('snap/rollback',
+             ['{pool_name}', '{image_name}', '{snapshot_name}'], 5.0)
+    @RESTController.resource(['POST'])
+    def rollback(self, pool_name, image_name, snapshot_name):
+        def _rollback(ioctx, img, snapshot_name):
+            img.rollback_to_snap(snapshot_name)
+        return _rbd_image_call(pool_name, image_name, _rollback, snapshot_name)
+
+    @RbdTask('clone',
+             {'parent_pool_name': '{pool_name}',
+              'parent_image_name': '{image_name}',
+              'parent_snap_name': '{snapshot_name}',
+              'child_pool_name': '{child_pool_name}',
+              'child_image_name': '{child_image_name}'}, 2.0)
+    @RESTController.resource(['POST'])
+    @RESTController.args_from_json
+    def clone(self, pool_name, image_name, snapshot_name, child_pool_name,
+              child_image_name, obj_size=None, features=None,
+              stripe_unit=None, stripe_count=None, data_pool=None):
+
+        def _parent_clone(p_ioctx):
+            def _clone(ioctx):
+                # Set order
+                l_order = None
+                if obj_size and obj_size > 0:
+                    l_order = int(round(math.log(float(obj_size), 2)))
+
+                # Set features
+                feature_bitmask = _format_features(features)
+
+                rbd_inst = rbd.RBD()
+                rbd_inst.clone(p_ioctx, image_name, snapshot_name, ioctx,
+                               child_image_name, feature_bitmask, l_order,
+                               stripe_unit, stripe_count, data_pool)
+
+            return _rbd_call(child_pool_name, _clone)
+
+        return _rbd_call(pool_name, _parent_clone)
