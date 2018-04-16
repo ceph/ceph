@@ -31,7 +31,7 @@ private:
     m_uid = b.m_uid;
     m_gid = b.m_gid;
     gid_count = b.gid_count;
-    if (gid_count) {
+    if (gid_count > 0) {
       gids = new gid_t[gid_count];
       alloced_gids = true;
       for (int i = 0; i < gid_count; ++i) {
