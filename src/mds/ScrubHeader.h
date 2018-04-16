@@ -41,7 +41,7 @@ public:
   bool get_recursive() const { return recursive; }
   bool get_repair() const { return repair; }
   bool get_force() const { return force; }
-  const CInode *get_origin() const { return origin; }
+  CInode *get_origin() const { return origin; }
   std::string_view get_tag() const { return tag; }
   Formatter &get_formatter() const { return *formatter; }
 

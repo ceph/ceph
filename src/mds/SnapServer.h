@@ -36,6 +36,9 @@ protected:
 
   version_t last_checked_osdmap;
 
+  bool root_scrubbed = false; // all snaprealms under root are converted?
+  bool mdsdir_scrubbed = false; // all snaprealms under ~mds0 are converted?
+
   void encode_server_state(bufferlist& bl) const override {
     ENCODE_START(5, 3, bl);
     encode(last_snap, bl);
@@ -97,8 +100,17 @@ public:
 
   void check_osd_map(bool force);
 
+  void mark_base_recursively_scrubbed(inodeno_t ino) {
+    if (ino ==  MDS_INO_ROOT)
+      root_scrubbed = true;
+    else if (ino == MDS_INO_MDSDIR(rank))
+      mdsdir_scrubbed = true;
+    else
+      assert(0);
+  }
   bool can_allow_multimds_snaps() const {
-    return snaps.empty() || snaps.begin()->first >= snaprealm_v2_since;
+    return (root_scrubbed && mdsdir_scrubbed) ||
+	   snaps.empty() || snaps.begin()->first >= snaprealm_v2_since;
   }
 
   void encode(bufferlist& bl) const {

@@ -12296,7 +12296,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     return;
 
   C_MDS_EnqueueScrub *cs = static_cast<C_MDS_EnqueueScrub*>(mdr->internal_op_finish);
-  ScrubHeaderRef &header = cs->header;
+  ScrubHeaderRef header = cs->header;
 
   // Cannot scrub same dentry twice at same time
   if (in->scrub_infop && in->scrub_infop->scrub_in_progress) {
@@ -12308,8 +12308,16 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   header->set_origin(in);
 
-  Context *fin = nullptr;
-  if (!header->get_recursive()) {
+  Context *fin;
+  if (header->get_recursive()) {
+    header->get_origin()->get(CInode::PIN_SCRUBQUEUE);
+    fin = new MDSInternalContextWrapper(mds,
+	    new FunctionContext([this, header](int r) {
+	      recursive_scrub_finish(header);
+	      header->get_origin()->put(CInode::PIN_SCRUBQUEUE);
+	    })
+	  );
+  } else {
     fin = cs->take_finisher();
   }
 
@@ -12350,6 +12358,22 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   mds->server->respond_to_request(mdr, 0);
   return;
+}
+
+void MDCache::recursive_scrub_finish(const ScrubHeaderRef& header)
+{
+  if (header->get_origin()->is_base() &&
+      header->get_force() && header->get_repair()) {
+    // notify snapserver that base directory is recursively scrubbed.
+    // After both root and mdsdir are recursively scrubbed, snapserver
+    // knows that all old format snaprealms are converted to the new
+    // format.
+    if (mds->mdsmap->get_num_in_mds() == 1 &&
+	mds->mdsmap->get_num_failed_mds() == 0 &&
+	mds->mdsmap->get_tableserver() == mds->get_nodeid()) {
+      mds->mark_base_recursively_scrubbed(header->get_origin()->ino());
+    }
+  }
 }
 
 struct C_MDC_RespondInternalRequest : public MDCacheLogContext {
