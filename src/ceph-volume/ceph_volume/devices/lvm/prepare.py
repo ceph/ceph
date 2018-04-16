@@ -56,12 +56,14 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
         device = prepare_dmcrypt(key, device, 'data', tags)
         journal = prepare_dmcrypt(key, journal, 'journal', tags)
 
+    # vdo detection
+    is_vdo = api.is_vdo(device)
     # create the directory
     prepare_utils.create_osd_path(osd_id)
     # format the device
     prepare_utils.format_device(device)
     # mount the data device
-    prepare_utils.mount_osd(device, osd_id)
+    prepare_utils.mount_osd(device, osd_id, is_vdo=is_vdo)
     # symlink the journal
     prepare_utils.link_journal(journal, osd_id)
     # get the latest monmap
