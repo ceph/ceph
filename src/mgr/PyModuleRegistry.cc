@@ -410,6 +410,29 @@ void PyModuleRegistry::upgrade_config(
       auto last_slash = i.first.rfind('/');
       const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
       const std::string key = i.first.substr(last_slash + 1);
+
+      const auto &value = i.second;
+
+      // Heuristic to skip things that look more like stores
+      // than configs.
+      bool is_config = true;
+      for (const auto &c : value) {
+        if (c == '\n' || c == '\r' || c < 0x20) {
+          is_config = false;
+          break;
+        }
+      }
+
+      if (value.size() > 256) {
+        is_config = false;
+      }
+
+      if (!is_config) {
+        dout(1) << "Not migrating config module:key "
+                << module_name << " : " << key << dendl;
+        continue;
+      }
+
       module_config.set_config(monc, module_name, key, i.second);
       dout(4) << "Rewrote configuration module:key "
               << module_name << ":" << key << dendl;
