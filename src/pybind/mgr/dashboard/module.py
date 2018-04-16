@@ -30,7 +30,8 @@ from .controllers import generate_routes, json_error_page
 from .controllers.auth import Auth
 from .tools import SessionExpireAtBrowserCloseTool, NotificationQueue, \
                    RequestLoggingTool, TaskManager
-from .settings import options_command_list, handle_option_command
+from .settings import options_command_list, options_schema_list, \
+                      handle_option_command
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -72,6 +73,16 @@ class Module(MgrModule):
         }
     ]
     COMMANDS.extend(options_command_list())
+
+    OPTIONS = [
+        {'name': 'server_addr'},
+        {'name': 'server_port'},
+        {'name': 'session-expire'},
+        {'name': 'password'},
+        {'name': 'url_prefix'},
+        {'name': 'username'},
+    ]
+    OPTIONS.extend(options_schema_list())
 
     @property
     def url_prefix(self):

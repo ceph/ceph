@@ -201,6 +201,20 @@ class Eval:
         return r
 
 class Module(MgrModule):
+    OPTIONS = [
+            {'name': 'active'},
+            {'name': 'begin_time'},
+            {'name': 'crush_compat_max_iteratons'},
+            {'name': 'crush_compat_step'},
+            {'name': 'end_time'},
+            {'name': 'max_misplaced'},
+            {'name': 'min_score'},
+            {'name': 'mode'},
+            {'name': 'sleep_interval'},
+            {'name': 'upmap_max_iterations'},
+            {'name': 'upmap_max_deviations'},
+    ]
+
     COMMANDS = [
         {
             "cmd": "balancer status",
