@@ -435,6 +435,8 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
       new_srnode->seq = snaprealm->get_newest_seq();
       new_srnode->past_parents.clear();
     }
+    if (snaprealm)
+      snaprealm->past_parents_dirty = false;
   } else {
     if (snapid == 0)
       snapid = mdcache->get_global_snaprealm()->get_newest_seq();
@@ -3994,7 +3996,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       START = 0,
       BACKTRACE,
       INODE,
-      DIRFRAGS
+      DIRFRAGS,
+      SNAPREALM,
     };
 
     ValidationContinuation(CInode *i,
@@ -4009,6 +4012,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       set_callback(BACKTRACE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_backtrace));
       set_callback(INODE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_inode_disk));
       set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
+      set_callback(SNAPREALM, static_cast<Continuation::stagePtr>(&ValidationContinuation::_snaprealm));
     }
 
     ~ValidationContinuation() override {
@@ -4055,6 +4059,10 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 	// there's nothing to do for symlinks!
 	return true;
       }
+
+      // prefetch snaprealm's past parents
+      if (in->snaprealm && !in->snaprealm->have_past_parents_open())
+	in->snaprealm->open_parents(nullptr);
 
       C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
 					    in->mdcache->mds->finisher);
@@ -4157,13 +4165,13 @@ next:
         }
       }
 
-      // quit if we're a file, or kick off directory checks otherwise
-      // TODO: validate on-disk inode for non-base directories
-      if (!in->is_dir()) {
-        return true;
-      }
 
-      return validate_directory_data();
+      if (in->is_dir()) {
+	return validate_directory_data();
+      } else {
+	// TODO: validate on-disk inode for normal files
+	return check_inode_snaprealm();
+      }
     }
 
     bool validate_directory_data() {
@@ -4178,8 +4186,9 @@ next:
         shadow_in->fetch(get_internal_callback(INODE));
         return false;
       } else {
+	// TODO: validate on-disk inode for non-base directories
 	results->inode.passed = true;
-        return check_dirfrag_rstats();
+	return check_dirfrag_rstats();
       }
     }
 
@@ -4193,7 +4202,7 @@ next:
       mempool_inode& i = in->inode;
       if (si.version > i.version) {
         // uh, what?
-        results->inode.error_str << "On-disk inode is newer than in-memory one!";
+        results->inode.error_str << "On-disk inode is newer than in-memory one; ";
 	goto next;
       } else {
         bool divergent = false;
@@ -4201,7 +4210,7 @@ next:
         results->inode.passed = !divergent && r >= 0;
         if (!results->inode.passed) {
           results->inode.error_str <<
-              "On-disk inode is divergent or newer than in-memory one!";
+              "On-disk inode is divergent or newer than in-memory one; ";
 	  goto next;
         }
       }
@@ -4291,6 +4300,37 @@ next:
 
       results->raw_stats.passed = true;
 next:
+      // snaprealm
+      return check_inode_snaprealm();
+    }
+
+    bool check_inode_snaprealm() {
+      if (!in->snaprealm)
+	return true;
+
+      if (!in->snaprealm->have_past_parents_open()) {
+	in->snaprealm->open_parents(get_internal_callback(SNAPREALM));
+	return false;
+      } else {
+	return immediate(SNAPREALM, 0);
+      }
+    }
+
+    bool _snaprealm(int rval) {
+
+      if (in->snaprealm->past_parents_dirty ||
+	  !in->get_projected_srnode()->past_parents.empty()) {
+	// temporarily store error in field of on-disk inode validation temporarily
+	results->inode.checked = true;
+	results->inode.passed = false;
+	if (in->scrub_infop->header->get_repair()) {
+	  results->inode.error_str << "Inode has old format snaprealm (will upgrade)";
+	  results->inode.repaired = true;
+	  in->mdcache->upgrade_inode_snaprealm(in);
+	} else {
+	  results->inode.error_str << "Inode has old format snaprealm";
+	}
+      }
       return true;
     }
 

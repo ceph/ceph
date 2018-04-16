@@ -1229,7 +1229,8 @@ protected:
   void enqueue_scrub_work(MDRequestRef& mdr);
   void repair_inode_stats_work(MDRequestRef& mdr);
   void repair_dirfrag_stats_work(MDRequestRef& mdr);
-  friend class C_MDC_RepairDirfragStats;
+  void upgrade_inode_snaprealm_work(MDRequestRef& mdr);
+  friend class C_MDC_RespondInternalRequest;
 public:
   void flush_dentry(std::string_view path, Context *fin);
   /**
@@ -1240,6 +1241,7 @@ public:
 		     Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
+  void upgrade_inode_snaprealm(CInode *in);
 
 public:
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */

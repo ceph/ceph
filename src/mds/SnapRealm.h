@@ -45,7 +45,8 @@ public:
   MDCache *mdcache;
   CInode *inode;
 
-  mutable bool open;                        // set to true once all past_parents are opened
+  mutable bool open = false;                        // set to true once all past_parents are opened
+  bool past_parents_dirty = false;
   bool global;
 
   SnapRealm *parent;
