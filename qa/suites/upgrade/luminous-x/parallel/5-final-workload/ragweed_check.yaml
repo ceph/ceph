@@ -1,3 +1,6 @@
+meta:
+- desc: |
+    ragweed check for rgw
 tasks:
 - rgw:
   - client.0
