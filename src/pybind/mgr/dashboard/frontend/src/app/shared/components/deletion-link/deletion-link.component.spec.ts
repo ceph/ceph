@@ -8,28 +8,28 @@ import { Subscriber } from 'rxjs/Subscriber';
 
 import { ModalComponent } from '../modal/modal.component';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
-import { DeletionButtonComponent } from './deletion-button.component';
+import { DeletionLinkComponent } from './deletion-link.component';
 
 @Component({
   template: `
-    <cd-deletion-button #ctrlDeleteButton
-                        metaType="Controller delete handling"
-                        pattern="ctrl-test"
-                        (toggleDeletion)="fakeDeleteController()">
+    <cd-deletion-link #ctrlDeleteButton
+                      metaType="Controller delete handling"
+                      pattern="ctrl-test"
+                      (toggleDeletion)="fakeDeleteController()">
       The spinner is handled by the controller if you have use the modal as ViewChild in order to
       use it's functions to stop the spinner or close the dialog.
-    </cd-deletion-button>
-    <cd-deletion-button #modalDeleteButton
-                        metaType="Modal delete handling"
-                        [deletionObserver]="fakeDelete()"
-                        pattern="modal-test">
+    </cd-deletion-link>
+    <cd-deletion-link #modalDeleteButton
+                      metaType="Modal delete handling"
+                      [deletionObserver]="fakeDelete()"
+                      pattern="modal-test">
       The spinner is handled by the modal if your given deletion function returns a Observable.
-    </cd-deletion-button>
+    </cd-deletion-link>
   `
 })
 class MockComponent {
-  @ViewChild('ctrlDeleteButton') ctrlDeleteButton: DeletionButtonComponent;
-  @ViewChild('modalDeleteButton') modalDeleteButton: DeletionButtonComponent;
+  @ViewChild('ctrlDeleteButton') ctrlDeleteButton: DeletionLinkComponent;
+  @ViewChild('modalDeleteButton') modalDeleteButton: DeletionLinkComponent;
   someData = [1, 2, 3, 4, 5];
   finished: number[];
 
@@ -56,14 +56,14 @@ class MockComponent {
   }
 }
 
-describe('DeletionButtonComponent', () => {
+describe('DeletionLinkComponent', () => {
   let mockComponent: MockComponent;
-  let component: DeletionButtonComponent;
+  let component: DeletionLinkComponent;
   let fixture: ComponentFixture<MockComponent>;
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ MockComponent, DeletionButtonComponent, ModalComponent,
+      declarations: [ MockComponent, DeletionLinkComponent, ModalComponent,
         SubmitButtonComponent],
       imports: [ModalModule.forRoot(), ReactiveFormsModule],
     })

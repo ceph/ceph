@@ -9,15 +9,14 @@ import { Observable } from 'rxjs/Observable';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 
 @Component({
-  selector: 'cd-deletion-button',
-  templateUrl: './deletion-button.component.html',
-  styleUrls: ['./deletion-button.component.scss']
+  selector: 'cd-deletion-link',
+  templateUrl: './deletion-link.component.html',
+  styleUrls: ['./deletion-link.component.scss']
 })
-export class DeletionButtonComponent implements OnInit {
+export class DeletionLinkComponent implements OnInit {
   @ViewChild(SubmitButtonComponent) submitButton: SubmitButtonComponent;
   @Input() metaType: string;
   @Input() pattern = 'yes';
-  @Input() btnClasses = 'btn btn-sm btn-primary';
   @Input() deletionObserver: () => Observable<any>;
   @Output() toggleDeletion = new EventEmitter();
   bsModalRef: BsModalRef;
