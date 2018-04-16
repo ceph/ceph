@@ -1097,9 +1097,7 @@ void Objecter::_scan_requests(
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
-      if (op->session) {
-	_session_op_remove(op->session, op);
-      }
+      _session_op_remove(op->session, op);
       need_resend[op->tid] = op;
       _op_cancel_map_check(op);
       break;
@@ -1128,9 +1126,7 @@ void Objecter::_scan_requests(
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
       need_resend_command[c->tid] = c;
-      if (c->session) {
-	_session_command_op_remove(c->session, c);
-      }
+      _session_command_op_remove(c->session, c);
       _command_cancel_map_check(c);
       break;
     case RECALC_OP_TARGET_POOL_DNE:
@@ -4785,8 +4781,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << " not found" << dendl;
     m->put();
     sl.unlock();
-    if (s)
-      s->put();
+    s->put();
     return;
   }
 
@@ -4799,8 +4794,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << dendl;
     m->put();
     sl.unlock();
-    if (s)
-      s->put();
+    s->put();
     return;
   }
   if (c->poutbl) {
@@ -4812,8 +4806,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
 
   _finish_command(c, m->r, m->rs);
   m->put();
-  if (s)
-    s->put();
+  s->put();
 }
 
 void Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
