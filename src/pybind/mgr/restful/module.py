@@ -261,7 +261,7 @@ class Module(MgrModule):
 
     def refresh_keys(self):
         self.keys = {}
-        rawkeys = self.get_config_prefix('keys/') or {}
+        rawkeys = self.get_store_prefix('keys/') or {}
         for k, v in six.iteritems(rawkeys):
             self.keys[k[5:]] = v  # strip of keys/ prefix
 
@@ -283,16 +283,16 @@ class Module(MgrModule):
         self.log.info('server_addr: %s server_port: %d',
                       server_addr, server_port)
 
-        cert = self.get_localized_config("crt")
+        cert = self.get_localized_store("crt")
         if cert is not None:
             cert_tmp = tempfile.NamedTemporaryFile()
             cert_tmp.write(cert.encode('utf-8'))
             cert_tmp.flush()
             cert_fname = cert_tmp.name
         else:
-            cert_fname = self.get_localized_config('crt_file')
+            cert_fname = self.get_localized_store('crt_file')
 
-        pkey = self.get_localized_config("key")
+        pkey = self.get_localized_store("key")
         if pkey is not None:
             pkey_tmp = tempfile.NamedTemporaryFile()
             pkey_tmp.write(pkey.encode('utf-8'))
@@ -406,7 +406,7 @@ class Module(MgrModule):
             else:
                 key = str(uuid4())
                 self.keys[command['key_name']] = key
-                self.set_config('keys/' + command['key_name'], key)
+                self.set_store('keys/' + command['key_name'], key)
 
             return (
                 0,
@@ -417,7 +417,7 @@ class Module(MgrModule):
         elif command['prefix'] == "restful delete-key":
             if command['key_name'] in self.keys:
                 del self.keys[command['key_name']]
-                self.set_config('keys/' + command['key_name'], None)
+                self.set_store('keys/' + command['key_name'], None)
 
             return (
                 0,
@@ -435,8 +435,8 @@ class Module(MgrModule):
 
         elif command['prefix'] == "restful create-self-signed-cert":
             cert, pkey = self.create_self_signed_cert()
-            self.set_config(self.get_mgr_id() + '/crt', cert.decode('utf-8'))
-            self.set_config(self.get_mgr_id() + '/key', pkey.decode('utf-8'))
+            self.set_store(self.get_mgr_id() + '/crt', cert.decode('utf-8'))
+            self.set_store(self.get_mgr_id() + '/key', pkey.decode('utf-8'))
 
             self.restart()
             return (
