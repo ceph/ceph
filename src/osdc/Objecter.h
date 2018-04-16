@@ -25,8 +25,6 @@
 
 #include <boost/thread/shared_mutex.hpp>
 
-#include "dmclock/src/dmclock_client.h"
-
 #include "include/assert.h"
 #include "include/buffer.h"
 #include "include/types.h"
@@ -1210,8 +1208,6 @@ public:
   MonClient *monc;
   Finisher *finisher;
   ZTracer::Endpoint trace_endpoint;
-  std::unique_ptr<dmc::ServiceTracker<int>> qos_trk;
-  std::atomic<bool> mclock_service_tracker;
 private:
   OSDMap    *osdmap;
 public:
@@ -1261,7 +1257,6 @@ private:
   void start_tick();
   void tick();
   void update_crush_location();
-  void update_mclock_service_tracker();
 
   class RequestStateHook;
 
@@ -2031,7 +2026,6 @@ private:
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     trace_endpoint("0.0.0.0", 0, "Objecter"),
-    mclock_service_tracker(cct->_conf->objecter_mclock_service_tracker),
     osdmap(new OSDMap),
     max_linger_id(0),
     keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
@@ -2046,11 +2040,7 @@ private:
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
     epoch_barrier(0),
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-  {
-    if (cct->_conf->objecter_mclock_service_tracker) {
-      qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
-    }
-  }
+  { }
   ~Objecter() override;
 
   void init();
