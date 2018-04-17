@@ -176,7 +176,6 @@ TEST_F(TestMockWatcherRewatchRequest, WatchError) {
   InSequence seq;
   expect_aio_unwatch(mock_image_ctx, 0);
   expect_aio_watch(mock_image_ctx, -EINVAL);
-  expect_aio_watch(mock_image_ctx, 0);
 
   C_SaferCond ctx;
   MockRewatchRequest *req = MockRewatchRequest::create(mock_image_ctx.md_ctx,
@@ -189,7 +188,7 @@ TEST_F(TestMockWatcherRewatchRequest, WatchError) {
     RWLock::WLocker watch_locker(m_watch_lock);
     req->send();
   }
-  ASSERT_EQ(0, ctx.wait());
+  ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
 } // namespace watcher

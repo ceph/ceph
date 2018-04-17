@@ -250,13 +250,22 @@ void Watcher::rewatch() {
 }
 
 void Watcher::handle_rewatch(int r) {
-  ldout(m_cct, 10) "r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   WatchState next_watch_state = WATCH_STATE_REGISTERED;
-  if (r < 0) {
-    // only EBLACKLISTED or ENOENT can be returned
-    assert(r == -EBLACKLISTED || r == -ENOENT);
+  if (r  == -EBLACKLISTED) {
+    lderr(m_cct) << "client blacklisted" << dendl;
     next_watch_state = WATCH_STATE_UNREGISTERED;
+  } else if (r == -ENOENT) {
+    lderr(m_cct) << "failed to unwatch: " << cpp_strerror(r) << dendl;
+    next_watch_state = WATCH_STATE_UNREGISTERED;
+  } else if (r < 0) {
+    next_watch_state = WATCH_STATE_ERROR;
+    if (m_unregister_watch_ctx != nullptr) {
+      ldout(m_cct, 10) << "image is closing, skip rewatch" << dendl;
+    } else {
+      rewatch();
+    }  
   }
 
   Context *unregister_watch_ctx = nullptr;
