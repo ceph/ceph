@@ -32,6 +32,9 @@
 // --------
 // utime_t
 
+inline __u32 cap_to_u32_max(__u64 t) {
+  return std::min(t, (__u64)std::numeric_limits<uint32_t>::max());
+}
 /* WARNING: If add member in utime_t, please make sure the encode/decode funtion
  * work well. For little-endian machine, we should make sure there is no padding
  * in 32-bit machine and 64-bit machine.
@@ -47,9 +50,10 @@ public:
   bool is_zero() const {
     return (tv.tv_sec == 0) && (tv.tv_nsec == 0);
   }
+
   void normalize() {
     if (tv.tv_nsec > 1000000000ul) {
-      tv.tv_sec += tv.tv_nsec / (1000000000ul);
+      tv.tv_sec = cap_to_u32_max(tv.tv_sec + tv.tv_nsec / (1000000000ul));
       tv.tv_nsec %= 1000000000ul;
     }
   }
@@ -433,22 +437,21 @@ public:
 WRITE_CLASS_ENCODER(utime_t)
 WRITE_CLASS_DENC(utime_t)
 
-
 // arithmetic operators
 inline utime_t operator+(const utime_t& l, const utime_t& r) {
-  return utime_t( l.sec() + r.sec() + (l.nsec()+r.nsec())/1000000000L,
-                  (l.nsec()+r.nsec())%1000000000L );
+  __u64 sec = (__u64)l.sec() + r.sec();
+  return utime_t(cap_to_u32_max(sec), l.nsec() + r.nsec());
 }
 inline utime_t& operator+=(utime_t& l, const utime_t& r) {
-  l.sec_ref() += r.sec() + (l.nsec()+r.nsec())/1000000000L;
+  l.sec_ref() = cap_to_u32_max((__u64)l.sec() + r.sec());
   l.nsec_ref() += r.nsec();
-  l.nsec_ref() %= 1000000000L;
+  l.normalize();
   return l;
 }
 inline utime_t& operator+=(utime_t& l, double f) {
   double fs = trunc(f);
   double ns = (f - fs) * 1000000000.0;
-  l.sec_ref() += (long)fs;
+  l.sec_ref() = cap_to_u32_max(l.sec() + (__u64)fs);
   l.nsec_ref() += (long)ns;
   l.normalize();
   return l;
