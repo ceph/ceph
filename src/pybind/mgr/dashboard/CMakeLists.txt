@@ -62,6 +62,6 @@ add_custom_command(
 )
 add_custom_target(mgr-dashboard-frontend-build
   DEPENDS frontend/dist mgr-dashboard-frontend-deps
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
-)
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend)
+add_dependencies(tests mgr-dashboard-frontend-build)
 endif(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
