@@ -78,19 +78,10 @@ void RewatchRequest::rewatch() {
 void RewatchRequest::handle_rewatch(int r) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << "r=" << r << dendl;
-
-  if (r == -EBLACKLISTED) {
-    lderr(cct) << "client blacklisted" << dendl;
-    finish(r);
-    return;
-  } else if (r == -ENOENT) {
-    ldout(cct, 5) << "object deleted" << dendl;
-    finish(r);
-    return;
-  } else if (r < 0) {
+  if (r < 0) {
     lderr(cct) << "failed to watch object: " << cpp_strerror(r)
                << dendl;
-    rewatch();
+    finish(r);
     return;
   }
 
