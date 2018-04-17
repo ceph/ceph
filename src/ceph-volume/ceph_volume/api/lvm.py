@@ -76,7 +76,7 @@ def get_api_vgs():
     Return the list of group volumes available in the system using flags to
     include common metadata associated with them
 
-    Command and sample delimeted output, should look like::
+    Command and sample delimited output should look like::
 
         $ vgs --noheadings --separator=';' \
           -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
@@ -96,7 +96,7 @@ def get_api_lvs():
     Return the list of logical volumes available in the system using flags to include common
     metadata associated with them
 
-    Command and delimeted output, should look like::
+    Command and delimited output should look like::
 
         $ lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
           ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
@@ -117,7 +117,7 @@ def get_api_pvs():
 
     This will only return physical volumes set up to work with LVM.
 
-    Command and delimeted output, should look like::
+    Command and delimited output should look like::
 
         $ pvs --noheadings --separator=';' -o pv_name,pv_tags,pv_uuid
           /dev/sda1;;
@@ -446,7 +446,7 @@ class Volumes(list):
 
     def _purge(self):
         """
-        Deplete all the items in the list, used internally only so that we can
+        Delete all the items in the list, used internally only so that we can
         dynamically allocate the items when filtering without the concern of
         messing up the contents
         """
