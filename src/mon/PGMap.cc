@@ -2068,9 +2068,8 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
 {
   TextTable tab;
 
-  tab.define_column("PG_STAT", TextTable::LEFT, TextTable::LEFT);
+  tab.define_column("PG", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("MISSING_ON_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEGRADED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
@@ -2081,12 +2080,8 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   tab.define_column("VERSION", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("REPORTED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("UP", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("UP_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("ACTING", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("ACTING_PRIMARY", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("LAST_SCRUB", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("LAST_DEEP_SCRUB", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("DEEP_SCRUB_STAMP", TextTable::LEFT, TextTable::RIGHT);
 
   for (auto i = pgs.begin(); i != pgs.end(); ++i) {
@@ -2095,9 +2090,11 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
     ostringstream reported;
     reported << st.reported_epoch << ":" << st.reported_seq;
 
+    ostringstream upstr, actingstr;
+    upstr << st.up << 'p' << st.up_primary;
+    actingstr << st.acting << 'p' << st.acting_primary;
     tab << *i
         << st.stats.sum.num_objects
-        << st.stats.sum.num_objects_missing_on_primary
         << st.stats.sum.num_objects_degraded
         << st.stats.sum.num_objects_misplaced
         << st.stats.sum.num_objects_unfound
@@ -2107,13 +2104,9 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
         << st.last_change
         << st.version
         << reported.str()
-        << st.up
-        << st.up_primary
-        << st.acting
-        << st.acting_primary
-        << st.last_scrub
+        << upstr.str()
+        << actingstr.str()
         << st.last_scrub_stamp
-        << st.last_deep_scrub
         << st.last_deep_scrub_stamp
         << TextTable::endrow;
   }
