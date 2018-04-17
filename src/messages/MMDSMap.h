@@ -34,7 +34,7 @@ public:
 
   MMDSMap() : 
     Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION) {}
-  MMDSMap(const uuid_d &f, MDSMap *mm) :
+  MMDSMap(const uuid_d &f, const MDSMap *mm) :
     Message(CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION),
     fsid(f) {
     epoch = mm->get_epoch();
