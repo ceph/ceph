@@ -264,7 +264,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
 
   ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
                                         dest_md_ctx, false);
-  r = dest->state->open(false);
+  r = dest->state->open(0);
   if (r < 0) {
     lderr(cct) << "failed to read newly created header" << dendl;
     return r;
