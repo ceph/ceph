@@ -103,6 +103,7 @@ protected:
 public:
 
   friend class MDSMonitor;
+  friend class PaxosFSMap;
 
   FSMap() 
     : epoch(0),
