@@ -105,7 +105,7 @@ TYPED_TEST(AllocatorTest, test_add_free_rm_free_Fibonnaci_CantorSet) {
       Inext[width].insert(Inext[width].end(), dd.second.begin(), dd.second.end());
     }
   };
-
+/*
   auto print = [](const std::string& name, const aset_t& S) {
     for (auto &s: S) {
       std::cout << name << s.first << "["; //std::endl;
@@ -115,7 +115,7 @@ TYPED_TEST(AllocatorTest, test_add_free_rm_free_Fibonnaci_CantorSet) {
       std::cout << "]" << std::endl;
     }
   };
-
+*/
   auto size = [](const aset_t& S) -> uint64_t {
     size_t sum=0;
     for (auto &s: S) {
@@ -157,10 +157,6 @@ TYPED_TEST(AllocatorTest, test_add_free_rm_free_Fibonnaci_CantorSet) {
 
 
 TYPED_TEST(AllocatorTest, test_fragmentation) {
-  if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
-    std::cerr << "[ SKIPPING ] --would fail--" << std::endl;
-    return;
-  }
   typename TestFixture::Allocator sa(g_ceph_context);
   constexpr size_t M = 1<<20;
   constexpr size_t P = 4096;
@@ -183,6 +179,10 @@ TYPED_TEST(AllocatorTest, test_fragmentation) {
     ASSERT_EQ(sa.get_free(), M);
   }
   sa.reserve(M);
+  if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
+    std::cerr << "[ SKIPPING REST ] --would fail--" << std::endl;
+    return;
+  }
   uint64_t offset;
   uint32_t allocated;
   ASSERT_EQ(0, sa.allocate_int(M, P, 0, &offset, &allocated));
@@ -192,10 +192,6 @@ TYPED_TEST(AllocatorTest, test_fragmentation) {
 
 
 TYPED_TEST(AllocatorTest, test_fragmentation_dragged) {
-  if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
-    std::cerr << "[ SKIPPING ] --would fail--" << std::endl;
-    return;
-  }
   typename TestFixture::Allocator sa(g_ceph_context);
   constexpr size_t M = 1<<26;
   constexpr size_t P = 4096;
@@ -238,10 +234,89 @@ TYPED_TEST(AllocatorTest, test_fragmentation_dragged) {
   ASSERT_EQ(sa.get_free(), M);
 
   sa.reserve(M);
+  if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
+      std::cerr << "[ SKIPPING REST ] --would fail--" << std::endl;
+      return;
+  }
   uint64_t offset;
   uint32_t allocated;
   ASSERT_EQ(0, sa.allocate_int(M, P, 0, &offset, &allocated));
   ASSERT_EQ(allocated, M);
+}
+
+TYPED_TEST(AllocatorTest, performance_test) {
+  typename TestFixture::Allocator sa(g_ceph_context);
+  srand(1);
+  constexpr size_t CAPACITY = 1<<30;
+  constexpr size_t MAXALLOC = 1<<26;
+  constexpr size_t PAGE = 4096;
+  sa.init_add_free(0, CAPACITY);
+  typedef std::pair<uint64_t, uint32_t> allocation_t;
+  typedef std::list<allocation_t> allocation_list_t;
+  allocation_list_t allocation_list;
+  std::vector<allocation_list_t::iterator> allocation_vector;
+
+  auto want_size = [CAPACITY](int i) -> uint64_t {
+    //graph sin (t+12) + sin (1.1(t+13)) + sin(1.2(t+12)) + sin(1.3(t+13)) + t/8, t=0 to 80
+    //graph sin(t/80*pi)*(sin (t)*2 + sin(t*3)*2) + sin(t/80*pi)*10, t=0 to 80
+    double t = i / 1000. * 80;
+    double r =
+        sin (t/80 * M_PI) *
+        (sin (t) * 2 + sin (t*3) * 2 + 10);
+    return r / 14 * CAPACITY;
+  };
+  uint64_t allocation_count = 0;
+
+  for (int k=0; k<10; k++)
+  for (int i=0; i<1000;i++) {
+    uint64_t wsize = want_size(i);
+    uint64_t offset;
+    uint32_t v = rand() % (MAXALLOC / PAGE);
+    uint32_t scale = cbits(MAXALLOC / PAGE) - cbits(v);
+    uint64_t size = ( (rand() % (1 << scale)) + 1 ) * PAGE;
+
+    bool more = true;
+    while ((CAPACITY - sa.get_free()) < wsize && more) {
+      if (0 == sa.reserve(size)) {
+        uint32_t allocated = 0;
+        if (0 == sa.allocate_int(size, PAGE, 1, &offset, &allocated)) {
+          auto n = allocation_list.emplace(allocation_list.end(), allocation_t{offset,allocated});
+          allocation_vector.push_back(n);
+          allocation_count++;
+        } else {
+          more = false;
+        }
+        sa.unreserve(size - allocated);
+      }
+    }
+    while ((CAPACITY - sa.get_free()) > wsize) {
+      size_t r = rand()%allocation_vector.size();
+      auto it = allocation_vector[r];
+      interval_set<uint64_t> tr;
+      tr.insert(it->first, it->second);
+      sa.release(tr);
+      allocation_vector[r] = allocation_vector.back();
+      allocation_vector.resize(allocation_vector.size() - 1);
+    }
+
+  }
+  interval_set<uint64_t> tr;
+  for (size_t i = 0; i < allocation_vector.size(); i++) {
+    auto it = allocation_vector[i];
+    tr.insert(it->first, it->second);
+  }
+  sa.release(tr);
+  ASSERT_EQ(sa.get_free(), CAPACITY);
+
+  if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
+      std::cerr << "[ SKIPPING REST ] --would fail--" << std::endl;
+      return;
+  }
+  uint64_t offset;
+  uint32_t allocated;
+  sa.reserve(CAPACITY);
+  ASSERT_EQ(0, sa.allocate_int(CAPACITY, PAGE, 0, &offset, &allocated));
+  ASSERT_EQ(allocated, CAPACITY);
 }
 
 int main(int argc, char **argv) {
