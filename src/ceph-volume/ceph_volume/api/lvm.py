@@ -313,7 +313,7 @@ def remove_vg(vg_name):
     """
     Removes a volume group.
     """
-    fail_msg = "Unable to remove vg %s".format(vg_name)
+    fail_msg = "Unable to remove vg %s" % vg_name
     process.run(
         [
             'vgremove',
@@ -329,7 +329,7 @@ def remove_pv(pv_name):
     """
     Removes a physical volume.
     """
-    fail_msg = "Unable to remove vg %s".format(pv_name)
+    fail_msg = "Unable to remove vg %s" % pv_name
     process.run(
         [
             'pvremove',
@@ -359,7 +359,7 @@ def remove_lv(path):
         terminal_verbose=True,
     )
     if returncode != 0:
-        raise RuntimeError("Unable to remove %s".format(path))
+        raise RuntimeError("Unable to remove %s" % path)
     return True
 
 
