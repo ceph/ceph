@@ -179,12 +179,15 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   update_log_clients();
 
-  op_tracker.set_complaint_and_threshold(g_conf->get_val<double>("mon_op_complaint_time"),                              
-                                         g_conf->get_val<int64_t>("mon_op_log_threshold"));
-  op_tracker.set_history_size_and_duration(g_conf->get_val<uint64_t>("mon_op_history_size"),
-                                           g_conf->get_val<uint64_t>("mon_op_history_duration"));
-  op_tracker.set_history_slow_op_size_and_threshold(g_conf->get_val<uint64_t>("mon_op_history_slow_op_size"),
-                                                    g_conf->get_val<double>("mon_op_history_slow_op_threshold"));
+  op_tracker.set_complaint_and_threshold(
+      g_conf->get_val<std::chrono::seconds>("mon_op_complaint_time").count(),
+      g_conf->get_val<int64_t>("mon_op_log_threshold"));
+  op_tracker.set_history_size_and_duration(
+      g_conf->get_val<uint64_t>("mon_op_history_size"),
+      g_conf->get_val<std::chrono::seconds>("mon_op_history_duration").count());
+  op_tracker.set_history_slow_op_size_and_threshold(
+      g_conf->get_val<uint64_t>("mon_op_history_slow_op_size"),
+      g_conf->get_val<std::chrono::seconds>("mon_op_history_slow_op_threshold").count());
 
   paxos = new Paxos(this, "paxos");
 
@@ -274,14 +277,6 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
     << "from='admin socket' entity='admin socket' "
     << "cmd='" << command << "' args=" << args << ": dispatch";
 
-  set<string> filters;
-  vector<string> filter_str;
-  if (cmd_getval(cct, cmdmap, "filterstr", filter_str)) {                                                                                                                           
-      copy(filter_str.begin(), filter_str.end(),
-          inserter(filters, filters.end()));
-  }
-
-
   if (command == "mon_status") {
     get_mon_status(f.get(), ss);
     if (f)
@@ -340,7 +335,7 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
         please enable \"mon_enable_op_tracker\", and the tracker will start to track new ops received afterwards.";
     }
   } else if (command == "dump_historic_slow_ops") {
-    if (op_tracker.dump_historic_slow_ops(f.get(), filters)) {
+    if (op_tracker.dump_historic_slow_ops(f.get(), {})) {
       f->flush(ss);
     } else {
       ss << "op_tracker tracking is not enabled now, so no ops are tracked currently, even those get stuck. \
@@ -5458,7 +5453,7 @@ vector<DaemonHealthMetric> Monitor::get_health_metrics()
   utime_t oldest_secs;
   const utime_t now = ceph_clock_now();
   auto too_old = now;
-  too_old -= g_conf->get_val<double>("mon_op_complaint_time");
+  too_old -= g_conf->get_val<std::chrono::seconds>("mon_op_complaint_time").count();
   int slow = 0;
 
   auto count_slow_ops = [&](TrackedOp& op) {
