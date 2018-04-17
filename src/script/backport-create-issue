@@ -36,6 +36,17 @@ from redminelib import Redmine  # https://pypi.org/project/python-redmine/
 redmine_endpoint = "http://tracker.ceph.com"
 project_name = "Ceph"
 release_id = 16
+#
+# NOTE: release_id is hard-coded because
+# http://www.redmine.org/projects/redmine/wiki/Rest_CustomFields
+# requires administrative permissions. If and when
+# https://www.redmine.org/issues/18875
+# is resolved, it could maybe be replaced by the following code:
+#
+# for field in redmine.custom_field.all():
+#     if field.name == 'Release':
+#         self.release_id = field.id
+#
 status2status_id = {}
 project_id2project = {}
 tracker2tracker_id = {}
