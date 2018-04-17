@@ -13,20 +13,23 @@
 StupidAllocator2::StupidAllocator2(CephContext* cct)
   : cct(cct), num_free(0),
     num_reserved(0),
-    bins(10),
+    bins(bins_count),
     last_alloc(0)
 {
+  static_assert ((bins_count % 2) == 0);
+  static_assert (bins_count > 0);
 }
 
 StupidAllocator2::~StupidAllocator2()
 {
 }
 
-unsigned StupidAllocator2::_choose_bin(uint64_t orig_len)
+size_t StupidAllocator2::_choose_bin(uint64_t orig_len)
 {
-
   uint64_t len = orig_len / cct->_conf->bdev_block_size;
-  int bin = std::min((int)cbits(len), (int)bins.size() - 1);
+  int bin = std::min<size_t>(cbits(len), bins_count / 2 - 1) * 2;
+  if ((orig_len >> cbits(len)) >= (uint64_t)(cct->_conf->bdev_block_size * 3 / 4) )
+    bin++;
   ldout(cct, 30) << __func__ << " len 0x" << std::hex << orig_len
 		 << std::dec << " -> " << bin << dendl;
   return bin;
@@ -125,8 +128,6 @@ void StupidAllocator2::_remove_free(uint64_t offset, uint64_t length)
   assert(length == 0);
 }
 
-
-
 int StupidAllocator2::reserve(uint64_t need)
 {
   std::lock_guard<std::mutex> l(lock);
@@ -147,20 +148,6 @@ void StupidAllocator2::unreserve(uint64_t unused)
 	   	 << " num_reserved 0x" << num_reserved << std::dec << dendl;
   assert(num_reserved >= (int64_t)unused);
   num_reserved -= unused;
-}
-
-/// return the effective length of the extent if we align to alloc_unit
-uint64_t StupidAllocator2::_aligned_len(
-  StupidAllocator2::region_map_t::iterator p,
-  uint64_t alloc_unit)
-{
-  uint64_t skew = p->first % alloc_unit;
-  if (skew)
-    skew = alloc_unit - skew;
-  if (skew > p->second.length)
-    return 0;
-  else
-    return p->second.length - skew;
 }
 
 /*
@@ -193,6 +180,11 @@ StupidAllocator2::lower_bound(region_map_t& map, uint64_t offset)
   return it;
 }
 
+/*
+ * If point offset belongs to some region, return it.
+ * It point offset does not belong to any region return first region after it.
+ * Obviously, if offset is higher then any region return end().
+ */
 StupidAllocator2::free_map_t::iterator
 StupidAllocator2::lower_bound(free_map_t& map, uint64_t offset)
 {
@@ -297,6 +289,8 @@ int64_t StupidAllocator2::allocate_int(
   int orig_bin = bin;
 
   auto p = bins[0].begin();
+  assert(isp2(alloc_unit));
+  ceph::math::p2_t<uint64_t> alloc_unit_p2(alloc_unit);
 
   if (!hint)
     hint = last_alloc;
@@ -306,7 +300,7 @@ int64_t StupidAllocator2::allocate_int(
     for (bin = orig_bin; bin < (int)bins.size(); ++bin) {
       p = /*free[bin].*/lower_bound(bins[bin], hint);
       while (p != bins[bin].end()) {
-	if (_aligned_len(p, alloc_unit) >= want_size) {
+	if (_aligned_len(p, alloc_unit_p2) >= want_size) {
 	  goto found;
 	}
 	++p;
@@ -319,7 +313,7 @@ int64_t StupidAllocator2::allocate_int(
     p = bins[bin].begin();
     auto end = hint ? lower_bound(bins[bin], hint) : bins[bin].end();
     while (p != end) {
-      if (_aligned_len(p, alloc_unit) >= want_size) {
+      if (_aligned_len(p, alloc_unit_p2) >= want_size) {
 	goto found;
       }
       ++p;
@@ -331,7 +325,7 @@ int64_t StupidAllocator2::allocate_int(
     for (bin = orig_bin; bin >= 0; --bin) {
       p = lower_bound(bins[bin], hint);
       while (p != bins[bin].end()) {
-	if (_aligned_len(p, alloc_unit) >= alloc_unit) {
+	if (_aligned_len(p, alloc_unit_p2) >= alloc_unit) {
 	  goto found;
 	}
 	++p;
@@ -344,7 +338,7 @@ int64_t StupidAllocator2::allocate_int(
     p = bins[bin].begin();
     auto end = hint ? lower_bound(bins[bin], hint) : bins[bin].end();
     while (p != end) {
-      if (_aligned_len(p, alloc_unit) >= alloc_unit) {
+      if (_aligned_len(p, alloc_unit_p2) >= alloc_unit) {
 	goto found;
       }
       ++p;
