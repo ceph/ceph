@@ -6670,6 +6670,11 @@ std::vector<Option> get_mds_options() {
     .set_default(1.5)
     .set_description("ratio of mds_bal_split_size at which fast fragment splitting occurs"),
 
+    Option("mds_bal_fragment_dirs", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("enable directory fragmentation")
+    .set_long_description("Directory fragmentation is a standard feature of CephFS that allows sharding directories across multiple objects for performance and stability. Additionally, this allows fragments to be distributed across multiple active MDSs to increase throughput. Disabling (new) fragmentation should only be done in exceptional circumstances and may lead to performance issues."),
+
     Option("mds_bal_idle_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("idle metadata popularity threshold before rebalancing"),
@@ -6933,6 +6938,7 @@ std::vector<Option> get_mds_options() {
     Option("mds_max_ratio_caps_per_client", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.8)
     .set_description("maximum ratio of current caps that may be recalled during MDS cache pressure"),
+
     Option("mds_hack_allow_loading_invalid_metadata", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk. Allows testing repair tools."),
