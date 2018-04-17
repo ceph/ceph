@@ -239,7 +239,8 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS	 (1<<4)  /* cluster alllowed to enable MULTIMDS
 							    and SNAPS at the same time */
 
-#define CEPH_MDSMAP_DEFAULTS CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS
+#define CEPH_MDSMAP_DEFAULTS (CEPH_MDSMAP_ALLOW_SNAPS | \
+			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS)
 
 /*
  * mds states

@@ -361,12 +361,6 @@ public:
         });
 	ss << "disabled new snapshots";
       } else {
-	string confirm;
-	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
-	    confirm != "--yes-i-really-mean-it") {
-	  ss << EXPERIMENTAL_WARNING;
-	  return -EPERM;
-	}
         fsmap.modify_filesystem(
             fs->fscid,
             [](std::shared_ptr<Filesystem> fs)
