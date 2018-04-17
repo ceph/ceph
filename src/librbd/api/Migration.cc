@@ -15,6 +15,7 @@
 #include "librbd/api/Group.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
+#include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/ListWatchersRequest.h"
 #include "librbd/image/RemoveRequest.h"
@@ -1130,21 +1131,49 @@ int Migration<I>::create_dst_image() {
   ldout(m_cct, 10) << dendl;
 
   uint64_t size;
+  ParentSpec parent_spec;
   {
     RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
+    RWLock::RLocker parent_locker(m_src_image_ctx->parent_lock);
     size = m_src_image_ctx->size;
+
+    // use oldest snapshot or HEAD for parent spec
+    if (!m_src_image_ctx->snap_info.empty()) {
+      parent_spec = m_src_image_ctx->snap_info.begin()->second.parent.spec;
+    } else {
+      parent_spec = m_src_image_ctx->parent_md.spec;
+    }
   }
 
   ThreadPool *thread_pool;
   ContextWQ *op_work_queue;
   ImageCtx::get_thread_pool_instance(m_cct, &thread_pool, &op_work_queue);
 
+  int r;
   C_SaferCond on_create;
-  auto *req = image::CreateRequest<I>::create(
-      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size, m_image_options, "",
-      "", true /* skip_mirror_enable */, op_work_queue, &on_create);
-  req->send();
-  int r = on_create.wait();
+  librados::Rados rados(m_src_image_ctx->md_ctx);
+  librados::IoCtx parent_io_ctx;
+  if (parent_spec.pool_id == -1) {
+    auto *req = image::CreateRequest<I>::create(
+      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, size, m_image_options,
+      "", "", true /* skip_mirror_enable */, op_work_queue, &on_create);
+    req->send();
+  } else {
+    r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
+    if (r < 0) {
+      lderr(m_cct) << "failed to open source parent pool: "
+                   << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    auto *req = image::CloneRequest<I>::create(
+      parent_io_ctx, parent_spec.image_id, "", parent_spec.snap_id,
+      m_dst_io_ctx, m_dst_image_name, m_dst_image_id, m_image_options, "", "",
+      op_work_queue, &on_create);
+    req->send();
+  }
+
+  r = on_create.wait();
   if (r < 0) {
     lderr(m_cct) << "header creation failed: " << cpp_strerror(r) << dendl;
     return r;
