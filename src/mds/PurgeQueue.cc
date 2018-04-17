@@ -513,14 +513,30 @@ void PurgeQueue::_execute_item_complete(
   auto iter = in_flight.find(expire_to);
   assert(iter != in_flight.end());
   if (iter == in_flight.begin()) {
-    // This was the lowest journal position in flight, so we can now
-    // safely expire the journal up to here.
-    dout(10) << "expiring to 0x" << std::hex << expire_to << std::dec << dendl;
-    journaler.set_expire_pos(expire_to);
+    uint64_t pos = expire_to;
+    if (!pending_expire.empty()) {
+      auto n = iter;
+      ++n;
+      if (n == in_flight.end()) {
+	pos = *pending_expire.rbegin();
+	pending_expire.clear();
+      } else {
+	auto p = pending_expire.begin();
+	do {
+	  if (*p >= n->first)
+	    break;
+	  pos = *p;
+	  pending_expire.erase(p++);
+	} while (p != pending_expire.end());
+      }
+    }
+    dout(10) << "expiring to 0x" << std::hex << pos << std::dec << dendl;
+    journaler.set_expire_pos(pos);
   } else {
     // This is completely fine, we're not supposed to purge files in
     // order when doing them in parallel.
     dout(10) << "non-sequential completion, not expiring anything" << dendl;
+    pending_expire.insert(expire_to);
   }
 
   ops_in_flight -= _calculate_ops(iter->second);
