@@ -446,11 +446,11 @@ int MgrClient::service_daemon_register(
   const std::map<std::string,std::string>& metadata)
 {
   Mutex::Locker l(lock);
-  if (name == "osd" ||
-      name == "mds" ||
-      name == "client" ||
-      name == "mon" ||
-      name == "mgr") {
+  if (service == "osd" ||
+      service == "mds" ||
+      service == "client" ||
+      service == "mon" ||
+      service == "mgr") {
     // normal ceph entity types are not allowed!
     return -EINVAL;
   }
