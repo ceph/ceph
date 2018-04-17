@@ -202,38 +202,13 @@ void CreateImageRequest<I>::handle_open_remote_parent_image(int r) {
     return;
   }
 
-  open_local_parent_image();
+  clone_image();
 }
 
 template <typename I>
-void CreateImageRequest<I>::open_local_parent_image() {
+void CreateImageRequest<I>::clone_image() {
   dout(20) << dendl;
 
-  Context *ctx = create_context_callback<
-    CreateImageRequest<I>,
-    &CreateImageRequest<I>::handle_open_local_parent_image>(this);
-  OpenImageRequest<I> *request = OpenImageRequest<I>::create(
-    m_local_parent_io_ctx, &m_local_parent_image_ctx,
-    m_local_parent_spec.image_id, true, ctx);
-  request->send();
-}
-
-template <typename I>
-void CreateImageRequest<I>::handle_open_local_parent_image(int r) {
-  dout(20) << ": r=" << r << dendl;
-  if (r < 0) {
-    derr << ": failed to open local parent image " << m_parent_pool_name << "/"
-         << m_local_parent_spec.image_id << dendl;
-    m_ret_val = r;
-    close_remote_parent_image();
-    return;
-  }
-
-  set_local_parent_snap();
-}
-
-template <typename I>
-void CreateImageRequest<I>::set_local_parent_snap() {
   std::string snap_name;
   cls::rbd::SnapshotNamespace snap_namespace;
   {
@@ -246,66 +221,18 @@ void CreateImageRequest<I>::set_local_parent_snap() {
     }
   }
 
-  if (snap_name.empty()) {
-    dout(15) << ": failed to locate remote parent snapshot" << dendl;
-    m_ret_val = -ENOENT;
-    close_local_parent_image();
-    return;
-  }
-
-  m_local_parent_spec.snap_id = CEPH_NOSNAP;
-  {
-    RWLock::RLocker local_snap_locker(m_local_parent_image_ctx->snap_lock);
-    auto it = m_local_parent_image_ctx->snap_ids.find(
-      {snap_namespace, snap_name});
-    if (it != m_local_parent_image_ctx->snap_ids.end()) {
-      m_local_parent_spec.snap_id = it->second;
-    }
-  }
-
-  if (m_local_parent_spec.snap_id == CEPH_NOSNAP) {
-    dout(15) << ": failed to locate local parent snapshot" << dendl;
-    m_ret_val = -ENOENT;
-    close_local_parent_image();
-    return;
-  }
-
-  dout(15) << ": local_snap_id=" << m_local_parent_spec.snap_id << dendl;
-
-  Context *ctx = create_context_callback<
-    CreateImageRequest<I>,
-    &CreateImageRequest<I>::handle_set_local_parent_snap>(this);
-  m_local_parent_image_ctx->state->snap_set(m_local_parent_spec.snap_id, ctx);
-}
-
-template <typename I>
-void CreateImageRequest<I>::handle_set_local_parent_snap(int r) {
-  dout(20) << ": r=" << r << dendl;
-  if (r < 0) {
-    derr << ": failed to set parent snapshot " << m_local_parent_spec.snap_id
-         << ": " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    close_local_parent_image();
-    return;
-  }
-
-  clone_image();
-}
-
-template <typename I>
-void CreateImageRequest<I>::clone_image() {
-  dout(20) << dendl;
-
   librbd::ImageOptions opts;
   populate_image_options(&opts);
 
   using klass = CreateImageRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_clone_image>(this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_clone_image>(this);
 
   librbd::image::CloneRequest<I> *req = librbd::image::CloneRequest<I>::create(
-    m_local_parent_image_ctx, m_local_io_ctx, m_local_image_name,
-    m_local_image_id, opts, m_global_image_id, m_remote_mirror_uuid,
-    m_remote_image_ctx->op_work_queue, ctx);
+    m_local_parent_io_ctx, m_local_parent_spec.image_id, snap_name, CEPH_NOSNAP,
+    m_local_io_ctx, m_local_image_name, m_local_image_id, opts,
+    m_global_image_id, m_remote_mirror_uuid, m_remote_image_ctx->op_work_queue,
+    ctx);
   req->send();
 }
 
@@ -314,31 +241,9 @@ void CreateImageRequest<I>::handle_clone_image(int r) {
   dout(20) << ": r=" << r << dendl;
   if (r < 0) {
     derr << ": failed to clone image " << m_parent_pool_name << "/"
-         << m_local_parent_image_ctx->name << " to "
+         << m_remote_parent_spec.image_id << " to "
          << m_local_image_name << dendl;
     m_ret_val = r;
-  }
-
-  close_local_parent_image();
-}
-
-template <typename I>
-void CreateImageRequest<I>::close_local_parent_image() {
-  dout(20) << dendl;
-  Context *ctx = create_context_callback<
-    CreateImageRequest<I>,
-    &CreateImageRequest<I>::handle_close_local_parent_image>(this);
-  CloseImageRequest<I> *request = CloseImageRequest<I>::create(
-    &m_local_parent_image_ctx, ctx);
-  request->send();
-}
-
-template <typename I>
-void CreateImageRequest<I>::handle_close_local_parent_image(int r) {
-  dout(20) << ": r=" << r << dendl;
-  if (r < 0) {
-    derr << ": error encountered closing local parent image: "
-         << cpp_strerror(r) << dendl;
   }
 
   close_remote_parent_image();
