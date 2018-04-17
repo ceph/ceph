@@ -7707,9 +7707,11 @@ bool MDCache::shutdown_pass()
   }
   assert(subtrees.empty());
 
-  if (myin)
+  if (myin) {
     remove_inode(myin);
-  
+    assert(!myin);
+  }
+
   // done!
   dout(2) << "shutdown done." << dendl;
   return true;
