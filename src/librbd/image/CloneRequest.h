@@ -117,47 +117,47 @@ private:
   void validate_options();
   void validate_parent();
 
-  void send_validate_child();
+  void validate_child();
   void handle_validate_child(int r);
 
-  void send_create();
-  void handle_create(int r);
+  void create_child();
+  void handle_create_child(int r);
 
-  void send_open();
-  void handle_open(int r);
+  void open_child();
+  void handle_open_child(int r);
 
-  void send_set_parent();
+  void set_parent();
   void handle_set_parent(int r);
 
-  void send_v2_set_op_feature();
+  void v2_set_op_feature();
   void handle_v2_set_op_feature(int r);
 
-  void send_v2_child_attach();
+  void v2_child_attach();
   void handle_v2_child_attach(int r);
 
-  void send_v1_add_child();
+  void v1_add_child();
   void handle_v1_add_child(int r);
 
-  void send_v1_refresh();
+  void v1_refresh();
   void handle_v1_refresh(int r);
 
-  void send_metadata_list();
+  void metadata_list();
   void handle_metadata_list(int r);
 
-  void send_metadata_set();
+  void metadata_set();
   void handle_metadata_set(int r);
 
   void get_mirror_mode();
   void handle_get_mirror_mode(int r);
 
-  void send_enable_mirror();
+  void enable_mirror();
   void handle_enable_mirror(int r);
 
-  void send_close();
-  void handle_close(int r);
+  void close_child();
+  void handle_close_child(int r);
 
-  void send_remove();
-  void handle_remove(int r);
+  void remove_child();
+  void handle_remove_child(int r);
 
   void complete(int r);
 };
