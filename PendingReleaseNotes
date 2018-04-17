@@ -63,6 +63,25 @@
     significantly reducing the time of loading inodes for open files. MDS
     creates the table automatically if it does not exist.
 
+  * CephFS snapshot is now stable and enabled by default on new filesystems.
+    To enable snapshot on existing filesystems, use command:
+      - ceph fs set <fs_name> allow_new_snaps
+
+    The on-disk format of snapshot metadata has changed. The old format
+    metadata can not be properly handled in multiple active MDS configuration.
+    To guarantee all snapshot metadata on existing filesystems get updated,
+    perform the sequence of upgrading the MDS cluster strictly.
+
+    See http://docs.ceph.com/docs/master/cephfs/upgrading/
+
+    For filesystems that have ever enabled snapshot, the multiple-active MDS
+    feature is disabled by the new version MON. This will cause the "restore
+    previous max_mds" step in above URL to fail. To re-enable the feature,
+    either delete all old snapshots or scrub the whole filesystem:
+
+      - ceph daemon <mds of rank 0> scrub_path / force recursive repair
+      - ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
+
 * *RBD*
 
   * The RBD C API's rbd_discard method now enforces a maximum length of
