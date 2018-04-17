@@ -70,7 +70,6 @@ public:
     return false;
   }
 
-  void _close_parents() { open = false; }
   bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
   bool open_parents(MDSInternalContextBase *retryorfinish);
   void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
