@@ -109,7 +109,7 @@ workload:
 workload_luminous:
    full_sequential:
    - workunit:
-       branch: luminous
+       tag: v12.2.2
        clients:
          client.1:
          - rados/test.sh
@@ -166,14 +166,14 @@ workload_x:
        branch: luminous
        clients:
          client.1:
-         - rados/test.sh
+         - rados/test-upgrade-to-mimic.sh
          - cls
-   - print: "**** done rados/test.sh &  cls workload_x NOT upgraded  client"
+   - print: "**** done rados/test-upgrade-to-mimic.sh &  cls workload_x NOT upgraded  client"
    - workunit:
        branch: luminous
        clients:
          client.0:
-         - rados/test.sh
+         - rados/test-upgrade-to-mimic.sh
          - cls
    - print: "**** done rados/test.sh &  cls workload_x upgraded client"
    - rgw: [client.1]
