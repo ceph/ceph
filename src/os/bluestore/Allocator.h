@@ -51,6 +51,10 @@ public:
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
   virtual uint64_t get_free() = 0;
+  virtual double get_fragmentation(uint64_t alloc_unit)
+  {
+    return 0.0;
+  }
 
   virtual void shutdown() = 0;
   static Allocator *create(CephContext* cct, string type, int64_t size,

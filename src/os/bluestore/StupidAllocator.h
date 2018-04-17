@@ -53,6 +53,7 @@ public:
     const interval_set<uint64_t>& release_set) override;
 
   uint64_t get_free() override;
+  double get_fragmentation(uint64_t alloc_unit) override;
 
   void dump() override;
 
