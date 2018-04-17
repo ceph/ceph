@@ -532,8 +532,8 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioctx));
     tracepoint(librbd, clone3_enter, p_ioctx.get_pool_name().c_str(), p_ioctx.get_id(), p_name, p_snap_name, c_ioctx.get_pool_name().c_str(), c_ioctx.get_id(), c_name, c_opts.opts);
-    int r = librbd::clone(p_ioctx, p_name, p_snap_name, c_ioctx, c_name,
-			  c_opts);
+    int r = librbd::clone(p_ioctx, nullptr, p_name, p_snap_name, c_ioctx,
+                          nullptr, c_name, c_opts, "", "");
     tracepoint(librbd, clone3_exit, r);
     return r;
   }
@@ -2671,7 +2671,8 @@ extern "C" int rbd_clone3(rados_ioctx_t p_ioctx, const char *p_name,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(p_ioc));
   tracepoint(librbd, clone3_enter, p_ioc.get_pool_name().c_str(), p_ioc.get_id(), p_name, p_snap_name, c_ioc.get_pool_name().c_str(), c_ioc.get_id(), c_name, c_opts);
   librbd::ImageOptions c_opts_(c_opts);
-  int r = librbd::clone(p_ioc, p_name, p_snap_name, c_ioc, c_name, c_opts_);
+  int r = librbd::clone(p_ioc, nullptr, p_name, p_snap_name, c_ioc, nullptr,
+                        c_name, c_opts_, "", "");
   tracepoint(librbd, clone3_exit, r);
   return r;
 }
