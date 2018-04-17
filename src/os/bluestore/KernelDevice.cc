@@ -673,7 +673,7 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
 {
   uint64_t len = bl.length();
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
-	  << std::dec << " buffered" << dendl;
+	  << std::dec << (buffered ? " (buffered)" : " (direct)") << dendl;
   if (cct->_conf->bdev_inject_crash &&
       rand() % cct->_conf->bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
