@@ -4,7 +4,7 @@ Dashboard Developer Documentation
 Frontend Development
 --------------------
 
-Before you can start the dashboard from within a development environment,  you
+Before you can start the dashboard from within a development environment, you
 will need to generate the frontend code and either use a compiled and running
 Ceph cluster (e.g. started by ``vstart.sh``) or the standalone development web
 server.
