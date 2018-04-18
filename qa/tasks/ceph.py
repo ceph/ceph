@@ -377,7 +377,6 @@ def cephfs_setup(ctx, config):
         num_active = len([r for r in all_roles if is_active_mds(r)])
 
         fs.set_max_mds(num_active)
-        fs.set_allow_dirfrags(True)
 
     yield
 

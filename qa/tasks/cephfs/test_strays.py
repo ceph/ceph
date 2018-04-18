@@ -579,7 +579,6 @@ class TestStrays(CephFSTestCase):
 
         # Shut down rank 1
         self.fs.set_max_mds(1)
-        self.fs.deactivate(1)
 
         # It shouldn't proceed past stopping because its still not allowed
         # to purge
@@ -593,10 +592,7 @@ class TestStrays(CephFSTestCase):
                                             "--mds_max_purge_files 100")
 
         # It should now proceed through shutdown
-        self.wait_until_true(
-            lambda: self._is_stopped(1),
-            timeout=60
-        )
+        self.fs.wait_for_daemons(timeout=120)
 
         # ...and in the process purge all that data
         self.await_data_pool_empty()
@@ -639,10 +635,7 @@ class TestStrays(CephFSTestCase):
 
         # Shut down rank 1
         self.fs.set_max_mds(1)
-        self.fs.deactivate(1)
-
-        # Wait til we get to a single active MDS mdsmap state
-        self.wait_until_true(lambda: self._is_stopped(1), timeout=120)
+        self.fs.wait_for_daemons(timeout=120)
 
         # See that the stray counter on rank 0 has incremented
         self.assertEqual(self.get_mdc_stat("strays_created", rank_0_id), 1)
@@ -833,8 +826,6 @@ class TestStrays(CephFSTestCase):
         That unlinking fails when the stray directory fragment becomes too large and that unlinking may continue once those strays are purged.
         """
 
-        self.fs.set_allow_dirfrags(True)
-
         LOW_LIMIT = 50
         for mds in self.fs.get_daemon_names():
             self.fs.mds_asok(["config", "set", "mds_bal_fragment_size_max", str(LOW_LIMIT)], mds)
@@ -962,7 +953,6 @@ class TestStrays(CephFSTestCase):
 
         max_purge_files = 2
 
-        self.fs.set_allow_dirfrags(True)
         self.set_conf('mds', 'mds_max_purge_files', "%d" % max_purge_files)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()

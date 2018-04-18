@@ -1239,17 +1239,6 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
     goto out;
   }
 
-  // Only handle legacy commands if there is a filesystem configured
-  if (pending.legacy_client_fscid == FS_CLUSTER_ID_NONE) {
-    if (pending.filesystems.size() == 0) {
-      ss << "No filesystem configured: use `ceph fs new` to create a filesystem";
-    } else {
-      ss << "No filesystem set for use with legacy commands";
-    }
-    r = -EINVAL;
-    goto out;
-  }
-
   if (r == -ENOSYS && ss.str().empty()) {
     ss << "unrecognized command";
   }
@@ -1308,40 +1297,9 @@ int MDSMonitor::filesystem_command(
   auto &pending = get_pending_fsmap_writeable();
 
   if (prefix == "mds deactivate") {
-    mds_role_t role;
-    r = parse_role(whostr, &role, ss);
-    if (r < 0 ) {
-      return r;
-    }
-    const auto &fs = pending.get_filesystem(role.fscid);
-
-    if (!fs->mds_map.is_active(role.rank)) {
-      r = -EEXIST;
-      ss << "mds." << role << " not active (" 
-	 << ceph_mds_state_name(fs->mds_map.get_state(role.rank)) << ")";
-    } else if (fs->mds_map.get_root() == role.rank ||
-		fs->mds_map.get_tableserver() == role.rank) {
-      r = -EINVAL;
-      ss << "can't tell the root (" << fs->mds_map.get_root()
-	 << ") or tableserver (" << fs->mds_map.get_tableserver()
-	 << ") to deactivate";
-    } else if (role.rank != fs->mds_map.get_last_in_mds()) {
-      r = -EINVAL;
-      ss << "mds." << role << " doesn't have the max rank ("
-	 << fs->mds_map.get_last_in_mds() << ")";
-    } else if (fs->mds_map.get_num_in_mds() <= size_t(fs->mds_map.get_max_mds())) {
-      r = -EBUSY;
-      ss << "must decrease max_mds or else MDS will immediately reactivate";
-    } else {
-      r = 0;
-      mds_gid_t gid = fs->mds_map.up.at(role.rank);
-      ss << "telling mds." << role << " "
-         << pending.get_info_gid(gid).addr << " to deactivate";
-
-      pending.modify_daemon(gid, [](MDSMap::mds_info_t *info) {
-        info->state = MDSMap::STATE_STOPPING;
-      });
-    }
+    ss << "This command is deprecated because it is obsolete;"
+       << " to deactivate one or more MDS, decrease max_mds appropriately"
+       << " (ceph fs set <fsname> max_mds)";
   } else if (prefix == "mds set_state") {
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
@@ -1775,19 +1733,30 @@ int MDSMonitor::print_nodes(Formatter *f)
 
 /**
  * If a cluster is undersized (with respect to max_mds), then
- * attempt to find daemons to grow it.
+ * attempt to find daemons to grow it. If the cluster is oversized
+ * (with respect to max_mds) then shrink it by stopping its highest rank.
  */
-bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> &fs)
+bool MDSMonitor::maybe_resize_cluster(std::shared_ptr<Filesystem> &fs)
 {
-  bool do_propose = false;
   auto &pending = get_pending_fsmap_writeable();
+  int in = fs->mds_map.get_num_in_mds();
+  int max = fs->mds_map.get_max_mds();
 
-  if (fs->mds_map.test_flag(CEPH_MDSMAP_DOWN)) {
-    return do_propose;
+  dout(20) << __func__ << " in " << in << " max " << max << dendl;
+
+  if (fs->mds_map.is_degraded()) {
+    dout(5) << "not resizing degraded MDS cluster "
+	         << fs->mds_map.fs_name << dendl;
+    return false;
   }
 
-  while (fs->mds_map.get_num_in_mds() < size_t(fs->mds_map.get_max_mds()) &&
-	 !fs->mds_map.is_degraded()) {
+  if (fs->mds_map.get_num_mds(CEPH_MDS_STATE_STOPPING)) {
+    dout(5) << "An MDS for " << fs->mds_map.fs_name
+	         << " is stopping; waiting to resize" << dendl;
+    return false;
+  }
+
+  if (in < max && !fs->mds_map.test_flag(CEPH_MDSMAP_NOT_JOINABLE)) {
     mds_rank_t mds = mds_rank_t(0);
     string name;
     while (fs->mds_map.is_in(mds)) {
@@ -1796,7 +1765,7 @@ bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> &fs)
     mds_gid_t newgid = pending.find_replacement_for({fs->fscid, mds},
                          name, g_conf->mon_force_standby_active);
     if (newgid == MDS_GID_NONE) {
-      break;
+      return false;
     }
 
     const auto &new_info = pending.get_info_gid(newgid);
@@ -1808,10 +1777,25 @@ bool MDSMonitor::maybe_expand_cluster(std::shared_ptr<Filesystem> &fs)
                       << mds << " (now has " << fs->mds_map.get_num_in_mds() + 1
                       << " ranks)";
     pending.promote(newgid, fs, mds);
-    do_propose = true;
+    return true;
+  } else if (in > max) {
+    mds_rank_t target = in - 1;
+    const auto &info = fs->mds_map.get_info(target);
+    if (fs->mds_map.is_active(target)) {
+      dout(1) << "deactivating " << target << dendl;
+      mon->clog->info() << "deactivating " << info.human_name();
+      pending.modify_daemon(info.global_id,
+                            [] (MDSMap::mds_info_t *info) {
+                                info->state = MDSMap::STATE_STOPPING;
+                            });
+      return true;
+    } else {
+      dout(20) << "skipping deactivate on " << target << dendl;
+      return false;
+    }
   }
 
-  return do_propose;
+  return false;
 }
 
 
@@ -1847,7 +1831,7 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info
       info.state != MDSMap::STATE_STANDBY &&
       info.state != MDSMap::STATE_STANDBY_REPLAY &&
       may_replace &&
-      !pending.get_filesystem(fscid)->mds_map.test_flag(CEPH_MDSMAP_DOWN) &&
+      !pending.get_filesystem(fscid)->mds_map.test_flag(CEPH_MDSMAP_NOT_JOINABLE) &&
       (sgid = pending.find_replacement_for({fscid, info.rank}, info.name,
                 g_conf->mon_force_standby_active)) != MDS_GID_NONE)
   {
@@ -1896,7 +1880,9 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info
 
 bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> &fs)
 {
-  assert(!fs->mds_map.test_flag(CEPH_MDSMAP_DOWN));
+  if (fs->mds_map.test_flag(CEPH_MDSMAP_NOT_JOINABLE)) {
+    return false;
+  }
 
   auto &pending = get_pending_fsmap_writeable();
 
@@ -2025,9 +2011,9 @@ void MDSMonitor::tick()
 
   do_propose |= pending.check_health();
 
-  // expand mds cluster (add new nodes to @in)?
+  // resize mds cluster (adjust @in)?
   for (auto &p : pending.filesystems) {
-    do_propose |= maybe_expand_cluster(p.second);
+    do_propose |= maybe_resize_cluster(p.second);
   }
 
   const auto now = ceph_clock_now();
@@ -2093,10 +2079,7 @@ void MDSMonitor::tick()
   }
 
   for (auto &p : pending.filesystems) {
-    auto &fs = p.second;
-    if (!fs->mds_map.test_flag(CEPH_MDSMAP_DOWN)) {
-      do_propose |= maybe_promote_standby(fs);
-    }
+    do_propose |= maybe_promote_standby(p.second);
   }
 
   if (do_propose) {
