@@ -1206,7 +1206,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const string& get_compression_type(const string& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
-    ENCODE_START(10, 1, bl);
+    ENCODE_START(12, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -1223,15 +1223,17 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(metadata_heap, bl);
     encode(realm_id, bl);
     encode(lc_pool, bl);
-    encode(tier_config, bl);
+    map<string, string, ltstr_nocase> old_tier_config;
+    encode(old_tier_config, bl);
     encode(roles_pool, bl);
     encode(reshard_pool, bl);
     encode(otp_pool, bl);
+    encode(tier_config, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) override {
-    DECODE_START(10, bl);
+    DECODE_START(12, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -1262,8 +1264,9 @@ struct RGWZoneParams : RGWSystemMetaObj {
     } else {
       lc_pool = log_pool.name + ":lc";
     }
+    map<string, string, ltstr_nocase> old_tier_config;
     if (struct_v >= 8) {
-      decode(tier_config, bl);
+      decode(old_tier_config, bl);
     }
     if (struct_v >= 9) {
       decode(roles_pool, bl);
@@ -1279,6 +1282,13 @@ struct RGWZoneParams : RGWSystemMetaObj {
       ::decode(otp_pool, bl);
     } else {
       otp_pool = name + ".rgw.otp";
+    }
+    if (struct_v >= 12) {
+      ::decode(tier_config, bl);
+    } else {
+      for (auto& kv : old_tier_config) {
+        tier_config.set(kv.first, kv.second);
+      }
     }
     DECODE_FINISH(bl);
   }
