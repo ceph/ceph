@@ -31,16 +31,19 @@ fi
 getjson="no"
 
 # Filter out mtime and local_mtime dates, version, prior_version and last_reqid (client) from any object_info.
-jqfilter='(. | (.inconsistents[].selected_object_info | .mtime ) |= "----Stripped-----")
-        | (. | (.inconsistents[].selected_object_info | .local_mtime ) |= "----Stripped-----" )
-        | (. | (.inconsistents[].selected_object_info | .last_reqid ) |= "----Stripped-----")
-        | (. | (.inconsistents[].selected_object_info | .version ) |= "----Stripped-----" )
-        | (. | (.inconsistents[].selected_object_info | .prior_version ) |= "----Stripped-----" )
-        | ( . | (.inconsistents[].shards[].object_info | .mtime ) |= "----Stripped-----" )
-        | ( . | (.inconsistents[].shards[].object_info | .local_mtime ) |= "----Stripped-----" )
-        | ( . | (.inconsistents[].shards[].object_info | .last_reqid ) |= "----Stripped-----" )
-        | ( .| (.inconsistents[].shards[].object_info | .version ) |= "----Stripped-----" )
-        | ( .| (.inconsistents[].shards[].object_info | .prior_version ) |= "----Stripped-----" )'
+jqfilter='def walk(f):
+  . as $in
+  | if type == "object" then
+      reduce keys[] as $key
+        ( {}; . + { ($key):  ($in[$key] | walk(f)) } ) | f
+    elif type == "array" then map( walk(f) ) | f
+    else f
+    end;
+walk(if type == "object" then del(.mtime) else . end)
+| walk(if type == "object" then del(.local_mtime) else . end)
+| walk(if type == "object" then del(.last_reqid) else . end)
+| walk(if type == "object" then del(.version) else . end)
+| walk(if type == "object" then del(.prior_version) else . end)'
 
 sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
 
