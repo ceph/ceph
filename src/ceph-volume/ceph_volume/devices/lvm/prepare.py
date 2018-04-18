@@ -189,11 +189,7 @@ class Prepare(object):
         """
         if disk.is_partition(arg) or disk.is_device(arg):
             # we must create a vg, and then a single lv
-            vg_name = "ceph-%s" % cluster_fsid
-            if api.get_vg(vg_name=vg_name):
-                # means we already have a group for this, make a different one
-                # XXX this could end up being annoying for an operator, maybe?
-                vg_name = "ceph-%s" % str(uuid.uuid4())
+            vg_name = "ceph-%s" % str(uuid.uuid4())
             api.create_vg(vg_name, arg)
             lv_name = "osd-%s-%s" % (device_type, osd_fsid)
             return api.create_lv(
