@@ -3,8 +3,12 @@ API for CRUD lvm tag operations. Follows the Ceph LVM tag naming convention
 that prefixes tags with ``ceph.`` and uses ``=`` for assignment, and provides
 set of utilities for interacting with LVM.
 """
+import logging
+import os
 from ceph_volume import process
 from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError, MultiplePVsError
+
+logger = logging.getLogger(__name__)
 
 
 def _output_parser(output, fields):
@@ -69,6 +73,98 @@ def parse_tags(lv_tags):
         tag_mapping[key] = value
 
     return tag_mapping
+
+
+def _vdo_parents(devices):
+    """
+    It is possible we didn't get a logical volume, or a mapper path, but
+    a device like /dev/sda2, to resolve this, we must look at all the slaves of
+    every single device in /sys/block and if any of those devices is related to
+    VDO devices, then we can add the parent
+    """
+    parent_devices = []
+    for parent in os.listdir('/sys/block'):
+        for slave in os.listdir('/sys/block/%s/slaves' % parent):
+            if slave in devices:
+                parent_devices.append('/dev/%s' % parent)
+                parent_devices.append(parent)
+    return parent_devices
+
+
+def _vdo_slaves(vdo_names):
+    """
+    find all the slaves associated with each vdo name (from realpath) by going
+    into /sys/block/<realpath>/slaves
+    """
+    devices = []
+    for vdo_name in vdo_names:
+        mapper_path = '/dev/mapper/%s' % vdo_name
+        if not os.path.exists(mapper_path):
+            continue
+        # resolve the realpath and realname of the vdo mapper
+        vdo_realpath = os.path.realpath(mapper_path)
+        vdo_realname = vdo_realpath.split('/')[-1]
+        slaves_path = '/sys/block/%s/slaves' % vdo_realname
+        if not os.path.exists(slaves_path):
+            continue
+        devices.append(vdo_realpath)
+        devices.append(mapper_path)
+        devices.append(vdo_realname)
+        for slave in os.listdir(slaves_path):
+            devices.append('/dev/%s' % slave)
+            devices.append(slave)
+    return devices
+
+
+def _is_vdo(path):
+    """
+    A VDO device can be composed from many different devices, go through each
+    one of those devices and its slaves (if any) and correlate them back to
+    /dev/mapper and their realpaths, and then check if they appear as part of
+    /sys/kvdo/<name>/statistics
+
+    From the realpath of a logical volume, determine if it is a VDO device or
+    not, by correlating it to the presence of the name in
+    /sys/kvdo/<name>/statistics and all the previously captured devices
+    """
+    if not os.path.isdir('/sys/kvdo'):
+        return False
+    realpath = os.path.realpath(path)
+    realpath_name = realpath.split('/')[-1]
+    devices = []
+    vdo_names = set()
+    # get all the vdo names
+    for dirname in os.listdir('/sys/kvdo/'):
+        if os.path.isdir('/sys/kvdo/%s/statistics' % dirname):
+            vdo_names.add(dirname)
+
+    # find all the slaves associated with each vdo name (from realpath) by
+    # going into /sys/block/<realpath>/slaves
+    devices.extend(_vdo_slaves(vdo_names))
+
+    # Find all possible parents, looking into slaves that are related to VDO
+    devices.extend(_vdo_parents(devices))
+
+    return any([
+        path in devices,
+        realpath in devices,
+        realpath_name in devices])
+
+
+def is_vdo(path):
+    """
+    Detect if a path is backed by VDO, proxying the actual call to _is_vdo so
+    that we can prevent an exception breaking OSD creation. If an exception is
+    raised, it will get captured and logged to file, while returning
+    a ``False``.
+    """
+    try:
+        if _is_vdo(path):
+            return '1'
+        return '0'
+    except Exception:
+        logger.exception('Unable to properly detect device as VDO: %s', path)
+        return '0'
 
 
 def get_api_vgs():

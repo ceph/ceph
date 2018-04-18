@@ -56,12 +56,14 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
         device = prepare_dmcrypt(key, device, 'data', tags)
         journal = prepare_dmcrypt(key, journal, 'journal', tags)
 
+    # vdo detection
+    is_vdo = api.is_vdo(device)
     # create the directory
     prepare_utils.create_osd_path(osd_id)
     # format the device
     prepare_utils.format_device(device)
     # mount the data device
-    prepare_utils.mount_osd(device, osd_id)
+    prepare_utils.mount_osd(device, osd_id, is_vdo=is_vdo)
     # symlink the journal
     prepare_utils.link_journal(journal, osd_id)
     # get the latest monmap
@@ -160,6 +162,7 @@ class Prepare(object):
         if device_name is None:
             return '', '', tags
         tags['ceph.type'] = device_type
+        tags['ceph.vdo'] = api.is_vdo(device_name)
         lv = self.get_lv(device_name)
         if lv:
             uuid = lv.lv_uuid
@@ -263,6 +266,7 @@ class Prepare(object):
             tags['ceph.data_uuid'] = data_lv.lv_uuid
             tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
             tags['ceph.encrypted'] = encrypted
+            tags['ceph.vdo'] = api.is_vdo(data_lv.lv_path)
 
             journal_device, journal_uuid, tags = self.setup_device('journal', args.journal, tags)
 
@@ -286,6 +290,7 @@ class Prepare(object):
             tags['ceph.block_uuid'] = block_lv.lv_uuid
             tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
             tags['ceph.encrypted'] = encrypted
+            tags['ceph.vdo'] = api.is_vdo(block_lv.lv_path)
 
             wal_device, wal_uuid, tags = self.setup_device('wal', args.block_wal, tags)
             db_device, db_uuid, tags = self.setup_device('db', args.block_db, tags)
