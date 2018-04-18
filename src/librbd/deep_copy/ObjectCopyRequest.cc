@@ -173,6 +173,7 @@ void ObjectCopyRequest<I>::send_read_object() {
   if (!read_required) {
     // nothing written to this object for this snapshot (must be trunc/remove)
     handle_read_object(0);
+    return;
   }
 
   auto ctx = create_context_callback<
