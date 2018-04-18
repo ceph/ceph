@@ -28,6 +28,7 @@ import * as _ from 'lodash';
 })
 export class SubmitButtonComponent implements OnInit {
   @Input() form: FormGroup;
+  @Input() type = 'submit';
   @Output() submitAction = new EventEmitter();
 
   loading = false;
@@ -58,7 +59,7 @@ export class SubmitButtonComponent implements OnInit {
 
   focusButton() {
     this.elRef.nativeElement.offsetParent.querySelector(
-      'button[type="submit"]'
+      `button[type="${this.type}"]`
     ).focus();
   }
 
