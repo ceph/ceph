@@ -15,8 +15,8 @@ import {
   RbdService
 } from '../../../shared/api/rbd.service';
 import {
-  DeleteConfirmationComponent
-} from '../../../shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+  DeletionModalComponent
+} from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -185,7 +185,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
       });
   }
 
-  private asyncTask(task: string, taskName: string, snapshotName: string) {
+  _asyncTask(task: string, taskName: string, snapshotName: string) {
     const finishedTask = new FinishedTask();
     finishedTask.name = taskName;
     finishedTask.metadata = {
@@ -207,7 +207,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
           });
       })
       .catch((resp) => {
-        this.modalRef.hide();
+        this.modalRef.content.stopLoadingSpinner();
         finishedTask.success = false;
         finishedTask.exception = resp.error;
         this.notificationService.notifyTask(finishedTask);
@@ -219,16 +219,18 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     this.modalRef = this.modalService.show(RollbackConfirmationModalComponent);
     this.modalRef.content.snapName = `${this.poolName}/${this.rbdName}@${snapshotName}`;
     this.modalRef.content.onSubmit.subscribe((itemName: string) => {
-      this.asyncTask('rollbackSnapshot', 'rbd/snap/rollback', snapshotName);
+      this._asyncTask('rollbackSnapshot', 'rbd/snap/rollback', snapshotName);
     });
   }
 
   deleteSnapshotModal() {
     const snapshotName = this.selection.selected[0].name;
-    this.modalRef = this.modalService.show(DeleteConfirmationComponent);
-    this.modalRef.content.itemName = snapshotName;
-    this.modalRef.content.onSubmit.subscribe((itemName: string) => {
-      this.asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName);
+    this.modalRef = this.modalService.show(DeletionModalComponent);
+    this.modalRef.content.setUp({
+      metaType: 'RBD snapshot',
+      pattern: snapshotName,
+      deletionMethod: () => this._asyncTask('deleteSnapshot', 'rbd/snap/delete', snapshotName),
+      modalRef: this.modalRef
     });
   }
 

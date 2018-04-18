@@ -5,8 +5,8 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import {
-  DeleteConfirmationComponent
-} from '../../../shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+  DeletionModalComponent
+} from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -235,6 +235,7 @@ export class RbdListComponent implements OnInit, OnDestroy {
         this.modalRef.hide();
         this.loadImages(null);
       }).catch((resp) => {
+        this.modalRef.content.stopLoadingSpinner();
         finishedTask.success = false;
         finishedTask.exception = resp.error;
         this.notificationService.notifyTask(finishedTask);
@@ -244,10 +245,12 @@ export class RbdListComponent implements OnInit, OnDestroy {
   deleteRbdModal() {
     const poolName = this.selection.first().pool_name;
     const imageName = this.selection.first().name;
-    this.modalRef = this.modalService.show(DeleteConfirmationComponent);
-    this.modalRef.content.itemName = `${poolName}/${imageName}`;
-    this.modalRef.content.onSubmit.subscribe(() => {
-      this.deleteRbd(poolName, imageName);
+    this.modalRef = this.modalService.show(DeletionModalComponent);
+    this.modalRef.content.setUp({
+      metaType: 'RBD',
+      pattern: `${poolName}/${imageName}`,
+      deletionMethod: () => this.deleteRbd(poolName, imageName),
+      modalRef: this.modalRef
     });
   }
 }

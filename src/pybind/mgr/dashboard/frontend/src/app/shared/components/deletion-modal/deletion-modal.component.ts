@@ -3,7 +3,7 @@ import {
 } from '@angular/core';
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
@@ -95,6 +95,6 @@ export class DeletionModalComponent implements OnInit {
   }
 
   stopLoadingSpinner() {
-    this.submitButton.loading = false;
+    this.deletionForm.setErrors({'cdSubmitButton': true});
   }
 }
