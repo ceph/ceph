@@ -15,7 +15,7 @@ from .listing import direct_report
 logger = logging.getLogger(__name__)
 
 
-def activate_filestore(lvs):
+def activate_filestore(lvs, no_systemd=False):
     # find the osd
     osd_lv = lvs.get(lv_tags={'ceph.type': 'data'})
     if not osd_lv:
@@ -68,11 +68,12 @@ def activate_filestore(lvs):
     # make sure that the journal has proper permissions
     system.chown(osd_journal)
 
-    # enable the ceph-volume unit for this OSD
-    systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
+    if no_systemd is False:
+        # enable the ceph-volume unit for this OSD
+        systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
 
-    # start the OSD
-    systemctl.start_osd(osd_id)
+        # start the OSD
+        systemctl.start_osd(osd_id)
     terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
 
 
@@ -109,7 +110,7 @@ def get_osd_device_path(osd_lv, lvs, device_type, dmcrypt_secret=None):
     return None
 
 
-def activate_bluestore(lvs):
+def activate_bluestore(lvs, no_systemd=False):
     # find the osd
     osd_lv = lvs.get(lv_tags={'ceph.type': 'block'})
     if not osd_lv:
@@ -164,11 +165,12 @@ def activate_bluestore(lvs):
         process.run(['ln', '-snf', wal_device_path, destination])
         system.chown(wal_device_path)
 
-    # enable the ceph-volume unit for this OSD
-    systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
+    if no_systemd is False:
+        # enable the ceph-volume unit for this OSD
+        systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
 
-    # start the OSD
-    systemctl.start_osd(osd_id)
+        # start the OSD
+        systemctl.start_osd(osd_id)
     terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
 
 
@@ -235,9 +237,9 @@ class Activate(object):
             logger.info('unable to find a journal associated with the OSD, assuming bluestore')
             return activate_bluestore(lvs)
         if args.bluestore:
-            activate_bluestore(lvs)
+            activate_bluestore(lvs, no_systemd=args.no_systemd)
         elif args.filestore:
-            activate_filestore(lvs)
+            activate_filestore(lvs, no_systemd=args.no_systemd)
 
     def main(self):
         sub_command_help = dedent("""
@@ -293,6 +295,12 @@ class Activate(object):
             dest='activate_all',
             action='store_true',
             help='Activate all OSDs found in the system',
+        )
+        parser.add_argument(
+            '--no-systemd',
+            dest='no_systemd',
+            action='store_true',
+            help='Skip creating and enabling systemd units and starting OSD services',
         )
         if len(self.argv) == 0:
             print(sub_command_help)
