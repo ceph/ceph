@@ -223,9 +223,6 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("crush_location")) {
     update_crush_location();
   }
-  if (changed.count("objecter_mclock_service_tracker")) {
-    update_mclock_service_tracker();
-  }
 }
 
 void Objecter::update_crush_location()
@@ -238,7 +235,7 @@ void Objecter::update_mclock_service_tracker()
 {
   unique_lock wl(rwlock);
   if (cct->_conf->objecter_mclock_service_tracker && (!mclock_service_tracker)) {
-    qos_trk = make_unique<dmc::ServiceTracker<int>>();
+    qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
   } else if (!cct->_conf->objecter_mclock_service_tracker) {
     qos_trk.reset();
   }
@@ -2866,6 +2863,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       return RECALC_OP_TARGET_POOL_DNE;
     }
   }
+#warning We have the pgid at this point in pgid
   ldout(cct,20) << __func__ << " target " << t->target_oid << " "
 		<< t->target_oloc << " -> pgid " << pgid << dendl;
   ldout(cct,30) << __func__ << "  target pi " << pi
@@ -3231,10 +3229,10 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
     m->set_reqid(op->reqid);
   }
 
-  if (mclock_service_tracker) {
-    dmc::ReqParams rp = qos_trk->get_req_params(op->target.osd);
-    m->set_qos_params(rp);
-  }
+  dmc::ReqParams rp =
+    op->qos_profile->service_tracker().get_req_params(op->target.osd);
+  m->set_qos_req_params(rp);
+  m->set_qos_profile_params(op->qos_profile->qos_params());
 
   logger->inc(l_osdc_op_send);
   ssize_t sum = 0;
@@ -3414,6 +3412,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		<< " in " << m->get_pg()
 		<< " attempt " << m->get_retry_attempt()
 		<< dendl;
+
+#warning OpReply matched up with Op
   Op *op = iter->second;
   op->trace.event("osd op reply");
 
@@ -3550,12 +3550,13 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
   logger->inc(l_osdc_op_reply);
 
+  op->qos_profile->service_tracker().track_resp(op->target.osd,
+						m->get_qos_resp(),
+						m->get_qos_cost());
+
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
-  if (mclock_service_tracker) {
-    qos_trk->track_resp(op->target.osd, m->get_qos_resp());
-  }
   ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
   _finish_op(op, 0);
 

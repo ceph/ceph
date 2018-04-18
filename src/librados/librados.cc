@@ -32,6 +32,7 @@
 #include "librados/RadosClient.h"
 #include "librados/RadosXattrIter.h"
 #include "librados/ListObjectImpl.h"
+#include "osdc/QosProfileMgr.h"
 #include <cls/lock/cls_lock_client.h>
 
 #include <string>
@@ -83,6 +84,7 @@ uint8_t get_checksum_op_type(rados_checksum_type_t type) {
 
 } // anonymous namespace
 
+
 /*
  * Structure of this file
  *
@@ -103,15 +105,21 @@ uint8_t get_checksum_op_type(rados_checksum_type_t type) {
  * +--------------------------------------+
  */
 
+
+static osdc::QosProfileMgr qos_profile_mgr;
+
+
+///////////////////////////// OperationImpl section /////////////////////////////
+
 namespace librados {
 
-struct ObjectOperationImpl {
-  ::ObjectOperation o;
-  real_time rt;
-  real_time *prt;
+  struct ObjectOperationImpl {
+    ::ObjectOperation o;
+    real_time rt;
+    real_time *prt;
 
-  ObjectOperationImpl() : prt(NULL) {}
-};
+    ObjectOperationImpl() : prt(NULL) {}
+  };
 
 }
 
@@ -141,7 +149,7 @@ static void set_op_flags(::ObjectOperation *o, int flags)
   o->set_last_op_flags(rados_flags);
 }
 
-//deprcated
+// deprecated
 void librados::ObjectOperation::set_op_flags(ObjectOperationFlags flags)
 {
   ::set_op_flags(&impl->o, (int)flags);
@@ -687,6 +695,12 @@ void librados::ObjectWriteOperation::cache_unpin()
   ::ObjectOperation *o = &impl->o;
   o->cache_unpin();
 }
+
+void librados::ObjectWriteOperation::set_qos_profile(rados_qos_profile_t qp)
+{
+  impl->o.set_qos_profile(*osdc::qos_profile_ref(qp));
+}
+
 
 librados::WatchCtx::
 ~WatchCtx()
@@ -2790,6 +2804,25 @@ librados::AioCompletion *librados::Rados::aio_create_completion(void *cb_arg,
   int r = rados_aio_create_completion(cb_arg, cb_complete, cb_safe, (void**)&c);
   assert(r == 0);
   return new AioCompletion(c);
+}
+
+
+rados_qos_profile_t librados::Rados::qos_profile_create(uint64_t reservation,
+							uint64_t weight,
+							uint64_t limit)
+{
+  return (rados_qos_profile_t) qos_profile_mgr.create(reservation, weight, limit);
+}
+
+int librados::Rados::qos_profile_release(rados_qos_profile_t qos_profile)
+{
+  return qos_profile_mgr.release((osdc::qos_profile_ref) qos_profile);
+}
+
+uint64_t librados::Rados::qos_profile_get_id(rados_qos_profile_t qos_profile)
+{
+  return osdc::QosProfileMgr::get_profile_id(
+    (osdc::qos_profile_ref) qos_profile);
 }
 
 librados::ObjectOperation::ObjectOperation()
@@ -6401,6 +6434,46 @@ extern "C" int rados_cache_unpin(rados_ioctx_t io, const char *o)
   return retval;
 }
 
+extern "C" int rados_qos_profile_create(uint64_t reservation,
+					uint64_t weight,
+					uint64_t limit,
+					rados_qos_profile_t* profile)
+{
+  *profile =
+    (rados_qos_profile_t) qos_profile_mgr.create(reservation, weight, limit);
+  return 0;
+}
+
+extern "C" void rados_ioctx_set_qos_profile(rados_ioctx_t ioctx,
+					   rados_qos_profile_t qos_profile)
+{
+  auto ctx = (librados::IoCtxImpl*) ioctx;
+  if (nullptr == qos_profile) {
+    ctx->set_qos_profile(osdc::get_default_qos_profile());
+  } else {
+    auto profile = (osdc::qos_profile_ref) qos_profile;
+    ctx->set_qos_profile(*profile);
+  }
+}
+
+extern "C" void rados_write_op_set_qos_profile(rados_write_op_t op,
+					       rados_qos_profile_t qp)
+{
+  auto operation = (::ObjectOperation *) op;
+  auto profile = (osdc::qos_profile_ref) qp;
+  operation->set_qos_profile(*profile);
+}
+
+extern "C" int rados_qos_profile_release(rados_qos_profile_t qp)
+{
+  return qos_profile_mgr.release((osdc::qos_profile_ref) qp);
+}
+
+extern "C" uint64_t rados_qos_profile_get_id(rados_qos_profile_t qp)
+{
+  return osdc::QosProfileMgr::get_profile_id((osdc::qos_profile_ref) qp);
+}
+
 
 ///////////////////////////// ListObject //////////////////////////////
 librados::ListObject::ListObject() : impl(NULL)
@@ -6706,4 +6779,11 @@ int librados::IoCtx::application_metadata_list(const std::string& app_name,
   return io_ctx_impl->application_metadata_list(app_name, values);
 }
 
-
+void librados::IoCtx::set_qos_profile(rados_qos_profile_t qos_profile)
+{
+  if (nullptr == qos_profile) {
+    io_ctx_impl->set_qos_profile(osdc::get_default_qos_profile());
+  } else {
+    io_ctx_impl->set_qos_profile(*osdc::qos_profile_ref(qos_profile));
+  }
+}

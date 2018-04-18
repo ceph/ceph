@@ -121,5 +121,5 @@ namespace ceph {
 
     // Formatted output of the queue
     void dump(ceph::Formatter *f) const override final;
-  }; // class mClockOpClassAdapter
+  }; // class mClockOpClassQueue
 } // namespace ceph

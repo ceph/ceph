@@ -709,9 +709,12 @@ int librados::IoCtxImpl::operate(const object_t& oid, ::ObjectOperation *o,
   int op = o->ops[0].op.op;
   ldout(client->cct, 10) << ceph_osd_op_name(op) << " oid=" << oid
 			 << " nspace=" << oloc.nspace << dendl;
-  Objecter::Op *objecter_op = objecter->prepare_mutate_op(oid, oloc,
-							  *o, snapc, ut, flags,
-							  oncommit, &ver);
+
+  Objecter::Op *objecter_op =
+    objecter->prepare_mutate_op(oid, oloc,
+				*o, snapc, ut, flags,
+				get_qos_profile(o->qos_profile),
+				oncommit, &ver);
   objecter->op_submit(objecter_op);
 
   mylock.Lock();
@@ -821,7 +824,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 
   trace.event("init root span");
   Objecter::Op *op = objecter->prepare_mutate_op(
-    oid, oloc, *o, snap_context, ut, flags,
+    oid, oloc, *o, snap_context, ut, flags, get_qos_profile(o->qos_profile),
     oncomplete, &c->objver, osd_reqid_t(), &trace);
   objecter->op_submit(op, &c->tid);
   trace.event("rados operate op submitted");

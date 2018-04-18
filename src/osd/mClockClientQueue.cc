@@ -78,7 +78,7 @@ namespace ceph {
 					 unsigned priority,
 					 unsigned cost,
 					 Request&& item) {
-    auto qos_params = item.get_qos_params();
+    auto qos_params = item.get_qos_req_params();
     queue.enqueue_distributed(get_inner_client(cl, item), priority, cost,
 			      std::move(item), qos_params);
   }
@@ -94,11 +94,12 @@ namespace ceph {
 
   // Return an op to be dispatched
   inline Request mClockClientQueue::dequeue() {
-    std::pair<Request, dmc::PhaseType> retn = queue.dequeue_distributed();
+    queue_t::Retn retn = queue.dequeue_distributed();
 
-    if (boost::optional<OpRequestRef> _op = retn.first.maybe_get_op()) {
-      (*_op)->qos_resp = retn.second;
+    if (boost::optional<OpRequestRef> _op = retn.request.maybe_get_op()) {
+      (*_op)->qos_phase = retn.phase;
+      (*_op)->qos_cost = retn.cost;
     }
-    return std::move(retn.first);
+    return std::move(retn.request);
   }
 } // namespace ceph

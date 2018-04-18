@@ -5349,4 +5349,45 @@ struct store_statfs_t
 };
 ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
 
+
+struct qos_params_t {
+  uint64_t reservation;
+  uint64_t weight;
+  uint64_t limit;
+
+  // unique for a given client, so a <client_id, qos_profile_id> tuple
+  // is a unique identifier
+  uint64_t qos_profile_id;
+
+  qos_params_t() :
+    reservation(0), weight(0), limit(0), qos_profile_id(0)
+  {}
+
+  qos_params_t(uint64_t r, uint64_t w, uint64_t l, uint64_t qpid) :
+    reservation(r),
+    weight(w),
+    limit(l),
+    qos_profile_id(qpid)
+  {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(reservation, bl);
+    encode(weight, bl);
+    encode(limit, bl);
+    encode(qos_profile_id, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    decode(reservation, bl);
+    decode(weight, bl);
+    decode(limit, bl);
+    decode(qos_profile_id, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(qos_params_t)
+
 #endif

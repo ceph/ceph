@@ -34,7 +34,7 @@ class OSD;
 
 class MOSDOp : public MOSDFastDispatchOp {
 
-  static const int HEAD_VERSION = 9;
+  static const int HEAD_VERSION = 10;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -62,7 +62,9 @@ private:
   uint64_t features;
   bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
-  dmc::ReqParams qos_params;
+
+  dmc::ReqParams qos_req_params;
+  qos_params_t qos_profile_params;
 
 public:
   friend class MOSDOpReply;
@@ -81,7 +83,12 @@ public:
   void set_spg(spg_t p) {
     pgid = p;
   }
-  void set_qos_params(const dmc::ReqParams& p) { qos_params = p; }
+  void set_qos_req_params(const dmc::ReqParams& p) {
+    qos_req_params = p;
+  }
+  void set_qos_profile_params(const qos_params_t& p) {
+    qos_profile_params = p;
+  }
 
   // Fields decoded in partial decoding
   pg_t get_pg() const {
@@ -116,9 +123,15 @@ public:
 			 header.tid);
     }
   }
-  const dmc::ReqParams& get_qos_params() const {
+
+  const dmc::ReqParams& get_qos_req_params() const {
     assert(!partial_decode_needed);
-    return qos_params;
+    return qos_req_params;
+  }
+
+  const qos_params_t& get_qos_profile_params() const {
+    assert(!partial_decode_needed);
+    return qos_profile_params;
   }
 
   // Fields decoded in final decoding
@@ -365,7 +378,7 @@ struct ceph_osd_request_head {
       encode(retry_attempt, payload);
       encode(features, payload);
     } else {
-      // v9 encoding for dmclock use, otherwise v8.
+      // v10 encoding for dmclock use, otherwise v8.
       // v8 encoding with hobject_t hash separate from pgid, no
       // reassert version.
       if (HAVE_FEATURE(features, QOS_DMC)) {
@@ -379,8 +392,9 @@ struct ceph_osd_request_head {
       encode(osdmap_epoch, payload);
       encode(flags, payload);
       encode(reqid, payload);
-      if (header.version >= 9) {
-	encode(qos_params, payload);
+      if (header.version >= 10) {
+	encode(qos_req_params, payload);
+	encode(qos_profile_params, payload);
       }
       encode_trace(payload, features);
 
@@ -418,8 +432,12 @@ struct ceph_osd_request_head {
       decode(osdmap_epoch, p);
       decode(flags, p);
       decode(reqid, p);
-      if (header.version >= 9)
-	decode(qos_params, p);
+      if (header.version >= 9) {
+	decode(qos_req_params, p);
+	if (header.version >= 10) {
+	  decode(qos_profile_params, p);
+	}
+      }
       decode_trace(p);
     } else if (header.version == 7) {
       decode(pgid.pgid, p);      // raw pgid

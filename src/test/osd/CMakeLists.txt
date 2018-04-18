@@ -114,3 +114,12 @@ add_ceph_unittest(unittest_mclock_client_queue)
 target_link_libraries(unittest_mclock_client_queue
   global osd dmclock os
 )
+
+# unittest_mclock_client_profile_queue
+add_executable(unittest_mclock_client_profile_queue
+  TestMClockClientProfileQueue.cc
+)
+add_ceph_unittest(unittest_mclock_client_profile_queue)
+target_link_libraries(unittest_mclock_client_profile_queue
+  global osd dmclock os
+)

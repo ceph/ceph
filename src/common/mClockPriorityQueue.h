@@ -34,12 +34,25 @@ namespace ceph {
 
   namespace dmc = crimson::dmclock;
 
+  /*
+   * T is request type
+   * K is client type
+   */
   template <typename T, typename K>
   class mClockQueue : public OpQueue <T, K> {
+  public:
+    struct Retn {
+      T request;
+      dmc::PhaseType phase;
+      uint64_t cost;
+
+      Retn(T&& _request, dmc::PhaseType _phase, uint64_t _cost) :
+	request(std::move(_request)), phase(_phase), cost(_cost)
+      {}
+    };
 
     using priority_t = unsigned;
     using cost_t = unsigned;
-    using Retn = std::pair<T, dmc::PhaseType>;
 
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
@@ -68,25 +81,36 @@ namespace ceph {
       // client-class to ordered queue
       Classes q;
 
+#if 0
       unsigned tokens, max_tokens;
+#endif
       int64_t size;
 
       typename Classes::iterator cur;
 
     public:
 
-      SubQueue(const SubQueue &other)
-	: q(other.q),
-	  tokens(other.tokens),
-	  max_tokens(other.max_tokens),
-	  size(other.size),
-	  cur(q.begin()) {}
+      SubQueue(const SubQueue &other) :
+	q(other.q),
+#if 0
+	tokens(other.tokens),
+	max_tokens(other.max_tokens),
+#endif
+	size(other.size),
+	cur(q.begin())
+      {}
 
-      SubQueue()
-	: tokens(0),
-	  max_tokens(0),
-	  size(0), cur(q.begin()) {}
+      SubQueue() :
+#if 0
+	tokens(0),
+	max_tokens(0),
+#endif
+	size(0),
+	cur(q.begin())
+      {}
 
+      // remove tokens?
+#if 0
       void set_max_tokens(unsigned mt) {
 	max_tokens = mt;
       }
@@ -113,6 +137,7 @@ namespace ceph {
 	  tokens = 0;
 	}
       }
+#endif
 
       void enqueue(K cl, cost_t cost, T&& item) {
 	q[cl].emplace_back(cost, std::move(item));
@@ -221,9 +246,9 @@ namespace ceph {
 
   public:
 
-    mClockQueue(
-      const typename dmc::PullPriorityQueue<K,T,true>::ClientInfoFunc& info_func,
-      double anticipation_timeout = 0.0) :
+    mClockQueue(const typename dmc::PullPriorityQueue<K,T,true>::ClientInfoFunc& info_func,
+      
+		double anticipation_timeout = 0.0) :
       queue(info_func, true, anticipation_timeout)
     {
       // empty
@@ -311,17 +336,18 @@ namespace ceph {
       queue.add_request(std::move(item), cl, cost);
     }
 
-    void enqueue_distributed(K cl, unsigned priority, unsigned cost, T&& item,
-			     const dmc::ReqParams& req_params) {
-      // priority is ignored
-      queue.add_request(std::move(item), cl, req_params, cost);
+    void enqueue_distributed(K cl, unsigned priority,
+			     unsigned cost,
+			     T&& item,
+			     const dmc::ReqParams& qos_req_params) {
+      queue.add_request(std::move(item), cl, qos_req_params, cost);
     }
 
     void enqueue_front(K cl,
 		       unsigned priority,
 		       unsigned cost,
 		       T&& item) override final {
-      queue_front.emplace_front(std::pair<K,T>(cl, std::move(item)));
+      queue_front.emplace_front(std::pair<K,T>(std::move(cl), std::move(item)));
     }
 
     bool empty() const override final {
@@ -354,7 +380,7 @@ namespace ceph {
 
     Retn dequeue_distributed() {
       assert(!empty());
-      dmc::PhaseType resp_params = dmc::PhaseType();
+      dmc::PhaseType default_phase = dmc::PhaseType();
 
       if (!high_queue.empty()) {
 	T ret = std::move(high_queue.rbegin()->second.front().second);
@@ -362,20 +388,19 @@ namespace ceph {
 	if (high_queue.rbegin()->second.empty()) {
 	  high_queue.erase(high_queue.rbegin()->first);
 	}
-	return std::make_pair(std::move(ret), resp_params);
+	return Retn(std::move(ret), default_phase, 0u);
       }
 
       if (!queue_front.empty()) {
 	T ret = std::move(queue_front.front().second);
 	queue_front.pop_front();
-	return std::make_pair(std::move(ret), resp_params);
+	return Retn(std::move(ret), default_phase, 0u);
       }
 
       auto pr = queue.pull_request();
       assert(pr.is_retn());
       auto& retn = pr.get_retn();
-      resp_params = retn.phase;
-      return std::make_pair(std::move(*(retn.request)), resp_params);
+      return Retn(std::move(*(retn.request)), retn.phase, retn.cost);
     }
 
     void dump(ceph::Formatter *f) const override final {

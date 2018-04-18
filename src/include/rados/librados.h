@@ -3965,6 +3965,55 @@ CEPH_RADOS_API int rados_service_update_status(
   rados_t cluster,
   const char *status_dict);
 
+
+/**
+ * QOS calls
+ *
+ */
+
+
+/**
+ * An opaque pointer to an object containing a qos profile, consisting
+ * of at least a reservation value, weight value, and limit value. The
+ * weight is a scalar, and the reservation and limit are in the unit
+ * of cost_units per second.
+ */
+typedef const void* rados_qos_profile_t;
+
+/**
+ * Creates a qos profile. Must be released with
+ * rados_qos_profile_release. Reservation and limit are in the unit of
+ * cost_units per second. The weight is a scalar.
+ */
+CEPH_RADOS_API int rados_qos_profile_create(uint64_t reservation,
+					    uint64_t weight,
+					    uint64_t limit,
+					    rados_qos_profile_t* profile);
+
+/**
+ * Associates the specified qos profile with the associated ioctx. If
+ * the profile is NULL, the ioctx will use a default profile.
+ */
+CEPH_RADOS_API void rados_ioctx_set_qos_profile(rados_ioctx_t,
+						rados_qos_profile_t);
+
+/**
+ * Sets the specified write op to the specified profile.
+ */
+CEPH_RADOS_API void rados_write_op_set_qos_profile(rados_write_op_t,
+						   rados_qos_profile_t);
+
+/**
+ * Releases the specified profile.
+ */
+CEPH_RADOS_API int rados_qos_profile_release(rados_qos_profile_t);
+
+/**
+ * Returns an internal index to a profile. Useful for debugging but not for clients in general.
+ */
+CEPH_RADOS_API uint64_t rados_qos_profile_get_id(rados_qos_profile_t);
+
+
 /** @} Mon/OSD/PG commands */
 
 /*

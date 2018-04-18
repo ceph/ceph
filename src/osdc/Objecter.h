@@ -26,6 +26,7 @@
 #include <boost/thread/shared_mutex.hpp>
 
 #include "dmclock/src/dmclock_client.h"
+#include "QosProfileMgr.h"
 
 #include "include/assert.h"
 #include "include/buffer.h"
@@ -70,6 +71,8 @@ struct ObjectOperation {
   vector<Context*> out_handler;
   vector<int*> out_rval;
 
+  osdc::shared_qos_profile qos_profile;
+
   ObjectOperation() : flags(0), priority(0) {}
   ~ObjectOperation() {
     while (!out_handler.empty()) {
@@ -80,6 +83,10 @@ struct ObjectOperation {
 
   size_t size() {
     return ops.size();
+  }
+
+  void set_qos_profile(const osdc::shared_qos_profile& qp) {
+    qos_profile = qp;
   }
 
   void set_last_op_flags(int flags) {
@@ -1394,6 +1401,8 @@ public:
     osd_reqid_t reqid; // explicitly setting reqid
     ZTracer::Trace trace;
 
+    osdc::shared_qos_profile qos_profile;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *fin, version_t *ov, int *offset = NULL,
        ZTracer::Trace *parent_trace = nullptr) :
@@ -1454,7 +1463,7 @@ public:
       }
       trace.event("finish");
     }
-  };
+  }; // struct Objecter::Op
 
   struct C_Op_Map_Latest : public Context {
     Objecter *objecter;
@@ -1866,7 +1875,7 @@ public:
     bool is_homeless() { return (osd == -1); }
 
     unique_completion_lock get_lock(object_t& oid);
-  };
+  }; // class OSDSession
   map<int,OSDSession*> osd_sessions;
 
   bool osdmap_full_flag() const;
@@ -2026,7 +2035,6 @@ private:
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     trace_endpoint("0.0.0.0", 0, "Objecter"),
-    mclock_service_tracker(cct->_conf->objecter_mclock_service_tracker),
     osdmap(new OSDMap),
     max_linger_id(0),
     keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
@@ -2043,7 +2051,7 @@ private:
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
   {
     if (cct->_conf->objecter_mclock_service_tracker) {
-      qos_trk = make_unique<dmc::ServiceTracker<int>>();
+      qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
     }
   }
   ~Objecter() override;
@@ -2257,6 +2265,7 @@ public:
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op, const SnapContext& snapc,
     ceph::real_time mtime, int flags,
+    osdc::shared_qos_profile qos_profile,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t(),
     ZTracer::Trace *parent_trace = nullptr) {
@@ -2267,15 +2276,18 @@ public:
     o->snapc = snapc;
     o->out_rval.swap(op.out_rval);
     o->reqid = reqid;
+    o->qos_profile = qos_profile;
     return o;
   }
   ceph_tid_t mutate(
     const object_t& oid, const object_locator_t& oloc,
     ObjectOperation& op, const SnapContext& snapc,
     ceph::real_time mtime, int flags,
-    Context *oncommit, version_t *objver = NULL,
+    Context *oncommit,
+    version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t()) {
     Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
+			      osdc::get_default_qos_profile(),
 			      oncommit, objver, reqid);
     ceph_tid_t tid;
     op_submit(o, &tid);

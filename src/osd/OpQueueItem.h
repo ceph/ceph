@@ -37,11 +37,13 @@ public:
     virtual void unlock() = 0;
     virtual ~OrderLocker() {}
   };
+
   // Abstraction for operations queueable in the op queue
   class OpQueueable {
   public:
     enum class op_type_t {
       client_op,
+      client_op_proxy,
       peering_event,
       bg_snaptrim,
       bg_recovery,
@@ -89,7 +91,8 @@ public:
 private:
   OpQueueable::Ref qitem;
   int cost;
-  dmc::ReqParams qos_params;
+  dmc::ReqParams qos_req_params;
+  qos_params_t qos_profile_params;
   unsigned priority;
   utime_t start_time;
   uint64_t owner;  ///< global id (e.g., client.XXX)
@@ -114,7 +117,8 @@ public:
       auto req = (*op)->get_req();
       if (req->get_type() == CEPH_MSG_OSD_OP) {
 	const MOSDOp *m = static_cast<const MOSDOp*>(req);
-	qos_params = m->get_qos_params();
+	qos_req_params = m->get_qos_req_params();
+	qos_profile_params = m->get_qos_profile_params();
       }
     }
   }
@@ -150,8 +154,16 @@ public:
   utime_t get_start_time() const { return start_time; }
   uint64_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
-  dmc::ReqParams get_qos_params() const { return qos_params; }
-  void set_qos_params(dmc::ReqParams qparams) { qos_params =  qparams; }
+  dmc::ReqParams get_qos_req_params() const { return qos_req_params; }
+  void set_qos_req_params(dmc::ReqParams qparams) {
+    qos_req_params = qparams;
+  }
+  const qos_params_t& get_qos_profile_params() const {
+    return qos_profile_params;
+  }
+  void set_qos_profile_params(qos_params_t qparams) {
+    qos_profile_params = qparams;
+  }
 
   bool is_peering() const {
     return qitem->is_peering();
@@ -177,6 +189,28 @@ public:
     return out << ")";
   }
 }; // class OpQueueItem
+
+
+#warning delete this
+#if 0
+class ClientOpProxy : public OpQueueItem::OpQueueable {
+  op_type_t get_op_type() const override {
+    return op_type_t::client_op_proxy;
+  }
+  uint32_t get_queue_token() const override {
+    assert(0);
+    return 0;
+  }
+  const spg_t& get_ordering_token() const override {
+    assert(0);
+    return spg_t(0);
+  }
+  OrderLocker::Ref get_order_locker(PGRef pg) override {
+    assert(0);
+    return OrderLocker::Ref();
+  }
+};
+#endif
 
 /// Implements boilerplate for operations queued for the pg lock
 class PGOpQueueable : public OpQueueItem::OpQueueable {
@@ -227,6 +261,28 @@ public:
   }
   void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };
+
+#warning delete this
+#if 0
+/*
+ * The PGProxyOpItem is a proxy for a client op that is in a different
+ * queue. When such an item is dequeued, an op must then be dequeued
+ * from the client queue and that op returned.
+ */
+class PGProxyOpItem : public PGOpQueueable {
+public:
+  PGProxyOpItem(spg_t pg) : PGOpQueueable(pg) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::client_op_proxy;
+  }
+  ostream &print(ostream &rhs) const override final {
+    return rhs << "PGProxyOpItem";
+  }
+  // the implementation of run should assert false, as it is not
+  // runnable
+  void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+#endif
 
 class PGPeeringItem : public PGOpQueueable {
   PGPeeringEventRef evt;

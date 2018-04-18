@@ -1,6 +1,7 @@
 set(osdc_osd_srcs
   ${CMAKE_SOURCE_DIR}/src/osdc/Objecter.cc
-  ${CMAKE_SOURCE_DIR}/src/osdc/Striper.cc)
+  ${CMAKE_SOURCE_DIR}/src/osdc/Striper.cc
+  ${CMAKE_SOURCE_DIR}/src/osdc/QosProfileMgr.cc)
 
 if(WITH_OSD_INSTRUMENT_FUNCTIONS AND CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(GCC_C_FLAGS "-finstrument-functions")
@@ -32,6 +33,7 @@ set(osd_srcs
   mClockOpClassSupport.cc
   mClockOpClassQueue.cc
   mClockClientQueue.cc
+  mClockClientProfileQueue.cc
   OpQueueItem.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${osd_cyg_functions_src}

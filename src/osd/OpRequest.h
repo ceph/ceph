@@ -111,7 +111,8 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
-  dmc::PhaseType qos_resp;
+  uint64_t qos_cost;
+  dmc::PhaseType qos_phase;
   const Message *get_req() const { return request; }
   Message *get_nonconst_req() { return request; }
 

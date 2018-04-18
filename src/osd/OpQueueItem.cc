@@ -25,6 +25,17 @@ void PGOpItem::run(
   pg->unlock();
 }
 
+#warning delete this
+#if 0
+void PGProxyOpItem::run(OSD *osd,
+			PGRef& pg,
+			ThreadPool::TPHandle &handle)
+{
+  // should never be run
+  assert(false);
+}
+#endif
+
 void PGPeeringItem::run(
   OSD *osd,
   OSDShard *sdata,

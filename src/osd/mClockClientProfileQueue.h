@@ -24,46 +24,81 @@
 #include "common/mClockPriorityQueue.h"
 #include "osd/OpQueueItem.h"
 #include "osd/mClockOpClassSupport.h"
+#include "common/mClockClientInfoMgr.h"
 
 
 namespace ceph {
 
   using Request = OpQueueItem;
   using Client = uint64_t;
+  using MClockProfile = uint64_t;
 
   // This class exists to bridge the ceph code, which treats the class
   // as the client, and the queue, where the class is
   // osd_op_type_t. So this adapter class will transform calls
   // appropriately.
-  class mClockClientQueue : public OpQueue<Request, Client> {
-
-    using osd_op_type_t = ceph::mclock::osd_op_type_t;
-
-    using InnerClient = std::pair<uint64_t,osd_op_type_t>;
-
-    using queue_t = mClockQueue<Request, InnerClient>;
-
-    queue_t queue;
-
-    ceph::mclock::OpClassClientInfoMgr client_info_mgr;
+  class mClockClientProfileQueue : public OpQueue<Request, Client> {
 
   public:
 
-    mClockClientQueue(CephContext *cct);
+    // either wraps a request or acts as a proxy for a client request,
+    // the actual request of which is in client_queue.
+    struct RequestProxyWrapper {
+      std::unique_ptr<Request> request;
+      bool is_proxy;
 
-    const crimson::dmclock::ClientInfo* op_class_client_info_f(const InnerClient& client);
+      // construct a proxy
+      RequestProxyWrapper() :
+	is_proxy(true)
+      {}
+
+      // construct a request wrapper
+      explicit RequestProxyWrapper(Request&& _request) :
+	request(new Request(std::move(_request))),
+	is_proxy(false)
+      {}
+
+      RequestProxyWrapper(RequestProxyWrapper&& _wrapper) {
+	std::swap(request, _wrapper.request);
+	std::swap(is_proxy, _wrapper.is_proxy);
+      }
+
+      RequestProxyWrapper& operator=(RequestProxyWrapper&& rhs) {
+	is_proxy = rhs.is_proxy;
+	std::swap(request, rhs.request);
+	return *this;
+      }
+    }; // RequestProxyWrapper
+
+  protected:
+
+    using osd_op_type_t = ceph::mclock::osd_op_type_t;
+    using ClientProfile = std::pair<Client,MClockProfile>;
+    using client_queue_t = dmc::PullPriorityQueue<ClientProfile, Request, true>;
+    using top_queue_t = mClockQueue<RequestProxyWrapper, osd_op_type_t>;
+    using client_profile_mgr_t =
+      ceph::mclock::MClockClientInfoMgr<ClientProfile>;
+
+    client_profile_mgr_t client_profile_mgr;
+    ceph::mclock::OpClassClientInfoMgr op_class_mgr;
+    client_queue_t client_queue;
+    top_queue_t top_queue;
+
+  public:
+
+    mClockClientProfileQueue(CephContext *cct);
 
     inline unsigned length() const override final {
-      return queue.length();
+      return top_queue.length();
     }
 
     // Ops of this priority should be deleted immediately
     inline void remove_by_class(Client cl,
 				std::list<Request> *out) override final {
-      queue.remove_by_filter(
-	[&cl, out] (Request&& r) -> bool {
-	  if (cl == r.get_owner()) {
-	    out->push_front(std::move(r));
+      top_queue.remove_by_filter(
+	[&cl, out] (RequestProxyWrapper&& r) -> bool {
+	  if (!r.is_proxy && cl == r.request->get_owner()) {
+	    out->push_front(std::move(*r.request));
 	    return true;
 	  } else {
 	    return false;
@@ -97,15 +132,17 @@ namespace ceph {
 
     // Returns if the queue is empty
     inline bool empty() const override final {
-      return queue.empty();
+      return top_queue.empty();
     }
 
     // Formatted output of the queue
     void dump(ceph::Formatter *f) const override final;
 
+#if 0
   protected:
 
     InnerClient get_inner_client(const Client& cl, const Request& request);
-  }; // class mClockClientQueue
+#endif
+  }; // class mClockClientProfileQueue
 
 } // namespace ceph
