@@ -674,7 +674,7 @@ bool PGBackend::be_compare_scrub_objects(
         errorstream << "data_digest 0x" << std::hex << candidate.digest
 		    << " != data_digest 0x" << auth_oi.data_digest << std::dec
 		    << " from auth oi " << auth_oi;
-        shard_result.set_data_digest_mismatch_oi();
+        shard_result.set_data_digest_mismatch_info();
       }
     }
     if (auth_oi.is_omap_digest() && candidate.omap_digest_present) {
@@ -685,7 +685,7 @@ bool PGBackend::be_compare_scrub_objects(
         errorstream << "omap_digest 0x" << std::hex << candidate.omap_digest
 		    << " != omap_digest 0x" << auth_oi.omap_digest << std::dec
 		    << " from auth oi " << auth_oi;
-        shard_result.set_omap_digest_mismatch_oi();
+        shard_result.set_omap_digest_mismatch_info();
       }
     }
   }
@@ -699,7 +699,7 @@ bool PGBackend::be_compare_scrub_objects(
     errorstream << "size " << candidate.size
 		<< " != size " << oi_size
 		<< " from auth oi " << auth_oi;
-    shard_result.set_size_mismatch_oi();
+    shard_result.set_size_mismatch_info();
   }
   if (auth.size != candidate.size) {
     if (error != CLEAN)
@@ -714,7 +714,7 @@ bool PGBackend::be_compare_scrub_objects(
        i != auth.attrs.end();
        ++i) {
     // We check system keys seperately
-    if (i->first == OI_ATTR || i->first == SS_ATTR)
+    if (i->first == OI_ATTR || i->first[0] != '_')
       continue;
     if (!candidate.attrs.count(i->first)) {
       if (error != CLEAN)
@@ -734,7 +734,7 @@ bool PGBackend::be_compare_scrub_objects(
        i != candidate.attrs.end();
        ++i) {
     // We check system keys seperately
-    if (i->first == OI_ATTR || i->first == SS_ATTR)
+    if (i->first == OI_ATTR || i->first[0] != '_')
       continue;
     if (!auth.attrs.count(i->first)) {
       if (error != CLEAN)
@@ -766,7 +766,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   inconsistent_obj_wrapper &object_error)
 {
   eversion_t auth_version;
-  bufferlist first_oi_bl, first_ss_bl;
+  bufferlist first_oi_bl, first_ss_bl, first_hk_bl;
 
   // Create list of shards with primary first so it will be auth copy all
   // other things being equal.
@@ -809,7 +809,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     bufferlist bl;
     map<string, bufferptr>::iterator k;
     SnapSet ss;
-    bufferlist ss_bl;
+    bufferlist ss_bl, hk_bl;
 
     if (i->second.stat_error) {
       shard_info.set_stat_error();
@@ -823,8 +823,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     if (obj.is_head() || obj.is_snapdir()) {
       k = i->second.attrs.find(SS_ATTR);
       if (k == i->second.attrs.end()) {
-	shard_info.set_ss_attr_missing();
-	error_string += " ss_attr_missing";
+	shard_info.set_snapset_missing();
+	error_string += " snapset_missing";
       } else {
         ss_bl.push_back(k->second);
         try {
@@ -838,8 +838,33 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 	  }
         } catch (...) {
 	  // invalid snapset, probably corrupt
-	  shard_info.set_ss_attr_corrupted();
-	  error_string += " ss_attr_corrupted";
+	  shard_info.set_snapset_corrupted();
+	  error_string += " snapset_corrupted";
+        }
+      }
+    }
+
+    if (parent->get_pool().is_erasure()) {
+      ECUtil::HashInfo hi;
+      k = i->second.attrs.find(ECUtil::get_hinfo_key());
+      if (k == i->second.attrs.end()) {
+	shard_info.set_hinfo_missing();
+	error_string += " hinfo_key_missing";
+      } else {
+	hk_bl.push_back(k->second);
+        try {
+	  bufferlist::iterator bliter = hk_bl.begin();
+	  decode(hi, bliter);
+	  if (first_hk_bl.length() == 0) {
+	    first_hk_bl.append(hk_bl);
+	  } else if (!object_error.has_hinfo_inconsistency() && !hk_bl.contents_equal(first_hk_bl)) {
+	    object_error.set_hinfo_inconsistency();
+	    error_string += " hinfo_inconsistency";
+	  }
+        } catch (...) {
+	  // invalid snapset, probably corrupt
+	  shard_info.set_hinfo_corrupted();
+	  error_string += " hinfo_corrupted";
         }
       }
     }
@@ -847,8 +872,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     k = i->second.attrs.find(OI_ATTR);
     if (k == i->second.attrs.end()) {
       // no object info on object, probably corrupt
-      shard_info.set_oi_attr_missing();
-      error_string += " oi_attr_missing";
+      shard_info.set_info_missing();
+      error_string += " info_missing";
       goto out;
     }
     bl.push_back(k->second);
@@ -857,8 +882,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       ::decode(oi, bliter);
     } catch (...) {
       // invalid object info, probably corrupt
-      shard_info.set_oi_attr_corrupted();
-      error_string += " oi_attr_corrupted";
+      shard_info.set_info_corrupted();
+      error_string += " info_corrupted";
       goto out;
     }
 
@@ -874,8 +899,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
 
     if (i->second.size != be_get_ondisk_size(oi.size)) {
       dout(5) << __func__ << " size " << i->second.size << " oi size " << oi.size << dendl;
-      shard_info.set_obj_size_oi_mismatch();
-      error_string += " obj_size_oi_mismatch";
+      shard_info.set_obj_size_info_mismatch();
+      error_string += " obj_size_info_mismatch";
     }
 
     // Don't use this particular shard due to previous errors
@@ -1063,7 +1088,7 @@ void PGBackend::be_compare_scrubmaps(
       // recorded digest != actual digest?
       if (auth_oi.is_data_digest() && auth_object.digest_present &&
 	  auth_oi.data_digest != auth_object.digest) {
-        assert(shard_map[auth->first].has_data_digest_mismatch_oi());
+        assert(shard_map[auth->first].has_data_digest_mismatch_info());
 	errorstream << pgid << " recorded data digest 0x"
 		    << std::hex << auth_oi.data_digest << " != on disk 0x"
 		    << auth_object.digest << std::dec << " on " << auth_oi.soid
@@ -1073,7 +1098,7 @@ void PGBackend::be_compare_scrubmaps(
       }
       if (auth_oi.is_omap_digest() && auth_object.omap_digest_present &&
 	  auth_oi.omap_digest != auth_object.omap_digest) {
-        assert(shard_map[auth->first].has_omap_digest_mismatch_oi());
+        assert(shard_map[auth->first].has_omap_digest_mismatch_info());
 	errorstream << pgid << " recorded omap digest 0x"
 		    << std::hex << auth_oi.omap_digest << " != on disk 0x"
 		    << auth_object.omap_digest << std::dec
