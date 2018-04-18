@@ -33,7 +33,7 @@ int manual_fallocate(int fd, off_t offset, off_t len) {
   // TODO: compressing filesystems would require random data
   memset(data, 0x42, sizeof(data));
   for (off_t off = 0; off < len; off += sizeof(data)) {
-    if (off + sizeof(data) > len)
+    if (off + static_cast<off_t>(sizeof(data)) > len)
       r = safe_write(fd, data, len - off);
     else
       r = safe_write(fd, data, sizeof(data));
