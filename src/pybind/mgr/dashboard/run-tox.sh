@@ -13,7 +13,11 @@ else
     TOX_PATH=`readlink -f $(dirname $0)/tox.ini`
 fi
 
+# tox.ini will take care of this.
+unset PYTHONPATH
 export CEPH_BUILD_DIR=$CEPH_BUILD_DIR
+
+source ${MGR_DASHBOARD_VIRTUALENV}/bin/activate
 
 if [ "$WITH_PYTHON2" = "ON" ]; then
   ENV_LIST+="py27-cov,py27-lint,"
