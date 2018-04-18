@@ -9,7 +9,6 @@ import {
   OnInit,
   Output,
   TemplateRef,
-  Type,
   ViewChild
 } from '@angular/core';
 import {
@@ -64,12 +63,15 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    */
   @Input() autoReload: any = 5000;
 
-  // Which row property is unique for a row
+  // Which row property is unique for a row. If the identifier is not specified in any
+  // column, then the property name of the first column is used. Defaults to 'id'.
   @Input() identifier = 'id';
+  // If 'true', then the specified identifier is used anyway, although it is not specified
+  // in any column. Defaults to 'false'.
+  @Input() forceIdentifier = false;
   // Allows other components to specify which type of selection they want,
   // e.g. 'single' or 'multi'.
   @Input() selectionType: string = undefined;
-
   // If `true` selected item details will be updated on table refresh
   @Input() updateSelectionOnRefresh = true;
 
@@ -124,10 +126,17 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   ngOnInit() {
     this._addTemplates();
     if (!this.sorts) {
-      this.identifier = this.columns.some(c => c.prop === this.identifier) ?
-        this.identifier :
-        this.columns[0].prop + '';
-      this.sorts = this.createSortingDefinition(this.identifier);
+      // Check whether the specified identifier exists.
+      const exists = _.findIndex(this.columns, ['prop', this.identifier]) !== -1;
+      // Auto-build the sorting configuration. If the specified identifier doesn't exist,
+      // then use the property of the first column.
+      this.sorts = this.createSortingDefinition(exists ?
+        this.identifier : this.columns[0].prop + '');
+      // If the specified identifier doesn't exist and it is not forced to use it anyway,
+      // then use the property of the first column.
+      if (!exists && !this.forceIdentifier) {
+        this.identifier = this.columns[0].prop + '';
+      }
     }
     this.columns.map(c => {
       if (c.cellTransformation) {

@@ -134,6 +134,15 @@ describe('TableComponent', () => {
     expect(component.rows.length).toBe(100);
   });
 
+  it('should force an identifier', () => {
+    component.identifier = 'x';
+    component.forceIdentifier = true;
+    component.ngOnInit();
+    expect(component.identifier).toBe('x');
+    expect(component.sorts[0].prop).toBe('a');
+    expect(component.sorts).toEqual(component.createSortingDefinition('a'));
+  });
+
   describe('after ngInit', () => {
     const toggleColumn = (prop, checked) => {
       component.toggleColumn({
