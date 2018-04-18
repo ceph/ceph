@@ -98,6 +98,8 @@ OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name')
 
+RGW_METADATA = ('id', 'hostname', 'ceph_version')
+
 DISK_OCCUPATION = ('instance', 'device', 'ceph_daemon')
 
 
@@ -191,6 +193,13 @@ class Metrics(object):
             'pool_metadata',
             'POOL Metadata',
             POOL_METADATA
+        )
+
+        metrics['rgw_metadata'] = Metric(
+            'untyped',
+            'rgw_metadata',
+            'RGW Metadata',
+            RGW_METADATA
         )
 
         metrics['pg_total'] = Metric(
@@ -507,6 +516,18 @@ class Module(MgrModule):
         pool_meta = []
         for pool in osd_map['pools']:
             self.metrics.append('pool_metadata', 1, (pool['pool'], pool['pool_name']))
+
+        # Populate rgw_metadata
+        for key, value in servers.items():
+            service_id, service_type = key
+            if service_type != 'rgw':
+                continue
+            hostname, version = value
+            self.metrics.append(
+                'rgw_metadata',
+                1,
+                (service_id, hostname, version)
+            )
 
     def collect(self):
         self.get_health()
