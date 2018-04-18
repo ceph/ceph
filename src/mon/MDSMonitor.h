@@ -22,8 +22,7 @@
 #include <set>
 
 #include "include/types.h"
-#include "mds/FSMap.h"
-#include "mds/MDSMap.h"
+#include "PaxosFSMap.h"
 #include "PaxosService.h"
 #include "msg/Messenger.h"
 #include "messages/MMDSBeacon.h"
@@ -33,7 +32,7 @@ class MMDSLoadTargets;
 class MMDSMap;
 class FileSystemCommandHandler;
 
-class MDSMonitor : public PaxosService {
+class MDSMonitor : public PaxosService, public PaxosFSMap {
  public:
   MDSMonitor(Monitor *mn, Paxos *p, string service_name);
 
@@ -58,8 +57,6 @@ class MDSMonitor : public PaxosService {
   void check_subs();
   void check_sub(Subscription *sub);
 
-  const FSMap &get_pending() const { return pending_fsmap; }
-  const FSMap &get_fsmap() const { return fsmap; }
   void dump_info(Formatter *f);
   int print_nodes(Formatter *f);
 
@@ -67,14 +64,13 @@ class MDSMonitor : public PaxosService {
    * Return true if a blacklist was done (i.e. OSD propose needed)
    */
   bool fail_mds_gid(mds_gid_t gid);
- protected:
-  // mds maps
-  FSMap fsmap;           // current
-  FSMap pending_fsmap;  // current + pending updates
 
+  bool is_leader() const override { return mon->is_leader(); }
+
+ protected:
   // my helpers
   template<int dblV = 7>
-  void print_map(FSMap &m);
+  void print_map(const FSMap &m);
 
   void _updated(MonOpRequestRef op);
 
@@ -116,8 +112,8 @@ class MDSMonitor : public PaxosService {
 
   std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
 
-  bool maybe_promote_standby(std::shared_ptr<Filesystem> fs);
-  bool maybe_expand_cluster(std::shared_ptr<Filesystem> fs);
+  bool maybe_promote_standby(std::shared_ptr<Filesystem> &fs);
+  bool maybe_expand_cluster(std::shared_ptr<Filesystem> &fs);
   void maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info,
       bool *mds_propose, bool *osd_propose);
   void tick() override;     // check state, take actions
