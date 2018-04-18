@@ -223,8 +223,7 @@ bool CopyupRequest<I>::is_update_object_map_required() {
 
 template <typename I>
 bool CopyupRequest<I>::is_deep_copy() const {
-  return !m_ictx->migration_info.empty() &&
-    m_ictx->migration_info.snap_map.size() > 1;
+  return !m_ictx->migration_info.empty();
 }
 
 template <typename I>

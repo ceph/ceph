@@ -131,7 +131,8 @@ void ObjectRequest<I>::add_write_hint(I& image_ctx,
 }
 
 template <typename I>
-bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents) {
+bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
+                                              bool read_request) {
   assert(m_ictx->snap_lock.is_locked());
   assert(m_ictx->parent_lock.is_locked());
 
@@ -146,7 +147,13 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents) {
     lderr(m_ictx->cct) << "failed to retrieve parent overlap: "
                        << cpp_strerror(r) << dendl;
     return false;
-  } else if (parent_overlap == 0) {
+  }
+
+  if (!read_request && !m_ictx->migration_info.empty()) {
+    parent_overlap = m_ictx->migration_info.overlap;
+  }
+
+  if (parent_overlap == 0) {
     return false;
   }
 
@@ -323,7 +330,7 @@ void ObjectReadRequest<I>::copyup() {
   image_ctx->snap_lock.get_read();
   image_ctx->parent_lock.get_read();
   Extents parent_extents;
-  if (!this->compute_parent_extents(&parent_extents) ||
+  if (!this->compute_parent_extents(&parent_extents, true) ||
       (image_ctx->exclusive_lock != nullptr &&
        !image_ctx->exclusive_lock->is_lock_owner())) {
     image_ctx->parent_lock.put_read();
@@ -372,7 +379,7 @@ AbstractObjectWriteRequest<I>::AbstractObjectWriteRequest(
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::RLocker parent_locker(ictx->parent_lock);
-    this->compute_parent_extents(&m_parent_extents);
+    this->compute_parent_extents(&m_parent_extents, false);
   }
 
   if (this->m_object_off == 0 &&

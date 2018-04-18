@@ -1404,11 +1404,7 @@ bool RefreshRequest<I>::get_migration_info(ParentInfo *parent_md,
   parent_md->spec.pool_id = m_migration_spec.pool_id;
   parent_md->spec.image_id = m_migration_spec.image_id;
   parent_md->spec.snap_id = CEPH_NOSNAP;
-  parent_md->overlap = m_migration_spec.overlap;
-
-  *migration_info = {m_migration_spec.pool_id, m_migration_spec.image_name,
-                     m_migration_spec.image_id, {}, m_migration_spec.overlap,
-                     m_migration_spec.flatten};
+  parent_md->overlap = std::min(m_size, m_migration_spec.overlap);
 
   auto snap_seqs = m_migration_spec.snap_seqs;
   // If new snapshots have been created on destination image after
@@ -1422,6 +1418,22 @@ bool RefreshRequest<I>::get_migration_info(ParentInfo *parent_md,
   } else {
     snap_seqs[CEPH_NOSNAP] = CEPH_NOSNAP;
   }
+
+  std::set<uint64_t> snap_ids;
+  for (auto& it : snap_seqs) {
+    snap_ids.insert(it.second);
+  }
+  uint64_t overlap = snap_ids.find(CEPH_NOSNAP) != snap_ids.end() ?
+    parent_md->overlap : 0;
+  for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
+    if (snap_ids.find(m_snapc.snaps[i].val) != snap_ids.end()) {
+      overlap = std::max(overlap, m_snap_infos[i].image_size);
+    }
+  }
+
+  *migration_info = {m_migration_spec.pool_id, m_migration_spec.image_name,
+                     m_migration_spec.image_id, {}, overlap,
+                     m_migration_spec.flatten};
 
   deep_copy::util::compute_snap_map(0, CEPH_NOSNAP, snap_seqs,
                                     &migration_info->snap_map);
