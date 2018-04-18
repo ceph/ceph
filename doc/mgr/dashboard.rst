@@ -1,8 +1,39 @@
-dashboard plugin
+Dashboard Plugin
 ================
 
-The dashboard plugin is a web application that visualizes information and
-statistics about the Ceph cluster using a web server hosted by ``ceph-mgr``.
+Overview
+--------
+
+The original Ceph manager dashboard that was shipped with Ceph "Luminous"
+started out as a simple read-only view into various run-time information and
+performance data of a Ceph cluster. It used a very simple architecture to
+achieve the original goal.
+
+However, there was a growing demand for adding more web-based management
+capabilities, to make it easier to administer Ceph for users that prefer a WebUI
+over using the command line.
+
+This new dashboard module is a replacement of the previous one and an ongoing
+project to add a native web based monitoring and administration application to
+Ceph Manager.
+
+The architecture and functionality of this module are derived from and inspired
+by the `openATTIC Ceph management and monitoring tool
+<https://openattic.org/>`_. The development is actively driven by the team
+behind openATTIC at SUSE.
+
+The intention is to reuse as much of the existing openATTIC functionality as
+possible, while adapting it to the different environment. The Dashboard module's
+backend code uses the CherryPy framework and a custom REST API implementation
+instead of Django and the Django REST Framework.
+
+The WebUI implementation is based on Angular/TypeScript, merging both
+functionality from the original dashboard as well as adding new functionality
+originally developed for the standalone version of openATTIC.
+
+The dashboard plugin is implemented as a web application that visualizes
+information and statistics about the Ceph cluster using a web server hosted by
+``ceph-mgr``.
 
 The dashboard currently provides insight into the following aspects of your
 cluster:
@@ -36,9 +67,10 @@ Enabling
 
 The *dashboard* module is enabled with::
 
-  ceph mgr module enable dashboard
+  $ ceph mgr module enable dashboard
 
-This can be automated (e.g. during deployment) by adding the following to ceph.conf::
+This can be automated (e.g. during deployment) by adding the following to
+``ceph.conf``::
 
   [mon]
           mgr initial modules = dashboard
@@ -64,8 +96,8 @@ Since each ``ceph-mgr`` hosts its own instance of dashboard, it may
 also be necessary to configure them separately. The hostname and port
 can be changed via the configuration key facility::
 
-  ceph config-key set mgr/dashboard/$name/server_addr $IP
-  ceph config-key set mgr/dashboard/$name/server_port $PORT
+  $ ceph config-key set mgr/dashboard/$name/server_addr $IP
+  $ ceph config-key set mgr/dashboard/$name/server_port $PORT
 
 where ``$name`` is the ID of the ceph-mgr who is hosting this
 dashboard web app.
@@ -73,8 +105,8 @@ dashboard web app.
 These settings can also be configured cluster-wide and not manager
 specific.  For example,::
 
-  ceph config-key set mgr/dashboard/server_addr $IP
-  ceph config-key set mgr/dashboard/server_port $PORT
+  $ ceph config-key set mgr/dashboard/server_addr $IP
+  $ ceph config-key set mgr/dashboard/server_port $PORT
 
 If the port is not configured, the web app will bind to port ``7000``.
 If the address it not configured, the web app will bind to ``::``,
@@ -90,10 +122,53 @@ Username and password
 In order to be able to log in, you need to define a username and password, which
 will be stored in the MON's configuration database::
 
-  ceph dashboard set-login-credentials <username> <password>
+  $ ceph dashboard set-login-credentials <username> <password>
 
 The password will be stored in the configuration database in encrypted form
 using ``bcrypt``. This is a global setting that applies to all dashboard instances.
+
+Enabling the Object Gateway management frontend
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To use the Object Gateway management functionality of the dashboard, you will
+need to provide the login credentials of a user with the ``system`` flag
+enabled.
+
+If you do not have a user which shall be used for providing those credentials,
+you will also need to create one::
+
+  $ radosgw-admin user create --uid=<user id> --display-name=<display-name> \
+      --system
+
+Take note of the keys ``access_key`` and ``secret_key`` in the output of this
+command.
+
+The credentials of an existing user can also be obtained by using
+`radosgw-admin`::
+
+  $ radosgw-admin user info --uid=<user id>
+
+Finally, provide the credentials to the dashboard module::
+
+  $ ceph dashboard set-rgw-api-access-key <access_key>
+  $ ceph dashboard set-rgw-api-secret-key <secret_key>
+
+This is all you have to do to get the Object Gateway management functionality
+working. The host and port of the Object Gateway are determined automatically.
+
+If multiple zones are used, it will automatically determine the host within the
+master zone group and master zone. This should be sufficient for most setups,
+but in some circumstances you might want to set the host and port manually::
+
+  $ ceph dashboard set-rgw-api-host <host>
+  $ ceph dashboard set-rgw-api-port <port>
+
+In addition to the settings mentioned so far, the following settings do also
+exist and you may find yourself in the situation that you have to use them::
+
+  $ ceph dashboard set-rgw-api-scheme <scheme>  # http or https
+  $ ceph dashboard set-rgw-api-admin-resource <admin-resource>
+  $ ceph dashboard set-rgw-api-user-id <user-id>
 
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
