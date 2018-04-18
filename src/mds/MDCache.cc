@@ -7818,11 +7818,15 @@ bool MDCache::shutdown_pass()
   }
   assert(subtrees.empty());
 
-  if (myin)
+  if (myin) {
     remove_inode(myin);
+    assert(!myin);
+  }
 
-  if (global_snaprealm)
+  if (global_snaprealm) {
     remove_inode(global_snaprealm->inode);
+    global_snaprealm = nullptr;
+  }
   
   // done!
   dout(2) << "shutdown done." << dendl;
