@@ -38,6 +38,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @ViewChild('sparklineTpl') sparklineTpl: TemplateRef<any>;
   @ViewChild('routerLinkTpl') routerLinkTpl: TemplateRef<any>;
   @ViewChild('perSecondTpl') perSecondTpl: TemplateRef<any>;
+  @ViewChild('executingTpl') executingTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input() data: any[];
@@ -181,6 +182,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.cellTemplates.sparkline = this.sparklineTpl;
     this.cellTemplates.routerLink = this.routerLinkTpl;
     this.cellTemplates.perSecond = this.perSecondTpl;
+    this.cellTemplates.executing = this.executingTpl;
   }
 
   ngOnChanges(changes) {
