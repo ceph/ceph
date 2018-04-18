@@ -91,8 +91,8 @@ class MDSCommandOp : public CommandOp
 };
 
 /* error code for ceph_fuse */
-#define CEPH_FUSE_NO_MDS_UP    -(1<<16+0) /* no mds up deteced in ceph_fuse */
-#define CEPH_FUSE_LAST         -(1<<16+1) /* (unused) */
+#define CEPH_FUSE_NO_MDS_UP    -((1<<16)+0) /* no mds up deteced in ceph_fuse */
+#define CEPH_FUSE_LAST         -((1<<16)+1) /* (unused) */
 
 // ============================================
 // types for my local metadata cache
