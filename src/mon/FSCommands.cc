@@ -20,7 +20,6 @@
 #include "MgrStatMonitor.h"
 
 
-
 static const string EXPERIMENTAL_WARNING("Warning! This feature is experimental."
 "It may cause problems up to and including data loss."
 "Consult the documentation at ceph.com, and if unsure, do not proceed."
@@ -262,21 +261,16 @@ public:
       if (n <= 0) {
         ss << "You must specify at least one MDS";
         return -EINVAL;
-      }
-
-      if (!fs->mds_map.allows_multimds() && n > fs->mds_map.get_max_mds() &&
-	  n > 1) {
-	ss << "multi-MDS clusters are not enabled; set 'allow_multimds' to enable";
-	return -EINVAL;
-      }
-      if (n > MAX_MDS) {
+      } else if (n > MAX_MDS) {
         ss << "may not have more than " << MAX_MDS << " MDS ranks";
         return -EINVAL;
       }
+
       fsmap.modify_filesystem(
           fs->fscid,
           [n](std::shared_ptr<Filesystem> fs)
       {
+	fs->mds_map.clear_flag(CEPH_MDSMAP_NOT_JOINABLE);
         fs->mds_map.set_max_mds(n);
       });
     } else if (var == "inline_data") {
@@ -374,70 +368,73 @@ public:
 	ss << "enabled new snapshots";
       }
     } else if (var == "allow_multimds") {
-      bool enable_multimds = false;
-      int r = parse_bool(val, &enable_multimds, ss);
-      if (r != 0) {
-	return r;
-      }
-
-      if (!enable_multimds) {
-	fsmap.modify_filesystem(fs->fscid,
-	     [](std::shared_ptr<Filesystem> fs)
-		{
-		  fs->mds_map.clear_multimds_allowed();
-		});
-	ss << "disallowed increasing the cluster size past 1";
-      } else {
-        fsmap.modify_filesystem(
-            fs->fscid,
-            [](std::shared_ptr<Filesystem> fs)
-        {
-          fs->mds_map.set_multimds_allowed();
-        });
-	ss << "enabled creation of more than 1 active MDS";
-      }
+        ss << "Multiple MDS is always enabled. Use the max_mds"
+           << " parameter to control the number of active MDSs"
+           << " allowed. This command is DEPRECATED and will be"
+           << " REMOVED from future releases.";
     } else if (var == "allow_dirfrags") {
-      bool enable_dirfrags = false;
-      int r = parse_bool(val, &enable_dirfrags, ss);
-      if (r != 0) {
-	return r;
-      }
-
-      if (!enable_dirfrags) {
-	fsmap.modify_filesystem(fs->fscid,
-	     [](std::shared_ptr<Filesystem> fs)
-		{
-		  fs->mds_map.clear_dirfrags_allowed();
-		});
-	ss << "disallowed new directory fragmentation";
-      } else {
-        fsmap.modify_filesystem(
-            fs->fscid,
-            [](std::shared_ptr<Filesystem> fs)
-        {
-          fs->mds_map.set_dirfrags_allowed();
-        });
-	ss << "enabled directory fragmentation";
-      }
-    } else if (var == "cluster_down") {
+        ss << "Directory fragmentation is now permanently enabled."
+           << " This command is DEPRECATED and will be REMOVED from future releases.";
+    } else if (var == "down") {
       bool is_down = false;
       int r = parse_bool(val, &is_down, ss);
       if (r != 0) {
         return r;
       }
 
+      ss << fs->mds_map.get_fs_name();
+
       fsmap.modify_filesystem(
           fs->fscid,
           [is_down](std::shared_ptr<Filesystem> fs)
       {
-        if (is_down) {
-          fs->mds_map.set_flag(CEPH_MDSMAP_DOWN);
-        } else {
-          fs->mds_map.clear_flag(CEPH_MDSMAP_DOWN);
-        }
+	if (is_down) {
+	  fs->mds_map.set_old_max_mds();
+	  fs->mds_map.set_max_mds(0);
+	} else {
+	  mds_rank_t oldmax = fs->mds_map.get_old_max_mds();
+	  fs->mds_map.set_max_mds(oldmax ? oldmax : 1);
+	}
       });
 
-      ss << "marked " << (is_down ? "down" : "up");
+      if (is_down) {
+	ss << " marked down. ";
+      } else {
+	ss << " marked up, max_mds = " << fs->mds_map.get_max_mds();
+      }
+    } else if (var == "cluster_down" || var == "joinable") {
+      bool joinable = true;
+      int r = parse_bool(val, &joinable, ss);
+      if (r != 0) {
+        return r;
+      }
+      if (var == "cluster_down") {
+        joinable = !joinable;
+      }
+
+      ss << fs->mds_map.get_fs_name();
+
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [joinable](std::shared_ptr<Filesystem> fs)
+      {
+	if (joinable) {
+	  fs->mds_map.clear_flag(CEPH_MDSMAP_NOT_JOINABLE);
+	} else {
+	  fs->mds_map.set_flag(CEPH_MDSMAP_NOT_JOINABLE);
+	}
+      });
+
+      if (joinable) {
+	ss << " marked joinable; MDS may join as newly active.";
+      } else {
+	ss << " marked not joinable; MDS cannot join as newly active.";
+      }
+
+      if (var == "cluster_down") {
+        ss << " WARNING: cluster_down flag is deprecated and will be"
+           << " removed in a future version. Please use \"joinable\".";
+      }
     } else if (var == "standby_count_wanted") {
       if (interr.length()) {
        ss << var << " requires an integer value";

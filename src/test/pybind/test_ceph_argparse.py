@@ -445,10 +445,16 @@ class TestFS(TestArgparse):
         self.assert_valid_command(['fs', 'set', 'default', 'max_mds', '2'])
 
     def test_fs_set_cluster_down(self):
-        self.assert_valid_command(['fs', 'set', 'default', 'cluster_down', 'true'])
+        self.assert_valid_command(['fs', 'set', 'default', 'down', 'true'])
 
     def test_fs_set_cluster_up(self):
-        self.assert_valid_command(['fs', 'set', 'default', 'cluster_down', 'false'])
+        self.assert_valid_command(['fs', 'set', 'default', 'down', 'false'])
+
+    def test_fs_set_cluster_joinable(self):
+        self.assert_valid_command(['fs', 'set', 'default', 'joinable', 'true'])
+
+    def test_fs_set_cluster_not_joinable(self):
+        self.assert_valid_command(['fs', 'set', 'default', 'joinable', 'false'])
 
     def test_fs_set(self):
         self.assert_valid_command(['fs', 'set', 'default', 'max_file_size', '2'])

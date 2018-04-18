@@ -967,9 +967,7 @@ function test_mon_mds()
   ceph fs rm_data_pool cephfs $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
   ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
-  ceph fs set cephfs allow_multimds false
   expect_false ceph fs set cephfs max_mds 4
-  ceph fs set cephfs allow_multimds true
   ceph fs set cephfs max_mds 4
   ceph fs set cephfs max_mds 3
   ceph fs set cephfs max_mds 256

@@ -635,12 +635,10 @@ bool MDSRank::_dispatch(Message *m, bool new_msg)
     if (!dir->get_parent_dir()) continue;    // must be linked.
     if (!dir->is_auth()) continue;           // must be auth.
     frag_t fg = dir->get_frag();
-    if (mdsmap->allows_dirfrags()) {
-      if ((fg == frag_t() || (rand() % (1 << fg.bits()) == 0))) {
-        mdcache->split_dir(dir, 1);
-      } else {
-        balancer->queue_merge(dir);
-      }
+    if ((fg == frag_t() || (rand() % (1 << fg.bits()) == 0))) {
+      mdcache->split_dir(dir, 1);
+    } else {
+      balancer->queue_merge(dir);
     }
   }
 
@@ -1583,9 +1581,27 @@ void MDSRank::stopping_start()
   dout(2) << "stopping_start" << dendl;
 
   if (mdsmap->get_num_in_mds() == 1 && !sessionmap.empty()) {
-    // we're the only mds up!
-    dout(0) << "we are the last MDS, and have mounted clients: we cannot flush our journal.  suicide!" << dendl;
-    suicide();
+    std::vector<Session*> victims;
+    const auto sessions = sessionmap.get_sessions();
+    for (const auto p : sessions)  {
+      if (!p.first.is_client()) {
+        continue;
+      }
+
+      Session *s = p.second;
+      victims.push_back(s);
+    }
+
+    dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
+    assert(!victims.empty());
+
+    C_GatherBuilder gather(g_ceph_context, new C_MDSInternalNoop);
+    for (const auto &s : victims) {
+      std::stringstream ss;
+      evict_client(s->get_client().v, false,
+                   g_conf->mds_session_blacklist_on_evict, ss, gather.new_sub());
+    }
+    gather.activate();
   }
 
   mdcache->shutdown_start();
@@ -2470,11 +2486,6 @@ bool MDSRank::command_dirfrag_split(
     std::ostream &ss)
 {
   Mutex::Locker l(mds_lock);
-  if (!mdsmap->allows_dirfrags()) {
-    ss << "dirfrags are disallowed by the mds map!";
-    return false;
-  }
-
   int64_t by = 0;
   if (!cmd_getval(g_ceph_context, cmdmap, "bits", by)) {
     ss << "missing bits argument";

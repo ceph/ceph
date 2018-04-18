@@ -382,6 +382,19 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
     }
   }
 
+  {
+  stringstream ss;
+  ss << fs_name << " max_mds " << max_mds;
+  summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+  }
+
+  if ((mds_rank_t)up.size() < max_mds) {
+    stringstream ss;
+    ss << fs_name << " has " << up.size()
+       << " active MDS(s), but has max_mds of " << max_mds;
+    summary.push_back(make_pair(HEALTH_WARN, ss.str()));
+  }
+
   map<mds_gid_t, mds_info_t>::const_iterator m_end = mds_info.end();
   set<string> laggy;
   for (const auto &u : up) {
@@ -452,6 +465,27 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
       if (ss.str().length())
 	detail.push_back(ss.str());
     }
+  }
+
+  // MDS_UP_LESS_THAN_MAX
+  if ((mds_rank_t)get_num_in_mds() < max_mds) {
+    health_check_t& check = checks->add(
+      "MDS_UP_LESS_THAN_MAX", HEALTH_WARN,
+      "%num% filesystem%plurals% %isorare% online with fewer MDS than max_mds");
+    stringstream ss;
+    ss << "fs " << fs_name << " has " << get_num_in_mds()
+       << " MDS online, but wants " << max_mds;
+    check.detail.push_back(ss.str());
+  }
+
+  // MDS_ALL_DOWN
+  if ((mds_rank_t)get_num_up_mds() == 0) {
+    health_check_t &check = checks->add(
+      "MDS_ALL_DOWN", HEALTH_ERR,
+      "%num% filesystem%plurals% %isorare% offline");
+    stringstream ss;
+    ss << "fs " << fs_name << " is offline because no MDS is active for it.";
+    check.detail.push_back(ss.str());
   }
 }
 
@@ -617,7 +651,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 12;
+  __u16 ev = 13;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -638,6 +672,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(damaged, bl);
   encode(balancer, bl);
   encode(standby_count_wanted, bl);
+  encode(old_max_mds, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -720,22 +755,15 @@ void MDSMap::decode(bufferlist::iterator& p)
       bool flag;
       decode(flag, p);
       ever_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
-      ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS|CEPH_MDSMAP_ALLOW_DIRFRAGS;
       decode(flag, p);
       explicitly_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
-      if (max_mds > 1) {
-	set_multimds_allowed();
-      }
     } else {
       decode(ever_allowed_features, p);
       decode(explicitly_allowed_features, p);
     }
   } else {
-    ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
+    ever_allowed_features = 0;
     explicitly_allowed_features = 0;
-    if (max_mds > 1) {
-      set_multimds_allowed();
-    }
   }
   if (ev >= 7)
     decode(inline_data_enabled, p);
@@ -766,6 +794,10 @@ void MDSMap::decode(bufferlist::iterator& p)
 
   if (ev >= 12) {
     decode(standby_count_wanted, p);
+  }
+
+  if (ev >= 13) {
+    decode(old_max_mds, p);
   }
 
   DECODE_FINISH(p);

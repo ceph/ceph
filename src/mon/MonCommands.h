@@ -308,9 +308,9 @@ COMMAND("mds compat show", "show mds compatibility settings", \
 	"mds", "r", "cli,rest")
 COMMAND_WITH_FLAG("mds stop name=role,type=CephString", "stop mds", \
 	"mds", "rw", "cli,rest", FLAG(OBSOLETE))
-COMMAND("mds deactivate name=role,type=CephString",
+COMMAND_WITH_FLAG("mds deactivate name=role,type=CephString",
         "clean up specified MDS rank (use with `set max_mds` to shrink cluster)", \
-	"mds", "rw", "cli,rest")
+	"mds", "rw", "cli,rest", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest", FLAG(OBSOLETE))
@@ -387,8 +387,9 @@ COMMAND("fs get name=fs_name,type=CephString", \
 COMMAND("fs set " \
 	"name=fs_name,type=CephString " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-        "|allow_new_snaps|inline_data|cluster_down|allow_multimds|allow_dirfrags|balancer" \
-        "|standby_count_wanted|session_timeout|session_autoclose " \
+        "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer" \
+        "|standby_count_wanted|session_timeout|session_autoclose" \
+        "|down|joinable " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set fs parameter <var> to <val>", "mds", "rw", "cli,rest")
