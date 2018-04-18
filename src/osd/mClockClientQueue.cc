@@ -147,7 +147,7 @@ namespace ceph {
 					 unsigned priority,
 					 unsigned cost,
 					 Request item) {
-    queue.enqueue(get_inner_client(cl, item), priority, cost, item);
+    queue.enqueue(get_inner_client(cl, item), priority, 0u, item);
   }
 
   // Enqueue the op in the front of the regular queue
@@ -155,7 +155,7 @@ namespace ceph {
 					       unsigned priority,
 					       unsigned cost,
 					       Request item) {
-    queue.enqueue_front(get_inner_client(cl, item), priority, cost, item);
+    queue.enqueue_front(get_inner_client(cl, item), priority, 0u, item);
   }
 
   // Return an op to be dispatched
