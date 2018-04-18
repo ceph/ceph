@@ -10,6 +10,7 @@ import { MonitorService } from './monitor.service';
 import { OsdService } from './osd.service';
 import { PoolService } from './pool.service';
 import { RbdMirroringService } from './rbd-mirroring.service';
+import { RbdService } from './rbd.service';
 import { RgwDaemonService } from './rgw-daemon.service';
 import { TablePerformanceCounterService } from './table-performance-counter.service';
 import { TcmuIscsiService } from './tcmu-iscsi.service';
@@ -26,6 +27,7 @@ import { TcmuIscsiService } from './tcmu-iscsi.service';
     MonitorService,
     OsdService,
     PoolService,
+    RbdService,
     RbdMirroringService,
     RgwDaemonService,
     TablePerformanceCounterService,

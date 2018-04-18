@@ -7,8 +7,9 @@ export class PoolService {
   constructor(private http: HttpClient) {
   }
 
-  rbdPoolImages(pool) {
-    return this.http.get(`api/block/image?pool_name=${pool}`).toPromise().then((resp: any) => {
+  list(attrs = []) {
+    const attrsStr = attrs.join(',');
+    return this.http.get(`api/pool?attrs=${attrsStr}`).toPromise().then((resp: any) => {
       return resp;
     });
   }
