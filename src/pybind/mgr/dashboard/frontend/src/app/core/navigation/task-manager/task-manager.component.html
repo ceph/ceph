@@ -8,15 +8,19 @@
     <div *ngFor="let executingTask of executingTasks">
       <table>
         <tr>
-          <td class="icon-col">
-            <i class="fa fa-spinner fa-spin fa-fw" aria-hidden="true"></i>
+          <td rowspan="3"  class="icon-col text-center">
+            <span class="fa-stack fa-2x text-info">
+              <i class="fa fa-circle fa-stack-2x"></i>
+              <i class="fa fa-stack-1x fa-inverse fa-spinner fa-spin"></i>
+            </span>
           </td>
-          <td>{{ executingTask.description }}</td>
-          <td class="text-right italic" *ngIf="executingTask.progress"><span>{{ executingTask.progress }} %</span></td>
+          <td colspan="3"><strong>{{ executingTask.description }}</strong></td>
         </tr>
         <tr>
-          <td colspan="3" class="text-right">
-            <span class="date">{{ executingTask.begin_time | cdDate }}</span></td>
+          <td colspan="2">
+            <small class="date">{{ executingTask.begin_time | cdDate }}</small>
+          </td>
+          <td class="text-right italic" nowrap *ngIf="executingTask.progress"><span>{{ executingTask.progress }} %</span></td>
         </tr>
       </table>
       <hr>
@@ -31,16 +35,22 @@
     <div *ngFor="let finishedTask of finishedTasks">
       <table>
         <tr>
-          <td class="icon-col">
+          <td rowspan="3"  class="icon-col text-center">
             <span *ngIf="!finishedTask.errorMessage">
-              <i class="fa fa-check text-success"></i>
+              <span class="fa-stack fa-2x text-success">
+                <i class="fa fa-circle fa-stack-2x"></i>
+                <i class="fa fa-stack-1x fa-inverse fa-check"></i>
+              </span>
             </span>
             <span *ngIf="finishedTask.errorMessage">
-              <i class="fa fa-exclamation-triangle text-danger"></i>
+              <span class="fa-stack fa-2x text-danger">
+                <i class="fa fa-circle fa-stack-2x"></i>
+                <i class="fa fa-stack-1x fa-inverse fa-exclamation-triangle"></i>
+              </span>
             </span>
           </td>
           <td colspan="2">
-            {{ finishedTask.description }}
+            <strong>{{ finishedTask.description }}</strong>
           </td>
         </tr>
         <tr>
@@ -52,8 +62,8 @@
           </td>
         </tr>
         <tr>
-          <td colspan="2" class="text-right">
-            <span class="date">{{ finishedTask.end_time | cdDate }}</span>
+          <td colspan="2">
+            <small class="date">{{ finishedTask.end_time | cdDate }}</small>
           </td>
         </tr>
       </table>
