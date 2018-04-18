@@ -7,6 +7,9 @@ import { DataTableModule } from './datatable/datatable.module';
 import { DimlessBinaryDirective } from './directives/dimless-binary.directive';
 import { PasswordButtonDirective } from './directives/password-button.directive';
 import { PipesModule } from './pipes/pipes.module';
+import { AuthGuardService } from './services/auth-guard.service';
+import { AuthStorageService } from './services/auth-storage.service';
+import { FormatterService } from './services/formatter.service';
 import { ServicesModule } from './services/services.module';
 
 @NgModule({
@@ -30,6 +33,11 @@ import { ServicesModule } from './services/services.module';
     DimlessBinaryDirective,
     DataTableModule,
     ApiModule
+  ],
+  providers: [
+    AuthStorageService,
+    AuthGuardService,
+    FormatterService
   ]
 })
 export class SharedModule {}

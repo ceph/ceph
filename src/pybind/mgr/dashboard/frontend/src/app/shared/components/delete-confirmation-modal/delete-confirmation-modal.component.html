@@ -1,0 +1,25 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left">Delete</h4>
+  <button type="button" class="close pull-right" aria-label="Close" (click)="modalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<form name="deleteForm"
+      class="form-horizontal"
+      #formDir="ngForm"
+      [formGroup]="deleteForm"
+      novalidate>
+  <div class="modal-body">
+    Are you sure you want to delete <strong>{{ itemName }}</strong>?
+  </div>
+  <div class="modal-footer">
+    <div class="button-group text-right">
+      <cd-submit-button [form]="deleteForm"
+                        (submitAction)="submit()">
+        Delete
+      </cd-submit-button>
+      <button type="button" class="btn btn-sm btn-default" (click)="modalRef.hide()">Cancel</button>
+    </div>
+  </div>
+</form>
+
