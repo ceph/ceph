@@ -838,6 +838,7 @@ int KernelDevice::aio_read(
   int r = 0;
 #ifdef HAVE_LIBAIO
   if (aio && dio) {
+    assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
     ioc->pending_aios.push_back(aio_t(ioc, fd_direct));
     ++ioc->num_pending;
