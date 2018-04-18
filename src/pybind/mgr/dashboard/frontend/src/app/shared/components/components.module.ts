@@ -6,9 +6,6 @@ import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { AlertModule, ModalModule, PopoverModule, TooltipModule } from 'ngx-bootstrap';
 
 import { PipesModule } from '../pipes/pipes.module';
-import {
-  DeleteConfirmationComponent
-} from './delete-confirmation-modal/delete-confirmation-modal.component';
 import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
 import { HelperComponent } from './helper/helper.component';
 import { ModalComponent } from './modal/modal.component';
@@ -36,11 +33,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     HelperComponent,
     SubmitButtonComponent,
     UsageBarComponent,
-    DeleteConfirmationComponent,
     ModalComponent,
-    DeletionModalComponent
-  ],
-  entryComponents: [
     DeletionModalComponent
   ],
   providers: [],
@@ -50,10 +43,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     HelperComponent,
     SubmitButtonComponent,
     UsageBarComponent,
-    DeleteConfirmationComponent
   ],
   entryComponents: [
-    DeleteConfirmationComponent,
     ModalComponent,
     DeletionModalComponent
   ]
