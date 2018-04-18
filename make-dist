@@ -23,7 +23,7 @@ fi
 download_boost() {
     boost_version=$1
     shift
-    boost_md5=$1
+    boost_sha256=$1
     shift
     boost_version_underscore=$(echo $boost_version | sed 's/\./_/g')
     boost_fname=boost_${boost_version_underscore}.tar.bz2
@@ -39,8 +39,8 @@ download_boost() {
         wget -c --no-verbose -O $boost_fname $url
         if [ $? != 0 -o ! -e $boost_fname ]; then
             echo "Download of $url failed"
-        elif [ $(md5sum $boost_fname | awk '{print $1}') != $boost_md5 ]; then
-            echo "Error: failed to download boost: MD5 mismatch."
+        elif [ $(sha256sum $boost_fname | awk '{print $1}') != $boost_sha256 ]; then
+            echo "Error: failed to download boost: SHA256 mismatch."
         else
             break
         fi
@@ -131,7 +131,7 @@ tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfi
 # NOTE: If you change this version number make sure the package is available
 # at the three URLs referenced below (may involve uploading to download.ceph.com)
 boost_version=1.66.0
-download_boost $boost_version b2dfbd6c717be4a7bb2d88018eaccf75 \
+download_boost $boost_version 5721818253e6a0989583192f96782c4a98eb6204965316df9f5ad75819225ca9 \
                https://dl.bintray.com/boostorg/release/$boost_version/source \
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa

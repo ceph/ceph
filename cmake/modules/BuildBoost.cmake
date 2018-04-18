@@ -140,7 +140,7 @@ function(do_build_boost version)
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
     set(boost_version 1.66.0)
-    set(boost_md5 b2dfbd6c717be4a7bb2d88018eaccf75)
+    set(boost_256 5721818253e6a0989583192f96782c4a98eb6204965316df9f5ad75819225ca9)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     set(boost_url 
       https://dl.bintray.com/boostorg/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
@@ -152,7 +152,7 @@ function(do_build_boost version)
     endif()
     set(source_dir
       URL ${boost_url}
-      URL_MD5 ${boost_md5})
+      URL_HASH SHA256=${boost_sha256})
     if(CMAKE_VERSION VERSION_GREATER 3.1)
       list(APPEND source_dir DOWNLOAD_NO_PROGRESS 1)
     endif()
