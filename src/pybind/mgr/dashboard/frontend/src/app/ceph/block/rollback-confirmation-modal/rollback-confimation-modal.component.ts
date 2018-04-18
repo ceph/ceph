@@ -32,4 +32,8 @@ export class RollbackConfirmationModalComponent implements OnInit {
   submit() {
     this.onSubmit.next(this.snapName);
   }
+
+  stopLoadingSpinner() {
+    this.rollbackForm.setErrors({'cdSubmitButton': true});
+  }
 }
