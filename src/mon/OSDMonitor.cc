@@ -1491,8 +1491,11 @@ void OSDMonitor::share_map_with_random_osd()
   }
 
   dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
+
+  //get features of the peer, fall back to my quorum_con_features.
+  uint64_t features = s->con_features ? s->con_features : mon->get_quorum_con_features();
   // whatev, they'll request more if they need it
-  MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch());
+  MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch(), features);
   s->con->send_message(m);
   // NOTE: do *not* record osd has up to this epoch (as we do
   // elsewhere) as they may still need to request older values.
@@ -3341,25 +3344,25 @@ void OSDMonitor::send_latest(MonOpRequestRef op, epoch_t start)
 }
 
 
-MOSDMap *OSDMonitor::build_latest_full()
+MOSDMap *OSDMonitor::build_latest_full(uint64_t features)
 {
   MOSDMap *r = new MOSDMap(mon->monmap->fsid);
-  get_version_full(osdmap.get_epoch(), r->maps[osdmap.get_epoch()]);
+  get_version_full(osdmap.get_epoch(), features, r->maps[osdmap.get_epoch()]);
   r->oldest_map = get_first_committed();
   r->newest_map = osdmap.get_epoch();
   return r;
 }
 
-MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
+MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to, uint64_t features)
 {
-  dout(10) << "build_incremental [" << from << ".." << to << "]" << dendl;
+  dout(10) << "build_incremental [" << from << ".." << to << "] with features " << std::hex << features << dendl;
   MOSDMap *m = new MOSDMap(mon->monmap->fsid);
   m->oldest_map = get_first_committed();
   m->newest_map = osdmap.get_epoch();
 
   for (epoch_t e = to; e >= from && e > 0; e--) {
     bufferlist bl;
-    int err = get_version(e, bl);
+    int err = get_version(e, features, bl);
     if (err == 0) {
       assert(bl.length());
       // if (get_version(e, bl) > 0) {
@@ -3369,7 +3372,7 @@ MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to)
     } else {
       assert(err == -ENOENT);
       assert(!bl.length());
-      get_version_full(e, bl);
+      get_version_full(e, features, bl);
       if (bl.length() > 0) {
       //else if (get_version("full", e, bl) > 0) {
       dout(20) << "build_incremental   full " << e << " "
@@ -3387,7 +3390,7 @@ void OSDMonitor::send_full(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   dout(5) << "send_full to " << op->get_req()->get_orig_source_inst() << dendl;
-  mon->send_reply(op, build_latest_full());
+  mon->send_reply(op, build_latest_full(op->get_session()->con_features));
 }
 
 void OSDMonitor::send_incremental(MonOpRequestRef op, epoch_t first)
@@ -3419,6 +3422,9 @@ void OSDMonitor::send_incremental(epoch_t first,
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << session->inst << dendl;
 
+  //get feature of the peer, fall back to my quorum_con_features.
+  uint64_t features= session->con_features ? session->con_features : mon->get_quorum_con_features();
+
   if (first <= session->osd_epoch) {
     dout(10) << __func__ << " " << session->inst << " should already have epoch "
 	     << session->osd_epoch << dendl;
@@ -3435,7 +3441,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 
     first = get_first_committed();
     bufferlist bl;
-    int err = get_version_full(first, bl);
+    int err = get_version_full(first, features, bl);
     assert(err == 0);
     assert(bl.length());
     dout(20) << "send_incremental starting with base full "
@@ -3456,7 +3462,7 @@ void OSDMonitor::send_incremental(epoch_t first,
   while (first <= osdmap.get_epoch()) {
     epoch_t last = std::min<epoch_t>(first + g_conf->osd_map_message_max - 1,
 				     osdmap.get_epoch());
-    MOSDMap *m = build_incremental(first, last);
+    MOSDMap *m = build_incremental(first, last, features);
 
     if (req) {
       // send some maps.  it may not be all of them, but it will get them
@@ -3722,7 +3728,7 @@ void OSDMonitor::check_osdmap_sub(Subscription *sub)
     if (sub->next >= 1)
       send_incremental(sub->next, sub->session, sub->incremental_onetime);
     else
-      sub->session->con->send_message(build_latest_full());
+      sub->session->con->send_message(build_latest_full(sub->session->con_features));
     if (sub->onetime)
       mon->session_map.remove_sub(sub);
     else

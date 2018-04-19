@@ -358,8 +358,8 @@ private:
   bool can_mark_in(int o);
 
   // ...
-  MOSDMap *build_latest_full();
-  MOSDMap *build_incremental(epoch_t first, epoch_t last);
+  MOSDMap *build_latest_full(uint64_t features);
+  MOSDMap *build_incremental(epoch_t first, epoch_t last, uint64_t features);
   void send_full(MonOpRequestRef op);
   void send_incremental(MonOpRequestRef op, epoch_t first);
 public:
