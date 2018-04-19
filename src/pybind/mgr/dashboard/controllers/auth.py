@@ -26,7 +26,6 @@ class Auth(RESTController):
       |                           | seconds without activity                  |
     """
 
-    @RESTController.args_from_json
     def create(self, username, password, stay_signed_in=False):
         now = time.time()
         config_username = mgr.get_config('username', None)

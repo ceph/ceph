@@ -154,7 +154,6 @@ class ApiRoot(object):
         return tpl.format(lis='\n'.join(endpoints))
 
 
-# pylint: disable=too-many-locals
 def browsable_api_view(meth):
     def wrapper(self, *vpath, **kwargs):
         assert isinstance(self, BaseController)
@@ -521,11 +520,6 @@ class RESTController(BaseController):
         return method(*vpath, **params)
 
     @staticmethod
-    def args_from_json(func):
-        func._args_from_json_ = True
-        return func
-
-    @staticmethod
     def _function_args(func):
         if sys.version_info > (3, 0):  # pylint: disable=no-else-return
             return list(inspect.signature(func).parameters.keys())
@@ -538,10 +532,7 @@ class RESTController(BaseController):
         def inner(*args, **kwargs):
             if cherrypy.request.headers.get('Content-Type',
                                             '') == 'application/x-www-form-urlencoded':
-                if hasattr(func, '_args_from_json_'):  # pylint: disable=no-else-return
-                    return func(*args, **kwargs)
-                else:
-                    return func(kwargs)
+                return func(*args, **kwargs)
 
             content_length = int(cherrypy.request.headers['Content-Length'])
             body = cherrypy.request.body.read(content_length)
@@ -553,11 +544,8 @@ class RESTController(BaseController):
             except Exception as e:
                 raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
                                          .format(str(e)))
-            if hasattr(func, '_args_from_json_'):
-                kwargs.update(data.items())
-                return func(*args, **kwargs)
 
-            kwargs['data'] = data
+            kwargs.update(data.items())
             return func(*args, **kwargs)
         return inner
 

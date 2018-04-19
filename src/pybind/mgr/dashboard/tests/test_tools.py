@@ -19,9 +19,9 @@ class FooResource(RESTController):
     def list(self):
         return FooResource.elems
 
-    def create(self, data):
-        FooResource.elems.append(data)
-        return data
+    def create(self, a):
+        FooResource.elems.append({'a': a})
+        return {'a': a}
 
     def get(self, key):
         return {'detail': (key, [])}
@@ -32,9 +32,9 @@ class FooResource(RESTController):
     def bulk_delete(self):
         FooResource.elems = []
 
-    def set(self, key, data):
-        FooResource.elems[int(key)] = data
-        return dict(key=key, **data)
+    def set(self, key, newdata):
+        FooResource.elems[int(key)] = {'newdata': newdata}
+        return dict(key=key, newdata=newdata)
 
 
 @ApiController('foo/:key/:method')
@@ -45,7 +45,6 @@ class FooResourceDetail(RESTController):
 
 @ApiController('fooargs')
 class FooArgs(RESTController):
-    @RESTController.args_from_json
     def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
 
