@@ -35,6 +35,12 @@
         </li>
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
+          <a class="dropdown-item" routerLink="/rbd/clone/{{ poolName }}/{{ rbdName }}/{{ selection.first()?.name }}">
+            <i class="fa fa-fw fa-clone"></i><span i18n>Clone</span>
+          </a>
+        </li>
+        <li role="menuitem"
+            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item" (click)="rollbackModal()"><i class="fa fa-fw fa-undo"></i><span i18n>Rollback</span></a>
         </li>
         <li role="menuitem"
