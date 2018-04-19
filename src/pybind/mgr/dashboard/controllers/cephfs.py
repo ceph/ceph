@@ -97,7 +97,7 @@ class CephFS(BaseController):
 
         return names
 
-    # pylint: disable=too-many-locals,too-many-statements,too-many-branches
+    # pylint: disable=too-many-statements,too-many-branches
     def fs_status(self, fs_id):
         mds_versions = defaultdict(list)
 

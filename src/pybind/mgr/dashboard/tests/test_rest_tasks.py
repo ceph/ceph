@@ -14,32 +14,27 @@ class TaskTest(RESTController):
     sleep_time = 0.0
 
     @Task('task/create', {'param': '{param}'}, wait_for=1.0)
-    @RESTController.args_from_json
     def create(self, param):
         time.sleep(TaskTest.sleep_time)
         return {'my_param': param}
 
     @Task('task/set', {'param': '{2}'}, wait_for=1.0)
-    @RESTController.args_from_json
     def set(self, key, param=None):
         time.sleep(TaskTest.sleep_time)
         return {'key': key, 'my_param': param}
 
     @Task('task/delete', ['{key}'], wait_for=1.0)
-    @RESTController.args_from_json
     def delete(self, key):
         # pylint: disable=unused-argument
         time.sleep(TaskTest.sleep_time)
 
     @Task('task/foo', ['{param}'])
     @RESTController.collection(['POST'])
-    @RESTController.args_from_json
     def foo(self, param):
         return {'my_param': param}
 
     @Task('task/bar', ['{key}', '{param}'])
     @RESTController.resource(['PUT'])
-    @RESTController.args_from_json
     def bar(self, key, param=None):
         return {'my_param': param, 'key': key}
 
