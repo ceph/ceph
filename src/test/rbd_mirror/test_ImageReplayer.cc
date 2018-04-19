@@ -87,6 +87,8 @@ public:
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_poll_age", "1"));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_commit_age",
                                            "0.1"));
+    EXPECT_EQ(0, m_local_cluster->conf_set("rbd_shared_cache_enabled", "false"));
+
     m_local_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_local_cluster->pool_create(m_local_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->ioctx_create(m_local_pool_name.c_str(),
@@ -95,6 +97,7 @@ public:
 
     EXPECT_EQ("", connect_cluster_pp(m_remote_cluster));
     EXPECT_EQ(0, m_remote_cluster.conf_set("rbd_cache", "false"));
+    EXPECT_EQ(0, m_remote_cluster.conf_set("rbd_shared_cache_enabled", "false"));
 
     m_remote_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_remote_cluster.pool_create(m_remote_pool_name.c_str()));

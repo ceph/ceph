@@ -6515,6 +6515,14 @@ static std::vector<Option> get_rbd_options() {
     .set_default(60)
     .set_description("time in seconds for detecting a hung thread"),
 
+    Option("rbd_shared_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("whether to enable shared ssd caching"),
+
+    Option("rbd_shared_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp")
+    .set_description("shared ssd caching data dir"),
+
     Option("rbd_non_blocking_aio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("process AIO ops from a dispatch thread to prevent blocking"),

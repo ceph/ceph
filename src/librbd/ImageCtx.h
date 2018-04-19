@@ -188,6 +188,9 @@ namespace librbd {
     uint64_t mtime_update_interval;
     uint64_t atime_update_interval;
 
+    bool shared_cache_enabled;
+    std::string shared_cache_path;
+
     LibrbdAdminSocketHook *asok_hook;
 
     exclusive_lock::Policy *exclusive_lock_policy = nullptr;

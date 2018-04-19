@@ -47,6 +47,7 @@ public:
 
   void SetUp() override {
     ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
+    ASSERT_EQ(0, _rados.conf_set("rbd_shared_cache_enabled", "false"));
   }
 
   std::string image_name = "mirrorimg1";
