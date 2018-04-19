@@ -95,6 +95,8 @@ protected:
   // Map of Journaler offset to PurgeItem
   std::map<uint64_t, PurgeItem> in_flight;
 
+  std::set<uint64_t> pending_expire;
+
   // Throttled allowances
   uint64_t ops_in_flight;
 
