@@ -804,7 +804,7 @@ __librbd_deep_copy(struct rbd_ctx *ctx, const char *src_snapname,
 		return ret;
 	}
 
-	ret = rbd_snap_unprotect(image, src_snapname);
+	ret = rbd_snap_unprotect(image, src_snapname, false);
 	if (ret < 0) {
 		prt("rbd_snap_unprotect(%s@%s) failed\n", dst_imagename,
 		    src_snapname);
@@ -2969,7 +2969,7 @@ void remove_image(rados_ioctx_t ioctx, char *imagename, bool remove_snap,
 		report_failure(101);
 	}
 	if (remove_snap) {
-		if ((ret = rbd_snap_unprotect(image, "snap")) < 0) {
+		if ((ret = rbd_snap_unprotect(image, "snap", false)) < 0) {
 			sprintf(errmsg, "rbd_snap_unprotect %s@snap",
 				imagename);
 			prterrcode(errmsg, ret);

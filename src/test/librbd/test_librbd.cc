@@ -2918,7 +2918,7 @@ TEST_F(TestLibRBD, TestClone)
                                  ioctx, child_name.c_str(), features, &order));
 
   // unprotected image should fail unprotect
-  ASSERT_EQ(-EINVAL, rbd_snap_unprotect(parent, "parent_snap"));
+  ASSERT_EQ(-EINVAL, rbd_snap_unprotect(parent, "parent_snap", false));
   printf("can't unprotect an unprotected snap\n");
 
   ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
@@ -3002,7 +3002,7 @@ TEST_F(TestLibRBD, TestClone)
   ASSERT_EQ(0, rbd_remove(ioctx, child_name.c_str()));
   ASSERT_EQ(-EBUSY, rbd_snap_remove(parent, "parent_snap"));
   printf("can't remove parent while still protected\n");
-  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap", false));
   ASSERT_EQ(0, rbd_snap_remove(parent, "parent_snap"));
   printf("removed parent snap after unprotecting\n");
 
@@ -3371,7 +3371,7 @@ TEST_F(TestLibRBD, ListChildren)
   test_list_children(parent, 0);
   test_list_children2(parent, 0);
 
-  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap", false));
   ASSERT_EQ(0, rbd_snap_remove(parent, "parent_snap"));
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_remove(ioctx1, parent_name.c_str()));
@@ -3555,7 +3555,7 @@ TEST_F(TestLibRBD, ListChildrenTiered)
   test_list_children(parent, 0);
   test_list_children2(parent, 0);
 
-  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap"));
+  ASSERT_EQ(0, rbd_snap_unprotect(parent, "parent_snap", false));
   ASSERT_EQ(0, rbd_snap_remove(parent, "parent_snap"));
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_remove(ioctx1, parent_name.c_str()));
