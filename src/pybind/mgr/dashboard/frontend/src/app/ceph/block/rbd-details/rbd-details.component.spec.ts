@@ -1,4 +1,5 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { TabsModule, TooltipModule } from 'ngx-bootstrap';
 
@@ -13,7 +14,7 @@ describe('RbdDetailsComponent', () => {
   beforeEach(async(() => {
     TestBed.configureTestingModule({
       declarations: [ RbdDetailsComponent, RbdSnapshotListComponent ],
-      imports: [ SharedModule, TabsModule.forRoot(), TooltipModule.forRoot(), ]
+      imports: [ SharedModule, TabsModule.forRoot(), TooltipModule.forRoot(), RouterTestingModule]
     })
     .compileComponents();
   }));

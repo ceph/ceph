@@ -50,6 +50,11 @@ const routes: Routes = [
   { path: 'rbd/edit/:pool/:name', component: RbdFormComponent, canActivate: [AuthGuardService] },
   { path: 'pool', component: PoolListComponent, canActivate: [AuthGuardService] },
   {
+    path: 'rbd/clone/:pool/:name/:snap',
+    component: RbdFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
     path: 'perf_counters/:type/:id',
     component: PerformanceCounterComponent,
     canActivate: [AuthGuardService]

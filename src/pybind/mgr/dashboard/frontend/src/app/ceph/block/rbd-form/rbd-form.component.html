@@ -4,7 +4,7 @@
     <li class="breadcrumb-item">
       <a routerLink="/block/rbd">Images</a></li>
     <li class="breadcrumb-item active"
-        i18n>{editing, select, 1 {Edit} other {Add}}</li>
+        i18n>{mode, select, editing {Edit} cloning {Clone} other {Add}}</li>
   </ol>
 </nav>
 
@@ -17,10 +17,27 @@
     <div class="panel panel-default">
       <div class="panel-heading">
         <h3 class="panel-title">
-          <span i18n>{editing, select, 1 {Edit} other {Add}}</span> RBD
+          <span i18n>{mode, select, editing {Edit} cloning {Clone} other {Add}}</span> RBD
         </h3>
       </div>
       <div class="panel-body">
+
+        <!-- Parent -->
+        <div class="form-group"
+             *ngIf="rbdForm.controls.parent.value">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="name">{mode, select, cloning {Clone from} other {Parent}}
+          </label>
+          <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   id="parent"
+                   name="parent"
+                   formControlName="parent">
+            <hr>
+          </div>
+        </div>
 
         <!-- Name -->
         <div class="form-group"
@@ -175,7 +192,7 @@
           </label>
           <div class="col-sm-9">
             <div class="checkbox checkbox-primary"
-                 *ngIf="!editing">
+                 *ngIf="mode !== rbdFormMode.editing">
               <input type="checkbox"
                      id="default-features"
                      name="default-features"
@@ -184,7 +201,7 @@
                      for="default-features">Use default features</label>
             </div>
             <div *ngIf="!featuresFormGroups.value.defaultFeatures">
-              <br *ngIf="!editing">
+              <br *ngIf="mode !== rbdFormMode.editing">
               <div class="checkbox checkbox-primary"
                    *ngFor="let feature of featuresList">
                 <input type="checkbox"
@@ -299,7 +316,7 @@
           <cd-submit-button [form]="rbdForm"
                             type="button"
                             (submitAction)="submit()">
-            <span i18n>{editing, select, 1 {Update} other {Create}}</span> RBD
+            <span i18n>{mode, select, editing {Update} cloning {Clone} other {Create}}</span> RBD
           </cd-submit-button>
           <button i18n
                   type="button"
