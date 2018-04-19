@@ -130,8 +130,7 @@ public:
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
 
-static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
-			     CK_MECHANISM_TYPE mechanism,
+static int nss_aes_operation(PK11Context *ectx,
 			     PK11SymKey *key,
 			     SECItem *param,
 			     const bufferlist& in, bufferlist& out,
@@ -146,9 +145,8 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
   int written;
   unsigned char *in_buf;
 
-  PK11Context *ectx;
-  ectx = PK11_CreateContextBySymKey(mechanism, op, key, param);
-  assert(ectx);
+  ret = PK11_DigestBegin(ectx);
+  assert(SECSuccess == ret);
 
   incopy = in;  // it's a shallow copy!
   in_buf = (unsigned char*)incopy.c_str();
@@ -156,7 +154,6 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
 		      in_buf, in.length());
   if (ret != SECSuccess) {
-    PK11_DestroyContext(ectx, PR_TRUE);
     if (error) {
       ostringstream oss;
       oss << "NSS AES failed: " << PR_GetError();
@@ -169,7 +166,6 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
   ret = PK11_DigestFinal(ectx,
 			 (unsigned char*)out_tmp.c_str()+written, &written2,
 			 out_tmp.length()-written);
-  PK11_DestroyContext(ectx, PR_TRUE);
   if (ret != SECSuccess) {
     if (error) {
       ostringstream oss;
@@ -186,6 +182,8 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 
 class CryptoAESKeyHandler : public CryptoKeyHandler {
   CK_MECHANISM_TYPE mechanism;
+  PK11Context *enc_ctx;
+  PK11Context *dec_ctx;
   PK11SlotInfo *slot;
   PK11SymKey *key;
   SECItem *param;
@@ -193,11 +191,17 @@ class CryptoAESKeyHandler : public CryptoKeyHandler {
 public:
   CryptoAESKeyHandler()
     : mechanism(CKM_AES_CBC_PAD),
+      enc_ctx(NULL),
+      dec_ctx(NULL),
       slot(NULL),
       key(NULL),
       param(NULL) {}
   ~CryptoAESKeyHandler() override {
     SECITEM_FreeItem(param, PR_TRUE);
+    if (dec_ctx)
+      PK11_DestroyContext(dec_ctx, PR_TRUE);
+    if (enc_ctx)
+      PK11_DestroyContext(enc_ctx, PR_TRUE);
     if (key)
       PK11_FreeSymKey(key);
     if (slot)
@@ -237,16 +241,21 @@ public:
       return -1;
     }
 
+    enc_ctx = PK11_CreateContextBySymKey(mechanism, CKA_ENCRYPT, key, param);
+    assert(enc_ctx);
+    dec_ctx = PK11_CreateContextBySymKey(mechanism, CKA_DECRYPT, key, param);
+    assert(dec_ctx);
+
     return 0;
   }
 
   int encrypt(const bufferlist& in,
 	      bufferlist& out, std::string *error) const override {
-    return nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out, error);
+    return nss_aes_operation(enc_ctx, key, param, in, out, error);
   }
   int decrypt(const bufferlist& in,
 	       bufferlist& out, std::string *error) const override {
-    return nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out, error);
+    return nss_aes_operation(dec_ctx, key, param, in, out, error);
   }
 };
 
