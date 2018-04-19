@@ -111,6 +111,13 @@ def common_parser(prog, description):
         help='Enable device encryption via dm-crypt',
     )
 
+    parser.add_argument(
+        '--no-systemd',
+        dest='no_systemd',
+        action='store_true',
+        help='Skip creating and enabling systemd units and starting OSD services when activating',
+    )
+
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
     return parser
