@@ -27,6 +27,11 @@ export class RbdService {
     return this.http.get('api/block/image');
   }
 
+  copy(poolName, rbdName, rbd) {
+    return this.http.post(`api/block/image/${poolName}/${rbdName}/copy`, rbd,
+      { observe: 'response' });
+  }
+
   createSnapshot(poolName, rbdName, snapshotName) {
     const request = {
       snapshot_name: snapshotName

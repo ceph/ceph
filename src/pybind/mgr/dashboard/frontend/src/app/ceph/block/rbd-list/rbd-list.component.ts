@@ -208,6 +208,13 @@ export class RbdListComponent implements OnInit, OnDestroy {
         rbdModel.pool_name = executingTask.metadata['child_pool_name'];
         rbdModel.cdExecuting = 'cloning';
         resultRBDs.push(rbdModel);
+
+      } else if (executingTask.name === 'rbd/copy') {
+        const rbdModel = new RbdModel();
+        rbdModel.name = executingTask.metadata['dest_image_name'];
+        rbdModel.pool_name = executingTask.metadata['dest_pool_name'];
+        rbdModel.cdExecuting = 'copying';
+        resultRBDs.push(rbdModel);
       }
     });
     return resultRBDs;
