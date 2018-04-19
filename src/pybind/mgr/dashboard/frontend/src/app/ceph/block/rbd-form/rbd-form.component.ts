@@ -14,6 +14,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { TaskManagerMessageService } from '../../../shared/services/task-manager-message.service';
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
 import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
+import { RbdFormCopyRequestModel } from './rbd-form-copy-request.model';
 import { RbdFormCreateRequestModel } from './rbd-form-create-request.model';
 import { RbdFormEditRequestModel } from './rbd-form-edit-request.model';
 import { RbdFormMode } from './rbd-form-mode.enum';
@@ -186,6 +187,11 @@ export class RbdFormComponent implements OnInit {
     this.rbdForm.get('size').disable();
   }
 
+  disableForCopy() {
+    this.rbdForm.get('parent').disable();
+    this.rbdForm.get('size').disable();
+  }
+
   ngOnInit() {
     if (this.router.url.startsWith('/rbd/edit')) {
       this.mode = this.rbdFormMode.editing;
@@ -193,8 +199,13 @@ export class RbdFormComponent implements OnInit {
     } else if (this.router.url.startsWith('/rbd/clone')) {
       this.mode = this.rbdFormMode.cloning;
       this.disableForClone();
+    } else if (this.router.url.startsWith('/rbd/copy')) {
+      this.mode = this.rbdFormMode.copying;
+      this.disableForCopy();
     }
-    if (this.mode === this.rbdFormMode.editing || this.mode === this.rbdFormMode.cloning) {
+    if (this.mode === this.rbdFormMode.editing ||
+        this.mode === this.rbdFormMode.cloning ||
+        this.mode === this.rbdFormMode.copying) {
       this.routeParamsSubscribe = this.route.params.subscribe(
         (params: { pool: string, name: string, snap: string }) => {
           const poolName = params.pool;
@@ -378,6 +389,8 @@ export class RbdFormComponent implements OnInit {
     this.response = response;
     if (this.mode === this.rbdFormMode.cloning) {
       this.rbdForm.get('parent').setValue(`${response.pool_name}/${response.name}@${snapName}`);
+    } else if (this.mode === this.rbdFormMode.copying) {
+      this.rbdForm.get('parent').setValue(`${response.pool_name}/${response.name}`);
     } else if (response.parent) {
       const parent = response.parent;
       this.rbdForm.get('parent')
@@ -553,11 +566,66 @@ export class RbdFormComponent implements OnInit {
       });
   }
 
+  copyRequest(): RbdFormCopyRequestModel {
+    const request = new RbdFormCopyRequestModel();
+    request.dest_pool_name = this.rbdForm.get('pool').value;
+    request.dest_image_name = this.rbdForm.get('name').value;
+    request.obj_size = this.formatter.toBytes(this.rbdForm.get('obj_size').value);
+    if (!this.defaultFeaturesFormControl.value) {
+      _.forIn(this.features, (feature) => {
+        if (this.featuresFormGroups.get(feature.key).value) {
+          request.features.push(feature.key);
+        }
+      });
+    } else {
+      request.features = null;
+    }
+    request.stripe_unit = this.formatter.toBytes(this.rbdForm.get('stripingUnit').value);
+    request.stripe_count = this.rbdForm.get('stripingCount').value;
+    request.data_pool = this.rbdForm.get('dataPool').value;
+    return request;
+  }
+
+  copyAction() {
+    const request = this.copyRequest();
+    const finishedTask = new FinishedTask();
+    finishedTask.name = 'rbd/copy';
+    finishedTask.metadata = {
+      'src_pool_name': this.response.pool_name,
+      'src_image_name': this.response.name,
+      'dest_pool_name': request.dest_pool_name,
+      'dest_image_name': request.dest_image_name
+    };
+    this.rbdService.copy(this.response.pool_name, this.response.name, request)
+      .toPromise().then((resp) => {
+        if (resp.status === 202) {
+          this.notificationService.show(NotificationType.info,
+            `RBD copy in progress...`,
+            this.taskManagerMessageService.getDescription(finishedTask));
+          this.taskManagerService.subscribe(finishedTask.name, finishedTask.metadata,
+            (asyncFinishedTask: FinishedTask) => {
+              this.notificationService.notifyTask(asyncFinishedTask);
+            });
+        } else {
+          finishedTask.success = true;
+          this.notificationService.notifyTask(finishedTask);
+        }
+        this.router.navigate(['/block/rbd']);
+      }).catch((resp) => {
+        this.rbdForm.setErrors({'cdSubmitButton': true});
+        finishedTask.success = false;
+        finishedTask.exception = resp.error;
+        this.notificationService.notifyTask(finishedTask);
+      });
+  }
+
   submit() {
     if (this.mode === this.rbdFormMode.editing) {
       this.editAction();
     } else if (this.mode === this.rbdFormMode.cloning) {
       this.cloneAction();
+    } else if (this.mode === this.rbdFormMode.copying) {
+      this.copyAction();
     } else {
       this.createAction();
     }

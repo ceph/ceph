@@ -1,4 +1,5 @@
 export enum RbdFormMode {
   editing = 'editing',
-  cloning = 'cloning'
+  cloning = 'cloning',
+  copying = 'copying'
 }
