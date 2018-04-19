@@ -63,27 +63,28 @@ export class NotificationService {
 
   /**
    * Method for showing a notification.
-   *
    * @param {NotificationType} type toastr type
    * @param {string} message
    * @param {string} [title]
    * @param {*} [options] toastr compatible options, used when creating a toastr
    * @memberof NotificationService
+   * @returns The timeout ID that is set to be able to cancel the notification.
    */
   show(type: NotificationType, message: string, title?: string, options?: any) {
-    this.save(type, message, title);
-
-    switch (type) {
-      case NotificationType.error:
-        this.toastr.error(message, title, options);
-        break;
-      case NotificationType.info:
-        this.toastr.info(message, title, options);
-        break;
-      case NotificationType.success:
-        this.toastr.success(message, title, options);
-        break;
-    }
+    return setTimeout(() => {
+      this.save(type, message, title);
+      switch (type) {
+        case NotificationType.error:
+          this.toastr.error(message, title, options);
+          break;
+        case NotificationType.info:
+          this.toastr.info(message, title, options);
+          break;
+        case NotificationType.success:
+          this.toastr.success(message, title, options);
+          break;
+      }
+    }, 10);
   }
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true) {
@@ -94,6 +95,16 @@ export class NotificationService {
       this.show(NotificationType.error,
         this.taskManagerMessageService.getErrorMessage(finishedTask),
         this.taskManagerMessageService.getDescription(finishedTask));
+    }
+  }
+
+  /**
+   * Prevent the notification from being shown.
+   * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
+   */
+  cancel(timeoutId) {
+    if (timeoutId) {
+      clearTimeout(timeoutId);
     }
   }
 }
