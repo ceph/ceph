@@ -15,7 +15,8 @@
 <cd-table [data]="images"
           columnMode="flex"
           [columns]="columns"
-          identifier="name"
+          identifier="id"
+          forceIdentifier="true"
           selectionType="single"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions">
