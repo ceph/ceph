@@ -6943,102 +6943,103 @@ std::vector<Option> get_mds_options() {
 
 std::vector<Option> get_mds_client_options() {
   return std::vector<Option>({
-    Option("client_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("client_cache_size", Option::TYPE_INT, Option::LEVEL_BASIC)
     .set_default(16384)
-    .set_description(""),
+    .set_description("soft maximum number of directory entries in client cache"),
 
     Option("client_cache_mid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.75)
-    .set_description(""),
+    .set_description("mid-point of client cache LRU"),
 
-    Option("client_use_random_mds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("client_use_random_mds", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("issue new requests to a random active MDS"),
 
     Option("client_mount_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(300.0)
-    .set_description(""),
+    .set_description("timeout for mounting CephFS (seconds)"),
 
-    Option("client_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("client_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1.0)
-    .set_description(""),
+    .set_description("seconds between client upkeep ticks"),
 
-    Option("client_trace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("client_trace", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .set_description(""),
-
+    .set_description("file containing trace of client operations"),
 
     Option("client_readahead_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(128*1024)
-    .set_description(""),
+    .set_description("minimum bytes to readahead in a file"),
 
     Option("client_readahead_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("maximum bytes to readahead in a file (zero is unlimited)"),
 
     Option("client_readahead_max_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
-    .set_description(""),
+    .set_description("maximum stripe periods to readahead in a file"),
 
     Option("client_reconnect_stale", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("reconnect when the session becomes stale"),
 
     Option("client_snapdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(".snap")
-    .set_description(""),
+    .set_description("pseudo directory for snapshot access to a directory"),
 
     Option("client_mountpoint", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/")
-    .set_description(""),
+    .set_description("default mount-point"),
 
     Option("client_mount_uid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(-1)
-    .set_description(""),
+    .set_description("uid to mount as"),
 
     Option("client_mount_gid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(-1)
-    .set_description(""),
+    .set_description("gid to mount as"),
 
-    Option("client_notify_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    /* RADOS client option */
+    Option("client_notify_timeout", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(10)
     .set_description(""),
 
-    Option("osd_client_watch_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    /* RADOS client option */
+    Option("osd_client_watch_timeout", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(30)
     .set_description(""),
 
-    Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
     .set_description(""),
 
     Option("client_quota_df", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("show quota usage for statfs (df)"),
 
     Option("client_oc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("enable object caching"),
 
     Option("client_oc_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(200_M)
-    .set_description(""),
+    .set_description("maximum size of object cache"),
 
     Option("client_oc_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(100_M)
-    .set_description(""),
+    .set_description("maximum size of dirty pages in object cache"),
 
     Option("client_oc_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(8_M)
-    .set_description(""),
+    .set_description("target size of dirty pages object cache"),
 
     Option("client_oc_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5.0)
-    .set_description(""),
+    .set_description("maximum age of dirty pages in object cache (seconds)"),
 
     Option("client_oc_max_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
-    .set_description(""),
+    .set_description("maximum number of objects in cache"),
 
     Option("client_debug_getattr_caps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
@@ -7052,7 +7053,7 @@ std::vector<Option> get_mds_client_options() {
     .set_default(0)
     .set_description(""),
 
-    Option("client_max_inline_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("client_max_inline_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(4_K)
     .set_description(""),
 
@@ -7066,19 +7067,20 @@ std::vector<Option> get_mds_client_options() {
 
     Option("client_metadata", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("metadata key=value comma-delimited pairs appended to session metadata"),
 
     Option("client_acl_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("ACL type to enforce (none or \"posix_acl\")"),
 
     Option("client_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("client-enforced permission checking"),
 
     Option("client_dirsize_rbytes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("set the directory size as the number of file bytes recursively used")
+    .set_long_description("This option enables a CephFS feature that stores the recursive directory size (the bytes used by files in the directory and its descendents) in the st_size field of the stat structure."),
 
     // note: the max amount of "in flight" dirty data is roughly (max - target)
     Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -7087,15 +7089,15 @@ std::vector<Option> get_mds_client_options() {
 
     Option("fuse_disable_pagecache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("disable page caching in the kernel for this FUSE mount"),
 
     Option("fuse_allow_other", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("pass allow_other to FUSE on mount"),
 
     Option("fuse_default_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("pass default_permisions to FUSE on mount"),
 
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -7103,33 +7105,34 @@ std::vector<Option> get_mds_client_options() {
 
     Option("fuse_max_write", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description("Set the maximum number of bytes in a single write operation.  Because the FUSE default is 128kbytes, SO fuse_max_write default set to 0(The default does not take effect)"),
+    .set_description("set the maximum number of bytes in a single write operation")
+    .set_long_description("Set the maximum number of bytes in a single write operation that may pass atomically through FUSE. The FUSE default is 128kB and may be indicated by setting this option to 0."),
 
     Option("fuse_atomic_o_trunc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("pass atomic_o_trunc flag to FUSE on mount"),
 
-    Option("fuse_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("fuse_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
     Option("fuse_multithreaded", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("allow parallel processing through FUSE library"),
 
     Option("fuse_require_active_mds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("require active MDSs in the file system when mounting"),
 
     Option("fuse_syncfs_on_mksnap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("synchronize all local metadata/file changes after snapshot"),
 
     Option("fuse_set_user_groups", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("check for ceph-fuse to consider supplementary groups for permissions"),
 
-    Option("client_try_dentry_invalidate", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("client_try_dentry_invalidate", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
@@ -7144,15 +7147,15 @@ std::vector<Option> get_mds_client_options() {
 
     Option("client_check_pool_perm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("confirm access to inode's data pool/namespace described in file layout"),
 
-    Option("client_use_faked_inos", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("client_use_faked_inos", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
     Option("client_mds_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("CephFS file system name to mount"),
   });
 }
 
