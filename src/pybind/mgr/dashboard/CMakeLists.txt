@@ -70,6 +70,7 @@ add_custom_command(
   COMMENT "dashboard frontend is being created"
 )
 add_custom_target(mgr-dashboard-frontend-build
+  ALL
   DEPENDS frontend/dist mgr-dashboard-frontend-deps
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend)
 add_dependencies(tests mgr-dashboard-frontend-build)
