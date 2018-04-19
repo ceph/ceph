@@ -4339,6 +4339,33 @@ void BlueStore::_init_logger()
                     "Read EIO errors propagated to high level callers");
   b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
             "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
+
+  // Latency axis configuration for op histograms, values are in bytes
+  PerfHistogramCommon::axis_config_d alloc_hist_x_axis_config{
+    "<dummy>",
+    PerfHistogramCommon::SCALE_LOG2, ///< Amount in logarithmic scale
+    0,                               ///< Start at 0
+    1,                               ///< nop
+    1,                               ///<
+  };
+
+  // Op size axis configuration for op histograms, values are in bytes
+  PerfHistogramCommon::axis_config_d alloc_hist_y_axis_config{
+    "Request size (bytes)",
+    PerfHistogramCommon::SCALE_LOG2, ///< Request size in logarithmic scale
+    1,                               ///< Start at 0
+    4096,                            ///< Quantization unit is 4K bytes
+    13,                              ///< Enough to cover requests larger than 4 MB
+  };
+
+  b.add_u64_counter_histogram(
+    l_bluestore_alloc_req_histogram, "bluestore_allocation_request_histogram",
+    alloc_hist_x_axis_config, alloc_hist_y_axis_config,
+    "Histogram of space allocation request sizes");
+  b.add_u64_counter_histogram(
+    l_bluestore_alloc_res_histogram, "bluestore_allocation_result_histogram",
+    alloc_hist_x_axis_config, alloc_hist_y_axis_config,
+    "Histogram of resulting space allocations");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -5385,8 +5412,11 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 	      << std::dec << dendl;
       _dump_alloc_on_rebalance_failure();
     }
+    logger->hinc(l_bluestore_alloc_req_histogram, 1, gift);
+
     for (auto& e : *extents) {
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+     logger->hinc(l_bluestore_alloc_res_histogram, 1, e.length);
     }
     ret = 1;
   }
@@ -10827,7 +10857,10 @@ int BlueStore::_do_alloc_write(
   assert(prealloc_left == (int64_t)need);
 
   dout(20) << __func__ << " prealloc " << prealloc << dendl;
+  logger->hinc(l_bluestore_alloc_req_histogram, 1, need);
+
   auto prealloc_pos = prealloc.begin();
+  logger->hinc(l_bluestore_alloc_res_histogram, 1, prealloc_pos->length);
 
   for (auto& wi : wctx->writes) {
     BlobRef b = wi.b;
@@ -10886,6 +10919,9 @@ int BlueStore::_do_alloc_write(
 	txc->statfs_delta.allocated() += prealloc_pos->length;
 	extents.push_back(*prealloc_pos);
 	++prealloc_pos;
+	if (prealloc_pos != prealloc.end()) {
+	  logger->hinc(l_bluestore_alloc_res_histogram, 1, prealloc_pos->length);
+	}
       } else {
 	extents.emplace_back(prealloc_pos->offset, left);
 	prealloc_pos->offset += left;

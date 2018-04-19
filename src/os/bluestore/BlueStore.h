@@ -122,6 +122,8 @@ enum {
   l_bluestore_gc_merged,
   l_bluestore_read_eio,
   l_bluestore_fragmentation,
+  l_bluestore_alloc_req_histogram,
+  l_bluestore_alloc_res_histogram,
   l_bluestore_last
 };
 
