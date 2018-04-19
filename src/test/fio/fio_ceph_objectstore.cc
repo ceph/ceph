@@ -282,8 +282,9 @@ struct Engine {
     if (!ref_count) {
       ostringstream ostr;
       Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
-      cct->get_perfcounters_collection()->dump_formatted(f, false);
       ostr << "FIO plugin ";
+      cct->get_perfcounters_collection()->dump_formatted(f, false);
+      cct->get_perfcounters_collection()->dump_formatted_histograms(f, false);
       f->flush(ostr);
       if (g_conf()->rocksdb_perf) {
         os->get_db_statistics(f);
@@ -299,6 +300,12 @@ struct Engine {
       ostr << "Generate db histogram: ";
       os->generate_db_histogram(f);
       f->flush(ostr);
+
+      {
+	ostr <<" mempool dump:\n";
+	mempool::dump(f);
+	f->flush(ostr);
+      }
       delete f;
 
       if (unlink) {
