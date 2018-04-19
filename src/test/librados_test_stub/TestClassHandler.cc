@@ -28,7 +28,7 @@ TestClassHandler::~TestClassHandler() {
 
 void TestClassHandler::open_class(const std::string& name,
                                   const std::string& path) {
-  void *handle = dlopen(path.c_str(), RTLD_NOW);
+  void *handle = dlopen(path.c_str(), RTLD_LAZY);
   if (handle == NULL) {
     derr << "Failed to load class: " << dlerror() << dendl;
     return;
