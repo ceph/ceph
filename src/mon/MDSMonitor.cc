@@ -1970,6 +1970,7 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> &fs)
 
       // check everyone
       for (const auto &p : pending.filesystems) {
+	bool assigned = false;
         const auto &fs = p.second;
         const MDSMap &mds_map = fs->mds_map;
         for (const auto &mds_i : mds_map.mds_info) {
@@ -1981,12 +1982,15 @@ bool MDSMonitor::maybe_promote_standby(std::shared_ptr<Filesystem> &fs)
             }
 
             if (try_standby_replay(info, *fs, cand_info)) {
-              do_propose = true;
+	      assigned = true;
               break;
             }
-            continue;
           }
         }
+	if (assigned) {
+	  do_propose = true;
+	  break;
+	}
       }
     }
   }
