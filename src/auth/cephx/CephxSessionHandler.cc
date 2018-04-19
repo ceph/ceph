@@ -45,17 +45,26 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
     mswab<uint32_t>(header.crc), mswab<uint32_t>(footer.front_crc),
     mswab<uint32_t>(footer.middle_crc), mswab<uint32_t>(footer.data_crc)
   };
-  bufferlist bl_plaintext;
-  bl_plaintext.append(buffer::create_static(sizeof(sigblock), (char*)&sigblock));
 
-  bufferlist bl_ciphertext;
-  if (key.encrypt(cct, bl_plaintext, bl_ciphertext, NULL) < 0) {
+  char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];
+
+  try {
+    const CryptoKey::in_slice_t in {
+      sizeof(sigblock),
+      reinterpret_cast<const unsigned char*>(&sigblock)
+    };
+    const CryptoKey::out_slice_t out {
+      sizeof(exp_buf),
+      reinterpret_cast<unsigned char*>(&exp_buf)
+    };
+
+    key.encrypt(cct, in, out);
+  } catch (std::exception& e) {
     lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
     return -1;
   }
 
-  bufferlist::iterator ci = bl_ciphertext.begin();
-  decode(*psig, ci);
+  *psig = *reinterpret_cast<__le64*>(exp_buf);
 
   ldout(cct, 10) << __func__ << " seq " << m->get_seq()
 		 << " front_crc_ = " << footer.front_crc
