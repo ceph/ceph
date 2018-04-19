@@ -74,9 +74,68 @@ void CryptoRandom::get_bytes(char *buf, int len)
 
 
 // ---------------------------------------------------
+// fallback implementation of the bufferlist-free
+// interface.
+
+std::size_t CryptoKeyHandler::encrypt(
+  const CryptoKeyHandler::in_slice_t& in,
+  const CryptoKeyHandler::out_slice_t& out) const
+{
+  ceph::bufferptr inptr(reinterpret_cast<const char*>(in.buf), in.length);
+  ceph::bufferlist plaintext;
+  plaintext.append(std::move(inptr));
+
+  ceph::bufferlist ciphertext;
+  std::string error;
+  const int ret = encrypt(plaintext, ciphertext, &error);
+  if (ret != 0 || !error.empty()) {
+    throw std::runtime_error(std::move(error));
+  }
+
+  // we need to specify the template parameter explicitly as ::length()
+  // returns unsigned int, not size_t.
+  const auto todo_len = \
+    std::min<std::size_t>(ciphertext.length(), out.max_length);
+  memcpy(out.buf, ciphertext.c_str(), todo_len);
+
+  return todo_len;
+}
+
+std::size_t CryptoKeyHandler::decrypt(
+  const CryptoKeyHandler::in_slice_t& in,
+  const CryptoKeyHandler::out_slice_t& out) const
+{
+  ceph::bufferptr inptr(reinterpret_cast<const char*>(in.buf), in.length);
+  ceph::bufferlist ciphertext;
+  ciphertext.append(std::move(inptr));
+
+  ceph::bufferlist plaintext;
+  std::string error;
+  const int ret = decrypt(ciphertext, plaintext, &error);
+  if (ret != 0 || !error.empty()) {
+    throw std::runtime_error(std::move(error));
+  }
+
+  // we need to specify the template parameter explicitly as ::length()
+  // returns unsigned int, not size_t.
+  const auto todo_len = \
+    std::min<std::size_t>(plaintext.length(), out.max_length);
+  memcpy(out.buf, plaintext.c_str(), todo_len);
+
+  return todo_len;
+}
+
+// ---------------------------------------------------
 
 class CryptoNoneKeyHandler : public CryptoKeyHandler {
 public:
+  CryptoNoneKeyHandler()
+    : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_0B()) {
+  }
+
+  using CryptoKeyHandler::encrypt;
+  using CryptoKeyHandler::decrypt;
+
   int encrypt(const bufferlist& in,
 	       bufferlist& out, std::string *error) const override {
     out = in;
@@ -128,12 +187,15 @@ public:
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
 
-
 class CryptoAESKeyHandler : public CryptoKeyHandler {
   AES_KEY enc_key;
   AES_KEY dec_key;
 
 public:
+  CryptoAESKeyHandler()
+    : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()) {
+  }
+
   int init(const bufferptr& s, ostringstream& err) {
     secret = s;
 
@@ -225,6 +287,15 @@ public:
     out_tmp.set_length(in.length() - pad_len);
     out.append(std::move(out_tmp));
 
+    return 0;
+  }
+
+  std::size_t encrypt(const in_slice_t& in,
+		      const out_slice_t& out) const override {
+    return 0;
+  }
+  std::size_t decrypt(const in_slice_t& in,
+		      const out_slice_t& out) const override {
     return 0;
   }
 };
