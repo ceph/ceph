@@ -29,6 +29,11 @@ class Options(object):
     RGW_API_SCHEME = ('http', str)
     RGW_API_USER_ID = ('', str)
 
+    # Grafana settings
+    GRAFANA_API_URL = ('http://localhost:3000', str)
+    GRAFANA_API_USERNAME = ('admin', str)
+    GRAFANA_API_PASSWORD = ('admin', str)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \

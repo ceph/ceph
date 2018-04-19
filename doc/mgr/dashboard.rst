@@ -230,6 +230,60 @@ exist and you may find yourself in the situation that you have to use them::
   $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
   $ ceph dashboard set-rgw-api-user-id <user_id>
 
+Enabling the Embedding of Grafana Dashboards
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Grafana and Prometheus are likely going to be bundled and installed by some
+orchestration tools along Ceph in the near future, but currently, you will have
+to install and configure both manually. After you have installed Prometheus and
+Grafana on your preferred hosts, proceed with the following steps::
+
+ 1. Enable the Ceph Exporter which comes as Ceph Manager module by running::
+
+    $ ceph mgr module enable prometheus
+
+    More details can be found on the `documentation
+    <http://docs.ceph.com/docs/master/mgr/prometheus/>`_ of the prometheus
+    module.
+
+ 2. Add the corresponding scrape configuration to Prometheus. This may look
+    like::
+
+        global:
+          scrape_interval: 5s
+
+        scrape_configs:
+          - job_name: 'prometheus'
+            static_configs:
+              - targets: ['localhost:9090']
+          - job_name: 'ceph'
+            static_configs:
+              - targets: ['localhost:9283']
+          - job_name: 'node-exporter'
+            static_configs:
+              - targets: ['localhost:9100']
+
+ 3. Add Prometheus as data source to Grafana
+
+ 4. Install the `vonage-status-panel` plugin using::
+
+        grafana-cli plugins install vonage-status-panel
+
+ 4. Add the Dashboards to Grafana by importing them
+
+ 5. Configure Grafana in `/etc/grafana/grafana.ini` to adapt the URLs to the
+    Ceph Dashboard properly::
+
+        root_url = http://localhost:3000/api/grafana/proxy
+
+After you have configured Grafana and Prometheus, you will need to tell the
+Ceph Manager Dashboard where it can access Grafana and what the credentials are
+to do so. This can be done by using the following commands::
+
+  $ ceph dashboard set-grafana-api-url <url>  # default: 'http://localhost:3000'
+  $ ceph dashboard set-grafana-api-username <username> # default: 'admin'
+  $ ceph dashboard set-grafana-api-password <password> # default: 'admin'
+
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
 
