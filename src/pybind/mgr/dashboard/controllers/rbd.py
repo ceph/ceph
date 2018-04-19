@@ -351,6 +351,7 @@ class Rbd(RESTController):
 
 
 @ApiController('block/image/:pool_name/:image_name/snap')
+@AuthRequired()
 class RbdSnapshot(RESTController):
 
     @RbdTask('snap/create',
