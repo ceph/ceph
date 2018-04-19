@@ -26,6 +26,7 @@ export class ApiInterceptorService implements HttpInterceptor {
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     return next.handle(request).catch(resp => {
       if (resp instanceof HttpErrorResponse) {
+        let showNotification = true;
         switch (resp.status) {
           case 401:
             this.authStorageService.remove();
@@ -34,11 +35,15 @@ export class ApiInterceptorService implements HttpInterceptor {
           case 404:
             this.router.navigate(['/404']);
             break;
+          case 409:
+            showNotification = false;
+            break;
         }
-        this.notificationService.show(
-          NotificationType.error,
-          resp.error.detail || '',
-          `${resp.status} - ${resp.statusText}`);
+        if (showNotification) {
+          this.notificationService.show(NotificationType.error,
+            resp.error.detail || '',
+            `${resp.status} - ${resp.statusText}`);
+        }
       }
       // Return the error to the method that called it.
       return Observable.throw(resp);
