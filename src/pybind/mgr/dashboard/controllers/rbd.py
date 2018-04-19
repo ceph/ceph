@@ -113,6 +113,8 @@ def _sort_features(features, enable=True):
 @AuthRequired()
 class Rbd(RESTController):
 
+    RESOURCE_ID = "pool_name/image_name"
+
     # set of image features that can be enable on existing images
     ALLOW_ENABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
                                  "journaling"])
@@ -353,6 +355,8 @@ class Rbd(RESTController):
 @ApiController('block/image/:pool_name/:image_name/snap')
 @AuthRequired()
 class RbdSnapshot(RESTController):
+
+    RESOURCE_ID = "snapshot_name"
 
     @RbdTask('snap/create',
              ['{pool_name}', '{image_name}', '{snapshot_name}'], 2.0)
