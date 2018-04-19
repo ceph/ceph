@@ -36,8 +36,6 @@ class ErasureCodeProfile(RESTController):
         except KeyError:
             raise NotFound('No such erasure code profile')
 
-    # pylint: disable=too-many-arguments
-    @RESTController.args_from_json
     def create(self, name, k, m, plugin=None, ruleset_failure_domain=None, **kwargs):
         kwargs['k'] = k
         kwargs['m'] = m

@@ -61,8 +61,6 @@ class Pool(RESTController):
         return CephService.send_command('mon', 'osd pool delete', pool=pool_name, pool2=pool_name,
                                         sure='--yes-i-really-really-mean-it')
 
-    # pylint: disable=too-many-arguments, too-many-locals
-    @RESTController.args_from_json
     def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
                application_metadata=None, rule_name=None, **kwargs):
         ecp = erasure_code_profile if erasure_code_profile else None
