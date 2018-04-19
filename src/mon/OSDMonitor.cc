@@ -3496,12 +3496,53 @@ void OSDMonitor::get_removed_snaps_range(
 
 int OSDMonitor::get_version(version_t ver, bufferlist& bl)
 {
-    if (inc_osd_cache.lookup(ver, &bl)) {
+  return get_version(ver, mon->get_quorum_con_features(), bl);
+}
+
+void OSDMonitor::reencode_incremental_map(bufferlist& bl, uint64_t features)
+{
+  OSDMap::Incremental inc;
+  bufferlist::iterator q = bl.begin();
+  inc.decode(q);
+  bl.clear();
+  if (inc.fullmap.length()) {
+    // embedded full map?
+    OSDMap m;
+    m.decode(inc.fullmap);
+    inc.fullmap.clear();
+    m.encode(inc.fullmap, features | CEPH_FEATURE_RESERVED);
+  }
+  if (inc.crush.length()) {
+    // embedded crush map
+    CrushWrapper c;
+    auto p = inc.crush.begin();
+    c.decode(p);
+    inc.crush.clear();
+    c.encode(inc.crush, features);
+  }
+  inc.encode(bl, features | CEPH_FEATURE_RESERVED);
+}
+
+void OSDMonitor::reencode_full_map(bufferlist& bl, uint64_t features)
+{
+  OSDMap m;
+  bufferlist::iterator q = bl.begin();
+  m.decode(q);
+  bl.clear();
+  m.encode(bl, features | CEPH_FEATURE_RESERVED);
+}
+
+int OSDMonitor::get_version(version_t ver, uint64_t features, bufferlist& bl)
+{
+    if (inc_osd_cache.lookup(make_pair(ver, features), &bl)) {
       return 0;
     }
     int ret = PaxosService::get_version(ver, bl);
     if (!ret) {
-      inc_osd_cache.add(ver, bl);
+      if (features != mon->get_quorum_con_features()) {
+        reencode_incremental_map(bl, features);
+      }
+      inc_osd_cache.add(make_pair(ver, features), bl);
     }
     return ret;
 }
@@ -3542,7 +3583,7 @@ int OSDMonitor::get_full_from_pinned_map(version_t ver, bufferlist& bl)
   bufferlist osdm_bl;
   bool has_cached_osdmap = false;
   for (version_t v = ver-1; v >= closest_pinned; --v) {
-    if (full_osd_cache.lookup(v, &osdm_bl)) {
+    if (full_osd_cache.lookup(make_pair(v, mon->get_quorum_con_features()), &osdm_bl)) {
       dout(10) << __func__ << " found map in cache ver " << v << dendl;
       closest_pinned = v;
       has_cached_osdmap = true;
@@ -3624,20 +3665,27 @@ int OSDMonitor::get_full_from_pinned_map(version_t ver, bufferlist& bl)
 
 int OSDMonitor::get_version_full(version_t ver, bufferlist& bl)
 {
-    if (full_osd_cache.lookup(ver, &bl)) {
-      return 0;
-    }
-    int ret = PaxosService::get_version_full(ver, bl);
-    if (ret == -ENOENT) {
-      // build map?
-      ret = get_full_from_pinned_map(ver, bl);
-    }
-    if (ret != 0) {
-      return ret;
-    }
+  return get_version_full(ver, mon->get_quorum_con_features(), bl);
+}
 
-    full_osd_cache.add(ver, bl);
+int OSDMonitor::get_version_full(version_t ver, uint64_t features, bufferlist& bl)
+{
+  if (full_osd_cache.lookup(make_pair(ver, features), &bl)) {
     return 0;
+  }
+  int ret = PaxosService::get_version_full(ver, bl);
+  if (ret == -ENOENT) {
+    // build map?
+    ret = get_full_from_pinned_map(ver, bl);
+  }
+  if (ret != 0) {
+    return ret;
+  }
+  if (features != mon->get_quorum_con_features()) {
+    reencode_full_map(bl, features);
+  }
+  full_osd_cache.add(make_pair(ver, features), bl);
+  return 0;
 }
 
 epoch_t OSDMonitor::blacklist(const entity_addr_t& a, utime_t until)

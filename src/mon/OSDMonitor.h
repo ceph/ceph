@@ -42,6 +42,20 @@ class MOSDMap;
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
+//#include <boost/function.hpp>
+//#include <boost/functional/hash.hpp>
+
+namespace std
+{
+  template<>
+    struct hash<pair<version_t, uint64_t>> {
+      size_t operator()(const pair<version_t, uint64_t>& p) const {
+        size_t seed = hash<version_t>{}(p.first); {}
+        seed ^= hash<uint64_t>{}(p.second) + 0x9e3779b9 + (seed<<6) + (seed>>2);
+        return seed;
+      }
+    };
+};
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
@@ -219,8 +233,13 @@ public:
 
   map<int,double> osd_weight;
 
-  SimpleLRU<version_t, bufferlist> inc_osd_cache;
-  SimpleLRU<version_t, bufferlist> full_osd_cache;
+  using osdmap_key_t = std::pair<version_t, uint64_t>;
+  using osdmap_cache_t = SimpleLRU<osdmap_key_t,
+                                   bufferlist,
+                                   std::less<osdmap_key_t>,
+                                   std::hash<osdmap_key_t>>;
+  osdmap_cache_t inc_osd_cache;
+  osdmap_cache_t full_osd_cache;
 
   bool has_osdmap_manifest;
   osdmap_manifest_t osdmap_manifest;
@@ -532,6 +551,9 @@ private:
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
   void count_metadata(const string& field, Formatter *f);
+
+  void reencode_incremental_map(bufferlist& bl, uint64_t features);
+  void reencode_full_map(bufferlist& bl, uint64_t features);
 public:
   void count_metadata(const string& field, map<string,int> *out);
 protected:
@@ -637,6 +659,9 @@ public:
     mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps);
 
   int get_version(version_t ver, bufferlist& bl) override;
+  int get_version(version_t ver, uint64_t feature, bufferlist& bl);
+
+  int get_version_full(version_t ver, uint64_t feature, bufferlist& bl);
   int get_version_full(version_t ver, bufferlist& bl) override;
   int get_inc(version_t ver, OSDMap::Incremental& inc);
   int get_full_from_pinned_map(version_t ver, bufferlist& bl);
