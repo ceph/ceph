@@ -59,6 +59,12 @@ export class RbdService {
       { observe: 'response' });
   }
 
+  cloneSnapshot(poolName, rbdName, snapshotName, request) {
+    return this.http.post(
+      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}/clone`, request,
+      { observe: 'response' });
+  }
+
   deleteSnapshot(poolName, rbdName, snapshotName) {
     return this.http.delete(
       `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}`,
