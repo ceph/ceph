@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
+#include <boost/container/flat_set.hpp>
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
 
@@ -56,6 +57,8 @@ using namespace librados;
 #include <list>
 #include <map>
 #include "auth/Crypto.h" // get_random_bytes()
+
+#include "xxHash/xxhash.h"
 
 #include "rgw_log.h"
 
@@ -2641,11 +2644,36 @@ public:
 		     uint64_t cookie,
 		     uint64_t notifier_id,
 		     bufferlist& bl) {
+    static thread_local unsigned short seed[4];
+    static thread_local bool seeded = false;
+
+    if (unlikely(!seeded)) {
+      auto t = ceph::coarse_mono_clock::now();
+      auto h = XXH64(&t, sizeof(t), 0);
+      static_assert(sizeof(h) == sizeof(seed),
+                    "Please add cases for your machine's widths.");
+      *reinterpret_cast<uint64_t*>(&seed[0]) = h;
+      seeded = true;
+    }
+
+
     ldout(rados->ctx(), 10) << "RGWWatcher::handle_notify() "
 			    << " notify_id " << notify_id
 			    << " cookie " << cookie
 			    << " notifier " << notifier_id
 			    << " bl.length()=" << bl.length() << dendl;
+
+    if (unlikely(rados->inject_notify_timeout_probability == 1) ||
+	(rados->inject_notify_timeout_probability > 0 &&
+	 (rados->inject_notify_timeout_probability >
+	  erand48(seed)))) {
+      ldout(rados->ctx(), 0)
+	<< "RGWWatcher::handle_notify() dropping notification! "
+	<< "If this isn't what you want, set "
+	<< "rgw_inject_notify_timeout_probability to zero!" << dendl;
+      return;
+    }
+
     rados->watch_cb(notify_id, cookie, notifier_id, bl);
 
     bufferlist reply_bl; // empty reply payload
@@ -4061,6 +4089,18 @@ int RGWRados::init_complete()
 int RGWRados::initialize()
 {
   int ret;
+
+  inject_notify_timeout_probability = cct->_conf->rgw_inject_notify_timeout_probability;
+  if (inject_notify_timeout_probability < 0 ||
+      inject_notify_timeout_probability > 1) {
+    lderr(cct) << "ERROR: inject_notify_timeout_probability is a PROBABILITY. "
+               << "That means it must be between 0 and 1. You specified "
+               << inject_notify_timeout_probability << dendl;
+    return -EINVAL;
+  }
+
+
+  max_notify_retries = cct->_conf->rgw_max_notify_retries;
 
   ret = init_rados();
   if (ret < 0)
@@ -11353,7 +11393,105 @@ int RGWRados::distribute(const string& key, bufferlist& bl)
   pick_control_oid(key, notify_oid);
 
   ldout(cct, 10) << "distributing notification oid=" << notify_oid << " bl.length()=" << bl.length() << dendl;
-  int r = control_pool_ctx.notify2(notify_oid, bl, 0, NULL);
+  return robust_notify(notify_oid, bl);
+}
+
+int RGWRados::robust_notify(const string& notify_oid, bufferlist& bl)
+{
+  // The reply of every machine that acks goes in here.
+  boost::container::flat_set<std::pair<uint64_t, uint64_t>> acks;
+  bufferlist rbl;
+
+  // First, try to send, without being fancy about it.
+  auto r = control_pool_ctx.notify2(notify_oid, bl, 0, &rbl);
+
+  // if that doesn't work, get serious.
+  if (r < 0) {
+    ldout(cct, 1) << "robust_notify: If at first you don't succeed: "
+		  << cpp_strerror(-r) << dendl;
+
+
+    bufferlist::iterator p = rbl.begin();
+    // Gather up the replies to the first attempt.
+    try {
+      uint32_t num_acks;
+      decode(num_acks, p);
+      // Doing this ourselves since we don't care about the payload;
+      for (auto i = 0u; i < num_acks; ++i) {
+	std::pair<uint64_t, uint64_t> id;
+	decode(id, p);
+	acks.insert(id);
+	ldout(cct, 20) << "robust_notify: acked by " << id << dendl;
+	uint32_t blen;
+	decode(blen, p);
+	p.advance(blen);
+      }
+    } catch (const buffer::error& e) {
+      ldout(cct, 0) << "robust_notify: notify response parse failed: "
+		    << e.what() << dendl;
+      acks.clear(); // Throw away junk on failed parse.
+    }
+
+
+    // Every machine that fails to reply and hasn't acked a previous
+    // attempt goes in here.
+    boost::container::flat_set<std::pair<uint64_t, uint64_t>> timeouts;
+
+    auto tries = 1u;
+    while (r < 0 && tries < max_notify_retries) {
+      ++tries;
+      rbl.clear();
+      // Reset the timeouts, we're only concerned with new ones.
+      timeouts.clear();
+      r = control_pool_ctx.notify2(notify_oid, bl, 0, &rbl);
+      if (r < 0) {
+	ldout(cct, 1) << "robust_notify: retry " << tries << " failed: "
+		      << cpp_strerror(-r) << dendl;
+	p = rbl.begin();
+	try {
+	  uint32_t num_acks;
+	  decode(num_acks, p);
+	  // Not only do we not care about the payload, but we don't
+	  // want to empty the container we just want to augment it
+	  // with any new members.
+	  for (auto i = 0u; i < num_acks; ++i) {
+	    std::pair<uint64_t, uint64_t> id;
+	    decode(id, p);
+	    auto ir = acks.insert(id);
+	    if (ir.second) {
+	      ldout(cct, 20) << "robust_notify: acked by " << id << dendl;
+	    }
+	    uint32_t blen;
+	    decode(blen, p);
+	    p.advance(blen);
+	  }
+
+	  uint32_t num_timeouts;
+	  decode(num_timeouts, p);
+	  for (auto i = 0u; i < num_timeouts; ++i) {
+	    std::pair<uint64_t, uint64_t> id;
+	    decode(id, p);
+	    // Only track timeouts from hosts that haven't acked previously.
+	    if (acks.find(id) != acks.cend()) {
+	      ldout(cct, 20) << "robust_notify: " << id << " timed out."
+			     << dendl;
+	      timeouts.insert(id);
+	    }
+	  }
+	} catch (const buffer::error& e) {
+	  ldout(cct, 0) << "robust_notify: notify response parse failed: "
+			<< e.what() << dendl;
+	  continue;
+	}
+	// If we got a good parse and timeouts is empty, that means
+	// everyone who timed out in one call received the update in a
+	// previous one.
+	if (timeouts.empty()) {
+	  r = 0;
+	}
+      }
+    }
+  }
   return r;
 }
 
