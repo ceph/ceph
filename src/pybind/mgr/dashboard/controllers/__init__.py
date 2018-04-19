@@ -421,6 +421,13 @@ class RESTController(BaseController):
 
     """
 
+    # resource id parameter for using in get, set, and delete methods
+    # should be overriden by subclasses.
+    # to specify a composite id (two parameters) use '/'. e.g., "param1/param2".
+    # If subclasses don't override this property we try to infer the structure of
+    # the resourse ID.
+    RESOURCE_ID = None
+
     _method_mapping = collections.OrderedDict([
         (('GET', False), ('list', 200)),
         (('PUT', False), ('bulk_set', 200)),
@@ -428,9 +435,9 @@ class RESTController(BaseController):
         (('POST', False), ('create', 201)),
         (('DELETE', False), ('bulk_delete', 204)),
         (('GET', True), ('get', 200)),
-        (('PUT', True), ('set', 200)),
-        (('PATCH', True), ('set', 200)),
         (('DELETE', True), ('delete', 204)),
+        (('PUT', True), ('set', 200)),
+        (('PATCH', True), ('set', 200))
     ])
 
     @classmethod
@@ -458,7 +465,10 @@ class RESTController(BaseController):
             if k[1] and hasattr(cls, v[0]):
                 methods.append(k[0])
                 if not args:
-                    args = cls._parse_function_args(getattr(cls, v[0]))
+                    if cls.RESOURCE_ID is None:
+                        args = cls._parse_function_args(getattr(cls, v[0]))
+                    else:
+                        args = cls.RESOURCE_ID.split('/')
         if methods:
             result.append((methods, None, '_element', args))
 
