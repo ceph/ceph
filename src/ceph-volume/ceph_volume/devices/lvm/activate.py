@@ -20,6 +20,7 @@ def activate_filestore(lvs):
     if not osd_lv:
         raise RuntimeError('Unable to find a data LV for filestore activation')
     is_encrypted = osd_lv.tags.get('ceph.encrypted', '0') == '1'
+    is_vdo = osd_lv.tags.get('ceph.vdo', '0')
 
     osd_id = osd_lv.tags['ceph.osd_id']
     conf.cluster = osd_lv.tags['ceph.cluster_name']
@@ -54,10 +55,11 @@ def activate_filestore(lvs):
         source = '/dev/mapper/%s' % osd_lv.lv_uuid
     else:
         source = osd_lv.lv_path
+
     # mount the osd
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     if not system.device_is_mounted(source, destination=destination):
-        process.run(['mount', '-v', source, destination])
+        prepare_utils.mount_osd(source, osd_id, is_vdo=is_vdo)
 
     # always re-do the symlink regardless if it exists, so that the journal
     # device path that may have changed can be mapped correctly every time

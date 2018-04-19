@@ -235,10 +235,30 @@ class TestNormalizeFlags(object):
 
     @pytest.mark.parametrize("flags", ceph_conf_mount_values)
     def test_normalize_lists(self, flags):
-        result = prepare._normalize_mount_flags(flags)
-        assert result == 'rw,auto,exec'
+        result = sorted(prepare._normalize_mount_flags(flags).split(','))
+        assert ','.join(result) == 'auto,exec,rw'
 
     @pytest.mark.parametrize("flags", string_mount_values)
     def test_normalize_strings(self, flags):
-        result = prepare._normalize_mount_flags(flags)
-        assert result == 'rw,auto,exec'
+        result = sorted(prepare._normalize_mount_flags(flags).split(','))
+        assert ','.join(result) == 'auto,exec,rw'
+
+    @pytest.mark.parametrize("flags", ceph_conf_mount_values)
+    def test_normalize_extra_flags(self, flags):
+        result = prepare._normalize_mount_flags(flags, extras=['discard'])
+        assert sorted(result.split(',')) == ['auto', 'discard', 'exec', 'rw']
+
+    @pytest.mark.parametrize("flags", ceph_conf_mount_values)
+    def test_normalize_duplicate_extra_flags(self, flags):
+        result = prepare._normalize_mount_flags(flags, extras=['rw', 'discard'])
+        assert sorted(result.split(',')) == ['auto', 'discard', 'exec', 'rw']
+
+    @pytest.mark.parametrize("flags", string_mount_values)
+    def test_normalize_strings_flags(self, flags):
+        result = sorted(prepare._normalize_mount_flags(flags, extras=['discard']).split(','))
+        assert ','.join(result) == 'auto,discard,exec,rw'
+
+    @pytest.mark.parametrize("flags", string_mount_values)
+    def test_normalize_strings_duplicate_flags(self, flags):
+        result = sorted(prepare._normalize_mount_flags(flags, extras=['discard','rw']).split(','))
+        assert ','.join(result) == 'auto,discard,exec,rw'

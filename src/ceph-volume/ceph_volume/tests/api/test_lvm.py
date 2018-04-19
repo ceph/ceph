@@ -1,3 +1,4 @@
+import os
 import pytest
 from ceph_volume import process, exceptions
 from ceph_volume.api import lvm as api
@@ -414,3 +415,149 @@ class TestCreateLV(object):
         api.create_lv('foo', 'foo_group', size='5G', tags={'ceph.type': 'data'})
         data_tag = ['lvchange', '--addtag', 'ceph.data_device=/path', '/path']
         assert capture.calls[2]['args'][0] == data_tag
+
+
+#
+# The following tests are pretty gnarly. VDO detection is very convoluted and
+# involves correlating information from device mappers, realpaths, slaves of
+# those mappers, and parents or related mappers.  This makes it very hard to
+# patch nicely or keep tests short and readable. These tests are trying to
+# ensure correctness, the better approach will be to do some functional testing
+# with VDO.
+#
+
+
+@pytest.fixture
+def disable_kvdo_path(monkeypatch):
+    monkeypatch.setattr('os.path.isdir', lambda x: False)
+
+
+@pytest.fixture
+def enable_kvdo_path(monkeypatch):
+    monkeypatch.setattr('os.path.isdir', lambda x: True)
+
+
+# Stub for os.listdir
+
+
+class ListDir(object):
+
+    def __init__(self, paths):
+        self.paths = paths
+        self._normalize_paths()
+        self.listdir = os.listdir
+
+    def _normalize_paths(self):
+        for k, v in self.paths.items():
+            self.paths[k.rstrip('/')] = v.rstrip('/')
+
+    def add(self, original, fake):
+        self.paths[original.rstrip('/')] = fake.rstrip('/')
+
+    def __call__(self, path):
+        return self.listdir(self.paths[path.rstrip('/')])
+
+
+@pytest.fixture(scope='function')
+def listdir(monkeypatch):
+    def apply(paths=None, stub=None):
+        if not stub:
+            stub = ListDir(paths)
+        if paths:
+            for original, fake in paths.items():
+                stub.add(original, fake)
+
+        monkeypatch.setattr('os.listdir', stub)
+    return apply
+
+
+@pytest.fixture(scope='function')
+def makedirs(tmpdir):
+    def create(directory):
+        path = os.path.join(str(tmpdir), directory)
+        os.makedirs(path)
+        return path
+    create.base = str(tmpdir)
+    return create
+
+
+class TestIsVdo(object):
+
+    def test_no_vdo_dir(self, disable_kvdo_path):
+        assert api._is_vdo('/path') is False
+
+    def test_exceptions_return_false(self, monkeypatch):
+        def throw():
+            raise Exception()
+        monkeypatch.setattr('ceph_volume.api.lvm._is_vdo', throw)
+        assert api.is_vdo('/path') == '0'
+
+    def test_is_vdo_returns_a_string(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.api.lvm._is_vdo', lambda x: True)
+        assert api.is_vdo('/path') == '1'
+
+    def test_kvdo_dir_no_devices(self, makedirs, enable_kvdo_path, listdir, monkeypatch):
+        kvdo_path = makedirs('sys/kvdo')
+        listdir(paths={'/sys/kvdo': kvdo_path})
+        monkeypatch.setattr('ceph_volume.api.lvm._vdo_slaves', lambda x: [])
+        monkeypatch.setattr('ceph_volume.api.lvm._vdo_parents', lambda x: [])
+        assert api._is_vdo('/dev/mapper/vdo0') is False
+
+    def test_vdo_slaves_found_and_matched(self, makedirs, enable_kvdo_path, listdir, monkeypatch):
+        kvdo_path = makedirs('sys/kvdo')
+        listdir(paths={'/sys/kvdo': kvdo_path})
+        monkeypatch.setattr('ceph_volume.api.lvm._vdo_slaves', lambda x: ['/dev/dm-3'])
+        monkeypatch.setattr('ceph_volume.api.lvm._vdo_parents', lambda x: [])
+        assert api._is_vdo('/dev/dm-3') is True
+
+    def test_vdo_parents_found_and_matched(self, makedirs, enable_kvdo_path, listdir, monkeypatch):
+        kvdo_path = makedirs('sys/kvdo')
+        listdir(paths={'/sys/kvdo': kvdo_path})
+        monkeypatch.setattr('ceph_volume.api.lvm._vdo_slaves', lambda x: [])
+        monkeypatch.setattr('ceph_volume.api.lvm._vdo_parents', lambda x: ['/dev/dm-4'])
+        assert api._is_vdo('/dev/dm-4') is True
+
+
+class TestVdoSlaves(object):
+
+    def test_slaves_are_not_found(self, makedirs, listdir, monkeypatch):
+        slaves_path = makedirs('sys/block/vdo0/slaves')
+        listdir(paths={'/sys/block/vdo0/slaves': slaves_path})
+        monkeypatch.setattr('ceph_volume.api.lvm.os.path.exists', lambda x: True)
+        result = sorted(api._vdo_slaves(['vdo0']))
+        assert '/dev/mapper/vdo0' in result
+        assert 'vdo0' in result
+
+    def test_slaves_are_found(self, makedirs, listdir, monkeypatch):
+        slaves_path = makedirs('sys/block/vdo0/slaves')
+        makedirs('sys/block/vdo0/slaves/dm-4')
+        makedirs('dev/mapper/vdo0')
+        listdir(paths={'/sys/block/vdo0/slaves': slaves_path})
+        monkeypatch.setattr('ceph_volume.api.lvm.os.path.exists', lambda x: True)
+        result = sorted(api._vdo_slaves(['vdo0']))
+        assert '/dev/dm-4' in result
+        assert 'dm-4' in result
+
+
+class TestVDOParents(object):
+
+    def test_parents_are_found(self, makedirs, listdir):
+        block_path = makedirs('sys/block')
+        slaves_path = makedirs('sys/block/dm-4/slaves')
+        makedirs('sys/block/dm-4/slaves/dm-3')
+        listdir(paths={
+            '/sys/block/dm-4/slaves': slaves_path,
+            '/sys/block': block_path})
+        result = api._vdo_parents(['dm-3'])
+        assert '/dev/dm-4' in result
+        assert 'dm-4' in result
+
+    def test_parents_are_not_found(self, makedirs, listdir):
+        block_path = makedirs('sys/block')
+        slaves_path = makedirs('sys/block/dm-4/slaves')
+        makedirs('sys/block/dm-4/slaves/dm-5')
+        listdir(paths={
+            '/sys/block/dm-4/slaves': slaves_path,
+            '/sys/block': block_path})
+        result = api._vdo_parents(['dm-3'])
+        assert result == []

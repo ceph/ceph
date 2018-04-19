@@ -144,7 +144,7 @@ def format_device(device):
     process.run(command)
 
 
-def _normalize_mount_flags(flags):
+def _normalize_mount_flags(flags, extras=None):
     """
     Mount flag options have to be a single string, separated by a comma. If the
     flags are separated by spaces, or with commas and spaces in ceph.conf, the
@@ -159,20 +159,45 @@ def _normalize_mount_flags(flags):
         [" rw ,", "exec"]
 
     :param flags: A list of flags, or a single string of mount flags
+    :param extras: Extra set of mount flags, useful when custom devices like VDO need
+                   ad-hoc mount configurations
     """
+    # Instead of using set(), we append to this new list here, because set()
+    # will create an arbitrary order on the items that is made worst when
+    # testing with tools like tox that includes a randomizer seed. By
+    # controlling the order, it is easier to correctly assert the expectation
+    unique_flags = []
     if isinstance(flags, list):
+        if extras:
+            flags.extend(extras)
+
         # ensure that spaces and commas are removed so that they can join
-        # correctly
-        return ','.join([f.strip().strip(',') for f in flags if f])
+        # correctly, remove duplicates
+        for f in flags:
+            if f and f not in unique_flags:
+                unique_flags.append(f.strip().strip(','))
+        return ','.join(unique_flags)
 
     # split them, clean them, and join them back again
     flags = flags.strip().split(' ')
-    return ','.join(
-        [f.strip().strip(',') for f in flags if f]
-    )
+    if extras:
+        flags.extend(extras)
+
+    # remove possible duplicates
+    for f in flags:
+        if f and f not in unique_flags:
+            unique_flags.append(f.strip().strip(','))
+    flags = ','.join(unique_flags)
+    # Before returning, split them again, since strings can be mashed up
+    # together, preventing removal of duplicate entries
+    return ','.join(set(flags.split(',')))
 
 
-def mount_osd(device, osd_id):
+def mount_osd(device, osd_id, **kw):
+    extras = []
+    is_vdo = kw.get('is_vdo', '0')
+    if is_vdo == '1':
+        extras = ['discard']
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     command = ['mount', '-t', 'xfs', '-o']
     flags = conf.ceph.get_list(
@@ -181,7 +206,9 @@ def mount_osd(device, osd_id):
         default=constants.mount.get('xfs'),
         split=' ',
     )
-    command.append(_normalize_mount_flags(flags))
+    command.append(
+        _normalize_mount_flags(flags, extras=extras)
+    )
     command.append(device)
     command.append(destination)
     process.run(command)
