@@ -507,7 +507,7 @@ CEPH_RBD_API int rbd_snap_protect(rbd_image_t image, const char *snap_name);
  * @returns 0 on success, negative error code on failure
  * @returns -EINVAL if snap is not protected
  */
-CEPH_RBD_API int rbd_snap_unprotect(rbd_image_t image, const char *snap_name);
+CEPH_RBD_API int rbd_snap_unprotect(rbd_image_t image, const char *snap_name, bool force_unprotect);
 /**
  * Determine whether a snapshot is protected.
  *

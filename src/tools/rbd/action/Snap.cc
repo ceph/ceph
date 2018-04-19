@@ -243,9 +243,9 @@ int do_protect_snap(librbd::Image& image, const char *snapname)
   return 0;
 }
 
-int do_unprotect_snap(librbd::Image& image, const char *snapname)
+int do_unprotect_snap(librbd::Image& image, const char *snapname, bool force_unprotect)
 {
-  int r = image.snap_unprotect(snapname);
+  int r = image.snap_unprotect(snapname, force_unprotect);
   if (r < 0)
     return r;
 
@@ -616,6 +616,7 @@ void get_unprotect_arguments(po::options_description *positional,
                              po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
+  at::add_force_option(options);
 }
 
 int execute_unprotect(const po::variables_map &vm,
@@ -625,6 +626,11 @@ int execute_unprotect(const po::variables_map &vm,
   std::string image_name;
   std::string snap_name;
   std::string image_id;
+  bool force_unprotect = false;
+
+  if (vm.count(at::FORCE)) {
+    force_unprotect = vm[at::FORCE].as<bool>();
+  }
 
   if (vm.count(at::IMAGE_ID)) {
     image_id = vm[at::IMAGE_ID].as<std::string>();
@@ -685,7 +691,7 @@ int execute_unprotect(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  r = do_unprotect_snap(image, snap_name.c_str());
+  r = do_unprotect_snap(image, snap_name.c_str(), force_unprotect);
   if (r < 0) {
     std::cerr << "rbd: unprotecting snap failed: " << cpp_strerror(r)
               << std::endl;
