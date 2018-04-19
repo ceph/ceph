@@ -2,7 +2,7 @@ set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
 
 add_custom_target(mgr-dashboard-test-venv
   COMMAND
-  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${MGR_DASHBOARD_VIRTUALENV}
+  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${MGR_DASHBOARD_VIRTUALENV}
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard
   COMMENT "dashboard tests virtualenv is being created")
 add_dependencies(tests mgr-dashboard-test-venv)
@@ -13,7 +13,7 @@ set(mgr-dashboard-nodeenv ${CMAKE_CURRENT_BINARY_DIR}/node-env)
 
 add_custom_command(
   OUTPUT "${mgr-dashboard-nodeenv}/bin/npm"
-  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=python2.7 ${mgr-dashboard-nodeenv}
+  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv}
   COMMAND ${mgr-dashboard-nodeenv}/bin/pip install nodeenv
   COMMAND ${mgr-dashboard-nodeenv}/bin/nodeenv -p -n 8.10.0
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
