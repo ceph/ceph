@@ -23,9 +23,12 @@ Limitations
    of data.  Generally speaking writers will be stopped within 10s of
    seconds of crossing the configured limit.
 
-#. *Quotas are not yet implemented in the kernel client.* Quotas are
-   supported by the userspace client (libcephfs, ceph-fuse) but are
-   not yet implemented in the Linux kernel client.
+#. *Quotas are implemented in the kernel client 4.17 and higher.*
+   Quotas are supported by the userspace client (libcephfs, ceph-fuse).
+   Linux kernel clients >= 4.17 support CephFS quotas but only on
+   mimic+ clusters.  Kernel clients (even recent versions) will fail
+   to handle quotas on older clusters, even if they may be able to set
+   the quotas extended attributes.
 
 #. *Quotas must be configured carefully when used with path-based
    mount restrictions.* The client needs to have access to the
