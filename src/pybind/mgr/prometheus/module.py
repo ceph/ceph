@@ -451,7 +451,7 @@ class Module(MgrModule):
         servers = self.get_service_list()
         for osd in osd_map['osds']:
             # id can be used to link osd metrics and metadata
-            id_ = str(osd['osd'])
+            id_ = osd['osd']
             # collect osd metadata
             p_addr = osd['public_addr'].split(':')[0]
             c_addr = osd['cluster_addr'].split(':')[0]
@@ -474,9 +474,9 @@ class Module(MgrModule):
                         id_))
                 continue
 
-            host_version = servers.get((id_, 'osd'), ('',''))
+            host_version = servers.get((str(id_), 'osd'), ('',''))
 
-            self.metrics['osd_metadata'].set(1, (
+            self.metrics.append('osd_metadata', 1, (
                 c_addr,
                 dev_class,
                 id_, host_version[0],
@@ -490,7 +490,7 @@ class Module(MgrModule):
                                     ('osd.{}'.format(id_),))
 
             # collect disk occupation metadata
-            osd_metadata = self.get_metadata("osd", id_)
+            osd_metadata = self.get_metadata("osd", str(id_))
             if osd_metadata is None:
                 continue
             dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
