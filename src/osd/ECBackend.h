@@ -313,6 +313,7 @@ private:
     RecoveryMessages *m);
   void get_all_avail_shards(
     const hobject_t &hoid,
+    const set<pg_shard_t> &error_shards,
     set<int> &have,
     map<shard_id_t, pg_shard_t> &shards,
     bool for_recovery);
@@ -649,6 +650,8 @@ public:
   int get_remaining_shards(
     const hobject_t &hoid,
     const set<int> &avail,
+    const set<int> &want,
+    const read_result_t &result,
     map<pg_shard_t, vector<pair<int, int>>> *to_read,
     bool for_recovery);
 
