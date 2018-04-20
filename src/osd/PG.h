@@ -1593,6 +1593,26 @@ public:
     // Cleaned map pending snap metadata scrub
     ScrubMap cleaned_meta_map;
 
+    void clean_meta_map(ScrubMap &for_meta_scrub) {
+      if (end.is_max() ||
+          cleaned_meta_map.objects.empty()) {
+         cleaned_meta_map.swap(for_meta_scrub);
+      } else {
+        auto iter = cleaned_meta_map.objects.end();
+        --iter; // not empty, see if clause
+        auto begin = cleaned_meta_map.objects.begin();
+        while (iter != begin) {
+          auto next = iter--;
+          if (next->first.get_head() != iter->first.get_head()) {
+	    ++iter;
+	    break;
+          }
+        }
+        for_meta_scrub.objects.insert(begin, iter);
+        cleaned_meta_map.objects.erase(begin, iter);
+      }
+    }
+
     // digest updates which we are waiting on
     int num_digest_updates_pending;
 

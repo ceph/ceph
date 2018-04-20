@@ -4367,11 +4367,18 @@ void PG::_scan_snaps(ScrubMap &smap)
 {
   hobject_t head;
   SnapSet snapset;
+
+  // Test qa/standalone/scrub/osd-scrub-snaps.sh uses this message to verify 
+  // caller using clean_meta_map(), and it works properly.
+  dout(20) << __func__ << " start" << dendl;
+
   for (map<hobject_t, ScrubMap::object>::reverse_iterator i = smap.objects.rbegin();
        i != smap.objects.rend();
        ++i) {
     const hobject_t &hoid = i->first;
     ScrubMap::object &o = i->second;
+
+    dout(20) << __func__ << " " << hoid << dendl;
 
     assert(!hoid.is_snapdir());
     if (hoid.is_head()) {
@@ -4556,8 +4563,13 @@ int PG::build_scrub_map_chunk(
   // finish
   dout(20) << __func__ << " finishing" << dendl;
   assert(pos.done());
-  _scan_snaps(map);
   _repair_oinfo_oid(map);
+  if (!is_primary()) {
+    ScrubMap for_meta_scrub;
+    scrubber.cleaned_meta_map.insert(map);
+    scrubber.clean_meta_map(for_meta_scrub);
+    _scan_snaps(for_meta_scrub);
+  }
 
   dout(20) << __func__ << " done, got " << map.objects.size() << " items"
 	   << dendl;
@@ -5325,26 +5337,12 @@ void PG::scrub_compare_maps()
   }
 
   ScrubMap for_meta_scrub;
-  if (scrubber.end.is_max() ||
-      scrubber.cleaned_meta_map.objects.empty()) {
-    scrubber.cleaned_meta_map.swap(for_meta_scrub);
-  } else {
-    auto iter = scrubber.cleaned_meta_map.objects.end();
-    --iter; // not empty, see if clause
-    auto begin = scrubber.cleaned_meta_map.objects.begin();
-    while (iter != begin) {
-      auto next = iter--;
-      if (next->first.get_head() != iter->first.get_head()) {
-	++iter;
-	break;
-      }
-    }
-    for_meta_scrub.objects.insert(begin, iter);
-    scrubber.cleaned_meta_map.objects.erase(begin, iter);
-  }
+  scrubber.clean_meta_map(for_meta_scrub);
 
   // ok, do the pg-type specific scrubbing
   scrub_snapshot_metadata(for_meta_scrub, missing_digest);
+  // Called here on the primary can use an authoritative map if it isn't the primary
+  _scan_snaps(for_meta_scrub);
   if (!scrubber.store->empty()) {
     if (state_test(PG_STATE_REPAIR)) {
       dout(10) << __func__ << ": discarding scrub results" << dendl;
