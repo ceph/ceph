@@ -883,20 +883,9 @@ int RGWGetObj_ObjStore::get_params()
     get_data &= (!rgwx_stat);
   }
 
-  /* start gettorrent */
-  bool is_torrent = s->info.args.exists(GET_TORRENT);
-  bool torrent_flag = s->cct->_conf->rgw_torrent_flag;
-  if (torrent_flag && is_torrent)
-  {
-    int ret = 0;
-    ret = torrent.get_params();
-    if (ret < 0)
-    {
-      return ret;
-    }
+  if (s->info.args.exists(GET_TORRENT)) {
+    return torrent.get_params();
   }
-  /* end gettorrent */
-
   return 0;
 }
 

@@ -1684,7 +1684,9 @@ void RGWGetObj::execute()
   {
     attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
     if (attr_iter != attrs.end() && attr_iter->second.to_str() == "SSE-C-AES256") {
-      op_ret = -ERR_INVALID_REQUEST;
+      ldout(s->cct, 0) << "ERROR: torrents are not supported for objects "
+          "encrypted with SSE-C" << dendl;
+      op_ret = -EINVAL;
       goto done_err;
     }
     torrent.init(s, store);
