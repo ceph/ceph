@@ -2370,17 +2370,14 @@ int ECBackend::send_all_remaining_reads(
   GenContext<pair<RecoveryMessages *, read_result_t& > &> *c =
     rop.to_read.find(hoid)->second.cb;
 
-  map<hobject_t, read_request_t> for_read_op;
-  for_read_op.insert(
-    make_pair(
+  rop.to_read.erase(hoid);
+  rop.to_read.insert(make_pair(
       hoid,
       read_request_t(
 	offsets,
 	shards,
 	false,
 	c)));
-
-  rop.to_read.swap(for_read_op);
   do_read_op(rop);
   return 0;
 }

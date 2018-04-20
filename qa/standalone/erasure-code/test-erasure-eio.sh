@@ -420,9 +420,10 @@ function TEST_ec_recovery_multiple_objects() {
     local dir=$1
     local objname=myobject
 
-    export CEPH_ARGS
+    ORIG_ARGS=$CEPH_ARGS
     CEPH_ARGS+=' --osd-recovery-max-single-start 3 --osd-recovery-max-active 3 '
     setup_osds 7 || return 1
+    CEPH_ARGS=$ORIG_ARGS
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname 3 2 || return 1
@@ -448,9 +449,10 @@ function TEST_ec_recovery_multiple_objects_eio() {
     local dir=$1
     local objname=myobject
 
-    export CEPH_ARGS
+    ORIG_ARGS=$CEPH_ARGS
     CEPH_ARGS+=' --osd-recovery-max-single-start 3 --osd-recovery-max-active 3 '
     setup_osds 7 || return 1
+    CEPH_ARGS=$ORIG_ARGS
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname 3 2 || return 1
@@ -481,9 +483,10 @@ function TEST_ec_backfill_unfound() {
     # Must be between 1 and $lastobj
     local testobj=obj250
 
-    export CEPH_ARGS
+    ORIG_ARGS=$CEPH_ARGS
     CEPH_ARGS+=' --osd_min_pg_log_entries=5 --osd_max_pg_log_entries=10'
     setup_osds 5 || return 1
+    CEPH_ARGS=$ORIG_ARGS
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname 3 2 || return 1
@@ -559,7 +562,11 @@ function TEST_ec_recovery_unfound() {
     # Must be between 1 and $lastobj
     local testobj=obj75
 
+    ORIG_ARGS=$CEPH_ARGS
+    CEPH_ARGS+=' --osd-recovery-max-single-start 3 --osd-recovery-max-active 3 '
+    CEPH_ARGS+=' --osd_min_pg_log_entries=5 --osd_max_pg_log_entries=10'
     setup_osds 5 || return 1
+    CEPH_ARGS=$ORIG_ARGS
 
     local poolname=pool-jerasure
     create_erasure_coded_pool $poolname 3 2 || return 1
