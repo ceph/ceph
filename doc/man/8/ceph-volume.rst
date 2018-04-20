@@ -50,13 +50,18 @@ enabled and needs to be mounted.
 
 Usage::
 
-    ceph-volume lvm activate --filestore <osd id> <osd fsid>
+    ceph-volume lvm activate --bluestore <osd id> <osd fsid>
 
 Optional Arguments:
 
 * [-h, --help]  show the help message and exit
+* [--auto-detect-objectstore] Automatically detect the objecstore by inspecting
+  the OSD
 * [--bluestore] bluestore objectstore (default)
 * [--filestore] filestore objectstore
+* [--all] Activate all OSDs found in the system
+* [--no-systemd] Skip creating and enabling systemd units and starting of OSD
+  services
 
 
 **prepare**
@@ -72,12 +77,14 @@ Optional arguments:
 
 * [-h, --help]          show the help message and exit
 * [--journal JOURNAL]   A logical group name, path to a logical volume, or path to a device
-* [--journal-size GB]   Size (in GB) A logical group name or a path to a logical volume
 * [--bluestore]         Use the bluestore objectstore (default)
+* [--block.wal]         Path to a bluestore block.wal logical volume or partition
+* [--block.db]          Path to a bluestore block.db logical volume or partition
 * [--filestore]         Use the filestore objectstore
 * [--dmcrypt]           Enable encryption for the underlying OSD devices
 * [--osd-id OSD_ID]     Reuse an existing OSD id
 * [--osd-fsid OSD_FSID] Reuse an existing OSD fsid
+* [--crush-device-class] Define a CRUSH device class to assign the OSD to
 
 Required arguments:
 
@@ -91,7 +98,7 @@ avoiding large amounts of data being rebalanced.
 
 The single-call process unifies exactly what ``prepare`` and ``activate`` do,
 with the convenience of doing it all at once. Flags and general usage are
-equivalent to those of the ``prepare`` subcommand.
+equivalent to those of the ``prepare`` and ``activate`` subcommand.
 
 **trigger**
 This subcommand is not meant to be used directly, and it is used by systemd so
@@ -136,8 +143,8 @@ group, and lv the logical volume name)::
 
 Positional arguments:
 
-* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
-  ``/path/to/sda1`` for regular devices.
+* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes,
+  ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
 
 
 **zap**
@@ -157,8 +164,8 @@ Usage, for logical partitions::
 
 Positional arguments:
 
-* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
-  ``/path/to/sda1`` for regular devices.
+* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes,
+  ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
 
 
 simple
