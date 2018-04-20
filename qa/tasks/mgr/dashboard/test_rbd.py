@@ -60,6 +60,10 @@ class RbdTest(DashboardTestCase):
                              {'name': name, 'size': size, 'features': features})
 
     @classmethod
+    def flatten_image(cls, pool, image):
+        return cls._task_post('/api/block/image/{}/{}/flatten'.format(pool, image))
+
+    @classmethod
     def create_snapshot(cls, pool, image, snapshot):
         return cls._task_post('/api/block/image/{}/{}/snap'.format(pool, image),
                               {'snapshot_name': snapshot})
@@ -509,4 +513,27 @@ class RbdTest(DashboardTestCase):
         self.remove_image('rbd', 'coimg')
         self.assertStatus(204)
         self.remove_image('rbd_iscsi', 'coimg-copy')
+        self.assertStatus(204)
+
+    def test_flatten(self):
+        self.create_snapshot('rbd', 'img1', 'snapf')
+        self.update_snapshot('rbd', 'img1', 'snapf', None, True)
+        self.clone_image('rbd', 'img1', 'snapf', 'rbd_iscsi', 'img1_snapf_clone')
+
+        img = self._get('/api/block/image/rbd_iscsi/img1_snapf_clone')
+        self.assertStatus(200)
+        self.assertIsNotNone(img['parent'])
+
+        self.flatten_image('rbd_iscsi', 'img1_snapf_clone')
+        self.assertStatus(200)
+
+        img = self._get('/api/block/image/rbd_iscsi/img1_snapf_clone')
+        self.assertStatus(200)
+        self.assertIsNone(img['parent'])
+
+        self.update_snapshot('rbd', 'img1', 'snapf', None, False)
+        self.remove_snapshot('rbd', 'img1', 'snapf')
+        self.assertStatus(204)
+
+        self.remove_image('rbd_iscsi', 'img1_snapf_clone')
         self.assertStatus(204)

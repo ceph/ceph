@@ -32,6 +32,11 @@ export class RbdService {
       { observe: 'response' });
   }
 
+  flatten(poolName, rbdName) {
+    return this.http.post(`api/block/image/${poolName}/${rbdName}/flatten`, null,
+      { observe: 'response' });
+  }
+
   createSnapshot(poolName, rbdName, snapshotName) {
     const request = {
       snapshot_name: snapshotName
