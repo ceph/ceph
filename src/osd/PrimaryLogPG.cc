@@ -4514,7 +4514,9 @@ void PrimaryLogPG::kick_snap_trim()
 {
   ceph_assert(is_active());
   ceph_assert(is_primary());
-  if (is_clean() && !snap_trimq.empty()) {
+  if (is_clean() &&
+      !state_test(PG_STATE_PREMERGE) &&
+      !snap_trimq.empty()) {
     if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM)) {
       dout(10) << __func__ << ": nosnaptrim set, not kicking" << dendl;
     } else {
@@ -13745,6 +13747,7 @@ void PrimaryLogPG::agent_setup()
   ceph_assert(is_locked());
   if (!is_active() ||
       !is_primary() ||
+      state_test(PG_STATE_PREMERGE) ||
       pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE ||
       pool.info.tier_of < 0 ||
       !get_osdmap()->have_pg_pool(pool.info.tier_of)) {
