@@ -20,6 +20,9 @@ source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 # Set to "yes" in order to ignore diff errors and save results to update test
 getjson="no"
 
+jqfilter='.inconsistents'
+sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
+
 function run() {
     local dir=$1
     shift
@@ -37,33 +40,12 @@ function run() {
     done
 }
 
-function TEST_scrub_snaps() {
+function create_scenario() {
     local dir=$1
-    local poolname=test
-    local OBJS=15
-    local OSDS=1
+    local poolname=$2
+    local TESTDATA=$3
+    local osd=$4
 
-    TESTDATA="testdata.$$"
-
-    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
-    run_mgr $dir x || return 1
-    for osd in $(seq 0 $(expr $OSDS - 1))
-    do
-      run_osd $dir $osd || return 1
-    done
-
-    # Create a pool with a single pg
-    create_pool $poolname 1 1
-    wait_for_clean || return 1
-    poolid=$(ceph osd dump | grep "^pool.*[']test[']" | awk '{ print $2 }')
-
-    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
-    for i in `seq 1 $OBJS`
-    do
-        rados -p $poolname put obj${i} $TESTDATA
-    done
-
-    local primary=$(get_primary $poolname obj1)
     SNAP=1
     rados -p $poolname mksnap snap${SNAP}
     dd if=/dev/urandom of=$TESTDATA bs=256 count=${SNAP}
@@ -107,60 +89,91 @@ function TEST_scrub_snaps() {
 
     # Don't need to use ceph_objectstore_tool() function because osd stopped
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj1)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" --force remove
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj1)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --force remove
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --op list obj5 | grep \"snapid\":2)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" remove
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":2)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --op list obj5 | grep \"snapid\":1)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":1)"
     OBJ5SAVE="$JSON"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" remove
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --op list obj5 | grep \"snapid\":4)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":4)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=18
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" set-bytes $TESTDATA
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj3)"
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj3)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=15
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" set-bytes $TESTDATA
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --op list obj4 | grep \"snapid\":7)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" remove
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj4 | grep \"snapid\":7)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove
 
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj2)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" rm-attr snapset
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj2)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" rm-attr snapset
 
     # Create a clone which isn't in snapset and doesn't have object info
     JSON="$(echo "$OBJ5SAVE" | sed s/snapid\":1/snapid\":7/)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=7
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" set-bytes $TESTDATA
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA
 
-    rm -f $TESTDATA
-
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj6)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj7)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset corrupt
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj8)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset seq
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj9)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset clone_size
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj10)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset clone_overlap
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj11)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset clones
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj12)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset head
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj13)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset snaps
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj14)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" clear-snapset size
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj6)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj7)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset corrupt
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj8)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset seq
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj9)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clone_size
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj10)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clone_overlap
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj11)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clones
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj12)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset head
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj13)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset snaps
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj14)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset size
 
     echo "garbage" > $dir/bad
-    JSON="$(ceph-objectstore-tool --data-path $dir/${primary} --head --op list obj15)"
-    ceph-objectstore-tool --data-path $dir/${primary} "$JSON" set-attr snapset $dir/bad
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj15)"
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-attr snapset $dir/bad
     rm -f $dir/bad
+}
+
+function TEST_scrub_snaps() {
+    local dir=$1
+    local poolname=test
+    local OBJS=15
+    local OSDS=1
+
+    TESTDATA="testdata.$$"
+
+    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd || return 1
+    done
+
+    # Create a pool with a single pg
+    create_pool $poolname 1 1
+    wait_for_clean || return 1
+    poolid=$(ceph osd dump | grep "^pool.*[']test[']" | awk '{ print $2 }')
+
+    dd if=/dev/urandom of=$TESTDATA bs=1032 count=1
+    for i in `seq 1 $OBJS`
+    do
+        rados -p $poolname put obj${i} $TESTDATA
+    done
+
+    local primary=$(get_primary $poolname obj1)
+
+    create_scenario $dir $poolname $TESTDATA $primary
+
+    rm -f $TESTDATA
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
@@ -172,7 +185,8 @@ function TEST_scrub_snaps() {
         cat $dir/osd.0.log
         return 1
     fi
-    grep 'log_channel' $dir/osd.0.log
+
+    test "$(grep "_scan_snaps start" $dir/osd.${primary}.log | wc -l)" = "2" || return 1
 
     rados list-inconsistent-pg $poolname > $dir/json || return 1
     # Check pg count
@@ -180,10 +194,22 @@ function TEST_scrub_snaps() {
     # Check pgid
     test $(jq -r '.[0]' $dir/json) = $pgid || return 1
 
-    rados list-inconsistent-snapset $pgid > $dir/json || return 1
+    rados list-inconsistent-obj $pgid > $dir/json || return 1
 
-    local jqfilter='.inconsistents'
-    local sortkeys='import json; import sys ; JSON=sys.stdin.read() ; ud = json.loads(JSON) ; print json.dumps(ud, sort_keys=True, indent=2)'
+    # The injected snapshot errors with a single copy pool doesn't
+    # see object errors because all the issues are detected by
+    # comparing copies.
+    jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
+{
+    "epoch": 17,
+    "inconsistents": []
+}
+EOF
+
+    jq "$jqfilter" $dir/json | python -c "$sortkeys" > $dir/csjson
+    diff ${DIFFCOLOPTS} $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+
+    rados list-inconsistent-snapset $pgid > $dir/json || return 1
 
     jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
 {
@@ -637,6 +663,13 @@ EOF
       jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-snap.json || return 1
     fi
 
+    pidfiles=$(find $dir 2>/dev/null | grep 'osd[^/]*\.pid')
+    pids=""
+    for pidfile in ${pidfiles}
+    do
+        pids+="$(cat $pidfile) "
+    done
+
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
@@ -644,14 +677,14 @@ EOF
 
     ERRORS=0
 
-    pidfile=$(find $dir 2>/dev/null | grep $name_prefix'[^/]*\.pid')
-    pid=$(cat $pidfile)
-    if ! kill -0 $pid
-    then
-        echo "OSD crash occurred"
-        tail -100 $dir/osd.0.log
-        ERRORS=$(expr $ERRORS + 1)
-    fi
+    for pid in $pids
+    do
+        if ! kill -0 $pid
+        then
+            echo "OSD Crash occurred"
+            ERRORS=$(expr $ERRORS + 1)
+        fi
+    done
 
     kill_daemons $dir || return 1
 
