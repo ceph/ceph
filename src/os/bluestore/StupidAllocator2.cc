@@ -16,7 +16,7 @@ StupidAllocator2::StupidAllocator2(CephContext* cct)
     bins(bins_count),
     last_alloc(0)
 {
-  static_assert ((bins_count % 2) == 0);
+  static_assert ((bins_count % 2) == 1);
   static_assert (bins_count > 0);
 }
 
@@ -27,11 +27,19 @@ StupidAllocator2::~StupidAllocator2()
 size_t StupidAllocator2::_choose_bin(uint64_t orig_len)
 {
   uint64_t len = orig_len / cct->_conf->bdev_block_size;
-  int bin = std::min<size_t>(cbits(len), bins_count / 2 - 1) * 2;
-  if ((orig_len >> cbits(len)) >= (uint64_t)(cct->_conf->bdev_block_size * 3 / 4) )
-    bin++;
+  int p2 = cbits(len);
+  uint32_t bin;
+  if (orig_len >> p2 >= (uint64_t)(cct->_conf->bdev_block_size * 3 / 4)) {
+    bin = p2 * 2 + 1;
+  } else {
+    bin = p2 * 2;
+  }
+  if (bin >= bins_count)
+    bin = bins_count - 1;
+
+  assert(bin < bins_count);
   ldout(cct, 30) << __func__ << " len 0x" << std::hex << orig_len
-		 << std::dec << " -> " << bin << dendl;
+      << std::dec << " -> " << bin << dendl;
   return bin;
 }
 
