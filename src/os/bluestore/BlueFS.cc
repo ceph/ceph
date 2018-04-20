@@ -115,6 +115,8 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
 		    "Bytes written to SSTs", "sst",
 		    PerfCountersBuilder::PRIO_CRITICAL, unit_t(BYTES));
+  b.add_u64_counter(l_bluefs_fragment_fallback, "fragment_fallback",
+		    "Count of fallback because of fragmentation when _allocate");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -1993,6 +1995,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
         to_release.insert(p.offset, p.length);
       }
       alloc[id]->release(to_release);
+
+      if(logger && (id != BDEV_SLOW))
+        logger->inc(l_bluefs_fragment_fallback, 1);
     }
     if (id != BDEV_SLOW) {
       if (bdev[id]) {
