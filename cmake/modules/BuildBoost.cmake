@@ -140,7 +140,7 @@ function(do_build_boost version)
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
     set(boost_version 1.66.0)
-    set(boost_256 5721818253e6a0989583192f96782c4a98eb6204965316df9f5ad75819225ca9)
+    set(boost_sha256 5721818253e6a0989583192f96782c4a98eb6204965316df9f5ad75819225ca9)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     set(boost_url 
       https://dl.bintray.com/boostorg/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
