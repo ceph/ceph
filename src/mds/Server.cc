@@ -863,7 +863,13 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
 void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 {
   reconnect_done = reconnect_done_;
-  mds->sessionmap.get_client_set(client_reconnect_gather);
+
+  set<Session*> sessions;
+  mds->sessionmap.get_client_session_set(sessions);
+  for (auto session : sessions) {
+    if (session->is_open())
+	client_reconnect_gather.insert(session->get_client());
+  }
 
   if (client_reconnect_gather.empty()) {
     dout(7) << "reconnect_clients -- no sessions, doing nothing." << dendl;
@@ -905,7 +911,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
        << ") from " << m->get_source_inst()
        << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")";
     deny = true;
-  } else if (session->is_closed()) {
+  } else if (!session->is_open()) {
     dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
     mds->clog->info() << "denied reconnect attempt (mds is "
 	<< ceph_mds_state_name(mds->get_state())
