@@ -17,8 +17,8 @@
 
 #include <mutex>
 #include <random>
-#include <optional>
 #include <type_traits>
+#include <boost/optional.hpp>
 
 // Basic random number facility, adapted from N3551:
 namespace ceph::util {
@@ -114,7 +114,7 @@ void randomize_rng()
 template <typename EngineT>
 EngineT& engine()
 {
-  thread_local std::optional<EngineT> rng_engine;
+  thread_local boost::optional<EngineT> rng_engine;
 
   if (!rng_engine) {
     rng_engine.emplace(EngineT());
