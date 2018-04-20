@@ -7,6 +7,7 @@ import { CephfsModule } from './cephfs/cephfs.module';
 import { ClusterModule } from './cluster/cluster.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { PerformanceCounterModule } from './performance-counter/performance-counter.module';
+import { PoolModule } from './pool/pool.module';
 import { RgwModule } from './rgw/rgw.module';
 
 @NgModule({
@@ -17,6 +18,7 @@ import { RgwModule } from './rgw/rgw.module';
     RgwModule,
     PerformanceCounterModule,
     BlockModule,
+    PoolModule,
     CephfsModule,
     SharedModule
   ],
