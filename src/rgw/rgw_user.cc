@@ -2376,7 +2376,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
     int ret = store->get_user_stats(info.user_id, stats);
-    if (ret < 0) {
+    if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
 
