@@ -35,12 +35,16 @@ The dashboard plugin is implemented as a web application that visualizes
 information and statistics about the Ceph cluster using a web server hosted by
 ``ceph-mgr``.
 
-The dashboard currently provides insight into the following aspects of your
-cluster:
+The dashboard currently provides the following features to monitor and manage
+various aspects of your Ceph cluster:
 
+* **Username/password protection**: The Dashboard can only be accessed by
+  providing a configurable username and password.
 * **Overall cluster health**: Displays the overall cluster status, storage
   utilization (e.g. number of objects, raw capacity, usage per pool), a list of
-  pools and their status and usage statistics, access to the cluster log file.
+  pools and their status and usage statistics.
+* **Cluster logs**: Display the latest updates to the cluster's event and audit
+  log files.
 * **Hosts**: Provides a list of all hosts associated to the cluster, which
   services are running and which version of Ceph is installed.
 * **Performance counters**: Displays detailed service-specific statistics for
@@ -53,8 +57,9 @@ cluster:
   and usage histograms for read/write operations.
 * **iSCSI**: Lists all hosts that run the TCMU runner service, displaying all
   images and their performance characteristics (read/write ops, traffic).
-* **RBD**: Lists all RBD images and their properties (size, objects, features)
-  in a given pool.
+* **RBD**: Lists all RBD images and their properties (size, objects, features).
+  Create, modify and delete RBD images. Create, delete and rollback snapshots of
+  selected images, protect/unprotect these snapshots against modification.
 * **RBD mirroring**: Lists all active sync daemons and their status, pools and
   RBD images including their synchronization state.
 * **CephFS**: Lists all active filesystem clients and associated pools,
