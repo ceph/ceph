@@ -1,4 +1,3 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -322,6 +321,7 @@ private:
     RecoveryMessages *m);
   void get_all_avail_shards(
     const hobject_t &hoid,
+    const set<pg_shard_t> &error_shards,
     set<int> &have,
     map<shard_id_t, pg_shard_t> &shards,
     bool for_recovery);
@@ -659,6 +659,8 @@ public:
   int get_remaining_shards(
     const hobject_t &hoid,
     const set<int> &avail,
+    const set<int> &want,
+    const read_result_t &result,
     set<pg_shard_t> *to_read,
     bool for_recovery);
 
