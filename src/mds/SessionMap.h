@@ -542,13 +542,6 @@ public:
 
   void dump();
 
-  void get_client_set(set<client_t>& s) {
-    for (ceph::unordered_map<entity_name_t,Session*>::iterator p = session_map.begin();
-	 p != session_map.end();
-	 ++p)
-      if (p->second->info.inst.name.is_client())
-	s.insert(p->second->get_client());
-  }
   void get_client_session_set(set<Session*>& s) const {
     for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
 	 p != session_map.end();
