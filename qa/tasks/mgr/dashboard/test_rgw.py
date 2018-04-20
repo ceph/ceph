@@ -43,8 +43,8 @@ class RgwProxyExceptionsTest(DashboardTestCase):
     @authenticate
     def test_no_credentials_exception(self):
         resp = self._get('/api/rgw/proxy/status')
-        self.assertStatus(401)
-        self.assertIn('message', resp)
+        self.assertStatus(500)
+        self.assertIn('detail', resp)
 
 
 class RgwProxyTest(DashboardTestCase):
@@ -115,12 +115,13 @@ class RgwProxyTest(DashboardTestCase):
         self.assertStatus(200)
 
         self._delete('/api/rgw/proxy/user', params={'uid': 'teuth-test-user'})
-        self.assertStatus(404)
+        self.assertStatus(500)
         resp = self._resp.json()
-        self.assertIn('Code', resp)
-        self.assertIn('HostId', resp)
-        self.assertIn('RequestId', resp)
-        self.assertEqual(resp['Code'], 'NoSuchUser')
+        self.assertIn('detail', resp)
+        self.assertIn('failed request with status code 404', resp['detail'])
+        self.assertIn('"Code":"NoSuchUser"', resp['detail'])
+        self.assertIn('"HostId"', resp['detail'])
+        self.assertIn('"RequestId"', resp['detail'])
 
     @authenticate
     def test_rgw_proxy(self):
