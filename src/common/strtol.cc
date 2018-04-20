@@ -22,7 +22,7 @@
 
 using std::ostringstream;
 
-long long strict_strtoll(const std::string_view str, int base, std::string *err)
+long long strict_strtoll(std::string_view str, int base, std::string *err)
 {
   ostringstream errStr;
   if (auto invalid = str.find_first_not_of("0123456789-+");
@@ -56,7 +56,7 @@ long long strict_strtoll(const char *str, int base, std::string *err)
   return strict_strtoll(std::string_view(str), base, err);
 }
 
-int strict_strtol(const std::string_view str, int base, std::string *err)
+int strict_strtol(std::string_view str, int base, std::string *err)
 {
   ostringstream errStr;
   long long ret = strict_strtoll(str, base, err);
@@ -75,7 +75,7 @@ int strict_strtol(const char *str, int base, std::string *err)
   return strict_strtol(std::string_view(str), base, err);
 }
 
-double strict_strtod(const std::string_view str, std::string *err)
+double strict_strtod(std::string_view str, std::string *err)
 {
   char *endptr;
   ostringstream oss;
@@ -106,7 +106,7 @@ double strict_strtod(const char *str, std::string *err)
   return strict_strtod(std::string_view(str), err);
 }
 
-float strict_strtof(const std::string_view str, std::string *err)
+float strict_strtof(std::string_view str, std::string *err)
 {
   char *endptr;
   ostringstream oss;
@@ -138,7 +138,7 @@ float strict_strtof(const char *str, std::string *err)
 }
 
 template<typename T>
-T strict_iec_cast(const std::string_view str, std::string *err)
+T strict_iec_cast(std::string_view str, std::string *err)
 {
   if (str.empty()) {
     *err = "strict_iecstrtoll: value not specified";
@@ -216,13 +216,13 @@ T strict_iec_cast(const std::string_view str, std::string *err)
   return (ll << m);
 }
 
-template int strict_iec_cast<int>(const std::string_view str, std::string *err);
-template long strict_iec_cast<long>(const std::string_view str, std::string *err);
-template long long strict_iec_cast<long long>(const std::string_view str, std::string *err);
-template uint64_t strict_iec_cast<uint64_t>(const std::string_view str, std::string *err);
-template uint32_t strict_iec_cast<uint32_t>(const std::string_view str, std::string *err);
+template int strict_iec_cast<int>(std::string_view str, std::string *err);
+template long strict_iec_cast<long>(std::string_view str, std::string *err);
+template long long strict_iec_cast<long long>(std::string_view str, std::string *err);
+template uint64_t strict_iec_cast<uint64_t>(std::string_view str, std::string *err);
+template uint32_t strict_iec_cast<uint32_t>(std::string_view str, std::string *err);
 
-uint64_t strict_iecstrtoll(const std::string_view str, std::string *err)
+uint64_t strict_iecstrtoll(std::string_view str, std::string *err)
 {
   return strict_iec_cast<uint64_t>(str, err);
 }
@@ -245,7 +245,7 @@ template uint64_t strict_iec_cast<uint64_t>(const char *str, std::string *err);
 template uint32_t strict_iec_cast<uint32_t>(const char *str, std::string *err);
 
 template<typename T>
-T strict_si_cast(const std::string_view str, std::string *err)
+T strict_si_cast(std::string_view str, std::string *err)
 {
   if (str.empty()) {
     *err = "strict_sistrtoll: value not specified";
@@ -296,13 +296,13 @@ T strict_si_cast(const std::string_view str, std::string *err)
   return (ll * pow (10,  m));
 }
 
-template int strict_si_cast<int>(const std::string_view str, std::string *err);
-template long strict_si_cast<long>(const std::string_view str, std::string *err);
-template long long strict_si_cast<long long>(const std::string_view str, std::string *err);
-template uint64_t strict_si_cast<uint64_t>(const std::string_view str, std::string *err);
-template uint32_t strict_si_cast<uint32_t>(const std::string_view str, std::string *err);
+template int strict_si_cast<int>(std::string_view str, std::string *err);
+template long strict_si_cast<long>(std::string_view str, std::string *err);
+template long long strict_si_cast<long long>(std::string_view str, std::string *err);
+template uint64_t strict_si_cast<uint64_t>(std::string_view str, std::string *err);
+template uint32_t strict_si_cast<uint32_t>(std::string_view str, std::string *err);
 
-uint64_t strict_sistrtoll(const std::string_view str, std::string *err)
+uint64_t strict_sistrtoll(std::string_view str, std::string *err)
 {
   return strict_si_cast<uint64_t>(str, err);
 }
