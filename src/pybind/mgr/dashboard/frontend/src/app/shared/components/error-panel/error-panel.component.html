@@ -1,0 +1,23 @@
+<div class="panel panel-default">
+  <div class="panel-heading">
+    <h3 class="panel-title">
+      <i class="fa fa-exclamation-triangle fa-fw icon-danger"
+         aria-hidden="true"></i> {{ title }}
+    </h3>
+  </div>
+  <div class="panel-body">
+    <ng-content></ng-content>
+  </div>
+  <div class="panel-footer"
+       *ngIf="backAction.observers.length > 0">
+    <div class="button-group text-right">
+      <button class="btn btn-sm btn-default tc_backButton"
+              type="button"
+              (click)="backAction.emit()"
+              autofocus
+              i18n>
+        Back
+      </button>
+    </div>
+  </div>
+</div>

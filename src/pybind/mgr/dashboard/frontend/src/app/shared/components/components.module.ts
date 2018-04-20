@@ -7,6 +7,7 @@ import { AlertModule, ModalModule, PopoverModule, TooltipModule } from 'ngx-boot
 
 import { PipesModule } from '../pipes/pipes.module';
 import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
+import { ErrorPanelComponent } from './error-panel/error-panel.component';
 import { HelperComponent } from './helper/helper.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
@@ -34,6 +35,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     HelperComponent,
     SubmitButtonComponent,
     UsageBarComponent,
+    ErrorPanelComponent,
     LoadingPanelComponent,
     ModalComponent,
     DeletionModalComponent
@@ -44,6 +46,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     SparklineComponent,
     HelperComponent,
     SubmitButtonComponent,
+    ErrorPanelComponent,
     LoadingPanelComponent,
     UsageBarComponent
   ],
