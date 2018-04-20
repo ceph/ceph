@@ -1462,6 +1462,7 @@ void ECBackend::call_write_ordered(std::function<void(void)> &&cb) {
 
 void ECBackend::get_all_avail_shards(
   const hobject_t &hoid,
+  const set<pg_shard_t> &error_shards,
   set<int> &have,
   map<shard_id_t, pg_shard_t> &shards,
   bool for_recovery)
@@ -1472,6 +1473,8 @@ void ECBackend::get_all_avail_shards(
        ++i) {
     dout(10) << __func__ << ": checking acting " << *i << dendl;
     const pg_missing_t &missing = get_parent()->get_shard_missing(*i);
+    if (error_shards.find(*i) != error_shards.end())
+      continue;
     if (!missing.is_missing(hoid)) {
       assert(!have.count(i->shard));
       have.insert(i->shard);
@@ -1485,6 +1488,8 @@ void ECBackend::get_all_avail_shards(
 	   get_parent()->get_backfill_shards().begin();
 	 i != get_parent()->get_backfill_shards().end();
 	 ++i) {
+      if (error_shards.find(*i) != error_shards.end())
+	continue;
       if (have.count(i->shard)) {
 	assert(shards.count(i->shard));
 	continue;
@@ -1511,6 +1516,8 @@ void ECBackend::get_all_avail_shards(
 	if (m) {
 	  assert(!(*m).is_missing(hoid));
 	}
+	if (error_shards.find(*i) != error_shards.end())
+	  continue;
 	have.insert(i->shard);
 	shards.insert(make_pair(i->shard, *i));
       }
@@ -1530,8 +1537,9 @@ int ECBackend::get_min_avail_to_read_shards(
 
   set<int> have;
   map<shard_id_t, pg_shard_t> shards;
+  set<pg_shard_t> error_shards;
 
-  get_all_avail_shards(hoid, have, shards, for_recovery);
+  get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
 
   map<int, vector<pair<int, int>>> need;
   int r = ec_impl->minimum_to_decode(want, have, &need);
@@ -1559,6 +1567,8 @@ int ECBackend::get_min_avail_to_read_shards(
 int ECBackend::get_remaining_shards(
   const hobject_t &hoid,
   const set<int> &avail,
+  const set<int> &want,
+  const read_result_t &result,
   map<pg_shard_t, vector<pair<int, int>>> *to_read,
   bool for_recovery)
 {
@@ -1566,17 +1576,36 @@ int ECBackend::get_remaining_shards(
 
   set<int> have;
   map<shard_id_t, pg_shard_t> shards;
+  set<pg_shard_t> error_shards;
+  for (auto &p : result.errors) {
+    error_shards.insert(p.first);
+  }
 
-  get_all_avail_shards(hoid, have, shards, for_recovery);
+  get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
+
+  map<int, vector<pair<int, int>>> need;
+  int r = ec_impl->minimum_to_decode(want, have, &need);
+  if (r < 0) {
+    dout(0) << __func__ << " not enough shards left to try for " << hoid
+	    << " read result was " << result << dendl;
+    return -EIO;
+  }
+
+  set<int> shards_left;
+  for (auto p : need) {
+    if (avail.find(p.first) == avail.end()) {
+      shards_left.insert(p.first);
+    }
+  }
 
   vector<pair<int, int>> subchunks;
   subchunks.push_back(make_pair(0, ec_impl->get_sub_chunk_count()));
-  for (set<int>::iterator i = have.begin();
-       i != have.end();
+  for (set<int>::iterator i = shards_left.begin();
+       i != shards_left.end();
        ++i) {
     assert(shards.count(shard_id_t(*i)));
-    if (avail.find(*i) == avail.end())
-      to_read->insert(make_pair(shards[shard_id_t(*i)], subchunks));
+    assert(avail.find(*i) == avail.end());
+    to_read->insert(make_pair(shards[shard_id_t(*i)], subchunks));
   }
   return 0;
 }
@@ -2298,15 +2327,11 @@ int ECBackend::send_all_remaining_reads(
     already_read.insert(i->shard);
   dout(10) << __func__ << " have/error shards=" << already_read << dendl;
   map<pg_shard_t, vector<pair<int, int>>> shards;
-  int r = get_remaining_shards(hoid, already_read, &shards, rop.for_recovery);
+  int r = get_remaining_shards(hoid, already_read, rop.want_to_read[hoid],
+			       rop.complete[hoid], &shards, rop.for_recovery);
   if (r)
     return r;
-  if (shards.empty())
-    return -EIO;
 
-  dout(10) << __func__ << " Read remaining shards " << shards << dendl;
-
-  // TODOSAM: this doesn't seem right
   list<boost::tuple<uint64_t, uint64_t, uint32_t> > offsets =
     rop.to_read.find(hoid)->second.to_read;
   GenContext<pair<RecoveryMessages *, read_result_t& > &> *c =
