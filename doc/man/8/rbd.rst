@@ -647,9 +647,6 @@ Per client instance `rbd device map` options:
   since 4.2 this can be used to ensure that `rbd device unmap` eventually
   times out when there is no network connection to a cluster.
 
-* lock_timeout=x - A timeout on waiting for the acquisition of exclusive lock
-  (since 4.17, default is 0 seconds, meaning no timeout).
-
 * osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
 
 * osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
@@ -666,6 +663,9 @@ Per mapping (block device) `rbd device map` options:
   discards (since 4.9).
 
 * exclusive - Disable automatic exclusive lock transitions (since 4.12).
+
+* lock_timeout=x - A timeout on waiting for the acquisition of exclusive lock
+  (since 4.17, default is 0 seconds, meaning no timeout).
 
 * notrim - Turn off discard and write zeroes offload support to avoid
   deprovisioning a fully provisioned image (since 4.17). When enabled, discard
