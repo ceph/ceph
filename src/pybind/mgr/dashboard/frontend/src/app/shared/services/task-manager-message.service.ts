@@ -75,6 +75,15 @@ export class TaskManagerMessageService {
         };
       }
     ),
+    'rbd/flatten': new TaskManagerMessage(
+      (metadata) => `Flatten RBD '${metadata.pool_name}/${metadata.image_name}'`,
+      (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'
+                     has been flattened successfully`,
+      () => {
+        return {
+        };
+      }
+    ),
     'rbd/snap/create': new TaskManagerMessage(
       (metadata) => `Create snapshot ` +
                     `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,

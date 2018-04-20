@@ -22,6 +22,10 @@ import {
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskManagerMessageService } from '../../../shared/services/task-manager-message.service';
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
+import {
+  FlattenConfirmationModalComponent
+} from '../flatten-confirmation-modal/flatten-confimation-modal.component';
+import { RbdParentModel } from '../rbd-form/rbd-parent.model';
 import { RbdModel } from './rbd-model';
 
 @Component({
@@ -194,7 +198,11 @@ export class RbdListComponent implements OnInit, OnDestroy {
 
         } else if (executingTask.name === 'rbd/edit') {
           rbdExecuting.cdExecuting = 'updating';
+
+        } else if (executingTask.name === 'rbd/flatten') {
+          rbdExecuting.cdExecuting = 'flattening';
         }
+
       } else if (executingTask.name === 'rbd/create') {
         const rbdModel = new RbdModel();
         rbdModel.name = executingTask.metadata['image_name'];
@@ -265,6 +273,49 @@ export class RbdListComponent implements OnInit, OnDestroy {
       pattern: `${poolName}/${imageName}`,
       deletionMethod: () => this.deleteRbd(poolName, imageName),
       modalRef: this.modalRef
+    });
+  }
+
+  flattenRbd(poolName, imageName) {
+    const finishedTask = new FinishedTask();
+    finishedTask.name = 'rbd/flatten';
+    finishedTask.metadata = {'pool_name': poolName, 'image_name': imageName};
+    this.rbdService.flatten(poolName, imageName)
+      .toPromise().then((resp) => {
+        if (resp.status === 202) {
+          this.notificationService.show(NotificationType.info,
+            `RBD flatten in progress...`,
+            this.taskManagerMessageService.getDescription(finishedTask));
+          const executingTask = new ExecutingTask();
+          executingTask.name = finishedTask.name;
+          executingTask.metadata = finishedTask.metadata;
+          this.executingTasks.push(executingTask);
+          this.taskManagerService.subscribe(executingTask.name, executingTask.metadata,
+            (asyncFinishedTask: FinishedTask) => {
+              this.notificationService.notifyTask(asyncFinishedTask);
+            });
+        } else {
+          finishedTask.success = true;
+          this.notificationService.notifyTask(finishedTask);
+        }
+        this.modalRef.hide();
+        this.loadImages(null);
+      }).catch((resp) => {
+        finishedTask.success = false;
+        finishedTask.exception = resp.error;
+        this.notificationService.notifyTask(finishedTask);
+      });
+  }
+
+  flattenRbdModal() {
+    const poolName = this.selection.first().pool_name;
+    const imageName = this.selection.first().name;
+    this.modalRef = this.modalService.show(FlattenConfirmationModalComponent);
+    const parent: RbdParentModel = this.selection.first().parent;
+    this.modalRef.content.parent = `${parent.pool_name}/${parent.image_name}@${parent.snap_name}`;
+    this.modalRef.content.child = `${poolName}/${imageName}`;
+    this.modalRef.content.onSubmit.subscribe(() => {
+      this.flattenRbd(poolName, imageName);
     });
   }
 }
