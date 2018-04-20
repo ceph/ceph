@@ -108,7 +108,8 @@ public:
   int signal_exit(int r) {
     if (forked) {
       /* If we get an error here, it's too late to do anything reasonable about it. */
-      (void)safe_write(fd[1], &r, sizeof(r));
+      ssize_t len = safe_write(fd[1], &r, sizeof(r));
+      (void)len;
     }
     return r;
   }
