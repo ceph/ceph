@@ -108,7 +108,7 @@ public:
   int signal_exit(int r) {
     if (forked) {
       /* If we get an error here, it's too late to do anything reasonable about it. */
-      (void)safe_write(fd[1], &r, sizeof(r));
+      [[maybe_unused]] auto n = safe_write(fd[1], &r, sizeof(r));
     }
     return r;
   }
