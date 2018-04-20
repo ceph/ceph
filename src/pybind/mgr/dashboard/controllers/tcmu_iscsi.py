@@ -11,7 +11,7 @@ SERVICE_TYPE = 'tcmu-runner'
 @ApiController('tcmuiscsi')
 @AuthRequired()
 class TcmuIscsi(RESTController):
-    # pylint: disable=too-many-locals,too-many-nested-blocks
+    # pylint: disable=too-many-nested-blocks
     def list(self):  # pylint: disable=unused-argument
         daemons = {}
         images = {}

@@ -12,6 +12,7 @@ wheelhouse*
 .vscode
 .idea
 *.egg
+.env
 
 # virtualenv
 venv
