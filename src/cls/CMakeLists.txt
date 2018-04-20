@@ -3,12 +3,17 @@
 set(cls_dir ${CMAKE_INSTALL_LIBDIR}/rados-classes)
 set(cls_embedded_srcs)
 
+if(CMAKE_COMPILER_IS_GNUCC)
+  set(cls_link_flags LINK_FLAGS "--no-gnu-unique")
+endif()
+
 # cls_sdk
 add_library(cls_sdk SHARED sdk/cls_sdk.cc)
 set_target_properties(cls_sdk PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_sdk DESTINATION ${cls_dir})
 
 # cls_hello
@@ -17,7 +22,8 @@ add_library(cls_hello SHARED ${cls_hello_srcs})
 set_target_properties(cls_hello PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_hello DESTINATION ${cls_dir})
 list(APPEND cls_embedded_srcs ${cls_hello_srcs})
 
@@ -27,7 +33,8 @@ add_library(cls_numops SHARED ${cls_numops_srcs})
 set_target_properties(cls_numops PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_numops DESTINATION ${cls_dir})
 
 set(cls_numops_client_srcs numops/cls_numops_client.cc)
@@ -42,7 +49,8 @@ if (WITH_RBD)
   set_target_properties(cls_rbd PROPERTIES
     VERSION "1.0.0"
     SOVERSION "1"
-    INSTALL_RPATH "")
+    INSTALL_RPATH ""
+    ${cls_link_flags})
   install(TARGETS cls_rbd DESTINATION ${cls_dir})
 
   set(cls_rbd_client_srcs rbd/cls_rbd_client.cc rbd/cls_rbd_types.cc)
@@ -58,7 +66,8 @@ add_library(cls_lock SHARED ${cls_lock_srcs})
 set_target_properties(cls_lock PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_lock DESTINATION ${cls_dir})
 
 set(cls_lock_client_srcs
@@ -76,7 +85,8 @@ target_link_libraries(cls_otp oath)
 set_target_properties(cls_otp PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_otp DESTINATION ${cls_dir})
 
 set(cls_otp_client_srcs
@@ -96,7 +106,8 @@ target_link_libraries(cls_refcount json_spirit)
 set_target_properties(cls_refcount PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_refcount DESTINATION ${cls_dir})
 
 set(cls_refcount_client_srcs
@@ -112,7 +123,8 @@ add_library(cls_version SHARED ${cls_version_srcs})
 set_target_properties(cls_version PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_version DESTINATION ${cls_dir})
 
 set(cls_version_client_srcs
@@ -128,7 +140,8 @@ add_library(cls_log SHARED ${cls_log_srcs})
 set_target_properties(cls_log PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_log DESTINATION ${cls_dir})
 
 set(cls_log_client_srcs log/cls_log_client.cc)
@@ -142,7 +155,8 @@ add_library(cls_statelog SHARED ${cls_statelog_srcs})
 set_target_properties(cls_statelog PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_statelog DESTINATION ${cls_dir})
 
 set(cls_statelog_client_srcs statelog/cls_statelog_client.cc)
@@ -156,7 +170,8 @@ add_library(cls_timeindex SHARED ${cls_timeindex_srcs})
 set_target_properties(cls_timeindex PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_timeindex DESTINATION ${cls_dir})
 
 set(cls_timeindex_client_srcs timeindex/cls_timeindex_client.cc)
@@ -170,7 +185,8 @@ add_library(cls_replica_log SHARED ${cls_replica_log_srcs})
 set_target_properties(cls_replica_log PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_replica_log DESTINATION ${cls_dir})
 
 set(cls_replica_log_client_srcs
@@ -187,7 +203,8 @@ add_library(cls_user SHARED ${cls_user_srcs})
 set_target_properties(cls_user PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_user DESTINATION ${cls_dir})
 
 set(cls_user_client_srcs
@@ -206,7 +223,8 @@ add_library(cls_journal SHARED ${cls_journal_srcs})
 set_target_properties(cls_journal PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_journal DESTINATION ${cls_dir})
 
 set(cls_journal_client_srcs
@@ -228,7 +246,8 @@ if (WITH_RADOSGW)
   set_target_properties(cls_rgw PROPERTIES
     VERSION "1.0.0"
     SOVERSION "1"
-    INSTALL_RPATH "")
+    INSTALL_RPATH ""
+    ${cls_link_flags})
   install(TARGETS cls_rgw DESTINATION ${cls_dir})
 
   set(cls_rgw_client_srcs
@@ -248,7 +267,8 @@ if (WITH_CEPHFS)
   set_target_properties(cls_cephfs PROPERTIES
     VERSION "1.0.0"
     SOVERSION "1"
-    INSTALL_RPATH "")
+    INSTALL_RPATH ""
+    ${cls_link_flags})
   install(TARGETS cls_cephfs DESTINATION ${cls_dir})
 
   set(cls_cephfs_client_srcs
@@ -266,7 +286,8 @@ add_library(cls_lua SHARED ${cls_lua_srcs})
 set_target_properties(cls_lua PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
-  INSTALL_RPATH "")
+  INSTALL_RPATH ""
+  ${cls_link_flags})
 install(TARGETS cls_lua DESTINATION ${cls_dir})
 target_link_libraries(cls_lua
     liblua
