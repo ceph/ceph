@@ -50,13 +50,18 @@ enabled and needs to be mounted.
 
 Usage::
 
-    ceph-volume lvm activate --filestore <osd id> <osd fsid>
+    ceph-volume lvm activate --bluestore <osd id> <osd fsid>
 
 Optional Arguments:
 
 * [-h, --help]  show the help message and exit
+* [--auto-detect-objectstore] Automatically detect the objecstore by inspecting
+  the OSD
 * [--bluestore] bluestore objectstore (default)
 * [--filestore] filestore objectstore
+* [--all] Activate all OSDs found in the system
+* [--no-systemd] Skip creating and enabling systemd units and starting of OSD
+  services
 
 
 **prepare**
