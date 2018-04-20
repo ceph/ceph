@@ -43,3 +43,61 @@ class DashboardException(Exception):
         if self._code:
             return str(self._code)
         return str(abs(self.errno))
+
+
+# access control module exceptions
+class RoleAlreadyExists(Exception):
+    def __init__(self, name):
+        super(RoleAlreadyExists, self).__init__(
+            "Role '{}' already exists".format(name))
+
+
+class RoleDoesNotExist(Exception):
+    def __init__(self, name):
+        super(RoleDoesNotExist, self).__init__(
+            "Role '{}' does not exist".format(name))
+
+
+class ScopeNotValid(Exception):
+    def __init__(self, name):
+        super(ScopeNotValid, self).__init__(
+            "Scope '{}' is not valid".format(name))
+
+
+class PermissionNotValid(Exception):
+    def __init__(self, name):
+        super(PermissionNotValid, self).__init__(
+            "Permission '{}' is not valid".format(name))
+
+
+class RoleIsAssociatedWithUser(Exception):
+    def __init__(self, rolename, username):
+        super(RoleIsAssociatedWithUser, self).__init__(
+            "Role '{}' is still associated with user '{}'"
+            .format(rolename, username))
+
+
+class UserAlreadyExists(Exception):
+    def __init__(self, name):
+        super(UserAlreadyExists, self).__init__(
+            "User '{}' already exists".format(name))
+
+
+class UserDoesNotExist(Exception):
+    def __init__(self, name):
+        super(UserDoesNotExist, self).__init__(
+            "User '{}' does not exist".format(name))
+
+
+class ScopeNotInRole(Exception):
+    def __init__(self, scopename, rolename):
+        super(ScopeNotInRole, self).__init__(
+            "There are no permissions for scope '{}' in role '{}'"
+            .format(scopename, rolename))
+
+
+class RoleNotInUser(Exception):
+    def __init__(self, rolename, username):
+        super(RoleNotInUser, self).__init__(
+            "Role '{}' is not associated with user '{}'"
+            .format(rolename, username))
