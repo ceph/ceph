@@ -11,8 +11,8 @@ from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
 
 from .. import logger
-from ..controllers.auth import Auth
 from ..controllers import json_error_page, generate_controller_routes
+from ..controllers.auth import Auth
 from ..services.exception import dashboard_exception_handler
 from ..tools import SessionExpireAtBrowserCloseTool
 

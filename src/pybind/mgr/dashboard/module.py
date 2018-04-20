@@ -62,6 +62,9 @@ from .controllers import generate_routes, json_error_page
 from .controllers.auth import Auth
 from .tools import SessionExpireAtBrowserCloseTool, NotificationQueue, \
                    RequestLoggingTool, TaskManager
+from .services.auth import AuthManager
+from .services.access_control import ACCESS_CONTROL_COMMANDS, \
+                                     handle_access_control_command
 from .services.exception import dashboard_exception_handler
 from .settings import options_command_list, handle_option_command
 
@@ -227,6 +230,7 @@ class Module(MgrModule, SSLCherryPyConfig):
         },
     ]
     COMMANDS.extend(options_command_list())
+    COMMANDS.extend(ACCESS_CONTROL_COMMANDS)
 
     @property
     def rados(self):
@@ -273,6 +277,8 @@ class Module(MgrModule, SSLCherryPyConfig):
     def serve(self):
         if 'COVERAGE_ENABLED' in os.environ:
             _cov.start()
+
+        AuthManager.initialize()
 
         uri = self.await_configuration()
         if uri is None:
@@ -325,6 +331,9 @@ class Module(MgrModule, SSLCherryPyConfig):
 
     def handle_command(self, cmd):
         res = handle_option_command(cmd)
+        if res[0] != -errno.ENOSYS:
+            return res
+        res = handle_access_control_command(cmd)
         if res[0] != -errno.ENOSYS:
             return res
         if cmd['prefix'] == 'dashboard set-login-credentials':
