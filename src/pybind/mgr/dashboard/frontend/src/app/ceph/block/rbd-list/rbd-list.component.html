@@ -51,6 +51,10 @@
           <a class="dropdown-item" routerLink="/rbd/copy/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}"><i class="fa fa-fw fa-copy"></i><span i18n>Copy</span></a>
         </li>
         <li role="menuitem"
+            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing || !selection.first().parent}">
+          <a class="dropdown-item" (click)="flattenRbdModal()"><i class="fa fa-fw fa-chain-broken"></i><span i18n>Flatten</span></a>
+        </li>
+        <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item" (click)="deleteRbdModal()"><i class="fa fa-fw fa-trash-o"></i><span i18n>Delete</span></a>
         </li>

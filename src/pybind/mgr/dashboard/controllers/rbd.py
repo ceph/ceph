@@ -348,6 +348,15 @@ class Rbd(RESTController):
 
         return _rbd_image_call(pool_name, image_name, _src_copy)
 
+    @RbdTask('flatten', ['{pool_name}', '{image_name}'], 2.0)
+    @RESTController.resource(['POST'])
+    def flatten(self, pool_name, image_name):
+
+        def _flatten(ioctx, image):
+            image.flatten()
+
+        return _rbd_image_call(pool_name, image_name, _flatten)
+
 
 @ApiController('block/image/:pool_name/:image_name/snap')
 @AuthRequired()

@@ -7,6 +7,9 @@ import { BsDropdownModule, ModalModule, TabsModule, TooltipModule } from 'ngx-bo
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 
 import { SharedModule } from '../../shared/shared.module';
+import {
+  FlattenConfirmationModalComponent
+} from './flatten-confirmation-modal/flatten-confimation-modal.component';
 import { IscsiComponent } from './iscsi/iscsi.component';
 import { MirrorHealthColorPipe } from './mirror-health-color.pipe';
 import { MirroringComponent } from './mirroring/mirroring.component';
@@ -23,7 +26,8 @@ import {
   entryComponents: [
     RbdDetailsComponent,
     RbdSnapshotFormComponent,
-    RollbackConfirmationModalComponent
+    RollbackConfirmationModalComponent,
+    FlattenConfirmationModalComponent
   ],
   imports: [
     CommonModule,
@@ -46,7 +50,8 @@ import {
     RbdFormComponent,
     RbdSnapshotListComponent,
     RbdSnapshotFormComponent,
-    RollbackConfirmationModalComponent
+    RollbackConfirmationModalComponent,
+    FlattenConfirmationModalComponent
   ]
 })
 export class BlockModule { }
