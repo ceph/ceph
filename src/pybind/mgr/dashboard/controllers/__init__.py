@@ -154,7 +154,6 @@ class ApiRoot(object):
         return tpl.format(lis='\n'.join(endpoints))
 
 
-# pylint: disable=too-many-locals
 def browsable_api_view(meth):
     def wrapper(self, *vpath, **kwargs):
         assert isinstance(self, BaseController)
@@ -421,6 +420,13 @@ class RESTController(BaseController):
 
     """
 
+    # resource id parameter for using in get, set, and delete methods
+    # should be overriden by subclasses.
+    # to specify a composite id (two parameters) use '/'. e.g., "param1/param2".
+    # If subclasses don't override this property we try to infer the structure of
+    # the resourse ID.
+    RESOURCE_ID = None
+
     _method_mapping = collections.OrderedDict([
         (('GET', False), ('list', 200)),
         (('PUT', False), ('bulk_set', 200)),
@@ -428,9 +434,9 @@ class RESTController(BaseController):
         (('POST', False), ('create', 201)),
         (('DELETE', False), ('bulk_delete', 204)),
         (('GET', True), ('get', 200)),
-        (('PUT', True), ('set', 200)),
-        (('PATCH', True), ('set', 200)),
         (('DELETE', True), ('delete', 204)),
+        (('PUT', True), ('set', 200)),
+        (('PATCH', True), ('set', 200))
     ])
 
     @classmethod
@@ -458,7 +464,10 @@ class RESTController(BaseController):
             if k[1] and hasattr(cls, v[0]):
                 methods.append(k[0])
                 if not args:
-                    args = cls._parse_function_args(getattr(cls, v[0]))
+                    if cls.RESOURCE_ID is None:
+                        args = cls._parse_function_args(getattr(cls, v[0]))
+                    else:
+                        args = cls.RESOURCE_ID.split('/')
         if methods:
             result.append((methods, None, '_element', args))
 
@@ -511,11 +520,6 @@ class RESTController(BaseController):
         return method(*vpath, **params)
 
     @staticmethod
-    def args_from_json(func):
-        func._args_from_json_ = True
-        return func
-
-    @staticmethod
     def _function_args(func):
         if sys.version_info > (3, 0):  # pylint: disable=no-else-return
             return list(inspect.signature(func).parameters.keys())
@@ -528,10 +532,7 @@ class RESTController(BaseController):
         def inner(*args, **kwargs):
             if cherrypy.request.headers.get('Content-Type',
                                             '') == 'application/x-www-form-urlencoded':
-                if hasattr(func, '_args_from_json_'):  # pylint: disable=no-else-return
-                    return func(*args, **kwargs)
-                else:
-                    return func(kwargs)
+                return func(*args, **kwargs)
 
             content_length = int(cherrypy.request.headers['Content-Length'])
             body = cherrypy.request.body.read(content_length)
@@ -543,11 +544,8 @@ class RESTController(BaseController):
             except Exception as e:
                 raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
                                          .format(str(e)))
-            if hasattr(func, '_args_from_json_'):
-                kwargs.update(data.items())
-                return func(*args, **kwargs)
 
-            kwargs['data'] = data
+            kwargs.update(data.items())
             return func(*args, **kwargs)
         return inner
 

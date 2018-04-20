@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=too-many-arguments,too-many-locals,unused-argument,
+# pylint: disable=unused-argument
 # pylint: disable=too-many-statements,too-many-branches
 from __future__ import absolute_import
 
@@ -113,6 +113,8 @@ def _sort_features(features, enable=True):
 @ApiController('block/image')
 @AuthRequired()
 class Rbd(RESTController):
+
+    RESOURCE_ID = "pool_name/image_name"
 
     # set of image features that can be enable on existing images
     ALLOW_ENABLE_FEATURES = set(["exclusive-lock", "object-map", "fast-diff",
@@ -265,7 +267,6 @@ class Rbd(RESTController):
 
     @RbdTask('create',
              {'pool_name': '{pool_name}', 'image_name': '{name}'}, 2.0)
-    @RESTController.args_from_json
     def create(self, name, pool_name, size, obj_size=None, features=None,
                stripe_unit=None, stripe_count=None, data_pool=None):
 
@@ -292,7 +293,6 @@ class Rbd(RESTController):
         return _rbd_call(pool_name, rbd_inst.remove, image_name)
 
     @RbdTask('edit', ['{pool_name}', '{image_name}'], 4.0)
-    @RESTController.args_from_json
     def set(self, pool_name, image_name, name=None, size=None, features=None):
         def _edit(ioctx, image):
             rbd_inst = rbd.RBD()
@@ -328,7 +328,6 @@ class Rbd(RESTController):
               'dest_pool_name': '{dest_pool_name}',
               'dest_image_name': '{dest_image_name}'}, 2.0)
     @RESTController.resource(['POST'])
-    @RESTController.args_from_json
     def copy(self, pool_name, image_name, dest_pool_name, dest_image_name,
              obj_size=None, features=None, stripe_unit=None,
              stripe_count=None, data_pool=None):
@@ -355,9 +354,10 @@ class Rbd(RESTController):
 @AuthRequired()
 class RbdSnapshot(RESTController):
 
+    RESOURCE_ID = "snapshot_name"
+
     @RbdTask('snap/create',
              ['{pool_name}', '{image_name}', '{snapshot_name}'], 2.0)
-    @RESTController.args_from_json
     def create(self, pool_name, image_name, snapshot_name):
         def _create_snapshot(ioctx, img, snapshot_name):
             img.create_snap(snapshot_name)
@@ -376,7 +376,6 @@ class RbdSnapshot(RESTController):
 
     @RbdTask('snap/edit',
              ['{pool_name}', '{image_name}', '{snapshot_name}'], 4.0)
-    @RESTController.args_from_json
     def set(self, pool_name, image_name, snapshot_name, new_snap_name=None,
             is_protected=None):
         def _edit(ioctx, img, snapshot_name):
@@ -407,7 +406,6 @@ class RbdSnapshot(RESTController):
               'child_pool_name': '{child_pool_name}',
               'child_image_name': '{child_image_name}'}, 2.0)
     @RESTController.resource(['POST'])
-    @RESTController.args_from_json
     def clone(self, pool_name, image_name, snapshot_name, child_pool_name,
               child_image_name, obj_size=None, features=None,
               stripe_unit=None, stripe_count=None, data_pool=None):
