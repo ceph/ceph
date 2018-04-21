@@ -61,7 +61,7 @@ def log_descriptors(reads, process, terminal_logging):
 def obfuscate(command_, on=None):
     """
     Certain commands that are useful to log might contain information that
-    should be replaced by '*' like when creating OSDs and the keyryings are
+    should be replaced by '*' like when creating OSDs and the keyrings are
     being passed, which should not be logged.
 
     :param on: A string (will match a flag) or an integer (will match an index)

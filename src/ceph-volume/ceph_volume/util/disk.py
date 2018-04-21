@@ -179,18 +179,6 @@ def lsblk(device, columns=None, abspath=False):
     return _lsblk_parser(' '.join(out))
 
 
-def _lsblk_type(device):
-    """
-    Helper function that will use the ``TYPE`` label output of ``lsblk`` to determine
-    if a device is a partition or disk.
-    It does not process the output to return a boolean, but it does process it to return the
-    """
-    out, err, rc = process.call(
-        ['blkid', '-s', 'PARTUUID', '-o', 'value', device]
-    )
-    return ' '.join(out).strip()
-
-
 def is_device(dev):
     """
     Boolean to determine if a given device is a block device (**not**
