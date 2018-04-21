@@ -19,10 +19,10 @@
 
 #include "gtest/gtest.h"
 
-static void test_strict_strtoll(const char *str, long long expected)
+static void test_strict_strtoll(const char *str, long long expected, int base)
 {
   std::string err;
-  long long val = strict_strtoll(str, 10, &err);
+  long long val = strict_strtoll(str, base, &err);
   if (!err.empty()) {
     ASSERT_EQ(err, "");
   }
@@ -74,11 +74,14 @@ static void test_strict_strtof(const char *str, float expected)
 }
 
 TEST(StrToL, Simple1) {
-  test_strict_strtoll("123", 123);
-  test_strict_strtoll("0", 0);
-  test_strict_strtoll("-123", -123);
-  test_strict_strtoll("8796093022208", 8796093022208LL);
-  test_strict_strtoll("-8796093022208", -8796093022208LL);
+  test_strict_strtoll("123", 123, 10);
+  test_strict_strtoll("0", 0, 10);
+  test_strict_strtoll("-123", -123, 10);
+  test_strict_strtoll("8796093022208", 8796093022208LL, 10);
+  test_strict_strtoll("-8796093022208", -8796093022208LL, 10);
+  test_strict_strtoll("123", 123, 0);
+  test_strict_strtoll("0x7b", 123, 0);
+  test_strict_strtoll("4d2", 1234, 16);
 
   test_strict_strtol("208", 208);
   test_strict_strtol("-4", -4);
