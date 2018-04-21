@@ -60,7 +60,7 @@ def mask_ceph_disk():
     # systemctl allows using a glob like '*' for masking, but there was a bug
     # in that it wouldn't allow this for service templates. This means that
     # masking ceph-disk@* will not work, so we must link the service directly.
-    # /etc/systemd takes precendence regardless of the location of the unit
+    # /etc/systemd takes precedence regardless of the location of the unit
     process.run(
         ['ln', '-sf', '/dev/null', '/etc/systemd/system/ceph-disk@.service']
     )
