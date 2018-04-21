@@ -887,6 +887,16 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       r = -ENOENT;
       goto out;
     }
+
+    std::string can_run_error;
+    if (force != "--force" && !pending_map.can_run_module(module, &can_run_error)) {
+      ss << "module '" << module << "' reports that it cannot run on the active "
+            "manager daemon: " << can_run_error << " (pass --force to force "
+            "enablement)";
+      r = -ENOENT;
+      goto out;
+    }
+
     pending_map.modules.insert(module);
   } else if (prefix == "mgr module disable") {
     string module;
