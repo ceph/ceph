@@ -6855,6 +6855,55 @@ TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice2) {
   g_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, BluestoreStatistics) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf, "rocksdb_perf", "true");
+  SetVal(g_conf, "rocksdb_collect_compaction_stats", "true");
+  SetVal(g_conf, "rocksdb_collect_extended_stats","true");
+  SetVal(g_conf, "rocksdb_collect_memory_stats","true");
+
+  // disable cache
+  SetVal(g_conf, "bluestore_cache_size_ssd", "0");
+  SetVal(g_conf, "bluestore_cache_size_hdd", "0");
+  SetVal(g_conf, "bluestore_cache_size", "0");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  int r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount();
+  ASSERT_EQ(r, 0);
+
+  BlueStore* bstore = NULL;
+  EXPECT_NO_THROW(bstore = dynamic_cast<BlueStore*> (store.get()));
+
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_db_statistics", "", CEPH_NOSNAP, 0, 0, ""));
+  auto ch = bstore->create_new_collection(cid);
+  bufferlist bl;
+  bl.append("0123456789abcdefghi");
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Write object" << std::endl;
+    r = queue_transaction(bstore, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bufferlist readback;
+    r = store->read(ch, hoid, 0, bl.length(), readback);
+    ASSERT_EQ(r, bl.length());
+    ASSERT_TRUE(bl_eq(bl, readback));
+  }
+  Formatter *f = Formatter::create("store_test", "json-pretty", "json-pretty");
+  EXPECT_NO_THROW(store->get_db_statistics(f));
+  f->flush(cout);
+  cout << std::endl;
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
