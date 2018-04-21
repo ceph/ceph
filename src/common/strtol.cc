@@ -24,27 +24,17 @@ using std::ostringstream;
 
 long long strict_strtoll(const std::string_view str, int base, std::string *err)
 {
-  ostringstream errStr;
-  if (auto invalid = str.find_first_not_of("0123456789-+");
-      invalid != std::string_view::npos ||
-      invalid == 0) {
-    errStr << "The option value '" << str << "' contains invalid digits";
-    *err =  errStr.str();
-    return 0;
-  }
   char *endptr;
   errno = 0; /* To distinguish success/failure after call (see man page) */
   long long ret = strtoll(str.data(), &endptr, base);
-
-  if (endptr == str.data()) {
-    errStr << "Expected option value to be integer, got '" << str << "'";
-    *err =  errStr.str();
+  if (endptr == str.data() || endptr != str.data() + str.size()) {
+    *err = (std::string{"Expected option value to be integer, got '"} +
+	    std::string{str} + "'");
     return 0;
   }
-  if ((errno == ERANGE && (ret == LLONG_MAX || ret == LLONG_MIN))
-      || (errno != 0 && ret == 0)) {
-    errStr << "The option value '" << str << "' seems to be invalid";
-    *err = errStr.str();
+  if (errno) {
+    *err = (std::string{"The option value '"} + std::string{str} +
+	    "' seems to be invalid");
     return 0;
   }
   *err = "";
@@ -58,11 +48,11 @@ long long strict_strtoll(const char *str, int base, std::string *err)
 
 int strict_strtol(const std::string_view str, int base, std::string *err)
 {
-  ostringstream errStr;
   long long ret = strict_strtoll(str, base, err);
   if (!err->empty())
     return 0;
   if ((ret < INT_MIN) || (ret > INT_MAX)) {
+    ostringstream errStr;
     errStr << "The option value '" << str << "' seems to be invalid";
     *err = errStr.str();
     return 0;
@@ -78,21 +68,23 @@ int strict_strtol(const char *str, int base, std::string *err)
 double strict_strtod(const std::string_view str, std::string *err)
 {
   char *endptr;
-  ostringstream oss;
   errno = 0; /* To distinguish success/failure after call (see man page) */
   double ret = strtod(str.data(), &endptr);
   if (errno == ERANGE) {
+    ostringstream oss;
     oss << "strict_strtod: floating point overflow or underflow parsing '"
 	<< str << "'";
     *err = oss.str();
     return 0.0;
   }
   if (endptr == str) {
+    ostringstream oss;
     oss << "strict_strtod: expected double, got: '" << str << "'";
     *err = oss.str();
     return 0;
   }
   if (*endptr != '\0') {
+    ostringstream oss;
     oss << "strict_strtod: garbage at end of string. got: '" << str << "'";
     *err = oss.str();
     return 0;
@@ -109,21 +101,23 @@ double strict_strtod(const char *str, std::string *err)
 float strict_strtof(const std::string_view str, std::string *err)
 {
   char *endptr;
-  ostringstream oss;
   errno = 0; /* To distinguish success/failure after call (see man page) */
   float ret = strtof(str.data(), &endptr);
   if (errno == ERANGE) {
+    ostringstream oss;
     oss << "strict_strtof: floating point overflow or underflow parsing '"
 	<< str << "'";
     *err = oss.str();
     return 0.0;
   }
   if (endptr == str) {
+    ostringstream oss;
     oss << "strict_strtof: expected float, got: '" << str << "'";
     *err = oss.str();
     return 0;
   }
   if (*endptr != '\0') {
+    ostringstream oss;
     oss << "strict_strtof: garbage at end of string. got: '" << str << "'";
     *err = oss.str();
     return 0;
