@@ -3218,6 +3218,10 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	    im.cap_id = ++last_cap_id; // assign a new cap ID
 	    im.issue_seq = 1;
 	    im.mseq = q->second.mseq;
+
+	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
+	    if (session)
+	      rejoin_imported_client_map.emplace(q->first, session->info.inst);
 	  }
 
 	  // will process these caps in rejoin stage
@@ -4398,7 +4402,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     assert(gather_locks.empty());
 
     // check cap exports.
-    rejoin_client_map.insert(weak->client_map.begin(), weak->client_map.end());
+    rejoin_imported_client_map.insert(weak->client_map.begin(), weak->client_map.end());
 
     for (auto p = weak->cap_exports.begin(); p != weak->cap_exports.end(); ++p) {
       CInode *in = get_inode(p->first);
@@ -5169,7 +5173,11 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 
       dout(10) << " exporting caps for client." << q->first << " ino " << p->first << dendl;
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
-      assert(session);
+      if (!session) {
+	dout(10) << " no session for client." << p->first << dendl;
+	ex.second.erase(r);
+	continue;
+      }
 
       // mark client caps stale.
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
@@ -5350,22 +5358,19 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
 
 class C_MDC_RejoinSessionsOpened : public MDCacheLogContext {
 public:
-  map<client_t,entity_inst_t> client_map;
-  map<client_t,uint64_t> sseqmap;
-
-  C_MDC_RejoinSessionsOpened(MDCache *c, map<client_t,entity_inst_t>& cm) :
-    MDCacheLogContext(c), client_map(cm) {}
+  map<client_t,pair<Session*,uint64_t> > imported_session_map;
+  C_MDC_RejoinSessionsOpened(MDCache *c) : MDCacheLogContext(c) {}
   void finish(int r) override {
     assert(r == 0);
-    mdcache->rejoin_open_sessions_finish(client_map, sseqmap);
+    mdcache->rejoin_open_sessions_finish(imported_session_map);
   }
 };
 
-void MDCache::rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map,
-					  map<client_t,uint64_t>& sseqmap)
+void MDCache::rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >& imported_session_map)
 {
   dout(10) << "rejoin_open_sessions_finish" << dendl;
-  mds->server->finish_force_open_sessions(client_map, sseqmap);
+  mds->server->finish_force_open_sessions(imported_session_map);
+  rejoin_imported_session_map.swap(imported_session_map);
   if (rejoin_gather.empty())
     rejoin_gather_finish();
 }
@@ -5427,21 +5432,16 @@ bool MDCache::process_imported_caps()
 
   // called by rejoin_gather_finish() ?
   if (rejoin_gather.count(mds->get_nodeid()) == 0) {
-    // if sessions for imported caps are all open ?
-    for (map<client_t,entity_inst_t>::iterator p = rejoin_client_map.begin();
-	 p != rejoin_client_map.end();
-	 ++p) {
-      if (!mds->sessionmap.have_session(entity_name_t::CLIENT(p->first.v))) {
-	C_MDC_RejoinSessionsOpened *finish = new C_MDC_RejoinSessionsOpened(this, rejoin_client_map);
-	version_t pv = mds->server->prepare_force_open_sessions(rejoin_client_map, finish->sseqmap);
-	ESessions *le = new ESessions(pv, rejoin_client_map);
-	mds->mdlog->start_submit_entry(le, finish);
-	mds->mdlog->flush();
-	rejoin_client_map.clear();
-	return true;
-      }
+    if (!rejoin_imported_client_map.empty() &&
+	rejoin_imported_session_map.empty()) {
+      C_MDC_RejoinSessionsOpened *finish = new C_MDC_RejoinSessionsOpened(this);
+      version_t pv = mds->server->prepare_force_open_sessions(rejoin_imported_client_map,
+							      finish->imported_session_map);
+      mds->mdlog->start_submit_entry(new ESessions(pv, rejoin_imported_client_map), finish);
+      mds->mdlog->flush();
+      rejoin_imported_client_map.clear();
+      return true;
     }
-    rejoin_client_map.clear();
 
     // process caps that were exported by slave rename
     for (map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > >::iterator p = rejoin_slave_exports.begin();
@@ -5452,9 +5452,11 @@ bool MDCache::process_imported_caps()
       for (map<client_t,Capability::Export>::iterator q = p->second.second.begin();
 	   q != p->second.second.end();
 	   ++q) {
-	Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
-	assert(session);
+	auto r = rejoin_imported_session_map.find(q->first);
+	if (r == rejoin_imported_session_map.end())
+	  continue;
 
+	Session *session = r->second.first;
 	Capability *cap = in->get_client_cap(q->first);
 	if (!cap) {
 	  cap = in->add_client_cap(q->first, session);
@@ -5487,9 +5489,19 @@ bool MDCache::process_imported_caps()
       }
       assert(in->is_auth());
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
-	Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
-	assert(session);
+	Session *session;
+	{
+	  auto r = rejoin_imported_session_map.find(q->first);
+	  session = (r != rejoin_imported_session_map.end() ? r->second.first : nullptr);
+	}
+
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
+	  if (!session) {
+	    if (r->first >= 0)
+	      (void)rejoin_imported_caps[r->first][p->first][q->first]; // all are zero
+	    continue;
+	  }
+
 	  Capability *cap = in->reconnect_cap(q->first, r->second, session);
 	  add_reconnected_cap(q->first, in->ino(), r->second);
 	  if (r->first >= 0) {
