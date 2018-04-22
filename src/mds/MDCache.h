@@ -548,8 +548,7 @@ protected:
   map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_slave_exports;
   map<client_t,entity_inst_t> rejoin_client_map;
 
-  map<inodeno_t,map<client_t,cap_reconnect_t> > cap_exports; // ino -> client -> capex
-  map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
+  map<inodeno_t,pair<mds_rank_t,map<client_t,cap_reconnect_t> > > cap_exports; // ino -> target, client -> capex
 
   map<inodeno_t,map<client_t,map<mds_rank_t,cap_reconnect_t> > > cap_imports;  // ino -> client -> frommds -> capex
   set<inodeno_t> cap_imports_missing;
@@ -589,8 +588,9 @@ public:
   void rejoin_send_rejoins();
   void rejoin_export_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr,
 			  int target=-1) {
-    cap_exports[ino][client] = icr;
-    cap_export_targets[ino] = target;
+    auto& ex = cap_exports[ino];
+    ex.first = target;
+    ex.second[client] = icr;
   }
   void rejoin_recovered_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr, 
 			     mds_rank_t frommds=MDS_RANK_NONE) {
