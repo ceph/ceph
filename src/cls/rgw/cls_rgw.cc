@@ -2296,6 +2296,9 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
   for (iter = keys.begin(); iter != keys.end(); ++iter) {
     if (iter->first >= end_key) {
       /* past the end of plain namespace */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2317,6 +2320,10 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
     CLS_LOG(20, "%s(): entry.idx=%s e.key.name=%s", __func__, escape_str(entry.idx).c_str(), escape_str(e.key.name).c_str());
 
     if (!name.empty() && e.key.name != name) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2379,6 +2386,10 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
     entry.data = iter->second;
 
     if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2395,6 +2406,10 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
     }
 
     if (!name.empty() && e.key.name != name) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2456,6 +2471,10 @@ static int list_olh_entries(cls_method_context_t hctx, const string& name, const
     entry.data = iter->second;
 
     if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2472,6 +2491,10 @@ static int list_olh_entries(cls_method_context_t hctx, const string& name, const
     }
 
     if (!name.empty() && e.key.name != name) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2502,7 +2525,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   int32_t max = (op.max < MAX_BI_LIST_ENTRIES ? op.max : MAX_BI_LIST_ENTRIES);
   string start_key = op.marker;
   bool more;
-  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries, &more); 
+  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries, &more);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s(): list_plain_entries retured ret=%d", __func__, ret);
     return ret;
