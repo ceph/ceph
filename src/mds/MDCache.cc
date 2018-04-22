@@ -4016,12 +4016,11 @@ void MDCache::rejoin_send_rejoins()
   if (mds->is_rejoin()) {
     map<client_t, set<mds_rank_t> > client_exports;
     for (auto p = cap_exports.begin(); p != cap_exports.end(); ++p) {
-      assert(cap_export_targets.count(p->first));
-      mds_rank_t target = cap_export_targets[p->first];
+      mds_rank_t target = p->second.first;
       if (rejoins.count(target) == 0)
 	continue;
-      rejoins[target]->cap_exports[p->first] = p->second;
-      for (auto q = p->second.begin(); q != p->second.end(); ++q)
+      rejoins[target]->cap_exports[p->first] = p->second.second;
+      for (auto q = p->second.second.begin(); q != p->second.second.end(); ++q)
 	client_exports[q->first].insert(target);
     }
     for (map<client_t, set<mds_rank_t> >::iterator p = client_exports.begin();
@@ -5160,13 +5159,13 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   for (map<inodeno_t,map<client_t,Capability::Import> >::iterator p = peer_imported.begin();
        p != peer_imported.end();
        ++p) {
-    assert(cap_exports.count(p->first));
-    assert(cap_export_targets.count(p->first));
-    assert(cap_export_targets[p->first] == from);
+    auto& ex = cap_exports.at(p->first);
+    assert(ex.first == from);
     for (map<client_t,Capability::Import>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
-      assert(cap_exports[p->first].count(q->first));
+      auto r = ex.second.find(q->first);
+      assert(r != ex.second.end());
 
       dout(10) << " exporting caps for client." << q->first << " ino " << p->first << dendl;
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
@@ -5174,15 +5173,15 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
 
       // mark client caps stale.
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
-				       cap_exports[p->first][q->first].capinfo.cap_id, 0,
+				       r->second.capinfo.cap_id, 0,
                                        mds->get_osd_epoch_barrier());
       m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq,
 		      (q->second.cap_id > 0 ? from : -1), 0);
       mds->send_message_client_counted(m, session);
 
-      cap_exports[p->first].erase(q->first);
+      ex.second.erase(r);
     }
-    assert(cap_exports[p->first].empty());
+    assert(ex.second.empty());
   }
 
   for (auto p : updated_realms) {
