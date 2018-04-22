@@ -10,6 +10,8 @@ tasks:
     log-whitelist:
       - overall HEALTH_
       - \(MGR_DOWN\)
+      - \(MDS_ALL_DOWN\)
+      - \(MDS_UP_LESS_THAN_MAX\)
       - \(PG_
       - \(OSD_
       - \(OBJECT_

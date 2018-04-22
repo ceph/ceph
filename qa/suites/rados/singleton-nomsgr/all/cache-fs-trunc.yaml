@@ -10,6 +10,9 @@ tasks:
     log-whitelist:
       - overall HEALTH_
       - \(CACHE_POOL_NO_HIT_SET\)
+      - \(MDS_DOWN\)
+      - \(MDS_ALL_DOWN\)
+      - \(MDS_UP_LESS_THAN_MAX\)
     conf:
       global:
         osd max object name len: 460

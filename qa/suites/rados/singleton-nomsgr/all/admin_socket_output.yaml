@@ -14,6 +14,9 @@ overrides:
       - (OSD_FULL)
       - (MDS_READ_ONLY)
       - (POOL_FULL)
+      - \(MDS_DOWN\)
+      - \(MDS_ALL_DOWN\)
+      - \(MDS_UP_LESS_THAN_MAX\)
 tasks:
 - install:
 - ceph:
