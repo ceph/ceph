@@ -75,6 +75,15 @@ void RGWCRHTTPGetDataCB::claim_data(bufferlist *dest, uint64_t max) {
   }
 }
 
+RGWStreamReadHTTPResourceCRF::~RGWStreamReadHTTPResourceCRF()
+{
+  if (req) {
+    req->cancel();
+    req->wait();
+    delete req;
+  }
+}
+
 int RGWStreamReadHTTPResourceCRF::init()
 {
   env->stack->init_new_io(req);
@@ -168,6 +177,15 @@ int RGWStreamReadHTTPResourceCRF::read(bufferlist *out, uint64_t max_size, bool 
 bool RGWStreamReadHTTPResourceCRF::is_done()
 {
   return req->is_done();
+}
+
+RGWStreamWriteHTTPResourceCRF::~RGWStreamWriteHTTPResourceCRF()
+{
+  if (req) {
+    req->cancel();
+    req->wait();
+    delete req;
+  }
 }
 
 void RGWStreamWriteHTTPResourceCRF::send_ready(const rgw_rest_obj& rest_obj)
