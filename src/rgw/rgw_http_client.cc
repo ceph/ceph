@@ -531,14 +531,20 @@ int RGWHTTPClient::wait()
   return req_data->ret;
 }
 
-RGWHTTPClient::~RGWHTTPClient()
+void RGWHTTPClient::cancel()
 {
   if (req_data) {
     RGWHTTPManager *http_manager = req_data->mgr;
     if (http_manager) {
       http_manager->remove_request(this);
     }
+  }
+}
 
+RGWHTTPClient::~RGWHTTPClient()
+{
+  cancel();
+  if (req_data) {
     req_data->put();
   }
 }
@@ -784,13 +790,17 @@ void RGWHTTPManager::register_request(rgw_http_req_data *req_data)
   ldout(cct, 20) << __func__ << " mgr=" << this << " req_data->id=" << req_data->id << ", curl_handle=" << req_data->curl_handle << dendl;
 }
 
-void RGWHTTPManager::unregister_request(rgw_http_req_data *req_data)
+bool RGWHTTPManager::unregister_request(rgw_http_req_data *req_data)
 {
   RWLock::WLocker rl(reqs_lock);
+  if (!req_data->registered) {
+    return false;
+  }
   req_data->get();
   req_data->registered = false;
   unregistered_reqs.push_back(req_data);
   ldout(cct, 20) << __func__ << " mgr=" << this << " req_data->id=" << req_data->id << ", curl_handle=" << req_data->curl_handle << dendl;
+  return true;
 }
 
 void RGWHTTPManager::complete_request(rgw_http_req_data *req_data)
@@ -960,7 +970,9 @@ int RGWHTTPManager::remove_request(RGWHTTPClient *client)
     unlink_request(req_data);
     return 0;
   }
-  unregister_request(req_data);
+  if (!unregister_request(req_data)) {
+    return 0;
+  }
   int ret = signal_thread();
   if (ret < 0) {
     return ret;

@@ -430,6 +430,7 @@ public:
                                                                 http_manager(_http_manager) {
     rest_obj.init(_src_key);
   }
+  ~RGWStreamReadHTTPResourceCRF();
 
   int init() override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
@@ -489,7 +490,7 @@ public:
                                                                caller(_caller),
                                                                http_manager(_http_manager),
                                                                write_drain_notify_cb(this) {}
-  virtual ~RGWStreamWriteHTTPResourceCRF() = default;
+  virtual ~RGWStreamWriteHTTPResourceCRF();
 
   int init() override {
     return 0;
