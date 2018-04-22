@@ -244,8 +244,7 @@ struct MDRequestImpl : public MutationImpl {
     bool is_remote_frozen_authpin;
     bool is_inode_exporter;
 
-    map<client_t,entity_inst_t> imported_client_map;
-    map<client_t,uint64_t> sseq_map;
+    map<client_t, pair<Session*, uint64_t> > imported_session_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
     // for lock/flock
