@@ -65,7 +65,7 @@
 #define dout_prefix _prefix(_dout, this)
 template <typename T>
 static ostream& _prefix(std::ostream *_dout, T *pg) {
-  return *_dout << pg->gen_prefix();
+  return pg->gen_prefix(*_dout);
 }
 
 
@@ -14987,7 +14987,7 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef 
 
 /*---SnapTrimmer Logging---*/
 #undef dout_prefix
-#define dout_prefix *_dout << pg->gen_prefix() 
+#define dout_prefix pg->gen_prefix(*_dout)
 
 void PrimaryLogPG::SnapTrimmer::log_enter(const char *state_name)
 {
@@ -15001,7 +15001,7 @@ void PrimaryLogPG::SnapTrimmer::log_exit(const char *state_name, utime_t enter_t
 
 /*---SnapTrimmer states---*/
 #undef dout_prefix
-#define dout_prefix (*_dout << context< SnapTrimmer >().pg->gen_prefix() \
+#define dout_prefix (context< SnapTrimmer >().pg->gen_prefix(*_dout) \
 		     << "SnapTrimmer state<" << get_state_name() << ">: ")
 
 /* NotTrimming */

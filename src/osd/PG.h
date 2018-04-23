@@ -259,7 +259,7 @@ public:
   class RecoveryCtx;
 
   // -- methods --
-  std::string gen_prefix() const override;
+  std::ostream& gen_prefix(std::ostream& out) const override;
   CephContext *get_cct() const override {
     return cct;
   }
@@ -703,7 +703,9 @@ protected:
       is_readable.reset(_is_readable);
       is_recoverable.reset(_is_recoverable);
     }
-    string gen_prefix() const { return pg->gen_prefix(); }
+    std::ostream& gen_prefix(std::ostream& out) const {
+      return pg->gen_prefix(out);
+    }
     bool needs_recovery(
       const hobject_t &hoid,
       eversion_t *v = 0) const {
