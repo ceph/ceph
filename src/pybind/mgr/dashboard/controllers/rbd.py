@@ -328,7 +328,7 @@ class Rbd(RESTController):
               'dest_image_name': '{dest_image_name}'}, 2.0)
     @RESTController.resource(['POST'])
     def copy(self, pool_name, image_name, dest_pool_name, dest_image_name,
-             obj_size=None, features=None, stripe_unit=None,
+             snapshot_name=None, obj_size=None, features=None, stripe_unit=None,
              stripe_count=None, data_pool=None):
 
         def _src_copy(s_ioctx, s_img):
@@ -340,6 +340,9 @@ class Rbd(RESTController):
 
                 # Set features
                 feature_bitmask = _format_features(features)
+
+                if snapshot_name:
+                    s_img.set_snap(snapshot_name)
 
                 s_img.copy(d_ioctx, dest_image_name, feature_bitmask, l_order,
                            stripe_unit, stripe_count, data_pool)
