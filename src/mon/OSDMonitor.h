@@ -42,20 +42,9 @@ class MOSDMap;
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
-//#include <boost/function.hpp>
-//#include <boost/functional/hash.hpp>
-
-namespace std
-{
-  template<>
-    struct hash<pair<version_t, uint64_t>> {
-      size_t operator()(const pair<version_t, uint64_t>& p) const {
-        size_t seed = hash<version_t>{}(p.first); {}
-        seed ^= hash<uint64_t>{}(p.second) + 0x9e3779b9 + (seed<<6) + (seed>>2);
-        return seed;
-      }
-    };
-};
+#include <boost/functional/hash.hpp>
+// re-include our assert to clobber the system one; fix dout:
+#include "include/assert.h"
 
 /// information about a particular peer's failure reports for one osd
 struct failure_reporter_t {
@@ -237,7 +226,7 @@ public:
   using osdmap_cache_t = SimpleLRU<osdmap_key_t,
                                    bufferlist,
                                    std::less<osdmap_key_t>,
-                                   std::hash<osdmap_key_t>>;
+                                   boost::hash<osdmap_key_t>>;
   osdmap_cache_t inc_osd_cache;
   osdmap_cache_t full_osd_cache;
 
