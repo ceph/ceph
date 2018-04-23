@@ -349,6 +349,7 @@ namespace buffer CEPH_BUFFER_API {
     void zero(bool crc_reset);
     void zero(unsigned o, unsigned l);
     void zero(unsigned o, unsigned l, bool crc_reset);
+    unsigned append_zeros(unsigned l);
 
   };
 
