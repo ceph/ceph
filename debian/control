@@ -185,6 +185,7 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
+Suggests: python-influxdb
 Replaces: ceph (<< 0.93-417),
 Breaks: ceph (<< 0.93-417),
 Description: manager for the ceph distributed storage system

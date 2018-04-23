@@ -118,7 +118,7 @@ class MgrTestCase(CephTestCase):
 
         initial_gid = cls.mgr_cluster.get_mgr_map()['active_gid']
         cls.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable",
-                                         module_name)
+                                                    module_name, "--force")
 
         # Wait for the module to load
         def has_restarted():
