@@ -11036,6 +11036,11 @@ int PrimaryLogPG::find_object_context(const hobject_t& oid,
   snapid_t first, last;
   auto p = obc->ssc->snapset.clone_snaps.find(soid.snap);
   assert(p != obc->ssc->snapset.clone_snaps.end());
+  if (p->second.empty()) {
+    dout(1) << __func__ << " " << soid << " empty snapset -- DNE" << dendl;
+    assert(!cct->_conf->osd_debug_verify_snaps);
+    return -ENOENT;
+  }
   first = p->second.back();
   last = p->second.front();
   if (first <= oid.snap) {
