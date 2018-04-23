@@ -2,7 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { NgxDatatableModule, TableColumn } from '@swimlane/ngx-datatable';
+import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
 import { ComponentsModule } from '../../components/components.module';
 import { TableComponent } from './table.component';
@@ -10,7 +10,6 @@ import { TableComponent } from './table.component';
 describe('TableComponent', () => {
   let component: TableComponent;
   let fixture: ComponentFixture<TableComponent>;
-  const columns: TableColumn[] = [];
 
   const createFakeData = (n) => {
     const data = [];
