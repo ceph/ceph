@@ -207,6 +207,13 @@ int ActivePyModule::handle_command(
   assert(ss != nullptr);
   assert(ds != nullptr);
 
+  if (pClassInstance == nullptr) {
+    // Not the friendliest error string, but we could only
+    // hit this in quite niche cases, if at all.
+    *ss << "Module not instantiated";
+    return -EINVAL;
+  }
+
   Gil gil(pMyThreadState, true);
 
   PyFormatter f;
