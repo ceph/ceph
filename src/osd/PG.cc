@@ -1528,8 +1528,9 @@ void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
            << dendl;
 
   // take out as many osds as we can for async recovery, in order of cost
-  for (auto weighted_shard : candidates_by_cost) {
-    pg_shard_t cur_shard = weighted_shard.second;
+  for (auto rit = candidates_by_cost.rbegin();
+       rit != candidates_by_cost.rend(); ++rit) {
+    pg_shard_t cur_shard = rit->second;
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
     if (recoverable_and_ge_min_size(candidate_want)) {
