@@ -1090,17 +1090,21 @@ void MDSRank::boot_start(BootStep step, int r)
         MDSGatherBuilder gather(g_ceph_context,
             new C_MDS_BootStart(this, MDS_BOOT_PREPARE_LOG));
 
-	mdcache->open_mydir_inode(gather.new_sub());
+	if (is_starting()) {
+	  // load mydir frag for the first log segment (creating subtree map)
+	  mdcache->open_mydir_frag(gather.new_sub());
+	} else {
+	  mdcache->open_mydir_inode(gather.new_sub());
+	}
 
 	mdcache->create_global_snaprealm();
 
-        if (is_starting() ||
-            whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
-          mdcache->open_root_inode(gather.new_sub());
-        } else {
-          // replay.  make up fake root inode to start with
-          (void)mdcache->create_root_inode();
-        }
+	if (whoami == mdsmap->get_root()) {  // load root inode off disk if we are auth
+	  mdcache->open_root_inode(gather.new_sub());
+	} else if (is_any_replay()) {
+	  // replay.  make up fake root inode to start with
+	  mdcache->create_root_inode();
+	}
         gather.activate();
       }
       break;
@@ -1166,16 +1170,7 @@ void MDSRank::starting_done()
   assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
 
-  mdcache->open_root();
-
-  if (mdcache->is_open()) {
-    mdlog->start_new_segment();
-  } else {
-    mdcache->wait_for_open(new MDSInternalContextWrapper(this,
-			   new FunctionContext([this] (int r) {
-			       mdlog->start_new_segment();
-			   })));
-  }
+  mdlog->start_new_segment();
 
   // sync snaptable cache
   snapclient->sync(new C_MDSInternalNoop);
@@ -1476,7 +1471,8 @@ void MDSRank::active_start()
 {
   dout(1) << "active_start" << dendl;
 
-  if (last_state == MDSMap::STATE_CREATING) {
+  if (last_state == MDSMap::STATE_CREATING ||
+      last_state == MDSMap::STATE_STARTING) {
     mdcache->open_root();
   }
 
@@ -1744,7 +1740,7 @@ void MDSRankDispatcher::handle_mds_map(
 
   // REJOIN
   // is everybody finally rejoining?
-  if (is_starting() || is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
+  if (is_rejoin() || is_clientreplay() || is_active() || is_stopping()) {
     // did we start?
     if (!oldmap->is_rejoining() && mdsmap->is_rejoining())
       rejoin_joint_start();
