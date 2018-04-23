@@ -32,6 +32,7 @@ class PoolTest(DashboardTestCase):
             self.assertIn('pool_name', pool)
             self.assertIn('type', pool)
             self.assertIn('application_metadata', pool)
+            self.assertIsInstance(pool['application_metadata'], list)
             self.assertIn('flags', pool)
             self.assertIn('flags_names', pool)
             self.assertNotIn('stats', pool)
@@ -94,6 +95,7 @@ class PoolTest(DashboardTestCase):
                     elif k == 'pg_num':
                         self.assertEqual(pool[k], int(v), '{}: {} != {}'.format(k, pool[k], v))
                     elif k == 'application_metadata':
+                        self.assertIsInstance(pool[k], list)
                         self.assertEqual(pool[k],
                                          data['application_metadata'].split(','))
                     elif k == 'pool':
