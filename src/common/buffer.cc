@@ -1815,7 +1815,7 @@ public:
   void buffer::list::reserve(size_t prealloc)
   {
     if (append_buffer.unused_tail_length() < prealloc) {
-      append_buffer = buffer::create_in_mempool(prealloc, get_mempool());
+      append_buffer = buffer::create_page_aligned(prealloc);
       append_buffer.set_length(0);   // unused, so far.
     }
   }
