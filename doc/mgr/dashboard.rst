@@ -52,6 +52,8 @@ various aspects of your Ceph cluster:
 * **Monitors**: Lists all MONs, their quorum status, open sessions.
 * **Configuration Reference**: Lists all available configuration options,
   their description and default values.
+* **Pools**: List all Ceph pools and their details (e.g. applications, placement
+  groups, replication size, EC profile, CRUSH ruleset, etc.)
 * **OSDs**: Lists all OSDs, their status and usage statistics as well as
   detailed information like attributes (OSD map), metadata, performance counters
   and usage histograms for read/write operations.
@@ -65,7 +67,8 @@ various aspects of your Ceph cluster:
 * **CephFS**: Lists all active filesystem clients and associated pools,
   including their usage statistics.
 * **Object Gateway**: Lists all active object gateways and their performance
-  counters.
+  counters, object gateway users and their details (e.g. quotas) as well as
+  all buckets and their details (e.g. owner, quotas). 
 
 Enabling
 --------
