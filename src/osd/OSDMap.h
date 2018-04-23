@@ -620,6 +620,8 @@ public:
     return SIGNIFICANT_FEATURES & features;
   }
 
+  uint64_t get_encoding_features() const;
+
   void deepish_copy_from(const OSDMap& o) {
     *this = o;
     primary_temp.reset(new mempool::osdmap::map<pg_t,int32_t>(*o.primary_temp));

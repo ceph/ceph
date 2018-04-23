@@ -1252,7 +1252,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   osdmap.maybe_remove_pg_upmaps(cct, osdmap, &pending_inc);
 
   // features for osdmap and its incremental
-  uint64_t features = mon->get_quorum_con_features();
+  uint64_t features;
 
   // encode full map and determine its crc
   OSDMap tmp;
@@ -1261,26 +1261,11 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     tmp.apply_incremental(pending_inc);
 
     // determine appropriate features
-    if (tmp.require_osd_release < CEPH_RELEASE_LUMINOUS) {
-      dout(10) << __func__ << " encoding without feature SERVER_LUMINOUS"
-	       << dendl;
-      features &= ~CEPH_FEATURE_SERVER_LUMINOUS;
-    }
-    if (tmp.require_osd_release < CEPH_RELEASE_KRAKEN) {
-      dout(10) << __func__ << " encoding without feature SERVER_KRAKEN | "
-	       << "MSG_ADDR2" << dendl;
-      features &= ~(CEPH_FEATURE_SERVER_KRAKEN |
-		    CEPH_FEATURE_MSG_ADDR2);
-    }
-    if (tmp.require_osd_release < CEPH_RELEASE_JEWEL) {
-      dout(10) << __func__ << " encoding without feature SERVER_JEWEL" << dendl;
-      features &= ~CEPH_FEATURE_SERVER_JEWEL;
-    }
-    if (tmp.require_osd_release < CEPH_RELEASE_MIMIC) {
-      dout(10) << __func__ << " encoding without feature SERVER_MIMIC" << dendl;
-      features &= ~(CEPH_FEATURE_SERVER_MIMIC);
-    }
+    features = tmp.get_encoding_features();
     dout(10) << __func__ << " encoding full map with " << features << dendl;
+
+    // the features should be a subset of the mon quorum's features!
+    assert((features & ~mon->get_quorum_con_features()) == 0);
 
     bufferlist fullbl;
     encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
