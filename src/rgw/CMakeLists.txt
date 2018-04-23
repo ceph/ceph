@@ -139,7 +139,8 @@ set(rgw_a_srcs
   rgw_rest_user.cc
   rgw_swift_auth.cc
   rgw_usage.cc
-  rgw_opa.cc)
+  rgw_opa.cc
+  sts-assume-role.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
