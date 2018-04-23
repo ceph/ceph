@@ -319,7 +319,7 @@ class Task(object):
                     if 'status' in task.ret_value:
                         status = task.ret_value['status']
                     else:
-                        status = 500
+                        status = getattr(ex, 'status', 500)
                     cherrypy.response.status = status
                     return task.ret_value
                 raise ex
@@ -327,7 +327,6 @@ class Task(object):
                 cherrypy.response.status = 202
                 return {'name': self.name, 'metadata': md}
             return value
-        wrapper.__wrapped__ = func
         return wrapper
 
 

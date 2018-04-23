@@ -316,8 +316,8 @@ class RbdTest(DashboardTestCase):
 
     def test_delete_non_existent_image(self):
         res = self.remove_image('rbd', 'i_dont_exist')
-        self.assertStatus(409)
-        self.assertEqual(res, {"errno": 2, "status": 409, "component": "rbd",
+        self.assertStatus(400)
+        self.assertEqual(res, {"errno": 2, "status": 400, "component": "rbd",
                                "detail": "[errno 2] error removing image"})
 
     def test_image_delete(self):
