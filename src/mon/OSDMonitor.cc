@@ -2055,7 +2055,7 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
     features = m->get_session()->con_features;
 
   dout(10) << __func__ << " " << *m << dendl;
-  MOSDMap *reply = new MOSDMap(mon->monmap->fsid);
+  MOSDMap *reply = new MOSDMap(mon->monmap->fsid, features);
   epoch_t first = get_first_committed();
   epoch_t last = osdmap.get_epoch();
   int max = g_conf->osd_map_message_max;
@@ -3341,7 +3341,7 @@ void OSDMonitor::send_latest(MonOpRequestRef op, epoch_t start)
 
 MOSDMap *OSDMonitor::build_latest_full(uint64_t features)
 {
-  MOSDMap *r = new MOSDMap(mon->monmap->fsid);
+  MOSDMap *r = new MOSDMap(mon->monmap->fsid, features);
   get_version_full(osdmap.get_epoch(), features, r->maps[osdmap.get_epoch()]);
   r->oldest_map = get_first_committed();
   r->newest_map = osdmap.get_epoch();
@@ -3351,7 +3351,7 @@ MOSDMap *OSDMonitor::build_latest_full(uint64_t features)
 MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to, uint64_t features)
 {
   dout(10) << "build_incremental [" << from << ".." << to << "] with features " << std::hex << features << dendl;
-  MOSDMap *m = new MOSDMap(mon->monmap->fsid);
+  MOSDMap *m = new MOSDMap(mon->monmap->fsid, features);
   m->oldest_map = get_first_committed();
   m->newest_map = osdmap.get_epoch();
 
@@ -3429,7 +3429,7 @@ void OSDMonitor::send_incremental(epoch_t first,
   }
 
   if (first < get_first_committed()) {
-    MOSDMap *m = new MOSDMap(osdmap.get_fsid());
+    MOSDMap *m = new MOSDMap(osdmap.get_fsid(), features);
     m->oldest_map = get_first_committed();
     m->newest_map = osdmap.get_epoch();
 
