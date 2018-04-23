@@ -11,6 +11,8 @@
 extern "C" {
 #endif
 
+#define CEPH_CLS_API [[gnu::visibility("default")]]
+
 #ifndef BUILDING_FOR_EMBEDDED
 #define CLS_VER(maj,min) \
 int __cls_ver__## maj ## _ ##min = 0; \
@@ -21,7 +23,6 @@ int __cls_ver_min = min;
 int __cls_name__## name = 0; \
 const char *__cls_name = #name;
 
-#define CEPH_CLS_API [[gnu::visibility("default")]]
 #define CLS_INIT(name) \
 CEPH_CLS_API void __cls_init()
 #else
