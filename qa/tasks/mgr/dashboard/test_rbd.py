@@ -260,8 +260,8 @@ class RbdTest(DashboardTestCase):
         res = self.create_image('rbd', 'test_rbd_twice', 10240)
 
         res = self.create_image('rbd', 'test_rbd_twice', 10240)
-        self.assertStatus(409)
-        self.assertEqual(res, {"errno": 17, "status": 409, "component": "rbd",
+        self.assertStatus(400)
+        self.assertEqual(res, {"errno": 17, "status": 400, "component": "rbd",
                                "detail": "[errno 17] error creating image"})
         self.remove_image('rbd', 'test_rbd_twice')
         self.assertStatus(204)
@@ -472,7 +472,7 @@ class RbdTest(DashboardTestCase):
                                      'snap_name': 'snap1'})
 
         res = self.remove_image('rbd', 'cimg')
-        self.assertStatus(409)
+        self.assertStatus(400)
         self.assertIn('errno', res)
         self.assertEqual(res['errno'], 39)
 
