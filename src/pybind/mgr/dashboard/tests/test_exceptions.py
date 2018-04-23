@@ -1,20 +1,23 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import time
+
 import cherrypy
 
 import rados
 from ..services.ceph_service import SendCommandError
-from ..controllers import RESTController, ApiController
+from ..controllers import RESTController, ApiController, Task
 from .helper import ControllerTestCase
 from ..services.exception import handle_rados_error, handle_send_command_error, \
     serialize_dashboard_exception
-from ..tools import ViewCache, TaskManager
+from ..tools import ViewCache, TaskManager, NotificationQueue
 
 
 # pylint: disable=W0613
 @ApiController('foo')
 class FooResource(RESTController):
+
     @cherrypy.expose
     @cherrypy.tools.json_out()
     @handle_rados_error('foo')
@@ -43,7 +46,6 @@ class FooResource(RESTController):
     def vc_no_data(self):
         @ViewCache(timeout=0)
         def _no_data():
-            import time
             time.sleep(0.2)
 
         _no_data()
@@ -90,9 +92,10 @@ class Root(object):
 
 
 class RESTControllerTest(ControllerTestCase):
-
     @classmethod
     def setup_server(cls):
+        NotificationQueue.start_queue()
+        TaskManager.init()
         cls.setup_controllers([FooResource])
 
     def test_no_exception(self):
@@ -144,6 +147,18 @@ class RESTControllerTest(ControllerTestCase):
         self.assertJsonBody(
             {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo'}
         )
+
+    def test_task_exception(self):
+        self._get('/foo/task_exception')
+        self.assertStatus(400)
+        self.assertJsonBody(
+            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo'}
+        )
+
+        self._get('/foo/wait_task_exception')
+        while self.jsonBody():
+            time.sleep(0.5)
+            self._get('/foo/wait_task_exception')
 
     def test_internal_server_error(self):
         self._get('/foo/internal_server_error')
