@@ -1948,7 +1948,7 @@ public:
 		    uint32_t register_gen);
   int _normalize_watch_error(int r);
 
-  friend class C_DoWatchError;
+  friend class CB_DoWatchError;
 public:
   void linger_callback_flush(Context *ctx) {
     finisher->queue(ctx);
