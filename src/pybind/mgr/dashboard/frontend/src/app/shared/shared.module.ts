@@ -34,7 +34,8 @@ import { ServicesModule } from './services/services.module';
     PasswordButtonDirective,
     DimlessBinaryDirective,
     DataTableModule,
-    ApiModule
+    ApiModule,
+    AutofocusDirective
   ],
   providers: [
     AuthStorageService,
