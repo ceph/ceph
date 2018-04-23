@@ -27,6 +27,7 @@ class MOSDMap : public Message {
 
  public:
   uuid_d fsid;
+  uint64_t encode_features;
   map<epoch_t, bufferlist> maps;
   map<epoch_t, bufferlist> incremental_maps;
   epoch_t oldest_map =0, newest_map = 0;
@@ -63,13 +64,12 @@ class MOSDMap : public Message {
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDMap(const uuid_d &f)
+  MOSDMap(const uuid_d &f, const uint64_t features)
     : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
-      fsid(f),
+      fsid(f), encode_features(features),
       oldest_map(0), newest_map(0) { }
 private:
   ~MOSDMap() override {}
-
 public:
   // marshalling
   void decode_payload() override {
@@ -93,12 +93,8 @@ public:
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
     encode(fsid, payload);
-    if ((features & CEPH_FEATURE_PGID64) == 0 ||
-	(features & CEPH_FEATURE_PGPOOL3) == 0 ||
-	(features & CEPH_FEATURE_OSDENC) == 0 ||
-        (features & CEPH_FEATURE_OSDMAP_ENC) == 0 ||
-	(features & CEPH_FEATURE_MSG_ADDR2) == 0 ||
-	!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    if (OSDMap::get_significant_features(encode_features) ==
+         OSDMap::get_significant_features(features)) {
       if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	  (features & CEPH_FEATURE_PGPOOL3) == 0)
 	header.version = 1;  // old old_client version
