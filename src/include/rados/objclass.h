@@ -20,13 +20,15 @@ int __cls_ver_min = min;
 #define CLS_NAME(name) \
 int __cls_name__## name = 0; \
 const char *__cls_name = #name;
+
+#define CEPH_CLS_API [[gnu::visibility("default")]]
 #define CLS_INIT(name) \
-void CEPH_CLS_API __cls_init()
+CEPH_CLS_API void __cls_init()
 #else
 #define CLS_VER(maj,min)
 #define CLS_NAME(name)
 #define CLS_INIT(name) \
-void CEPH_CLS_API name##_cls_init()
+CEPH_CLS_API void name##_cls_init()
 #endif
 
 #define CLS_METHOD_RD       0x1 /// method executes read operations
