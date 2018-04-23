@@ -13,10 +13,10 @@
     (even as standby). Operators may ignore the error messages and continue
     upgrading/restarting or follow this upgrade sequence:
 
-	 Reduce the number of ranks to 1 (`ceph fs set <fs_name> max_mds 1`), wait
-	 for all other MDS to deactivate, leaving the one active MDS, upgrade the
-	 single active MDS, then upgrade/start standbys. Finally, restore the
-	 previous max_mds.
+   Reduce the number of ranks to 1 (`ceph fs set <fs_name> max_mds 1`), wait
+   for all other MDS to deactivate, leaving the one active MDS, upgrade the
+   single active MDS, then upgrade/start standbys. Finally, restore the
+   previous max_mds.
 
     See also: https://tracker.ceph.com/issues/23172
 
@@ -192,7 +192,7 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
   ``<<< binary blob of length N >>>``.
 
 * The Ceph LZ4 compression plugin is now enabled by default, and introduces
-  a new build depdendency.
+  a new build dependency.
 
 * Monitors will now prune on-disk full maps if the number of maps grows above
   a certain number (mon_osdmap_full_prune_min, default: 10000), thus
@@ -202,3 +202,10 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
 
 * Bootstrap auth keys will now be generated automatically on a fresh
   deployment; these keys will also be generated, if missing, during upgrade.
+
+* The (read-only) Ceph manager dashboard introduced in Ceph Luminous has been
+  replaced with a new implementation, providing a drop-in replacement offering
+  a number of additional management features. To access the new dashboard, you
+  first need to define a username and password. See the documentation for a
+  feature overview and installation instructions:
+  http://docs.ceph.com/docs/master/mgr/dashboard/
