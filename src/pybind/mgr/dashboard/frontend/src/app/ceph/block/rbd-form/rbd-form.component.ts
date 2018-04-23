@@ -197,7 +197,7 @@ export class RbdFormComponent implements OnInit {
         const pools = [];
         const dataPools = [];
         for (const pool of resp) {
-          if (!_.isUndefined(pool.application_metadata.rbd)) {
+          if (_.indexOf(pool.application_metadata, 'rbd') !== -1) {
             if (pool.type === 'replicated') {
               pools.push(pool);
               dataPools.push(pool);
