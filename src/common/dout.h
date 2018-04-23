@@ -37,7 +37,7 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
 
 class DoutPrefixProvider {
 public:
-  virtual string gen_prefix() const = 0;
+  virtual std::ostream& gen_prefix(std::ostream& out) const = 0;
   virtual CephContext *get_cct() const = 0;
   virtual unsigned get_subsys() const = 0;
   virtual ~DoutPrefixProvider() {}
@@ -99,7 +99,7 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define ldpp_dout(dpp, v) 						\
   if (dpp) 								\
     dout_impl(dpp->get_cct(), ceph::dout::need_dynamic(dpp->get_subsys()), v)				\
-    (*_dout << dpp->gen_prefix())
+    dpp->gen_prefix(*_dout)
 
 #define lgeneric_subdout(cct, sub, v) dout_impl(cct, ceph_subsys_##sub, v) *_dout
 #define lgeneric_dout(cct, v) dout_impl(cct, ceph_subsys_, v) *_dout

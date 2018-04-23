@@ -162,7 +162,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual const set<pg_shard_t> &get_acting_shards() const = 0;
      virtual const set<pg_shard_t> &get_backfill_shards() const = 0;
 
-     virtual std::string gen_dbg_prefix() const = 0;
+     virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
      virtual const map<hobject_t, set<pg_shard_t>> &get_missing_loc_shards()
        const = 0;
@@ -310,8 +310,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
 
-   std::string gen_prefix() const {
-     return parent->gen_dbg_prefix();
+   std::ostream& gen_prefix(std::ostream& out) const {
+     return parent->gen_dbg_prefix(out);
    }
 
    /**

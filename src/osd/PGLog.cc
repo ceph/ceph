@@ -26,7 +26,7 @@
 
 static ostream& _prefix(std::ostream *_dout, const PGLog *pglog)
 {
-  return *_dout << pglog->gen_prefix();
+  return pglog->gen_prefix(*_dout);
 }
 
 //////////////////// PGLog::IndexedLog ////////////////////
