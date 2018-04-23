@@ -152,13 +152,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       return c;
     });
     this.tableColumns = this.columns.filter(c => !c.isHidden);
-    if (this.autoReload) {
-      // Also if nothing is bound to fetchData nothing will be triggered
-      // Force showing the loading indicator because it has been set to False in
-      // useData() when this method was triggered by ngOnChanges().
-      if (this.fetchData.observers.length > 0) {
-        this.loadingIndicator = true;
-      }
+    // Load the data table content every N ms or at least once.
+    // Force showing the loading indicator if there are subscribers to the fetchData
+    // event. This is necessary because it has been set to False in useData() when
+    // this method was triggered by ngOnChanges().
+    if (this.fetchData.observers.length > 0) {
+      this.loadingIndicator = true;
+    }
+    if (_.isInteger(this.autoReload) && (this.autoReload > 0)) {
       this.ngZone.runOutsideAngular(() => {
         this.subscriber = Observable.timer(0, this.autoReload).subscribe(x => {
           this.ngZone.run(() => {
@@ -166,6 +167,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
           });
         });
       });
+    } else {
+      this.reloadData();
     }
   }
 
