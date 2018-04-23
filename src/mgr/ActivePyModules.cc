@@ -756,9 +756,14 @@ int ActivePyModules::handle_command(
   std::stringstream *ss)
 {
   lock.Lock();
-  auto mod = modules.at(module_name).get();
+  auto mod_iter = modules.find(module_name);
+  if (mod_iter == modules.end()) {
+    *ss << "Module '" << module_name << "' is not available";
+    return -ENOENT;
+  }
+
   lock.Unlock();
-  return mod->handle_command(cmdmap, ds, ss);
+  return mod_iter->second->handle_command(cmdmap, ds, ss);
 }
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)
