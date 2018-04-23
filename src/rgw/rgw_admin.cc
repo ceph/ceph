@@ -8,7 +8,9 @@
 
 #include <boost/optional.hpp>
 
+extern "C" {
 #include <liboath/oath.h>
+}
 
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
