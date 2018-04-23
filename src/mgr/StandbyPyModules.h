@@ -26,8 +26,6 @@
 #include "mon/MgrMap.h"
 #include "mgr/PyModuleRunner.h"
 
-typedef std::map<std::string, std::string> PyModuleConfig;
-
 /**
  * State that is read by all modules running in standby mode
  */
@@ -36,28 +34,20 @@ class StandbyPyModuleState
   mutable Mutex lock{"StandbyPyModuleState::lock"};
 
   MgrMap mgr_map;
-  PyModuleConfig config_cache;
-
-  mutable Cond config_loaded;
+  PyModuleConfig &module_config;
 
 public:
 
-  bool is_config_loaded = false;
+  
+  StandbyPyModuleState(PyModuleConfig &module_config_)
+    : module_config(module_config_)
+  {}
 
   void set_mgr_map(const MgrMap &mgr_map_)
   {
     Mutex::Locker l(lock);
 
     mgr_map = mgr_map_;
-  }
-
-  void loaded_config(const PyModuleConfig &config_)
-  {
-    Mutex::Locker l(lock);
-
-    config_cache = config_;
-    is_config_loaded = true;
-    config_loaded.Signal();
   }
 
   template<typename Callback, typename...Args>
@@ -69,14 +59,10 @@ public:
 
   template<typename Callback, typename...Args>
   auto with_config(Callback&& cb, Args&&... args) const ->
-    decltype(cb(config_cache, std::forward<Args>(args)...)) {
+    decltype(cb(module_config, std::forward<Args>(args)...)) {
     Mutex::Locker l(lock);
 
-    if (!is_config_loaded) {
-      config_loaded.Wait(lock);
-    }
-
-    return std::forward<Callback>(cb)(config_cache, std::forward<Args>(args)...);
+    return std::forward<Callback>(cb)(module_config, std::forward<Args>(args)...);
   }
 };
 
@@ -109,32 +95,15 @@ private:
   mutable Mutex lock{"StandbyPyModules::lock"};
   std::map<std::string, std::unique_ptr<StandbyPyModule>> modules;
 
-  MonClient *monc;
-
   StandbyPyModuleState state;
-
-  void load_config();
-  class LoadConfigThread : public Thread
-  {
-    protected:
-      MonClient *monc;
-      StandbyPyModuleState *state;
-    public:
-    LoadConfigThread(MonClient *monc_, StandbyPyModuleState *state_)
-      : monc(monc_), state(state_)
-    {}
-    void *entry() override;
-  };
-
-  LoadConfigThread load_config_thread;
 
   LogChannelRef clog;
 
 public:
 
   StandbyPyModules(
-      MonClient *monc_,
       const MgrMap &mgr_map_,
+      PyModuleConfig &module_config,
       LogChannelRef clog_);
 
   int start_one(PyModuleRef py_module);

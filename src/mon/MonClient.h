@@ -11,7 +11,6 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #ifndef CEPH_MONCLIENT_H
 #define CEPH_MONCLIENT_H
 
@@ -24,7 +23,6 @@
 #include "common/Timer.h"
 #include "common/Finisher.h"
 #include "common/config.h"
-
 
 class MMonMap;
 class MConfig;
@@ -148,6 +146,7 @@ private:
 class MonClient : public Dispatcher {
 public:
   MonMap monmap;
+  map<string,string> config_mgr;
 private:
   Messenger *messenger;
 
@@ -205,7 +204,7 @@ private:
   std::unique_ptr<Context> session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
-
+  
   bool _opened() const;
   bool _hunting() const;
   void _start_hunting();
@@ -433,6 +432,7 @@ public:
   // admin commands
 private:
   uint64_t last_mon_command_tid;
+
   struct MonCommand {
     string target_name;
     int target_rank;
@@ -484,7 +484,6 @@ public:
    * @return (via context) 0 on success, -EAGAIN if we need to resubmit our request
    */
   void get_version(string map, version_t *newest, version_t *oldest, Context *onfinish);
-
   /**
    * Run a callback within our lock, with a reference
    * to the MonMap
@@ -495,6 +494,9 @@ public:
     Mutex::Locker l(monc_lock);
     return std::forward<Callback>(cb)(monmap, std::forward<Args>(args)...);
   }
+
+  void register_config_callback(md_config_t::config_callback fn);
+  md_config_t::config_callback get_config_callback();
 
 private:
   struct version_req_d {
@@ -507,7 +509,7 @@ private:
   ceph_tid_t version_req_id;
   void handle_get_version_reply(MMonGetVersionReply* m);
 
-
+  md_config_t::config_callback config_cb;
 };
 
 #endif

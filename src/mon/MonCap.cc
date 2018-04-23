@@ -198,13 +198,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
-    StringConstraint constraint(StringConstraint::MATCH_TYPE_PREFIX,
-                                "daemon-private/mgr/");
-    profile_grants.push_back(MonCapGrant("config-key get", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key set", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key put", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key exists", "key", constraint));
-    profile_grants.push_back(MonCapGrant("config-key delete", "key", constraint));
+    profile_grants.push_back(MonCapGrant("config", MON_CAP_R | MON_CAP_W));
   }
   if (profile == "osd" || profile == "mds" || profile == "mon" ||
       profile == "mgr") {

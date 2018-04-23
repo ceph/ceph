@@ -3,6 +3,16 @@ import json
 import threading
 
 class Module(MgrModule):
+
+    OPTIONS = [
+            {'name': 'failure_domain'},
+            {'name': 'min_size'},
+            {'name': 'num_rep'},
+            {'name': 'pg_num'},
+            {'name': 'prefix'},
+            {'name': 'subtree'},
+    ]
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.serve_event = threading.Event()

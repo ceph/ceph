@@ -63,8 +63,8 @@ protected:
   LogChannelRef clog;
   LogChannelRef audit_clog;
 
-  PyModuleConfig load_config();
   void load_all_metadata();
+  std::map<std::string, std::string> load_store();
   void init();
 
   bool initialized;

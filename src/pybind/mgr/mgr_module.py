@@ -213,6 +213,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
 
 class MgrModule(ceph_module.BaseMgrModule):
     COMMANDS = []
+    OPTIONS = []
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -254,17 +255,6 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def __del__(self):
         unconfigure_logger(self, self.module_name)
-
-    def update_perf_schema(self, daemon_type, daemon_name):
-        """
-        For plugins that use get_all_perf_counters, call this when
-        receiving a notification of type 'perf_schema_update', to
-        prompt MgrModule to update its cache of counter schemas.
-
-        :param daemon_type:
-        :param daemon_name:
-        :return:
-        """
 
     @property
     def log(self):
@@ -485,6 +475,23 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_mgr_id()
 
+    def _validate_option(self, key):
+        """
+        Helper: don't allow get/set config callers to 
+        access config options that they didn't declare
+        in their schema.
+        """
+        if key not in [o['name'] for o in self.OPTIONS]:
+            raise RuntimeError("Config option '{0}' is not in {1}.OPTIONS".\
+                    format(key, self.__class__.__name__))
+
+    def _get_config(self, key, default):
+        r = self._ceph_get_config(key)
+        if r is None:
+            return default
+        else:
+            return r
+
     def get_config(self, key, default=None):
         """
         Retrieve the value of a persistent configuration setting
@@ -492,20 +499,28 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str key:
         :return: str
         """
-        r = self._ceph_get_config(key)
-        if r is None:
-            return default
-        else:
-            return r
+        self._validate_option(key)
+        return self._get_config(key, default)
 
-    def get_config_prefix(self, key_prefix):
+    def get_store_prefix(self, key_prefix):
         """
-        Retrieve a dict of config values with the given prefix
+        Retrieve a dict of KV store keys to values, where the keys
+        have the given prefix
 
         :param str key_prefix:
         :return: str
         """
-        return self._ceph_get_config_prefix(key_prefix)
+        return self._ceph_get_store_prefix(key_prefix)
+
+    def _get_localized(self, key, default, getter):
+        r = getter(self.get_mgr_id() + '/' + key, None)
+        if r is None:
+            r = getter(key, default)
+
+        return r
+
+    def _set_localized(self, key, val, setter):
+        return setter(self.get_mgr_id() + '/' + key, val)
 
     def get_localized_config(self, key, default=None):
         """
@@ -514,13 +529,11 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str default:
         :return: str
         """
-        r = self.get_config(self.get_mgr_id() + '/' + key)
-        if r is None:
-            r = self.get_config(key)
+        self._validate_option(key)
+        return self._get_localized(key, default, self._get_config)
 
-        if r is None:
-            r = default
-        return r
+    def _set_config(self, key, val):
+        return self._ceph_set_config(key, val)
 
     def set_config(self, key, val):
         """
@@ -529,7 +542,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str key:
         :param str val:
         """
-        self._ceph_set_config(key, val)
+        self._validate_option(key)
+        return self._set_config(key, val)
 
     def set_localized_config(self, key, val):
         """
@@ -538,29 +552,53 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param str default:
         :return: str
         """
-        return self._ceph_set_config(self.get_mgr_id() + '/' + key, val)
+        self._validate_option(key)
+        return self._set_localized(key, val, self._set_config)
 
-    def set_config_json(self, key, val):
+    def set_store_json(self, key, val):
         """
-        Helper for setting json-serialized-config
+        Helper for setting json-serialized stored data
 
         :param str key:
         :param val: json-serializable object
         """
-        self._ceph_set_config(key, json.dumps(val))
+        self.set_store(key, json.dumps(val))
 
-    def get_config_json(self, key):
+    def get_store_json(self, key):
         """
-        Helper for getting json-serialized config
+        Helper for getting json-serialized stored data
 
         :param str key:
         :return: object
         """
-        raw = self.get_config(key)
+        raw = self.get_store(key)
         if raw is None:
             return None
         else:
             return json.loads(raw)
+
+    def set_store(self, key, val):
+        """
+        Set a value in this module's persistent key value store
+        """
+        self._ceph_set_store(key, val)
+
+    def get_store(self, key, default=None):
+        """
+        Get a value from this module's persistent key value store
+        """
+        r = self._ceph_get_store(key)
+        if r is None:
+            return default
+        else:
+            return r
+
+    def get_localized_store(self, key, default=None):
+        return self._get_localized(key, default, self.get_store)
+
+    def set_localized_store(self, key, val):
+        return self._set_localized(key, val, self.set_store)
+
 
     def self_test(self):
         """

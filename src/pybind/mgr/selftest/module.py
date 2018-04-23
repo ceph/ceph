@@ -25,26 +25,42 @@ class Module(MgrModule):
 
     WORKLOADS = (WORKLOAD_COMMAND_SPAM, WORKLOAD_THROW_EXCEPTION)
 
+    # The test code in qa/ relies on these options existing -- they
+    # are of course not really used for anything in the module
+    OPTIONS = [
+            {'name': 'testkey'},
+            {'name': 'testlkey'},
+            {'name': 'testnewline'}
+    ]
+
     COMMANDS = [
             {
                 "cmd": "mgr self-test run",
                 "desc": "Run mgr python interface tests",
-                "perm": "r"
+                "perm": "rw"
             },
             {
                 "cmd": "mgr self-test background start name=workload,type=CephString",
                 "desc": "Activate a background workload (one of {0})".format(
                     ", ".join(WORKLOADS)),
-                "perm": "r"
+                "perm": "rw"
             },
             {
                 "cmd": "mgr self-test background stop",
                 "desc": "Stop background workload if any is running",
-                "perm": "r"
+                "perm": "rw"
+            },
+            {
+                "cmd": "mgr self-test config get name=key,type=CephString",
+                "desc": "Peek at a configuration value",
+                "perm": "rw"
+            },
+            {
+                "cmd": "mgr self-test config get_localized name=key,type=CephString",
+                "desc": "Peek at a configuration value (localized variant)",
+                "perm": "rw"
             },
             ]
-
-
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -73,7 +89,10 @@ class Module(MgrModule):
                         was_running)
             else:
                 return 0, '', 'No background workload was running'
-
+        elif command['prefix'] == 'mgr self-test config get':
+            return 0, str(self.get_config(command['key'])), ''
+        elif command['prefix'] == 'mgr self-test config get_localized':
+            return 0, str(self.get_localized_config(command['key'])), ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -84,6 +103,7 @@ class Module(MgrModule):
         self._self_test_osdmap()
         self._self_test_getters()
         self._self_test_config()
+        self._self_test_store()
         self._self_test_misc()
         self._self_test_perf_counters()
 
@@ -138,11 +158,17 @@ class Module(MgrModule):
         self.set_localized_config("testkey", "testvalue")
         assert self.get_localized_config("testkey") == "testvalue"
 
-        self.set_config_json("testjsonkey", {"testblob": 2})
-        assert self.get_config_json("testjsonkey") == {"testblob": 2}
+    def _self_test_store(self):
+        existing_keys = set(self.get_store_prefix("test").keys())
+        self.set_store("testkey", "testvalue")
+        assert self.get_store("testkey") == "testvalue"
 
-        assert sorted(self.get_config_prefix("test").keys()) == sorted(
-                ["testkey", "testjsonkey"])
+        self.set_store_json("testjsonkey", {"testblob": 2})
+        assert self.get_store_json("testjsonkey") == {"testblob": 2}
+
+        assert sorted(self.get_store_prefix("test").keys()) == sorted(
+                list({"testkey", "testjsonkey"} | existing_keys))
+
 
     def _self_test_perf_counters(self):
         self.get_perf_schema("osd", "0")

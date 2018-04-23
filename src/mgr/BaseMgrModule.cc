@@ -369,15 +369,15 @@ ceph_config_get(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
-ceph_config_get_prefix(BaseMgrModule *self, PyObject *args)
+ceph_store_get_prefix(BaseMgrModule *self, PyObject *args)
 {
   char *prefix = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_config_get", &prefix)) {
+  if (!PyArg_ParseTuple(args, "s:ceph_store_get_prefix", &prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
 
-  return self->py_modules->get_config_prefix(self->this_module->get_name(),
+  return self->py_modules->get_store_prefix(self->this_module->get_name(),
       prefix);
 }
 
@@ -394,6 +394,47 @@ ceph_config_set(BaseMgrModule *self, PyObject *args)
     val = value;
   }
   self->py_modules->set_config(self->this_module->get_name(), key, val);
+
+  Py_RETURN_NONE;
+}
+
+
+static PyObject*
+ceph_store_get(BaseMgrModule *self, PyObject *args)
+{
+  char *what = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_store_get", &what)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  std::string value;
+  bool found = self->py_modules->get_store(self->this_module->get_name(),
+      what, &value);
+  if (found) {
+    dout(10) << "ceph_store_get " << what << " found: " << value.c_str() << dendl;
+    return PyString_FromString(value.c_str());
+  } else {
+    dout(4) << "ceph_store_get " << what << " not found " << dendl;
+    Py_RETURN_NONE;
+  }
+}
+
+
+
+static PyObject*
+ceph_store_set(BaseMgrModule *self, PyObject *args)
+{
+  char *key = nullptr;
+  char *value = nullptr;
+  if (!PyArg_ParseTuple(args, "sz:ceph_store_set", &key, &value)) {
+    return nullptr;
+  }
+  boost::optional<string> val;
+  if (value) {
+    val = value;
+  }
+  self->py_modules->set_store(self->this_module->get_name(), key, val);
 
   Py_RETURN_NONE;
 }
@@ -538,11 +579,17 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_config", (PyCFunction)ceph_config_get, METH_VARARGS,
    "Get a configuration value"},
 
-  {"_ceph_get_config_prefix", (PyCFunction)ceph_config_get_prefix, METH_VARARGS,
-   "Get all configuration values with a given prefix"},
+  {"_ceph_get_store_prefix", (PyCFunction)ceph_store_get_prefix, METH_VARARGS,
+   "Get all KV store values with a given prefix"},
 
   {"_ceph_set_config", (PyCFunction)ceph_config_set, METH_VARARGS,
    "Set a configuration value"},
+
+  {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
+   "Get a stored field"},
+
+  {"_ceph_set_store", (PyCFunction)ceph_store_set, METH_VARARGS,
+   "Set a stored field"},
 
   {"_ceph_get_counter", (PyCFunction)get_counter, METH_VARARGS,
     "Get a performance counter"},

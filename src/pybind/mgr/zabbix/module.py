@@ -52,13 +52,33 @@ class Module(MgrModule):
     config = dict()
     ceph_health_mapping = {'HEALTH_OK': 0, 'HEALTH_WARN': 1, 'HEALTH_ERR': 2}
 
-    config_keys = {
-        'zabbix_sender': '/usr/bin/zabbix_sender',
-        'zabbix_host': None,
-        'zabbix_port': 10051,
-        'identifier': "",
-        'interval': 60
-    }
+    @property
+    def config_keys(self):
+        return dict((o['name'], o.get('default', None))
+                for o in self.OPTIONS)
+
+    OPTIONS = [
+            {
+                'name': 'zabbix_sender',
+                'default': '/usr/bin/zabbix_sender'
+            },
+            {
+                'name': 'zabbix_host',
+                'default': None
+            },
+            {
+                'name': 'zabbix_port',
+                'default': 10051
+            },
+            {
+                'name': 'identifier',
+                'default': ""
+            },
+            {
+                'name': 'interval',
+                'default': 60
+            }
+    ]
 
     COMMANDS = [
         {

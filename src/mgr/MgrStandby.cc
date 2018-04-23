@@ -125,6 +125,21 @@ int MgrStandby::init()
   monc.set_want_keys(CEPH_ENTITY_TYPE_MON|CEPH_ENTITY_TYPE_OSD
       |CEPH_ENTITY_TYPE_MDS|CEPH_ENTITY_TYPE_MGR);
   monc.set_messenger(client_messenger.get());
+
+  // We must register our config callback before calling init(), so
+  // that we see the initial configuration message
+  monc.register_config_callback([this](const std::string &k, const std::string &v){
+      dout(10) << "config_callback: " << k << " : " << v << dendl;
+      if (k.substr(0, 4) == "mgr/") {
+	const std::string global_key = PyModule::config_prefix + k.substr(4);
+        py_module_registry.handle_config(global_key, v);
+
+	return true;
+      }
+      return false;
+    });
+  dout(4) << "Registered monc callback" << dendl;
+
   int r = monc.init();
   if (r < 0) {
     monc.shutdown();
@@ -385,7 +400,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
       if (!py_module_registry.is_standby_running()) {
-        py_module_registry.standby_start(&monc);
+        py_module_registry.standby_start();
       }
     }
   }
