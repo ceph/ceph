@@ -195,7 +195,7 @@ void PyModuleRegistry::active_start(
   for (const auto &i : modules) {
     // Anything we're skipping because of !can_run will be flagged
     // to the user separately via get_health_checks
-    if (!(i.second->is_enabled() && i.second->get_can_run())) {
+    if (!(i.second->is_enabled() && i.second->is_loaded())) {
       continue;
     }
 
@@ -353,7 +353,13 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
       if (module->is_enabled() && !module->get_can_run()) {
         dependency_modules[module->get_name()] = module->get_error_string();
       } else if ((module->is_enabled() && !module->is_loaded())
-              || module->is_failed()) {
+              || (module->is_failed() && module->get_can_run())) {
+        // - Unloadable modules are only reported if they're enabled,
+        //   to avoid spamming users about modules they don't have the
+        //   dependencies installed for because they don't use it.
+        // - Failed modules are only reported if they passed the can_run
+        //   checks (to avoid outputting two health messages about a
+        //   module that said can_run=false but we tried running it anyway)
         failed_modules[module->get_name()] = module->get_error_string();
       }
     }
