@@ -2487,6 +2487,8 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
+    // NOTE: any new encoding dependencies must be reflected by
+    // SIGNIFICANT_FEATURES
     uint8_t v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
@@ -2557,6 +2559,8 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
+    // NOTE: any new encoding dependencies must be reflected by
+    // SIGNIFICANT_FEATURES
     uint8_t target_v = 5;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
