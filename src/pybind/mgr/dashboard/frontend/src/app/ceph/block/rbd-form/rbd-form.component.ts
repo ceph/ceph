@@ -390,7 +390,11 @@ export class RbdFormComponent implements OnInit {
     if (this.mode === this.rbdFormMode.cloning) {
       this.rbdForm.get('parent').setValue(`${response.pool_name}/${response.name}@${snapName}`);
     } else if (this.mode === this.rbdFormMode.copying) {
-      this.rbdForm.get('parent').setValue(`${response.pool_name}/${response.name}`);
+      if (snapName) {
+        this.rbdForm.get('parent').setValue(`${response.pool_name}/${response.name}@${snapName}`);
+      } else {
+        this.rbdForm.get('parent').setValue(`${response.pool_name}/${response.name}`);
+      }
     } else if (response.parent) {
       const parent = response.parent;
       this.rbdForm.get('parent')
@@ -568,6 +572,9 @@ export class RbdFormComponent implements OnInit {
 
   copyRequest(): RbdFormCopyRequestModel {
     const request = new RbdFormCopyRequestModel();
+    if (this.snapName) {
+      request.snapshot_name = this.snapName;
+    }
     request.dest_pool_name = this.rbdForm.get('pool').value;
     request.dest_image_name = this.rbdForm.get('name').value;
     request.obj_size = this.formatter.toBytes(this.rbdForm.get('obj_size').value);
