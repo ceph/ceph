@@ -17,7 +17,7 @@ int main(int argc, const char **argv)
         char buf[1024];
 
         if (argc < 3) {
-                fprintf(stderr, "usage: ./%s <conf> <file>\n", argv[0]);
+                fprintf(stderr, "usage: %s <conf> <file>\n", argv[0]);
                 exit(1);
         }
 
