@@ -320,3 +320,8 @@ target_link_libraries(unittest_async_completion Boost::system)
 add_executable(unittest_async_shared_mutex test_async_shared_mutex.cc)
 add_ceph_unittest(unittest_async_shared_mutex)
 target_link_libraries(unittest_async_shared_mutex ceph-common Boost::system)
+
+add_executable(unittest_finisher test_finisher.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_finisher global ceph-common)
+add_ceph_unittest(unittest_finisher)
