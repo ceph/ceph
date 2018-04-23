@@ -613,6 +613,24 @@ void MDCache::open_mydir_inode(MDSInternalContextBase *c)
   gather.activate();
 }
 
+void MDCache::open_mydir_frag(MDSInternalContextBase *c)
+{
+  open_mydir_inode(
+      new MDSInternalContextWrapper(mds,
+	new FunctionContext([this, c](int r) {
+	    if (r < 0) {
+	      c->complete(r);
+	      return;
+	    }
+	    CDir *mydir = myin->get_or_open_dirfrag(this, frag_t());
+	    assert(mydir);
+	    adjust_subtree_auth(mydir, mds->get_nodeid());
+	    mydir->fetch(c);
+	  })
+	)
+      );
+}
+
 void MDCache::open_root()
 {
   dout(10) << "open_root" << dendl;

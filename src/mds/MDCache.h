@@ -892,6 +892,7 @@ public:
   void open_root_inode(MDSInternalContextBase *c);
   void open_root();
   void open_mydir_inode(MDSInternalContextBase *c);
+  void open_mydir_frag(MDSInternalContextBase *c);
   void populate_mydir();
 
   void _create_system_file(CDir *dir, const char *name, CInode *in, MDSInternalContextBase *fin);
