@@ -1492,8 +1492,10 @@ void OSDMonitor::share_map_with_random_osd()
 
   dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
 
-  //get features of the peer, fall back to my quorum_con_features.
-  uint64_t features = s->con_features ? s->con_features : mon->get_quorum_con_features();
+  // get feature of the peer
+  // use quorum_con_features, if it's an anonymous connection.
+  uint64_t features = s->con_features ? s->con_features :
+                                        mon->get_quorum_con_features();
   // whatev, they'll request more if they need it
   MOSDMap *m = build_incremental(osdmap.get_epoch() - 1, osdmap.get_epoch(), features);
   s->con->send_message(m);
@@ -3427,8 +3429,10 @@ void OSDMonitor::send_incremental(epoch_t first,
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
 	  << " to " << session->inst << dendl;
 
-  //get feature of the peer, fall back to my quorum_con_features.
-  uint64_t features= session->con_features ? session->con_features : mon->get_quorum_con_features();
+  // get feature of the peer
+  // use quorum_con_features, if it's an anonymous connection.
+  uint64_t features= session->con_features ? session->con_features :
+                                             mon->get_quorum_con_features();
 
   if (first <= session->osd_epoch) {
     dout(10) << __func__ << " " << session->inst << " should already have epoch "
@@ -3545,15 +3549,17 @@ void OSDMonitor::reencode_full_map(bufferlist& bl, uint64_t features)
 
 int OSDMonitor::get_version(version_t ver, uint64_t features, bufferlist& bl)
 {
-    if (inc_osd_cache.lookup(make_pair(ver, features), &bl)) {
+    uint64_t significant_features = OSDMap::get_significant_features(features);
+    if (inc_osd_cache.lookup({ver, significant_features}, &bl)) {
       return 0;
     }
     int ret = PaxosService::get_version(ver, bl);
     if (!ret) {
-      if (features != mon->get_quorum_con_features()) {
+      if (significant_features !=
+            OSDMap::get_significant_features(mon->get_quorum_con_features())) {
         reencode_incremental_map(bl, features);
       }
-      inc_osd_cache.add(make_pair(ver, features), bl);
+      inc_osd_cache.add({ver, significant_features}, bl);
     }
     return ret;
 }
@@ -3594,7 +3600,8 @@ int OSDMonitor::get_full_from_pinned_map(version_t ver, bufferlist& bl)
   bufferlist osdm_bl;
   bool has_cached_osdmap = false;
   for (version_t v = ver-1; v >= closest_pinned; --v) {
-    if (full_osd_cache.lookup(make_pair(v, mon->get_quorum_con_features()), &osdm_bl)) {
+    if (full_osd_cache.lookup({v, mon->get_quorum_con_features()},
+                                &osdm_bl)) {
       dout(10) << __func__ << " found map in cache ver " << v << dendl;
       closest_pinned = v;
       has_cached_osdmap = true;
@@ -3681,7 +3688,8 @@ int OSDMonitor::get_version_full(version_t ver, bufferlist& bl)
 
 int OSDMonitor::get_version_full(version_t ver, uint64_t features, bufferlist& bl)
 {
-  if (full_osd_cache.lookup(make_pair(ver, features), &bl)) {
+  uint64_t significant_features = OSDMap::get_significant_features(features);
+  if (full_osd_cache.lookup({ver, significant_features}, &bl)) {
     return 0;
   }
   int ret = PaxosService::get_version_full(ver, bl);
@@ -3692,10 +3700,11 @@ int OSDMonitor::get_version_full(version_t ver, uint64_t features, bufferlist& b
   if (ret != 0) {
     return ret;
   }
-  if (features != mon->get_quorum_con_features()) {
+  if (significant_features !=
+        OSDMap::get_significant_features(mon->get_quorum_con_features())) {
     reencode_full_map(bl, features);
   }
-  full_osd_cache.add(make_pair(ver, features), bl);
+  full_osd_cache.add({ver, significant_features}, bl);
   return 0;
 }
 
