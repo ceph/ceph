@@ -29,7 +29,6 @@ export class RbdFormComponent implements OnInit {
 
   rbdForm: FormGroup;
   featuresFormGroups: FormGroup;
-  defaultFeaturesFormControl: FormControl;
   deepFlattenFormControl: FormControl;
   layeringFormControl: FormControl;
   exclusiveLockFormControl: FormControl;
@@ -130,7 +129,6 @@ export class RbdFormComponent implements OnInit {
   }
 
   createForm() {
-    this.defaultFeaturesFormControl = new FormControl(true);
     this.deepFlattenFormControl = new FormControl(false);
     this.layeringFormControl = new FormControl(false);
     this.exclusiveLockFormControl = new FormControl(false);
@@ -138,7 +136,6 @@ export class RbdFormComponent implements OnInit {
     this.journalingFormControl = new FormControl({value: false, disabled: true});
     this.fastDiffFormControl = new FormControl({value: false, disabled: true});
     this.featuresFormGroups = new FormGroup({
-      defaultFeatures: this.defaultFeaturesFormControl,
       'deep-flatten': this.deepFlattenFormControl,
       'layering': this.layeringFormControl,
       'exclusive-lock': this.exclusiveLockFormControl,
@@ -217,6 +214,11 @@ export class RbdFormComponent implements OnInit {
             });
         }
       );
+    } else {
+      this.rbdService.defaultFeatures()
+        .subscribe((defaultFeatures: Array<string>) => {
+          this.setFeatures(defaultFeatures);
+        });
     }
     this.poolService.list(['pool_name', 'type', 'flags_names', 'application_metadata']).then(
       resp => {
@@ -244,9 +246,6 @@ export class RbdFormComponent implements OnInit {
         }
       }
     );
-    this.defaultFeaturesFormControl.valueChanges.subscribe((value) => {
-      this.watchDataFeatures(null, value);
-    });
     this.deepFlattenFormControl.valueChanges.subscribe((value) => {
       this.watchDataFeatures('deep-flatten', value);
     });
@@ -380,9 +379,17 @@ export class RbdFormComponent implements OnInit {
   }
 
   watchDataFeatures(key, checked) {
-    if (!this.defaultFeaturesFormControl.value && key) {
-      this.featureFormUpdate(key, checked);
-    }
+    this.featureFormUpdate(key, checked);
+  }
+
+  setFeatures(features: Array<string>) {
+    const featuresControl = this.rbdForm.get('features');
+    _.forIn(this.features, (feature) => {
+      if (features.indexOf(feature.key) !== -1) {
+        featuresControl.get(feature.key).setValue(true);
+      }
+      this.watchDataFeatures(feature.key, featuresControl.get(feature.key).value);
+    });
   }
 
   setResponse(response: RbdFormResponseModel, snapName: string) {
@@ -410,13 +417,7 @@ export class RbdFormComponent implements OnInit {
     }
     this.rbdForm.get('size').setValue(this.dimlessBinaryPipe.transform(response.size));
     this.rbdForm.get('obj_size').setValue(this.dimlessBinaryPipe.transform(response.obj_size));
-    const featuresControl = this.rbdForm.get('features');
-    featuresControl.get('defaultFeatures').setValue(false);
-    _.forIn(this.features, (feature) => {
-      if (response.features_name.indexOf(feature.key) !== -1) {
-        featuresControl.get(feature.key).setValue(true);
-      }
-    });
+    this.setFeatures(response.features_name);
     this.rbdForm.get('stripingUnit').setValue(
       this.dimlessBinaryPipe.transform(response.stripe_unit));
     this.rbdForm.get('stripingCount').setValue(response.stripe_count);
@@ -428,15 +429,11 @@ export class RbdFormComponent implements OnInit {
     request.name = this.rbdForm.get('name').value;
     request.size = this.formatter.toBytes(this.rbdForm.get('size').value);
     request.obj_size = this.formatter.toBytes(this.rbdForm.get('obj_size').value);
-    if (!this.defaultFeaturesFormControl.value) {
-      _.forIn(this.features, (feature) => {
-        if (this.featuresFormGroups.get(feature.key).value) {
-          request.features.push(feature.key);
-        }
-      });
-    } else {
-      request.features = null;
-    }
+    _.forIn(this.features, (feature) => {
+      if (this.featuresFormGroups.get(feature.key).value) {
+        request.features.push(feature.key);
+      }
+    });
     request.stripe_unit = this.formatter.toBytes(this.rbdForm.get('stripingUnit').value);
     request.stripe_count = this.rbdForm.get('stripingCount').value;
     request.data_pool = this.rbdForm.get('dataPool').value;
@@ -474,13 +471,11 @@ export class RbdFormComponent implements OnInit {
     const request = new RbdFormEditRequestModel();
     request.name = this.rbdForm.get('name').value;
     request.size = this.formatter.toBytes(this.rbdForm.get('size').value);
-    if (!this.defaultFeaturesFormControl.value) {
-      _.forIn(this.features, (feature) => {
-        if (this.featuresFormGroups.get(feature.key).value) {
-          request.features.push(feature.key);
-        }
-      });
-    }
+    _.forIn(this.features, (feature) => {
+      if (this.featuresFormGroups.get(feature.key).value) {
+        request.features.push(feature.key);
+      }
+    });
     return request;
   }
 
@@ -489,15 +484,11 @@ export class RbdFormComponent implements OnInit {
     request.child_pool_name = this.rbdForm.get('pool').value;
     request.child_image_name = this.rbdForm.get('name').value;
     request.obj_size = this.formatter.toBytes(this.rbdForm.get('obj_size').value);
-    if (!this.defaultFeaturesFormControl.value) {
-      _.forIn(this.features, (feature) => {
-        if (this.featuresFormGroups.get(feature.key).value) {
-          request.features.push(feature.key);
-        }
-      });
-    } else {
-      request.features = null;
-    }
+    _.forIn(this.features, (feature) => {
+      if (this.featuresFormGroups.get(feature.key).value) {
+        request.features.push(feature.key);
+      }
+    });
     request.stripe_unit = this.formatter.toBytes(this.rbdForm.get('stripingUnit').value);
     request.stripe_count = this.rbdForm.get('stripingCount').value;
     request.data_pool = this.rbdForm.get('dataPool').value;
@@ -578,15 +569,11 @@ export class RbdFormComponent implements OnInit {
     request.dest_pool_name = this.rbdForm.get('pool').value;
     request.dest_image_name = this.rbdForm.get('name').value;
     request.obj_size = this.formatter.toBytes(this.rbdForm.get('obj_size').value);
-    if (!this.defaultFeaturesFormControl.value) {
-      _.forIn(this.features, (feature) => {
-        if (this.featuresFormGroups.get(feature.key).value) {
-          request.features.push(feature.key);
-        }
-      });
-    } else {
-      request.features = null;
-    }
+    _.forIn(this.features, (feature) => {
+      if (this.featuresFormGroups.get(feature.key).value) {
+        request.features.push(feature.key);
+      }
+    });
     request.stripe_unit = this.formatter.toBytes(this.rbdForm.get('stripingUnit').value);
     request.stripe_count = this.rbdForm.get('stripingCount').value;
     request.data_pool = this.rbdForm.get('dataPool').value;

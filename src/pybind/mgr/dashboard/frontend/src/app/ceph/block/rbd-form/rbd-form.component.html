@@ -192,27 +192,15 @@
           </label>
           <div class="col-sm-9">
             <div class="checkbox checkbox-primary"
-                 *ngIf="mode !== rbdFormMode.editing">
+                 *ngFor="let feature of featuresList">
               <input type="checkbox"
-                     id="default-features"
-                     name="default-features"
-                     formControlName="defaultFeatures">
-              <label i18n
-                     for="default-features">Use default features</label>
-            </div>
-            <div *ngIf="!featuresFormGroups.value.defaultFeatures">
-              <br *ngIf="mode !== rbdFormMode.editing">
-              <div class="checkbox checkbox-primary"
-                   *ngFor="let feature of featuresList">
-                <input type="checkbox"
-                       id="{{ feature.key }}"
-                       name="{{ feature.key }}"
-                       formControlName="{{ feature.key }}">
-                <label for="{{ feature.key }}">{{ feature.desc }}</label>
-                <cd-helper *ngIf="feature.helperHtml"
-                           html="{{ feature.helperHtml }}">
-                </cd-helper>
-              </div>
+                     id="{{ feature.key }}"
+                     name="{{ feature.key }}"
+                     formControlName="{{ feature.key }}">
+              <label for="{{ feature.key }}">{{ feature.desc }}</label>
+              <cd-helper *ngIf="feature.helperHtml"
+                         html="{{ feature.helperHtml }}">
+              </cd-helper>
             </div>
           </div>
         </div>

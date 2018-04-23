@@ -37,6 +37,10 @@ export class RbdService {
       { observe: 'response' });
   }
 
+  defaultFeatures() {
+    return this.http.get('api/block/image/default_features');
+  }
+
   createSnapshot(poolName, rbdName, snapshotName) {
     const request = {
       snapshot_name: snapshotName
