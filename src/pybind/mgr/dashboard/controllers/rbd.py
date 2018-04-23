@@ -360,6 +360,11 @@ class Rbd(RESTController):
 
         return _rbd_image_call(pool_name, image_name, _flatten)
 
+    @RESTController.collection(['GET'])
+    def default_features(self):
+        rbd_default_features = mgr.get('config')['rbd_default_features']
+        return _format_bitmask(int(rbd_default_features))
+
 
 @ApiController('block/image/:pool_name/:image_name/snap')
 @AuthRequired()
