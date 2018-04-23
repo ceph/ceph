@@ -60,6 +60,11 @@ const routes: Routes = [
     canActivate: [AuthGuardService]
   },
   {
+    path: 'rbd/copy/:pool/:name/:snap',
+    component: RbdFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
     path: 'perf_counters/:type/:id',
     component: PerformanceCounterComponent,
     canActivate: [AuthGuardService]
