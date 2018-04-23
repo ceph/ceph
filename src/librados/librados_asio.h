@@ -78,7 +78,7 @@ struct bound_completion_handler : public invoker<Result> {
     // static check for CompletionHandler concept (must be CopyConstructible and
     // callable with no arguments)
     using namespace boost::asio;
-    BOOST_ASIO_COMPLETION_HANDLER_CHECK(bound_completion_handler, *this) type_check;
+    BOOST_ASIO_LEGACY_COMPLETION_HANDLER_CHECK(bound_completion_handler, *this) type_check;
   }
 
   /// Invoke the completion handler with our bound arguments
