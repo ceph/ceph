@@ -52,9 +52,10 @@ void PGLog::IndexedLog::trim(
 {
   if (complete_to != log.end() &&
       complete_to->version <= s) {
-    generic_dout(0) << " bad trim to " << s << " when complete_to is "
-		    << complete_to->version
-		    << " on " << *this << dendl;
+    generic_derr << " bad trim to " << s << " when complete_to is "
+		 << complete_to->version
+		 << " on " << *this << dendl;
+    assert(0 == "out of order trim");
   }
 
   assert(s <= can_rollback_to);
