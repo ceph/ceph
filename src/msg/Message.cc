@@ -173,6 +173,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MMgrReport.h"
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
 #include "messages/MServiceMap.h"
@@ -791,6 +792,10 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   case MSG_MGR_OPEN:
     m = new MMgrOpen();
+    break;
+
+  case MSG_MGR_CLOSE:
+    m = new MMgrClose();
     break;
 
   case MSG_MGR_REPORT:
