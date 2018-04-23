@@ -585,6 +585,9 @@ class Task(object):
         return "Task(ns={}, md={})" \
                .format(self.name, self.metadata)
 
+    def __repr__(self):
+        return str(self)
+
     def _run(self):
         with self.lock:
             assert not self.running
