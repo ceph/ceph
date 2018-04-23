@@ -361,6 +361,9 @@ public:
   }
   void add_local_next_event(const pg_log_entry_t& e) {
     pg_log.missing_add_next_entry(e);
+    // might need to reset **complete_to**
+    // and advance **last_complete** too
+    pg_log.reset_complete_to(&info);
   }
   bool pgb_is_primary() const override {
     return is_primary();
