@@ -102,6 +102,19 @@ def options_command_list():
     return cmd_list
 
 
+def options_schema_list():
+    def filter_attr(member):
+        return not inspect.isroutine(member)
+
+    result = []
+    for option, value in inspect.getmembers(Options, filter_attr):
+        if option.startswith('_'):
+            continue
+        result.append({'name': option, 'default': value[0]})
+
+    return result
+
+
 def handle_option_command(cmd):
     if cmd['prefix'] not in _OPTIONS_COMMAND_MAP:
         return (-errno.ENOSYS, '', "Command not found '{}'".format(cmd['prefix']))

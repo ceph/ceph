@@ -36,7 +36,7 @@ Set configuration values using the following command:
 
 ::
 
-    ceph config-key set mgr/influx/<key> <value>
+    ceph config set mgr mgr/influx/<key> <value>
 
 
 The most important settings are ``hostname``, ``username`` and ``password``.  
@@ -44,9 +44,9 @@ For example, a typical configuration might look like this:
 
 ::
 
-    ceph config-key set mgr/influx/hostname influx.mydomain.com
-    ceph config-key set mgr/influx/username admin123
-    ceph config-key set mgr/influx/password p4ssw0rd
+    ceph config set mgr mgr/influx/hostname influx.mydomain.com
+    ceph config set mgr mgr/influx/username admin123
+    ceph config set mgr mgr/influx/password p4ssw0rd
     
 Additional optional configuration settings are:
 

@@ -19,6 +19,9 @@
 #include <string>
 #include "common/Mutex.h"
 #include <memory>
+#include <boost/optional.hpp>
+
+class MonClient;
 
 std::string handle_pyerror();
 
@@ -36,6 +39,15 @@ public:
 
   // Call the ActivePyModule of this name to handle the command
   std::string module_name;
+};
+
+
+/**
+ * An option declared by the python module in its configuration schema
+ */
+class ModuleOption {
+  public:
+  std::string name;
 };
 
 class PyModule
@@ -64,10 +76,20 @@ private:
   // Populated if loaded, can_run or failed indicates a problem
   std::string error_string;
 
+  // Helper for loading OPTIONS and COMMANDS members
+  int walk_dict_list(
+      const std::string &attr_name,
+      std::function<int(PyObject*)> fn);
+
   int load_commands();
   std::vector<ModuleCommand> commands;
 
+  int load_options();
+  std::map<std::string, ModuleOption> options;
+
 public:
+  static std::string config_prefix;
+
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
@@ -78,6 +100,8 @@ public:
   }
 
   ~PyModule();
+
+  bool is_option(const std::string &option_name);
 
   int load(PyThreadState *pMainThreadState);
 #if PY_MAJOR_VERSION >= 3
@@ -132,3 +156,20 @@ public:
 
 typedef std::shared_ptr<PyModule> PyModuleRef;
 
+class PyModuleConfig {
+public:
+  mutable Mutex lock{"PyModuleConfig::lock"};
+  std::map<std::string, std::string> config;
+
+  PyModuleConfig();
+  
+  PyModuleConfig(PyModuleConfig &mconfig);
+  
+  ~PyModuleConfig();
+
+  void set_config(
+    MonClient *monc,
+    const std::string &module_name,
+    const std::string &key, const boost::optional<std::string>& val);
+
+};
