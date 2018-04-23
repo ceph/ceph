@@ -537,3 +537,9 @@ class RbdTest(DashboardTestCase):
 
         self.remove_image('rbd_iscsi', 'img1_snapf_clone')
         self.assertStatus(204)
+
+    def test_default_features(self):
+        default_features = self._get('/api/block/image/default_features')
+        self.assertEqual(default_features, ['deep-flatten', 'exclusive-lock',
+                                             'fast-diff', 'layering',
+                                             'object-map'])
