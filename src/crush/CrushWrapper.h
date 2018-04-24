@@ -73,12 +73,12 @@ public:
   std::map<int64_t, crush_choose_arg_map> choose_args;
 
 private:
-  struct crush_map *crush;
+  struct crush_map *crush = nullptr;
 
   bool have_uniform_rules = false;
 
   /* reverse maps */
-  mutable bool have_rmaps;
+  mutable bool have_rmaps = false;
   mutable std::map<string, int> type_rmap, name_rmap, rule_name_rmap;
   void build_rmaps() const {
     if (have_rmaps) return;
@@ -97,7 +97,7 @@ public:
   CrushWrapper(const CrushWrapper& other);
   const CrushWrapper& operator=(const CrushWrapper& other);
 
-  CrushWrapper() : crush(0), have_rmaps(false) {
+  CrushWrapper() {
     create();
   }
   ~CrushWrapper() {
