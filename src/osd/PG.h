@@ -1709,6 +1709,9 @@ protected:
   // not stop until the scrub range is completed.
   bool write_blocked_by_scrub(const hobject_t &soid);
 
+  /// true if the given range intersects the scrub interval in any way
+  bool range_intersects_scrub(const hobject_t &start, const hobject_t& end);
+
   void repair_object(
     const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
     pg_shard_t bad_peer);
