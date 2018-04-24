@@ -120,8 +120,6 @@ int process_request(RGWRados* const store,
 {
   int ret = client_io->init(g_ceph_context);
 
-  req->log_init();
-
   dout(1) << "====== starting new request req=" << hex << req << dec
 	  << " =====" << dendl;
   perfcounter->inc(l_rgw_req);

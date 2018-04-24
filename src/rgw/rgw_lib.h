@@ -160,8 +160,6 @@ namespace rgw {
       /* fixup _s->req */
       _s->req = this;
 
-      log_init();
-
       get_state()->obj_ctx = rados_ctx;
       get_state()->req_id = store->unique_id(id);
       get_state()->trans_id = store->unique_trans_id(id);
@@ -200,8 +198,6 @@ namespace rgw {
 
 	/* fixup _s->req */
 	get_state()->req = this;
-
-	log_init();
 
 	get_state()->obj_ctx = &rados_ctx;
 	get_state()->req_id = store->unique_id(id);
