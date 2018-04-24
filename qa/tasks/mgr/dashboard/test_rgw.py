@@ -1,16 +1,19 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
-import urllib
 import logging
-logger = logging.getLogger(__name__)
 
-from .helper import DashboardTestCase, authenticate
+from .helper import DashboardTestCase
+
+
+logger = logging.getLogger(__name__)
 
 
 class RgwTestCase(DashboardTestCase):
 
     maxDiff = None
     create_test_user = False
+
+    AUTH_ROLES = ['rgw-manager']
 
     @classmethod
     def setUpClass(cls):
@@ -49,7 +52,10 @@ class RgwTestCase(DashboardTestCase):
     def tearDownClass(cls):
         if cls.create_test_user:
             cls._radosgw_admin_cmd(['user', 'rm', '--uid=teuth-test-user'])
-        super(DashboardTestCase, cls).tearDownClass()
+        super(RgwTestCase, cls).tearDownClass()
+
+    def setUp(self):
+        super(RgwTestCase, self).setUp()
 
     def get_rgw_user(self, uid):
         return self._get('/api/rgw/user/{}'.format(uid))
@@ -68,17 +74,20 @@ class RgwTestCase(DashboardTestCase):
 
 class RgwApiCredentialsTest(RgwTestCase):
 
+    AUTH_ROLES = ['rgw-manager']
+
     def setUp(self):
         # Restart the Dashboard module to ensure that the connection to the
         # RGW Admin Ops API is re-established with the new credentials.
+        self.logout()
         self._ceph_cmd(['mgr', 'module', 'disable', 'dashboard'])
         self._ceph_cmd(['mgr', 'module', 'enable', 'dashboard', '--force'])
         # Set the default credentials.
         self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', ''])
         self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
         self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
+        super(RgwApiCredentialsTest, self).setUp()
 
-    @authenticate
     def test_no_access_secret_key(self):
         self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', ''])
         self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', ''])
@@ -87,9 +96,8 @@ class RgwApiCredentialsTest(RgwTestCase):
         self.assertIn('detail', resp)
         self.assertIn('component', resp)
         self.assertIn('No RGW credentials found', resp['detail'])
-        self.assertEquals(resp['component'], 'rgw')
+        self.assertEqual(resp['component'], 'rgw')
 
-    @authenticate
     def test_success(self):
         data = self._get('/api/rgw/status')
         self.assertStatus(200)
@@ -97,7 +105,6 @@ class RgwApiCredentialsTest(RgwTestCase):
         self.assertIn('message', data)
         self.assertTrue(data['available'])
 
-    @authenticate
     def test_invalid_user_id(self):
         self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'xyz'])
         data = self._get('/api/rgw/status')
@@ -111,12 +118,13 @@ class RgwApiCredentialsTest(RgwTestCase):
 
 class RgwBucketTest(RgwTestCase):
 
+    AUTH_ROLES = ['rgw-manager']
+
     @classmethod
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwBucketTest, cls).setUpClass()
 
-    @authenticate
     def test_all(self):
         # Create a new bucket.
         self._post(
@@ -134,7 +142,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertIn('creation_time', data)
         self.assertIn('name', data['bucket'])
         self.assertIn('bucket_id', data['bucket'])
-        self.assertEquals(data['bucket']['name'], 'teuth-test-bucket')
+        self.assertEqual(data['bucket']['name'], 'teuth-test-bucket')
 
         # List all buckets.
         data = self._get('/api/rgw/bucket')
@@ -149,8 +157,8 @@ class RgwBucketTest(RgwTestCase):
         self.assertIn('bucket', data)
         self.assertIn('bucket_quota', data)
         self.assertIn('owner', data)
-        self.assertEquals(data['bucket'], 'teuth-test-bucket')
-        self.assertEquals(data['owner'], 'admin')
+        self.assertEqual(data['bucket'], 'teuth-test-bucket')
+        self.assertEqual(data['owner'], 'admin')
 
         # Update the bucket.
         self._put(
@@ -162,7 +170,7 @@ class RgwBucketTest(RgwTestCase):
         self.assertStatus(200)
         data = self._get('/api/rgw/bucket/teuth-test-bucket')
         self.assertStatus(200)
-        self.assertEquals(data['owner'], 'teuth-test-user')
+        self.assertEqual(data['owner'], 'teuth-test-user')
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/teuth-test-bucket')
@@ -174,7 +182,16 @@ class RgwBucketTest(RgwTestCase):
 
 class RgwDaemonTest(DashboardTestCase):
 
-    @authenticate
+    AUTH_ROLES = ['rgw-manager']
+
+
+    @DashboardTestCase.RunAs('test', 'test', [{'rgw': ['create', 'update', 'delete']}])
+    def test_read_access_permissions(self):
+        self._get('/api/rgw/daemon')
+        self.assertStatus(403)
+        self._get('/api/rgw/daemon/id')
+        self.assertStatus(403)
+
     def test_list(self):
         data = self._get('/api/rgw/daemon')
         self.assertStatus(200)
@@ -184,7 +201,6 @@ class RgwDaemonTest(DashboardTestCase):
         self.assertIn('version', data)
         self.assertIn('server_hostname', data)
 
-    @authenticate
     def test_get(self):
         data = self._get('/api/rgw/daemon')
         self.assertStatus(200)
@@ -196,7 +212,6 @@ class RgwDaemonTest(DashboardTestCase):
         self.assertIn('rgw_status', data)
         self.assertTrue(data['rgw_metadata'])
 
-    @authenticate
     def test_status(self):
         self._radosgw_admin_cmd([
             'user', 'create', '--uid=admin', '--display-name=admin',
@@ -215,6 +230,8 @@ class RgwDaemonTest(DashboardTestCase):
 
 class RgwUserTest(RgwTestCase):
 
+    AUTH_ROLES = ['rgw-manager']
+
     @classmethod
     def setUpClass(cls):
         super(RgwUserTest, cls).setUpClass()
@@ -232,21 +249,18 @@ class RgwUserTest(RgwTestCase):
         self.assertIn('tenant', data)
         self.assertIn('user_id', data)
 
-    @authenticate
     def test_get(self):
         data = self.get_rgw_user('admin')
         self.assertStatus(200)
         self._assert_user_data(data)
-        self.assertEquals(data['user_id'], 'admin')
+        self.assertEqual(data['user_id'], 'admin')
 
-    @authenticate
     def test_list(self):
         data = self._get('/api/rgw/user')
         self.assertStatus(200)
         self.assertGreaterEqual(len(data), 1)
         self.assertIn('admin', data)
 
-    @authenticate
     def test_create_update_delete(self):
         # Create a new user.
         self._post('/api/rgw/user', params={
@@ -256,14 +270,14 @@ class RgwUserTest(RgwTestCase):
         self.assertStatus(201)
         data = self.jsonBody()
         self._assert_user_data(data)
-        self.assertEquals(data['user_id'], 'teuth-test-user')
-        self.assertEquals(data['display_name'], 'display name')
+        self.assertEqual(data['user_id'], 'teuth-test-user')
+        self.assertEqual(data['display_name'], 'display name')
 
         # Get the user.
         data = self.get_rgw_user('teuth-test-user')
         self.assertStatus(200)
         self._assert_user_data(data)
-        self.assertEquals(data['user_id'], 'teuth-test-user')
+        self.assertEqual(data['user_id'], 'teuth-test-user')
 
         # Update the user.
         self._put(
@@ -291,12 +305,13 @@ class RgwUserTest(RgwTestCase):
 
 class RgwUserCapabilityTest(RgwTestCase):
 
+    AUTH_ROLES = ['rgw-manager']
+
     @classmethod
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwUserCapabilityTest, cls).setUpClass()
 
-    @authenticate
     def test_set(self):
         self._post(
             '/api/rgw/user/teuth-test-user/capability',
@@ -318,7 +333,6 @@ class RgwUserCapabilityTest(RgwTestCase):
         self.assertEqual(data['caps'][0]['type'], 'usage')
         self.assertEqual(data['caps'][0]['perm'], 'read')
 
-    @authenticate
     def test_delete(self):
         self._delete(
             '/api/rgw/user/teuth-test-user/capability',
@@ -336,12 +350,13 @@ class RgwUserCapabilityTest(RgwTestCase):
 
 class RgwUserKeyTest(RgwTestCase):
 
+    AUTH_ROLES = ['rgw-manager']
+
     @classmethod
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwUserKeyTest, cls).setUpClass()
 
-    @authenticate
     def test_create_s3(self):
         self._post(
             '/api/rgw/user/teuth-test-user/key',
@@ -358,7 +373,6 @@ class RgwUserKeyTest(RgwTestCase):
         self.assertIsInstance(key, object)
         self.assertEqual(key['secret_key'], 'aaabbbccc')
 
-    @authenticate
     def test_create_swift(self):
         self._post(
             '/api/rgw/user/teuth-test-user/key',
@@ -374,7 +388,6 @@ class RgwUserKeyTest(RgwTestCase):
         key = self.find_in_list('secret_key', 'xxxyyyzzz', data)
         self.assertIsInstance(key, object)
 
-    @authenticate
     def test_delete_s3(self):
         self._delete(
             '/api/rgw/user/teuth-test-user/key',
@@ -384,7 +397,6 @@ class RgwUserKeyTest(RgwTestCase):
             })
         self.assertStatus(204)
 
-    @authenticate
     def test_delete_swift(self):
         self._delete(
             '/api/rgw/user/teuth-test-user/key',
@@ -396,6 +408,8 @@ class RgwUserKeyTest(RgwTestCase):
 
 
 class RgwUserQuotaTest(RgwTestCase):
+
+    AUTH_ROLES = ['rgw-manager']
 
     @classmethod
     def setUpClass(cls):
@@ -414,13 +428,11 @@ class RgwUserQuotaTest(RgwTestCase):
         self.assertIn('max_size_kb', data['bucket_quota'])
         self.assertIn('max_size', data['bucket_quota'])
 
-    @authenticate
     def test_get_quota(self):
         data = self._get('/api/rgw/user/teuth-test-user/quota')
         self.assertStatus(200)
         self._assert_quota(data)
 
-    @authenticate
     def test_set_user_quota(self):
         self._put(
             '/api/rgw/user/teuth-test-user/quota',
@@ -439,7 +451,6 @@ class RgwUserQuotaTest(RgwTestCase):
         self.assertTrue(data['user_quota']['enabled'])
         self.assertEqual(data['user_quota']['max_size_kb'], 2048)
 
-    @authenticate
     def test_set_bucket_quota(self):
         self._put(
             '/api/rgw/user/teuth-test-user/quota',
@@ -461,12 +472,13 @@ class RgwUserQuotaTest(RgwTestCase):
 
 class RgwUserSubuserTest(RgwTestCase):
 
+    AUTH_ROLES = ['rgw-manager']
+
     @classmethod
     def setUpClass(cls):
         cls.create_test_user = True
         super(RgwUserSubuserTest, cls).setUpClass()
 
-    @authenticate
     def test_create_swift(self):
         self._post(
             '/api/rgw/user/teuth-test-user/subuser',
@@ -487,7 +499,6 @@ class RgwUserSubuserTest(RgwTestCase):
         key = self.find_in_list('user', 'teuth-test-user:tux', data['swift_keys'])
         self.assertIsInstance(key, object)
 
-    @authenticate
     def test_create_s3(self):
         self._post(
             '/api/rgw/user/teuth-test-user/subuser',
@@ -511,7 +522,6 @@ class RgwUserSubuserTest(RgwTestCase):
         self.assertIsInstance(key, object)
         self.assertEqual(key['secret_key'], 'xxx')
 
-    @authenticate
     def test_delete_w_purge(self):
         self._delete(
             '/api/rgw/user/teuth-test-user/subuser/teuth-test-subuser2')
@@ -524,7 +534,6 @@ class RgwUserSubuserTest(RgwTestCase):
                                 data['swift_keys'])
         self.assertIsNone(key)
 
-    @authenticate
     def test_delete_wo_purge(self):
         self._delete(
             '/api/rgw/user/teuth-test-user/subuser/teuth-test-subuser',

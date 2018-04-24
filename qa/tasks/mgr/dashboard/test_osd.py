@@ -4,15 +4,23 @@ from __future__ import absolute_import
 
 import json
 
-from .helper import DashboardTestCase, authenticate, JObj, JAny, JList, JLeaf, JTuple
+from .helper import DashboardTestCase, JObj, JAny, JList, JLeaf, JTuple
 
 
 class OsdTest(DashboardTestCase):
 
+    AUTH_ROLES = ['cluster-manager']
+
+    @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
+    def test_access_permissions(self):
+        self._get('/api/osd')
+        self.assertStatus(403)
+        self._get('/api/osd/0')
+        self.assertStatus(403)
+
     def assert_in_and_not_none(self, data, properties):
         self.assertSchema(data, JObj({p: JAny(none=False) for p in properties}, allow_unknown=True))
 
-    @authenticate
     def test_list(self):
         data = self._get('/api/osd')
         self.assertStatus(200)
@@ -28,7 +36,6 @@ class OsdTest(DashboardTestCase):
         self.assertSchema(data['stats_history']['op_out_bytes'],
                           JList(JTuple([JLeaf(int), JLeaf(float)])))
 
-    @authenticate
     def test_details(self):
         data = self._get('/api/osd/0')
         self.assertStatus(200)
@@ -37,7 +44,6 @@ class OsdTest(DashboardTestCase):
         self.assert_in_and_not_none(data['histogram']['osd'], ['op_w_latency_in_bytes_histogram',
                                                                'op_r_latency_out_bytes_histogram'])
 
-    @authenticate
     def test_scrub(self):
         self._post('/api/osd/0/scrub?deep=False')
         self.assertStatus(200)
@@ -63,14 +69,12 @@ class OsdFlagsTest(DashboardTestCase):
         cls._put('/api/osd/flags', data={'flags': flags})
         return sorted(cls._resp.json())
 
-    @authenticate
     def test_list_osd_flags(self):
         flags = self._get('/api/osd/flags')
         self.assertStatus(200)
         self.assertEqual(len(flags), 3)
         self.assertEqual(sorted(flags), self._initial_flags)
 
-    @authenticate
     def test_add_osd_flag(self):
         flags = self._put_flags([
             'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',

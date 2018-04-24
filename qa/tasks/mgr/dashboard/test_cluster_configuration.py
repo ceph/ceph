@@ -1,10 +1,12 @@
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, authenticate
+import time
+
+from .helper import DashboardTestCase
 
 
 class ClusterConfigurationTest(DashboardTestCase):
-    @authenticate
+
     def test_list(self):
         data = self._get('/api/cluster_conf')
         self.assertStatus(200)
@@ -13,7 +15,6 @@ class ClusterConfigurationTest(DashboardTestCase):
         for conf in data:
             self._validate_single(conf)
 
-    @authenticate
     def test_get(self):
         data = self._get('/api/cluster_conf/admin_socket')
         self.assertStatus(200)
