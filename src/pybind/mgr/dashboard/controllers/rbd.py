@@ -7,6 +7,8 @@ import math
 from functools import partial
 
 import cherrypy
+import six
+
 import rbd
 
 from . import ApiController, AuthRequired, RESTController, Task
@@ -74,9 +76,12 @@ def _format_features(features):
     >>> _format_features(None) is None
     True
 
-    >>> _format_features('not a list') is None
-    True
+    >>> _format_features('deep-flatten, exclusive-lock')
+    32
     """
+    if isinstance(features, six.string_types):
+        features = features.split(',')
+
     if not isinstance(features, list):
         return None
 
@@ -268,6 +273,8 @@ class Rbd(RESTController):
              {'pool_name': '{pool_name}', 'image_name': '{name}'}, 2.0)
     def create(self, name, pool_name, size, obj_size=None, features=None,
                stripe_unit=None, stripe_count=None, data_pool=None):
+
+        size = int(size)
 
         def _create(ioctx):
             rbd_inst = rbd.RBD()
