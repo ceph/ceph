@@ -137,19 +137,19 @@ class RESTControllerTest(ControllerTestCase):
         self._post('/foo/1/detail', 'post-data')
         self.assertStatus(404)
 
-    def test_developer_page(self):
-        self.getPage('/foo', headers=[('Accept', 'text/html')])
-        self.assertIn('<p>GET', self.body.decode('utf-8'))
-        self.assertIn('Content-Type: text/html', self.body.decode('utf-8'))
-        self.assertIn('<form action="/api/foo/" method="post">', self.body.decode('utf-8'))
-        self.assertIn('<input type="hidden" name="_method" value="post" />',
-                      self.body.decode('utf-8'))
+    # def test_developer_page(self):
+    #     self.getPage('/foo', headers=[('Accept', 'text/html')])
+    #     self.assertIn('<p>GET', self.body.decode('utf-8'))
+    #     self.assertIn('Content-Type: text/html', self.body.decode('utf-8'))
+    #     self.assertIn('<form action="/api/foo/" method="post">', self.body.decode('utf-8'))
+    #     self.assertIn('<input type="hidden" name="_method" value="post" />',
+    #                   self.body.decode('utf-8'))
 
-    def test_developer_exception_page(self):
-        self.getPage('/foo',
-                     headers=[('Accept', 'text/html'), ('Content-Length', '0')],
-                     method='put')
-        self.assertStatus(404)
+    # def test_developer_exception_page(self):
+    #     self.getPage('/foo',
+    #                  headers=[('Accept', 'text/html'), ('Content-Length', '0')],
+    #                  method='put')
+    #     self.assertStatus(404)
 
     def test_create_form(self):
         self.getPage('/fooargs', headers=[('Accept', 'text/html')])

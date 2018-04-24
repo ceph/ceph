@@ -486,72 +486,63 @@ class RESTController(BaseController):
                     attr != '_collection' and attr != '_element':
                 result.append(([], attr, attr, cls._parse_function_args(val)))
 
-        methods = []
         for k, v in cls._method_mapping.items():
-            if not k[1] and hasattr(cls, v[0]):
-                methods.append(k[0])
-        if methods:
-            result.append((methods, None, '_collection', []))
-        methods = []
+            func = getattr(cls, v[0], None)
+            if not k[1] and func:
+                if k[0] != 'PATCH':  # we already wrapped in PUT
+                    wrapper = cls._rest_request_wrapper(func, v[1])
+                    setattr(cls, v[0], wrapper)
+                else:
+                    wrapper = func
+                result.append(([k[0]], None, v[0], []))
+
         args = []
         for k, v in cls._method_mapping.items():
-            if k[1] and hasattr(cls, v[0]):
-                methods.append(k[0])
+            func = getattr(cls, v[0], None)
+            if k[1] and func:
+                if k[0] != 'PATCH':  # we already wrapped in PUT
+                    wrapper = cls._rest_request_wrapper(func, v[1])
+                    setattr(cls, v[0], wrapper)
+                else:
+                    wrapper = func
                 if not args:
                     if cls.RESOURCE_ID is None:
-                        args = cls._parse_function_args(getattr(cls, v[0]))
+                        args = cls._parse_function_args(func)
                     else:
                         args = cls.RESOURCE_ID.split('/')
-        if methods:
-            result.append((methods, None, '_element', args))
+                result.append(([k[0]], None, v[0], args))
 
         for attr, val in inspect.getmembers(cls, predicate=callable):
             if hasattr(val, '_collection_method_'):
+                wrapper = cls._rest_request_wrapper(val, 200)
+                setattr(cls, attr, wrapper)
                 result.append(
-                    (val._collection_method_, attr, '_handle_detail_method', []))
+                    (val._collection_method_, attr, attr, []))
 
         for attr, val in inspect.getmembers(cls, predicate=callable):
             if hasattr(val, '_resource_method_'):
+                wrapper = cls._rest_request_wrapper(val, 200)
+                setattr(cls, attr, wrapper)
                 res_params = [":{}".format(arg) for arg in args]
                 url_suffix = "{}/{}".format("/".join(res_params), attr)
                 result.append(
-                    (val._resource_method_, url_suffix, '_handle_detail_method', []))
+                    (val._resource_method_, url_suffix, attr, []))
 
         return result
 
-    @cherrypy.expose
-    def _collection(self, *vpath, **params):
-        return self._rest_request(False, *vpath, **params)
+    @classmethod
+    def _rest_request_wrapper(cls, func, status_code):
+        def wrapper(*vpath, **params):
+            method = func
+            if cherrypy.request.method not in ['GET', 'DELETE']:
+                method = RESTController._takes_json(method)
 
-    @cherrypy.expose
-    def _element(self, *vpath, **params):
-        return self._rest_request(True, *vpath, **params)
+            method = RESTController._returns_json(method)
 
-    def _handle_detail_method(self, *vpath, **params):
-        method = getattr(self, cherrypy.request.path_info.split('/')[-1])
+            cherrypy.response.status = status_code
 
-        if cherrypy.request.method not in ['GET', 'DELETE']:
-            method = RESTController._takes_json(method)
-
-        method = RESTController._returns_json(method)
-
-        cherrypy.response.status = 200
-
-        return method(*vpath, **params)
-
-    def _rest_request(self, is_element, *vpath, **params):
-        method_name, status_code = self._method_mapping[
-            (cherrypy.request.method, is_element)]
-        method = getattr(self, method_name, None)
-
-        if cherrypy.request.method not in ['GET', 'DELETE']:
-            method = RESTController._takes_json(method)
-
-        method = RESTController._returns_json(method)
-
-        cherrypy.response.status = status_code
-
-        return method(*vpath, **params)
+            return method(*vpath, **params)
+        return wrapper
 
     @staticmethod
     def _function_args(func):
@@ -589,6 +580,9 @@ class RESTController(BaseController):
 
     @staticmethod
     def resource(methods=None):
+        if not methods:
+            methods = ['GET']
+
         def _wrapper(func):
             func._resource_method_ = methods
             return func
@@ -596,6 +590,9 @@ class RESTController(BaseController):
 
     @staticmethod
     def collection(methods=None):
+        if not methods:
+            methods = ['GET']
+
         def _wrapper(func):
             func._collection_method_ = methods
             return func
