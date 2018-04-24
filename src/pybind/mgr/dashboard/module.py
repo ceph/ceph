@@ -24,6 +24,7 @@ except ImportError:
 
 try:
     import cherrypy
+    from cherrypy._cptools import HandlerWrapperTool
 except ImportError:
     # To be picked up and reported by .can_run()
     cherrypy = None
@@ -61,6 +62,7 @@ from .controllers import generate_routes, json_error_page
 from .controllers.auth import Auth
 from .tools import SessionExpireAtBrowserCloseTool, NotificationQueue, \
                    RequestLoggingTool, TaskManager
+from .services.exception import dashboard_exception_handler
 from .settings import options_command_list, handle_option_command
 
 
@@ -125,6 +127,8 @@ class SSLCherryPyConfig(object):
         cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
         cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
         cherrypy.tools.request_logging = RequestLoggingTool()
+        cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
+                                                                        priority=31)
 
         # SSL initialization
         cert = self.get_store("crt")
