@@ -7,10 +7,16 @@ from __future__ import absolute_import
 import errno
 import os
 import socket
+import tempfile
+import threading
+from uuid import uuid4
+from OpenSSL import crypto
+
 try:
     from urlparse import urljoin
 except ImportError:
     from urllib.parse import urljoin
+
 try:
     import cherrypy
 except ImportError:
@@ -74,6 +80,10 @@ def prepare_url_prefix(url_prefix):
     return url_prefix.rstrip('/')
 
 
+class ServerConfigException(Exception):
+    pass
+
+
 class Module(MgrModule):
     """
     dashboard module entrypoint
@@ -92,7 +102,12 @@ class Module(MgrModule):
                    'name=seconds,type=CephInt',
             'desc': 'Set the session expire timeout',
             'perm': 'w'
-        }
+        },
+        {
+            "cmd": "dashboard create-self-signed-cert",
+            "desc": "Create self signed certificate",
+            "perm": "w"
+        },
     ]
     COMMANDS.extend(options_command_list())
 
@@ -124,6 +139,8 @@ class Module(MgrModule):
         mgr.init(self)
         self._url_prefix = ''
 
+        self._stopping = threading.Event()
+
     @classmethod
     def can_run(cls):
         if cherrypy is None:
@@ -144,7 +161,7 @@ class Module(MgrModule):
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '8080')
         if server_addr is None:
-            raise RuntimeError(
+            raise ServerConfigException(
                 'no server_addr configured; '
                 'try "ceph config-key set mgr/{}/{}/server_addr <ip>"'
                 .format(self.module_name, self.get_mgr_id()))
@@ -159,11 +176,40 @@ class Module(MgrModule):
         cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
         cherrypy.tools.request_logging = RequestLoggingTool()
 
+        # SSL initialization
+        cert = self.get_store("crt")
+        if cert is not None:
+            self.cert_tmp = tempfile.NamedTemporaryFile()
+            self.cert_tmp.write(cert.encode('utf-8'))
+            self.cert_tmp.flush()  # cert_tmp must not be gc'ed
+            cert_fname = self.cert_tmp.name
+        else:
+            cert_fname = self.get_localized_config('crt_file')
+
+        pkey = self.get_store("key")
+        if pkey is not None:
+            self.pkey_tmp = tempfile.NamedTemporaryFile()
+            self.pkey_tmp.write(pkey.encode('utf-8'))
+            self.pkey_tmp.flush()  # pkey_tmp must not be gc'ed
+            pkey_fname = self.pkey_tmp.name
+        else:
+            pkey_fname = self.get_localized_config('key_file')
+
+        if not cert_fname or not pkey_fname:
+            raise ServerConfigException('no certificate configured')
+        if not os.path.isfile(cert_fname):
+            raise ServerConfigException('certificate %s does not exist' % cert_fname)
+        if not os.path.isfile(pkey_fname):
+            raise ServerConfigException('private key %s does not exist' % pkey_fname)
+
         # Apply the 'global' CherryPy configuration.
         config = {
             'engine.autoreload.on': False,
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
+            'server.ssl_module': 'builtin',
+            'server.ssl_certificate': cert_fname,
+            'server.ssl_private_key': pkey_fname,
             'error_page.default': json_error_page,
             'tools.request_logging.on': True
         }
@@ -171,7 +217,7 @@ class Module(MgrModule):
 
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        self.set_uri("http://{0}:{1}{2}/".format(
+        self.set_uri("https://{0}:{1}{2}/".format(
             socket.getfqdn() if server_addr == "::" else server_addr,
             server_port,
             self.url_prefix
@@ -192,7 +238,19 @@ class Module(MgrModule):
     def serve(self):
         if 'COVERAGE_ENABLED' in os.environ:
             _cov.start()
-        self.configure_cherrypy()
+
+        while not self._stopping.is_set():
+            try:
+                self.configure_cherrypy()
+            except ServerConfigException as e:
+                self.log.info("Config not ready to serve, waiting: {0}".format(
+                    e
+                ))
+                # Poll until a non-errored config is present
+                self._stopping.wait(5)
+            else:
+                self.log.info("Configured CherryPy, starting engine...")
+                break
 
         cherrypy.engine.start()
         NotificationQueue.start_queue()
@@ -206,6 +264,9 @@ class Module(MgrModule):
 
     def shutdown(self):
         super(Module, self).shutdown()
+
+        self._stopping.set()
+
         logger.info('Stopping server...')
         NotificationQueue.stop()
         cherrypy.engine.exit()
@@ -226,9 +287,34 @@ class Module(MgrModule):
         elif cmd['prefix'] == 'dashboard set-session-expire':
             self.set_config('session-expire', str(cmd['seconds']))
             return 0, 'Session expiration timeout updated', ''
+        elif cmd['prefix'] == 'dashboard create-self-signed-cert':
+            self.create_self_signed_cert()
+            return 0, 'Self-signed certificate created', ''
 
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))
+
+    def create_self_signed_cert(self):
+        # create a key pair
+        pkey = crypto.PKey()
+        pkey.generate_key(crypto.TYPE_RSA, 2048)
+
+        # create a self-signed cert
+        cert = crypto.X509()
+        cert.get_subject().O = "IT"
+        cert.get_subject().CN = "ceph-dashboard"
+        cert.set_serial_number(int(uuid4()))
+        cert.gmtime_adj_notBefore(0)
+        cert.gmtime_adj_notAfter(10*365*24*60*60)
+        cert.set_issuer(cert.get_subject())
+        cert.set_pubkey(pkey)
+        cert.sign(pkey, 'sha512')
+
+        cert = crypto.dump_certificate(crypto.FILETYPE_PEM, cert)
+        self.set_store('crt', cert.decode('utf-8'))
+
+        pkey = crypto.dump_privatekey(crypto.FILETYPE_PEM, pkey)
+        self.set_store('key', pkey.decode('utf-8'))
 
     def notify(self, notify_type, notify_id):
         NotificationQueue.new_notification(notify_type, notify_id)
