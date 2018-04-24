@@ -18,8 +18,14 @@ roles:
   - cluster1.client.mirror.1
   - cluster1.client.mirror.2
   - cluster1.client.mirror.3
+  - cluster1.client.mirror.4
+  - cluster1.client.mirror.5
+  - cluster1.client.mirror.6
   - cluster2.client.mirror
   - cluster2.client.mirror.0
   - cluster2.client.mirror.1
   - cluster2.client.mirror.2
   - cluster2.client.mirror.3
+  - cluster2.client.mirror.4
+  - cluster2.client.mirror.5
+  - cluster2.client.mirror.6
