@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import json
-
-from mgr_module import CommandResult
-
 from . import ApiController, AuthRequired, RESTController
-from .. import logger, mgr
+from .. import mgr
 from ..services.ceph_service import CephService
+from ..services.exception import handle_send_command_error
 
 
 @ApiController('osd')
@@ -51,20 +48,9 @@ class Osd(RESTController):
             osds[str(osd['id'])] = osd
         return osds
 
+    @handle_send_command_error('osd')
     def get(self, svc_id):
-        result = CommandResult('')
-        mgr.send_command(result, 'osd', svc_id,
-                         json.dumps({
-                             'prefix': 'perf histogram dump',
-                         }),
-                         '')
-        r, outb, outs = result.wait()
-        if r != 0:
-            logger.warning('Failed to load histogram for OSD %s', svc_id)
-            logger.debug(outs)
-            histogram = outs
-        else:
-            histogram = json.loads(outb)
+        histogram = CephService.send_command('osd', srv_spec=svc_id, prefix='perf histogram dump')
         return {
             'osd_map': self.get_osd_map()[svc_id],
             'osd_metadata': mgr.get_metadata('osd', svc_id),

@@ -37,3 +37,14 @@ class CephfsTest(DashboardTestCase):
 
         self.assertIsInstance(data, dict)
         self.assertIsNotNone(data)
+
+    @authenticate
+    def test_cephfs_mds_counters_wrong(self):
+        data = self._get("/api/cephfs/mds_counters/baadbaad")
+        self.assertStatus(400)
+        self.assertJsonBody({
+                "component": 'cephfs',
+                "code": "invalid_cephfs_id",
+                "detail": "Invalid cephfs id baadbaad"
+             })
+

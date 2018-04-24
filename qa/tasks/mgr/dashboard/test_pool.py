@@ -18,9 +18,6 @@ class PoolTest(DashboardTestCase):
             cls._ceph_cmd(['osd', 'pool', 'delete', name, name, '--yes-i-really-really-mean-it'])
         cls._ceph_cmd(['osd', 'erasure-code-profile', 'rm', 'ecprofile'])
 
-
-
-
     @authenticate
     def test_pool_list(self):
         data = self._get("/api/pool")
@@ -144,6 +141,17 @@ class PoolTest(DashboardTestCase):
         }]
         for data in pools:
             self._pool_create(data)
+
+    @authenticate
+    def test_pool_create_fail(self):
+        data = {'pool_type': u'replicated', 'rule_name': u'dnf', 'pg_num': u'8', 'pool': u'sadfs'}
+        self._post('/api/pool/', data)
+        self.assertStatus(400)
+        self.assertJsonBody({
+            'component': 'pool',
+            'code': "2",
+            'detail': "specified rule dnf doesn't exist"
+        })
 
     @authenticate
     def test_pool_info(self):
