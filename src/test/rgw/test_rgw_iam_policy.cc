@@ -588,7 +588,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   RGWRados rgw_rados;
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
-  req_state rgw_req_state(cct.get(), &rgw_env, &user);
+  req_state rgw_req_state(cct.get(), &rgw_env, &user, 0);
   Environment iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
   auto ip = iam_env.find("aws:SourceIp");
   ASSERT_NE(ip, iam_env.end());

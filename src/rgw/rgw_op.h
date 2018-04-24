@@ -105,7 +105,7 @@ void rgw_bucket_object_pre_exec(struct req_state *s);
 /**
  * Provide the base class for all ops.
  */
-class RGWOp {
+class RGWOp : public DoutPrefixProvider {
 protected:
   struct req_state *s;
   RGWHandler *dialect_handler;
@@ -178,6 +178,11 @@ public:
   virtual uint32_t op_mask() { return 0; }
 
   virtual int error_handler(int err_no, string *error_content);
+
+  // implements DoutPrefixProvider
+  std::ostream& gen_prefix(std::ostream& out) const override;
+  CephContext* get_cct() const override { return s->cct; }
+  unsigned get_subsys() const override { return ceph_subsys_rgw; }
 };
 
 class RGWGetObj_Filter : public RGWGetDataCB
