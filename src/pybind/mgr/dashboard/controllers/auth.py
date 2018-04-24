@@ -12,7 +12,7 @@ from ..services.auth import AuthManager
 from ..tools import Session
 
 
-@ApiController('/auth')
+@ApiController('/auth', secure=False)
 class Auth(RESTController):
     """
     Provide login and logout actions.

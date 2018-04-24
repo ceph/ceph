@@ -3,12 +3,11 @@ from __future__ import absolute_import
 
 import json
 
-from . import ApiController, AuthRequired, Endpoint, BaseController
+from . import ApiController, Endpoint, BaseController
 from .. import mgr
 
 
 @ApiController('/monitor')
-@AuthRequired()
 class Monitor(BaseController):
     @Endpoint()
     def __call__(self):

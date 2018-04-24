@@ -3,12 +3,11 @@ from __future__ import absolute_import
 
 import cherrypy
 
+from . import ApiController, RESTController
 from .. import mgr
-from . import ApiController, RESTController, AuthRequired
 
 
 @ApiController('/cluster_conf')
-@AuthRequired()
 class ClusterConfiguration(RESTController):
     def list(self):
         options = mgr.get("config_options")['options']

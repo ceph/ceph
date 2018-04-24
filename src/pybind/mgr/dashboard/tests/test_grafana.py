@@ -25,7 +25,7 @@ class Grafana(TestCase):
                 url='//localhost:3000', username='admin', password='admin')
 
 
-@Controller('grafana/mocked')
+@Controller('/grafana/mocked', secure=False)
 class GrafanaMockInstance(BaseController):
     @Proxy()
     def __call__(self, path, **params):

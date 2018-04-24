@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import ApiController, AuthRequired, RESTController
+from . import ApiController, RESTController
 from .. import mgr, logger
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
@@ -9,7 +9,6 @@ from ..tools import str_to_bool
 
 
 @ApiController('/osd')
-@AuthRequired()
 class Osd(RESTController):
     def list(self):
         osds = self.get_osd_map()
