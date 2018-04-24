@@ -7,11 +7,13 @@ import threading
 import time
 
 import cherrypy
+from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
 
 from .. import logger
 from ..controllers.auth import Auth
 from ..controllers import json_error_page, generate_controller_routes
+from ..services.exception import dashboard_exception_handler
 from ..tools import SessionExpireAtBrowserCloseTool
 
 
@@ -31,6 +33,8 @@ class ControllerTestCase(helper.CPWebCase):
     def __init__(self, *args, **kwargs):
         cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
         cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
+        cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
+                                                                        priority=31)
         cherrypy.config.update({'error_page.default': json_error_page})
         super(ControllerTestCase, self).__init__(*args, **kwargs)
 

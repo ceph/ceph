@@ -3,9 +3,11 @@ from __future__ import absolute_import
 
 import unittest
 
+import cherrypy
 from cherrypy.lib.sessions import RamSession
 from mock import patch
 
+from ..services.exception import handle_rados_error
 from .helper import ControllerTestCase
 from ..controllers import RESTController, ApiController
 from ..tools import is_valid_ipv6_address, dict_contains_path
@@ -46,6 +48,13 @@ class FooResourceDetail(RESTController):
 class FooArgs(RESTController):
     def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
+
+    @handle_rados_error('foo')
+    def create(self, my_arg_name):
+        return my_arg_name
+
+    def list(self):
+        raise cherrypy.NotFound()
 
 
 # pylint: disable=blacklisted-name
@@ -133,6 +142,10 @@ class RESTControllerTest(ControllerTestCase):
                      headers=[('Accept', 'text/html'), ('Content-Length', '0')],
                      method='put')
         self.assertStatus(404)
+
+    def test_create_form(self):
+        self.getPage('/fooargs', headers=[('Accept', 'text/html')])
+        self.assertIn('my_arg_name', self.body.decode('utf-8'))
 
 
 class TestFunctions(unittest.TestCase):
