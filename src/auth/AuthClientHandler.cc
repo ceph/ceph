@@ -17,18 +17,30 @@
 
 #include "AuthClientHandler.h"
 #include "cephx/CephxClientHandler.h"
+#include "ldap_krb/KrbClientHandler.hpp"
+#include "ldap_krb/LdapClientHandler.hpp"
 #include "none/AuthNoneClientHandler.h"
 
 AuthClientHandler *get_auth_client_handler(CephContext *cct, int proto,
 					   RotatingKeyRing *rkeys)
 {
   switch (proto) {
-  case CEPH_AUTH_CEPHX:
-    return new CephxClientHandler(cct, rkeys);
-  case CEPH_AUTH_NONE:
-    return new AuthNoneClientHandler(cct, rkeys);
-  default:
-    return NULL;
+    case CEPH_AUTH_CEPHX:
+      return new CephxClientHandler(cct, rkeys);
+    case CEPH_AUTH_NONE:
+      return new AuthNoneClientHandler(cct, rkeys);
+
+    case CEPH_AUTH_KRB5: 
+      return new KrbClientHandler(cct, rkeys);
+    /*
+    case CEPH_AUTH_LDAP:
+      return new LdapClientHandler(cct, rkeys);
+
+    case CEPH_AUTH_LDAP_KRB5: 
+      return new AuthLdapKrbClientHandler(cct, rkeys);
+    */
+    default:
+      return NULL;
   }
 }
 

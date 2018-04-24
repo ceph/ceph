@@ -14,6 +14,8 @@
 
 #include "AuthServiceHandler.h"
 #include "cephx/CephxServiceHandler.h"
+#include "ldap_krb/KrbServiceHandler.hpp"
+//#include "ldap_krb/LdapServiceHandler.hpp"
 #include "none/AuthNoneServiceHandler.h"
 
 #define dout_subsys ceph_subsys_auth
@@ -22,10 +24,20 @@
 AuthServiceHandler *get_auth_service_handler(int type, CephContext *cct, KeyServer *ks)
 {
   switch (type) {
-  case CEPH_AUTH_CEPHX:
-    return new CephxServiceHandler(cct, ks);
-  case CEPH_AUTH_NONE:
-    return new AuthNoneServiceHandler(cct);
+    case CEPH_AUTH_CEPHX:
+      return new CephxServiceHandler(cct, ks);
+    case CEPH_AUTH_NONE:
+      return new AuthNoneServiceHandler(cct);
+
+    case CEPH_AUTH_KRB5: 
+      return new KrbServiceHandler(cct, ks);
+    /*
+    case CEPH_AUTH_LDAP:
+      return new LdapAuthorizeHandler(cct, ks);
+
+    case CEPH_AUTH_LDAP_KRB5: 
+      return new LdapKrbServiceHandler(cct, ks);
+    */
   }
   return NULL;
 }

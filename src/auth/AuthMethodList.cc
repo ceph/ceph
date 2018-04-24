@@ -34,7 +34,19 @@ AuthMethodList::AuthMethodList(CephContext *cct, string str)
       auth_supported.push_back(CEPH_AUTH_CEPHX);
     } else if (iter->compare("none") == 0) {
       auth_supported.push_back(CEPH_AUTH_NONE);
-    } else {
+    } 
+    else if (iter->compare("krb") == 0) {
+      auth_supported.push_back(CEPH_AUTH_KRB5);
+    }
+    /*
+    else if (iter->compare("ldap") == 0) {
+      auth_supported.push_back(CEPH_AUTH_LDAP);
+    }
+    else if (iter->compare("ldap_krb") == 0) {
+      auth_supported.push_back(CEPH_AUTH_LDAP_KRB5);
+    }
+    */
+    else {
       auth_supported.push_back(CEPH_AUTH_UNKNOWN);
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
     }

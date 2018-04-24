@@ -2,6 +2,7 @@ set(lib_mon_srcs
   ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxKeyServer.cc
   ${CMAKE_SOURCE_DIR}/src/auth/cephx/CephxServiceHandler.cc
   ${CMAKE_SOURCE_DIR}/src/auth/AuthServiceHandler.cc
+  ${CMAKE_SOURCE_DIR}/src/auth/ldap_krb/KrbServiceHandler.cpp
   ${osd_mon_files}
   Paxos.cc
   PaxosService.cc

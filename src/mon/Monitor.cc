@@ -144,7 +144,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
   store(s),
-  
+  krb_ktfile_client(cct->_conf->krb_ktfile_client),
   state(STATE_PROBING),
   
   elector(this),
@@ -178,6 +178,12 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
 
   update_log_clients();
+
+  if (!krb_ktfile_client.empty()) {
+    auto result(setenv("KRB5_CLIENT_KTNAME", 
+                       krb_ktfile_client.c_str(), 1));
+    assert(!result);
+  }
 
   op_tracker.set_complaint_and_threshold(g_conf->get_val<double>("mon_op_complaint_time"),                              
                                          g_conf->get_val<int64_t>("mon_op_log_threshold"));
@@ -2864,8 +2870,10 @@ bool Monitor::is_keyring_required()
   string auth_service_required = g_conf->auth_supported.empty() ?
     g_conf->auth_service_required : g_conf->auth_supported;
 
-  return auth_service_required == "cephx" ||
-    auth_cluster_required == "cephx";
+  return auth_service_required == "cephx" || 
+         auth_cluster_required == "cephx" || 
+         auth_service_required == "krb"   || 
+         auth_cluster_required == "krb";
 }
 
 struct C_MgrProxyCommand : public Context {

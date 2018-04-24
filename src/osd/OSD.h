@@ -46,6 +46,8 @@
 #include <atomic>
 #include <map>
 #include <memory>
+#include <string>
+
 #include "include/memory.h"
 
 #include "include/unordered_map.h"
@@ -1229,6 +1231,8 @@ class OSD : public Dispatcher,
   // Tick timer for those stuff that do not need osd_lock
   Mutex tick_timer_lock;
   SafeTimer tick_timer_without_osd_lock;
+  std::string krb_ktfile_client;
+
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;

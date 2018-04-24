@@ -73,6 +73,19 @@ struct ceph_dir_layout {
 #define CEPH_AUTH_NONE	 	0x1
 #define CEPH_AUTH_CEPHX	 	0x2
 
+/*  For options with "_", like: LDAP_KRB5
+    which means: Mode/Protocol to validate "authentication_authorization",
+    where:
+      - Authentication: Verifying the identity of an entity.
+      - Authorization:  Verifying that an authenticated entity has
+                        the right to access a particular resource.
+*/ 
+#define CEPH_AUTH_LDAP      0x3
+#define CEPH_AUTH_KRB5      0x4
+#define CEPH_AUTH_LDAP_LDAP CEPH_AUTH_LDAP
+#define CEPH_AUTH_KRB5_KRB5 CEPH_AUTH_KRB5
+#define CEPH_AUTH_LDAP_KRB5 0x34
+
 #define CEPH_AUTH_UID_DEFAULT ((__u64) -1)
 
 

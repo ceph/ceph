@@ -57,21 +57,18 @@ void Option::dump_value(const char *field_name,
   if (boost::get<boost::blank>(&v)) {
     // This should be nil but Formatter doesn't allow it.
     f->dump_string(field_name, "");
-    return;
-  }
-  switch (type) {
-  case TYPE_INT:
-    f->dump_int(field_name, boost::get<int64_t>(v)); break;
-  case TYPE_UINT:
-    f->dump_unsigned(field_name, boost::get<uint64_t>(v)); break;
-  case TYPE_STR:
-    f->dump_string(field_name, boost::get<std::string>(v)); break;
-  case TYPE_FLOAT:
-    f->dump_float(field_name, boost::get<double>(v)); break;
-  case TYPE_BOOL:
-    f->dump_bool(field_name, boost::get<bool>(v)); break;
-  default:
-    f->dump_stream(field_name) << v; break;
+  } else if (type == TYPE_UINT) {
+    f->dump_unsigned(field_name, boost::get<uint64_t>(v));
+  } else if (type == TYPE_INT) {
+    f->dump_int(field_name, boost::get<int64_t>(v));
+  } else if (type == TYPE_STR) {
+    f->dump_string(field_name, boost::get<std::string>(v));
+  } else if (type == TYPE_FLOAT) {
+    f->dump_float(field_name, boost::get<double>(v));
+  } else if (type == TYPE_BOOL) {
+    f->dump_bool(field_name, boost::get<bool>(v));
+  } else {
+    f->dump_stream(field_name) << v;
   }
 }
 
@@ -4854,6 +4851,16 @@ std::vector<Option> get_global_options() {
     Option("debug_asserts_on_shutdown", Option::TYPE_BOOL,Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Enable certain asserts to check for refcounting bugs on shutdown; see http://tracker.ceph.com/issues/21738"),
+
+    /*  LDAP/KRB Authentication.
+    */
+    Option("krb_ktfile_client", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/var/lib/ceph/$name/krb_$name.ktab")
+    .set_description("Kerberos Keytab file for client authentication")
+    .add_service({"mon", "osd"})
+    //.set_safe(),
+    .set_long_description("This sets the full path for the Kerberos keytab  "
+                          "file location. "),
   });
 }
 

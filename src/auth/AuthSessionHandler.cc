@@ -15,6 +15,8 @@
 #include "common/debug.h"
 #include "AuthSessionHandler.h"
 #include "cephx/CephxSessionHandler.h"
+#include "ldap_krb/KrbSessionHandler.hpp"
+//#include "ldap_krb/LdapSessionHandler.hpp"
 #include "none/AuthNoneSessionHandler.h"
 #include "unknown/AuthUnknownSessionHandler.h"
 
@@ -29,12 +31,24 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
   ldout(cct,10) << "In get_auth_session_handler for protocol " << protocol << dendl;
  
   switch (protocol) {
-  case CEPH_AUTH_CEPHX:
-    return new CephxSessionHandler(cct, key, features);
-  case CEPH_AUTH_NONE:
-    return new AuthNoneSessionHandler(cct, key);
-  case CEPH_AUTH_UNKNOWN:
-    return new AuthUnknownSessionHandler(cct, key);
+    case CEPH_AUTH_CEPHX:
+      return new CephxSessionHandler(cct, key, features);
+    case CEPH_AUTH_NONE:
+      return new AuthNoneSessionHandler(cct, key);
+    case CEPH_AUTH_UNKNOWN:
+      return new AuthUnknownSessionHandler(cct, key);
+
+    case CEPH_AUTH_KRB5: 
+      return new KrbSessionHandler(cct, key);
+
+    /*
+    case CEPH_AUTH_LDAP:
+      return new LdapSessionHandler(cct, ks);
+
+    case CEPH_AUTH_LDAP_KRB5: 
+      return new LdapKrbSessionHandler(cct, ks);
+    */
   }
   return NULL;
 }
+

@@ -15,6 +15,7 @@
 #ifndef CEPH_MDS_H
 #define CEPH_MDS_H
 
+#include <string>
 #include <string_view>
 
 #include "common/LogClient.h"
@@ -46,7 +47,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool         stopping;
 
   SafeTimer    timer;
-
+  std::string   krb_ktfile_client;
 
   mono_time get_starttime() const {
     return starttime;

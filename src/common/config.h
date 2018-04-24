@@ -335,6 +335,9 @@ public:
 
   bool no_mon_config = false;
 
+  /// kerberos keytab file name
+  std::string krb_ktfile_client;
+
 // This macro block defines C members of the md_config_t struct
 // corresponding to the definitions in legacy_config_opts.h.
 // These C members are consumed by code that was written before
