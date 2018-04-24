@@ -28,7 +28,7 @@ class Pool(RESTController):
             elif attr == 'crush_rule':
                 res[attr] = crush_rules[pool[attr]]
             elif attr == 'application_metadata':
-                res[attr] = pool[attr].keys()
+                res[attr] = list(pool[attr].keys())
             else:
                 res[attr] = pool[attr]
 
