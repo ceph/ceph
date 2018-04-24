@@ -1083,7 +1083,10 @@ void ECBackend::handle_sub_write_reply(
     i->second.pending_apply.erase(from);
   }
 
-  if (i->second.pending_commit.empty() && i->second.on_all_commit) {
+  if (i->second.pending_commit.empty() &&
+      i->second.on_all_commit &&
+      // also wait for apply, to preserve ordering with luminous peers.
+      i->second.pending_apply.empty()) {
     dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
     i->second.on_all_commit->complete(0);
     i->second.on_all_commit = 0;
