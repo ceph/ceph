@@ -3,12 +3,12 @@ from __future__ import absolute_import
 
 import time
 
-import bcrypt
 import cherrypy
 
 from . import ApiController, RESTController
-from .. import logger, mgr
+from .. import logger
 from ..exceptions import DashboardException
+from ..services.auth import AuthManager
 from ..tools import Session
 
 
@@ -21,19 +21,13 @@ class Auth(RESTController):
 
       | KEY             | DEFAULT | DESCR                                     |
       ------------------------------------------------------------------------|
-      | username        | None    | Username                                  |
-      | password        | None    | Password encrypted using bcrypt           |
       | session-expire  | 1200    | Session will expire after <expires>       |
       |                           | seconds without activity                  |
     """
 
     def create(self, username, password, stay_signed_in=False):
         now = time.time()
-        config_username = mgr.get_config('username', None)
-        config_password = mgr.get_config('password', None)
-        hash_password = Auth.password_hash(password,
-                                           config_password)
-        if username == config_username and hash_password == config_password:
+        if AuthManager.authenticate(username, password):
             cherrypy.session.regenerate()
             cherrypy.session[Session.USERNAME] = username
             cherrypy.session[Session.TS] = now
@@ -41,11 +35,7 @@ class Auth(RESTController):
             logger.debug('Login successful')
             return {'username': username}
 
-        if config_username is None:
-            logger.warning('No Credentials configured. Need to call `ceph dashboard '
-                           'set-login-credentials <username> <password>` first.')
-        else:
-            logger.debug('Login failed')
+        logger.debug('Login failed')
         raise DashboardException(msg='Invalid credentials',
                                  code='invalid_credentials',
                                  component='auth')
@@ -54,39 +44,3 @@ class Auth(RESTController):
         logger.debug('Logout successful')
         cherrypy.session[Session.USERNAME] = None
         cherrypy.session[Session.TS] = None
-
-    @staticmethod
-    def password_hash(password, salt_password=None):
-        if not salt_password:
-            salt_password = bcrypt.gensalt()
-        else:
-            salt_password = salt_password.encode('utf8')
-        return bcrypt.hashpw(password.encode('utf8'), salt_password).decode('utf8')
-
-    @staticmethod
-    def check_auth():
-        username = cherrypy.session.get(Session.USERNAME)
-        if not username:
-            logger.debug('Unauthorized access to %s',
-                         cherrypy.url(relative='server'))
-            raise cherrypy.HTTPError(401, 'You are not authorized to access '
-                                          'that resource')
-        now = time.time()
-        expires = float(mgr.get_config(
-            'session-expire', Session.DEFAULT_EXPIRE))
-        if expires > 0:
-            username_ts = cherrypy.session.get(Session.TS, None)
-            if username_ts and float(username_ts) < (now - expires):
-                cherrypy.session[Session.USERNAME] = None
-                cherrypy.session[Session.TS] = None
-                logger.debug('Session expired')
-                raise cherrypy.HTTPError(401,
-                                         'Session expired. You are not '
-                                         'authorized to access that resource')
-        cherrypy.session[Session.TS] = now
-
-    @staticmethod
-    def set_login_credentials(username, password):
-        mgr.set_config('username', username)
-        hashed_passwd = Auth.password_hash(password)
-        mgr.set_config('password', hashed_passwd)
