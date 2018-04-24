@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms inject socket failures: 2500
+        ms tcp read timeout: 5
