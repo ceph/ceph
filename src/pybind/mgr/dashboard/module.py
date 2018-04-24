@@ -17,6 +17,28 @@ except ImportError:
     # To be picked up and reported by .can_run()
     cherrypy = None
 
+
+# The SSL code in CherryPy 3.5.0 is buggy.  It was fixed long ago,
+# but 3.5.0 is still shipping in major linux distributions
+# (Fedora 27, Ubuntu Xenial), so we must monkey patch it to get SSL working.
+from distutils.version import StrictVersion
+if cherrypy is not None:
+    v = StrictVersion(cherrypy.__version__)
+    # It was fixed in 3.7.0.  Exact lower bound version is probably earlier,
+    # but 3.5.0 is what this monkey patch is tested on.
+    if v >= StrictVersion("3.5.0") and v < StrictVersion("3.7.0"):
+        from cherrypy.wsgiserver.wsgiserver2 import HTTPConnection,\
+                                                    CP_fileobject
+        def fixed_init(hc_self, server, sock, makefile=CP_fileobject):
+            hc_self.server = server
+            hc_self.socket = sock
+            hc_self.rfile = makefile(sock, "rb", hc_self.rbufsize)
+            hc_self.wfile = makefile(sock, "wb", hc_self.wbufsize)
+            hc_self.requests_seen = 0
+
+        HTTPConnection.__init__ = fixed_init
+
+
 from mgr_module import MgrModule, MgrStandbyModule
 import rados
 
