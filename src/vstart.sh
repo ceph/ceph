@@ -688,9 +688,9 @@ EOF
         if $with_mgr_dashboard ; then
             ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
             if [ $mgr -eq 1 ]; then
-                DASH_URLS="http://$IP:$MGR_PORT"
+                DASH_URLS="https://$IP:$MGR_PORT"
             else
-                DASH_URLS+=", http://$IP:$MGR_PORT"
+                DASH_URLS+=", https://$IP:$MGR_PORT"
             fi
         fi
 	MGR_PORT=$(($MGR_PORT + 1000))
@@ -713,6 +713,9 @@ EOF
     # setting login credentials for dashboard
     if $with_mgr_dashboard; then
         ceph_adm tell mgr dashboard set-login-credentials admin admin
+        if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+            echo dashboard module not working correctly!
+        fi
     fi
 
     if ceph_adm tell mgr restful create-self-signed-cert; then
