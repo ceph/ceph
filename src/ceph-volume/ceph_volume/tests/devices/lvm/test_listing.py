@@ -22,12 +22,16 @@ class TestPrettyReport(object):
         assert stdout == '\n'
 
     def test_type_and_path_are_reported(self, capsys):
-        lvm.listing.pretty_report({0: [{'type': 'data', 'path': '/dev/sda1'}]})
+        lvm.listing.pretty_report({0: [
+            {'type': 'data', 'path': '/dev/sda1', 'devices': ['/dev/sda']}
+        ]})
         stdout, stderr = capsys.readouterr()
         assert '[data]    /dev/sda1' in stdout
 
     def test_osd_id_header_is_reported(self, capsys):
-        lvm.listing.pretty_report({0: [{'type': 'data', 'path': '/dev/sda1'}]})
+        lvm.listing.pretty_report({0: [
+            {'type': 'data', 'path': '/dev/sda1', 'devices': ['/dev/sda']}
+        ]})
         stdout, stderr = capsys.readouterr()
         assert '====== osd.0 =======' in stdout
 
@@ -36,7 +40,8 @@ class TestPrettyReport(object):
             {0: [{
                 'type': 'data',
                 'path': '/dev/sda1',
-                'tags': {'ceph.osd_id': '0'}
+                'tags': {'ceph.osd_id': '0'},
+                'devices': ['/dev/sda'],
             }]}
         )
         stdout, stderr = capsys.readouterr()
@@ -155,7 +160,9 @@ class TestSingleReport(object):
         # ceph lvs are detected by looking into its tags
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data'
         lv = api.Volume(
-            lv_name='lv', vg_name='VolGroup', lv_path='/dev/VolGroup/lv', lv_tags=tags)
+            lv_name='lv', vg_name='VolGroup',
+            lv_uuid='aaaa', lv_path='/dev/VolGroup/lv', lv_tags=tags
+        )
         volumes.append(lv)
         monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
         result = lvm.listing.List([]).single_report('VolGroup/lv')
@@ -167,7 +174,8 @@ class TestSingleReport(object):
         # ceph lvs are detected by looking into its tags
         tags = 'ceph.osd_id=0,ceph.journal_uuid=x,ceph.type=data,ceph.journal_device=/dev/sda1'
         lv = api.Volume(
-            lv_name='lv', vg_name='VolGroup', lv_path='/dev/VolGroup/lv', lv_tags=tags)
+            lv_name='lv', vg_name='VolGroup', lv_path='/dev/VolGroup/lv',
+            lv_uuid='aaa', lv_tags=tags)
         volumes.append(lv)
         monkeypatch.setattr(lvm.listing.api, 'Volumes', lambda: volumes)
         result = lvm.listing.List([]).single_report('/dev/sda1')
