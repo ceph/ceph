@@ -88,18 +88,32 @@ class TestClusterResize(CephFSTestCase):
         self.shrink(2)
         self.wait_for_health_clear(30)
 
+    def test_down_twice(self):
+        """
+        That marking a FS down twice does not wipe old_max_mds.
+        """
+
+        self.grow(2)
+        self.fs.set_down()
+        self.wait_for_health("MDS_ALL_DOWN", 30)
+        self.fs.set_down(False)
+        mdsmap = self.fs.get_mds_map()
+        self.assertTrue(mdsmap["max_mds"] == 2)
+        self.fs.wait_for_daemons(timeout=60)
+
     def test_all_down(self):
         """
-        That a health error is generated when FS has no active MDS.
+        That a health error is generated when FS has no active MDS and cleared
+        when actives come back online.
         """
 
         self.fs.set_down()
         self.wait_for_health("MDS_ALL_DOWN", 30)
         self.fs.set_down(False)
         self.wait_for_health_clear(30)
-        self.fs.set_down()
+        self.fs.set_down(True)
         self.wait_for_health("MDS_ALL_DOWN", 30)
-        self.grow(1)
+        self.grow(2)
         self.wait_for_health_clear(30)
 
     def test_hole(self):
