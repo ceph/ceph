@@ -5205,6 +5205,13 @@ bool PG::write_blocked_by_scrub(const hobject_t& soid)
   return true;
 }
 
+bool PG::range_intersects_scrub(const hobject_t &start, const hobject_t& end)
+{
+  // does [start, end] intersect [scrubber.start, scrubber.end)
+  return (start < scrubber.end &&
+	  end >= scrubber.start);
+}
+
 void PG::scrub_clear_state()
 {
   assert(is_locked());
