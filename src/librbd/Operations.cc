@@ -1157,7 +1157,7 @@ void Operations<I>::execute_snap_protect(const cls::rbd::SnapshotNamespace& snap
 
 template <typename I>
 int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namespace,
-				  const std::string& snap_name) {
+				  const std::string& snap_name, bool force_unprotect) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
@@ -1188,7 +1188,7 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
     r = invoke_async_request("snap_unprotect", true,
                              boost::bind(&Operations<I>::execute_snap_unprotect,
-                                         this, snap_namespace, snap_name, _1),
+                                         this, snap_namespace, snap_name, _1, force_unprotect),
                              boost::bind(&ImageWatcher<I>::notify_snap_unprotect,
                                          m_image_ctx.image_watcher,
 					 snap_namespace, snap_name, _1));
@@ -1199,7 +1199,7 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
     C_SaferCond cond_ctx;
     {
       RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-      execute_snap_unprotect(snap_namespace, snap_name, &cond_ctx);
+      execute_snap_unprotect(snap_namespace, snap_name, &cond_ctx, force_unprotect);
     }
 
     r = cond_ctx.wait();
@@ -1213,7 +1213,7 @@ int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namesp
 template <typename I>
 void Operations<I>::execute_snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namespace,
 					   const std::string &snap_name,
-                                           Context *on_finish) {
+                                           Context *on_finish, bool force_unprotect) {
   assert(m_image_ctx.owner_lock.is_locked());
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
     assert(m_image_ctx.exclusive_lock == nullptr ||
@@ -1246,7 +1246,7 @@ void Operations<I>::execute_snap_unprotect(const cls::rbd::SnapshotNamespace& sn
 
   operation::SnapshotUnprotectRequest<I> *request =
     new operation::SnapshotUnprotectRequest<I>(
-      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_namespace, snap_name);
+      m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), snap_namespace, snap_name, force_unprotect);
   request->send();
 }
 

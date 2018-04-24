@@ -25,6 +25,7 @@ from libc.string cimport strdup
 
 from collections import Iterable
 from datetime import datetime
+from cpython cimport bool
 
 cimport rados
 
@@ -321,7 +322,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_rename(rbd_image_t image, const char *snapname,
                         const char* dstsnapsname)
     int rbd_snap_protect(rbd_image_t image, const char *snap_name)
-    int rbd_snap_unprotect(rbd_image_t image, const char *snap_name)
+    int rbd_snap_unprotect(rbd_image_t image, const char *snap_name, bool force_unprotect)
     int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
                               int *is_protected)
     int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
@@ -2424,7 +2425,7 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error protecting snapshot %s@%s' % (self.name, name))
 
-    def unprotect_snap(self, name):
+    def unprotect_snap(self, name, force_unprotect):
         """
         Mark a snapshot unprotected. This allows it to be deleted if
         it was protected.
@@ -2435,8 +2436,9 @@ cdef class Image(object):
         """
         name = cstr(name, 'name')
         cdef char *_name = name
+        cdef bool _force_unprotect = force_unprotect
         with nogil:
-            ret = rbd_snap_unprotect(self.image, _name)
+            ret = rbd_snap_unprotect(self.image, _name, _force_unprotect)
         if ret != 0:
             raise make_ex(ret, 'error unprotecting snapshot %s@%s' % (self.name, name))
 

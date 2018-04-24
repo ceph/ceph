@@ -153,10 +153,10 @@ template <typename I>
 SnapshotUnprotectRequest<I>::SnapshotUnprotectRequest(I &image_ctx,
                                                       Context *on_finish,
                                                       const cls::rbd::SnapshotNamespace &snap_namespace,
-						      const std::string &snap_name)
+						      const std::string &snap_name, bool force_unprotect)
   : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
     m_snap_name(snap_name), m_state(STATE_UNPROTECT_SNAP_START),
-    m_ret_val(0), m_snap_id(CEPH_NOSNAP) {
+    m_ret_val(0), m_snap_id(CEPH_NOSNAP), m_force_unprotect(force_unprotect) {
 }
 
 template <typename I>
@@ -190,7 +190,10 @@ bool SnapshotUnprotectRequest<I>::should_complete(int r) {
   bool finished = false;
   switch (m_state) {
   case STATE_UNPROTECT_SNAP_START:
-    send_scan_pool_children();
+    if (m_force_unprotect)
+      send_unprotect_snap_finish();
+    else
+      send_scan_pool_children();
     break;
   case STATE_SCAN_POOL_CHILDREN:
     send_unprotect_snap_finish();

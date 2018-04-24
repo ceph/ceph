@@ -51,7 +51,7 @@ public:
 
   SnapshotUnprotectRequest(ImageCtxT &image_ctx, Context *on_finish,
 		           const cls::rbd::SnapshotNamespace &snap_namespace,
-			   const std::string &snap_name);
+			   const std::string &snap_name, bool force_unprotect = false);
 
 protected:
   void send_op() override;
@@ -75,6 +75,7 @@ private:
 
   int m_ret_val;
   uint64_t m_snap_id;
+  bool m_force_unprotect;
 
   bool should_complete_error();
 

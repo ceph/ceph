@@ -1546,11 +1546,11 @@ namespace librbd {
     return r;
   }
 
-  int Image::snap_unprotect(const char *snap_name)
+  int Image::snap_unprotect(const char *snap_name, bool force_unprotect)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_unprotect_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-    int r = ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), snap_name);
+    int r = ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), snap_name, force_unprotect);
     tracepoint(librbd, snap_unprotect_exit, r);
     return r;
   }
@@ -3532,11 +3532,11 @@ extern "C" int rbd_snap_protect(rbd_image_t image, const char *snap_name)
   return r;
 }
 
-extern "C" int rbd_snap_unprotect(rbd_image_t image, const char *snap_name)
+extern "C" int rbd_snap_unprotect(rbd_image_t image, const char *snap_name, bool force_unprotect)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_unprotect_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, snap_name);
-  int r = ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), snap_name);
+  int r = ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), snap_name, force_unprotect);
   tracepoint(librbd, snap_unprotect_exit, r);
   return r;
 }

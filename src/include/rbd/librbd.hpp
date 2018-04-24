@@ -378,7 +378,7 @@ public:
   int snap_rollback(const char *snap_name);
   int snap_rollback_with_progress(const char *snap_name, ProgressContext& pctx);
   int snap_protect(const char *snap_name);
-  int snap_unprotect(const char *snap_name);
+  int snap_unprotect(const char *snap_name, bool force_unprotect = false);
   int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
   int snap_set_by_id(uint64_t snap_id);
