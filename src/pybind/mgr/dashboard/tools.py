@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import sys
+import inspect
+import functools
+
 import collections
 from datetime import datetime, timedelta
 import fnmatch
@@ -11,6 +15,7 @@ from six.moves import urllib
 import cherrypy
 
 from . import logger
+from .exceptions import ViewCacheNoDataException
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -197,7 +202,7 @@ class ViewCache(object):
                     # We have some data, but it doesn't meet freshness requirements
                     return ViewCache.VALUE_STALE, self.value
                 # We have no data, not even stale data
-                return ViewCache.VALUE_NONE, None
+                raise ViewCacheNoDataException()
 
     def __init__(self, timeout=5):
         self.timeout = timeout
@@ -708,3 +713,26 @@ def dict_contains_path(dct, keys):
             return dict_contains_path(dct, keys)
         return False
     return True
+
+
+if sys.version_info > (3, 0):
+    wraps = functools.wraps
+    _getargspec = inspect.getfullargspec
+else:
+    def wraps(func):
+        def decorator(wrapper):
+            new_wrapper = functools.wraps(func)(wrapper)
+            new_wrapper.__wrapped__ = func  # set __wrapped__ even for Python 2
+            return new_wrapper
+        return decorator
+
+    _getargspec = inspect.getargspec
+
+
+def getargspec(func):
+    try:
+        while True:
+            func = func.__wrapped__
+    except AttributeError:
+        pass
+    return _getargspec(func)

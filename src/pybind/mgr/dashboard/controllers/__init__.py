@@ -5,7 +5,6 @@ from __future__ import absolute_import
 import collections
 from datetime import datetime, timedelta
 import fnmatch
-from functools import wraps
 import importlib
 import inspect
 import json
@@ -21,7 +20,9 @@ from six import add_metaclass
 
 from .. import logger
 from ..settings import Settings
-from ..tools import Session, TaskManager
+from ..tools import Session, wraps, getargspec, TaskManager
+from ..exceptions import ViewCacheNoDataException, DashboardException
+from ..services.exception import serialize_dashboard_exception
 
 
 def ApiController(path):
@@ -31,7 +32,8 @@ def ApiController(path):
         config = {
             'tools.sessions.on': True,
             'tools.sessions.name': Session.NAME,
-            'tools.session_expire_at_browser_close.on': True
+            'tools.session_expire_at_browser_close.on': True,
+            'tools.dashboard_exception_handler.on': True,
         }
         if not hasattr(cls, '_cp_config'):
             cls._cp_config = {}
@@ -155,6 +157,7 @@ class ApiRoot(object):
 
 
 def browsable_api_view(meth):
+    @wraps(meth)
     def wrapper(self, *vpath, **kwargs):
         assert isinstance(self, BaseController)
         if not Settings.ENABLE_BROWSABLE_API:
@@ -276,7 +279,7 @@ class Task(object):
             sig = inspect.signature(func)
             arg_list = [a for a in sig.parameters]
         else:
-            sig = inspect.getargspec(func)
+            sig = getargspec(func)
             arg_list = [a for a in sig.args]
 
         for idx, arg in enumerate(arg_list):
@@ -336,10 +339,7 @@ class BaseControllerMeta(type):
             if isinstance(thing, (types.FunctionType, types.MethodType))\
                     and getattr(thing, 'exposed', False):
 
-                # @cherrypy.tools.json_out() is incompatible with our browsable_api_view decorator.
-                cp_config = getattr(thing, '_cp_config', {})
-                if not cp_config.get('tools.json_out.on', False):
-                    setattr(new_cls, a_name, browsable_api_view(thing))
+                setattr(new_cls, a_name, browsable_api_view(thing))
         return new_cls
 
 
@@ -355,18 +355,9 @@ class BaseController(object):
 
     @classmethod
     def _parse_function_args(cls, func):
-        # pylint: disable=deprecated-method
-        if sys.version_info > (3, 0):  # pylint: disable=no-else-return
-            sig = inspect.signature(func)
-            cargs = [k for k, v in sig.parameters.items()
-                     if k != 'self' and v.default is inspect.Parameter.empty and
-                     (v.kind == inspect.Parameter.POSITIONAL_ONLY or
-                      v.kind == inspect.Parameter.POSITIONAL_OR_KEYWORD)]
-        else:
-            func = getattr(func, '__wrapped__', func)
-            args = inspect.getargspec(func)
-            nd = len(args.args) if not args.defaults else -len(args.defaults)
-            cargs = args.args[1:nd]
+        args = getargspec(func)
+        nd = len(args.args) if not args.defaults else -len(args.defaults)
+        cargs = args.args[1:nd]
 
         # filter out controller path params
         for idx, step in enumerate(cls._cp_path_.split('/')):
@@ -522,10 +513,7 @@ class RESTController(BaseController):
 
     @staticmethod
     def _function_args(func):
-        if sys.version_info > (3, 0):  # pylint: disable=no-else-return
-            return list(inspect.signature(func).parameters.keys())
-        else:
-            return inspect.getargspec(func).args[1:]  # pylint: disable=deprecated-method
+        return getargspec(func).args[1:]
 
     @staticmethod
     def _takes_json(func):
