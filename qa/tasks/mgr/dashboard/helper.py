@@ -166,53 +166,41 @@ class DashboardTestCase(MgrTestCase):
         task_name = res['name']
         task_metadata = res['metadata']
 
-        class Waiter(threading.Thread):
-            def __init__(self, task_name, task_metadata):
-                super(Waiter, self).__init__()
-                self.task_name = task_name
-                self.task_metadata = task_metadata
-                self.ev = threading.Event()
-                self.abort = False
-                self.res_task = None
+        retries = int(timeout)
+        res_task = None
+        while retries > 0 and not res_task:
+            retries -= 1
+            log.info("task (%s, %s) is still executing", task_name,
+                     task_metadata)
+            time.sleep(1)
+            _res = cls._get('/api/task?name={}'.format(task_name))
+            cls._assertEq(cls._resp.status_code, 200)
+            executing_tasks = [task for task in _res['executing_tasks'] if
+                               task['metadata'] == task_metadata]
+            finished_tasks = [task for task in _res['finished_tasks'] if
+                               task['metadata'] == task_metadata]
+            if not executing_tasks and finished_tasks:
+                res_task = finished_tasks[0]
 
-            def run(self):
-                running = True
-                while running and not self.abort:
-                    log.info("task (%s, %s) is still executing", self.task_name,
-                             self.task_metadata)
-                    time.sleep(1)
-                    res = cls._get('/api/task?name={}'.format(self.task_name))
-                    for task in res['finished_tasks']:
-                        if task['metadata'] == self.task_metadata:
-                            # task finished
-                            running = False
-                            self.res_task = task
-                            self.ev.set()
+        if retries <= 0:
+            raise Exception("Waiting for task ({}, {}) to finish timed out. {}"
+                            .format(task_name, task_metadata, _res))
 
-        thread = Waiter(task_name, task_metadata)
-        thread.start()
-        status = thread.ev.wait(timeout)
-        if not status:
-            # timeout expired
-            thread.abort = True
-            thread.join()
-            raise Exception("Waiting for task ({}, {}) to finish timed out"
-                            .format(task_name, task_metadata))
         log.info("task (%s, %s) finished", task_name, task_metadata)
-        if thread.res_task['success']:
+        if res_task['success']:
             if method == 'POST':
                 cls._resp.status_code = 201
             elif method == 'PUT':
                 cls._resp.status_code = 200
             elif method == 'DELETE':
                 cls._resp.status_code = 204
-            return thread.res_task['ret_value']
+            return res_task['ret_value']
         else:
-            if 'status' in thread.res_task['exception']:
-                cls._resp.status_code = thread.res_task['exception']['status']
+            if 'status' in res_task['exception']:
+                cls._resp.status_code = res_task['exception']['status']
             else:
                 cls._resp.status_code = 500
-            return thread.res_task['exception']
+            return res_task['exception']
 
     @classmethod
     def _task_post(cls, url, data=None, timeout=60):
