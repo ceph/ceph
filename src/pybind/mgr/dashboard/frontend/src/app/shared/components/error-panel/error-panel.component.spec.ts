@@ -1,5 +1,7 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { AlertModule } from 'ngx-bootstrap';
+
 import { ErrorPanelComponent } from './error-panel.component';
 
 describe('ErrorPanelComponent', () => {
@@ -8,7 +10,8 @@ describe('ErrorPanelComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ ErrorPanelComponent ]
+      declarations: [ ErrorPanelComponent ],
+      imports: [ AlertModule.forRoot() ]
     })
     .compileComponents();
   }));
