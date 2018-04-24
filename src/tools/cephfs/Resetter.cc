@@ -170,12 +170,25 @@ int Resetter::_write_reset_event(Journaler *journaler)
 
   bufferlist bl;
   le->encode_with_header(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-  
-  cout << "writing EResetJournal entry" << std::endl;
-  C_SaferCond cond;
-  journaler->append_entry(bl);
-  journaler->flush(&cond);
 
-  return cond.wait();
+  cout << "writing EResetJournal entry" << std::endl;
+  journaler->append_entry(bl);
+
+  int ret;
+  {
+    C_SaferCond cond;
+    journaler->flush(&cond);
+    ret = cond.wait();
+    if (ret < 0)
+      return ret;
+  }
+  {
+    // wait until all journal prezero ops are done
+    C_SaferCond cond;
+    journaler->wait_for_prezero(&cond);
+    cond.wait();
+  }
+
+  return ret;
 }
 
