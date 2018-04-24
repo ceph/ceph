@@ -312,6 +312,8 @@ private:
 
   uint64_t waiting_for_zero_pos;
   interval_set<uint64_t> pending_zero;  // non-contig bits we've zeroed
+  list<Context*> waitfor_prezero;
+
   std::map<uint64_t, uint64_t> pending_safe; // flush_pos -> safe_pos
   // when safe through given offset
   std::map<uint64_t, std::list<Context*> > waitfor_safe;
@@ -459,6 +461,7 @@ public:
   void flush(Context *onsafe = 0);
   void wait_for_readable(Context *onfinish);
   bool have_waiter() const;
+  void wait_for_prezero(Context *onfinish);
 
   // Synchronous setters
   // ===================
