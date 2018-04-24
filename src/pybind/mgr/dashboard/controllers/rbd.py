@@ -11,7 +11,7 @@ import six
 
 import rbd
 
-from . import ApiController, AuthRequired, RESTController, Task
+from . import ApiController, RESTController, Task
 from .. import mgr
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
@@ -113,7 +113,6 @@ def _sort_features(features, enable=True):
 
 
 @ApiController('/block/image')
-@AuthRequired()
 class Rbd(RESTController):
 
     RESOURCE_ID = "pool_name/image_name"
@@ -375,7 +374,6 @@ class Rbd(RESTController):
 
 
 @ApiController('/block/image/:pool_name/:image_name/snap')
-@AuthRequired()
 class RbdSnapshot(RESTController):
 
     RESOURCE_ID = "snapshot_name"

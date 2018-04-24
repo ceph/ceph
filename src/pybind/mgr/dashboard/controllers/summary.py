@@ -3,15 +3,15 @@ from __future__ import absolute_import
 
 import json
 
+
+from . import ApiController, Endpoint, BaseController
 from .. import mgr
-from . import AuthRequired, ApiController, Endpoint, BaseController
 from ..controllers.rbd_mirroring import get_daemons_and_pools
 from ..tools import ViewCacheNoDataException
 from ..tools import TaskManager
 
 
 @ApiController('/summary')
-@AuthRequired()
 class Summary(BaseController):
     def _health_status(self):
         health_data = mgr.get("health")

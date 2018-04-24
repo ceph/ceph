@@ -5,15 +5,14 @@ from collections import defaultdict
 
 import cherrypy
 
-from ..exceptions import DashboardException
-from . import ApiController, AuthRequired, RESTController
+from . import ApiController, RESTController
 from .. import mgr
+from ..exceptions import DashboardException
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
 
 
 @ApiController('/cephfs')
-@AuthRequired()
 class CephFS(RESTController):
     def __init__(self):
         super(CephFS, self).__init__()

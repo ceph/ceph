@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import json
 import cherrypy
 
-from . import ApiController, BaseController, RESTController, AuthRequired, Endpoint
+from . import ApiController, BaseController, RESTController, Endpoint
 from .. import logger
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
@@ -13,7 +13,6 @@ from ..exceptions import DashboardException
 
 
 @ApiController('/rgw')
-@AuthRequired()
 class Rgw(BaseController):
 
     @Endpoint()
@@ -37,7 +36,6 @@ class Rgw(BaseController):
 
 
 @ApiController('/rgw/daemon')
-@AuthRequired()
 class RgwDaemon(RESTController):
 
     def list(self):
@@ -97,7 +95,6 @@ class RgwRESTController(RESTController):
 
 
 @ApiController('/rgw/bucket')
-@AuthRequired()
 class RgwBucket(RgwRESTController):
 
     def list(self):
@@ -128,7 +125,6 @@ class RgwBucket(RgwRESTController):
 
 
 @ApiController('/rgw/user')
-@AuthRequired()
 class RgwUser(RgwRESTController):
 
     def list(self):
