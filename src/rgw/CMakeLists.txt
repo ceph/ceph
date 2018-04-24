@@ -97,7 +97,6 @@ set(rgw_a_srcs
   rgw_process.cc
   rgw_quota.cc
   rgw_rados.cc
-  rgw_request.cc
   rgw_resolve.cc
   rgw_rest_bucket.cc
   rgw_rest.cc
