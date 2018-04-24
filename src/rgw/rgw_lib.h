@@ -157,9 +157,6 @@ namespace rgw {
       RGWRequest::init_state(_s);
       RGWHandler::init(rados_ctx->store, _s, io);
 
-      /* fixup _s->req */
-      _s->req = this;
-
       get_state()->obj_ctx = rados_ctx;
       get_state()->req_id = store->unique_id(id);
       get_state()->trans_id = store->unique_trans_id(id);
@@ -195,9 +192,6 @@ namespace rgw {
 
 	RGWRequest::init_state(&rstate);
 	RGWHandler::init(rados_ctx.store, &rstate, &io_ctx);
-
-	/* fixup _s->req */
-	get_state()->req = this;
 
 	get_state()->obj_ctx = &rados_ctx;
 	get_state()->req_id = store->unique_id(id);
