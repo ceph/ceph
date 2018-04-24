@@ -21,7 +21,7 @@ from .exceptions import ViewCacheNoDataException
 class RequestLoggingTool(cherrypy.Tool):
     def __init__(self):
         cherrypy.Tool.__init__(self, 'before_handler', self.request_begin,
-                               priority=95)
+                               priority=10)
 
     def _setup(self):
         cherrypy.Tool._setup(self)
