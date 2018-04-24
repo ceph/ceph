@@ -13,6 +13,7 @@ from . import ApiController, AuthRequired, BaseController
 from .. import logger, mgr
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
+from ..services.exception import handle_rbd_error
 
 
 @ViewCache()
@@ -94,6 +95,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
                 mirror_mode = rbdctx.mirror_mode_get(ioctx)
             except:  # noqa pylint: disable=W0702
                 logger.exception("Failed to query mirror mode %s", pool_name)
+                mirror_mode = None
 
             stats = {}
             if mirror_mode == rbd.RBD_MIRROR_MODE_DISABLED:
@@ -163,6 +165,7 @@ class RbdMirror(BaseController):
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
+    @handle_rbd_error()
     def __call__(self):
         status, content_data = self._get_content_data()
         return {'status': status, 'content_data': content_data}
@@ -233,6 +236,7 @@ class RbdMirror(BaseController):
             pass
         except:  # noqa pylint: disable=W0702
             logger.exception("Failed to list mirror image status %s", pool_name)
+            raise
 
         return data
 
@@ -250,9 +254,6 @@ class RbdMirror(BaseController):
 
         pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
         _, data = get_daemons_and_pools()
-        if isinstance(data, Exception):
-            logger.exception("Failed to get rbd-mirror daemons list")
-            raise type(data)(str(data))
         daemons = data.get('daemons', [])
         pool_stats = data.get('pools', {})
 
