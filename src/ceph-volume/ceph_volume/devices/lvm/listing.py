@@ -49,6 +49,9 @@ def pretty_report(report):
                         value=value
                     )
                 )
+            output.append(
+                device_metadata_item_template.format(tag_name='devices', value=','.join(device['devices'])))
+
     print(''.join(output))
 
 
@@ -73,6 +76,30 @@ class List(object):
 
     def __init__(self, argv):
         self.argv = argv
+
+    @property
+    def pvs(self):
+        """
+        To avoid having to make an LVM API call for every single item being
+        reported, the call gets set only once, using that stored call for
+        subsequent calls
+        """
+        if getattr(self, '_pvs', None) is not None:
+            return self._pvs
+        self._pvs = api.get_api_pvs()
+        return self._pvs
+
+    def match_devices(self, lv_uuid):
+        """
+        It is possible to have more than one PV reported *with the same name*,
+        to avoid incorrect or duplicate contents we correlated the lv uuid to
+        the one on the physical device.
+        """
+        devices = []
+        for device in self.pvs:
+            if device.get('lv_uuid') == lv_uuid:
+                devices.append(device['pv_name'])
+        return devices
 
     @decorators.needs_root
     def list(self, args):
@@ -152,6 +179,7 @@ class List(object):
                 return self.full_report(lvs=lvs)
 
         if lv:
+
             try:
                 _id = lv.tags['ceph.osd_id']
             except KeyError:
@@ -159,9 +187,9 @@ class List(object):
                 return report
 
             report.setdefault(_id, [])
-            report[_id].append(
-                lv.as_dict()
-            )
+            lv_report = lv.as_dict()
+            lv_report['devices'] = self.match_devices(lv.lv_uuid)
+            report[_id].append(lv_report)
 
         else:
             # this has to be a journal/wal/db device (not a logical volume) so try
@@ -202,9 +230,9 @@ class List(object):
                 continue
 
             report.setdefault(_id, [])
-            report[_id].append(
-                lv.as_dict()
-            )
+            lv_report = lv.as_dict()
+            lv_report['devices'] = self.match_devices(lv.lv_uuid)
+            report[_id].append(lv_report)
 
             for device_type in ['journal', 'block', 'wal', 'db']:
                 device_uuid = lv.tags.get('ceph.%s_uuid' % device_type)
