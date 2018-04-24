@@ -1736,33 +1736,36 @@ int MDSMonitor::print_nodes(Formatter *f)
  * attempt to find daemons to grow it. If the cluster is oversized
  * (with respect to max_mds) then shrink it by stopping its highest rank.
  */
-bool MDSMonitor::maybe_resize_cluster(std::shared_ptr<Filesystem> &fs)
+bool MDSMonitor::maybe_resize_cluster(fs_cluster_id_t fscid)
 {
+  const auto &fsmap = get_fsmap();
+  auto &fsmap_mds_map = fsmap.get_filesystem(fscid)->mds_map;
   auto &pending = get_pending_fsmap_writeable();
-  int in = fs->mds_map.get_num_in_mds();
-  int max = fs->mds_map.get_max_mds();
+  auto pending_fs = pending.get_filesystem(fscid);
+  auto &pending_mds_map = pending_fs->mds_map;
+
+  int in = pending_mds_map.get_num_in_mds();
+  int max = pending_mds_map.get_max_mds();
 
   dout(20) << __func__ << " in " << in << " max " << max << dendl;
 
-  if (fs->mds_map.is_degraded()) {
-    dout(5) << "not resizing degraded MDS cluster "
-	         << fs->mds_map.fs_name << dendl;
+  /* Check that both the current epoch mds_map is resizeable as well as the
+   * current batch of changes in pending. This is important if an MDS is
+   * becoming active in the next epoch.
+   */
+  if (!fsmap_mds_map.is_resizeable() ||
+      !pending_mds_map.is_resizeable()) {
+    dout(5) << __func__ << " mds_map is not currently resizeable" << dendl;
     return false;
   }
 
-  if (fs->mds_map.get_num_mds(CEPH_MDS_STATE_STOPPING)) {
-    dout(5) << "An MDS for " << fs->mds_map.fs_name
-	         << " is stopping; waiting to resize" << dendl;
-    return false;
-  }
-
-  if (in < max && !fs->mds_map.test_flag(CEPH_MDSMAP_NOT_JOINABLE)) {
+  if (in < max && !pending_mds_map.test_flag(CEPH_MDSMAP_NOT_JOINABLE)) {
     mds_rank_t mds = mds_rank_t(0);
     string name;
-    while (fs->mds_map.is_in(mds)) {
+    while (pending_mds_map.is_in(mds)) {
       mds++;
     }
-    mds_gid_t newgid = pending.find_replacement_for({fs->fscid, mds},
+    mds_gid_t newgid = pending.find_replacement_for({fscid, mds},
                          name, g_conf->mon_force_standby_active);
     if (newgid == MDS_GID_NONE) {
       return false;
@@ -1773,15 +1776,15 @@ bool MDSMonitor::maybe_resize_cluster(std::shared_ptr<Filesystem> &fs)
             << " as mds." << mds << dendl;
 
     mon->clog->info() << new_info.human_name() << " assigned to "
-                         "filesystem " << fs->mds_map.fs_name << " as rank "
-                      << mds << " (now has " << fs->mds_map.get_num_in_mds() + 1
+                         "filesystem " << pending_mds_map.fs_name << " as rank "
+                      << mds << " (now has " << pending_mds_map.get_num_in_mds() + 1
                       << " ranks)";
-    pending.promote(newgid, fs, mds);
+    pending.promote(newgid, pending_fs, mds);
     return true;
   } else if (in > max) {
     mds_rank_t target = in - 1;
-    const auto &info = fs->mds_map.get_info(target);
-    if (fs->mds_map.is_active(target)) {
+    const auto &info = pending_mds_map.get_info(target);
+    if (pending_mds_map.is_active(target)) {
       dout(1) << "deactivating " << target << dendl;
       mon->clog->info() << "deactivating " << info.human_name();
       pending.modify_daemon(info.global_id,
@@ -2013,7 +2016,7 @@ void MDSMonitor::tick()
 
   // resize mds cluster (adjust @in)?
   for (auto &p : pending.filesystems) {
-    do_propose |= maybe_resize_cluster(p.second);
+    do_propose |= maybe_resize_cluster(p.second->fscid);
   }
 
   const auto now = ceph_clock_now();
