@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -ex
 #
 # rbd_mirror.sh - test rbd-mirror daemon
 #
@@ -8,6 +8,8 @@
 #
 
 . $(dirname $0)/rbd_mirror_helpers.sh
+
+setup
 
 testlog "TEST: add image and test replay"
 start_mirrors ${CLUSTER1}
@@ -436,5 +438,3 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER1} osd blacklist ls 2>&1 | grep -q "listed 0 entries"
   CEPH_ARGS='--id admin' ceph --cluster ${CLUSTER2} osd blacklist ls 2>&1 | grep -q "listed 0 entries"
 fi
-
-echo OK
