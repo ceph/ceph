@@ -1,0 +1,4 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/basic/health-mds.sh --mini
