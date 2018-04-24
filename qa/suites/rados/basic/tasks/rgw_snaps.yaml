@@ -13,6 +13,7 @@ tasks:
     kwargs:
       pools:
         - default.rgw.buckets.data
+        - default.rgw.buckets.index
         - .rgw.root
         - default.rgw.control
         - default.rgw.meta
@@ -20,6 +21,7 @@ tasks:
 - thrash_pool_snaps:
     pools:
     - default.rgw.buckets.data
+    - default.rgw.buckets.index
     - .rgw.root
     - default.rgw.control
     - default.rgw.meta
