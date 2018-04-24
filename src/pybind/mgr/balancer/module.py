@@ -204,7 +204,7 @@ class Module(MgrModule):
     OPTIONS = [
             {'name': 'active'},
             {'name': 'begin_time'},
-            {'name': 'crush_compat_max_iteratons'},
+            {'name': 'crush_compat_max_iterations'},
             {'name': 'crush_compat_step'},
             {'name': 'end_time'},
             {'name': 'max_misplaced'},
@@ -212,7 +212,7 @@ class Module(MgrModule):
             {'name': 'mode'},
             {'name': 'sleep_interval'},
             {'name': 'upmap_max_iterations'},
-            {'name': 'upmap_max_deviations'},
+            {'name': 'upmap_max_deviation'},
     ]
 
     COMMANDS = [
