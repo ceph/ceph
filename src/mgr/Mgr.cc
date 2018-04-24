@@ -72,7 +72,7 @@ void MetadataUpdate::finish(int r)
 {
   daemon_state.clear_updating(key);
   if (r == 0) {
-    if (key.first == "mds" || key.first == "osd") {
+    if (key.first == "mds" || key.first == "osd" || key.first == "mgr") {
       json_spirit::mValue json_result;
       bool read_ok = json_spirit::read(
           outbl.to_str(), json_result);
@@ -97,7 +97,7 @@ void MetadataUpdate::finish(int r)
       if (daemon_state.exists(key)) {
         state = daemon_state.get(key);
 	Mutex::Locker l(state->lock);
-        if (key.first == "mds") {
+        if (key.first == "mds" || key.first == "mgr") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
           daemon_meta.erase("id");
@@ -112,7 +112,7 @@ void MetadataUpdate::finish(int r)
         state->key = key;
         state->hostname = daemon_meta.at("hostname").get_str();
 
-        if (key.first == "mds") {
+        if (key.first == "mds" || key.first == "mgr") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
           daemon_meta.erase("id");
@@ -433,7 +433,6 @@ void Mgr::handle_osd_map()
       }
 
       if (update_meta) {
-        daemon_state.notify_updating(k);
         auto c = new MetadataUpdate(daemon_state, k);
         std::ostringstream cmd;
         cmd << "{\"prefix\": \"osd metadata\", \"id\": "
@@ -565,7 +564,6 @@ void Mgr::handle_fs_map(MFSMap* m)
     }
 
     if (update) {
-      daemon_state.notify_updating(k);
       auto c = new MetadataUpdate(daemon_state, k);
 
       // Older MDS daemons don't have addr in the metadata, so

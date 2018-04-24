@@ -116,7 +116,10 @@ public:
   std::string outs;
 
   MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
-    : daemon_state(daemon_state_), key(key_) {}
+    : daemon_state(daemon_state_), key(key_)
+  {
+      daemon_state.notify_updating(key);
+  }
 
   void set_default(const std::string &k, const std::string &v)
   {
