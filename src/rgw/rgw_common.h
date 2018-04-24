@@ -1769,16 +1769,12 @@ struct req_init_state {
   string src_bucket;
 };
 
-/* XXX why don't RGWRequest (or descendants) hold this state? */
-class RGWRequest;
-
 #include "rgw_auth.h"
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
   CephContext *cct;
   rgw::io::BasicClient *cio{nullptr};
-  RGWRequest *req{nullptr}; /// XXX: re-remove??
   http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
   bool content_started{false};
