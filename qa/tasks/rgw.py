@@ -194,7 +194,7 @@ def create_pools(ctx, clients):
     for client in clients:
         log.debug("Obtaining remote for client {}".format(client))
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
-        data_pool = '.rgw.buckets'
+        data_pool = 'default.rgw.buckets.data'
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
 
         if ctx.rgw.ec_data_pool:
