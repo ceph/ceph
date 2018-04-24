@@ -113,18 +113,21 @@ class ViewCache(object):
 
         # pylint: disable=broad-except
         def run(self):
+            t0 = 0
+            t1 = 0
             try:
                 t0 = time.time()
                 logger.debug("VC: starting execution of %s", self.fn)
                 val = self.fn(*self.args, **self.kwargs)
                 t1 = time.time()
             except Exception as ex:
-                logger.exception("Error while calling fn=%s ex=%s", self.fn,
-                                 str(ex))
-                self._view.value = None
-                self._view.value_when = None
-                self._view.getter_thread = None
-                self._view.exception = ex
+                with self._view.lock:
+                    logger.exception("Error while calling fn=%s ex=%s", self.fn,
+                                     str(ex))
+                    self._view.value = None
+                    self._view.value_when = None
+                    self._view.getter_thread = None
+                    self._view.exception = ex
             else:
                 with self._view.lock:
                     self._view.latency = t1 - t0
