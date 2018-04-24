@@ -4,30 +4,27 @@
 from __future__ import absolute_import
 
 import math
+from functools import partial
+
 import cherrypy
-import rados
 import rbd
 
 from . import ApiController, AuthRequired, RESTController, Task
 from .. import mgr
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
+from ..services.exception import handle_rados_error, handle_rbd_error, \
+    serialize_dashboard_exception
 
 
-# pylint: disable=inconsistent-return-statements
-def _rbd_exception_handler(ex):
-    if isinstance(ex, rbd.OSError):
-        return {'status': 409, 'detail': str(ex), 'errno': ex.errno,
-                'component': 'rbd'}
-    elif isinstance(ex, rados.OSError):
-        return {'status': 409, 'detail': str(ex), 'errno': ex.errno,
-                'component': 'rados'}
-    raise ex
-
-
+# pylint: disable=not-callable
 def RbdTask(name, metadata, wait_for):
-    return Task("rbd/{}".format(name), metadata, wait_for,
-                _rbd_exception_handler)
+    def composed_decorator(func):
+        func = handle_rados_error('pool')(func)
+        func = handle_rbd_error()(func)
+        return Task("rbd/{}".format(name), metadata, wait_for,
+                    partial(serialize_dashboard_exception, include_http_status=True))(func)
+    return composed_decorator
 
 
 def _rbd_call(pool_name, func, *args, **kwargs):
@@ -253,9 +250,13 @@ class Rbd(RESTController):
             result.append({'status': status, 'value': value, 'pool_name': pool})
         return result
 
+    @handle_rbd_error()
+    @handle_rados_error('pool')
     def list(self, pool_name=None):
         return self._rbd_list(pool_name)
 
+    @handle_rbd_error()
+    @handle_rados_error('pool')
     def get(self, pool_name, image_name):
         ioctx = mgr.rados.open_ioctx(pool_name)
         try:
