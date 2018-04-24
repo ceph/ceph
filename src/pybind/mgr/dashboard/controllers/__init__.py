@@ -164,11 +164,20 @@ def browsable_api_view(meth):
             return meth(self, *vpath, **kwargs)
         if 'text/html' not in cherrypy.request.headers.get('Accept', ''):
             return meth(self, *vpath, **kwargs)
+
         if '_method' in kwargs:
             cherrypy.request.method = kwargs.pop('_method').upper()
+
+        # Form typically use None as default, but HTML defaults to empty-string.
+        for k in kwargs:
+            if not kwargs[k]:
+                del kwargs[k]
+
         if '_raw' in kwargs:
             kwargs.pop('_raw')
             return meth(self, *vpath, **kwargs)
+
+        sub_path = cherrypy.request.path_info.split(self._cp_path_, 1)[-1].strip('/').split('/')
 
         template = """
         <html>
@@ -176,16 +185,19 @@ def browsable_api_view(meth):
         {docstring}
         <h2>Request</h2>
         <p>{method} {breadcrump}</p>
+        {params}
         <h2>Response</h2>
         <p>Status: {status_code}<p>
         <pre>{reponse_headers}</pre>
-        <form action="/api/{path}/{vpath}" method="get">
+        <form action="/api/{path}/{sub_path}" method="get">
         <input type="hidden" name="_raw" value="true" />
         <button type="submit">GET raw data</button>
         </form>
         <h2>Data</h2>
         <pre>{data}</pre>
+        {exception}
         {create_form}
+        {delete_form}
         <h2>Note</h2>
         <p>Please note that this API is not an official Ceph REST API to be
         used by third-party applications. It's primary purpose is to serve
@@ -195,33 +207,51 @@ def browsable_api_view(meth):
 
         create_form_template = """
         <h2>Create Form</h2>
-        <form action="/api/{path}/{vpath}" method="post">
+        <form action="/api/{path}/{sub_path}" method="post">
         {fields}<br>
         <input type="hidden" name="_method" value="post" />
         <button type="submit">Create</button>
         </form>
         """
 
-        try:
-            data = meth(self, *vpath, **kwargs)
-        except Exception as e:  # pylint: disable=broad-except
+        delete_form_template = """
+        <h2>Create Form</h2>
+        <form action="/api/{path}/{sub_path}" method="post">
+        <input type="hidden" name="_method" value="delete" />
+        <button type="submit">Delete</button>
+        </form>
+        """
+
+        def mk_exception(e):
             except_template = """
             <h2>Exception: {etype}: {tostr}</h2>
             <pre>{trace}</pre>
-            Params: {kwargs}
             """
             import traceback
             tb = sys.exc_info()[2]
             cherrypy.response.headers['Content-Type'] = 'text/html'
-            data = except_template.format(
+            return except_template.format(
                 etype=e.__class__.__name__,
                 tostr=str(e),
                 trace='\n'.join(traceback.format_tb(tb)),
                 kwargs=kwargs
             )
 
-        if cherrypy.response.headers['Content-Type'] == 'application/json':
-            data = json.dumps(json.loads(data), indent=2, sort_keys=True)
+        try:
+            data = meth(self, *vpath, **kwargs)
+            exception = ''
+            if cherrypy.response.headers['Content-Type'] == 'application/json':
+                try:
+                    data = json.dumps(json.loads(data), indent=2, sort_keys=True)
+                except Exception:  # pylint: disable=broad-except
+                    pass
+        except (ViewCacheNoDataException, DashboardException) as e:
+            cherrypy.response.status = getattr(e, 'status', 400)
+            data = str(serialize_dashboard_exception(e))
+            exception = mk_exception(e)
+        except Exception as e:  # pylint: disable=broad-except
+            data = ''
+            exception = mk_exception(e)
 
         try:
             create = getattr(self, 'create')
@@ -231,7 +261,7 @@ def browsable_api_view(meth):
             create_form = create_form_template.format(
                 fields='<br>'.join(input_fields),
                 path=self._cp_path_,
-                vpath='/'.join(vpath)
+                sub_path='/'.join(sub_path)
             )
         except AttributeError:
             create_form = ''
@@ -247,13 +277,18 @@ def browsable_api_view(meth):
             docstring='<pre>{}</pre>'.format(self.__doc__) if self.__doc__ else '',
             method=cherrypy.request.method,
             path=self._cp_path_,
-            vpath='/'.join(vpath),
-            breadcrump=mk_breadcrump(['api', self._cp_path_] + list(vpath)),
+            sub_path='/'.join(sub_path),
+            breadcrump=mk_breadcrump(['api', self._cp_path_] + list(sub_path)),
             status_code=cherrypy.response.status,
             reponse_headers='\n'.join(
                 '{}: {}'.format(k, v) for k, v in cherrypy.response.headers.items()),
             data=data,
-            create_form=create_form
+            exception=exception,
+            create_form=create_form,
+            delete_form=delete_form_template.format(path=self._cp_path_, sub_path='/'.join(
+                sub_path)) if sub_path else '',
+            params='<h2>Rrequest Params</h2><pre>{}</pre>'.format(
+                json.dumps(kwargs, indent=2)) if kwargs else '',
         )
 
     wrapper.exposed = True
