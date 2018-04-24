@@ -21,9 +21,10 @@ from ..services.exception import serialize_dashboard_exception
 
 
 class Controller(object):
-    def __init__(self, path, base_url=None):
+    def __init__(self, path, base_url=None, secure=True):
         self.path = path
         self.base_url = base_url
+        self.secure = secure
 
         if self.path and self.path[0] != "/":
             self.path = "/" + self.path
@@ -44,19 +45,19 @@ class Controller(object):
             'tools.sessions.on': True,
             'tools.sessions.name': Session.NAME,
             'tools.session_expire_at_browser_close.on': True,
-            'tools.dashboard_exception_handler.on': True
+            'tools.dashboard_exception_handler.on': True,
+            'tools.authenticate.on': self.secure,
         }
         if not hasattr(cls, '_cp_config'):
             cls._cp_config = {}
-        if 'tools.authenticate.on' not in cls._cp_config:
-            config['tools.authenticate.on'] = False
         cls._cp_config.update(config)
         return cls
 
 
 class ApiController(Controller):
-    def __init__(self, path):
-        super(ApiController, self).__init__(path, base_url="/api")
+    def __init__(self, path, secure=True):
+        super(ApiController, self).__init__(path, base_url="/api",
+                                            secure=secure)
 
     def __call__(self, cls):
         cls = super(ApiController, self).__call__(cls)
@@ -65,24 +66,10 @@ class ApiController(Controller):
 
 
 class UiApiController(Controller):
-    def __init__(self, path):
-        super(UiApiController, self).__init__(path, base_url="/ui-api")
-
-
-def AuthRequired(enabled=True):
-    if not isinstance(enabled, bool):
-        raise TypeError('AuthRequired used incorrectly. '
-                        'You are likely missing parentheses!')
-
-    def decorate(cls):
-        if not hasattr(cls, '_cp_config'):
-            cls._cp_config = {
-                'tools.authenticate.on': enabled
-            }
-        else:
-            cls._cp_config['tools.authenticate.on'] = enabled
-        return cls
-    return decorate
+    def __init__(self, path, security_scope=None, secure=True):
+        super(UiApiController, self).__init__(path, base_url="/ui-api",
+                                              security_scope=security_scope,
+                                              secure=secure)
 
 
 def Endpoint(method=None, path=None, path_params=None, query_params=None,
@@ -434,8 +421,8 @@ class BaseController(object):
             path_params = [p['name'] for p in self.path_params]
             query_params = [p['name'] for p in self.query_params]
             return [p for p in func_params
-                    if p['name'] not in path_params and
-                    p['name'] not in query_params]
+                    if p['name'] not in path_params
+                    and p['name'] not in query_params]
 
         @property
         def group(self):

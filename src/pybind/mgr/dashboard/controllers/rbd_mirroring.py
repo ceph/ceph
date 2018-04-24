@@ -8,7 +8,7 @@ from functools import partial
 
 import rbd
 
-from . import ApiController, AuthRequired, Endpoint, BaseController
+from . import ApiController, Endpoint, BaseController
 from .. import logger, mgr
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
@@ -155,7 +155,6 @@ def get_daemons_and_pools():  # pylint: disable=R0915
 
 
 @ApiController('/rbdmirror')
-@AuthRequired()
 class RbdMirror(BaseController):
 
     def __init__(self):

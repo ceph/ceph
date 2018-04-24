@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from . import ApiController, AuthRequired, RESTController
+from . import ApiController, RESTController
 from .. import mgr
 from ..services.ceph_service import CephService
 
@@ -9,7 +9,6 @@ SERVICE_TYPE = 'tcmu-runner'
 
 
 @ApiController('/tcmuiscsi')
-@AuthRequired()
 class TcmuIscsi(RESTController):
     # pylint: disable=too-many-nested-blocks
     def list(self):  # pylint: disable=unused-argument

@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from . import ApiController, RESTController, Endpoint, AuthRequired
+from . import ApiController, RESTController, Endpoint
 from .. import mgr
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
@@ -11,7 +11,6 @@ from ..tools import str_to_bool
 
 
 @ApiController('/pool')
-@AuthRequired()
 class Pool(RESTController):
 
     @classmethod

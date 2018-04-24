@@ -15,7 +15,7 @@ from ..tools import is_valid_ipv6_address, dict_contains_path
 
 
 # pylint: disable=W0613
-@Controller('/foo')
+@Controller('/foo', secure=False)
 class FooResource(RESTController):
     elems = []
 
@@ -40,20 +40,20 @@ class FooResource(RESTController):
         return dict(key=key, newdata=newdata)
 
 
-@Controller('/foo/:key/:method')
+@Controller('/foo/:key/:method', secure=False)
 class FooResourceDetail(RESTController):
     def list(self, key, method):
         return {'detail': (key, [method])}
 
 
-@ApiController('/rgw/proxy')
+@ApiController('/rgw/proxy', secure=False)
 class GenerateControllerRoutesController(BaseController):
     @Proxy()
     def __call__(self, path, **params):
         pass
 
 
-@ApiController('/fooargs')
+@ApiController('/fooargs', secure=False)
 class FooArgs(RESTController):
     def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}

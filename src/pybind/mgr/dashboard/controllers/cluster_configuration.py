@@ -3,13 +3,12 @@ from __future__ import absolute_import
 
 import cherrypy
 
+from . import ApiController, RESTController
 from .. import mgr
 from ..services.ceph_service import CephService
-from . import ApiController, RESTController, AuthRequired
 
 
 @ApiController('/cluster_conf')
-@AuthRequired()
 class ClusterConfiguration(RESTController):
 
     def _append_config_option_values(self, options):
