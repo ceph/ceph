@@ -127,7 +127,7 @@ struct bluefs_super_t {
       block_size(4096) { }
 
   uint64_t block_mask() const {
-    return ~(block_size - 1);
+    return ~((uint64_t)block_size - 1);
   }
 
   void encode(bufferlist& bl) const;
