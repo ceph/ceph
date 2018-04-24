@@ -1,12 +1,18 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import DashboardTestCase, authenticate
+from .helper import DashboardTestCase
 
 
 class HostControllerTest(DashboardTestCase):
 
-    @authenticate
+    AUTH_ROLES = ['read-only']
+
+    @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
+    def test_access_permissions(self):
+        self._get('/api/host')
+        self.assertStatus(403)
+
     def test_host_list(self):
         data = self._get('/api/host')
         self.assertStatus(200)
