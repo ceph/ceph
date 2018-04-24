@@ -193,7 +193,6 @@ void PGLog::proc_replica_log(
 	     << "for divergent objects" << dendl;
     return;
   }
-  assert(olog.head >= log.tail);
 
   /*
     basically what we're doing here is rewinding the remote log,
