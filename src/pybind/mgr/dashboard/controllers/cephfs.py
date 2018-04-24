@@ -5,6 +5,7 @@ from collections import defaultdict
 
 import cherrypy
 
+from ..exceptions import DashboardException
 from . import ApiController, AuthRequired, BaseController
 from .. import mgr
 from ..services.ceph_service import CephService
@@ -80,7 +81,9 @@ class CephFS(BaseController):
         try:
             return int(fs_id)
         except ValueError:
-            raise cherrypy.HTTPError(400, "Invalid cephfs id {}".format(fs_id))
+            raise DashboardException(code='invalid_cephfs_id',
+                                     msg="Invalid cephfs id {}".format(fs_id),
+                                     component='cephfs')
 
     def _get_mds_names(self, filesystem_id=None):
         names = []
