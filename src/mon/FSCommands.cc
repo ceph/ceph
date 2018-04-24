@@ -389,8 +389,10 @@ public:
           [is_down](std::shared_ptr<Filesystem> fs)
       {
 	if (is_down) {
-	  fs->mds_map.set_old_max_mds();
-	  fs->mds_map.set_max_mds(0);
+          if (fs->mds_map.get_max_mds() > 0) {
+	    fs->mds_map.set_old_max_mds();
+	    fs->mds_map.set_max_mds(0);
+          } /* else already down! */
 	} else {
 	  mds_rank_t oldmax = fs->mds_map.get_old_max_mds();
 	  fs->mds_map.set_max_mds(oldmax ? oldmax : 1);
