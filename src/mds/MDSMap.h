@@ -497,6 +497,17 @@ public:
    */
   availability_t is_cluster_available() const;
 
+  /**
+   * Return whether this MDSMap is suitable for resizing based on the state
+   * of the ranks.
+   */
+  bool is_resizeable() const {
+    return !is_degraded() &&
+        get_num_mds(CEPH_MDS_STATE_CREATING) == 0 &&
+        get_num_mds(CEPH_MDS_STATE_STARTING) == 0 &&
+        get_num_mds(CEPH_MDS_STATE_STOPPING) == 0;
+  }
+
   // mds states
   bool is_down(mds_rank_t m) const { return up.count(m) == 0; }
   bool is_up(mds_rank_t m) const { return up.count(m); }
