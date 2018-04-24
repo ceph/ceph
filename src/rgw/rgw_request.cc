@@ -21,9 +21,6 @@ void RGWRequest::log_format(struct req_state *s, const char *fmt, ...)
   log(s, buf);
 } /* RGWRequest::log_format */
 
-void RGWRequest::log_init() {
-}
-
 void RGWRequest::log(struct req_state *s, const char *msg) {
   if (s->info.method && req_str.size() == 0) {
     req_str = s->info.method;
