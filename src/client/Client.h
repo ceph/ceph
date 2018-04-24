@@ -885,7 +885,11 @@ private:
 	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
 	  bool readonly, hidden;
 	  bool (Client::*exists_cb)(Inode *in);
+	  int flags;
   };
+
+/* Flags for VXattr */
+#define VXATTR_RSTAT 0x1
 
   bool _vxattrcb_quota_exists(Inode *in);
   size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
