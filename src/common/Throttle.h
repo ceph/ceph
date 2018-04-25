@@ -373,8 +373,8 @@ public:
   
   ~TokenBucketThrottle();
   
-  template <typename T, typename I, void(T::*MF)(int, I*)>
-  bool get(uint64_t c, T *handler, I *item) {
+  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
+  bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
     if (0 == m_throttle.max)
       return false;
   
@@ -384,8 +384,8 @@ public:
     uint64_t got = m_throttle.get(c);
     if (got < c) {
       // Not enough tokens, add a blocker for it.
-      Context *ctx = new FunctionContext([handler, item](int r) {
-  	(handler->*MF)(r, item);
+      Context *ctx = new FunctionContext([handler, item, flag](int r) {
+  	(handler->*MF)(r, item, flag);
         });
       m_blockers.emplace_back(c - got, ctx);
       waited = true;
