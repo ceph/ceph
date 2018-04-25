@@ -130,10 +130,8 @@ public:
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
 
-static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
-			     CK_MECHANISM_TYPE mechanism,
-			     PK11SymKey *key,
-			     SECItem *param,
+static int nss_aes_operation(
+			     PK11Context* ectx,
 			     const bufferlist& in, bufferlist& out,
 			     std::string *error)
 {
@@ -146,17 +144,12 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
   int written;
   unsigned char *in_buf;
 
-  PK11Context *ectx;
-  ectx = PK11_CreateContextBySymKey(mechanism, op, key, param);
-  assert(ectx);
-
   incopy = in;  // it's a shallow copy!
   in_buf = (unsigned char*)incopy.c_str();
   ret = PK11_CipherOp(ectx,
 		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
 		      in_buf, in.length());
   if (ret != SECSuccess) {
-    PK11_DestroyContext(ectx, PR_TRUE);
     if (error) {
       ostringstream oss;
       oss << "NSS AES failed: " << PR_GetError();
@@ -169,7 +162,6 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
   ret = PK11_DigestFinal(ectx,
 			 (unsigned char*)out_tmp.c_str()+written, &written2,
 			 out_tmp.length()-written);
-  PK11_DestroyContext(ectx, PR_TRUE);
   if (ret != SECSuccess) {
     if (error) {
       ostringstream oss;
@@ -184,29 +176,40 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
   return 0;
 }
 
+// transplated from ad2f92594bd88ba8cf4163c1f9a0562c53ed96a8
+namespace ceph::crypto {
+
+struct ScopedPK11Context {
+  PK11Context* ctx;
+  ScopedPK11Context(PK11Context *c = nullptr)
+  : ctx(c)
+  {}
+  ~ScopedPK11Context() {
+    PK11_DestroyContext(ctx, PR_TRUE);
+  }
+  void reset(PK11Context* c) noexcept {
+   ctx = c;
+  }
+  PK11Context* get() const noexcept {
+    return ctx;
+  }
+  explicit operator bool() const noexcept {
+   return get() != nullptr;
+  }
+};
+
+}
+
 class CryptoAESKeyHandler : public CryptoKeyHandler {
-  CK_MECHANISM_TYPE mechanism;
-  PK11SlotInfo *slot;
-  PK11SymKey *key;
-  SECItem *param;
+  static constexpr CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
+  ceph::crypto::ScopedPK11Context enc_ctx;
+  ceph::crypto::ScopedPK11Context dec_ctx;
 
 public:
-  CryptoAESKeyHandler()
-    : mechanism(CKM_AES_CBC_PAD),
-      slot(NULL),
-      key(NULL),
-      param(NULL) {}
-  ~CryptoAESKeyHandler() override {
-    SECITEM_FreeItem(param, PR_TRUE);
-    if (key)
-      PK11_FreeSymKey(key);
-    if (slot)
-      PK11_FreeSlot(slot);
-  }
-
   int init(const bufferptr& s, ostringstream& err) {
     secret = s;
 
+    PK11SlotInfo *slot = nullptr;
     slot = PK11_GetBestSlot(mechanism, NULL);
     if (!slot) {
       err << "cannot find NSS slot to use: " << PR_GetError();
@@ -217,8 +220,11 @@ public:
     keyItem.type = siBuffer;
     keyItem.data = (unsigned char*)secret.c_str();
     keyItem.len = secret.length();
+    PK11SymKey* key = nullptr;
     key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
 			    &keyItem, NULL);
+    PK11_FreeSlot(slot);
+
     if (!key) {
       err << "cannot convert AES key for NSS: " << PR_GetError();
       return -1;
@@ -231,22 +237,30 @@ public:
     ivItem.data = (unsigned char*)CEPH_AES_IV;
     ivItem.len = sizeof(CEPH_AES_IV);
 
+    SECItem *param = nullptr;
     param = PK11_ParamFromIV(mechanism, &ivItem);
     if (!param) {
       err << "cannot set NSS IV param: " << PR_GetError();
       return -1;
     }
 
+    enc_ctx.reset(PK11_CreateContextBySymKey(mechanism, CKA_ENCRYPT, key, param));
+    dec_ctx.reset(PK11_CreateContextBySymKey(mechanism, CKA_DECRYPT, key, param));
+
+    SECITEM_FreeItem(param, PR_TRUE);
+    PK11_FreeSymKey(key);
     return 0;
   }
 
   int encrypt(const bufferlist& in,
 	      bufferlist& out, std::string *error) const override {
-    return nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out, error);
+    PK11_DigestBegin(enc_ctx.get());
+    return nss_aes_operation(enc_ctx.get(), in, out, error);
   }
   int decrypt(const bufferlist& in,
 	       bufferlist& out, std::string *error) const override {
-    return nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out, error);
+    PK11_DigestBegin(dec_ctx.get());
+    return nss_aes_operation(dec_ctx.get(), in, out, error);
   }
 };
 
