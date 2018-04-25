@@ -95,9 +95,11 @@ int RGWPeriodPuller::pull(const std::string& period_id, RGWPeriod& period)
       return r;
     }
     // reflect period objects if this is the latest version
-    r = period.reflect();
-    if (r < 0) {
-      return r;
+    if (store->realm.get_current_period() == period_id) {
+      r = period.reflect();
+      if (r < 0) {
+        return r;
+      }
     }
     ldout(store->ctx(), 14) << "period " << period_id
         << " pulled and written to local storage" << dendl;
