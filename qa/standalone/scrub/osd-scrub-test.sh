@@ -109,5 +109,6 @@ function TEST_scrub_test() {
 main osd-scrub-test "$@"
 
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && \
-#    qa/standalone/scrub/osd-scrub-test.sh"
+# compile-command: "cd build ; make -j4 && \
+#    ../qa/run-standalone.sh osd-scrub-test.sh"
+# End:
