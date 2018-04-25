@@ -20,7 +20,7 @@
 namespace {
   class CheckTextTable : public TextTable {
   public:
-    CheckTextTable(bool verbose) {
+    explicit CheckTextTable(bool verbose) {
       for (int i = 0; i < 4; i++) {
         define_column("", TextTable::LEFT, TextTable::LEFT);
       }

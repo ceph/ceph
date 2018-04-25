@@ -191,7 +191,7 @@ struct legacy_t {
     decode(a, p);
   }
   legacy_t() {}
-  legacy_t(int32_t i) : a(i) {}
+  explicit legacy_t(int32_t i) : a(i) {}
   friend bool operator<(const legacy_t& l, const legacy_t& r) {
     return l.a < r.a;
   }

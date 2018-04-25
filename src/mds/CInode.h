@@ -427,7 +427,7 @@ public:
     sr_t *snapnode = UNDEF_SRNODE;
 
     projected_inode() = delete;
-    projected_inode(const mempool_inode &in) : inode(in) {}
+    explicit projected_inode(const mempool_inode &in) : inode(in) {}
   };
 
 private:

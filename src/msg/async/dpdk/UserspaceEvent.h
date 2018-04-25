@@ -46,7 +46,7 @@ class UserspaceEventManager {
   std::list<uint32_t> unused_fds;
 
  public:
-  UserspaceEventManager(CephContext *c): cct(c) {
+  explicit UserspaceEventManager(CephContext *c): cct(c) {
     waiting_fds.resize(1024);
   }
 

@@ -99,7 +99,7 @@ struct RGWCurlHandle {
   mono_time lastuse;
   CURL* h;
 
-  RGWCurlHandle(CURL* h) : uses(0), h(h) {};
+  explicit RGWCurlHandle(CURL* h) : uses(0), h(h) {};
   CURL* operator*() {
     return this->h;
   }

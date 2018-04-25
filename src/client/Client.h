@@ -87,7 +87,7 @@ class MDSCommandOp : public CommandOp
   public:
   mds_gid_t     mds_gid;
 
-  MDSCommandOp(ceph_tid_t t) : CommandOp(t) {}
+  explicit MDSCommandOp(ceph_tid_t t) : CommandOp(t) {}
 };
 
 /* error code for ceph_fuse */
@@ -204,7 +204,7 @@ struct dir_result_t {
     int64_t offset;
     string name;
     InodeRef inode;
-    dentry(int64_t o) : offset(o) {}
+    explicit dentry(int64_t o) : offset(o) {}
     dentry(int64_t o, const string& n, const InodeRef& in) :
       offset(o), name(n), inode(in) {}
   };

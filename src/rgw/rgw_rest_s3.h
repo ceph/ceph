@@ -478,7 +478,7 @@ class RGWHandler_Auth_S3 : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
 
 public:
-  RGWHandler_Auth_S3(const rgw::auth::StrategyRegistry& auth_registry)
+  explicit RGWHandler_Auth_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
       auth_registry(auth_registry) {
   }
@@ -503,7 +503,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 public:
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 
-  RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
+  explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
       auth_registry(auth_registry) {
   }
@@ -772,7 +772,7 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   auth_data_t get_auth_data_v4(const req_state* s, const bool using_qs) const;
 
 public:
-  AWSGeneralAbstractor(CephContext* const cct)
+  explicit AWSGeneralAbstractor(CephContext* const cct)
     : cct(cct) {
   }
 
@@ -799,7 +799,7 @@ class AWSBrowserUploadAbstractor : public AWSEngine::VersionAbstractor {
   auth_data_t get_auth_data_v4(const req_state* s) const;
 
 public:
-  AWSBrowserUploadAbstractor(CephContext*) {
+  explicit AWSBrowserUploadAbstractor(CephContext*) {
   }
 
   auth_data_t get_auth_data(const req_state* s) const override;
@@ -897,7 +897,7 @@ class S3AuthFactory : public rgw::auth::RemoteApplier::Factory,
   RGWRados* const store;
 
 public:
-  S3AuthFactory(RGWRados* const store)
+  explicit S3AuthFactory(RGWRados* const store)
     : store(store) {
   }
 

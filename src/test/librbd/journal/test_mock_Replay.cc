@@ -16,7 +16,7 @@ namespace librbd {
 namespace {
 
 struct MockReplayImageCtx : public MockImageCtx {
-  MockReplayImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
+  explicit MockReplayImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
   }
 };
 

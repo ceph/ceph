@@ -176,7 +176,7 @@ struct obj {
   int a;
   int b;
   obj() : a(1), b(1) {}
-  obj(int _a) : a(_a), b(2) {}
+  explicit obj(int _a) : a(_a), b(2) {}
   obj(int _a,int _b) : a(_a), b(_b) {}
   friend inline bool operator<(const obj& l, const obj& r) {
     return l.a < r.a;

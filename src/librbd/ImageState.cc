@@ -26,7 +26,7 @@ using util::create_context_callback;
 class ImageUpdateWatchers {
 public:
 
-  ImageUpdateWatchers(CephContext *cct) : m_cct(cct),
+  explicit ImageUpdateWatchers(CephContext *cct) : m_cct(cct),
     m_lock(util::unique_lock_name("librbd::ImageUpdateWatchers::m_lock", this)) {
   }
 

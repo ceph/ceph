@@ -105,7 +105,7 @@ class interface {
     stream<Packet, ethernet_address> packet_stream;
     std::function<bool (forward_hash&, Packet&, size_t)> forward;
     bool ready() { return packet_stream.started(); }
-    l3_rx_stream(std::function<bool (forward_hash&, Packet&, size_t)>&& fw) : forward(fw) {}
+    explicit l3_rx_stream(std::function<bool (forward_hash&, Packet&, size_t)>&& fw) : forward(fw) {}
   };
   std::unordered_map<uint16_t, l3_rx_stream> _proto_map;
   std::shared_ptr<DPDKDevice> _dev;

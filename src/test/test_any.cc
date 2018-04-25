@@ -126,7 +126,7 @@ struct not_noexcept {
   }
 
   template<typename ...Args>
-  not_noexcept(Args&& ...) noexcept(false) {
+  explicit not_noexcept(Args&& ...) noexcept(false) {
   }
 
   template<typename U, typename ...Args>
@@ -395,11 +395,11 @@ struct unmoving {
   unmoving() noexcept {}
 
   template<typename... Args>
-  unmoving(Args&& ...args) noexcept
+  explicit unmoving(Args&& ...args) noexcept
     : a(sizeof...(Args)) {}
 
   template<typename U, typename... Args>
-  unmoving(std::initializer_list<U> l) noexcept
+  explicit unmoving(std::initializer_list<U> l) noexcept
     : a(-l.size()) {}
 
   template<typename U, typename... Args>

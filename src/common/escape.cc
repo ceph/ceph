@@ -120,7 +120,7 @@ struct hex_formatter {
   const char old_fill;
   const std::ostream::fmtflags old_flags;
 
-  hex_formatter(std::ostream& out)
+  explicit hex_formatter(std::ostream& out)
     : out(out),
       old_fill(out.fill('0')),
       old_flags(out.setf(out.hex, out.basefield))

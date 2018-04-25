@@ -2317,7 +2317,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
   class RGWMovedPermanently: public RGWOp {
     const std::string location;
   public:
-    RGWMovedPermanently(const std::string& location)
+    explicit RGWMovedPermanently(const std::string& location)
       : location(location) {
     }
 
@@ -2418,7 +2418,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
   public:
     /* Taking prefix_override by value to leverage std::string r-value ref
      * ctor and thus avoid extra memory copying/increasing ref counter. */
-    RGWWebsiteListing(std::string prefix_override)
+    explicit RGWWebsiteListing(std::string prefix_override)
       : prefix_override(std::move(prefix_override)) {
     }
   };

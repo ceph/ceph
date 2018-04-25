@@ -192,7 +192,7 @@ public:
       const inodeno_t ino) const;
 
 
-  DamageTable(const mds_rank_t rank_)
+  explicit DamageTable(const mds_rank_t rank_)
     : rank(rank_)
   {
     assert(rank_ != MDS_RANK_NONE);

@@ -188,7 +188,7 @@ public:
 
     std::pair<IdentityApplier::aplptr_t, Completer::cmplptr_t> result_pair;
 
-    AuthResult(const int reason)
+    explicit AuthResult(const int reason)
       : reason(reason) {
     }
 
@@ -199,7 +199,7 @@ public:
 
     /* Allow only the reasonable combintations - returning just Completer
      * without accompanying IdentityApplier is strictly prohibited! */
-    AuthResult(IdentityApplier::aplptr_t&& applier)
+    explicit AuthResult(IdentityApplier::aplptr_t&& applier)
       : result_pair(std::move(applier), nullptr) {
     }
 

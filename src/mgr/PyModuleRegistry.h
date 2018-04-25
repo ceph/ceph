@@ -76,7 +76,7 @@ public:
     return modules_out;
   }
 
-  PyModuleRegistry(LogChannelRef clog_)
+  explicit PyModuleRegistry(LogChannelRef clog_)
     : clog(clog_)
   {}
 

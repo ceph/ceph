@@ -39,7 +39,7 @@ struct old_rgw_bucket {
     data_pool = index_pool = s;
     marker = "";
   }
-  old_rgw_bucket(const char *n) : name(n) {
+  explicit old_rgw_bucket(const char *n) : name(n) {
     data_pool = index_pool = n;
     marker = "";
   }

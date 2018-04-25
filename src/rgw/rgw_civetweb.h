@@ -53,7 +53,7 @@ public:
     return env;
   }
 
-  RGWCivetWeb(mg_connection *_conn);
+  explicit RGWCivetWeb(mg_connection *_conn);
 };
 
 #endif

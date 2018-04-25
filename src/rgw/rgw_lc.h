@@ -289,7 +289,7 @@ protected:
   bool _add_rule(LCRule *rule);
   bool has_same_action(const lc_op& first, const lc_op& second);
 public:
-  RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
+  explicit RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
   RGWLifecycleConfiguration() : cct(NULL) {}
 
   void set_ctx(CephContext *ctx) {
