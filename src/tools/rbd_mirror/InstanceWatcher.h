@@ -163,7 +163,6 @@ private:
   librbd::ManagedLock<ImageCtxT> *m_instance_lock;
   Context *m_on_finish = nullptr;
   int m_ret_val = 0;
-  bool m_removing = false;
   std::string m_leader_instance_id;
   librbd::managed_lock::Locker m_instance_locker;
   std::set<std::pair<std::string, C_NotifyInstanceRequest *>> m_notify_ops;
