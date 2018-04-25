@@ -31,7 +31,7 @@ class Test1 {
     crimson::IntruHeapData heap_data;
 
 public:
-    Test1(int _data) : data(_data) {}
+    explicit Test1(int _data) : data(_data) {}
 
     friend std::ostream& operator<<(std::ostream& out, const Test1& d) {
         out << d.data << " (" << d.heap_data << ")";

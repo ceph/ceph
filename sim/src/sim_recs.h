@@ -105,7 +105,7 @@ namespace crimson {
     struct TestResponse {
       uint32_t epoch;
 
-      TestResponse(uint32_t _epoch) :
+      explicit TestResponse(uint32_t _epoch) :
 	epoch(_epoch)
       {
 	// empty
