@@ -108,7 +108,7 @@ class PoolTest(DashboardTestCase):
                     elif k == 'application_metadata':
                         self.assertIsInstance(pool[k], list)
                         self.assertEqual(pool[k],
-                                         data['application_metadata'].split(','))
+                                         data['application_metadata'])
                     elif k == 'pool':
                         self.assertEqual(pool['pool_name'], v)
                     elif k in ['compression_mode', 'compression_algorithm',
@@ -137,7 +137,7 @@ class PoolTest(DashboardTestCase):
             'pool': 'dashboard_pool1',
             'pg_num': '10',
             'pool_type': 'replicated',
-            'application_metadata': 'rbd',
+            'application_metadata': ['rbd', 'sth'],
         }, {
             'pool': 'dashboard_pool2',
             'pg_num': '10',
