@@ -401,6 +401,7 @@ bool MgrClient::handle_mgr_close(MMgrClose *m)
 {
   service_daemon = false;
   shutdown_cond.Signal();
+  m->put();
   return true;
 }
 
