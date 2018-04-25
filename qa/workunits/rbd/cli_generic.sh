@@ -496,12 +496,29 @@ test_deep_copy_clone() {
     rbd snap create testimg2@snap2
     rbd deep copy testimg2 testimg3
     rbd info testimg3 | grep 'size 256MiB'
+    rbd info testimg3 | grep 'parent: rbd/testimg1@snap1'
     rbd snap ls testimg3 | grep -v 'SNAPID' | wc -l | grep 1
     rbd snap ls testimg3 | grep '.*snap2.*'
     rbd info testimg2 | grep 'features:.*deep-flatten' || rbd snap rm testimg2@snap2
     rbd info testimg3 | grep 'features:.*deep-flatten' || rbd snap rm testimg3@snap2
     rbd flatten testimg2
     rbd flatten testimg3
+    rbd snap unprotect testimg1@snap1
+    rbd snap purge testimg2
+    rbd snap purge testimg3
+    rbd rm testimg2
+    rbd rm testimg3
+
+    rbd snap protect testimg1@snap1
+    rbd clone testimg1@snap1 testimg2
+    rbd snap create testimg2@snap2
+    rbd deep copy --flatten testimg2 testimg3
+    rbd info testimg3 | grep 'size 256MiB'
+    rbd info testimg3 | grep -v 'parent:'
+    rbd snap ls testimg3 | grep -v 'SNAPID' | wc -l | grep 1
+    rbd snap ls testimg3 | grep '.*snap2.*'
+    rbd info testimg2 | grep 'features:.*deep-flatten' || rbd snap rm testimg2@snap2
+    rbd flatten testimg2
     rbd snap unprotect testimg1@snap1
 
     remove_images
