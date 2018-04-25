@@ -775,5 +775,6 @@ EOF
 main osd-scrub-snaps "$@"
 
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && \
-#    test/osd/osd-scrub-snaps.sh"
+# compile-command: "cd build ; make -j4 && \
+#    ../qa/run-standalone.sh osd-scrub-snaps.sh"
+# End:
