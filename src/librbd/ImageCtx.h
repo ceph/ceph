@@ -198,6 +198,11 @@ namespace librbd {
     bool skip_partial_discard;
     bool blkin_trace_all;
     uint64_t qos_iops_limit;
+    uint64_t qos_bps_limit;
+    uint64_t qos_read_iops_limit;
+    uint64_t qos_write_iops_limit;
+    uint64_t qos_read_bps_limit;
+    uint64_t qos_write_bps_limit;
 
     LibrbdAdminSocketHook *asok_hook;
 

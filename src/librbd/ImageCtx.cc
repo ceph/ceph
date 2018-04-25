@@ -771,7 +771,12 @@ public:
         "rbd_mirroring_delete_delay", false)(
         "rbd_mirroring_replay_delay", false)(
         "rbd_skip_partial_discard", false)(
-	"rbd_qos_iops_limit", false);
+	"rbd_qos_iops_limit", false)(
+	"rbd_qos_bps_limit", false)(
+	"rbd_qos_read_iops_limit", false)(
+	"rbd_qos_write_iops_limit", false)(
+	"rbd_qos_read_bps_limit", false)(
+	"rbd_qos_write_bps_limit", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -834,6 +839,11 @@ public:
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
     ASSIGN_OPTION(qos_iops_limit, uint64_t);
+    ASSIGN_OPTION(qos_bps_limit, uint64_t);
+    ASSIGN_OPTION(qos_read_iops_limit, uint64_t);
+    ASSIGN_OPTION(qos_write_iops_limit, uint64_t);
+    ASSIGN_OPTION(qos_read_bps_limit, uint64_t);
+    ASSIGN_OPTION(qos_write_bps_limit, uint64_t);
 
     if (thread_safe) {
       ASSIGN_OPTION(journal_pool, std::string);
@@ -843,7 +853,12 @@ public:
       sparse_read_threshold_bytes = get_object_size();
     }
 
-    io_work_queue->apply_qos_iops_limit(qos_iops_limit);
+    io_work_queue->apply_qos_limit(qos_iops_limit, RBD_QOS_IOPS_THROTTLE);
+    io_work_queue->apply_qos_limit(qos_bps_limit, RBD_QOS_BPS_THROTTLE);
+    io_work_queue->apply_qos_limit(qos_read_iops_limit, RBD_QOS_READ_IOPS_THROTTLE);
+    io_work_queue->apply_qos_limit(qos_write_iops_limit, RBD_QOS_WRITE_IOPS_THROTTLE);
+    io_work_queue->apply_qos_limit(qos_read_bps_limit, RBD_QOS_READ_BPS_THROTTLE);
+    io_work_queue->apply_qos_limit(qos_write_bps_limit, RBD_QOS_WRITE_BPS_THROTTLE);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {
