@@ -389,7 +389,6 @@ void InstanceWatcher<I>::remove(Context *on_finish) {
   assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
   m_ret_val = 0;
-  m_removing = true;
 
   get_instance_locker();
 }
@@ -866,7 +865,7 @@ template <typename I>
 void InstanceWatcher<I>::handle_remove_instance_object(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (m_removing && r == -ENOENT) {
+  if (r == -ENOENT) {
     r = 0;
   }
 
@@ -938,10 +937,6 @@ void InstanceWatcher<I>::handle_wait_for_notify_ops(int r) {
 
     std::swap(on_finish, m_on_finish);
     r = m_ret_val;
-
-    if (m_removing) {
-      m_removing = false;
-    }
   }
   on_finish->complete(r);
 }
