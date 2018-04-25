@@ -142,7 +142,7 @@ else(no_yasm)
 endif(no_yasm)
 
 # require c++17
-if(CMAKE_VERSION VERSION_LESS "3.8")
+if(CMAKE_VERSION VERSION_LESS "3.1")
   include(CheckCXXCompilerFlag)
   CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
   if(NOT COMPILER_SUPPORTS_CXX17)
