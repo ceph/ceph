@@ -2390,10 +2390,10 @@ unsigned PG::get_backfill_priority()
 unsigned PG::get_delete_priority()
 {
   auto state = get_osdmap()->get_state(osd->whoami);
-  if (state & (CEPH_OSD_NEARFULL |
-	       CEPH_OSD_FULL)) {
+  if (state & (CEPH_OSD_BACKFILLFULL |
+               CEPH_OSD_FULL)) {
     return OSD_DELETE_PRIORITY_FULL;
-  } else if (state & CEPH_OSD_BACKFILLFULL) {
+  } else if (state & CEPH_OSD_NEARFULL) {
     return OSD_DELETE_PRIORITY_FULLISH;
   } else {
     return OSD_DELETE_PRIORITY_NORMAL;
