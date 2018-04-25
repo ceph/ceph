@@ -198,3 +198,9 @@ for details.
   first need to define a username and password. See the documentation for a
   feature overview and installation instructions:
   http://docs.ceph.com/docs/master/mgr/dashboard/
+
+* The 'osd force-create-pg' command now requires a force option to
+  proceed because the command is dangerous: it declares that data loss
+  is permanent and instructs the cluster to proceed with an empty PG
+  in its place, without making any further efforts to find the missing
+  data.
