@@ -1,17 +1,18 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component } from '@angular/core';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
+import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 
 @Component({
   selector: 'cd-configuration',
   templateUrl: './configuration.component.html',
   styleUrls: ['./configuration.component.scss']
 })
-export class ConfigurationComponent implements OnInit {
-  @ViewChild('arrayTmpl') arrayTmpl: TemplateRef<any>;
-
+export class ConfigurationComponent {
   data = [];
-  columns: any;
+  columns: CdTableColumn[];
+  selection = new CdTableSelection();
 
   filters = [
     {
@@ -35,7 +36,7 @@ export class ConfigurationComponent implements OnInit {
       label: 'Service',
       prop: 'services',
       value: 'any',
-      options: ['mon', 'mgr', 'osd', 'mds', 'common', 'mds_client', 'rgw', 'any'],
+      options: ['any', 'mon', 'mgr', 'osd', 'mds', 'common', 'mds_client', 'rgw'],
       applyFilter: (row, value) => {
         if (value === 'any') {
           return true;
@@ -46,28 +47,30 @@ export class ConfigurationComponent implements OnInit {
     }
   ];
 
-  constructor(private configurationService: ConfigurationService) {}
-
-  ngOnInit() {
+  constructor(
+    private configurationService: ConfigurationService,
+  ) {
     this.columns = [
       { flexGrow: 2, canAutoResize: true, prop: 'name' },
-      { flexGrow: 2, prop: 'desc', name: 'Description' },
-      { flexGrow: 2, prop: 'long_desc', name: 'Long description' },
+      { flexGrow: 2, prop: 'desc', name: 'Description', cellClass: 'wrap' },
+      { flexGrow: 2, prop: 'long_desc', name: 'Long description', cellClass: 'wrap' },
       { flexGrow: 1, prop: 'type' },
       { flexGrow: 1, prop: 'level' },
-      { flexGrow: 1, prop: 'default' },
+      { flexGrow: 1, prop: 'default', cellClass: 'wrap'},
       { flexGrow: 2, prop: 'daemon_default', name: 'Daemon default' },
-      { flexGrow: 1, prop: 'tags', name: 'Tags', cellTemplate: this.arrayTmpl },
-      { flexGrow: 1, prop: 'services', name: 'Services', cellTemplate: this.arrayTmpl },
-      { flexGrow: 1, prop: 'see_also', name: 'See_also', cellTemplate: this.arrayTmpl },
+      { flexGrow: 1, prop: 'tags', name: 'Tags' },
+      { flexGrow: 1, prop: 'services', name: 'Services' },
+      { flexGrow: 1, prop: 'see_also', name: 'See_also', cellClass: 'wrap' },
       { flexGrow: 1, prop: 'max', name: 'Max' },
       { flexGrow: 1, prop: 'min', name: 'Min' }
     ];
-
-    this.fetchData();
   }
 
-  fetchData() {
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+
+  getConfigurationList() {
     this.configurationService.getConfigData().subscribe((data: any) => {
       this.data = data;
     });
