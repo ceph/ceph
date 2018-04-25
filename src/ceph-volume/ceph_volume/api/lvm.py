@@ -220,7 +220,7 @@ def get_api_pvs():
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
     """
-    fields = 'pv_name,pv_tags,pv_uuid,vg_name'
+    fields = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
     stdout, stderr, returncode = process.call(
         ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields]
