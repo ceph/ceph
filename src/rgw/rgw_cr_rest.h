@@ -478,7 +478,7 @@ protected:
   class WriteDrainNotify : public RGWWriteDrainCB {
     RGWStreamWriteHTTPResourceCRF *crf;
   public:
-    WriteDrainNotify(RGWStreamWriteHTTPResourceCRF *_crf) : crf(_crf) {}
+    explicit WriteDrainNotify(RGWStreamWriteHTTPResourceCRF *_crf) : crf(_crf) {}
     void notify(uint64_t pending_size) override;
   } write_drain_notify_cb;
 

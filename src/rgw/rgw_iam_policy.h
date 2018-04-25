@@ -438,7 +438,7 @@ std::ostream& operator <<(ostream& m, const Statement& s);
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
 
-  PolicyParseException(rapidjson::ParseResult&& pr)
+  explicit PolicyParseException(rapidjson::ParseResult&& pr)
     : pr(pr) { }
   const char* what() const noexcept override {
     return rapidjson::GetParseError_En(pr.Code());

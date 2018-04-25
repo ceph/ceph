@@ -68,7 +68,7 @@ class DaemonPerfCounters
   // The record of perf stat types, shared between daemons
   PerfCounterTypes &types;
 
-  DaemonPerfCounters(PerfCounterTypes &types_)
+  explicit DaemonPerfCounters(PerfCounterTypes &types_)
     : types(types_)
   {}
 
@@ -119,7 +119,7 @@ class DaemonState
   // The perf counters received in MMgrReport messages
   DaemonPerfCounters perf_counters;
 
-  DaemonState(PerfCounterTypes &types_)
+  explicit DaemonState(PerfCounterTypes &types_)
     : perf_counters(types_)
   {
   }

@@ -104,7 +104,7 @@ class Packet {
 
     fragment frags[];
 
-    impl(size_t nr_frags = default_nr_frags);
+    explicit impl(size_t nr_frags = default_nr_frags);
     impl(const impl&) = delete;
     impl(fragment frag, size_t nr_frags = default_nr_frags);
 
@@ -180,7 +180,7 @@ class Packet {
               to->frags[0].base);
     }
   };
-  Packet(std::unique_ptr<impl>&& impl) : _impl(std::move(impl)) {}
+  explicit Packet(std::unique_ptr<impl>&& impl) : _impl(std::move(impl)) {}
   std::unique_ptr<impl> _impl;
 public:
   static Packet from_static_data(const char* data, size_t len) {
@@ -190,13 +190,13 @@ public:
   // build empty Packet
   Packet();
   // build empty Packet with nr_frags allocated
-  Packet(size_t nr_frags);
+  explicit Packet(size_t nr_frags);
   // move existing Packet
   Packet(Packet&& x) noexcept;
   // copy data into Packet
   Packet(const char* data, size_t len);
   // copy data into Packet
-  Packet(fragment frag);
+  explicit Packet(fragment frag);
   // zero-copy single fragment
   Packet(fragment frag, deleter del);
   // zero-copy multiple fragments

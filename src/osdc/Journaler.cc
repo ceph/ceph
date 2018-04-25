@@ -32,7 +32,7 @@ using std::chrono::seconds;
 class Journaler::C_DelayFlush : public Context {
   Journaler *journaler;
   public:
-  C_DelayFlush(Journaler *j) : journaler(j) {}
+  explicit C_DelayFlush(Journaler *j) : journaler(j) {}
   void finish(int r) override {
     journaler->_do_delayed_flush();
   }

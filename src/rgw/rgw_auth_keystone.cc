@@ -213,7 +213,7 @@ TokenEngine::authenticate(const std::string& token,
   /* This will be initialized on the first call to this method. In C++11 it's
    * also thread-safe. */
   static const struct RolesCacher {
-    RolesCacher(CephContext* const cct) {
+    explicit RolesCacher(CephContext* const cct) {
       get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
 
@@ -429,7 +429,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   /* This will be initialized on the first call to this method. In C++11 it's
    * also thread-safe. */
   static const struct RolesCacher {
-    RolesCacher(CephContext* const cct) {
+    explicit RolesCacher(CephContext* const cct) {
       get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
 

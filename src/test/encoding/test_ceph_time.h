@@ -12,7 +12,7 @@ class real_time_wrapper {
   ceph::real_time t;
  public:
   real_time_wrapper() = default;
-  real_time_wrapper(const ceph::real_time& t) : t(t) {}
+  explicit real_time_wrapper(const ceph::real_time& t) : t(t) {}
 
   void encode(bufferlist& bl) const {
     using ceph::encode;

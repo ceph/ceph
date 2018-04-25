@@ -172,7 +172,7 @@ protected:
     return pgid;
   }
 public:
-  PGOpQueueable(spg_t pg) : pgid(pg) {}
+  explicit PGOpQueueable(spg_t pg) : pgid(pg) {}
   uint32_t get_queue_token() const override final {
     return get_pgid().ps();
   }
@@ -185,7 +185,7 @@ public:
     class Locker : public OpQueueItem::OrderLocker {
       PGRef pg;
     public:
-      Locker(PGRef pg) : pg(pg) {}
+      explicit Locker(PGRef pg) : pg(pg) {}
       void lock() override final {
 	pg->lock();
       }

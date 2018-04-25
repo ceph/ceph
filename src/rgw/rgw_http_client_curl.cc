@@ -21,7 +21,7 @@ class RGWSSLSetup
 {
   std::vector <std::mutex> locks;
 public:
-  RGWSSLSetup(int n) : locks (n){}
+  explicit RGWSSLSetup(int n) : locks (n){}
 
   void set_lock(int id){
     try {

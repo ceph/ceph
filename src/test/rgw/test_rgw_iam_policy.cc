@@ -84,7 +84,7 @@ class FakeIdentity : public Identity {
   const Principal id;
 public:
 
-  FakeIdentity(Principal&& id) : id(std::move(id)) {}
+  explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
   uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
     abort();
     return 0;

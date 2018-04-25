@@ -94,7 +94,7 @@ public:
   PyObject *pClass = nullptr;
   PyObject *pStandbyClass = nullptr;
 
-  PyModule(const std::string &module_name_)
+  explicit PyModule(const std::string &module_name_)
     : module_name(module_name_)
   {
   }

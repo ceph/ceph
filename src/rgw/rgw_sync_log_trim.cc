@@ -101,7 +101,7 @@ struct TrimCounters {
   class Handler : public TrimNotifyHandler {
     Server *const server;
    public:
-    Handler(Server *server) : server(server) {}
+    explicit Handler(Server *server) : server(server) {}
 
     void handle(bufferlist::iterator& input, bufferlist& output) override;
   };
@@ -185,7 +185,7 @@ struct TrimComplete {
   class Handler : public TrimNotifyHandler {
     Server *const server;
    public:
-    Handler(Server *server) : server(server) {}
+    explicit Handler(Server *server) : server(server) {}
 
     void handle(bufferlist::iterator& input, bufferlist& output) override;
   };

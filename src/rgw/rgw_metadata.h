@@ -167,7 +167,7 @@ class RGWMetadataLogInfoCompletion : public RefCountedObject {
   std::mutex mutex; //< protects callback between cancel/complete
   boost::optional<info_callback_t> callback; //< cleared on cancel
  public:
-  RGWMetadataLogInfoCompletion(info_callback_t callback);
+  explicit RGWMetadataLogInfoCompletion(info_callback_t callback);
   ~RGWMetadataLogInfoCompletion() override;
 
   librados::IoCtx& get_io_ctx() { return io_ctx; }

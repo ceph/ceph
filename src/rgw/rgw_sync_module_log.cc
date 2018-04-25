@@ -36,7 +36,7 @@ public:
 class RGWLogDataSyncModule : public RGWDataSyncModule {
   string prefix;
 public:
-  RGWLogDataSyncModule(const string& _prefix) : prefix(_prefix) {}
+  explicit RGWLogDataSyncModule(const string& _prefix) : prefix(_prefix) {}
 
   RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
     ldout(sync_env->cct, 0) << prefix << ": SYNC_LOG: sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
@@ -57,7 +57,7 @@ public:
 class RGWLogSyncModuleInstance : public RGWSyncModuleInstance {
   RGWLogDataSyncModule data_handler;
 public:
-  RGWLogSyncModuleInstance(const string& prefix) : data_handler(prefix) {}
+  explicit RGWLogSyncModuleInstance(const string& prefix) : data_handler(prefix) {}
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }

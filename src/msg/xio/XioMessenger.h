@@ -36,7 +36,7 @@ class XioInit {
   void package_init(CephContext *cct);
 
 protected:
-  XioInit(CephContext *cct) {
+  explicit XioInit(CephContext *cct) {
     this->package_init(cct);
   }
 };

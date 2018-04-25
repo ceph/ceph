@@ -98,7 +98,7 @@ public:
     void clear() {
       ops.clear();
     }
-    MDBTransactionImpl(MemDB* _db) :m_db(_db)
+    explicit MDBTransactionImpl(MemDB* _db) :m_db(_db)
     {
       ops.clear();
     }

@@ -62,7 +62,7 @@ protected:
   void _wakeup(void *opaque);
   void _complete(RGWAioCompletionNotifier *cn, const rgw_io_id& io_id, void *user_info);
 public:
-  RGWCompletionManager(CephContext *_cct);
+  explicit RGWCompletionManager(CephContext *_cct);
   ~RGWCompletionManager() override;
 
   void complete(RGWAioCompletionNotifier *cn, const rgw_io_id& io_id, void *user_info);
@@ -192,7 +192,7 @@ class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
     utime_t timestamp;
     stringstream status;
 
-    Status(CephContext *_cct) : cct(_cct), lock("RGWCoroutine::Status::lock"), max_history(MAX_COROUTINE_HISTORY) {}
+    explicit Status(CephContext *_cct) : cct(_cct), lock("RGWCoroutine::Status::lock"), max_history(MAX_COROUTINE_HISTORY) {}
 
     deque<StatusItem> history;
 
@@ -334,7 +334,7 @@ class RGWConsumerCR : public RGWCoroutine {
   list<T> product;
 
 public:
-  RGWConsumerCR(CephContext *_cct) : RGWCoroutine(_cct) {}
+  explicit RGWConsumerCR(CephContext *_cct) : RGWCoroutine(_cct) {}
 
   bool has_product() {
     return !product.empty();
@@ -531,7 +531,7 @@ class RGWCoroutinesManagerRegistry : public RefCountedObject, public AdminSocket
   string admin_command;
 
 public:
-  RGWCoroutinesManagerRegistry(CephContext *_cct) : cct(_cct), lock("RGWCoroutinesRegistry::lock") {}
+  explicit RGWCoroutinesManagerRegistry(CephContext *_cct) : cct(_cct), lock("RGWCoroutinesRegistry::lock") {}
   ~RGWCoroutinesManagerRegistry() override;
 
   void add(RGWCoroutinesManager *mgr);

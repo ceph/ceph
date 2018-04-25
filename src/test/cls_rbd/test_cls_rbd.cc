@@ -1616,7 +1616,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
   struct WatchCtx : public librados::WatchCtx2 {
     librados::IoCtx *m_ioctx;
 
-    WatchCtx(librados::IoCtx *ioctx) : m_ioctx(ioctx) {}
+    explicit WatchCtx(librados::IoCtx *ioctx) : m_ioctx(ioctx) {}
     void handle_notify(uint64_t notify_id, uint64_t cookie,
 			     uint64_t notifier_id, bufferlist& bl_) override {
       bufferlist bl;
