@@ -148,7 +148,6 @@ def get_release(issue):
             return field['value']
 
 def update_relations(r, issue, dry_run):
-    success = True
     relations = r.issue_relation.filter(issue_id=issue['id'])
     existing_backports = set()
     for relation in relations:
@@ -161,31 +160,28 @@ def update_relations(r, issue, dry_run):
         if relation['relation_type'] != 'copied_to':
             logging.error(url(issue) + " unexpected relation '" +
                 relation['relation_type'] + "' to " + url(other))
-            success = False
             continue
         release = get_release(other)
         if release in existing_backports:
             logging.error(url(issue) + " duplicate " + release +
                           " backport issue detected")
-            success = False
             continue
         existing_backports.add(release)
         logging.debug(url(issue) + " backport to " + release + " is " +
             redmine_endpoint + "/issues/" + str(relation['issue_to_id']))
     if existing_backports == issue['backports']:
         logging.debug(url(issue) + " has all the required backport issues")
-        return success
+        return None
     if existing_backports.issuperset(issue['backports']):
         logging.error(url(issue) + " has more backport issues (" +
             ",".join(sorted(existing_backports)) + ") than expected (" +
             ",".join(sorted(issue['backports'])) + ")")
-        return False
+        return None
     backport_tracker_id = tracker2tracker_id['Backport']
     for release in issue['backports'] - existing_backports:
         if release not in releases():
             logging.error(url(issue) + " requires backport to " +
                 "unknown release " + release)
-            success = False
             break
         subject = release + ": " + issue['subject']
         if dry_run:
@@ -205,7 +201,7 @@ def update_relations(r, issue, dry_run):
                                 relation_type='copied_to')
         logging.info(url(issue) + " added backport to " +
                      release + " " + url(other))
-    return success
+    return None
 
 def iterate_over_backports(r, issues, dry_run):
     counter = 0
