@@ -114,8 +114,7 @@ int test_cors_helper::extract_input(unsigned argc, char *argv[]){
       ERR_CHECK_NEXT_PARAM(port);
     }else return -1;
   }
-  if(host.length() <= 0 ||
-     creds.length() <= 0)
+  if(host.empty() || creds.empty())
     return -1;
   return 0;
 }
