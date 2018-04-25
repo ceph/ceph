@@ -45,7 +45,7 @@ release_id = 16
 #
 # for field in redmine.custom_field.all():
 #     if field.name == 'Release':
-#         self.release_id = field.id
+#         release_id = field.id
 #
 status2status_id = {}
 project_id2project = {}
@@ -159,11 +159,16 @@ def update_relations(r, issue, dry_run):
                 "tracker")
             continue
         if relation['relation_type'] != 'copied_to':
-            logging.error(self.url(issue) + " unexpected relation '" +
-                relation['relation_type'] + "' to " + self.url(other))
+            logging.error(url(issue) + " unexpected relation '" +
+                relation['relation_type'] + "' to " + url(other))
             success = False
             continue
         release = get_release(other)
+        if release in existing_backports:
+            logging.error(url(issue) + " duplicate " + release +
+                          " backport issue detected")
+            success = False
+            continue
         existing_backports.add(release)
         logging.debug(url(issue) + " backport to " + release + " is " +
             redmine_endpoint + "/issues/" + str(relation['issue_to_id']))
