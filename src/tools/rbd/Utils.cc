@@ -773,6 +773,11 @@ int get_image_options(const boost::program_options::variables_map &vm,
     return r;
   }
 
+  r = get_flatten_option(vm, opts);
+  if (r < 0) {
+    return r;
+  }
+
   return 0;
 }
 
@@ -808,6 +813,15 @@ int get_journal_options(const boost::program_options::variables_map &vm,
     assert(r == 0);
   }
 
+  return 0;
+}
+
+int get_flatten_option(const boost::program_options::variables_map &vm,
+                       librbd::ImageOptions *opts) {
+  if (vm.count(at::IMAGE_FLATTEN) && vm[at::IMAGE_FLATTEN].as<bool>()) {
+    uint64_t flatten = 1;
+    opts->set(RBD_IMAGE_OPTION_FLATTEN, flatten);
+  }
   return 0;
 }
 

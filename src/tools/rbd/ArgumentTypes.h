@@ -73,6 +73,7 @@ static const std::string IMAGE_STRIPE_COUNT("stripe-count");
 static const std::string IMAGE_DATA_POOL("data-pool");
 static const std::string IMAGE_SPARSE_SIZE("sparse-size");
 static const std::string IMAGE_THICK_PROVISION("thick-provision");
+static const std::string IMAGE_FLATTEN("flatten");
 
 static const std::string JOURNAL_OBJECT_SIZE("journal-object-size");
 static const std::string JOURNAL_SPLAY_WIDTH("journal-splay-width");
@@ -204,6 +205,8 @@ void add_format_options(boost::program_options::options_description *opt);
 void add_verbose_option(boost::program_options::options_description *opt);
 
 void add_no_error_option(boost::program_options::options_description *opt);
+
+void add_flatten_option(boost::program_options::options_description *opt);
 
 std::string get_short_features_help(bool append_suffix);
 std::string get_long_features_help();
