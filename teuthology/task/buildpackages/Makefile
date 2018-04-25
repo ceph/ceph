@@ -59,7 +59,7 @@ ${PKG_REPO}:
 # If it's a weird status, bail out and let the delete fire
 # eg: ERROR status can happen if there is no VM host without enough capacity for the request.
 ${SELFNAME}-ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: ${PKG_REPO}
-	timeout $(TIMEOUT_SERVER_CREATE) openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-${CEPH_ARCH}' ${OPENSTACK_NETWORK} --flavor ${BUILD_FLAVOR} --key-name ${KEY_NAME} --security-group ${SEC_GROUP} --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@
+	timeout $(TIMEOUT_SERVER_CREATE) openstack server create --image 'makecheck-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-${CEPH_ARCH}' ${OPENSTACK_NETWORK} --flavor ${BUILD_FLAVOR} --key-name ${KEY_NAME} --security-group ${SEC_GROUP} --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@
 	set -ex ; \
 	trap "openstack server delete --wait $@" EXIT ; \
 	for delay in 30 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 ; do \
