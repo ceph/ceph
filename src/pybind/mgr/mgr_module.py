@@ -332,7 +332,59 @@ class MgrModule(ceph_module.BaseMgrModule):
             return "/s"
         elif unit == self.BYTES:
             return "B/s"  
-    
+
+    def to_pretty_iec(self, n):
+        for bits, suffix in [(60, 'Ei'), (50, 'Pi'), (40, 'Ti'), (30, 'Gi'),
+                (20, 'Mi'), (10, 'Ki')]:
+            if n > 10 << bits:
+                return str(n >> bits) + ' ' + suffix
+        return str(n) + ' '
+
+    def get_pretty_row(self, elems, width):
+        """
+        Takes an array of elements and returns a string with those elements
+        formatted as a table row. Useful for polling modules.
+
+        :param elems: the elements to be printed
+        :param width: the width of the terminal
+        """
+        n = len(elems)
+        column_width = width / n
+
+        ret = '|'
+        for elem in elems:
+            ret += '{0:>{w}} |'.format(elem, w=column_width - 2)
+
+        return ret
+
+    def get_pretty_header(self, elems, width):
+        """
+        Like ``get_pretty_row`` but adds dashes, to be used as a table title.
+
+        :param elems: the elements to be printed
+        :param width: the width of the terminal
+        """
+        n = len(elems)
+        column_width = width / n
+
+        # dash line
+        ret = '+'
+        for i in range(0, n):
+            ret += '-' * (column_width - 1) + '+'
+        ret += '\n'
+
+        # title
+        ret += self.get_pretty_row(elems, width)
+        ret += '\n'
+
+        # dash line
+        ret += '+'
+        for i in range(0, n):
+            ret += '-' * (column_width - 1) + '+'
+        ret += '\n'
+
+        return ret
+
     def get_server(self, hostname):
         """
         Called by the plugin to fetch metadata about a particular hostname from
