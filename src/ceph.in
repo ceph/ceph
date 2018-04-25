@@ -533,24 +533,39 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
     else:
         return -errno.EINVAL, '', 'invalid command'
 
+    next_header_print = 0
+    # Set extra options for polling commands only:
+    if valid_dict.get('poll', False):
+        valid_dict['width'] = Termsize().cols
     while True:
-        ret, outbuf, outs = json_command(cluster_handle, target=target, argdict=valid_dict,
-                inbuf=inbuf)
-        if 'poll' not in valid_dict or not valid_dict['poll']:
-            # Don't print here if it's not a polling command
-            break
-        if ret:
-            ret = abs(ret)
-            print('Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown')),
-                    file=sys.stderr)
-            break
-        if outbuf:
-            print(outbuf.decode('utf-8'))
-        if outs:
-            print(outs, file=sys.stderr)
-        if parsed_args.period <= 0:
-            break
-        sleep(parsed_args.period)
+        try:
+            # Only print the header for polling commands
+            if next_header_print == 0 and valid_dict.get('poll', False):
+                valid_dict['print_header'] = True
+                next_header_print = Termsize().rows - 3
+            next_header_print -= 1
+            ret, outbuf, outs = json_command(cluster_handle, target=target,
+                argdict=valid_dict, inbuf=inbuf)
+            if valid_dict.get('poll', False):
+                valid_dict['print_header'] = False
+            if not valid_dict.get('poll', False):
+                # Don't print here if it's not a polling command
+                break
+            if ret:
+                ret = abs(ret)
+                print('Error: {0} {1}'.format(ret, errno.errorcode.get(ret, 'Unknown')),
+                        file=sys.stderr)
+                break
+            if outbuf:
+                print(outbuf.decode('utf-8'))
+            if outs:
+                print(outs, file=sys.stderr)
+            if parsed_args.period <= 0:
+                break
+            sleep(parsed_args.period)
+        except KeyboardInterrupt:
+            print('Interrupted')
+            return ret, '', ''
 
     return ret, outbuf, outs
 
