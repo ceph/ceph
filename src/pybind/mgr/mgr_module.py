@@ -191,6 +191,14 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         else:
             return r
 
+    def get_store(self, key):
+        """
+        Retrieve the value of a persistent KV store entry
+
+        :param key: String
+        :return: Byte string or None
+        """
+        return self.get_config(key)
 
     def get_active_uri(self):
         return self._ceph_get_active_uri()
