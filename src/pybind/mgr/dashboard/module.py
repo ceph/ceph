@@ -124,7 +124,7 @@ class Module(MgrModule):
         if server_addr is None:
             raise RuntimeError(
                 'no server_addr configured; '
-                'try "ceph config-key put mgr/{}/{}/server_addr <ip>"'
+                'try "ceph config-key set mgr/{}/{}/server_addr <ip>"'
                 .format(self.module_name, self.get_mgr_id()))
         self.log.info('server_addr: %s server_port: %s', server_addr,
                       server_port)
