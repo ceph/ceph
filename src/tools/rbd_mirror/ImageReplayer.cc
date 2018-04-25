@@ -396,7 +396,7 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
 
 template <typename I>
 void ImageReplayer<I>::prepare_local_image() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   m_local_image_id = "";
   Context *ctx = create_context_callback<
@@ -409,10 +409,10 @@ void ImageReplayer<I>::prepare_local_image() {
 
 template <typename I>
 void ImageReplayer<I>::handle_prepare_local_image(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r == -ENOENT) {
-    dout(20) << "local image does not exist" << dendl;
+    dout(10) << "local image does not exist" << dendl;
   } else if (r < 0) {
     on_start_fail(r, "error preparing local image for replay");
     return;
@@ -426,7 +426,7 @@ void ImageReplayer<I>::handle_prepare_local_image(int r) {
 
 template <typename I>
 void ImageReplayer<I>::prepare_remote_image() {
-  dout(20) << dendl;
+  dout(10) << dendl;
   if (m_peers.empty()) {
     // technically nothing to bootstrap, but it handles the status update
     bootstrap();
@@ -448,14 +448,14 @@ void ImageReplayer<I>::prepare_remote_image() {
 
 template <typename I>
 void ImageReplayer<I>::handle_prepare_remote_image(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   assert(r < 0 ? m_remote_journaler == nullptr : m_remote_journaler != nullptr);
   if (r < 0 && !m_local_image_id.empty() &&
       m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
     // local image is primary -- fall-through
   } else if (r == -ENOENT) {
-    dout(20) << "remote image does not exist" << dendl;
+    dout(10) << "remote image does not exist" << dendl;
 
     // TODO need to support multiple remote images
     if (m_remote_image.image_id.empty() && !m_local_image_id.empty() &&
@@ -479,7 +479,7 @@ void ImageReplayer<I>::handle_prepare_remote_image(int r) {
 
 template <typename I>
 void ImageReplayer<I>::bootstrap() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   if (!m_local_image_id.empty() &&
       m_local_image_tag_owner == librbd::Journal<>::LOCAL_MIRROR_UUID) {
@@ -517,7 +517,7 @@ void ImageReplayer<I>::bootstrap() {
 
 template <typename I>
 void ImageReplayer<I>::handle_bootstrap(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
   {
     Mutex::Locker locker(m_lock);
     m_bootstrap_request->put();
@@ -566,7 +566,7 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
 
 template <typename I>
 void ImageReplayer<I>::init_remote_journaler() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_init_remote_journaler>(this);
@@ -575,7 +575,7 @@ void ImageReplayer<I>::init_remote_journaler() {
 
 template <typename I>
 void ImageReplayer<I>::handle_init_remote_journaler(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
     derr << "failed to initialize remote journal: " << cpp_strerror(r) << dendl;
@@ -616,7 +616,7 @@ void ImageReplayer<I>::handle_init_remote_journaler(int r) {
 
 template <typename I>
 void ImageReplayer<I>::start_replay() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *start_ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_start_replay>(this);
@@ -625,7 +625,7 @@ void ImageReplayer<I>::start_replay() {
 
 template <typename I>
 void ImageReplayer<I>::handle_start_replay(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
     assert(m_local_replay == nullptr);
@@ -665,7 +665,7 @@ void ImageReplayer<I>::handle_start_replay(int r) {
     m_replay_handler = new ReplayHandler<I>(this);
     m_remote_journaler->start_live_replay(m_replay_handler, poll_seconds);
 
-    dout(20) << "m_remote_journaler=" << *m_remote_journaler << dendl;
+    dout(10) << "m_remote_journaler=" << *m_remote_journaler << dendl;
   }
 
   dout(20) << "start succeeded" << dendl;
@@ -1025,7 +1025,7 @@ void ImageReplayer<I>::handle_replay_flush(int r) {
 
 template <typename I>
 void ImageReplayer<I>::get_remote_tag() {
-  dout(20) << "tag_tid: " << m_replay_tag_tid << dendl;
+  dout(15) << "tag_tid: " << m_replay_tag_tid << dendl;
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_get_remote_tag>(this);
@@ -1034,7 +1034,7 @@ void ImageReplayer<I>::get_remote_tag() {
 
 template <typename I>
 void ImageReplayer<I>::handle_get_remote_tag(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(15) << "r=" << r << dendl;
 
   if (r == 0) {
     try {
@@ -1054,7 +1054,7 @@ void ImageReplayer<I>::handle_get_remote_tag(int r) {
   }
 
   m_replay_tag_valid = true;
-  dout(20) << "decoded remote tag " << m_replay_tag_tid << ": "
+  dout(15) << "decoded remote tag " << m_replay_tag_tid << ": "
            << m_replay_tag_data << dendl;
 
   allocate_local_tag();
@@ -1417,7 +1417,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
     status.state = *mirror_image_status_state;
   }
 
-  dout(20) << "status=" << status << dendl;
+  dout(15) << "status=" << status << dendl;
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_status_set(&op, m_global_image_id, status);
 
@@ -1430,7 +1430,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
 
 template <typename I>
 void ImageReplayer<I>::handle_mirror_status_update(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(15) << "r=" << r << dendl;
 
   bool running = false;
   bool started = false;
@@ -1498,7 +1498,7 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
 
 template <typename I>
 void ImageReplayer<I>::shut_down(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   bool canceled_delayed_preprocess_task = false;
   {
@@ -1677,7 +1677,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     return;
   }
 
-  dout(20) << "stop complete" << dendl;
+  dout(10) << "stop complete" << dendl;
   ReplayStatusFormatter<I>::destroy(m_replay_status_formatter);
   m_replay_status_formatter = nullptr;
 
