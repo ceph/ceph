@@ -446,7 +446,7 @@ template <typename I>
 void Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
                                std::string *mirror_uuid,
                                ContextWQ *op_work_queue, Context *on_finish) {
-  CephContext *cct = (CephContext *)io_ctx.cct();
+  CephContext *cct = static_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << __func__ << dendl;
 
   auto ctx = new C_GetTagOwner(io_ctx, image_id, mirror_uuid, on_finish);
