@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
@@ -293,7 +293,7 @@ export class RbdFormComponent implements OnInit {
     this.pools = newPools;
   }
 
-  validateRbdForm(formatter: FormatterService) {
+  validateRbdForm(formatter: FormatterService): ValidatorFn {
     return (formGroup: FormGroup) => {
       // Data Pool
       const useDataPoolControl = formGroup.get('useDataPool');
@@ -340,6 +340,7 @@ export class RbdFormComponent implements OnInit {
         stripingCountControlErrors = {'min': true};
       }
       stripingCountControl.setErrors(stripingCountControlErrors);
+      return null;
     };
   }
 
