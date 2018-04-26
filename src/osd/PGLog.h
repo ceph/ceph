@@ -34,8 +34,8 @@ constexpr auto PGLOG_INDEXED_ALL              = PGLOG_INDEXED_OBJECTS
 class CephContext;
 
 struct PGLog : DoutPrefixProvider {
-  string gen_prefix() const override {
-    return "";
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out;
   }
   unsigned get_subsys() const override {
     return static_cast<unsigned>(ceph_subsys_osd);

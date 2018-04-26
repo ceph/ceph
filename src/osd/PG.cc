@@ -87,7 +87,7 @@ const string fastinfo_key("_fastinfo");
 template <class T>
 static ostream& _prefix(std::ostream *_dout, T *t)
 {
-  return *_dout << t->gen_prefix();
+  return t->gen_prefix(*_dout);
 }
 
 void PGStateHistory::enter(PG* pg, const utime_t entime, const char* state)
@@ -383,9 +383,8 @@ void PG::lock(bool no_lockdep) const
   dout(30) << "lock" << dendl;
 }
 
-std::string PG::gen_prefix() const
+std::ostream& PG::gen_prefix(std::ostream& out) const
 {
-  stringstream out;
   OSDMapRef mapref = osdmap_ref;
   if (_lock.is_locked_by_me()) {
     out << "osd." << osd->whoami
@@ -396,7 +395,7 @@ std::string PG::gen_prefix() const
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
 	<< " pg[" << info.pgid << "(unlocked)] ";
   }
-  return out.str();
+  return out;
 }
   
 /********* PG **********/
@@ -6565,7 +6564,7 @@ void PG::_delete_some(ObjectStore::Transaction *t)
 
 /*------------ Recovery State Machine----------------*/
 #undef dout_prefix
-#define dout_prefix (*_dout << context< RecoveryMachine >().pg->gen_prefix() \
+#define dout_prefix (context< RecoveryMachine >().pg->gen_prefix(*_dout) \
 		     << "state<" << get_state_name() << ">: ")
 
 /*------Crashed-------*/
@@ -9188,7 +9187,7 @@ void PG::RecoveryState::WaitUpThru::exit()
 
 /*----RecoveryState::RecoveryMachine Methods-----*/
 #undef dout_prefix
-#define dout_prefix *_dout << pg->gen_prefix()
+#define dout_prefix pg->gen_prefix(*_dout)
 
 void PG::RecoveryState::RecoveryMachine::log_enter(const char *state_name)
 {
@@ -9211,7 +9210,7 @@ void PG::RecoveryState::RecoveryMachine::log_exit(const char *state_name, utime_
 
 /*---------------------------------------------------*/
 #undef dout_prefix
-#define dout_prefix (*_dout << (debug_pg ? debug_pg->gen_prefix() : string()) << " PriorSet: ")
+#define dout_prefix ((debug_pg ? debug_pg->gen_prefix(*_dout) : *_dout) << " PriorSet: ")
 
 void PG::RecoveryState::start_handle(RecoveryCtx *new_ctx) {
   assert(!rctx);
