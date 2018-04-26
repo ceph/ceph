@@ -2,6 +2,7 @@ import { HttpClientModule } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -20,6 +21,9 @@ describe('RgwUserDetailsComponent', () => {
         HttpClientModule,
         SharedModule,
         TabsModule.forRoot()
+      ],
+      providers: [
+        BsModalService
       ]
     })
     .compileComponents();
