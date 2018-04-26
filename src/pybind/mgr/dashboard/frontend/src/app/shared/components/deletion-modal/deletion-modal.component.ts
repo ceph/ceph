@@ -74,8 +74,8 @@ export class DeletionModalComponent implements OnInit {
     this.confirmation.updateValueAndValidity();
   }
 
-  delete () {
-    this.submitButton.submit();
+  delete ($event) {
+    this.submitButton.submit($event);
   }
 
   deletionCall() {
