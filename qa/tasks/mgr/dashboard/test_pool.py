@@ -150,7 +150,7 @@ class PoolTest(DashboardTestCase):
             'pool_type': 'replicated',
             'compression_algorithm': 'zstd',
             'compression_mode': 'aggressive',
-            'compression_max_blob_size': 10000000,
+            'compression_max_blob_size': '10000000',
             'compression_required_ratio': '0.8',
         }]
         for data in pools:
