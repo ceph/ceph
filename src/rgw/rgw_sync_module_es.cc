@@ -215,6 +215,15 @@ struct es_index_mappings {
     dump_custom(f, "custom-date", "date", "strict_date_optional_time||epoch_millis");
     f->close_section(); // properties
     f->close_section(); // meta
+
+    f->open_object_section("tagging");
+    ::encode_json("type", "nested", f);
+    f->open_object_section("properties");
+    encode_json("key", es_dump_type("string"), f);
+    encode_json("value", es_dump_type("string"), f);
+    f->close_section(); // properties
+    f->close_section(); // tagging
+
     f->close_section(); // properties
     f->close_section(); // object
   }
