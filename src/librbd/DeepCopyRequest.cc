@@ -29,16 +29,17 @@ using librbd::util::unique_lock_name;
 template <typename I>
 DeepCopyRequest<I>::DeepCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                     librados::snap_t snap_id_start,
-                                    librados::snap_t snap_id_end,
+                                    librados::snap_t snap_id_end, bool flatten,
                                     const ObjectNumber &object_number,
                                     ContextWQ *work_queue, SnapSeqs *snap_seqs,
                                     ProgressContext *prog_ctx,
                                     Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_snap_id_start(snap_id_start),
-    m_snap_id_end(snap_id_end), m_object_number(object_number),
-    m_work_queue(work_queue), m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx),
-    m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
+    m_snap_id_end(snap_id_end), m_flatten(flatten),
+    m_object_number(object_number), m_work_queue(work_queue),
+    m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx), m_on_finish(on_finish),
+    m_cct(dst_image_ctx->cct),
     m_lock(unique_lock_name("DeepCopyRequest::m_lock", this)) {
 }
 
@@ -90,8 +91,8 @@ void DeepCopyRequest<I>::send_copy_snapshots() {
   Context *ctx = create_context_callback<
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_snapshots>(this);
   m_snapshot_copy_request = SnapshotCopyRequest<I>::create(
-    m_src_image_ctx, m_dst_image_ctx, m_snap_id_end, m_work_queue, m_snap_seqs,
-    ctx);
+    m_src_image_ctx, m_dst_image_ctx, m_snap_id_end, m_flatten, m_work_queue,
+    m_snap_seqs, ctx);
   m_snapshot_copy_request->get();
   m_lock.Unlock();
 
@@ -140,7 +141,7 @@ void DeepCopyRequest<I>::send_copy_image() {
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_image>(this);
   m_image_copy_request = ImageCopyRequest<I>::create(
       m_src_image_ctx, m_dst_image_ctx, m_snap_id_start, m_snap_id_end,
-      m_object_number, *m_snap_seqs, m_prog_ctx, ctx);
+      m_flatten, m_object_number, *m_snap_seqs, m_prog_ctx, ctx);
   m_image_copy_request->get();
   m_lock.Unlock();
 

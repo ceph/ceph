@@ -26,15 +26,16 @@ template <typename I>
 ImageCopyRequest<I>::ImageCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                       librados::snap_t snap_id_start,
                                       librados::snap_t snap_id_end,
+                                      bool flatten,
                                       const ObjectNumber &object_number,
                                       const SnapSeqs &snap_seqs,
                                       ProgressContext *prog_ctx,
                                       Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_snap_id_start(snap_id_start),
-    m_snap_id_end(snap_id_end), m_object_number(object_number),
-    m_snap_seqs(snap_seqs), m_prog_ctx(prog_ctx), m_on_finish(on_finish),
-    m_cct(dst_image_ctx->cct),
+    m_snap_id_end(snap_id_end), m_flatten(flatten),
+    m_object_number(object_number), m_snap_seqs(snap_seqs),
+    m_prog_ctx(prog_ctx), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(unique_lock_name("ImageCopyRequest::m_lock", this)) {
 }
 
@@ -207,7 +208,7 @@ void ImageCopyRequest<I>::send_next_object_copy() {
     });
   ObjectCopyRequest<I> *req = ObjectCopyRequest<I>::create(
       m_src_image_ctx, m_src_parent_image_ctx, m_dst_image_ctx, m_snap_map, ono,
-      ctx);
+      m_flatten, ctx);
   req->send();
 }
 

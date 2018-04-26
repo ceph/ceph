@@ -38,7 +38,7 @@ struct Image {
   static int deep_copy(ImageCtxT *ictx, librados::IoCtx& dest_md_ctx,
                        const char *destname, ImageOptions& opts,
                        ProgressContext &prog_ctx);
-  static int deep_copy(ImageCtxT *src, ImageCtxT *dest,
+  static int deep_copy(ImageCtxT *src, ImageCtxT *dest, bool flatten,
                        ProgressContext &prog_ctx);
 
   static int snap_set(ImageCtxT *ictx,

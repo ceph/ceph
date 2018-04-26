@@ -28,16 +28,16 @@ public:
                                    ImageCtxT *src_parent_image_ctx,
                                    ImageCtxT *dst_image_ctx,
                                    const SnapMap &snap_map,
-                                   uint64_t object_number,
+                                   uint64_t object_number, bool flatten,
                                    Context *on_finish) {
     return new ObjectCopyRequest(src_image_ctx, src_parent_image_ctx,
                                  dst_image_ctx, snap_map, object_number,
-                                 on_finish);
+                                 flatten, on_finish);
   }
 
   ObjectCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *src_parent_image_ctx,
                     ImageCtxT *dst_image_ctx, const SnapMap &snap_map,
-                    uint64_t object_number, Context *on_finish);
+                    uint64_t object_number, bool flatten, Context *on_finish);
 
   void send();
 
@@ -138,6 +138,7 @@ private:
   CephContext *m_cct;
   const SnapMap &m_snap_map;
   uint64_t m_dst_object_number;
+  bool m_flatten;
   Context *m_on_finish;
 
   decltype(m_src_image_ctx->data_ctx) m_src_io_ctx;

@@ -406,6 +406,16 @@ TEST_F(TestDeepCopy, Clone)
   test_clone();
 }
 
+TEST_F(TestDeepCopy, CloneFlatten)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  uint64_t flatten = 1;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_FLATTEN, flatten));
+
+  test_clone();
+}
+
 TEST_F(TestDeepCopy, Stress)
 {
   test_stress();
@@ -433,6 +443,18 @@ TEST_F(TestDeepCopy, Clone_LargerDstObjSize)
 
   uint64_t order = m_src_ictx->order + 1 + rand() % 2;
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
+
+  test_clone();
+}
+
+TEST_F(TestDeepCopy, CloneFlatten_LargerDstObjSize)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  uint64_t order = m_src_ictx->order + 1 + rand() % 2;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
+  uint64_t flatten = 1;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_FLATTEN, flatten));
 
   test_clone();
 }
@@ -473,6 +495,20 @@ TEST_F(TestDeepCopy, Clone_SmallerDstObjSize)
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
   uint64_t stripe_unit = m_src_ictx->stripe_unit >> 2;
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit));
+
+  test_clone();
+}
+
+TEST_F(TestDeepCopy, CloneFlatten_SmallerDstObjSize)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  uint64_t order = m_src_ictx->order - 1 - rand() % 2;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
+  uint64_t stripe_unit = m_src_ictx->stripe_unit >> 2;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit));
+  uint64_t flatten = 1;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_FLATTEN, flatten));
 
   test_clone();
 }
@@ -529,6 +565,22 @@ TEST_F(TestDeepCopy, Clone_StrippingLargerDstObjSize)
   test_clone();
 }
 
+TEST_F(TestDeepCopy, CloneFlatten_StrippingLargerDstObjSize)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_STRIPINGV2);
+
+  uint64_t order = m_src_ictx->order + 1;
+  uint64_t stripe_unit = 1 << (order - 2);
+  uint64_t stripe_count = 4;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit));
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count));
+  uint64_t flatten = 1;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_FLATTEN, flatten));
+
+  test_clone();
+}
+
 TEST_F(TestDeepCopy, Stress_StrippingLargerDstObjSize)
 {
   REQUIRE_FEATURE(RBD_FEATURE_STRIPINGV2);
@@ -581,6 +633,22 @@ TEST_F(TestDeepCopy, Clone_StrippingSmallerDstObjSize)
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit));
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count));
+
+  test_clone();
+}
+
+TEST_F(TestDeepCopy, CloneFlatten_StrippingSmallerDstObjSize)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_STRIPINGV2);
+
+  uint64_t order = m_src_ictx->order - 1 - rand() % 2;
+  uint64_t stripe_unit = 1 << (order - rand() % 4);
+  uint64_t stripe_count = 2 + rand() % 14;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_ORDER, order));
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, stripe_unit));
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count));
+  uint64_t flatten = 1;
+  ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_FLATTEN, flatten));
 
   test_clone();
 }

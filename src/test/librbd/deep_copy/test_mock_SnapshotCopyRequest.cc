@@ -223,8 +223,8 @@ public:
       librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish,
       librados::snap_t snap_id_end = CEPH_NOSNAP) {
     return new MockSnapshotCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
-                                       snap_id_end, m_work_queue, &m_snap_seqs,
-                                       on_finish);
+                                       snap_id_end, false, m_work_queue,
+                                       &m_snap_seqs, on_finish);
   }
 
   int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name,
