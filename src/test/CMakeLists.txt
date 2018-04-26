@@ -525,7 +525,6 @@ install(TARGETS
 add_dependencies(tests
   ceph-mon
   ceph-mgr
-  ceph
   ceph-authtool
   get_command_descriptions
   crushtool

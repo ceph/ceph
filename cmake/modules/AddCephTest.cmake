@@ -3,7 +3,9 @@
 #adds makes target/script into a test, test to check target, sets necessary environment variables
 function(add_ceph_test test_name test_path)
   add_test(NAME ${test_name} COMMAND ${test_path} ${ARGN})
-  add_dependencies(tests ${test_name})
+  if(TARGET ${test_name})
+    add_dependencies(tests ${test_name})
+  endif()
   set_property(TEST
     ${test_name}
     PROPERTY ENVIRONMENT 
