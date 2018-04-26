@@ -9,7 +9,7 @@ from mock import patch
 
 from ..services.exception import handle_rados_error
 from .helper import ControllerTestCase
-from ..controllers import RESTController, ApiController
+from ..controllers import RESTController, ApiController, BaseController
 from ..tools import is_valid_ipv6_address, dict_contains_path
 
 
@@ -44,6 +44,13 @@ class FooResourceDetail(RESTController):
         return {'detail': (key, [method])}
 
 
+@ApiController('rgw/proxy/{path:.*}')
+class GenerateControllerRoutesController(BaseController):
+    @cherrypy.expose
+    def __call__(self, path, **params):
+        pass
+
+
 @ApiController('fooargs')
 class FooArgs(RESTController):
     def set(self, code, name=None, opt1=None, opt2=None):
@@ -67,7 +74,8 @@ class RESTControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
-        cls.setup_controllers([FooResource, FooResourceDetail, FooArgs])
+        cls.setup_controllers(
+            [FooResource, FooResourceDetail, FooArgs, GenerateControllerRoutesController])
 
     def test_empty(self):
         self._delete("/foo")
@@ -146,6 +154,12 @@ class RESTControllerTest(ControllerTestCase):
     def test_create_form(self):
         self.getPage('/fooargs', headers=[('Accept', 'text/html')])
         self.assertIn('my_arg_name', self.body.decode('utf-8'))
+
+    def test_generate_controller_routes(self):
+        # We just need to add this controller in setup_server():
+        # noinspection PyStatementEffect
+        # pylint: disable=pointless-statement
+        GenerateControllerRoutesController
 
 
 class TestFunctions(unittest.TestCase):
