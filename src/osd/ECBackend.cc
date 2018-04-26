@@ -1193,8 +1193,9 @@ void ECBackend::handle_sub_read_reply(
       if ((err = ec_impl->minimum_to_decode(rop.want_to_read[iter->first], have, &dummy_minimum)) < 0) {
 	dout(20) << __func__ << " minimum_to_decode failed" << dendl;
         if (rop.in_progress.empty()) {
-	  // If we don't have enough copies and we haven't sent reads for all shards
-	  // we can send the rest of the reads, if any.
+	  // If we don't have enough copies, try other pg_shard_ts if available.
+	  // During recovery there may be multiple osds with copies of the same shard,
+	  // so getting EIO from one may result in multiple passes through this code path.
 	  if (!rop.do_redundant_reads) {
 	    int r = send_all_remaining_reads(iter->first, rop);
 	    if (r == 0) {
