@@ -1415,8 +1415,8 @@ public:
       return false;
     assert(positions);
     auto &cmap = choose_args[id];
-    cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
-					  crush->max_buckets);
+    cmap.args = static_cast<crush_choose_arg*>(calloc(sizeof(crush_choose_arg),
+					  crush->max_buckets));
     cmap.size = crush->max_buckets;
     for (int bidx=0; bidx < crush->max_buckets; ++bidx) {
       crush_bucket *b = crush->buckets[bidx];
@@ -1424,10 +1424,10 @@ public:
       carg.ids = NULL;
       carg.ids_size = 0;
       if (b && b->alg == CRUSH_BUCKET_STRAW2) {
-	crush_bucket_straw2 *sb = (crush_bucket_straw2*)b;
+	crush_bucket_straw2 *sb = reinterpret_cast<crush_bucket_straw2*>(b);
 	carg.weight_set_size = positions;
-	carg.weight_set = (crush_weight_set*)calloc(sizeof(crush_weight_set),
-						    carg.weight_set_size);
+	carg.weight_set = static_cast<crush_weight_set*>(calloc(sizeof(crush_weight_set),
+						    carg.weight_set_size));
 	// initialize with canonical weights
 	for (int pos = 0; pos < positions; ++pos) {
 	  carg.weight_set[pos].size = b->size;
