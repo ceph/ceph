@@ -129,15 +129,16 @@ struct ElasticConfig {
       num_shards = ES_NUM_SHARDS_MIN;
     }
     num_replicas = config["num_replicas"](ES_NUM_REPLICAS_DEFAULT);
+    if (!override_index_path.empty()) {
+      index_path = override_index_path;
+    }
   }
 
   void init_instance(RGWRealm& realm, uint64_t instance_id) {
-    sync_instance = instance_id;
-
-    if (!override_index_path.empty()) {
-      index_path = override_index_path;
+    if (!index_path.empty()) {
       return;
     }
+    sync_instance = instance_id;
 
     char buf[32];
     snprintf(buf, sizeof(buf), "-%08x", (uint32_t)(sync_instance & 0xFFFFFFFF));

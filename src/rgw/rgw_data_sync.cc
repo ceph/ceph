@@ -1902,20 +1902,13 @@ string RGWDataSyncStatusManager::shard_obj_name(const string& source_zone, int s
   return string(buf);
 }
 
-int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
-                             const rgw_bucket& bucket, int shard_id,
-                             RGWSyncErrorLogger *_error_logger,
-                             RGWSyncTraceManager *_sync_tracer,
-                             RGWSyncModuleInstanceRef& _sync_module)
+int RGWRemoteBucketLog::init(const rgw_bucket& bucket, int shard_id,
+                             RGWDataSyncEnv *_sync_env)
 {
-  conn = _conn;
-  source_zone = _source_zone;
   bs.bucket = bucket;
   bs.shard_id = shard_id;
 
-  sync_env.init(store->ctx(), store, conn, async_rados, http_manager,
-                _error_logger, _sync_tracer, source_zone, _sync_module,
-                nullptr);
+  sync_env = _sync_env;
 
   return 0;
 }
@@ -2015,7 +2008,7 @@ public:
 
 RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr()
 {
-  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, init_status);
+  return new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, init_status);
 }
 
 template <class T>
@@ -2270,7 +2263,7 @@ int RGWRemoteDataLog::read_shard_status(int shard_id, set<string>& pending_bucke
 
 RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status)
 {
-  return new RGWReadBucketSyncStatusCoroutine(&sync_env, bs, sync_status);
+  return new RGWReadBucketSyncStatusCoroutine(sync_env, bs, sync_status);
 }
 
 RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager() {
@@ -3245,7 +3238,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
 RGWCoroutine *RGWRemoteBucketLog::run_sync_cr()
 {
-  return new RGWRunBucketSyncCoroutine(&sync_env, bs, sync_env.sync_tracer->root_node);
+  return new RGWRunBucketSyncCoroutine(sync_env, bs, sync_env->sync_tracer->root_node);
 }
 
 int RGWBucketSyncStatusManager::init()
@@ -3282,15 +3275,26 @@ int RGWBucketSyncStatusManager::init()
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
-  sync_module.reset(new RGWDefaultSyncModuleInstance());
-
-  int effective_num_shards = (num_shards ? num_shards : 1);
+  sync_module = store->get_sync_module();
+  if (sync_module == nullptr) {
+    ret = store->get_sync_modules_manager()->create_instance(store->ctx(), store->get_zone().tier_type,
+        store->get_zone_params().tier_config, &sync_module);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
+      return ret;
+    }
+  }
 
   auto async_rados = store->get_async_rados();
 
+  sync_env.init(store->ctx(), store, conn, async_rados, &http_manager, error_logger, store->get_sync_tracer(),
+                source_zone, sync_module, nullptr);
+
+  int effective_num_shards = (num_shards ? num_shards : 1);
+
   for (int i = 0; i < effective_num_shards; i++) {
     RGWRemoteBucketLog *l = new RGWRemoteBucketLog(store, this, async_rados, &http_manager);
-    ret = l->init(source_zone, conn, bucket, (num_shards ? i : -1), error_logger, store->get_sync_tracer(), sync_module);
+    ret = l->init(bucket, (num_shards ? i : -1), &sync_env);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: failed to initialize RGWRemoteBucketLog object" << dendl;
       return ret;
@@ -3340,6 +3344,16 @@ int RGWBucketSyncStatusManager::read_sync_status()
 
 int RGWBucketSyncStatusManager::run()
 {
+  rgw_data_sync_status sync_status;
+  int ret = cr_mgr.run(new RGWReadDataSyncStatusCoroutine(&sync_env, &sync_status));
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to get data sync status ret=" << ret << dendl;
+    return ret;
+  }
+
+  RGWDataSyncModule * data_sync_module = sync_module->get_data_handler();
+  data_sync_module->init(&sync_env, sync_status.sync_info.instance_id);
+
   list<RGWCoroutinesStack *> stacks;
 
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
@@ -3350,7 +3364,7 @@ int RGWBucketSyncStatusManager::run()
     stacks.push_back(stack);
   }
 
-  int ret = cr_mgr.run(stacks);
+  ret = cr_mgr.run(stacks);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to read sync status for "
         << bucket_str{bucket} << dendl;

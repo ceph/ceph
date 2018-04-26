@@ -478,15 +478,13 @@ WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_info)
 
 class RGWRemoteBucketLog : public RGWCoroutinesManager {
   RGWRados *store;
-  RGWRESTConn *conn{nullptr};
-  string source_zone;
   rgw_bucket_shard bs;
 
   RGWBucketSyncStatusManager *status_manager;
   RGWAsyncRadosProcessor *async_rados;
   RGWHTTPManager *http_manager;
 
-  RGWDataSyncEnv sync_env;
+  RGWDataSyncEnv *sync_env{nullptr};
   rgw_bucket_shard_sync_info init_status;
 
   RGWBucketSyncCR *sync_cr{nullptr};
@@ -496,11 +494,8 @@ public:
                      RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager) : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()), store(_store),
                                        status_manager(_sm), async_rados(_async_rados), http_manager(_http_manager) {}
 
-  int init(const string& _source_zone, RGWRESTConn *_conn,
-           const rgw_bucket& bucket, int shard_id,
-           RGWSyncErrorLogger *_error_logger,
-           RGWSyncTraceManager *_sync_tracer,
-           RGWSyncModuleInstanceRef& _sync_module);
+  int init(const rgw_bucket& bucket, int shard_id,
+           RGWDataSyncEnv *_sync_env);
   void finish();
 
   RGWCoroutine *read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status);
@@ -516,6 +511,7 @@ class RGWBucketSyncStatusManager {
   RGWCoroutinesManager cr_mgr;
 
   RGWHTTPManager http_manager;
+  RGWDataSyncEnv sync_env;
 
   string source_zone;
   RGWRESTConn *conn;
@@ -536,13 +532,15 @@ class RGWBucketSyncStatusManager {
 
 public:
   RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
-                             const rgw_bucket& bucket) : store(_store),
-                                                                                     cr_mgr(_store->ctx(), _store->get_cr_registry()),
-                                                                                     http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
-                                                                                     source_zone(_source_zone),
-                                                                                     conn(NULL), error_logger(NULL),
-                                                                                     bucket(bucket),
-                                                                                     num_shards(0) {}
+                             const rgw_bucket& bucket)
+    : store(_store), cr_mgr(_store->ctx(), _store->get_cr_registry()),
+      http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
+      source_zone(_source_zone),
+      conn(NULL), error_logger(NULL),
+      sync_module(nullptr),
+      bucket(bucket),
+      num_shards(0) {}
+
   ~RGWBucketSyncStatusManager();
 
   int init();
