@@ -1610,6 +1610,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
   tmpmap.apply_incremental(*pending_inc);
   set<pg_t> to_check;
   set<pg_t> to_cancel;
+  map<int, map<int, float>> rule_weight_map;
 
   for (auto& p : tmpmap.pg_upmap) {
     to_check.insert(p.first);
@@ -1624,19 +1625,28 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
                  << pg << dendl;
       continue;
     }
+    map<int, float> weight_map;
+    auto it = rule_weight_map.find(crush_rule);
+    if (it == rule_weight_map.end()) {
+      auto r = tmpmap.crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+      if (r < 0) {
+        lderr(cct) << __func__ << " unable to get crush weight_map for "
+                   << "crush_rule " << crush_rule << dendl;
+        continue;
+      }
+      rule_weight_map[crush_rule] = weight_map;
+    } else {
+      weight_map = it->second;
+    }
     auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
     if (type < 0) {
       lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
                  << pg << dendl;
       continue;
-    } else if (type == 0) {
-      ldout(cct, 10) << __func__ << " failure-domain of pg " << pg
-                     << " is osd-level, skipping"
-                     << dendl;
-      continue;
     }
     ldout(cct, 10) << __func__ << " pg " << pg
                    << " crush-rule-id " << crush_rule
+                   << " weight_map " << weight_map
                    << " failure-domain-type " << type
                    << dendl;
     vector<int> raw;
@@ -1644,16 +1654,32 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     tmpmap.pg_to_raw_up(pg, &raw, &primary);
     set<int> parents;
     for (auto osd : raw) {
-      auto parent = tmpmap.crush->get_parent_of_type(osd, type);
-      if (parent >= 0) {
-        lderr(cct) << __func__ << " unable to get parent of raw osd." << osd
-                   << ", pg " << pg
-                   << dendl;
+      if (type > 0) {
+        auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+        if (parent >= 0) {
+          lderr(cct) << __func__ << " unable to get parent of raw osd."
+                     << osd << " of pg " << pg
+                     << dendl;
+          break;
+        }
+        auto r = parents.insert(parent);
+        if (!r.second) {
+          // two up-set osds come from same parent
+          to_cancel.insert(pg);
+          break;
+        }
+      }
+      // the above check validates collision only
+      // below we continue to check against crush-topology changing..
+      auto it = weight_map.find(osd);
+      if (it == weight_map.end()) {
+        // osd is gone or has been moved out of the specific crush-tree
+        to_cancel.insert(pg);
         break;
       }
-      auto r = parents.insert(parent);
-      if (!r.second) {
-        // two osds come from same parent, collided
+      auto adjusted_weight = tmpmap.get_weightf(it->first) * it->second;
+      if (adjusted_weight == 0) {
+        // osd is out/crush-out
         to_cancel.insert(pg);
         break;
       }
