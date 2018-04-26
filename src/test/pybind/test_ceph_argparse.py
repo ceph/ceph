@@ -95,7 +95,7 @@ class TestArgparse:
                                                     command,
                                                     'toomany']))
 
-	def capture_output(self, args, stdout=None, stderr=None):
+    def capture_output(self, args, stdout=None, stderr=None):
         if stdout:
             stdout = StringIO()
             sys.stdout = stdout

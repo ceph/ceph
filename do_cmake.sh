@@ -5,7 +5,7 @@ if test -e build; then
     exit 1
 fi
 
-if which ccache ; then
+if type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"
     ARGS="$ARGS -DWITH_CCACHE=ON"
 fi
