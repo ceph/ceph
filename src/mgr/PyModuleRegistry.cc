@@ -124,7 +124,7 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
 
 
 
-void PyModuleRegistry::standby_start()
+void PyModuleRegistry::standby_start(MonClient &mc)
 {
   Mutex::Locker l(lock);
   assert(active_modules == nullptr);
@@ -137,7 +137,7 @@ void PyModuleRegistry::standby_start()
   dout(4) << "Starting modules in standby mode" << dendl;
 
   standby_modules.reset(new StandbyPyModules(
-        mgr_map, module_config, clog));
+        mgr_map, module_config, clog, mc));
 
   std::set<std::string> failed_modules;
   for (const auto &i : modules) {
