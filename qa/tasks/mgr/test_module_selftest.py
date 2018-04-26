@@ -51,6 +51,8 @@ class TestModuleSelftest(MgrTestCase):
         # Use the dashboard to test that the mgr is still able to do its job
         self._assign_ports("dashboard", "server_port")
         self._load_module("dashboard")
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("dashboard",
+                                                     "create-self-signed-cert")
 
         original_active = self.mgr_cluster.get_active_id()
         original_standbys = self.mgr_cluster.get_standby_ids()
@@ -66,7 +68,7 @@ class TestModuleSelftest(MgrTestCase):
         for i in range(0, periods):
             t1 = time.time()
             # Check that an HTTP module remains responsive
-            r = requests.get(dashboard_uri)
+            r = requests.get(dashboard_uri, verify=False)
             self.assertEqual(r.status_code, 200)
 
             # Check that a native non-module command remains responsive

@@ -82,13 +82,16 @@ class DashboardTestCase(MgrTestCase):
         url = "{}{}".format(cls.base_uri, url)
         log.info("request %s to %s", method, url)
         if method == 'GET':
-            cls._resp = cls._session.get(url, params=params)
+            cls._resp = cls._session.get(url, params=params, verify=False)
         elif method == 'POST':
-            cls._resp = cls._session.post(url, json=data, params=params)
+            cls._resp = cls._session.post(url, json=data, params=params,
+                                          verify=False)
         elif method == 'DELETE':
-            cls._resp = cls._session.delete(url, json=data, params=params)
+            cls._resp = cls._session.delete(url, json=data, params=params,
+                                            verify=False)
         elif method == 'PUT':
-            cls._resp = cls._session.put(url, json=data, params=params)
+            cls._resp = cls._session.put(url, json=data, params=params,
+                                         verify=False)
         else:
             assert False
         try:
