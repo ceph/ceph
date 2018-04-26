@@ -10,7 +10,6 @@ set(shec_utils_srcs
   determinant.c)
 
 add_library(shec_utils OBJECT ${shec_utils_srcs})
-add_dependencies(shec_utils ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 
 set(ec_shec_objs
   $<TARGET_OBJECTS:gf-complete_objs>
@@ -18,7 +17,6 @@ set(ec_shec_objs
   $<TARGET_OBJECTS:shec_utils>)
 
 add_library(ec_shec SHARED ${ec_shec_objs})
-add_dependencies(ec_shec ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 set_target_properties(ec_shec PROPERTIES
   INSTALL_RPATH "")
 target_link_libraries(ec_shec ${EXTRALIBS})

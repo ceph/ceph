@@ -5,7 +5,6 @@ set(jerasure_utils_src
   ErasureCodeJerasure.cc)
 
 add_library(jerasure_utils OBJECT ${jerasure_utils_src})
-add_dependencies(jerasure_utils ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 
 # Set the CFLAGS correctly for gf-complete based on SIMD compiler support
 set(GF_COMPILE_FLAGS)
