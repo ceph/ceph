@@ -52,6 +52,38 @@ export class TaskManagerMessageService {
         };
       }
     ),
+    'rbd/clone': new TaskManagerMessage(
+      (metadata) => `Clone RBD '${metadata.child_pool_name}/${metadata.child_image_name}'`,
+      (metadata) => `RBD '${metadata.child_pool_name}/${metadata.child_image_name}'
+                     has been cloned successfully`,
+      (metadata) => {
+        return {
+          '17': `Name '${metadata.child_pool_name}/${metadata.child_image_name}' is already
+                 in use.`,
+          '22': `Snapshot must be protected.`
+        };
+      }
+    ),
+    'rbd/copy': new TaskManagerMessage(
+      (metadata) => `Copy RBD '${metadata.dest_pool_name}/${metadata.dest_image_name}'`,
+      (metadata) => `RBD '${metadata.dest_pool_name}/${metadata.dest_image_name}'
+                     has been copied successfully`,
+      (metadata) => {
+        return {
+          '17': `Name '${metadata.child_pool_name}/${metadata.child_image_name}' is already
+                 in use.`
+        };
+      }
+    ),
+    'rbd/flatten': new TaskManagerMessage(
+      (metadata) => `Flatten RBD '${metadata.pool_name}/${metadata.image_name}'`,
+      (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'
+                     has been flattened successfully`,
+      () => {
+        return {
+        };
+      }
+    ),
     'rbd/snap/create': new TaskManagerMessage(
       (metadata) => `Create snapshot ` +
                     `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,

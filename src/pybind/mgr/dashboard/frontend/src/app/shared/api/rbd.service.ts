@@ -27,6 +27,20 @@ export class RbdService {
     return this.http.get('api/block/image');
   }
 
+  copy(poolName, rbdName, rbd) {
+    return this.http.post(`api/block/image/${poolName}/${rbdName}/copy`, rbd,
+      { observe: 'response' });
+  }
+
+  flatten(poolName, rbdName) {
+    return this.http.post(`api/block/image/${poolName}/${rbdName}/flatten`, null,
+      { observe: 'response' });
+  }
+
+  defaultFeatures() {
+    return this.http.get('api/block/image/default_features');
+  }
+
   createSnapshot(poolName, rbdName, snapshotName) {
     const request = {
       snapshot_name: snapshotName
@@ -56,6 +70,12 @@ export class RbdService {
   rollbackSnapshot(poolName, rbdName, snapshotName) {
     return this.http.post(
       `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}/rollback`, null,
+      { observe: 'response' });
+  }
+
+  cloneSnapshot(poolName, rbdName, snapshotName, request) {
+    return this.http.post(
+      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}/clone`, request,
       { observe: 'response' });
   }
 
