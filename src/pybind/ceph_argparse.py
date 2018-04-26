@@ -1261,11 +1261,11 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 print('submit {0} to osd.{1}'.format(cmd, osdid),
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
-                cluster.osd_command, osdid, cmd, inbuf, timeout)
+                cluster.osd_command, osdid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mgr':
             ret, outbuf, outs = run_in_thread(
-                cluster.mgr_command, cmd, inbuf, timeout)
+                cluster.mgr_command, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'pg':
             pgid = target[1]
@@ -1281,7 +1281,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 print('submit {0} for pgid {1}'.format(cmd, pgid),
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
-                cluster.pg_command, pgid, cmd, inbuf, timeout)
+                cluster.pg_command, pgid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mon':
             if verbose:
@@ -1289,10 +1289,10 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                       file=sys.stderr)
             if len(target) < 2 or target[1] == '':
                 ret, outbuf, outs = run_in_thread(
-                    cluster.mon_command, cmd, inbuf, timeout)
+                    cluster.mon_command, cmd, inbuf, timeout=timeout)
             else:
                 ret, outbuf, outs = run_in_thread(
-                    cluster.mon_command, cmd, inbuf, timeout, target[1])
+                    cluster.mon_command, cmd, inbuf, timeout=timeout, target=target[1])
         elif target[0] == 'mds':
             mds_spec = target[1]
 
