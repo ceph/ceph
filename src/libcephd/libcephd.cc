@@ -34,7 +34,6 @@ CLS_INIT(lua);
 CLS_INIT(numops);
 CLS_INIT(rbd);
 CLS_INIT(refcount);
-CLS_INIT(replica_log);
 CLS_INIT(rgw);
 CLS_INIT(statelog);
 CLS_INIT(timeindex);
@@ -212,8 +211,6 @@ void cephd_preload_rados_classes(OSD *osd)
 #endif
     class_handler->add_embedded_class("refcount");
     refcount_cls_init();
-    class_handler->add_embedded_class("replica_log");
-    replica_log_cls_init();
 #ifdef WITH_RADOSGW
     class_handler->add_embedded_class("rgw");
     rgw_cls_init();
