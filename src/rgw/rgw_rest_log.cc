@@ -846,7 +846,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_metadata_log_status"; }
+  const char* name() const override { return "get_metadata_log_status"; }
 };
 
 void RGWOp_MDLog_Status::execute()
@@ -884,7 +884,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_bucket_index_log_status"; }
+  const char* name() const override { return "get_bucket_index_log_status"; }
 };
 
 void RGWOp_BILog_Status::execute()
@@ -941,7 +941,7 @@ public:
   }
   void execute() override ;
   void send_response() override;
-  const string name() override { return "get_data_changes_log_status"; }
+  const char* name() const override { return "get_data_changes_log_status"; }
 };
 
 void RGWOp_DATALog_Status::execute()
