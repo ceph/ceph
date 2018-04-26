@@ -193,7 +193,7 @@ void CephBroker::close(ResponseCallback *cb, uint32_t fd) {
 void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount) {
   OpenFileDataCephPtr fdata;
   ssize_t nread;
-  uint64_t offset;
+  int64_t offset;
   StaticBuffer buf(new uint8_t [amount], amount);
 
   HT_DEBUGF("read fd=%" PRIu32 " amount = %d", fd, amount);
@@ -207,7 +207,7 @@ void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount) {
   }
 
   if ((offset = ceph_lseek(cmount, fdata->fd, 0, SEEK_CUR)) < 0) {
-    std::string errs(cpp_strerror((int)-offset));
+    std::string errs(cpp_strerror(offset));
     HT_ERRORF("lseek failed: fd=%" PRIu32 " ceph_fd=%d offset=0 SEEK_CUR - %s",
 	      fd, fdata->fd, errs.c_str());
     report_error(cb, offset);
@@ -221,7 +221,7 @@ void CephBroker::read(ResponseCallbackRead *cb, uint32_t fd, uint32_t amount) {
   }
 
   buf.size = nread;
-  cb->response(offset, buf);
+  cb->response((uint64_t)offset, buf);
 }
 
 void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
@@ -229,7 +229,7 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
 {
   OpenFileDataCephPtr fdata;
   ssize_t nwritten;
-  uint64_t offset;
+  int64_t offset;
 
   HT_DEBUG_OUT << "append fd="<< fd <<" amount="<< amount <<" data='"
 	       << format_bytes(20, data, amount) <<" sync="<< sync << HT_END;
@@ -241,8 +241,8 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
     return;
   }
 
-  if ((offset = (uint64_t)ceph_lseek(cmount, fdata->fd, 0, SEEK_CUR)) < 0) {
-    std::string errs(cpp_strerror((int)-offset));
+  if ((offset = ceph_lseek(cmount, fdata->fd, 0, SEEK_CUR)) < 0) {
+    std::string errs(cpp_strerror(offset));
     HT_ERRORF("lseek failed: fd=%" PRIu32 " ceph_fd=%d offset=0 SEEK_CUR - %s", fd, fdata->fd,
               errs.c_str());
     report_error(cb, offset);
@@ -265,7 +265,7 @@ void CephBroker::append(ResponseCallbackAppend *cb, uint32_t fd,
     return;
   }
 
-  cb->response(offset, nwritten);
+  cb->response((uint64_t)offset, nwritten);
 }
 
 void CephBroker::seek(ResponseCallback *cb, uint32_t fd, uint64_t offset) {
