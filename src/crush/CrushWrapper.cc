@@ -1770,25 +1770,25 @@ int CrushWrapper::add_bucket(
     crush_choose_arg_map& cmap = p.second;
     if (cmap.args) {
       if ((int)cmap.size <= pos) {
-	cmap.args = (crush_choose_arg*)realloc(
+	cmap.args = static_cast<crush_choose_arg*>(realloc(
 	  cmap.args,
-	  sizeof(crush_choose_arg) * (pos + 1));
+	  sizeof(crush_choose_arg) * (pos + 1)));
         assert(cmap.args);
 	memset(&cmap.args[cmap.size], 0,
 	       sizeof(crush_choose_arg) * (pos + 1 - cmap.size));
 	cmap.size = pos + 1;
       }
     } else {
-      cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
-					    pos + 1);
+      cmap.args = static_cast<crush_choose_arg*>(calloc(sizeof(crush_choose_arg),
+						 pos + 1));
       assert(cmap.args);
       cmap.size = pos + 1;
     }
     if (size > 0) {
       int positions = get_choose_args_positions(cmap);
       crush_choose_arg& carg = cmap.args[pos];
-      carg.weight_set = (crush_weight_set*)calloc(sizeof(crush_weight_set),
-						  size);
+      carg.weight_set = static_cast<crush_weight_set*>(calloc(sizeof(crush_weight_set),
+						  size));
       carg.weight_set_size = positions;
       for (int ppos = 0; ppos < positions; ++ppos) {
 	carg.weight_set[ppos].weights = (__u32*)calloc(sizeof(__u32), size);
@@ -2033,8 +2033,8 @@ int CrushWrapper::device_class_clone(
     crush_choose_arg_map& cmap = w.second;
     if (-1-bno >= (int)cmap.size) {
       unsigned new_size = -1-bno + 1;
-      cmap.args = (crush_choose_arg*)realloc(cmap.args,
-					     new_size * sizeof(cmap.args[0]));
+      cmap.args = static_cast<crush_choose_arg*>(realloc(cmap.args,
+					     new_size * sizeof(cmap.args[0])));
       assert(cmap.args);
       memset(cmap.args + cmap.size, 0,
 	     (new_size - cmap.size) * sizeof(cmap.args[0]));
@@ -2044,8 +2044,8 @@ int CrushWrapper::device_class_clone(
     auto& n = cmap.args[-1-bno];
     n.ids_size = 0; // FIXME: implement me someday
     n.weight_set_size = o.weight_set_size;
-    n.weight_set = (crush_weight_set*)calloc(
-      n.weight_set_size, sizeof(crush_weight_set));
+    n.weight_set = static_cast<crush_weight_set*>(calloc(
+      n.weight_set_size, sizeof(crush_weight_set)));
     for (size_t s = 0; s < n.weight_set_size; ++s) {
       n.weight_set[s].size = copy->size;
       n.weight_set[s].weights = (__u32*)calloc(copy->size, sizeof(__u32));
@@ -2451,8 +2451,8 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	decode(choose_args_index, blp);
 	crush_choose_arg_map arg_map;
 	arg_map.size = crush->max_buckets;
-	arg_map.args = (crush_choose_arg*)calloc(
-	  arg_map.size, sizeof(crush_choose_arg));
+	arg_map.args = static_cast<crush_choose_arg*>(calloc(
+	  arg_map.size, sizeof(crush_choose_arg)));
 	__u32 size;
 	decode(size, blp);
 	for (__u32 j = 0; j < size; j++) {
@@ -2462,8 +2462,8 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	  crush_choose_arg *arg = &arg_map.args[bucket_index];
 	  decode(arg->weight_set_size, blp);
 	  if (arg->weight_set_size) {
-	    arg->weight_set = (crush_weight_set*)calloc(
-	      arg->weight_set_size, sizeof(crush_weight_set));
+	    arg->weight_set = static_cast<crush_weight_set*>(calloc(
+	      arg->weight_set_size, sizeof(crush_weight_set)));
 	    for (__u32 k = 0; k < arg->weight_set_size; k++) {
 	      crush_weight_set *weight_set = &arg->weight_set[k];
 	      decode(weight_set->size, blp);
