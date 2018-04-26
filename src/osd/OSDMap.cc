@@ -1643,6 +1643,20 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       ldout(cct, 10) << __func__ << " failure-domain of pg " << p.first
                      << " is osd-level, skipping"
                      << dendl;
+      for (auto osd : p.second) {
+	if (!tmpmap.crush->exists_in_rule_bucket(crush_rule, osd)) {
+          lderr(cct) << __func__ << " unable to find osd." << osd << " in bucket of pg "
+                 << p.first << dendl;
+          auto it = pending_inc->new_pg_upmap.find(p.first);
+          if (it != pending_inc->new_pg_upmap.end()) {
+            pending_inc->new_pg_upmap.erase(it);
+          }
+          if (osdmap.pg_upmap.count(p.first)) {
+            pending_inc->old_pg_upmap.insert(p.first);
+           }
+	   break;
+	}
+      }
       continue;
     }
     ldout(cct, 10) << __func__ << " pg " << p.first
@@ -1703,6 +1717,30 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       ldout(cct, 10) << __func__ << " failure-domain of pg " << p.first
                      << " is osd-level, skipping"
                      << dendl;
+      for (auto osd_pair : p.second) {
+	// only check the dest osd
+	bool should_delete = false;
+	if (!tmpmap.crush->exists_in_rule_bucket(crush_rule, osd_pair.first)) {
+	  should_delete = true;
+          lderr(cct) << __func__ << " unable to find osd." << osd_pair.first << " in bucket of pg "
+                 << p.first << dendl;
+	}
+	if (!tmpmap.crush->exists_in_rule_bucket(crush_rule, osd_pair.second)) {
+	  should_delete = true;
+          lderr(cct) << __func__ << " unable to find osd." << osd_pair.second << " in bucket of pg "
+                 << p.first << dendl;
+	}
+	if (should_delete) {
+          auto it = pending_inc->new_pg_upmap_items.find(p.first);
+          if (it != pending_inc->new_pg_upmap_items.end()) {
+            pending_inc->new_pg_upmap_items.erase(it);
+          }
+          if (osdmap.pg_upmap_items.count(p.first)) {
+            pending_inc->old_pg_upmap_items.insert(p.first);
+          }
+	  break;
+	}
+      }
       continue;
     }
     ldout(cct, 10) << __func__ << " pg " << p.first

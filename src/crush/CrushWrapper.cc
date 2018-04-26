@@ -482,6 +482,25 @@ bool CrushWrapper::_bucket_is_in_use(int item)
   return false;
 }
 
+bool CrushWrapper::exists_in_rule_bucket(int rule_id, int osd_id)
+{
+  crush_rule *rule = get_rule(rule_id);
+  assert(rule);
+  for (unsigned s = 0; s < rule->len; ++s) {
+    if ((rule->steps[s].op == CRUSH_RULE_TAKE)) {
+      int id = rule->steps[s].arg1;
+      auto *b = get_bucket(id);
+      if (IS_ERR(b))
+        continue;
+
+      for (unsigned n=0; n<b->size; n++)
+        if (osd_id == b->items[n])
+	  return true;
+    }
+  }
+  return false;
+}
+
 int CrushWrapper::_remove_item_under(
   CephContext *cct, int item, int ancestor, bool unlink_only)
 {

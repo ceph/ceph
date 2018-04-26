@@ -885,6 +885,7 @@ private:
   int _remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
   bool _bucket_is_in_use(int id);
 public:
+  bool exists_in_rule_bucket(int rule_id, int osd_id);
   int remove_item_under(CephContext *cct, int id, int ancestor, bool unlink_only);
 
   /**
