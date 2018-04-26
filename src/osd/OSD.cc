@@ -7011,6 +7011,9 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     int slow = 0;
     auto count_slow_ops = [&](TrackedOp& op) {
       if (op.get_initiated() < too_old) {
+	lgeneric_subdout(cct,osd,20) << "slow op " << op.get_desc()
+	                             << " initiated "
+	                             << op.get_initiated() << dendl;
 	slow++;
 	return true;
       } else {
