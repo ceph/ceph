@@ -126,6 +126,9 @@
 /* Define if using NSS. */
 #cmakedefine USE_NSS
 
+/* Define if using OpenSSL. */
+#cmakedefine USE_OPENSSL
+
 /* Accelio conditional compilation */
 #cmakedefine HAVE_XIO
 

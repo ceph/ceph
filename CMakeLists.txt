@@ -341,9 +341,12 @@ CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
 find_package(NSS REQUIRED)
 find_package(NSPR REQUIRED)
+find_package(OpenSSL REQUIRED)
+# TODO: use NSS only for validation of the OpenSSL-based implementations
 set(USE_NSS 1)
-set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
-set(SSL_LIBRARIES ${NSS_LIBRARIES})
+set(USE_OPENSSL 1)
+set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} ${OPENSSL_LIBRARIES})
+set(SSL_LIBRARIES ${NSS_LIBRARIES} ${OPENSSL_LIBRARIES})
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)

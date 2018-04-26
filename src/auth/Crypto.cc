@@ -13,10 +13,8 @@
 
 #include <sstream>
 #include "Crypto.h"
-#ifdef USE_NSS
-# include <nspr.h>
-# include <nss.h>
-# include <pk11pub.h>
+#ifdef USE_OPENSSL
+# include <openssl/aes.h>
 #endif
 
 #include "include/assert.h"
@@ -125,142 +123,109 @@ public:
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
 };
 
-#ifdef USE_NSS
+#ifdef USE_OPENSSL
 // when we say AES, we mean AES-128
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
 
-static int nss_aes_operation(
-			     PK11Context* ectx,
-			     const bufferlist& in, bufferlist& out,
-			     std::string *error)
-{
-  // we are using CEPH_AES_IV for the IV param, so take it into consideration.
-  bufferptr out_tmp{round_up_to(in.length() + sizeof(CEPH_AES_IV),
-                                AES_BLOCK_LEN)};
-  bufferlist incopy;
-
-  SECStatus ret;
-  int written;
-  unsigned char *in_buf;
-
-  incopy = in;  // it's a shallow copy!
-  in_buf = (unsigned char*)incopy.c_str();
-  ret = PK11_CipherOp(ectx,
-		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
-		      in_buf, in.length());
-  if (ret != SECSuccess) {
-    if (error) {
-      ostringstream oss;
-      oss << "NSS AES failed: " << PR_GetError();
-      *error = oss.str();
-    }
-    return -1;
-  }
-
-  unsigned int written2;
-  ret = PK11_DigestFinal(ectx,
-			 (unsigned char*)out_tmp.c_str()+written, &written2,
-			 out_tmp.length()-written);
-  if (ret != SECSuccess) {
-    if (error) {
-      ostringstream oss;
-      oss << "NSS AES final round failed: " << PR_GetError();
-      *error = oss.str();
-    }
-    return -1;
-  }
-
-  out_tmp.set_length(written + written2);
-  out.append(out_tmp);
-  return 0;
-}
-
-// transplated from ad2f92594bd88ba8cf4163c1f9a0562c53ed96a8
-namespace ceph::crypto {
-
-struct ScopedPK11Context {
-  PK11Context* ctx;
-  ScopedPK11Context(PK11Context *c = nullptr)
-  : ctx(c)
-  {}
-  ~ScopedPK11Context() {
-    PK11_DestroyContext(ctx, PR_TRUE);
-  }
-  void reset(PK11Context* c) noexcept {
-   ctx = c;
-  }
-  PK11Context* get() const noexcept {
-    return ctx;
-  }
-  explicit operator bool() const noexcept {
-   return get() != nullptr;
-  }
-};
-
-}
 
 class CryptoAESKeyHandler : public CryptoKeyHandler {
-  static constexpr CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
-  ceph::crypto::ScopedPK11Context enc_ctx;
-  ceph::crypto::ScopedPK11Context dec_ctx;
+  AES_KEY enc_key;
+  AES_KEY dec_key;
 
 public:
   int init(const bufferptr& s, ostringstream& err) {
     secret = s;
 
-    PK11SlotInfo *slot = nullptr;
-    slot = PK11_GetBestSlot(mechanism, NULL);
-    if (!slot) {
-      err << "cannot find NSS slot to use: " << PR_GetError();
+    const int enc_key_ret = \
+      AES_set_encrypt_key((const unsigned char*)secret.c_str(),
+			  AES_KEY_LEN * CHAR_BIT, &enc_key);
+    if (enc_key_ret != 0) {
+      err << "cannot set OpenSSL encrypt key for AES: " << enc_key_ret;
       return -1;
     }
 
-    SECItem keyItem;
-    keyItem.type = siBuffer;
-    keyItem.data = (unsigned char*)secret.c_str();
-    keyItem.len = secret.length();
-    PK11SymKey* key = nullptr;
-    key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
-			    &keyItem, NULL);
-    PK11_FreeSlot(slot);
-
-    if (!key) {
-      err << "cannot convert AES key for NSS: " << PR_GetError();
+    const int dec_key_ret = \
+      AES_set_decrypt_key((const unsigned char*)secret.c_str(),
+			  AES_KEY_LEN * CHAR_BIT, &dec_key);
+    if (dec_key_ret != 0) {
+      err << "cannot set OpenSSL decrypt key for AES: " << dec_key_ret;
       return -1;
     }
 
-    SECItem ivItem;
-    ivItem.type = siBuffer;
-    // losing constness due to SECItem.data; IV should never be
-    // modified, regardless
-    ivItem.data = (unsigned char*)CEPH_AES_IV;
-    ivItem.len = sizeof(CEPH_AES_IV);
-
-    SECItem *param = nullptr;
-    param = PK11_ParamFromIV(mechanism, &ivItem);
-    if (!param) {
-      err << "cannot set NSS IV param: " << PR_GetError();
-      return -1;
-    }
-
-    enc_ctx.reset(PK11_CreateContextBySymKey(mechanism, CKA_ENCRYPT, key, param));
-    dec_ctx.reset(PK11_CreateContextBySymKey(mechanism, CKA_DECRYPT, key, param));
-
-    SECITEM_FreeItem(param, PR_TRUE);
-    PK11_FreeSymKey(key);
     return 0;
   }
 
-  int encrypt(const bufferlist& in,
-	      bufferlist& out, std::string *error) const override {
-    PK11_DigestBegin(enc_ctx.get());
-    return nss_aes_operation(enc_ctx.get(), in, out, error);
+  int encrypt(const ceph::bufferlist& in,
+	      ceph::bufferlist& out,
+              std::string* /* unused */) const override {
+    // we need to take into account the PKCS#7 padding. There *always* will
+    // be at least one byte of padding. This stays even to input aligned to
+    // AES_BLOCK_LEN. Otherwise we would face ambiguities during decryption.
+    // To exemplify:
+    //   16 + p2align(10, 16) -> 16
+    //   16 + p2align(16, 16) -> 32 including 16 bytes for padding.
+    ceph::bufferptr out_tmp{
+      AES_BLOCK_LEN + p2align(in.length(), AES_BLOCK_LEN)};
+
+    // let's pad the data
+    std::uint8_t pad_len = out_tmp.length() - in.length();
+    ceph::bufferptr pad_buf{pad_len};
+    memset(pad_buf.c_str(), pad_len, pad_len);
+
+    // form contiguous buffer for block cipher. The ctor copies shallowly.
+    ceph::bufferlist incopy(in);
+    incopy.append(std::move(pad_buf));
+    const auto in_buf = reinterpret_cast<unsigned char*>(incopy.c_str());
+
+    // reinitialize IV each time. It might be unnecessary depending on
+    // actual implementation but at the interface layer we are obliged
+    // to deliver IV as non-const.
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    unsigned char iv[AES_BLOCK_LEN];
+    memcpy(iv, CEPH_AES_IV, AES_BLOCK_LEN);
+
+    // we aren't using EVP because of performance concerns. Profiling
+    // shows the cost is quite high. Endianness might be an issue.
+    // However, as they would affect Cephx, any fallout should pop up
+    // rather early, hopefully.
+    AES_cbc_encrypt(in_buf, reinterpret_cast<unsigned char*>(out_tmp.c_str()),
+		    out_tmp.length(), &enc_key, iv, AES_ENCRYPT);
+
+    out.append(out_tmp);
+    return 0;
   }
-  int decrypt(const bufferlist& in,
-	       bufferlist& out, std::string *error) const override {
-    PK11_DigestBegin(dec_ctx.get());
-    return nss_aes_operation(dec_ctx.get(), in, out, error);
+
+  int decrypt(const ceph::bufferlist& in,
+	      ceph::bufferlist& out,
+	      std::string* /* unused */) const override {
+    // PKCS#7 padding enlarges even empty plain-text to take 16 bytes.
+    if (in.length() < AES_BLOCK_LEN || in.length() % AES_BLOCK_LEN) {
+      return -1;
+    }
+
+    // needed because of .c_str() on const. It's a shallow copy.
+    ceph::bufferlist incopy(in);
+    const auto in_buf = reinterpret_cast<unsigned char*>(incopy.c_str());
+
+    // make a local, modifiable copy of IV.
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    unsigned char iv[AES_BLOCK_LEN];
+    memcpy(iv, CEPH_AES_IV, AES_BLOCK_LEN);
+
+    ceph::bufferptr out_tmp{in.length()};
+    AES_cbc_encrypt(in_buf, reinterpret_cast<unsigned char*>(out_tmp.c_str()),
+		    in.length(), &dec_key, iv, AES_DECRYPT);
+
+    // BE CAREFUL: we cannot expose any single bit of information about
+    // the cause of failure. Otherwise we'll face padding oracle attack.
+    // See: https://en.wikipedia.org/wiki/Padding_oracle_attack.
+    const auto pad_len = \
+      std::min<std::uint8_t>(out_tmp[in.length() - 1], AES_BLOCK_LEN);
+    out_tmp.set_length(in.length() - pad_len);
+    out.append(std::move(out_tmp));
+
+    return 0;
   }
 };
 
