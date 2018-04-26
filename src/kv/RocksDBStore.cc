@@ -21,6 +21,7 @@
 using std::string;
 #include "common/perf_counters.h"
 #include "common/debug.h"
+#include "common/PriorityCache.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
@@ -305,25 +306,18 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
   uint64_t row_cache_size = cache_size * g_conf->rocksdb_cache_row_ratio;
   uint64_t block_cache_size = cache_size - row_cache_size;
 
-  if (block_cache_size == 0) {
-    // disable block cache
-    dout(10) << __func__ << " block_cache_size " << block_cache_size
-             << ", setting no_block_cache " << dendl;
-    bbt_opts.no_block_cache = true;
+  if (g_conf->rocksdb_cache_type == "lru") {
+    bbt_opts.block_cache = rocksdb::NewLRUCache(
+      block_cache_size,
+      g_conf->rocksdb_cache_shard_bits);
+  } else if (g_conf->rocksdb_cache_type == "clock") {
+    bbt_opts.block_cache = rocksdb::NewClockCache(
+      block_cache_size,
+      g_conf->rocksdb_cache_shard_bits);
   } else {
-    if (g_conf->rocksdb_cache_type == "lru") {
-      bbt_opts.block_cache = rocksdb::NewLRUCache(
-        block_cache_size,
-        g_conf->rocksdb_cache_shard_bits);
-    } else if (g_conf->rocksdb_cache_type == "clock") {
-      bbt_opts.block_cache = rocksdb::NewClockCache(
-        block_cache_size,
-        g_conf->rocksdb_cache_shard_bits);
-    } else {
-      derr << "unrecognized rocksdb_cache_type '" << g_conf->rocksdb_cache_type
-        << "'" << dendl;
-      return -EINVAL;
-    }
+    derr << "unrecognized rocksdb_cache_type '" << g_conf->rocksdb_cache_type
+      << "'" << dendl;
+    return -EINVAL;
   }
   bbt_opts.block_size = g_conf->rocksdb_block_size;
 
@@ -908,6 +902,86 @@ void RocksDBStore::compact_range(const string& start, const string& end)
   rocksdb::Slice cend(end);
   db->CompactRange(options, &cstart, &cend);
 }
+
+int64_t RocksDBStore::request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const
+{
+  auto cache = bbt_opts.block_cache;
+  int64_t assigned = get_cache_bytes(pri);
+
+  switch (pri) {
+  // PRI0 is for rocksdb's high priority items (indexes/filters)
+  case PriorityCache::Priority::PRI0:
+    {
+      int64_t usage = cache->GetHighPriPoolUsage();
+
+      // RocksDB sometimes flushes the high pri cache when the low priority
+      // cache exceeds the soft cap, so in that case use a "watermark" for 
+      // the usage instead.
+      if (high_pri_watermark > usage) {
+        usage = high_pri_watermark;
+      }
+      dout(10) << __func__ << " high pri pool usage: " << usage << dendl;
+      int64_t request = PriorityCache::get_chunk(usage, chunk_bytes);
+      return (request > assigned) ? request - assigned : 0;
+    }
+  // All other cache items are currently shoved into the LAST priority. 
+  case PriorityCache::Priority::LAST:
+    { 
+      uint64_t usage = cache->GetUsage() - cache->GetHighPriPoolUsage();
+      dout(10) << __func__ << " low pri pool usage: " << usage << dendl;
+      int64_t request = PriorityCache::get_chunk(usage, chunk_bytes);
+      return (request > assigned) ? request - assigned : 0;
+    }
+  default:
+    break;
+  }
+  return -EOPNOTSUPP;
+}
+
+int64_t RocksDBStore::get_cache_usage() const
+{
+  return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
+}
+
+int64_t RocksDBStore::commit_cache_size()
+{
+  int64_t high_pri_bytes = get_cache_bytes(PriorityCache::Priority::PRI0);
+  int64_t total_bytes = get_cache_bytes();
+
+  double ratio = (double) high_pri_bytes / total_bytes;
+  size_t old_bytes = bbt_opts.block_cache->GetCapacity();
+  dout(10) << __func__ << " old: " << old_bytes
+           << ", new: " << total_bytes << dendl;
+  bbt_opts.block_cache->SetCapacity((size_t) total_bytes);
+  set_cache_high_pri_pool_ratio(ratio);
+
+  // After setting the cache sizes, updated the high pri watermark. 
+  int64_t high_pri_pool_usage = bbt_opts.block_cache->GetHighPriPoolUsage();
+  if (high_pri_watermark < high_pri_pool_usage) {
+    high_pri_watermark = high_pri_pool_usage;
+  } else {
+    high_pri_watermark = static_cast<int64_t>(0.90 * high_pri_watermark);
+  }
+
+  return total_bytes;
+}
+
+int RocksDBStore::set_cache_high_pri_pool_ratio(double ratio)
+{
+  if (g_conf->rocksdb_cache_type != "lru") {
+    return -EOPNOTSUPP;
+  }
+  dout(10) << __func__ << " old ratio: " 
+          << bbt_opts.block_cache->GetHighPriPoolRatio() << " new ratio: "
+          << ratio << dendl;
+  bbt_opts.block_cache->SetHighPriPoolRatio(ratio);
+  return 0;
+}
+
+int64_t RocksDBStore::get_cache_capacity() {
+  return bbt_opts.block_cache->GetCapacity();
+}
+
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
 {
   delete dbiter;

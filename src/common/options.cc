@@ -3564,12 +3564,21 @@ std::vector<Option> get_global_options() {
     .set_default(.99)
     .set_description("Ratio of bluestore cache to devote to kv database (rocksdb)"),
 
-    Option("bluestore_cache_kv_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(512_M)
-    .set_description("Max memory (bytes) to devote to kv database (rocksdb)")
-    .set_long_description("A negative value means using bluestore_cache_meta_ratio "
-      "and bluestore_cache_kv_ratio instead of calculating these ratios using "
-      "bluestore_cache_size_* and bluestore_cache_kv_max."),
+    Option("bluestore_cache_autotune", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_see_also("bluestore_cache_size")
+    .add_see_also("bluestore_cache_meta_ratio")
+    .set_description("Automatically tune the ratio of caches while respecting min values."),
+
+    Option("bluestore_cache_autotune_chunk_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(33554432)
+    .add_see_also("bluestore_cache_autotune")
+    .set_description("The chunk size in bytes to allocate to caches when cache autotune is enabled."),
+
+    Option("bluestore_cache_autotune_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .add_see_also("bluestore_cache_autotune")
+    .set_description("The number of seconds to wait between rebalances when cache autotune is enabled."),
 
     Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")
