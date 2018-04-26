@@ -1,15 +1,6 @@
-import {
-  AbstractControl,
-  ValidationErrors,
-  ValidatorFn,
-  Validators
-} from '@angular/forms';
+import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
-
-type Prerequisites = { // tslint:disable-line
-  [key: string]: any
-};
 
 export function isEmptyInputValue(value: any): boolean {
   return value == null || value.length === 0;
@@ -33,7 +24,7 @@ export class CdValidators {
    * the specified prerequisites matches. If the prerequisites are fulfilled,
    * then the given function is executed and if it succeeds, the 'required'
    * validation error will be returned, otherwise null.
-   * @param {Prerequisites} prerequisites An object containing the prerequisites.
+   * @param {Object} prerequisites An object containing the prerequisites.
    *   ### Example
    *   ```typescript
    *   {
@@ -49,17 +40,20 @@ export class CdValidators {
    *   argument. The function must return true to set the validation error.
    * @return {ValidatorFn} Returns the validator function.
    */
-  static requiredIf(prerequisites: Prerequisites, condition?: Function | undefined): ValidatorFn {
+  static requiredIf(prerequisites: Object, condition?: Function | undefined): ValidatorFn {
     return (control: AbstractControl): ValidationErrors | null => {
       // Check if all prerequisites matches.
-      if (!Object.keys(prerequisites).every((key) => {
-        return (control.parent && control.parent.get(key).value === prerequisites[key]);
-      })) {
+      if (
+        !Object.keys(prerequisites).every((key) => {
+          return control.parent && control.parent.get(key).value === prerequisites[key];
+        })
+      ) {
         return null;
       }
-      const success = _.isFunction(condition) ? condition.call(condition, control.value) :
-        isEmptyInputValue(control.value);
-      return success ? {'required': true} : null;
+      const success = _.isFunction(condition)
+        ? condition.call(condition, control.value)
+        : isEmptyInputValue(control.value);
+      return success ? { required: true } : null;
     };
   }
 }
