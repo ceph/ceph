@@ -2022,7 +2022,7 @@ public:
     RGWGetObj::end = UINT64_MAX;
   }
 
-  const string name() override { return "stat_obj"; }
+  const char* name() const override { return "stat_obj"; }
   RGWOpType get_type() override { return RGW_OP_STAT_OBJ; }
 
   real_time get_mtime() const {
