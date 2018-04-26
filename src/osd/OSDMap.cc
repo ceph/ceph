@@ -1618,6 +1618,12 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
   for (auto& p : tmpmap.pg_upmap_items) {
     to_check.insert(p.first);
   }
+  for (auto& p : pending_inc->new_pg_upmap) {
+    to_check.insert(p.first);
+  }
+  for (auto& p : pending_inc->new_pg_upmap_items) {
+    to_check.insert(p.first);
+  }
   for (auto& pg : to_check) {
     auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
     if (crush_rule < 0) {
