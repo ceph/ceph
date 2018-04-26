@@ -12,10 +12,15 @@ log = logging.getLogger(__name__)
 class TestDashboard(MgrTestCase):
     MGRS_REQUIRED = 3
 
-    def test_standby(self):
+    def setUp(self):
+        super(TestDashboard, self).setUp()
+
         self._assign_ports("dashboard", "server_port")
         self._load_module("dashboard")
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("dashboard",
+                                                     "create-self-signed-cert")
 
+    def test_standby(self):
         original_active = self.mgr_cluster.get_active_id()
 
         original_uri = self._get_uri("dashboard")
@@ -30,14 +35,11 @@ class TestDashboard(MgrTestCase):
 
         # The original active daemon should have come back up as a standby
         # and be doing redirects to the new active daemon
-        r = requests.get(original_uri, allow_redirects=False)
+        r = requests.get(original_uri, allow_redirects=False, verify=False)
         self.assertEqual(r.status_code, 303)
         self.assertEqual(r.headers['Location'], failed_over_uri)
 
     def test_urls(self):
-        self._assign_ports("dashboard", "server_port")
-        self._load_module("dashboard")
-
         base_uri = self._get_uri("dashboard")
 
         # This is a very simple smoke test to check that the dashboard can
@@ -51,7 +53,8 @@ class TestDashboard(MgrTestCase):
         failures = []
 
         for url in urls:
-            r = requests.get(base_uri + url, allow_redirects=False)
+            r = requests.get(base_uri + url, allow_redirects=False,
+                             verify=False)
             if r.status_code >= 300 and r.status_code < 400:
                 log.error("Unexpected redirect to: {0} (from {1})".format(
                     r.headers['Location'], base_uri))
