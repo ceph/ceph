@@ -4,12 +4,12 @@ import { inject, TestBed } from '@angular/core/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap';
 
-import { TablePerformanceCounterService } from './table-performance-counter.service';
+import { PerformanceCounterService } from './performance-counter.service';
 
-describe('TablePerformanceCounterService', () => {
+describe('PerformanceCounterService', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [TablePerformanceCounterService],
+      providers: [PerformanceCounterService],
       imports: [
         HttpClientTestingModule,
         BsDropdownModule.forRoot(),
@@ -20,7 +20,7 @@ describe('TablePerformanceCounterService', () => {
 
   it(
     'should be created',
-    inject([TablePerformanceCounterService], (service: TablePerformanceCounterService) => {
+    inject([PerformanceCounterService], (service: PerformanceCounterService) => {
       expect(service).toBeTruthy();
     })
   );
