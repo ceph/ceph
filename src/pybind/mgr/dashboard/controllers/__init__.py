@@ -395,8 +395,13 @@ class BaseController(object):
 
         # filter out controller path params
         for idx, step in enumerate(cls._cp_path_.split('/')):
+            param = None
             if step[0] == ':':
                 param = step[1:]
+            if step[0] == '{' and step[-1] == '}' and ':' in step[1:-1]:
+                param, _, _regex = step[1:-1].partition(':')
+
+            if param:
                 if param not in cargs:
                     raise Exception("function '{}' does not have the"
                                     " positional argument '{}' in the {} "
