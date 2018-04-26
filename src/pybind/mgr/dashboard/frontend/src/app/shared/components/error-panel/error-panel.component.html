@@ -1,0 +1,18 @@
+<alert type="danger">
+  <strong>
+    <i class="fa fa-exclamation-triangle fa-fw icon-danger"
+       aria-hidden="true"></i> {{ title }}
+  </strong>
+  <ng-content></ng-content>
+</alert>
+
+<div class="button-group text-right"
+     *ngIf="backAction.observers.length > 0">
+  <button class="btn btn-sm btn-default tc_backButton"
+          type="button"
+          (click)="backAction.emit()"
+          autofocus
+          i18n>
+    Back
+  </button>
+</div>
