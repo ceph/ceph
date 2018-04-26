@@ -4066,6 +4066,8 @@ int OSDMap::calc_pg_upmaps(
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
       int osd = p->second;
       float deviation = p->first;
+      // make sure osd is still there (belongs to this crush-tree)
+      assert(osd_weight.count(osd));
       float target = osd_weight[osd] * pgs_per_weight;
       assert(target > 0);
       if (deviation/target < max_deviation_ratio) {
