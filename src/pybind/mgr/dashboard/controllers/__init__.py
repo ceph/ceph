@@ -24,10 +24,11 @@ from ..settings import Settings
 from ..tools import Session, TaskManager
 
 
-def ApiController(path):
+def ApiController(path, dont_add_to_url=None):
     def decorate(cls):
         cls._cp_controller_ = True
         cls._cp_path_ = path
+        cls._cp_dont_add_to_url = dont_add_to_url if dont_add_to_url else []
         config = {
             'tools.sessions.on': True,
             'tools.sessions.name': Session.NAME,
@@ -95,9 +96,12 @@ def generate_controller_routes(ctrl_class, mapper, base_url):
             name = "{}:{}".format(ctrl_class.__name__, url_suffix)
             url = "{}/{}/{}".format(base_url, ctrl_class._cp_path_, url_suffix)
 
-        if params:
-            for param in params:
-                url = "{}/:{}".format(url, param)
+        # We add params to the url, except if they are already specified.
+        params_to_add = [':{}'.format(p) for p in params
+                         if p not in ctrl_class._cp_dont_add_to_url]
+
+        if params_to_add:
+            url += '/' + '/'.join(params_to_add)
 
         conditions = dict(method=methods) if methods else None
 

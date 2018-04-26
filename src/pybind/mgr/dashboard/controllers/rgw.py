@@ -63,7 +63,7 @@ class RgwDaemon(RESTController):
         return daemon
 
 
-@ApiController('rgw/proxy/{path:.*}')
+@ApiController('rgw/proxy/{path:.*}', dont_add_to_url=['path'])
 @AuthRequired()
 class RgwProxy(BaseController):
     @cherrypy.expose
