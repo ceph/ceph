@@ -25,7 +25,7 @@ struct CancelableContext : public Context {
 static ostream& _prefix(
   std::ostream* _dout,
   Notify *notify) {
-  return *_dout << notify->gen_dbg_prefix();
+  return notify->gen_dbg_prefix(*_dout);
 }
 
 Notify::Notify(
@@ -229,7 +229,7 @@ void Notify::init()
 static ostream& _prefix(
   std::ostream* _dout,
   Watch *watch) {
-  return *_dout << watch->gen_dbg_prefix();
+  return watch->gen_dbg_prefix(*_dout);
 }
 
 class HandleWatchTimeout : public CancelableContext {
@@ -278,11 +278,9 @@ public:
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-string Watch::gen_dbg_prefix() {
-  stringstream ss;
-  ss << pg->gen_prefix() << " -- Watch(" 
-     << make_pair(cookie, entity) << ") ";
-  return ss.str();
+std::ostream& Watch::gen_dbg_prefix(std::ostream& out) {
+  return pg->gen_prefix(out) << " -- Watch("
+      << make_pair(cookie, entity) << ") ";
 }
 
 Watch::Watch(

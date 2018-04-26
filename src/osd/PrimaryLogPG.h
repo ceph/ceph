@@ -339,8 +339,10 @@ public:
     return backfill_targets;
   }
 
-  std::string gen_dbg_prefix() const override { return gen_prefix(); }
-  
+  std::ostream& gen_dbg_prefix(std::ostream& out) const override {
+    return gen_prefix(out);
+  }
+
   const map<hobject_t, set<pg_shard_t>>
     &get_missing_loc_shards() const override {
     return missing_loc.get_missing_locs();

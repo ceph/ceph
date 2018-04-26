@@ -19,7 +19,7 @@
 #include "test/unit.cc"
 
 struct mydpp : public DoutPrefixProvider {
-  string gen_prefix() const override { return "foo"; }
+  std::ostream& gen_prefix(std::ostream& out) const override { return out << "foo"; }
   CephContext *get_cct() const override { return g_ceph_context; }
   unsigned get_subsys() const override { return ceph_subsys_osd; }
 } dpp;
