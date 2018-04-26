@@ -132,8 +132,7 @@ int test_helper::extract_input(int argc, char *argv[]){
       ERR_CHECK_NEXT_PARAM(rgw_admin_path);
     }else return -1;
   }
-  if(host.length() <= 0 ||
-     rgw_admin_path.length() <= 0)
+  if(host.empty() || rgw_admin_path.empty())
     return -1;
   return 0;
 }
