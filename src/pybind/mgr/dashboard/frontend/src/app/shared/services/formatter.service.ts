@@ -86,15 +86,15 @@ export class FormatterService {
       'yb': Math.pow(base, 8),
       'yib': Math.pow(base, 8)
     };
-    const m = RegExp('^(\\d+)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?|P(B|iB)?|' +
+    const m = RegExp('^(\\d+(\.\\d+)?)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?|P(B|iB)?|' +
       'E(B|iB)?|Z(B|iB)?|Y(B|iB)?)?$', 'i').exec(value);
     if (m === null) {
       return null;
     }
-    let bytes = parseInt(m[1], 10);
-    if (_.isString(m[2])) {
-      bytes = bytes * units[m[2].toLowerCase()];
+    let bytes = parseFloat(m[1]);
+    if (_.isString(m[3])) {
+      bytes = bytes * units[m[3].toLowerCase()];
     }
-    return bytes;
+    return Math.floor(bytes);
   }
 }
