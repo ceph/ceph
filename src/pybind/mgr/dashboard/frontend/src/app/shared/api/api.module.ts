@@ -8,13 +8,13 @@ import { DashboardService } from './dashboard.service';
 import { HostService } from './host.service';
 import { MonitorService } from './monitor.service';
 import { OsdService } from './osd.service';
+import { PerformanceCounterService } from './performance-counter.service';
 import { PoolService } from './pool.service';
 import { RbdMirroringService } from './rbd-mirroring.service';
 import { RbdService } from './rbd.service';
 import { RgwBucketService } from './rgw-bucket.service';
 import { RgwDaemonService } from './rgw-daemon.service';
 import { RgwUserService } from './rgw-user.service';
-import { TablePerformanceCounterService } from './table-performance-counter.service';
 import { TcmuIscsiService } from './tcmu-iscsi.service';
 
 @NgModule({
@@ -34,7 +34,7 @@ import { TcmuIscsiService } from './tcmu-iscsi.service';
     RgwBucketService,
     RgwDaemonService,
     RgwUserService,
-    TablePerformanceCounterService,
+    PerformanceCounterService,
     TcmuIscsiService
   ]
 })
