@@ -400,15 +400,6 @@ which are as follows:
 :command:`opstate rm`
   Remove entry (use client_id, op_id, object).
 
-:command:`replicalog get`
-  Get replica metadata log entry.
-
-:command:`replicalog update`
-  Update replica metadata log entry.
-
-:command:`replicalog rm`
-  Remove replica metadata log entry.
-
 :command:`orphans find`
   Init and run search for leaked rados objects
 
@@ -566,8 +557,7 @@ Options
 
 .. option:: --shard-id=<shard-id>
 
-	Optional for mdlog list, data sync status. Required for ``mdlog trim``,
-	``replica mdlog get/delete``, ``replica datalog get/delete``.
+	Optional for mdlog list, data sync status. Required for ``mdlog trim``.
 
 .. option:: --max-entries=<entries>
 
@@ -766,11 +756,6 @@ Options
 .. option:: --state=<state>
 
 	Specify a state for the opstate set command.
-
-.. option:: --replica-log-type <logtypestr>
-
-	Replica log type (metadata, data, bucket), required for replica log
-	operations.
 
 .. option:: --categories=<list>
 
