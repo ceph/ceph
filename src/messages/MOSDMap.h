@@ -96,11 +96,13 @@ public:
     if (OSDMap::get_significant_features(encode_features) !=
          OSDMap::get_significant_features(features)) {
       if ((features & CEPH_FEATURE_PGID64) == 0 ||
-	  (features & CEPH_FEATURE_PGPOOL3) == 0)
+	  (features & CEPH_FEATURE_PGPOOL3) == 0) {
 	header.version = 1;  // old old_client version
-      else if ((features & CEPH_FEATURE_OSDENC) == 0)
+	header.compat_version = 1;
+      } else if ((features & CEPH_FEATURE_OSDENC) == 0) {
 	header.version = 2;  // old pg_pool_t
-      header.compat_version = 0;
+	header.compat_version = 2;
+      }
 
       // reencode maps using old format
       //
