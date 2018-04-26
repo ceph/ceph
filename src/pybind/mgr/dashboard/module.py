@@ -84,80 +84,28 @@ class ServerConfigException(Exception):
     pass
 
 
-class Module(MgrModule):
+class SSLCherryPyConfig(object):
     """
-    dashboard module entrypoint
+    Class for common server configuration done by both active and
+    standby module, especially setting up SSL.
     """
+    def __init__(self):
+        self._stopping = threading.Event()
+        self._url_prefix = ""
 
-    COMMANDS = [
-        {
-            'cmd': 'dashboard set-login-credentials '
-                   'name=username,type=CephString '
-                   'name=password,type=CephString',
-            'desc': 'Set the login credentials',
-            'perm': 'w'
-        },
-        {
-            'cmd': 'dashboard set-session-expire '
-                   'name=seconds,type=CephInt',
-            'desc': 'Set the session expire timeout',
-            'perm': 'w'
-        },
-        {
-            "cmd": "dashboard create-self-signed-cert",
-            "desc": "Create self signed certificate",
-            "perm": "w"
-        },
-    ]
-    COMMANDS.extend(options_command_list())
+    def shutdown(self):
+        self._stopping.set()
 
     @property
     def url_prefix(self):
         return self._url_prefix
 
-    @property
-    def rados(self):
+    def _configure(self):
         """
-        A librados instance to be shared by any classes within
-        this mgr module that want one.
+        Configure CherryPy and initialize self.url_prefix
+
+        :returns our URI
         """
-        if self._rados:
-            return self._rados
-
-        ctx_capsule = self.get_context()
-        self._rados = rados.Rados(context=ctx_capsule)
-        self._rados.connect()
-
-        return self._rados
-
-    def __init__(self, *args, **kwargs):
-        super(Module, self).__init__(*args, **kwargs)
-
-        # Keep a librados instance for those that need it.
-        self._rados = None
-
-        mgr.init(self)
-        self._url_prefix = ''
-
-        self._stopping = threading.Event()
-
-    @classmethod
-    def can_run(cls):
-        if cherrypy is None:
-            return False, "Missing dependency: cherrypy"
-
-        if not os.path.exists(cls.get_frontend_path()):
-            return False, "Frontend assets not found: incomplete build?"
-
-        return True, ""
-
-    @classmethod
-    def get_frontend_path(cls):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        return os.path.join(current_dir, 'frontend/dist')
-
-    def configure_cherrypy(self):
-        # pylint: disable=too-many-locals
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '8080')
         if server_addr is None:
@@ -167,9 +115,6 @@ class Module(MgrModule):
                 .format(self.module_name, self.get_mgr_id()))
         self.log.info('server_addr: %s server_port: %s', server_addr,
                       server_port)
-
-        self._url_prefix = prepare_url_prefix(self.get_config('url_prefix',
-                                                              default=''))
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
@@ -215,13 +160,117 @@ class Module(MgrModule):
         }
         cherrypy.config.update(config)
 
-        # Publish the URI that others may use to access the service we're
-        # about to start serving
-        self.set_uri("https://{0}:{1}{2}/".format(
+        self._url_prefix = prepare_url_prefix(self.get_config('url_prefix',
+                                                              default=''))
+
+        uri = "https://{0}:{1}{2}/".format(
             socket.getfqdn() if server_addr == "::" else server_addr,
             server_port,
             self.url_prefix
-        ))
+        )
+
+        return uri
+
+    def await_configuration(self):
+        """
+        Block until configuration is ready (i.e. all needed keys are set)
+        or self._stopping is set.
+
+        :returns URI of configured webserver
+        """
+        while not self._stopping.is_set():
+            try:
+                uri = self._configure()
+            except ServerConfigException as e:
+                self.log.info("Config not ready to serve, waiting: {0}".format(
+                    e
+                ))
+                # Poll until a non-errored config is present
+                self._stopping.wait(5)
+            else:
+                self.log.info("Configured CherryPy, starting engine...")
+                return uri
+
+class Module(MgrModule, SSLCherryPyConfig):
+    """
+    dashboard module entrypoint
+    """
+
+    COMMANDS = [
+        {
+            'cmd': 'dashboard set-login-credentials '
+                   'name=username,type=CephString '
+                   'name=password,type=CephString',
+            'desc': 'Set the login credentials',
+            'perm': 'w'
+        },
+        {
+            'cmd': 'dashboard set-session-expire '
+                   'name=seconds,type=CephInt',
+            'desc': 'Set the session expire timeout',
+            'perm': 'w'
+        },
+        {
+            "cmd": "dashboard create-self-signed-cert",
+            "desc": "Create self signed certificate",
+            "perm": "w"
+        },
+    ]
+    COMMANDS.extend(options_command_list())
+
+    @property
+    def rados(self):
+        """
+        A librados instance to be shared by any classes within
+        this mgr module that want one.
+        """
+        if self._rados:
+            return self._rados
+
+        ctx_capsule = self.get_context()
+        self._rados = rados.Rados(context=ctx_capsule)
+        self._rados.connect()
+
+        return self._rados
+
+    def __init__(self, *args, **kwargs):
+        super(Module, self).__init__(*args, **kwargs)
+        SSLCherryPyConfig.__init__(self)
+
+        # Keep a librados instance for those that need it.
+        self._rados = None
+
+        mgr.init(self)
+
+        self._stopping = threading.Event()
+
+    @classmethod
+    def can_run(cls):
+        if cherrypy is None:
+            return False, "Missing dependency: cherrypy"
+
+        if not os.path.exists(cls.get_frontend_path()):
+            return False, "Frontend assets not found: incomplete build?"
+
+        return True, ""
+
+    @classmethod
+    def get_frontend_path(cls):
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        return os.path.join(current_dir, 'frontend/dist')
+
+    def serve(self):
+        if 'COVERAGE_ENABLED' in os.environ:
+            _cov.start()
+
+        uri = self.await_configuration()
+        if uri is None:
+            # We were shut down while waiting
+            return
+
+        # Publish the URI that others may use to access the service we're
+        # about to start serving
+        self.set_uri(uri)
 
         mapper = generate_routes(self.url_prefix)
 
@@ -234,23 +283,6 @@ class Module(MgrModule):
             '{}/api'.format(self.url_prefix): {'request.dispatch': mapper}
         }
         cherrypy.tree.mount(None, config=config)
-
-    def serve(self):
-        if 'COVERAGE_ENABLED' in os.environ:
-            _cov.start()
-
-        while not self._stopping.is_set():
-            try:
-                self.configure_cherrypy()
-            except ServerConfigException as e:
-                self.log.info("Config not ready to serve, waiting: {0}".format(
-                    e
-                ))
-                # Poll until a non-errored config is present
-                self._stopping.wait(5)
-            else:
-                self.log.info("Configured CherryPy, starting engine...")
-                break
 
         cherrypy.engine.start()
         NotificationQueue.start_queue()
@@ -265,7 +297,7 @@ class Module(MgrModule):
     def shutdown(self):
         super(Module, self).shutdown()
 
-        self._stopping.set()
+        SSLCherryPyConfig.shutdown(self)
 
         logger.info('Stopping server...')
         NotificationQueue.stop()
@@ -320,21 +352,20 @@ class Module(MgrModule):
         NotificationQueue.new_notification(notify_type, notify_id)
 
 
-class StandbyModule(MgrStandbyModule):
+class StandbyModule(MgrStandbyModule, SSLCherryPyConfig):
+    def __init__(self, *args, **kwargs):
+        super(StandbyModule, self).__init__(*args, **kwargs)
+        SSLCherryPyConfig.__init__(self)
+
+        # We can set the global mgr instance to ourselves even though
+        # we're just a standby, because it's enough for logging.
+        mgr.init(self)
+
     def serve(self):
-        server_addr = self.get_localized_config('server_addr', '::')
-        server_port = self.get_localized_config('server_port', '7000')
-        if server_addr is None:
-            msg = 'no server_addr configured; try "ceph config-key set ' \
-                  'mgr/dashboard/server_addr <ip>"'
-            raise RuntimeError(msg)
-        self.log.info("server_addr: %s server_port: %s",
-                      server_addr, server_port)
-        cherrypy.config.update({
-            'server.socket_host': server_addr,
-            'server.socket_port': int(server_port),
-            'engine.autoreload.on': False
-        })
+        uri = self.await_configuration()
+        if uri is None:
+            # We were shut down while waiting
+            return
 
         module = self
 
@@ -364,9 +395,7 @@ class StandbyModule(MgrStandbyModule):
                     """
                     return template.format(delay=5)
 
-        url_prefix = prepare_url_prefix(self.get_config('url_prefix',
-                                                        default=''))
-        cherrypy.tree.mount(Root(), "{}/".format(url_prefix), {})
+        cherrypy.tree.mount(Root(), "{}/".format(self.url_prefix), {})
         self.log.info("Starting engine...")
         cherrypy.engine.start()
         self.log.info("Waiting for engine...")
@@ -374,6 +403,8 @@ class StandbyModule(MgrStandbyModule):
         self.log.info("Engine done.")
 
     def shutdown(self):
+        SSLCherryPyConfig.shutdown(self)
+
         self.log.info("Stopping server...")
         cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
         cherrypy.engine.stop()
