@@ -89,8 +89,14 @@ ceph_store_get(BaseMgrStandbyModule *self, PyObject *args)
     return nullptr;
   }
 
+  // Drop GIL for blocking mon command execution
+  PyThreadState *tstate = PyEval_SaveThread();
+
   std::string value;
   bool found = self->this_module->get_store(what, &value);
+
+  PyEval_RestoreThread(tstate);
+
   if (found) {
     dout(10) << "ceph_store_get " << what << " found: " << value.c_str() << dendl;
     return PyString_FromString(value.c_str());

@@ -33,8 +33,10 @@
 
 StandbyPyModules::StandbyPyModules(
     const MgrMap &mgr_map_,
-    PyModuleConfig &module_config, LogChannelRef clog_)
-    : state(module_config),
+    PyModuleConfig &module_config,
+    LogChannelRef clog_,
+    MonClient &monc_)
+    : state(module_config, monc_),
       clog(clog_)
 {
   state.set_mgr_map(mgr_map_);
@@ -123,9 +125,6 @@ int StandbyPyModule::load()
 bool StandbyPyModule::get_config(const std::string &key,
                                  std::string *value) const
 {
-  PyThreadState *tstate = PyEval_SaveThread();
-  PyEval_RestoreThread(tstate);
-
   const std::string global_key = PyModule::config_prefix
     + get_name() + "/" + key;
 
@@ -139,6 +138,52 @@ bool StandbyPyModule::get_config(const std::string &key,
       return false;
     }
   });
+}
+
+bool StandbyPyModule::get_store(const std::string &key,
+                                std::string *value) const
+{
+
+  const std::string global_key = PyModule::config_prefix
+    + get_name() + "/" + key;
+
+  dout(4) << __func__ << " key: " << global_key << dendl;
+
+  // Active modules use a cache of store values (kept up to date
+  // as writes pass through the active mgr), but standbys
+  // fetch values synchronously to get an up to date value.
+  // It's an acceptable cost because standby modules should not be
+  // doing a lot.
+  
+  MonClient &monc = state.get_monc();
+
+  std::ostringstream cmd_json;
+  cmd_json << "{\"prefix\": \"config-key get\", \"key\": \""
+           << global_key << "\"}";
+
+  bufferlist outbl;
+  std::string outs;
+  C_SaferCond c;
+  monc.start_mon_command(
+      {cmd_json.str()},
+      {},
+      &outbl,
+      &outs,
+      &c);
+
+  int r = c.wait();
+  if (r == -ENOENT) {
+    return false;
+  } else if (r != 0) {
+    // This is some internal error, not meaningful to python modules,
+    // so let them just see no value.
+    derr << __func__ << " error fetching store key '" << global_key << "': "
+         << cpp_strerror(r) << " " << outs << dendl;
+    return false;
+  } else {
+    *value = outbl.to_str();
+    return true;
+  }
 }
 
 std::string StandbyPyModule::get_active_uri() const
