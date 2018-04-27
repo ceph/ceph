@@ -15,10 +15,10 @@ describe('RgwBucketListComponent', () => {
   let component: RgwBucketListComponent;
   let fixture: ComponentFixture<RgwBucketListComponent>;
 
-  const fakeService = {
+  const fakeRgwBucketService = {
     list: () => {
-      return new Promise(function(resolve, reject) {
-        return [];
+      return new Promise(function(resolve) {
+        resolve([]);
       });
     }
   };
@@ -37,7 +37,7 @@ describe('RgwBucketListComponent', () => {
         DataTableModule,
         SharedModule
       ],
-      providers: [{ provide: RgwBucketService, useValue: fakeService }]
+      providers: [{ provide: RgwBucketService, useValue: fakeRgwBucketService }]
     })
     .compileComponents();
   }));

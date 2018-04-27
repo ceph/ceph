@@ -66,6 +66,7 @@ class RgwDaemon(RESTController):
 @ApiController('rgw/proxy/{path:.*}')
 @AuthRequired()
 class RgwProxy(BaseController):
+
     @cherrypy.expose
     def __call__(self, path, **params):
         try:
@@ -85,3 +86,12 @@ class RgwProxy(BaseController):
             cherrypy.response.headers['Content-Type'] = 'application/json'
             cherrypy.response.status = 500
             return json.dumps({'detail': str(e)}).encode('utf-8')
+
+
+@ApiController('rgw/bucket')
+@AuthRequired()
+class RgwBucket(RESTController):
+
+    def create(self, bucket, uid):
+        rgw_client = RgwClient.instance(uid)
+        return rgw_client.create_bucket(bucket)
