@@ -60,8 +60,9 @@ various aspects of your Ceph cluster:
 * **iSCSI**: Lists all hosts that run the TCMU runner service, displaying all
   images and their performance characteristics (read/write ops, traffic).
 * **RBD**: Lists all RBD images and their properties (size, objects, features).
-  Create, modify and delete RBD images. Create, delete and rollback snapshots of
-  selected images, protect/unprotect these snapshots against modification.
+  Create, copy, modify and delete RBD images. Create, delete and rollback
+  snapshots of selected images, protect/unprotect these snapshots against
+  modification. Copy or clone snapshots, flatten cloned images.
 * **RBD mirroring**: Lists all active sync daemons and their status, pools and
   RBD images including their synchronization state.
 * **CephFS**: Lists all active filesystem clients and associated pools,
