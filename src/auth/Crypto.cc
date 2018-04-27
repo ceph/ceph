@@ -11,7 +11,10 @@
  * 
  */
 
+#include <array>
 #include <sstream>
+#include <limits>
+
 #include "Crypto.h"
 #ifdef USE_OPENSSL
 # include <openssl/aes.h>
@@ -184,8 +187,8 @@ public:
 
 #ifdef USE_OPENSSL
 // when we say AES, we mean AES-128
-# define AES_KEY_LEN	16
-# define AES_BLOCK_LEN   16
+static constexpr const std::size_t AES_KEY_LEN{16};
+static constexpr const std::size_t AES_BLOCK_LEN{16};
 
 class CryptoAESKeyHandler : public CryptoKeyHandler {
   AES_KEY enc_key;
@@ -227,8 +230,8 @@ public:
     // To exemplify:
     //   16 + p2align(10, 16) -> 16
     //   16 + p2align(16, 16) -> 32 including 16 bytes for padding.
-    ceph::bufferptr out_tmp{
-      AES_BLOCK_LEN + p2align(in.length(), AES_BLOCK_LEN)};
+    ceph::bufferptr out_tmp{static_cast<unsigned>(
+      AES_BLOCK_LEN + p2align(in.length(), AES_BLOCK_LEN))};
 
     // let's pad the data
     std::uint8_t pad_len = out_tmp.length() - in.length();
@@ -292,11 +295,71 @@ public:
 
   std::size_t encrypt(const in_slice_t& in,
 		      const out_slice_t& out) const override {
-    return 0;
+    if (out.buf == nullptr) {
+      // 16 + p2align(10, 16) -> 16
+      // 16 + p2align(16, 16) -> 32
+      const std::size_t needed = \
+        AES_BLOCK_LEN + p2align(in.length, AES_BLOCK_LEN);
+      return needed;
+    }
+
+    // how many bytes of in.buf hang outside the alignment boundary and how
+    // much padding we need.
+    //   length = 23 -> tail_len = 7, pad_len = 9
+    //   length = 32 -> tail_len = 0, pad_len = 16
+    const std::uint8_t tail_len = in.length % AES_BLOCK_LEN;
+    const std::uint8_t pad_len = AES_BLOCK_LEN - tail_len;
+    static_assert(std::numeric_limits<std::uint8_t>::max() > AES_BLOCK_LEN);
+
+    std::array<unsigned char, AES_BLOCK_LEN> last_block;
+    memcpy(last_block.data(), in.buf + in.length - tail_len, tail_len);
+    memset(last_block.data() + tail_len, pad_len, pad_len);
+
+    // need a local copy because AES_cbc_encrypt takes `iv` as non-const.
+    // Useful because it allows us to encrypt in two steps: main + tail.
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    std::array<unsigned char, AES_BLOCK_LEN> iv;
+    memcpy(iv.data(), CEPH_AES_IV, AES_BLOCK_LEN);
+
+    const std::size_t main_encrypt_size = \
+      std::min(in.length - tail_len, out.max_length);
+    AES_cbc_encrypt(in.buf, out.buf, main_encrypt_size, &enc_key, iv.data(),
+		    AES_ENCRYPT);
+
+    const std::size_t tail_encrypt_size = \
+      std::min(AES_BLOCK_LEN, out.max_length - main_encrypt_size);
+    AES_cbc_encrypt(last_block.data(), out.buf + main_encrypt_size,
+		    tail_encrypt_size, &enc_key, iv.data(), AES_ENCRYPT);
+
+    return main_encrypt_size + tail_encrypt_size;
   }
+
   std::size_t decrypt(const in_slice_t& in,
 		      const out_slice_t& out) const override {
-    return 0;
+    if (in.length % AES_BLOCK_LEN != 0 || in.length < AES_BLOCK_LEN) {
+      throw std::runtime_error("input not aligned to AES_BLOCK_LEN");
+    } else if (out.buf == nullptr) {
+      // essentially it would be possible to decrypt into a buffer that
+      // doesn't include space for any PKCS#7 padding. We don't do that
+      // for the sake of performance and simplicity.
+      return in.length;
+    } else if (out.max_length < in.length) {
+      throw std::runtime_error("output buffer too small");
+    }
+
+    static_assert(strlen_ct(CEPH_AES_IV) == AES_BLOCK_LEN);
+    std::array<unsigned char, AES_BLOCK_LEN> iv;
+    memcpy(iv.data(), CEPH_AES_IV, AES_BLOCK_LEN);
+
+    AES_cbc_encrypt(in.buf, out.buf, in.length, &dec_key, iv.data(),
+		    AES_DECRYPT);
+
+    // NOTE: we aren't handling partial decrypt. PKCS#7 padding must be
+    // at the end. If it's malformed, don't say a word to avoid risk of
+    // having an oracle. All we need to ensure is valid buffer boundary.
+    const auto pad_len = \
+      std::min<std::uint8_t>(out.buf[in.length - 1], AES_BLOCK_LEN);
+    return in.length - pad_len;
   }
 };
 
@@ -318,7 +381,7 @@ int CryptoAES::create(CryptoRandom *random, bufferptr& secret)
 
 int CryptoAES::validate_secret(const bufferptr& secret)
 {
-  if (secret.length() < (size_t)AES_KEY_LEN) {
+  if (secret.length() < AES_KEY_LEN) {
     return -EINVAL;
   }
 
