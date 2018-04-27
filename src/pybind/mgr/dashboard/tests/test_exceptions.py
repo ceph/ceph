@@ -126,11 +126,6 @@ class RESTControllerTest(ControllerTestCase):
             {'detail': '[errno -42] list', 'code': "42", 'component': 'foo'}
         )
 
-    def test_error_send_command_bowsable_api(self):
-        self.getPage('/foo/error_send_command', headers=[('Accept', 'text/html')])
-        for err in ["'detail': '[errno -42] hi'", "'component': 'foo'"]:
-            self.assertIn(err.replace("'", "\'").encode('utf-8'), self.body)
-
     def test_error_foo_generic(self):
         self._get('/foo/error_generic')
         self.assertJsonBody({'detail': 'hi', 'code': 'Error', 'component': None})
