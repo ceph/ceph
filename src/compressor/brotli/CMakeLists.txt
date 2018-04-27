@@ -31,7 +31,6 @@ foreach(lib ${bortli_libs})
 endforeach()
 
 add_library(ceph_brotli SHARED ${brotli_sources})
-add_dependencies(ceph_brotli ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_include_directories(ceph_brotli	PRIVATE "${CMAKE_BINARY_DIR}/src/brotli/c/include")
 List(REVERSE bortli_libs)
 target_link_libraries(ceph_brotli ${BROTLI_LIBRARIES})

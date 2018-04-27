@@ -9,7 +9,6 @@ set(lrc_srcs
 )
 
 add_library(ec_lrc SHARED ${lrc_srcs})
-add_dependencies(ec_lrc ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 set_target_properties(ec_lrc PROPERTIES
   INSTALL_RPATH "")
 target_link_libraries(ec_lrc json_spirit)
