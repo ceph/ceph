@@ -5,7 +5,6 @@ set(snappy_sources
 )
 
 add_library(ceph_snappy SHARED ${snappy_sources})
-add_dependencies(ceph_snappy ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_include_directories(ceph_snappy SYSTEM PRIVATE
   "${SNAPPY_INCLUDE_DIR}")
 target_link_libraries(ceph_snappy ${SNAPPY_LIBRARIES})
