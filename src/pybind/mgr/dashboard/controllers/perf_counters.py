@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 from . import ApiController, RESTController
 from .. import mgr
+from ..security import Scope
 from ..services.ceph_service import CephService
 
 
@@ -38,32 +39,32 @@ class PerfCounter(RESTController):
         }
 
 
-@ApiController('perf_counters/mds')
+@ApiController('perf_counters/mds', Scope.CEPHFS)
 class MdsPerfCounter(PerfCounter):
     service_type = 'mds'
 
 
-@ApiController('perf_counters/mon')
+@ApiController('perf_counters/mon', Scope.MONITOR)
 class MonPerfCounter(PerfCounter):
     service_type = 'mon'
 
 
-@ApiController('perf_counters/osd')
+@ApiController('perf_counters/osd', Scope.OSD)
 class OsdPerfCounter(PerfCounter):
     service_type = 'osd'
 
 
-@ApiController('perf_counters/rgw')
+@ApiController('perf_counters/rgw', Scope.RGW)
 class RgwPerfCounter(PerfCounter):
     service_type = 'rgw'
 
 
-@ApiController('perf_counters/rbd-mirror')
+@ApiController('perf_counters/rbd-mirror', Scope.RBD_MIRRORING)
 class RbdMirrorPerfCounter(PerfCounter):
     service_type = 'rbd-mirror'
 
 
-@ApiController('perf_counters/mgr')
+@ApiController('perf_counters/mgr', Scope.MANAGER)
 class MgrPerfCounter(PerfCounter):
     service_type = 'mgr'
 

@@ -8,11 +8,12 @@ import cherrypy
 from . import ApiController, RESTController
 from .. import mgr
 from ..exceptions import DashboardException
+from ..security import Scope
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
 
 
-@ApiController('/cephfs')
+@ApiController('/cephfs', Scope.CEPHFS)
 class CephFS(RESTController):
     def __init__(self):
         super(CephFS, self).__init__()

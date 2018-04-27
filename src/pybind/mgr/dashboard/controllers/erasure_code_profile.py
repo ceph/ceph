@@ -4,6 +4,7 @@ from __future__ import absolute_import
 from cherrypy import NotFound
 
 from . import ApiController, RESTController
+from ..security import Scope
 from ..services.ceph_service import CephService
 from .. import mgr
 
@@ -15,7 +16,7 @@ def _serialize_ecp(name, ecp):
     return ecp
 
 
-@ApiController('/erasure_code_profile')
+@ApiController('/erasure_code_profile', Scope.POOL)
 class ErasureCodeProfile(RESTController):
     """
     create() supports additional key-value arguments that are passed to the
