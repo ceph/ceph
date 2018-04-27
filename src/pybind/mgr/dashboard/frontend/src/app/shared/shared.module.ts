@@ -5,6 +5,7 @@ import { ApiModule } from './api/api.module';
 import { ComponentsModule } from './components/components.module';
 import { DataTableModule } from './datatable/datatable.module';
 import { AutofocusDirective } from './directives/autofocus.directive';
+import { Copy2ClipboardButtonDirective } from './directives/copy2clipboard-button.directive';
 import { DimlessBinaryDirective } from './directives/dimless-binary.directive';
 import { PasswordButtonDirective } from './directives/password-button.directive';
 import { PipesModule } from './pipes/pipes.module';
@@ -25,6 +26,7 @@ import { ServicesModule } from './services/services.module';
   declarations: [
     PasswordButtonDirective,
     DimlessBinaryDirective,
+    Copy2ClipboardButtonDirective,
     AutofocusDirective
   ],
   exports: [
@@ -32,6 +34,7 @@ import { ServicesModule } from './services/services.module';
     PipesModule,
     ServicesModule,
     PasswordButtonDirective,
+    Copy2ClipboardButtonDirective,
     DimlessBinaryDirective,
     DataTableModule,
     ApiModule,
