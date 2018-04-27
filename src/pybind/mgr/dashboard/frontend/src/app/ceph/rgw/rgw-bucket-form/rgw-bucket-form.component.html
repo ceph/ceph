@@ -128,7 +128,8 @@
       </div>
       <div class="panel-footer">
         <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submit()"
+          <cd-submit-button type="button"
+                            (submitAction)="submit()"
                             [form]="bucketForm"
                             i18n>
             {editing, select, 1 {Update} other {Add}}
