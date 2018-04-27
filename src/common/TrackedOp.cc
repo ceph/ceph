@@ -337,6 +337,7 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
 
 bool OpTracker::with_slow_ops_in_flight(utime_t* oldest_secs,
 					int* num_slow_ops,
+					int* num_warned_ops,
 					std::function<void(TrackedOp&)>&& on_warn)
 {
   const utime_t now = ceph_clock_now();
@@ -368,6 +369,7 @@ bool OpTracker::with_slow_ops_in_flight(utime_t* oldest_secs,
   if (visit_ops_in_flight(oldest_secs, check)) {
     if (num_slow_ops) {
       *num_slow_ops = slow;
+      *num_warned_ops = warned;
     }
     return true;
   } else {
@@ -396,7 +398,7 @@ bool OpTracker::check_ops_in_flight(std::string* summary,
     op.warn_interval_multiplier *= 2;
   };
   int slow = 0;
-  if (with_slow_ops_in_flight(&oldest_secs, &slow, warn_on_slow_op)) {
+  if (with_slow_ops_in_flight(&oldest_secs, &slow, &warned, warn_on_slow_op)) {
     stringstream ss;
     ss << slow << " slow requests, "
        << warned << " included below; oldest blocked for > "

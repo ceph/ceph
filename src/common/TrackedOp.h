@@ -152,12 +152,14 @@ public:
    *
    * @param[out] oldest_sec the amount of time since the oldest op was initiated
    * @param[out] num_slow_ops total number of slow ops
+   * @param[out] num_warned_ops total number of warned ops
    * @param on_warn a function consuming tracked ops, the function returns
    *                false if it don't want to be fed with more ops
    * @return True if there are any Ops to warn on, false otherwise
    */
   bool with_slow_ops_in_flight(utime_t* oldest_secs,
 			       int* num_slow_ops,
+			       int* num_warned_ops,
 			       std::function<void(TrackedOp&)>&& on_warn);
   /**
    * Look for Ops which are too old, and insert warning
