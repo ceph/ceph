@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212
 from __future__ import absolute_import
 
 import collections
@@ -395,7 +394,7 @@ class NotificationQueue(threading.Thread):
         logger.debug("notification queue finished")
 
 
-# pylint: disable=too-many-arguments
+# pylint: disable=too-many-arguments, protected-access
 class TaskManager(object):
     FINISHED_TASK_SIZE = 10
     FINISHED_TASK_TTL = 60.0
@@ -504,6 +503,7 @@ class TaskManager(object):
         } for t in fn_t]
 
 
+# pylint: disable=protected-access
 class TaskExecutor(object):
     def __init__(self):
         self.task = None
@@ -528,6 +528,7 @@ class TaskExecutor(object):
         self.task._complete(ret_value, exception)
 
 
+# pylint: disable=protected-access
 class ThreadedExecutor(TaskExecutor):
     def __init__(self):
         super(ThreadedExecutor, self).__init__()

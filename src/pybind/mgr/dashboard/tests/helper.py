@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212,too-many-arguments
+# pylint: disable=too-many-arguments
 from __future__ import absolute_import
 
 import json
@@ -70,6 +70,7 @@ class ControllerTestCase(helper.CPWebCase):
         task_name = res['name']
         task_metadata = res['metadata']
 
+        # pylint: disable=protected-access
         class Waiter(threading.Thread):
             def __init__(self, task_name, task_metadata, tc):
                 super(Waiter, self).__init__()

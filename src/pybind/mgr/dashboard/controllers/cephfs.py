@@ -284,8 +284,6 @@ class CephFSClients(object):
         self._module = module_inst
         self.fscid = fscid
 
-    # pylint: disable=unused-variable
     @ViewCache()
     def get(self):
-        # TODO handle nonzero returns, e.g. when rank isn't active
         return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))

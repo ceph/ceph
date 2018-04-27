@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212
+# pylint: disable=protected-access
 from __future__ import absolute_import
 
 import collections
@@ -527,7 +527,6 @@ class RESTController(BaseController):
         else:
             return inspect.getargspec(func).args[1:]  # pylint: disable=deprecated-method
 
-    # pylint: disable=W1505
     @staticmethod
     def _takes_json(func):
         def inner(*args, **kwargs):

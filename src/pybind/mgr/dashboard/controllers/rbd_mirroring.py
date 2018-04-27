@@ -56,7 +56,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
             'health_color': 'info',
             'health': 'Unknown'
         }
-        for _, pool_data in daemon['status'].items():  # TODO: simplify
+        for _, pool_data in daemon['status'].items():
             if (health['health'] != 'error' and
                     [k for k, v in pool_data.get('callouts', {}).items()
                      if v['level'] == 'error']):

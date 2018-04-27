@@ -254,7 +254,6 @@ class Rbd(RESTController):
         return result
 
     def list(self, pool_name=None):
-        # pylint: disable=unbalanced-tuple-unpacking
         return self._rbd_list(pool_name)
 
     def get(self, pool_name, image_name):
