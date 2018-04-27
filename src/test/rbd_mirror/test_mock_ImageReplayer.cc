@@ -124,17 +124,20 @@ template<>
 struct PrepareLocalImageRequest<librbd::MockTestImageCtx> {
   static PrepareLocalImageRequest* s_instance;
   std::string *local_image_id = nullptr;
+  std::string *local_image_name = nullptr;
   std::string *tag_owner = nullptr;
   Context *on_finish = nullptr;
 
   static PrepareLocalImageRequest* create(librados::IoCtx &,
                                           const std::string &global_image_id,
                                           std::string *local_image_id,
+                                          std::string *local_image_name,
                                           std::string *tag_owner,
                                           MockContextWQ *work_queue,
                                           Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->local_image_id = local_image_id;
+    s_instance->local_image_name = local_image_name;
     s_instance->tag_owner = tag_owner;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -417,12 +420,14 @@ public:
 
   void expect_send(MockPrepareLocalImageRequest &mock_request,
                    const std::string &local_image_id,
+                   const std::string &local_image_name,
                    const std::string &tag_owner,
                    int r) {
     EXPECT_CALL(mock_request, send())
-      .WillOnce(Invoke([&mock_request, local_image_id, tag_owner, r]() {
+      .WillOnce(Invoke([&mock_request, local_image_id, local_image_name, tag_owner, r]() {
           if (r == 0) {
             *mock_request.local_image_id = local_image_id;
+            *mock_request.local_image_name = local_image_name;
             *mock_request.tag_owner = tag_owner;
           }
           mock_request.on_finish->complete(r);
@@ -614,7 +619,7 @@ TEST_F(TestMockImageReplayer, StartStop) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
   EXPECT_CALL(mock_remote_journaler, construct());
@@ -677,7 +682,7 @@ TEST_F(TestMockImageReplayer, LocalImagePrimary) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "", 0);
+              mock_local_image_ctx.name, "", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               "remote image id", 0);
   EXPECT_CALL(mock_remote_journaler, construct());
@@ -709,7 +714,7 @@ TEST_F(TestMockImageReplayer, LocalImageDNE) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_send(mock_prepare_local_image_request, "", "", -ENOENT);
+  expect_send(mock_prepare_local_image_request, "", "", "", -ENOENT);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
   EXPECT_CALL(mock_remote_journaler, construct());
@@ -741,7 +746,7 @@ TEST_F(TestMockImageReplayer, PrepareLocalImageError) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", -EINVAL);
+              mock_local_image_ctx.name, "remote mirror uuid", -EINVAL);
 
   create_image_replayer(mock_threads);
 
@@ -767,7 +772,7 @@ TEST_F(TestMockImageReplayer, GetRemoteImageIdDNE) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               "", -ENOENT);
   expect_trash_move(mock_image_deleter, "global image id", false, 0);
@@ -796,7 +801,7 @@ TEST_F(TestMockImageReplayer, GetRemoteImageIdNonLinkedDNE) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "some other mirror uuid", 0);
+              mock_local_image_ctx.name, "some other mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               "", -ENOENT);
 
@@ -824,7 +829,7 @@ TEST_F(TestMockImageReplayer, GetRemoteImageIdError) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, -EINVAL);
 
@@ -855,7 +860,7 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
   EXPECT_CALL(mock_remote_journaler, construct());
@@ -897,7 +902,7 @@ TEST_F(TestMockImageReplayer, StartExternalReplayError) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
   EXPECT_CALL(mock_remote_journaler, construct());
@@ -954,7 +959,7 @@ TEST_F(TestMockImageReplayer, StopError) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
   EXPECT_CALL(mock_remote_journaler, construct());
@@ -1024,7 +1029,7 @@ TEST_F(TestMockImageReplayer, Replay) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
   EXPECT_CALL(mock_remote_journaler, construct());
@@ -1131,7 +1136,7 @@ TEST_F(TestMockImageReplayer, DecodeError) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
   EXPECT_CALL(mock_remote_journaler, construct());
@@ -1232,7 +1237,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
-              "remote mirror uuid", 0);
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
   EXPECT_CALL(mock_remote_journaler, construct());
