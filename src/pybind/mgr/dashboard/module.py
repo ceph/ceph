@@ -5,12 +5,17 @@ openATTIC mgr plugin (based on CherryPy)
 from __future__ import absolute_import
 
 import errno
+from distutils.version import StrictVersion
 import os
 import socket
 import tempfile
 import threading
 from uuid import uuid4
+
 from OpenSSL import crypto
+
+from mgr_module import MgrModule, MgrStandbyModule
+import rados
 
 try:
     from urlparse import urljoin
@@ -27,7 +32,6 @@ except ImportError:
 # The SSL code in CherryPy 3.5.0 is buggy.  It was fixed long ago,
 # but 3.5.0 is still shipping in major linux distributions
 # (Fedora 27, Ubuntu Xenial), so we must monkey patch it to get SSL working.
-from distutils.version import StrictVersion
 if cherrypy is not None:
     v = StrictVersion(cherrypy.__version__)
     # It was fixed in 3.7.0.  Exact lower bound version is probably earlier,
@@ -35,6 +39,7 @@ if cherrypy is not None:
     if v >= StrictVersion("3.5.0") and v < StrictVersion("3.7.0"):
         from cherrypy.wsgiserver.wsgiserver2 import HTTPConnection,\
                                                     CP_fileobject
+
         def fixed_init(hc_self, server, sock, makefile=CP_fileobject):
             hc_self.server = server
             hc_self.socket = sock
@@ -44,9 +49,6 @@ if cherrypy is not None:
 
         HTTPConnection.__init__ = fixed_init
 
-
-from mgr_module import MgrModule, MgrStandbyModule
-import rados
 
 if 'COVERAGE_ENABLED' in os.environ:
     import coverage
@@ -92,6 +94,9 @@ class SSLCherryPyConfig(object):
     def __init__(self):
         self._stopping = threading.Event()
         self._url_prefix = ""
+
+        self.cert_tmp = None
+        self.pkey_tmp = None
 
     def shutdown(self):
         self._stopping.set()
@@ -190,6 +195,7 @@ class SSLCherryPyConfig(object):
             else:
                 self.log.info("Configured CherryPy, starting engine...")
                 return uri
+
 
 class Module(MgrModule, SSLCherryPyConfig):
     """
