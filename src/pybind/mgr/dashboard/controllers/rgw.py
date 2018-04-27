@@ -93,5 +93,12 @@ class RgwProxy(BaseController):
 class RgwBucket(RESTController):
 
     def create(self, bucket, uid):
-        rgw_client = RgwClient.instance(uid)
-        return rgw_client.create_bucket(bucket)
+        try:
+            rgw_client = RgwClient.instance(uid)
+            return rgw_client.create_bucket(bucket)
+        except Exception as e:  # pylint: disable=broad-except
+            # Catch all exceptions and return a status code 500 with a meaningful
+            # error message.
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 500
+            return {'detail': str(e)}
