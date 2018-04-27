@@ -1,6 +1,8 @@
 #include <errno.h>
 #include <time.h>
 
+#include <boost/container/small_vector.hpp>
+
 #include "gtest/gtest.h"
 #include "include/types.h"
 #include "auth/Crypto.h"
@@ -75,6 +77,50 @@ TEST(AES, Encrypt) {
   delete kh;
 }
 
+TEST(AES, EncryptNoBl) {
+  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  char secret_s[] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+  };
+  bufferptr secret(secret_s, sizeof(secret_s));
+
+  const unsigned char plaintext[] = {
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+  };
+
+  std::string error;
+  std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler(secret, error));
+
+  const CryptoKey::in_slice_t plain_slice { sizeof(plaintext), plaintext };
+
+  // we need to deduce size first
+  const CryptoKey::out_slice_t probe_slice { 0, nullptr };
+  const auto needed = kh->encrypt(plain_slice, probe_slice);
+  ASSERT_GE(needed, plain_slice.length);
+
+  boost::container::small_vector<
+    // FIXME?
+    //unsigned char, sizeof(plaintext) + kh->get_block_size()> buf;
+    unsigned char, sizeof(plaintext) + 16> buf(needed);
+  const CryptoKey::out_slice_t cipher_slice { needed, buf.data() };
+  const auto cipher_size = kh->encrypt(plain_slice, cipher_slice);
+  ASSERT_EQ(cipher_size, needed);
+
+  const unsigned char want_cipher[] = {
+    0xb3, 0x8f, 0x5b, 0xc9, 0x35, 0x4c, 0xf8, 0xc6,
+    0x13, 0x15, 0x66, 0x6f, 0x37, 0xd7, 0x79, 0x3a,
+    0x11, 0x90, 0x7b, 0xe9, 0xd8, 0x3c, 0x35, 0x70,
+    0x58, 0x7b, 0x97, 0x9b, 0x03, 0xd2, 0xa5, 0x01,
+  };
+
+  ASSERT_EQ(sizeof(want_cipher), cipher_size);
+
+  const int err = memcmp(buf.data(), want_cipher, sizeof(want_cipher));
+  ASSERT_EQ(0, err);
+}
+
 TEST(AES, Decrypt) {
   CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
   char secret_s[] = {
@@ -113,6 +159,40 @@ TEST(AES, Decrypt) {
   ASSERT_EQ(0, err);
 
   delete kh;
+}
+
+TEST(AES, DecryptNoBl) {
+  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  const char secret_s[] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+  };
+  bufferptr secret(secret_s, sizeof(secret_s));
+
+  const unsigned char ciphertext[] = {
+    0xb3, 0x8f, 0x5b, 0xc9, 0x35, 0x4c, 0xf8, 0xc6,
+    0x13, 0x15, 0x66, 0x6f, 0x37, 0xd7, 0x79, 0x3a,
+    0x11, 0x90, 0x7b, 0xe9, 0xd8, 0x3c, 0x35, 0x70,
+    0x58, 0x7b, 0x97, 0x9b, 0x03, 0xd2, 0xa5, 0x01,
+  };
+
+  const unsigned char want_plaintext[] = {
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+  };
+  unsigned char plaintext[sizeof(want_plaintext)];
+
+  std::string error;
+  std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler(secret, error));
+
+  CryptoKey::in_slice_t cipher_slice { sizeof(ciphertext), ciphertext };
+  CryptoKey::out_slice_t plain_slice { sizeof(ciphertext), plaintext };
+  const auto plain_size = kh->decrypt(cipher_slice, plain_slice);
+
+  ASSERT_EQ(plain_size, sizeof(want_plaintext));
+
+  const int err = memcmp(plaintext, want_plaintext, sizeof(plain_size));
+  ASSERT_EQ(0, err);
 }
 
 TEST(AES, Loop) {
