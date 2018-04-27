@@ -1,4 +1,0 @@
-overrides:
-  deepsea:
-    exec:
-    - "suites/basic/health-nfs-ganesha.sh --cli --fsal=both"
