@@ -1,6 +1,15 @@
 import { Component, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
+
+import { BsModalService } from 'ngx-bootstrap';
+import 'rxjs/add/observable/forkJoin';
+import { Observable } from 'rxjs/Observable';
+import { Subscriber } from 'rxjs/Subscriber';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
+import {
+  DeletionModalComponent
+} from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -11,13 +20,16 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
   styleUrls: ['./rgw-bucket-list.component.scss']
 })
 export class RgwBucketListComponent {
-  @ViewChild('table') table: TableComponent;
+
+  @ViewChild(TableComponent) table: TableComponent;
 
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
 
-  constructor(private rgwBucketService: RgwBucketService) {
+  constructor(private router: Router,
+              private rgwBucketService: RgwBucketService,
+              private bsModalService: BsModalService) {
     this.columns = [
       {
         name: 'Name',
@@ -46,4 +58,26 @@ export class RgwBucketListComponent {
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
+
+  deleteAction() {
+    const modalRef = this.bsModalService.show(DeletionModalComponent);
+    modalRef.content.setUp({
+      metaType: this.selection.hasSingleSelection ? 'bucket' : 'buckets',
+      deletionObserver: (): Observable<any> => {
+        return new Observable((observer: Subscriber<any>) => {
+          Observable.forkJoin(
+            this.selection.selected.map((bucket: any) => {
+              return this.rgwBucketService.delete(bucket.bucket);
+            }))
+            .subscribe(null, null, () => {
+              observer.complete();
+              // Finally reload the data table content.
+              this.table.refreshBtn();
+            });
+        });
+      },
+      modalRef: modalRef
+    });
+  }
+
 }
