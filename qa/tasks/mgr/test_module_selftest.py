@@ -55,6 +55,9 @@ class TestModuleSelftest(MgrTestCase):
         self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "self-test", "run")
 
+    def test_telemetry(self):
+        self._selftest_plugin("telemetry")
+
     def test_selftest_config_update(self):
         """
         That configuration updates are seen by running mgr modules
