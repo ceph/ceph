@@ -20,6 +20,7 @@ import socket
 import stat
 import sys
 import threading
+import time
 import uuid
 
 
@@ -1264,8 +1265,14 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 cluster.osd_command, osdid, cmd, inbuf, timeout)
 
         elif target[0] == 'mgr':
-            ret, outbuf, outs = run_in_thread(
-                cluster.mgr_command, cmd, inbuf, timeout)
+            while True:
+                # waiting for the mgrmap
+                ret, outbuf, outs = run_in_thread(
+                    cluster.mgr_command, cmd, inbuf, timeout)
+                if ret != -errno.EACCES or outbuf or outs:
+                    break
+                else:
+                    time.sleep(0.1)
 
         elif target[0] == 'pg':
             pgid = target[1]
