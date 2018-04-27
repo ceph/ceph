@@ -72,5 +72,3 @@ class AuthTest(DashboardTestCase):
     def test_unauthorized(self):
         self._get("/api/host")
         self.assertStatus(401)
-        self._get("/api")
-        self.assertStatus(401)

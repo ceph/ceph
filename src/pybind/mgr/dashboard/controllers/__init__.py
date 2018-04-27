@@ -116,9 +116,6 @@ def generate_routes(url_prefix):
     for ctrl in ctrls:
         generate_controller_routes(ctrl, mapper, "{}/api".format(url_prefix))
 
-    mapper.connect(ApiRoot.__name__, "{}/api".format(url_prefix),
-                   controller=ApiRoot("{}/api".format(url_prefix),
-                                      ctrls))
     return mapper
 
 
@@ -126,170 +123,6 @@ def json_error_page(status, message, traceback, version):
     cherrypy.response.headers['Content-Type'] = 'application/json'
     return json.dumps(dict(status=status, detail=message, traceback=traceback,
                            version=version))
-
-
-class ApiRoot(object):
-
-    _cp_config = {
-        'tools.sessions.on': True,
-        'tools.authenticate.on': True
-    }
-
-    def __init__(self, base_url, ctrls):
-        self.base_url = base_url
-        self.ctrls = ctrls
-
-    def __call__(self):
-        tpl = """API Endpoints:<br>
-        <ul>
-        {lis}
-        </ul>
-        """
-        endpoints = ['<li><a href="{}/{}">{}</a></li>'
-                     .format(self.base_url, ctrl._cp_path_, ctrl.__name__) for
-                     ctrl in self.ctrls]
-        return tpl.format(lis='\n'.join(endpoints))
-
-
-def browsable_api_view(meth):
-    @wraps(meth)
-    def wrapper(self, *vpath, **kwargs):
-        assert isinstance(self, BaseController)
-        if not Settings.ENABLE_BROWSABLE_API:
-            return meth(self, *vpath, **kwargs)
-        if 'text/html' not in cherrypy.request.headers.get('Accept', ''):
-            return meth(self, *vpath, **kwargs)
-
-        if '_method' in kwargs:
-            cherrypy.request.method = kwargs.pop('_method').upper()
-
-        # Form typically use None as default, but HTML defaults to empty-string.
-        for k in kwargs:
-            if not kwargs[k]:
-                del kwargs[k]
-
-        if '_raw' in kwargs:
-            kwargs.pop('_raw')
-            return meth(self, *vpath, **kwargs)
-
-        sub_path = cherrypy.request.path_info.split(self._cp_path_, 1)[-1].strip('/').split('/')
-
-        template = """
-        <html>
-        <h1>Browsable API</h1>
-        {docstring}
-        <h2>Request</h2>
-        <p>{method} {breadcrump}</p>
-        {params}
-        <h2>Response</h2>
-        <p>Status: {status_code}<p>
-        <pre>{reponse_headers}</pre>
-        <form action="/api/{path}/{sub_path}" method="get">
-        <input type="hidden" name="_raw" value="true" />
-        <button type="submit">GET raw data</button>
-        </form>
-        <h2>Data</h2>
-        <pre>{data}</pre>
-        {exception}
-        {create_form}
-        {delete_form}
-        <h2>Note</h2>
-        <p>Please note that this API is not an official Ceph REST API to be
-        used by third-party applications. It's primary purpose is to serve
-        the requirements of the Ceph Dashboard and is subject to change at
-        any time. Use at your own risk.</p>
-        """
-
-        create_form_template = """
-        <h2>Create Form</h2>
-        <form action="/api/{path}/{sub_path}" method="post">
-        {fields}<br>
-        <input type="hidden" name="_method" value="post" />
-        <button type="submit">Create</button>
-        </form>
-        """
-
-        delete_form_template = """
-        <h2>Create Form</h2>
-        <form action="/api/{path}/{sub_path}" method="post">
-        <input type="hidden" name="_method" value="delete" />
-        <button type="submit">Delete</button>
-        </form>
-        """
-
-        def mk_exception(e):
-            except_template = """
-            <h2>Exception: {etype}: {tostr}</h2>
-            <pre>{trace}</pre>
-            """
-            import traceback
-            tb = sys.exc_info()[2]
-            cherrypy.response.headers['Content-Type'] = 'text/html'
-            return except_template.format(
-                etype=e.__class__.__name__,
-                tostr=str(e),
-                trace='\n'.join(traceback.format_tb(tb)),
-                kwargs=kwargs
-            )
-
-        try:
-            data = meth(self, *vpath, **kwargs)
-            exception = ''
-            if cherrypy.response.headers['Content-Type'] == 'application/json':
-                try:
-                    data = json.dumps(json.loads(data), indent=2, sort_keys=True)
-                except Exception:  # pylint: disable=broad-except
-                    pass
-        except (ViewCacheNoDataException, DashboardException) as e:
-            cherrypy.response.status = getattr(e, 'status', 400)
-            data = str(serialize_dashboard_exception(e))
-            exception = mk_exception(e)
-        except Exception as e:  # pylint: disable=broad-except
-            data = ''
-            exception = mk_exception(e)
-
-        try:
-            create = getattr(self, 'create')
-            f_args = RESTController._function_args(create)
-            input_fields = ['{name}:<input type="text" name="{name}">'.format(name=name) for name in
-                            f_args]
-            create_form = create_form_template.format(
-                fields='<br>'.join(input_fields),
-                path=self._cp_path_,
-                sub_path='/'.join(sub_path)
-            )
-        except AttributeError:
-            create_form = ''
-
-        def mk_breadcrump(elems):
-            return '/'.join([
-                '<a href="/{}">{}</a>'.format('/'.join(elems[0:i+1]), e)
-                for i, e in enumerate(elems)
-            ])
-
-        cherrypy.response.headers['Content-Type'] = 'text/html'
-        return template.format(
-            docstring='<pre>{}</pre>'.format(self.__doc__) if self.__doc__ else '',
-            method=cherrypy.request.method,
-            path=self._cp_path_,
-            sub_path='/'.join(sub_path),
-            breadcrump=mk_breadcrump(['api', self._cp_path_] + list(sub_path)),
-            status_code=cherrypy.response.status,
-            reponse_headers='\n'.join(
-                '{}: {}'.format(k, v) for k, v in cherrypy.response.headers.items()),
-            data=data,
-            exception=exception,
-            create_form=create_form,
-            delete_form=delete_form_template.format(path=self._cp_path_, sub_path='/'.join(
-                sub_path)) if sub_path else '',
-            params='<h2>Rrequest Params</h2><pre>{}</pre>'.format(
-                json.dumps(kwargs, indent=2)) if kwargs else '',
-        )
-
-    wrapper.exposed = True
-    if hasattr(meth, '_cp_config'):
-        wrapper._cp_config = meth._cp_config
-    return wrapper
 
 
 class Task(object):
@@ -360,17 +193,6 @@ class Task(object):
         return wrapper
 
 
-class BaseControllerMeta(type):
-    def __new__(mcs, name, bases, dct):
-        new_cls = type.__new__(mcs, name, bases, dct)
-
-        for a_name, thing in new_cls.__dict__.items():
-            if callable(thing) and getattr(thing, 'exposed', False):
-                setattr(new_cls, a_name, browsable_api_view(thing))
-        return new_cls
-
-
-@add_metaclass(BaseControllerMeta)
 class BaseController(object):
     """
     Base class for all controllers providing API endpoints.
