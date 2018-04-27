@@ -240,7 +240,8 @@
             <span *ngIf="subusers.length === 0"
                   class="form-control no-border">
               <span class="text-muted"
-                    i18n>Empty
+                    i18n>
+                There are no subusers.
               </span>
             </span>
 
@@ -304,7 +305,8 @@
             <span *ngIf="s3Keys.length === 0"
                   class="form-control no-border">
               <span class="text-muted"
-                    i18n>Empty
+                    i18n>
+                There are no keys.
               </span>
             </span>
 
@@ -356,7 +358,8 @@
             <span *ngIf="swiftKeys.length === 0"
                   class="form-control no-border">
               <span class="text-muted"
-                    i18n>Empty
+                    i18n>
+                There are no keys.
               </span>
             </span>
 
@@ -392,7 +395,8 @@
             <span *ngIf="capabilities.length === 0"
                   class="form-control no-border">
               <span class="text-muted"
-                    i18n>Empty
+                    i18n>
+                There are no capabilities.
               </span>
             </span>
 
@@ -645,7 +649,8 @@
 
       <div class="panel-footer">
         <div class="button-group text-right">
-          <cd-submit-button (submitAction)="onSubmit()"
+          <cd-submit-button type="button"
+                            (submitAction)="onSubmit()"
                             [form]="userForm"
                             i18n>
             {editing, select, 1 {Update} other {Add}}
