@@ -3,13 +3,15 @@ from __future__ import absolute_import
 
 import json
 
-from . import ApiController, Endpoint, BaseController
+from . import ApiController, Endpoint, BaseController, ReadPermission
 from .. import mgr
+from ..security import Scope
 
 
-@ApiController('/monitor')
+@ApiController('/monitor', Scope.MONITOR)
 class Monitor(BaseController):
     @Endpoint()
+    @ReadPermission
     def __call__(self):
         in_quorum, out_quorum = [], []
 

@@ -5,8 +5,9 @@ import cherrypy
 import requests
 from six.moves.urllib.parse import urlparse  # pylint: disable=import-error
 
-from . import ApiController, BaseController, Proxy, Endpoint
+from . import ApiController, BaseController, Proxy, Endpoint, ReadPermission
 from .. import logger
+from ..security import Scope
 from ..settings import Settings
 
 
@@ -101,10 +102,11 @@ class GrafanaRestClient(object):
         return True, ''
 
 
-@ApiController('/grafana')
+@ApiController('/grafana', Scope.GRAFANA)
 class Grafana(BaseController):
 
     @Endpoint()
+    @ReadPermission
     def status(self):
         grafana = GrafanaRestClient.instance()
         available, msg = grafana.is_service_online()
@@ -115,9 +117,10 @@ class Grafana(BaseController):
         return response
 
 
-@ApiController('/grafana/proxy')
+@ApiController('/grafana/proxy', Scope.GRAFANA)
 class GrafanaProxy(BaseController):
     @Proxy()
+    @ReadPermission
     def __call__(self, path, **params):
         grafana = GrafanaRestClient.instance()
         method = cherrypy.request.method

@@ -78,9 +78,11 @@ class RbdMirroringControllerTest(ControllerTestCase):
         for k in ['daemons', 'pools', 'image_error', 'image_syncing', 'image_ready']:
             self.assertIn(k, result['content_data'])
 
+    @mock.patch('dashboard.controllers.BaseController._has_permissions')
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
-    def test_summary(self, rbd_mock):  # pylint: disable=W0613
+    def test_summary(self, rbd_mock, has_perms_mock):  # pylint: disable=W0613
         """We're also testing `summary`, as it also uses code from `rbd_mirroring.py`"""
+        has_perms_mock.return_value = True
         self._get('/test/api/summary')
         self.assertStatus(200)
 
