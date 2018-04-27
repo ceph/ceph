@@ -118,7 +118,7 @@ class RgwClient(RestClient):
             logger.info("Creating new connection for user: %s", userid)
             keys = RgwClient.admin_instance().get_user_keys(userid)
             if not keys:
-                raise Exception(
+                raise RequestException(
                     "User '{}' does not have any keys configured.".format(
                         userid))
 
@@ -188,11 +188,11 @@ class RgwClient(RestClient):
         colon_idx = userid.find(':')
         user = userid if colon_idx == -1 else userid[:colon_idx]
         response = request({'uid': user})
-        for keys in response['keys']:
-            if keys['user'] == userid:
+        for key in response['keys']:
+            if key['user'] == userid:
                 return {
-                    'access_key': keys['access_key'],
-                    'secret_key': keys['secret_key']
+                    'access_key': key['access_key'],
+                    'secret_key': key['secret_key']
                 }
         return None
 
