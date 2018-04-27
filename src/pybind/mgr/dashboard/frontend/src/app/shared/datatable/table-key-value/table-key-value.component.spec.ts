@@ -27,6 +27,11 @@ describe('TableKeyValueComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+    expect(component._convertValue).toBeTruthy();
+    expect(component._makePairs).toBeTruthy();
+    expect(component._makePairsFromObject).toBeTruthy();
+    expect(component._makePairsFromArray).toBeTruthy();
+    expect(component._insertFlattenObjects).toBeTruthy();
   });
 
   it('should make key value object pairs out of arrays with length two', () => {
@@ -62,7 +67,7 @@ describe('TableKeyValueComponent', () => {
     expect(component.tableData[0].value).toBe('something');
   });
 
-  it('should make key value object pairs out of an object', () => {
+  it('makes key value object pairs out of an object', () => {
     component.data = {
       3: 'something',
       someKey: 0
@@ -73,7 +78,7 @@ describe('TableKeyValueComponent', () => {
     expect(component.tableData[1].key).toBe('someKey');
   });
 
-  it('should make do nothing if data is correct', () => {
+  it('does nothing if data is correct', () => {
     component.data = [
       {
         key: 3,
@@ -90,10 +95,113 @@ describe('TableKeyValueComponent', () => {
     expect(component.tableData[1].key).toBe('someKey');
   });
 
-  it('should throw error if miss match', () => {
+  it('throws errors if miss match', () => {
     component.data = 38;
     expect(() => component.ngOnInit()).toThrowError('Wrong data format');
     component.data = [['someKey', 0, 3]];
-    expect(() => component.ngOnInit()).toThrowError('Wrong array format');
+    expect(() => component.ngOnInit()).toThrowError('Wrong array format: [string, any][]');
+    component.data = [{somekey: 939, somethingElse: 'test'}];
+    expect(() => component.ngOnInit())
+      .toThrowError('Wrong object array format: {key: string, value: any}[]');
+  });
+
+  it('tests _makePairs', () => {
+    expect(component._makePairs([['dash', 'board']])).toEqual([{key: 'dash', value: 'board'}]);
+    const pair = [{key: 'dash', value: 'board'}, {key: 'ceph', value: 'mimic'}];
+    expect(component._makePairs(pair)).toEqual(pair);
+    expect(component._makePairs({dash: 'board'})).toEqual([{key: 'dash', value: 'board'}]);
+    expect(component._makePairs({dash: 'board', ceph: 'mimic'})).toEqual(pair);
+  });
+
+  it('tests _makePairsFromArray', () => {
+    expect(component._makePairsFromArray([['dash', 'board']]))
+      .toEqual([{key: 'dash', value: 'board'}]);
+    const pair = [{key: 'dash', value: 'board'}, {key: 'ceph', value: 'mimic'}];
+    expect(component._makePairsFromArray(pair)).toEqual(pair);
+  });
+
+  it('tests _makePairsFromObject', () => {
+    expect(component._makePairsFromObject({dash: 'board'}))
+      .toEqual([{key: 'dash', value: 'board'}]);
+    expect(component._makePairsFromObject({dash: 'board', ceph: 'mimic'}))
+      .toEqual([{key: 'dash', value: 'board'}, {key: 'ceph', value: 'mimic'}]);
+  });
+
+  it('tests _convertValue', () => {
+    const v = value => ({key: 'sth', value: value});
+    expect(component._convertValue(v('something'))).toEqual(v('something'));
+    expect(component._convertValue(v([1, 2, 3]))).toEqual(v('1, 2, 3'));
+    expect(component._convertValue(v({sth: 'something'}))).toBe(undefined);
+    component.renderObjects = true;
+    expect(component._convertValue(v({sth: 'something'}))).toEqual(v({sth: 'something'}));
+  });
+
+  it('tests _insertFlattenObjects', () => {
+    component.renderObjects = true;
+    const v = [
+      {
+        key: 'no',
+        value: 'change'
+      },
+      {
+        key: 'first',
+        value: {
+          second: {
+            l3_1: 33,
+            l3_2: 44
+          },
+          layer: 'something'
+        }
+      }
+    ];
+    expect(component._insertFlattenObjects(v)).toEqual([
+      {key: 'no', value: 'change'},
+      {key: 'first second l3_1', value: 33},
+      {key: 'first second l3_2', value: 44},
+      {key: 'first layer', value: 'something'}
+    ]);
+  });
+
+  describe('render objects', () => {
+    beforeEach(() => {
+      component.data = {
+        options: {
+          someSetting1: 38,
+          anotherSetting2: 'somethingElse',
+          suboptions : {
+            sub1: 12,
+            sub2: 34,
+            sub3: 56
+          }
+        },
+        someKey: 0
+      };
+      component.renderObjects = true;
+    });
+
+    it('with parent key', () => {
+      component.ngOnInit();
+      expect(component.tableData).toEqual([
+        {key: 'options someSetting1', value: 38},
+        {key: 'options anotherSetting2', value: 'somethingElse'},
+        {key: 'options suboptions sub1', value: 12},
+        {key: 'options suboptions sub2', value: 34},
+        {key: 'options suboptions sub3', value: 56},
+        {key: 'someKey', value: 0}
+      ]);
+    });
+
+    it('without parent key', () => {
+      component.appendParentKey = false;
+      component.ngOnInit();
+      expect(component.tableData).toEqual([
+        {key: 'someSetting1', value: 38},
+        {key: 'anotherSetting2', value: 'somethingElse'},
+        {key: 'sub1', value: 12},
+        {key: 'sub2', value: 34},
+        {key: 'sub3', value: 56},
+        {key: 'someKey', value: 0}
+      ]);
+    });
   });
 });
