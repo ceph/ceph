@@ -1555,6 +1555,8 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
 
   uint8_t v = 26;
+  // NOTE: any new encoding dependencies must be reflected by
+  // SIGNIFICANT_FEATURES
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.

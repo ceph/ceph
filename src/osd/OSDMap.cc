@@ -246,6 +246,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
   return 0;
 }
 
+// ----------------------------------
+// OSDMap
 
 bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
 {
@@ -2380,6 +2382,27 @@ bool OSDMap::primary_changed(
   return false;      // same primary (tho replicas may have changed)
 }
 
+uint64_t OSDMap::get_encoding_features() const
+{
+  uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < CEPH_RELEASE_MIMIC) {
+    f &= ~CEPH_FEATURE_SERVER_MIMIC;
+  }
+  if (require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    f &= ~(CEPH_FEATURE_SERVER_LUMINOUS |
+	   CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
+  }
+  if (require_osd_release < CEPH_RELEASE_KRAKEN) {
+    f &= ~(CEPH_FEATURE_SERVER_KRAKEN |
+	   CEPH_FEATURE_MSG_ADDR2 |
+	   CEPH_FEATURE_CRUSH_TUNABLES5);
+  }
+  if (require_osd_release < CEPH_RELEASE_JEWEL) {
+    f &= ~(CEPH_FEATURE_SERVER_JEWEL |
+	   CEPH_FEATURE_NEW_OSDOP_ENCODING);
+  }
+  return f;
+}
 
 // serialize, unserialize
 void OSDMap::encode_client_old(bufferlist& bl) const
@@ -2521,6 +2544,8 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
+    // NOTE: any new encoding dependencies must be reflected by
+    // SIGNIFICANT_FEATURES
     uint8_t v = 7;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
@@ -2597,6 +2622,8 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
+    // NOTE: any new encoding dependencies must be reflected by
+    // SIGNIFICANT_FEATURES
     uint8_t target_v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;

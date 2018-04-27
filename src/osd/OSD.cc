@@ -1299,7 +1299,8 @@ void OSDService::got_stop_ack()
 MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
                                                OSDSuperblock& sblock)
 {
-  MOSDMap *m = new MOSDMap(monc->get_fsid());
+  MOSDMap *m = new MOSDMap(monc->get_fsid(),
+			   osdmap->get_encoding_features());
   m->oldest_map = max_oldest_map;
   m->newest_map = sblock.newest_map;
 
@@ -1339,7 +1340,8 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
     OSDSuperblock sblock(get_superblock());
     if (since < sblock.oldest_map) {
       // just send latest full map
-      MOSDMap *m = new MOSDMap(monc->get_fsid());
+      MOSDMap *m = new MOSDMap(monc->get_fsid(),
+			       osdmap->get_encoding_features());
       m->oldest_map = max_oldest_map;
       m->newest_map = sblock.newest_map;
       get_map_bl(to, m->maps[to]);
