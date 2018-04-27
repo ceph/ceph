@@ -302,7 +302,8 @@ void ObjectMap<I>::aio_update(uint64_t snap_id, uint64_t start_object_no,
                        stringify(static_cast<uint32_t>(*current_state)) : "")
 		 << "->" << static_cast<uint32_t>(new_state) << dendl;
   if (snap_id == CEPH_NOSNAP) {
-    if (end_object_no > m_object_map.size()) {
+    end_object_no = std::min(end_object_no, m_object_map.size());
+    if (start_object_no >= end_object_no) {
       ldout(cct, 20) << "skipping update of invalid object map" << dendl;
       m_image_ctx.op_work_queue->queue(on_finish, 0);
       return;

@@ -20,7 +20,7 @@ struct TestDeepCopy : public TestFixture {
     int order = 22;
     uint64_t size = (1 << order) * 20;
     uint64_t features = 0;
-    bool old_format = get_features(&features);
+    bool old_format = !get_features(&features);
     EXPECT_EQ(0, create_image_full_pp(m_rbd, m_ioctx, image_name, size,
                                       features, old_format, &order));
     ASSERT_EQ(0, open_image(image_name, &m_src_ictx));
