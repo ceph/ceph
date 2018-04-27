@@ -7717,6 +7717,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     else
       dirp->next_offset = dirp->offset_low();
     dirp->last_name = dn_name; // we successfully returned this one; update!
+    dirp->release_count = 0; // last_name no longer match cache index
     if (r > 0)
       return r;
   }
