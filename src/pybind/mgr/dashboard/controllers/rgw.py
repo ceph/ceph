@@ -8,6 +8,7 @@ from . import ApiController, BaseController, RESTController, AuthRequired
 from .. import logger
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
+from ..rest_client import RequestException
 
 
 @ApiController('rgw')
@@ -79,7 +80,7 @@ class RgwProxy(BaseController):
                 data = cherrypy.request.body.read()
 
             return rgw_client.proxy(method, path, params, data)
-        except Exception as e:  # pylint: disable=broad-except
+        except RequestException as e:
             # Always use status code 500 and NOT the status that may delivered
             # by the exception. That's because we do not want to forward e.g.
             # 401 or 404 that may trigger unwanted actions in the UI.
@@ -93,5 +94,10 @@ class RgwProxy(BaseController):
 class RgwBucket(RESTController):
 
     def create(self, bucket, uid):
-        rgw_client = RgwClient.instance(uid)
-        return rgw_client.create_bucket(bucket)
+        try:
+            rgw_client = RgwClient.instance(uid)
+            return rgw_client.create_bucket(bucket)
+        except RequestException as e:
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 500
+            return {'detail': str(e)}
