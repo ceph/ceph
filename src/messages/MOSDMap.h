@@ -27,6 +27,7 @@ class MOSDMap : public Message {
 
  public:
   uuid_d fsid;
+  uint64_t encode_features = 0;
   map<epoch_t, bufferlist> maps;
   map<epoch_t, bufferlist> incremental_maps;
   epoch_t oldest_map =0, newest_map = 0;
@@ -63,13 +64,12 @@ class MOSDMap : public Message {
 
 
   MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
-  MOSDMap(const uuid_d &f)
+  MOSDMap(const uuid_d &f, const uint64_t features)
     : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
-      fsid(f),
+      fsid(f), encode_features(features),
       oldest_map(0), newest_map(0) { }
 private:
   ~MOSDMap() override {}
-
 public:
   // marshalling
   void decode_payload() override {
@@ -93,18 +93,16 @@ public:
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
     encode(fsid, payload);
-    if ((features & CEPH_FEATURE_PGID64) == 0 ||
-	(features & CEPH_FEATURE_PGPOOL3) == 0 ||
-	(features & CEPH_FEATURE_OSDENC) == 0 ||
-        (features & CEPH_FEATURE_OSDMAP_ENC) == 0 ||
-	(features & CEPH_FEATURE_MSG_ADDR2) == 0 ||
-	!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
+    if (OSDMap::get_significant_features(encode_features) !=
+         OSDMap::get_significant_features(features)) {
       if ((features & CEPH_FEATURE_PGID64) == 0 ||
-	  (features & CEPH_FEATURE_PGPOOL3) == 0)
+	  (features & CEPH_FEATURE_PGPOOL3) == 0) {
 	header.version = 1;  // old old_client version
-      else if ((features & CEPH_FEATURE_OSDENC) == 0)
+	header.compat_version = 1;
+      } else if ((features & CEPH_FEATURE_OSDENC) == 0) {
 	header.version = 2;  // old pg_pool_t
-      header.compat_version = 0;
+	header.compat_version = 2;
+      }
 
       // reencode maps using old format
       //
@@ -117,13 +115,15 @@ public:
 	OSDMap::Incremental inc;
 	bufferlist::iterator q = p->second.begin();
 	inc.decode(q);
+	// always encode with subset of osdmaps canonical features
+	uint64_t f = inc.encode_features & features;
 	p->second.clear();
 	if (inc.fullmap.length()) {
 	  // embedded full map?
 	  OSDMap m;
 	  m.decode(inc.fullmap);
 	  inc.fullmap.clear();
-	  m.encode(inc.fullmap, features | CEPH_FEATURE_RESERVED);
+	  m.encode(inc.fullmap, f | CEPH_FEATURE_RESERVED);
 	}
 	if (inc.crush.length()) {
 	  // embedded crush map
@@ -131,17 +131,19 @@ public:
 	  auto p = inc.crush.begin();
 	  c.decode(p);
 	  inc.crush.clear();
-	  c.encode(inc.crush, features);
+	  c.encode(inc.crush, f);
 	}
-	inc.encode(p->second, features | CEPH_FEATURE_RESERVED);
+	inc.encode(p->second, f | CEPH_FEATURE_RESERVED);
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
 	   p != maps.end();
 	   ++p) {
 	OSDMap m;
 	m.decode(p->second);
+	// always encode with subset of osdmaps canonical features
+	uint64_t f = m.get_encoding_features() & features;
 	p->second.clear();
-	m.encode(p->second, features | CEPH_FEATURE_RESERVED);
+	m.encode(p->second, f | CEPH_FEATURE_RESERVED);
       }
     }
     encode(incremental_maps, payload);
