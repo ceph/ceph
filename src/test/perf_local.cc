@@ -637,11 +637,10 @@ double perf_prefetch()
   uint64_t total_ticks = 0;
   int count = 10;
   char buf[16 * 64];
-  uint64_t start, stop;
 
   for (int i = 0; i < count; i++) {
     PerfHelper::flush_cache();
-    start = Cycles::rdtsc();
+    uint64_t start = Cycles::rdtsc();
     prefetch(&buf[576], 64);
     prefetch(&buf[0],   64);
     prefetch(&buf[512], 64);
@@ -658,7 +657,7 @@ double perf_prefetch()
     prefetch(&buf[832], 64);
     prefetch(&buf[64],  64);
     prefetch(&buf[192], 64);
-    stop = Cycles::rdtsc();
+    uint64_t stop = Cycles::rdtsc();
     total_ticks += stop - start;
   }
   return Cycles::to_seconds(total_ticks) / count / 16;
