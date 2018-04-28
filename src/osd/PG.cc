@@ -4734,8 +4734,8 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
           pg->scrubber.sleep_start = utime_t();
           pg->unlock();
         });
-    Mutex::Locker l(osd->scrub_sleep_lock);
-    osd->scrub_sleep_timer.add_event_after(cct->_conf->osd_scrub_sleep,
+    Mutex::Locker l(osd->sleep_lock);
+    osd->sleep_timer.add_event_after(cct->_conf->osd_scrub_sleep,
                                            scrub_requeue_callback);
     scrubber.sleeping = true;
     scrubber.sleep_start = ceph_clock_now();
