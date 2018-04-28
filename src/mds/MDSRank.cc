@@ -1373,10 +1373,8 @@ void MDSRank::replay_done()
   mdlog->get_journaler()->trim_tail();
 
   if (mdsmap->get_tableserver() == whoami &&
-      snapserver->get_version() == 0) {
-    // upgraded from old filesystem. version 0 snaptable confuses current code.
-    dout(1) << "upgrading snaptable version from 0 to 1" << dendl;
-    snapserver->reset();
+      snapserver->upgrade_format()) {
+    dout(1) << "upgrading snaptable format" << dendl;
     snapserver->save(new C_MDSInternalNoop);
   }
 

@@ -24,7 +24,7 @@ class MonClient;
 class SnapServer : public MDSTableServer {
 protected:
   MonClient *mon_client = nullptr;
-  snapid_t last_snap;
+  snapid_t last_snap = 0;
   snapid_t last_created, last_destroyed;
   snapid_t snaprealm_v2_since;
   map<snapid_t, SnapInfo> snaps;
@@ -77,7 +77,7 @@ protected:
     if (struct_v >= 5)
       decode(snaprealm_v2_since, bl);
     else
-      snaprealm_v2_since = last_snap + 1;
+      snaprealm_v2_since = CEPH_NOSNAP;
 
     DECODE_FINISH(bl);
   }
@@ -97,6 +97,23 @@ public:
   SnapServer() : MDSTableServer(NULL, TABLE_SNAP), last_checked_osdmap(0) {}
 
   void reset_state() override;
+
+  bool upgrade_format() {
+    // upgraded from old filesystem
+    assert(last_snap > 0);
+    bool upgraded = false;
+    if (get_version() == 0) {
+      // version 0 confuses snapclient code
+      reset_state();
+      upgraded = true;
+    }
+    if (snaprealm_v2_since == CEPH_NOSNAP) {
+      // new snapshots will have new format snaprealms
+      snaprealm_v2_since = last_snap + 1;
+      upgraded = true;
+    }
+    return upgraded;
+  }
 
   void check_osd_map(bool force);
 
