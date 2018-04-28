@@ -4000,6 +4000,8 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
 	mdr->more()->flock_was_waiting = true;
 	mds->locker->drop_locks(mdr.get());
 	mdr->drop_local_auth_pins();
+	mdr->mark_event("failed to add lock, waiting");
+	mdr->mark_nowarn();
 	cur->add_waiter(CInode::WAIT_FLOCK, new C_MDS_RetryRequest(mdcache, mdr));
       }
     } else

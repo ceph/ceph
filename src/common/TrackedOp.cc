@@ -341,6 +341,10 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
     auto i = sdata->ops_in_flight_sharded.begin();
     while (i != sdata->ops_in_flight_sharded.end() &&
 	   i->get_initiated() < too_old) {
+
+      if (!i->warn_interval_multiplier)
+	continue;
+
       (*slow)++;
 
       // exponential backoff of warning intervals

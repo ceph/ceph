@@ -288,6 +288,10 @@ public:
   void mark_event(const char *event,
 		  utime_t stamp=ceph_clock_now());
 
+  void mark_nowarn() {
+    warn_interval_multiplier = 0;
+  }
+
   virtual const char *state_string() const {
     Mutex::Locker l(lock);
     return events.rbegin()->c_str();
