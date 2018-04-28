@@ -1172,16 +1172,16 @@ def find_cmd_target(childargs):
 
 
 class RadosThread(threading.Thread):
-    def __init__(self, target, *args, **kwargs):
+    def __init__(self, func, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
-        self.target = target
+        self.func = func
         self.exception = None
         threading.Thread.__init__(self)
 
     def run(self):
         try:
-            self.retval = self.target(*self.args, **self.kwargs)
+            self.retval = self.func(*self.args, **self.kwargs)
         except Exception as e:
             self.exception = e
 
@@ -1190,11 +1190,11 @@ class RadosThread(threading.Thread):
 POLL_TIME_INCR = 0.5
 
 
-def run_in_thread(target, *args, **kwargs):
+def run_in_thread(func, *args, **kwargs):
     interrupt = False
     timeout = kwargs.pop('timeout', 0)
     countdown = timeout
-    t = RadosThread(target, *args, **kwargs)
+    t = RadosThread(func, *args, **kwargs)
 
     # allow the main thread to exit (presumably, avoid a join() on this
     # subthread) before this thread terminates.  This allows SIGINT
