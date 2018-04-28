@@ -1257,11 +1257,15 @@ public:
         auto iter = cleaned_meta_map.objects.end();
         --iter; // not empty, see if clause
         auto begin = cleaned_meta_map.objects.begin();
-        while (iter != begin) {
-          auto next = iter--;
-          if (next->first.get_head() != iter->first.get_head()) {
-	    ++iter;
-	    break;
+        if (iter->first.has_snapset()) {
+          ++iter;
+        } else {
+          while (iter != begin) {
+            auto next = iter--;
+            if (next->first.get_head() != iter->first.get_head()) {
+	      ++iter;
+	      break;
+            }
           }
         }
         for_meta_scrub.objects.insert(begin, iter);
