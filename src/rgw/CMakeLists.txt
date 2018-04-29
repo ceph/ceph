@@ -111,37 +111,15 @@ set(librgw_common_srcs
   rgw_crypt_sanitize.cc
   rgw_iam_policy.cc
 )
-add_library(rgw_common SHARED ${librgw_common_srcs})
-set(librgw_admin_user_srcs
-  librgw_admin_user.cc
-  rgw_admin_user.cc
-)
-target_link_libraries(rgw_common PRIVATE
-  librados
-  cls_rgw_client
-  cls_lock_client
-  cls_refcount_client
-  cls_log_client
-  cls_otp_client
-  cls_statelog_client
-  cls_timeindex_client
-  cls_version_client
-  cls_user_client
-  global
-  ${LIB_RESOLV}
-  ${CURL_LIBRARIES}
-  ${EXPAT_LIBRARIES})
-install(TARGETS rgw_common DESTINATION ${CMAKE_INSTALL_LIBDIR})
+add_library(rgw_common OBJECT ${librgw_common_srcs})
 
 set(rgw_a_srcs
-  ${librgw_common_srcs}
   rgw_auth_keystone.cc
   rgw_client_io.cc
   rgw_frontend.cc
   rgw_http_client_curl.cc
   rgw_loadgen.cc
   rgw_log.cc
-  rgw_otp.cc
   rgw_period_pusher.cc
   rgw_realm_reloader.cc
   rgw_realm_watcher.cc
@@ -171,7 +149,9 @@ if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND rgw_a_srcs rgw_fcgi.cc)
 endif()
 
-add_library(rgw_a STATIC ${rgw_a_srcs})
+add_library(rgw_a STATIC
+    ${rgw_a_srcs}
+    $<TARGET_OBJECTS:rgw_common>)
 
 add_dependencies(rgw_a civetweb_h)
 
@@ -297,12 +277,17 @@ set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-
-add_library(rgw_admin_user SHARED ${librgw_admin_user_srcs})
+set(librgw_admin_user_srcs
+  librgw_admin_user.cc
+  rgw_admin_user.cc
+)
+add_library(rgw_admin_user SHARED
+    ${librgw_admin_user_srcs}
+    $<TARGET_OBJECTS:rgw_common>)
 target_link_libraries(rgw_admin_user PRIVATE
-  rgw_common
   librados
   cls_rgw_client
+  cls_opt_client
   cls_lock_client
   cls_refcount_client
   cls_log_client
