@@ -400,7 +400,7 @@ testlog " - rbd_mirroring_resync_after_disconnect config option"
 set_image_meta ${CLUSTER2} ${POOL} ${image} \
 	       conf_rbd_mirroring_resync_after_disconnect true
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
-image_id=$(get_image_id ${CLUSTER1} ${pool} ${image})
+image_id=$(get_image_id ${CLUSTER1} ${POOL} ${image})
 disconnect_image ${CLUSTER2} ${POOL} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
