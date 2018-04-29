@@ -1135,11 +1135,6 @@ public:
   int get_caps_issued(int fd);
   int get_caps_issued(const char *path, const UserPerm& perms);
 
-  // low-level interface v2
-  inodeno_t ll_get_inodeno(Inode *in) {
-    Mutex::Locker lock(client_lock);
-    return _get_inodeno(in);
-  }
   snapid_t ll_get_snapid(Inode *in);
   vinodeno_t ll_get_vino(Inode *in) {
     Mutex::Locker lock(client_lock);
