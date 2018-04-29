@@ -86,7 +86,7 @@ void ImageCopyRequest<I>::send_object_copies() {
         break;
       }
     }
-    complete = (m_current_ops == 0);
+    complete = (m_current_ops == 0) && !m_updating_progress;
   }
 
   if (complete) {
@@ -139,16 +139,22 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
       }
     } else {
       m_copied_objects.push(object_no);
-      while (m_copied_objects.top() ==
+      while (!m_updating_progress && m_copied_objects.top() ==
              (m_object_number ? *m_object_number + 1 : 0)) {
         m_object_number = m_copied_objects.top();
         m_copied_objects.pop();
-        m_prog_ctx->update_progress(*m_object_number + 1, m_end_object_no);
+        uint64_t progress_object_no = *m_object_number + 1;
+        m_updating_progress = true;
+        m_lock.Unlock();
+        m_prog_ctx->update_progress(progress_object_no, m_end_object_no);
+        m_lock.Lock();
+        assert(m_updating_progress);
+        m_updating_progress = false;
       }
     }
 
     send_next_object_copy();
-    complete = (m_current_ops == 0);
+    complete = (m_current_ops == 0) && !m_updating_progress;
   }
 
   if (complete) {

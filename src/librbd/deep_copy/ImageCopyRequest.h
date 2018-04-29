@@ -82,6 +82,7 @@ private:
   uint64_t m_current_ops = 0;
   std::priority_queue<
     uint64_t, std::vector<uint64_t>, std::greater<uint64_t>> m_copied_objects;
+  bool m_updating_progress = false;
   SnapMap m_snap_map;
   int m_ret_val = 0;
 
