@@ -3,6 +3,9 @@ meta:
 overrides:
   ceph:
     conf:
+      client:
+        rbd default features: 125
+        debug rbd_mirror: 15
       # override to make these names predictable
       client.mirror.0:
         admin socket: /var/run/ceph/rbd-mirror.$cluster-$name.asok

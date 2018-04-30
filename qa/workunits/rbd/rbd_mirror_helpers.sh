@@ -1,4 +1,4 @@
-#!/bin/sh -x
+#!/bin/sh
 #
 # rbd_mirror_helpers.sh - shared rbd-mirror daemon helper functions
 #
@@ -245,11 +245,8 @@ setup_pools()
     rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} ${remote_cluster}
 }
 
-setup()
+setup_tempdir()
 {
-    local c
-    trap cleanup INT TERM EXIT
-
     if [ -n "${RBD_MIRROR_TEMDIR}" ]; then
 	test -d "${RBD_MIRROR_TEMDIR}" ||
 	mkdir "${RBD_MIRROR_TEMDIR}"
@@ -258,7 +255,14 @@ setup()
     else
 	TEMPDIR=`mktemp -d`
     fi
+}
 
+setup()
+{
+    local c
+    trap 'cleanup $?' INT TERM EXIT
+
+    setup_tempdir
     if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
 	setup_cluster "${CLUSTER1}"
 	setup_cluster "${CLUSTER2}"
@@ -273,27 +277,41 @@ setup()
 
 cleanup()
 {
-    test  -n "${RBD_MIRROR_NOCLEANUP}" && return
-    local cluster instance
+    local error_code=$1
 
     set +e
 
-    for cluster in "${CLUSTER1}" "${CLUSTER2}"; do
-	stop_mirrors "${cluster}"
-    done
-
-    if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
-        cd ${CEPH_ROOT}
-        CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER1}
-        CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER2}
-    else
-        CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
-        CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
-        CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
-        CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+    if [ "${error_code}" -ne 0 ]; then
+        status
     fi
-    test "${RBD_MIRROR_TEMDIR}" = "${TEMPDIR}" ||
-    rm -Rf ${TEMPDIR}
+
+    if [ -z "${RBD_MIRROR_NOCLEANUP}" ]; then
+        local cluster instance
+
+        for cluster in "${CLUSTER1}" "${CLUSTER2}"; do
+	    stop_mirrors "${cluster}"
+        done
+
+        if [ -z "${RBD_MIRROR_USE_EXISTING_CLUSTER}" ]; then
+            cd ${CEPH_ROOT}
+            CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER1}
+            CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER2}
+        else
+            CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
+            CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
+            CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+            CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+        fi
+        test "${RBD_MIRROR_TEMDIR}" = "${TEMPDIR}" || rm -Rf ${TEMPDIR}
+    fi
+
+    if [ "${error_code}" -eq 0 ]; then
+        echo "OK"
+    else
+        echo "FAIL"
+    fi
+
+    exit ${error_code}
 }
 
 start_mirror()
@@ -507,10 +525,11 @@ test_image_replay_state()
     local pool=$2
     local image=$3
     local test_state=$4
+    local status_result
     local current_state=stopped
 
-    admin_daemons "${cluster}" rbd mirror status ${pool}/${image} |
-	grep -i 'state.*Replaying' && current_state=started
+    status_result=$(admin_daemons "${cluster}" rbd mirror status ${pool}/${image} | grep -i 'state') || return 1
+    echo "${status_result}" | grep -i 'Replaying' && current_state=started
     test "${test_state}" = "${current_state}"
 }
 
@@ -858,6 +877,23 @@ compare_images()
     rm -f ${rmt_export} ${loc_export}
 }
 
+compare_image_snapshots()
+{
+    local pool=$1
+    local image=$2
+
+    local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
+    local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
+
+    for snap_name in $(rbd --cluster ${CLUSTER1} -p ${pool} snap list ${image}); do
+        rm -f ${rmt_export} ${loc_export}
+        rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
+        rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
+        cmp ${rmt_export} ${loc_export}
+    done
+    rm -f ${rmt_export} ${loc_export}
+}
+
 demote_image()
 {
     local cluster=$1
@@ -994,7 +1030,3 @@ then
     $@
     exit $?
 fi
-
-set -xe
-
-setup
