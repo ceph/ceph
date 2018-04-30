@@ -9713,10 +9713,12 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	   << " waiting " << slot->waiting
 	   << " waiting_peering " << slot->waiting_peering
 	   << dendl;
-  PGRef pg = slot->pg;
   slot->to_process.push_back(std::move(item));
   dout(20) << __func__ << " " << slot->to_process.back()
 	   << " queued" << dendl;
+
+ retry_pg:
+  PGRef pg = slot->pg;
 
   // lock pg (if we have it)
   if (pg) {
@@ -9741,14 +9743,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     slot = q->second.get();
     --slot->num_running;
 
-    if (slot->pg != pg) {
-      // this can happen if we race with pg removal.
-      dout(20) << __func__ << " slot " << token << " no longer attached to "
-	       << pg << dendl;
-      pg->unlock();
-      pg = slot->pg;
-    }
-
     if (slot->to_process.empty()) {
       // raced with _wake_pg_slot or consume_map
       dout(20) << __func__ << " " << token
@@ -9769,6 +9763,13 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       }
       sdata->shard_lock.Unlock();
       return;
+    }
+    if (slot->pg != pg) {
+      // this can happen if we race with pg removal.
+      dout(20) << __func__ << " slot " << token << " no longer attached to "
+	       << pg << dendl;
+      pg->unlock();
+      goto retry_pg;
     }
   }
 
