@@ -132,10 +132,10 @@ namespace crimson {
 	op_time =
 	  std::chrono::microseconds((int) (0.5 +
 					   thread_pool_size * 1000000.0 / iops));
-	std::chrono::milliseconds delay(1000);
+	std::chrono::milliseconds finishing_check_period(1000);
 	threads = new std::thread[thread_pool_size];
 	for (size_t i = 0; i < thread_pool_size; ++i) {
-	  threads[i] = std::thread(&SimulatedServer::run, this, delay);
+	  threads[i] = std::thread(&SimulatedServer::run, this, finishing_check_period);
 	}
       }
 
