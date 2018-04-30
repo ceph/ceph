@@ -13,8 +13,8 @@ overrides:
       ceph_conf_overrides:
         global:
           osd_default_pool_size: 3
-          osd_pool_default_pg_num: 128
-          osd_pool_default_pgp_num: 128
+          osd_pool_default_pg_num: 8
+          osd_pool_default_pgp_num: 8
           osd crush chooseleaf type: 0
 roles:
 - - mgr.x
