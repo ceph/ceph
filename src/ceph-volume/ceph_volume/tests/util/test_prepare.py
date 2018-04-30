@@ -262,3 +262,31 @@ class TestNormalizeFlags(object):
     def test_normalize_strings_duplicate_flags(self, flags):
         result = sorted(prepare._normalize_mount_flags(flags, extras=['discard','rw']).split(','))
         assert ','.join(result) == 'auto,discard,exec,rw'
+
+
+class TestMkfsBluestore(object):
+
+    def test_non_zero_exit_status(self, stub_call, monkeypatch):
+        conf.cluster = 'ceph'
+        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
+        stub_call(([], [], 1))
+        with pytest.raises(RuntimeError) as error:
+            prepare.osd_mkfs_bluestore('1', 'asdf-1234', keyring='keyring')
+        assert "Command failed with exit code 1" in str(error)
+
+    def test_non_zero_exit_formats_command_correctly(self, stub_call, monkeypatch):
+        conf.cluster = 'ceph'
+        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
+        stub_call(([], [], 1))
+        with pytest.raises(RuntimeError) as error:
+            prepare.osd_mkfs_bluestore('1', 'asdf-1234', keyring='keyring')
+        expected = ' '.join([
+            'ceph-osd',
+            '--cluster',
+            'ceph',
+            '--osd-objectstore', 'bluestore', '--mkfs',
+            '-i', '1', '--monmap', '/var/lib/ceph/osd/ceph-1/activate.monmap',
+            '--keyfile', '-', '--osd-data', '/var/lib/ceph/osd/ceph-1/',
+            '--osd-uuid', 'asdf-1234',
+            '--setuser', 'ceph', '--setgroup', 'ceph'])
+        assert expected in str(error)
