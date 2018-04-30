@@ -1843,7 +1843,7 @@ public:
   {
     // steal the other guy's buffers
     for (std::list<buffer::ptr>::const_iterator i = bl.buffers().begin();
-        i != bl.buffers().end(); i++) {
+        i != bl.buffers().end(); ++i) {
       append(*i, 0, i->length());
     }
     bl.clear();
