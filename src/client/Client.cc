@@ -5367,13 +5367,6 @@ vinodeno_t Client::_get_vino(Inode *in)
   return vinodeno_t(in->ino, in->snapid);
 }
 
-inodeno_t Client::_get_inodeno(Inode *in)
-{
-  /* The caller must hold the client lock */
-  return in->ino;
-}
-
-
 /**
  * Resolve an MDS spec to a list of MDS daemon GIDs.
  *
@@ -10441,7 +10434,7 @@ void Client::_ll_drop_pins()
 
 bool Client::_ll_forget(Inode *in, int count)
 {
-  inodeno_t ino = _get_inodeno(in);
+  inodeno_t ino = in->ino;
 
   ldout(cct, 3) << __func__ << " " << ino << " " << count << dendl;
   tout(cct) << __func__ << std::endl;
