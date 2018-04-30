@@ -358,7 +358,7 @@ enum {
   OPT_BUCKET_UNLINK,
   OPT_BUCKET_STATS,
   OPT_BUCKET_CHECK,
-  OPT_BUCKET_SYNC_STATUS,
+  OPT_BUCKET_SYNC_MARKERS,
   OPT_BUCKET_SYNC_INIT,
   OPT_BUCKET_SYNC_RUN,
   OPT_BUCKET_SYNC_DISABLE,
@@ -620,8 +620,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     }
   } else if (prev_prev_cmd && strcmp(prev_prev_cmd, "bucket") == 0) {
     if (strcmp(prev_cmd, "sync") == 0) {
-      if (strcmp(cmd, "status") == 0)
-        return OPT_BUCKET_SYNC_STATUS;
+      if (strcmp(cmd, "markers") == 0)
+        return OPT_BUCKET_SYNC_MARKERS;
       if (strcmp(cmd, "init") == 0)
         return OPT_BUCKET_SYNC_INIT;
       if (strcmp(cmd, "run") == 0)
@@ -6617,7 +6617,7 @@ next:
       return -ret;
 }
 
-  if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
+  if (opt_cmd == OPT_BUCKET_SYNC_MARKERS) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
