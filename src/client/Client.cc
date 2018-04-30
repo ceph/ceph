@@ -12364,7 +12364,6 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
   tout(cct) << vnewparent << std::endl;
   tout(cct) << newname << std::endl;
 
-  int r = 0;
   InodeRef target;
 
   auto fuse_default_permissions = cct->_conf->get_val<bool>(
@@ -12373,7 +12372,7 @@ int Client::ll_link(Inode *in, Inode *newparent, const char *newname,
     if (S_ISDIR(in->mode))
       return -EPERM;
 
-    r = may_hardlink(in, perm);
+    int r = may_hardlink(in, perm);
     if (r < 0)
       return r;
 
