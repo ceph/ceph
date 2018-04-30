@@ -7685,6 +7685,12 @@ boost::statechart::result
 PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  if (!pg->state_test(PG_STATE_RECOVERING)) {
+    // we may have finished recovery and have an AllReplicasRecovered
+    // event queued to move us to the next state.
+    ldout(pg->cct, 10) << "got defer recovery but not recovering" << dendl;
+    return discard_event();
+  }
   ldout(pg->cct, 10) << "defer recovery, retry delay " << evt.delay << dendl;
   pg->state_set(PG_STATE_RECOVERY_WAIT);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
