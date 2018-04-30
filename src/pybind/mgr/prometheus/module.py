@@ -4,6 +4,7 @@ import errno
 import math
 import os
 import socket
+import threading
 from collections import OrderedDict
 from mgr_module import MgrModule, MgrStandbyModule
 
@@ -351,6 +352,7 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
         self.metrics = Metrics()
         self.schema = OrderedDict()
+        self.shutdown_event = threading.Event()
         _global_instance['plugin'] = self
 
     def get_health(self):
@@ -668,16 +670,22 @@ class Module(MgrModule):
         self.log.info('Starting engine...')
         cherrypy.engine.start()
         self.log.info('Engine started.')
-        cherrypy.engine.block()
+        # wait for the shutdown event
+        self.shutdown_event.wait()
+        self.shutdown_event.clear()
+        cherrypy.engine.stop()
+        self.log.info('Engine stopped.')
 
     def shutdown(self):
         self.log.info('Stopping engine...')
-        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
-        cherrypy.engine.exit()
-        self.log.info('Stopped engine')
+        self.shutdown_event.set()
 
 
 class StandbyModule(MgrStandbyModule):
+    def __init__(self, *args, **kwargs):
+        super(StandbyModule, self).__init__(*args, **kwargs)
+        self.shutdown_event = threading.Event()
+
     def serve(self):
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', DEFAULT_PORT)
@@ -712,12 +720,14 @@ class StandbyModule(MgrStandbyModule):
         cherrypy.tree.mount(Root(), '/', {})
         self.log.info('Starting engine...')
         cherrypy.engine.start()
-        self.log.info("Waiting for engine...")
-        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
         self.log.info('Engine started.')
+        # Wait for shutdown event
+        self.shutdown_event.wait()
+        self.shutdown_event.clear()
+        cherrypy.engine.stop()
+        self.log.info('Engine stopped.')
 
     def shutdown(self):
         self.log.info("Stopping engine...")
-        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
-        cherrypy.engine.stop()
+        self.shutdown_event.set()
         self.log.info("Stopped engine")
