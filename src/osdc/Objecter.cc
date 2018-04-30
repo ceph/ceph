@@ -1697,7 +1697,9 @@ void Objecter::C_Command_Map_Latest::finish(int r)
   if (c->map_dne_bound == 0)
     c->map_dne_bound = latest;
 
+  OSDSession::unique_lock sul(c->session->lock);
   objecter->_check_command_map_dne(c);
+  sul.unlock();
 
   c->put();
 }
@@ -1705,6 +1707,7 @@ void Objecter::C_Command_Map_Latest::finish(int r)
 void Objecter::_check_command_map_dne(CommandOp *c)
 {
   // rwlock is locked unique
+  // session is locked unique
 
   ldout(cct, 10) << "_check_command_map_dne tid " << c->tid
 		 << " current " << osdmap->get_epoch()
@@ -1722,6 +1725,7 @@ void Objecter::_check_command_map_dne(CommandOp *c)
 void Objecter::_send_command_map_check(CommandOp *c)
 {
   // rwlock is locked unique
+  // session is locked unique
 
   // ask the monitor
   if (check_latest_map_commands.count(c->tid) == 0) {
@@ -4771,8 +4775,10 @@ void Objecter::handle_command_reply(MCommandReply *m)
 
   sl.unlock();
 
-
+  OSDSession::unique_lock sul(s->lock);
   _finish_command(c, m->r, m->rs);
+  sul.unlock();
+
   m->put();
   if (s)
     s->put();
@@ -4919,13 +4925,16 @@ int Objecter::command_op_cancel(OSDSession *s, ceph_tid_t tid, int r)
 
   CommandOp *op = it->second;
   _command_cancel_map_check(op);
+  OSDSession::unique_lock sl(op->session->lock);
   _finish_command(op, r, "");
+  sl.unlock();
   return 0;
 }
 
 void Objecter::_finish_command(CommandOp *c, int r, string rs)
 {
   // rwlock is locked unique
+  // session lock is locked
 
   ldout(cct, 10) << "_finish_command " << c->tid << " = " << r << " "
 		 << rs << dendl;
@@ -4938,9 +4947,7 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
     timer.cancel_event(c->ontimeout);
 
   OSDSession *s = c->session;
-  OSDSession::unique_lock sl(s->lock);
   _session_command_op_remove(c->session, c);
-  sl.unlock();
 
   c->put();
 
