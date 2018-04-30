@@ -88,6 +88,10 @@ protected:
   void reconnect();
   void _send_open();
 
+  // In pre-luminous clusters, the ceph-mgr service is absent or optional,
+  // so we must not block in start_command waiting for it.
+  bool mgr_optional = false;
+
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_);
 
@@ -95,6 +99,8 @@ public:
 
   void init();
   void shutdown();
+
+  void set_mgr_optional(bool optional_) {mgr_optional = optional_;}
 
   bool ms_dispatch(Message *m) override;
   bool ms_handle_reset(Connection *con) override;
