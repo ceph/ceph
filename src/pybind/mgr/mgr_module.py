@@ -221,7 +221,7 @@ class MgrModule(ceph_module.BaseMgrModule):
     PERFCOUNTER_LONGRUNAVG = 4
     PERFCOUNTER_COUNTER = 8
     PERFCOUNTER_HISTOGRAM = 0x10
-    PERFCOUNTER_TYPE_MASK = ~2
+    PERFCOUNTER_TYPE_MASK = ~3
 
     def __init__(self, module_name, py_modules_ptr, this_ptr):
         self.module_name = module_name
@@ -312,6 +312,13 @@ class MgrModule(ceph_module.BaseMgrModule):
             return 'histogram'
         
         return ''
+
+    def _perfvalue_to_value(self, stattype, value):
+        if stattype & self.PERFCOUNTER_TIME:
+            # Convert from ns to seconds
+            return value / 1000000000.0
+        else:
+            return value
 
     def get_server(self, hostname):
         """
