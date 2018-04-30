@@ -68,6 +68,11 @@ Configuration options
 Modules can load and store configuration options using the
 ``set_config`` and ``get_config`` methods.
 
+.. note:: Use ``set_config`` and ``get_config`` to manage user-visible
+   configuration options that are not blobs (like certificates). If you want to
+   persist module-internal data or binary configuration data consider using
+   the `KV store`_.
+
 You must declare your available configuration options in the
 ``OPTIONS`` class attribute, like this:
 
