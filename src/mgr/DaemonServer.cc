@@ -561,6 +561,8 @@ bool DaemonServer::handle_report(MMgrReport *m)
     if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
       // only OSD and MON send health_checks to me now
       daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
+      dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
+	       << dendl;
     }
   }
 
@@ -1838,6 +1840,8 @@ void DaemonServer::send_report()
               << static_cast<uint8_t>(metric.get_type()) << dendl;
             continue;
           }
+	  dout(20) << " + " << daemon.second->key << " "
+		   << metric << dendl;
           tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
               std::move(collector));
         }
