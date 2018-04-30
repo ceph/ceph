@@ -34,7 +34,10 @@ class RBDMirrorThrasher(Greenlet):
     max_thrash: [default: 1] the maximum number of active rbd-mirror daemons per
       cluster will be thrashed at any given time.
 
-    max_thrash_delay: [default: 30] maximum number of seconds to delay before
+    min_thrash_delay: [default: 60] minimum number of seconds to delay before
+      thrashing again.
+
+    max_thrash_delay: [default: 120] maximum number of seconds to delay before
       thrashing again.
 
     max_revive_delay: [default: 10] maximum number of seconds to delay before
@@ -71,7 +74,8 @@ class RBDMirrorThrasher(Greenlet):
 
         self.randomize = bool(self.config.get('randomize', True))
         self.max_thrash = int(self.config.get('max_thrash', 1))
-        self.max_thrash_delay = float(self.config.get('thrash_delay', 60.0))
+        self.min_thrash_delay = float(self.config.get('min_thrash_delay', 60.0))
+        self.max_thrash_delay = float(self.config.get('max_thrash_delay', 120.0))
         self.max_revive_delay = float(self.config.get('max_revive_delay', 10.0))
 
     def _run(self):
@@ -101,7 +105,7 @@ class RBDMirrorThrasher(Greenlet):
         while not self.stopping.is_set():
             delay = self.max_thrash_delay
             if self.randomize:
-                delay = random.randrange(0.0, self.max_thrash_delay)
+                delay = random.randrange(self.min_thrash_delay, self.max_thrash_delay)
 
             if delay > 0.0:
                 self.log('waiting for {delay} secs before thrashing'.format(delay=delay))
@@ -114,20 +118,21 @@ class RBDMirrorThrasher(Greenlet):
             weight = 1.0 / len(self.daemons)
             count = 0
             for daemon in self.daemons:
-                # if we've reached max_thrash, we're done
-                count = count + 1
-                if count > self.max_thrash:
-                    break
-
-                skip = random.randrange(0.0, 1.0)
+                skip = random.uniform(0.0, 1.0)
                 if weight <= skip:
-                    self.log('skipping thrash iteration with skip ({skip}) > weight ({weight})'.format(skip=skip, weight=weight))
+                    self.log('skipping daemon {label} with skip ({skip}) > weight ({weight})'.format(
+                        label=daemon.id_, skip=skip, weight=weight))
                     continue
 
                 self.log('kill {label}'.format(label=daemon.id_))
                 daemon.signal(signal.SIGTERM)
                 killed_daemons.append(daemon)
                 stats['kill'] += 1
+
+                # if we've reached max_thrash, we're done
+                count += 1
+                if count >= self.max_thrash:
+                    break
 
             if killed_daemons:
                 # wait for a while before restarting

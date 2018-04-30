@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/sh -ex
 #
 # rbd_mirror_stress.sh - stress test rbd-mirror daemon
 #
@@ -12,6 +12,8 @@ IMAGE_COUNT=50
 export LOCKDEP=0
 
 . $(dirname $0)/rbd_mirror_helpers.sh
+
+setup
 
 create_snap()
 {
@@ -182,5 +184,3 @@ do
   purge_snapshots ${CLUSTER2} ${POOL} ${image}
   remove_image_retry ${CLUSTER2} ${POOL} ${image}
 done
-
-echo OK

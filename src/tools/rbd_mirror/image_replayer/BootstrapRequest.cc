@@ -531,7 +531,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
 
     local_tag_tid = local_image_ctx->journal->get_tag_tid();
     local_tag_data = local_image_ctx->journal->get_tag_data();
-    dout(20) << ": local tag " << local_tag_tid << ": "
+    dout(10) << ": local tag " << local_tag_tid << ": "
              << local_tag_data << dendl;
   }
 
@@ -546,7 +546,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
     if (local_tag_data.predecessor.commit_valid &&
         local_tag_data.predecessor.mirror_uuid == m_remote_mirror_uuid &&
         local_tag_data.predecessor.tag_tid > remote_tag.tid) {
-      dout(20) << ": skipping processed predecessor remote tag "
+      dout(15) << ": skipping processed predecessor remote tag "
                << remote_tag.tid << dendl;
       continue;
     }
@@ -569,11 +569,11 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
     if (!local_tag_data.predecessor.commit_valid) {
       // newly synced local image (no predecessor) replays from the first tag
       if (remote_tag_data.mirror_uuid != librbd::Journal<>::LOCAL_MIRROR_UUID) {
-        dout(20) << ": skipping non-primary remote tag" << dendl;
+        dout(15) << ": skipping non-primary remote tag" << dendl;
         continue;
       }
 
-      dout(20) << ": using initial primary remote tag" << dendl;
+      dout(10) << ": using initial primary remote tag" << dendl;
       break;
     }
 
@@ -590,7 +590,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
             local_tag_data.predecessor.mirror_uuid ==
               librbd::Journal<>::LOCAL_MIRROR_UUID) {
           // local demoted and remote has matching event
-          dout(20) << ": found matching local demotion tag" << dendl;
+          dout(15) << ": found matching local demotion tag" << dendl;
           remote_orphan_tag_tid = remote_tag.tid;
           continue;
         }
@@ -599,7 +599,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
             remote_tag_data.predecessor.mirror_uuid ==
               librbd::Journal<>::LOCAL_MIRROR_UUID) {
           // remote demoted and local has matching event
-          dout(20) << ": found matching remote demotion tag" << dendl;
+          dout(15) << ": found matching remote demotion tag" << dendl;
           remote_orphan_tag_tid = remote_tag.tid;
           continue;
         }
@@ -610,7 +610,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
           remote_tag_data.predecessor.commit_valid && remote_orphan_tag_tid &&
           remote_tag_data.predecessor.tag_tid == *remote_orphan_tag_tid) {
         // remote promotion tag chained to remote/local demotion tag
-        dout(20) << ": found chained remote promotion tag" << dendl;
+        dout(15) << ": found chained remote promotion tag" << dendl;
         reconnect_orphan = true;
         break;
       }
@@ -622,9 +622,9 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
 
   if (remote_tag_data_valid &&
       local_tag_data.mirror_uuid == m_remote_mirror_uuid) {
-    dout(20) << ": local image is in clean replay state" << dendl;
+    dout(10) << ": local image is in clean replay state" << dendl;
   } else if (reconnect_orphan) {
-    dout(20) << ": remote image was demoted/promoted" << dendl;
+    dout(10) << ": remote image was demoted/promoted" << dendl;
   } else {
     derr << ": split-brain detected -- skipping image replay" << dendl;
     m_ret_val = -EEXIST;
