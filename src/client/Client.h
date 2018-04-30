@@ -874,7 +874,6 @@ private:
   int _getattr_for_perm(Inode *in, const UserPerm& perms);
 
   vinodeno_t _get_vino(Inode *in);
-  inodeno_t _get_inodeno(Inode *in);
 
   /*
    * These define virtual xattrs exposing the recursive directory
