@@ -554,7 +554,8 @@ class Module(MgrModule):
                         ("ceph_daemon",),
                     ))
 
-                self.metrics.append(path, counter_info['value'], (daemon,))
+                value = self._perfvalue_to_value(counter_info['type'], counter_info['value'])
+                self.metrics.append(path, value, (daemon,))
         # It is sufficient to reset the pending metrics once per scrape
         self.metrics.reset()
 
