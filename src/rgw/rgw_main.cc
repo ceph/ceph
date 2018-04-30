@@ -27,6 +27,7 @@
 #include "rgw_rest_log.h"
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
+#include "rgw_rest_sts.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_tools.h"
@@ -399,6 +400,11 @@ int main(int argc, const char **argv)
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
     rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
+  }
+
+  if (apis_map.count("sts") > 0) {
+    auto *sts = new RGWRESTMgr_STS;
+    rest.register_resource(g_conf()->rgw_sts_entry, set_logging(sts));
   }
 
   /* Initialize the registry of auth strategies which will coordinate

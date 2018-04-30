@@ -133,6 +133,7 @@ using ceph::crypto::MD5;
 #define RGW_REST_SWIFT_AUTH     0x2
 #define RGW_REST_S3             0x4
 #define RGW_REST_WEBSITE     0x8
+#define RGW_REST_STS            0x10
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
@@ -223,6 +224,10 @@ using ceph::crypto::MD5;
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301
+
+// STS Errors
+#define ERR_PACKED_POLICY_TOO_LARGE 2400
+
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
 #endif
@@ -516,6 +521,8 @@ enum RGWOpType {
   RGW_OP_CONFIG_BUCKET_META_SEARCH,
   RGW_OP_GET_BUCKET_META_SEARCH,
   RGW_OP_DEL_BUCKET_META_SEARCH,
+  /* sts specific*/
+  RGW_STS_ASSUME_ROLE,
 };
 
 class RGWAccessControlPolicy;

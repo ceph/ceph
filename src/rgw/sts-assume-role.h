@@ -4,7 +4,19 @@
 namespace STS {
 
 class AssumeRoleRequest {
-  static constexpr int MAX_POLICY_SIZE = 2048;
+  static constexpr uint64_t MIN_POLICY_SIZE = 1;
+  static constexpr uint64_t MAX_POLICY_SIZE = 2048;
+  static constexpr uint64_t DEFAULT_DURATION_IN_SECS = 3600;
+  static constexpr uint64_t MIN_DURATION_IN_SECS = 900;
+  static constexpr uint64_t MIN_EXTERNAL_ID_LEN = 2;
+  static constexpr uint64_t MAX_EXTERNAL_ID_LEN = 1224;
+  static constexpr uint64_t MIN_ROLE_ARN_SIZE = 2;
+  static constexpr uint64_t MAX_ROLE_ARN_SIZE = 2048;
+  static constexpr uint64_t MIN_ROLE_SESSION_SIZE = 2;
+  static constexpr uint64_t MAX_ROLE_SESSION_SIZE = 64;
+  static constexpr uint64_t MIN_SERIAL_NUMBER_SIZE = 9;
+  static constexpr uint64_t MAX_SERIAL_NUMBER_SIZE = 256;
+  static constexpr uint64_t TOKEN_CODE_SIZE = 6;
   uint64_t duration;
   string externalId;
   string iamPolicy;
@@ -13,16 +25,18 @@ class AssumeRoleRequest {
   string serialNumber;
   string tokenCode;
 public:
-  AssumeRoleRequest(uint64_t _duration, string _externalId, string _iamPolicy,
-                    string _roleArn, string _roleSessionName, string _serialNumber,
-                    string _tokenCode)
-                    : duration(_duration), externalId(_externalId), iamPolicy(_iamPolicy),
-                      roleArn(_roleArn), roleSessionName(_roleSessionName),
-                      serialNumber(_serialNumber), tokenCode(_tokenCode) {}
-  string getRoleARN() const { return roleArn; }
-  string getRoleSessionName() const { return roleSessionName; }
-  string getPolicy() const {return iamPolicy; }
-  int getMaxPolicySize() const { return MAX_POLICY_SIZE; }
+  AssumeRoleRequest( string _duration,
+                      string _externalId,
+                      string _iamPolicy,
+                      string _roleArn,
+                      string _roleSessionName,
+                      string _serialNumber,
+                      string _tokenCode);
+  const string& getRoleARN() const { return roleArn; }
+  const string& getRoleSessionName() const { return roleSessionName; }
+  const string& getPolicy() const {return iamPolicy; }
+  static uint64_t getMaxPolicySize() { return MAX_POLICY_SIZE; }
+  int validate_input() const;
 };
 
 
@@ -32,10 +46,12 @@ class AssumedRoleUser {
 public:
   int generateAssumedRoleUser( CephContext* cct,
                                 RGWRados *store,
-                                const string& roleArn,
+                                const string& roleId,
+                                const boost::optional<rgw::IAM::ARN>& roleArn,
                                 const string& roleSessionName);
-  string getARN() const { return arn; }
-  string getAssumeRoleId() const { return assumeRoleId; }
+  const string& getARN() const { return arn; }
+  const string& getAssumeRoleId() const { return assumeRoleId; }
+  void dump(Formatter *f) const;
 };
 
 class Credentials {
@@ -47,13 +63,15 @@ class Credentials {
   string sessionToken;
 public:
   int generateCredentials(CephContext* cct);
-  string getAccessKeyId() const { return accessKeyId; }
-  string getExpiration() const { return expiration; }
-  string getSecretAccessKey() const { return secretAccessKey; }
-  string getSessionToken() const { return sessionToken; }
+  const string& getAccessKeyId() const { return accessKeyId; }
+  const string& getExpiration() const { return expiration; }
+  const string& getSecretAccessKey() const { return secretAccessKey; }
+  const string& getSessionToken() const { return sessionToken; }
+  void dump(Formatter *f) const;
 };
 
-using AssumeRoleResponse = std::tuple<AssumedRoleUser, Credentials, uint64_t> ;
+//AssumedRoleUser, Credentials, PackedpolicySize
+using AssumeRoleResponse = std::tuple<int, AssumedRoleUser, Credentials, uint64_t> ;
 
 class STSService {
   CephContext* cct;
