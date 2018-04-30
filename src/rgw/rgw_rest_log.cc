@@ -906,7 +906,15 @@ void RGWOp_BILog_Status::execute()
     return;
   }
 
-  http_ret = rgw_bucket_sync_status(store, source_zone, bucket, &status);
+  // read the bucket instance info for num_shards
+  RGWObjectCtx ctx(store);
+  RGWBucketInfo info;
+  http_ret = store->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr);
+  if (http_ret < 0) {
+    ldout(s->cct, 4) << "failed to read bucket info: " << cpp_strerror(http_ret) << dendl;
+    return;
+  }
+  http_ret = rgw_bucket_sync_status(store, source_zone, info, &status);
 }
 
 void RGWOp_BILog_Status::send_response()
