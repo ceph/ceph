@@ -138,6 +138,10 @@ rgw_http_errors rgw_http_swift_errors({
     { ERR_ZERO_IN_URL, {412, "Invalid UTF8 or contains NULL"}},
 });
 
+rgw_http_errors rgw_http_sts_errors({
+    { ERR_PACKED_POLICY_TOO_LARGE, {400, "PackedPolicyTooLarge" }},
+});
+
 int rgw_perf_start(CephContext *cct)
 {
   PerfCountersBuilder plb(cct, "rgw", l_rgw_first, l_rgw_last);
@@ -323,6 +327,11 @@ void set_req_state_err(struct rgw_err& err,	/* out */
 
   if (prot_flags & RGW_REST_SWIFT) {
     if (search_err(rgw_http_swift_errors, err_no, err.http_ret, err.err_code))
+      return;
+  }
+
+  if (prot_flags & RGW_REST_STS) {
+    if (search_err(rgw_http_sts_errors, err_no, err.http_ret, err.err_code))
       return;
   }
 
