@@ -161,7 +161,7 @@ bool ConfigMap::parse_mask(
     } else {
       type = i;
     }
-    if (str_to_ceph_entity_type(type.c_str()) == CEPH_ENTITY_TYPE_ANY) {
+    if (EntityName::str_to_ceph_entity_type(type) == CEPH_ENTITY_TYPE_ANY) {
       return false;
     }
     *section = i;
