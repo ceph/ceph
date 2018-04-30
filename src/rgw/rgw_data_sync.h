@@ -548,7 +548,7 @@ public:
 
 /// read the sync status of all bucket shards from the given source zone
 int rgw_bucket_sync_status(RGWRados *store, const std::string& source_zone,
-                           const rgw_bucket& bucket,
+                           const RGWBucketInfo& bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status);
 
 class RGWDefaultSyncModule : public RGWSyncModule {

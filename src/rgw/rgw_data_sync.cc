@@ -3240,18 +3240,12 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
 };
 
 int rgw_bucket_sync_status(RGWRados *store, const std::string& source_zone,
-                           const rgw_bucket& bucket,
+                           const RGWBucketInfo& bucket_info,
                            std::vector<rgw_bucket_shard_sync_info> *status)
 {
-  // read the bucket instance info for num_shards
-  RGWObjectCtx ctx(store);
-  RGWBucketInfo info;
-  int ret = store->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr);
-  if (ret < 0) {
-    return ret;
-  }
+  const auto num_shards = bucket_info.num_shards;
   status->clear();
-  status->resize(std::max<size_t>(1, info.num_shards));
+  status->resize(std::max<size_t>(1, num_shards));
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
@@ -3259,8 +3253,8 @@ int rgw_bucket_sync_status(RGWRados *store, const std::string& source_zone,
            nullptr, nullptr, source_zone, module, nullptr);
 
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
-  return crs.run(new RGWCollectBucketSyncStatusCR(store, &env, info.num_shards,
-                                                  bucket, status));
+  return crs.run(new RGWCollectBucketSyncStatusCR(store, &env, num_shards,
+                                                  bucket_info.bucket, status));
 }
 
 
