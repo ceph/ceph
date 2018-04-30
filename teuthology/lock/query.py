@@ -123,6 +123,8 @@ def find_stale_locks(owner=None):
         url = os.path.join(config.results_server, 'runs', name, 'jobs', job_id,
                            '')
         resp = requests.get(url)
+        if not resp.ok:
+            return False
         job_info = resp.json()
         if job_info['status'] in ('running', 'waiting'):
             cache.add(description)
