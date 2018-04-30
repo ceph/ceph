@@ -1295,6 +1295,7 @@ struct pg_pool_t {
     }
   }
 
+  utime_t create_time;
   uint64_t flags;           ///< FLAG_*
   __u8 type;                ///< TYPE_*
   __u8 size, min_size;      ///< number of osds in each pg
@@ -1456,6 +1457,7 @@ public:
 
   void dump(Formatter *f) const;
 
+  const utime_t &get_create_time() const { return create_time; }
   uint64_t get_flags() const { return flags; }
   bool has_flag(uint64_t f) const { return flags & f; }
   void set_flag(uint64_t f) { flags |= f; }
