@@ -322,7 +322,9 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
 
     command = base_command + supplementary_command
 
-    process.call(command, stdin=keyring, show_command=True)
+    _, _, returncode = process.call(command, stdin=keyring, show_command=True)
+    if returncode != 0:
+        raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
 
 
 def osd_mkfs_filestore(osd_id, fsid, keyring):
@@ -360,4 +362,8 @@ def osd_mkfs_filestore(osd_id, fsid, keyring):
         '--setuser', 'ceph',
         '--setgroup', 'ceph'
     ]
-    process.call(command, stdin=keyring, terminal_verbose=True, show_command=True)
+    _, _, returncode = process.call(
+        command, stdin=keyring, terminal_verbose=True, show_command=True
+    )
+    if returncode != 0:
+        raise RuntimeError('Command failed with exit code %s: %s' % (returncode, ' '.join(command)))
