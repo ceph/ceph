@@ -4,6 +4,8 @@ overrides:
     conf:
       mon:
         mon osd initial require min compat client: hammer
+      client:
+        ms type: simple
 tasks:
 - install:
     branch: hammer
