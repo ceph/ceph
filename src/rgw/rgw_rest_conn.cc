@@ -157,8 +157,7 @@ int RGWRESTConn::put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_s
 
 int RGWRESTConn::complete_request(RGWRESTStreamS3PutObj *req, string& etag, real_time *mtime)
 {
-  map<string, string> attrs;
-  int ret = req->complete_request(etag, mtime, nullptr, attrs);
+  int ret = req->complete_request(&etag, mtime);
   delete req;
 
   return ret;
@@ -292,10 +291,14 @@ done_err:
   return r;
 }
 
-int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req, string& etag, real_time *mtime,
-                                  uint64_t *psize, map<string, string>& attrs)
+int RGWRESTConn::complete_request(RGWRESTStreamRWRequest *req,
+                                  string *etag,
+                                  real_time *mtime,
+                                  uint64_t *psize,
+                                  map<string, string> *pattrs,
+                                  map<string, string> *pheaders)
 {
-  int ret = req->complete_request(etag, mtime, psize, attrs);
+  int ret = req->complete_request(etag, mtime, psize, pattrs, pheaders);
   delete req;
 
   return ret;
@@ -336,9 +339,7 @@ int RGWRESTConn::get_resource(const string& resource,
     return ret;
   }
 
-  string etag;
-  map<string, string> attrs;
-  return req.complete_request(etag, NULL, NULL, attrs);
+  return req.complete_request();
 }
 
 RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
@@ -383,9 +384,7 @@ int RGWRESTReadResource::read()
     return ret;
   }
 
-  string etag;
-  map<string, string> attrs;
-  return req.complete_request(etag, NULL, NULL, attrs);
+  return req.complete_request();
 }
 
 int RGWRESTReadResource::aio_read()
@@ -446,9 +445,7 @@ int RGWRESTSendResource::send(bufferlist& outbl)
     return ret;
   }
 
-  string etag;
-  map<string, string> attrs;
-  return req.complete_request(etag, NULL, NULL, attrs);
+  return req.complete_request();
 }
 
 int RGWRESTSendResource::aio_send(bufferlist& outbl)

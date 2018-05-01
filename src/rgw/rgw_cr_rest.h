@@ -15,6 +15,10 @@ struct rgw_rest_obj {
   std::map<string, string> attrs;
   std::map<string, string> custom_attrs;
   RGWAccessControlPolicy acls;
+
+  void init(const rgw_obj_key& _key) {
+    key = _key;
+  }
 };
 
 class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine {
@@ -118,6 +122,8 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   string method;
   string path;
   param_vec_t params;
+  param_vec_t headers;
+  map<string, string> *attrs;
   T *result;
   bufferlist input_bl;
   bool send_content_length=false;
@@ -127,21 +133,20 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
  RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager,
                           const string& _method, const string& _path,
-                          rgw_http_param_pair *_params, bufferlist& _input, T *_result, bool _send_content_length)
+                          rgw_http_param_pair *_params,
+                          map<string, string> *_attrs,
+                          bufferlist& _input, T *_result, bool _send_content_length)
    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-    method(_method), path(_path), params(make_param_list(_params)), result(_result),
-    input_bl(_input), send_content_length(_send_content_length)
-    {}
+    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result),
+    input_bl(_input), send_content_length(_send_content_length) {}
 
- RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+  RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager,
                           const string& _method, const string& _path,
-                          rgw_http_param_pair *_params, T *_result)
+                          rgw_http_param_pair *_params, map<string, string> *_attrs,
+                          T *_result)
    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-    method(_method), path(_path), params(make_param_list(_params)), result(_result)
-    {}
-
-
+    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result) {}
 
   ~RGWSendRawRESTResourceCR() override {
     request_cleanup();
@@ -149,7 +154,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
 
   int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
-        new RGWRESTSendResource(conn, method, path, params, nullptr, http_manager));
+        new RGWRESTSendResource(conn, method, path, params, &headers, http_manager));
 
     init_new_io(op.get());
 
@@ -198,8 +203,9 @@ class RGWSendRESTResourceCR : public RGWSendRawRESTResourceCR<T> {
   RGWSendRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                            RGWHTTPManager *_http_manager,
                            const string& _method, const string& _path,
-                        rgw_http_param_pair *_params,S& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, _method, _path, _params, _result){
+                        rgw_http_param_pair *_params, map<string, string> *_attrs,
+                        S& _input, T *_result)
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, _method, _path, _params, _attrs, _result) {
 
     JSONFormatter jf;
     encode_json("data", _input, &jf);
@@ -220,7 +226,7 @@ public:
                         rgw_http_param_pair *_params, S& _input, T *_result)
     : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
                             "POST", _path,
-                            _params, _input, _result) {}
+                            _params, nullptr, _input, _result) {}
 };
 
 template <class T>
@@ -230,7 +236,7 @@ class RGWPutRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
                           RGWHTTPManager *_http_manager,
                           const string& _path,
                           rgw_http_param_pair *_params, bufferlist& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "PUT", _path, _params, _input, _result, true){}
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "PUT", _path, _params, nullptr, _input, _result, true){}
 
 };
 
@@ -240,8 +246,10 @@ class RGWPostRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
   RGWPostRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager,
                           const string& _path,
-                          rgw_http_param_pair *_params, bufferlist& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "POST", _path, _params, _input, _result, true){}
+                          rgw_http_param_pair *_params,
+                          map<string, string> * _attrs,
+                          bufferlist& _input, T *_result)
+    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "POST", _path, _params, _attrs, _input, _result, true){}
 
 };
 
@@ -255,7 +263,7 @@ public:
                         rgw_http_param_pair *_params, S& _input, T *_result)
     : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
                                   "PUT", _path,
-                                  _params, _input, _result) {}
+                                  _params, nullptr, _input, _result) {}
 };
 
 class RGWDeleteRESTResourceCR : public RGWSimpleCoroutine {
@@ -332,6 +340,7 @@ class RGWCRHTTPGetDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
   bufferlist extra_data;
   bool got_all_extra_data{false};
   bool paused{false};
+  bool notified{false};
 public:
   RGWCRHTTPGetDataCB(RGWCoroutinesEnv *_env, RGWCoroutine *_cr, RGWHTTPStreamRWRequest *_req);
 
@@ -360,7 +369,7 @@ protected:
 public:
   virtual int init() = 0;
   virtual int read(bufferlist *data, uint64_t max, bool *need_retry) = 0; /* reentrant */
-  virtual int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) = 0;
+  virtual int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) = 0;
   virtual bool has_attrs() = 0;
   virtual void get_attrs(std::map<string, string> *attrs) = 0;
   virtual ~RGWStreamReadResourceCRF() = default;
@@ -419,12 +428,13 @@ public:
                                                                 env(_env),
                                                                 caller(_caller),
                                                                 http_manager(_http_manager) {
-    rest_obj.key = _src_key;
+    rest_obj.init(_src_key);
   }
+  ~RGWStreamReadHTTPResourceCRF();
 
   int init() override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
-  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) override;
+  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) override;
   bool has_attrs() override;
   void get_attrs(std::map<string, string> *attrs);
   bool is_done();
@@ -480,7 +490,7 @@ public:
                                                                caller(_caller),
                                                                http_manager(_http_manager),
                                                                write_drain_notify_cb(this) {}
-  virtual ~RGWStreamWriteHTTPResourceCRF() = default;
+  virtual ~RGWStreamWriteHTTPResourceCRF();
 
   int init() override {
     return 0;

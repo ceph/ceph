@@ -832,6 +832,7 @@ class RGWAsyncStatRemoteObj : public RGWAsyncRadosRequest {
   uint64_t *psize;
   string *petag;
   map<string, bufferlist> *pattrs;
+  map<string, string> *pheaders;
 
 protected:
   int _send_request() override;
@@ -843,14 +844,16 @@ public:
                          ceph::real_time *_pmtime,
                          uint64_t *_psize,
                          string *_petag,
-                         map<string, bufferlist> *_pattrs) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                         map<string, bufferlist> *_pattrs,
+                         map<string, string> *_pheaders) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
                                                       key(_key),
                                                       pmtime(_pmtime),
                                                       psize(_psize),
                                                       petag(_petag),
-                                                      pattrs(_pattrs) {}
+                                                      pattrs(_pattrs),
+                                                      pheaders(_pheaders) {}
 };
 
 class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
@@ -867,6 +870,7 @@ class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
   uint64_t *psize;
   string *petag;
   map<string, bufferlist> *pattrs;
+  map<string, string> *pheaders;
 
   RGWAsyncStatRemoteObj *req;
 
@@ -878,7 +882,8 @@ public:
                       ceph::real_time *_pmtime,
                       uint64_t *_psize,
                       string *_petag,
-                      map<string, bufferlist> *_pattrs) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+                      map<string, bufferlist> *_pattrs,
+                      map<string, string> *_pheaders) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),
@@ -887,6 +892,7 @@ public:
                                        psize(_psize),
                                        petag(_petag),
                                        pattrs(_pattrs),
+                                       pheaders(_pheaders),
                                        req(NULL) {}
 
 
@@ -903,7 +909,7 @@ public:
 
   int send_request() override {
     req = new RGWAsyncStatRemoteObj(this, stack->create_completion_notifier(), store, source_zone,
-                                    bucket_info, key, pmtime, psize, petag, pattrs);
+                                    bucket_info, key, pmtime, psize, petag, pattrs, pheaders);
     async_rados->queue(req);
     return 0;
   }
