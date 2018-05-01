@@ -439,6 +439,8 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
   rootdir->commit(0, gather->new_sub());
 
+  root->mark_clean();
+  root->mark_dirty(root->pre_dirty(), mds->mdlog->get_current_segment());
   root->store(gather->new_sub());
 }
 
