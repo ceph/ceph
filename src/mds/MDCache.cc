@@ -6929,8 +6929,9 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<mds_rank_t, MCa
     // This is because that unconnected replicas are problematic for
     // subtree migration.
     //
-    if (!in->is_auth() && !in->dirfragtreelock.can_read(-1))
+    if (!in->is_auth() && !mds->locker->rdlock_try(&in->dirfragtreelock, -1, nullptr)) {
       return true;
+    }
 
     // DIR
     list<CDir*> dfls;
