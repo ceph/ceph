@@ -273,8 +273,8 @@ scrubbing operations.
 
 ``osd scrub load threshold`` 
 
-:Description: The maximum load. Ceph will not scrub when the system load 
-              (as defined by ``getloadavg()``) is higher than this number. 
+:Description: The normalized maximum load. Ceph will not scrub when the system load
+              (as defined by ``getloadavg() / number of online cpus``) is higher than this number.
               Default is ``0.5``.
 
 :Type: Float
