@@ -3278,6 +3278,7 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 	   !pending_inc.new_pools[p->first].removed_snaps.contains(*q))) {
 	pg_pool_t *newpi = pending_inc.get_new_pool(p->first, &pi);
 	newpi->removed_snaps.insert(*q);
+	newpi->flags |= pg_pool_t::FLAG_SELFMANAGED_SNAPS;
 	dout(10) << " pool " << p->first << " removed_snaps added " << *q
 		 << " (now " << newpi->removed_snaps << ")" << dendl;
 	if (*q > newpi->get_snap_seq()) {
