@@ -128,7 +128,7 @@ public:
     if (ret == -ENOENT) {
       if (truncated)
         *truncated = false;
-      return -ENOENT;
+      return 0;
     }
 
     return 0;
