@@ -4955,7 +4955,6 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
   if (c->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(c->ontimeout);
 
-  OSDSession *s = c->session;
   _session_command_op_remove(c->session, c);
 
   c->put();
