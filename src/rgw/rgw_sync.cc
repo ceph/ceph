@@ -905,12 +905,17 @@ public:
             call(new RGWReadRESTResourceCR<meta_list_result >(cct, conn, sync_env->http_manager,
                                                               entrypoint, pairs, &result));
           }
-          if (get_ret_status() < 0) {
+          ret_status = get_ret_status();
+          if (ret_status == -ENOENT) {
+            set_retcode(0); /* reset coroutine status so that we don't return it */
+            ret_status = 0;
+          }
+          if (ret_status < 0) {
             tn->log(0, SSTR("ERROR: failed to fetch metadata section: " << *sections_iter));
             yield entries_index->finish();
             yield lease_cr->go_down();
             drain_all();
-            return set_cr_error(get_ret_status());
+            return set_cr_error(ret_status);
           }
           iter = result.keys.begin();
           for (; iter != result.keys.end(); ++iter) {
