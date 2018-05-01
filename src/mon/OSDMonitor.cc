@@ -415,8 +415,25 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	// crc mismatch and request a full map from a mon.
 	derr << __func__ << " full map CRC mismatch, resetting to canonical"
 	     << dendl;
+
+	dout(20) << __func__ << " my (bad) full osdmap:\n";
+	JSONFormatter jf(true);
+	jf.dump_object("osdmap", osdmap);
+	jf.flush(*_dout);
+	*_dout << "\nhexdump:\n";
+	full_bl.hexdump(*_dout);
+	*_dout << dendl;
+
 	osdmap = OSDMap();
 	osdmap.decode(orig_full_bl);
+
+	dout(20) << __func__ << " canonical full osdmap:\n";
+	JSONFormatter jf(true);
+	jf.dump_object("osdmap", osdmap);
+	jf.flush(*_dout);
+	*_dout << "\nhexdump:\n";
+	orig_full_bl.hexdump(*_dout);
+	*_dout << dendl;
       }
     } else {
       assert(!inc.have_crc);
