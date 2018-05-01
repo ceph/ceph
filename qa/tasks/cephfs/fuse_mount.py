@@ -407,8 +407,14 @@ print find_socket("{client_name}")
         """
         Look up the CephFS client ID for this mount
         """
-
         return self.admin_socket(['mds_sessions'])['id']
+
+    def get_client_pid(self):
+        """
+        return pid of ceph-fuse process
+        """
+        status = self.admin_socket(['status'])
+        return status['metadata']['pid']
 
     def get_osd_epoch(self):
         """
