@@ -5028,6 +5028,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(60)
     .set_description(""),
 
+    Option("rgw_lc_thread_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Delay after processing of bucket listing chunks (i.e., per 1000 entries) in milliseconds"),
+
     Option("rgw_lc_max_objs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32)
     .set_description("Number of lifecycle data shards")
