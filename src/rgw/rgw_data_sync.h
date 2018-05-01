@@ -466,6 +466,20 @@ struct rgw_bucket_shard_sync_info {
 };
 WRITE_CLASS_ENCODER(rgw_bucket_shard_sync_info)
 
+struct rgw_bucket_index_marker_info {
+  string bucket_ver;
+  string master_ver;
+  string max_marker;
+  bool syncstopped{false};
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
+    JSONDecoder::decode_json("master_ver", master_ver, obj);
+    JSONDecoder::decode_json("max_marker", max_marker, obj);
+    JSONDecoder::decode_json("syncstopped", syncstopped, obj);
+  }
+};
+
 
 class RGWRemoteBucketLog : public RGWCoroutinesManager {
   RGWRados *store;

@@ -1819,30 +1819,16 @@ int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
   return 0;
 }
 
-struct bucket_index_marker_info {
-  string bucket_ver;
-  string master_ver;
-  string max_marker;
-  bool syncstopped{false};
-
-  void decode_json(JSONObj *obj) {
-    JSONDecoder::decode_json("bucket_ver", bucket_ver, obj);
-    JSONDecoder::decode_json("master_ver", master_ver, obj);
-    JSONDecoder::decode_json("max_marker", max_marker, obj);
-    JSONDecoder::decode_json("syncstopped", syncstopped, obj);
-  }
-};
-
 class RGWReadRemoteBucketIndexLogInfoCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   const string instance_key;
 
-  bucket_index_marker_info *info;
+  rgw_bucket_index_marker_info *info;
 
 public:
   RGWReadRemoteBucketIndexLogInfoCR(RGWDataSyncEnv *_sync_env,
                                   const rgw_bucket_shard& bs,
-                                  bucket_index_marker_info *_info)
+                                  rgw_bucket_index_marker_info *_info)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       instance_key(bs.get_key()), info(_info) {}
 
@@ -1855,7 +1841,7 @@ public:
 	                                { NULL, NULL } };
 
         string p = "/admin/log/";
-        call(new RGWReadRESTResourceCR<bucket_index_marker_info>(sync_env->cct, sync_env->conn, sync_env->http_manager, p, pairs, info));
+        call(new RGWReadRESTResourceCR<rgw_bucket_index_marker_info>(sync_env->cct, sync_env->conn, sync_env->http_manager, p, pairs, info));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -1874,7 +1860,7 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
 
   rgw_bucket_shard_sync_info& status;
 
-  bucket_index_marker_info info;
+  rgw_bucket_index_marker_info info;
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
                                         const rgw_bucket_shard& bs,
