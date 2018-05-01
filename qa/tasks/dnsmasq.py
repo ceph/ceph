@@ -51,6 +51,9 @@ def replace_resolv(remote, path):
     misc.write_file(remote, path, "nameserver 127.0.0.1\n")
     try:
         # install it
+        if remote.os.package_type == "rpm":
+            # for centos ovh resolv.conf has immutable attribute set
+            remote.run(args=['sudo', 'chattr', '-i', '/etc/resolv.conf'], check_status=False)
         remote.run(args=['sudo', 'cp', path, '/etc/resolv.conf'])
         yield
     finally:
