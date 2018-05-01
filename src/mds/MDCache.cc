@@ -7706,7 +7706,7 @@ bool MDCache::shutdown_pass()
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
 
-  // SUBTREES
+  // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
   if (!subtrees.empty() &&
       mds->get_nodeid() != 0) {
@@ -7746,6 +7746,7 @@ bool MDCache::shutdown_pass()
   }
 
   if (num_auth_subtree > 0) {
+    assert(mds->get_nodeid() > 0);
     dout(7) << "still have " << num_auth_subtree << " auth subtrees" << dendl;
     show_subtrees();
     return false;
@@ -7755,6 +7756,15 @@ bool MDCache::shutdown_pass()
   if (mds->sessionmap.have_unclosed_sessions()) {
     if (!mds->server->terminating_sessions)
       mds->server->terminate_sessions();
+    return false;
+  }
+
+  // Fully trim the log so that all objects in cache are clean and may be
+  // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
+  // trim the log such that the cache eventually becomes clean.
+  mds->mdlog->trim(0);
+  if (mds->mdlog->get_num_segments() > 1) {
+    dout(7) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
   }
 
@@ -7784,13 +7794,6 @@ bool MDCache::shutdown_pass()
   }
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
-
-  // flush what we can from the log
-  mds->mdlog->trim(0);
-  if (mds->mdlog->get_num_segments() > 1) {
-    dout(7) << "still >1 segments, waiting for log to trim" << dendl;
-    return false;
-  }
 
   if ((myin && myin->is_auth_pinned()) ||
       (mydir && mydir->is_auth_pinned())) {
