@@ -439,7 +439,10 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
   rootdir->commit(0, gather->new_sub());
 
-  root->store(gather->new_sub());
+  root->mark_clean();
+  root->mark_dirty(root->pre_dirty(), mds->mdlog->get_current_segment());
+  root->mark_dirty_parent(mds->mdlog->get_current_segment(), true);
+  root->flush(gather->new_sub());
 }
 
 void MDCache::create_mydir_hierarchy(MDSGather *gather)
@@ -469,7 +472,7 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
     straydir->mark_complete();
     straydir->mark_dirty(straydir->pre_dirty(), ls);
     straydir->commit(0, gather->new_sub());
-    stray->_mark_dirty_parent(ls, true);
+    stray->mark_dirty_parent(ls, true);
     stray->store_backtrace(gather->new_sub());
   }
 
