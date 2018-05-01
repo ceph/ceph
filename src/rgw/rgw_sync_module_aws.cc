@@ -676,6 +676,35 @@ struct AWSSyncInstanceEnv {
   }
 };
 
+static int do_decode_rest_obj(CephContext *cct, map<string, bufferlist>& attrs, map<string, string>& headers, rgw_rest_obj *info)
+{
+  for (auto header : headers) {
+    const string& val = header.second;
+    if (header.first == "RGWX_OBJECT_SIZE") {
+      info->content_len = atoi(val.c_str());
+    } else {
+      info->attrs[header.first] = val;
+    }
+  }
+
+  info->acls.set_ctx(cct);
+  auto aiter = attrs.find(RGW_ATTR_ACL);
+  if (aiter != attrs.end()) {
+    bufferlist& bl = aiter->second;
+    bufferlist::iterator bliter = bl.begin();
+    try {
+      info->acls.decode(bliter);
+    } catch (buffer::error& err) {
+      ldout(cct, 0) << "ERROR: failed to decode policy off attrs" << dendl;
+      return -EIO;
+    }
+  } else {
+    ldout(cct, 0) << "WARNING: acl attrs not provided" << dendl;
+  }
+
+  return 0;
+}
+
 class RGWRESTStreamGetCRF : public RGWStreamReadHTTPResourceCRF
 {
   RGWDataSyncEnv *sync_env;
@@ -727,15 +756,8 @@ public:
     return RGWStreamReadHTTPResourceCRF::init();
   }
 
-  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) override {
-    for (auto header : headers) {
-      const string& val = header.second;
-      if (header.first == "RGWX_OBJECT_SIZE") {
-        rest_obj.content_len = atoi(val.c_str());
-      } else {
-        rest_obj.attrs[header.first] = val;
-      }
-    }
+  int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) override {
+    map<string, bufferlist> src_attrs;
 
     ldout(sync_env->cct, 20) << __func__ << ":" << " headers=" << headers << " extra_data.length()=" << extra_data.length() << dendl;
 
@@ -746,34 +768,20 @@ public:
         return -EIO;
       }
 
-      map<string, bufferlist> src_attrs;
-
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
-
-      info->acls.set_ctx(sync_env->cct);
-      auto aiter = src_attrs.find(RGW_ATTR_ACL);
-      if (aiter != src_attrs.end()) {
-        bufferlist& bl = aiter->second;
-        bufferlist::iterator bliter = bl.begin();
-        try {
-          info->acls.decode(bliter);
-        } catch (buffer::error& err) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to decode policy off extra data" << dendl;
-          return -EIO;
-        }
-      } else {
-        ldout(sync_env->cct, 0) << "WARNING: acl attrs not provided in extra data" << dendl;
-      }
     }
-
-    return 0;
-
+    return do_decode_rest_obj(sync_env->cct, src_attrs, headers, &rest_obj);
   }
 
   bool need_extra_data() override {
     return true;
   }
 };
+
+static std::set<string> keep_headers = { "CONTENT_TYPE",
+                                         "CONTENT_ENCODING",
+                                         "CONTENT_DISPOSITION",
+                                         "CONTENT_LANGUAGE" };
 
 class RGWAWSStreamPutCRF : public RGWStreamWriteHTTPResourceCRF
 {
@@ -813,10 +821,25 @@ public:
     return RGWStreamWriteHTTPResourceCRF::init();
   }
 
-  void send_ready(const rgw_rest_obj& rest_obj) override {
-    RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
+  static bool keep_attr(const string& h) {
+    return (keep_headers.find(h) != keep_headers.end() ||
+            boost::algorithm::starts_with(h, "X_AMZ_"));
+  }
 
-    map<string, string> new_attrs = rest_obj.attrs;
+  static void init_send_attrs(CephContext *cct,
+                              const rgw_rest_obj& rest_obj,
+                              const rgw_sync_aws_src_obj_properties& src_properties,
+                              const AWSSyncConfig_Profile *target,
+                              map<string, string> *attrs) {
+    auto& new_attrs = *attrs;
+
+    new_attrs.clear();
+
+    for (auto& hi : rest_obj.attrs) {
+      if (keep_attr(hi.first)) {
+        new_attrs.insert(hi);
+      }
+    }
 
     auto acl = rest_obj.acls.get_acl();
 
@@ -833,7 +856,7 @@ public:
 
         auto iter = am.find(orig_grantee);
         if (iter == am.end()) {
-          ldout(sync_env->cct, 20) << "acl_mappings: Could not find " << orig_grantee << " .. ignoring" << dendl;
+          ldout(cct, 20) << "acl_mappings: Could not find " << orig_grantee << " .. ignoring" << dendl;
           continue;
         }
 
@@ -903,7 +926,7 @@ public:
         s.append(viter);
       }
 
-      ldout(sync_env->cct, 20) << "acl_mappings: set acl: " << header_str << "=" << s << dendl;
+      ldout(cct, 20) << "acl_mappings: set acl: " << header_str << "=" << s << dendl;
 
       new_attrs[header_str] = s;
     }
@@ -922,6 +945,15 @@ public:
     new_attrs["x-amz-meta-rgwx-source-key"] = rest_obj.key.name;
     if (!rest_obj.key.instance.empty()) {
       new_attrs["x-amz-meta-rgwx-source-version-id"] = rest_obj.key.instance;
+    }
+  }
+
+  void send_ready(const rgw_rest_obj& rest_obj) override {
+    RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
+
+    map<string, string> new_attrs;
+    if (!multipart.is_multipart) {
+      init_send_attrs(sync_env->cct, rest_obj, src_properties, target.get(), &new_attrs);
     }
 
     r->set_send_length(rest_obj.content_len);
@@ -1113,6 +1145,7 @@ class RGWAWSInitMultipartCR : public RGWCoroutine {
   rgw_obj dest_obj;
 
   uint64_t obj_size;
+  map<string, string> attrs;
 
   bufferlist out_bl;
 
@@ -1135,11 +1168,13 @@ public:
                         RGWRESTConn *_dest_conn,
                         const rgw_obj& _dest_obj,
                         uint64_t _obj_size,
+                        const map<string, string>& _attrs,
                         string *_upload_id) : RGWCoroutine(_sync_env->cct),
                                                    sync_env(_sync_env),
                                                    dest_conn(_dest_conn),
                                                    dest_obj(_dest_obj),
                                                    obj_size(_obj_size),
+                                                   attrs(_attrs),
                                                    upload_id(_upload_id) {}
 
   int operate() {
@@ -1149,7 +1184,7 @@ public:
         rgw_http_param_pair params[] = { { "uploads", nullptr }, {nullptr, nullptr} };
         bufferlist bl;
         call(new RGWPostRawRESTResourceCR <bufferlist> (sync_env->cct, dest_conn, sync_env->http_manager,
-                                                 obj_to_aws_path(dest_obj), params, bl, &out_bl));
+                                                 obj_to_aws_path(dest_obj), params, &attrs, bl, &out_bl));
       }
 
       if (retcode < 0) {
@@ -1260,7 +1295,7 @@ public:
         bl.append(ss.str());
 
         call(new RGWPostRawRESTResourceCR <bufferlist> (sync_env->cct, dest_conn, sync_env->http_manager,
-                                                 obj_to_aws_path(dest_obj), params, bl, &out_bl));
+                                                 obj_to_aws_path(dest_obj), params, nullptr, bl, &out_bl));
       }
 
       if (retcode < 0) {
@@ -1354,8 +1389,11 @@ class RGWAWSStreamObjToCloudMultipartCR : public RGWCoroutine {
   uint64_t obj_size;
   string src_etag;
   rgw_sync_aws_src_obj_properties src_properties;
+  rgw_rest_obj rest_obj;
 
   rgw_sync_aws_multipart_upload_info status;
+
+  map<string, string> new_attrs;
 
   rgw_sync_aws_multipart_part_info *pcur_part_info{nullptr};
 
@@ -1371,7 +1409,8 @@ public:
                                 std::shared_ptr<AWSSyncConfig_Profile>& _target,
                                 const rgw_obj& _dest_obj,
                                 uint64_t _obj_size,
-                                const rgw_sync_aws_src_obj_properties& _src_properties) : RGWCoroutine(_sync_env->cct),
+                                const rgw_sync_aws_src_obj_properties& _src_properties,
+                                const rgw_rest_obj& _rest_obj) : RGWCoroutine(_sync_env->cct),
                                                    sync_env(_sync_env),
                                                    conf(_conf),
                                                    source_conn(_source_conn),
@@ -1380,6 +1419,7 @@ public:
                                                    dest_obj(_dest_obj),
                                                    obj_size(_obj_size),
                                                    src_properties(_src_properties),
+                                                   rest_obj(_rest_obj),
                                                    status_obj(sync_env->store->get_zone_params().log_pool,
                                                               RGWBucketSyncStatusManager::obj_status_oid(sync_env->source_zone, src_obj)) {
   }
@@ -1406,7 +1446,9 @@ public:
       }
 
       if (retcode == -ENOENT) {
-        yield call(new RGWAWSInitMultipartCR(sync_env, target->conn.get(), dest_obj, status.obj_size, &status.upload_id));
+        RGWAWSStreamPutCRF::init_send_attrs(sync_env->cct, rest_obj, src_properties, target.get(), &new_attrs);
+
+        yield call(new RGWAWSInitMultipartCR(sync_env, target->conn.get(), dest_obj, status.obj_size, std::move(new_attrs), &status.upload_id));
         if (retcode < 0) {
           return set_cr_error(retcode);
         }
@@ -1626,8 +1668,14 @@ public:
                                                  target,
                                                  dest_obj));
         } else {
+          rgw_rest_obj rest_obj;
+          rest_obj.init(key);
+          if (do_decode_rest_obj(sync_env->cct, attrs, headers, &rest_obj)) {
+            ldout(sync_env->cct, 0) << "ERROR: failed to decode rest obj out of headers=" << headers << ", attrs=" << attrs << dendl;
+            return set_cr_error(-EINVAL);
+          }
           call(new RGWAWSStreamObjToCloudMultipartCR(sync_env, instance.conf, source_conn, src_obj,
-                                                     target, dest_obj, size, src_properties));
+                                                     target, dest_obj, size, src_properties, rest_obj));
         }
       }
       if (retcode < 0) {

@@ -616,6 +616,7 @@ int RGWAsyncStatRemoteObj::_send_request()
                        nullptr, /* const char *if_match, */
                        nullptr, /* const char *if_nomatch, */
                        pattrs,
+                       pheaders,
                        nullptr,
                        nullptr, /* string *ptag, */
                        petag); /* string *petag, */
