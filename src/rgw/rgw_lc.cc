@@ -293,6 +293,7 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
   int ret;
   RGWBucketInfo& bucket_info = target->get_bucket_info();
   RGWRados::Bucket::List list_op(target);
+  auto delay_ms = cct->_conf->get_val<int64_t>("rgw_lc_thread_delay");
   list_op.params.list_versions = false;
   /* lifecycle processing does not depend on total order, so can
    * take advantage of unorderd listing optimizations--such as
@@ -332,7 +333,8 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
           if (going_down())
             return 0;
         }
-      }
+      } /* for objs */
+      std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
     } while(is_truncated);
   }
   return 0;
@@ -357,6 +359,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   vector<rgw_bucket_dir_entry> objs;
   RGWObjectCtx obj_ctx(store);
   vector<std::string> result;
+  auto delay_ms = cct->_conf->get_val<int64_t>("rgw_lc_thread_delay");
   boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
   string bucket_name = result[1];
@@ -478,7 +481,8 @@ int RGWLC::bucket_lc_process(string& shard_id)
             if (going_down())
               return 0;
           }
-        }
+        } /* for objs */
+	std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
       } while (is_truncated);
     }
   } else {
