@@ -3,6 +3,7 @@ import re
 
 DISTRO_CODENAME_MAP = {
     "ubuntu": {
+        "18.04": "bionic",
         "16.04": "xenial",
         "15.04": "vivid",
         "14.04": "trusty",
