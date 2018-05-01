@@ -5455,16 +5455,23 @@ vector<DaemonHealthMetric> Monitor::get_health_metrics()
   auto too_old = now;
   too_old -= g_conf->get_val<std::chrono::seconds>("mon_op_complaint_time").count();
   int slow = 0;
-
+  TrackedOpRef oldest_op;
   auto count_slow_ops = [&](TrackedOp& op) {
     if (op.get_initiated() < too_old) {
       slow++;
+      if (!oldest_op || op.get_initiated() < oldest_op->get_initiated()) {
+	oldest_op = &op;
+      }
       return true;
     } else {
       return false;
     }
   };
   if (op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops)) {
+    if (slow) {
+      derr << __func__ << " reporting " << slow << " slow ops, oldest is "
+	   << oldest_op->get_desc() << dendl;
+    }
     metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
   } else {
     metrics.emplace_back(daemon_metric::SLOW_OPS, 0, 0);
