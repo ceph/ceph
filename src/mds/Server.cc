@@ -3530,7 +3530,7 @@ public:
     // dirty inode, dn, dir
     newi->inode.version--;   // a bit hacky, see C_MDS_mknod_finish
     newi->mark_dirty(newi->inode.version+1, mdr->ls);
-    newi->_mark_dirty_parent(mdr->ls, true);
+    newi->mark_dirty_parent(mdr->ls, true);
 
     mdr->apply();
 
@@ -5155,7 +5155,7 @@ public:
     // a new version of hte inode since it's just been created)
     newi->inode.version--; 
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
-    newi->_mark_dirty_parent(mdr->ls, true);
+    newi->mark_dirty_parent(mdr->ls, true);
 
     // mkdir?
     if (newi->inode.is_dir()) { 
