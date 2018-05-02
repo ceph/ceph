@@ -61,7 +61,7 @@ Build the Project
 
 Run ``npm run build`` to build the project. The build artifacts will be
 stored in the ``dist/`` directory. Use the ``-prod`` flag for a
-production build. Navigate to ``http://localhost:8080``.
+production build. Navigate to ``https://localhost:8080``.
 
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
@@ -265,11 +265,11 @@ following code::
 Every path given in the ``ApiController`` decorator will automatically be
 prefixed with ``api``. After reloading the Dashboard module you can access the
 above mentioned controller by pointing your browser to
-http://mgr_hostname:8080/api/ping2.
+https://mgr_hostname:8080/api/ping2.
 
 It is also possible to have nested controllers. The ``RgwController`` uses
 this technique to make the daemons available through the URL
-http://mgr_hostname:8080/api/rgw/daemon::
+https://mgr_hostname:8080/api/rgw/daemon::
 
   @ApiController('rgw')
   @AuthRequired()
