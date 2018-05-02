@@ -242,6 +242,19 @@ Or, ``source`` the script and run the tests manually::
   $ run_teuthology_tests [tests]...
   $ cleanup_teuthology
 
+Type checking with mypy
+~~~~~~~~~~~~~~~~~~~~~~~
+
+`mypy <http://mypy-lang.org/>`_ is a tool to statically typecheck Python code. It supports type
+annotations and type deduction. To run mypy, install mypy in your Python 3 environment::
+
+  $ pip install mypy
+
+and then run mypy on the dashboard code::
+
+  $ cd sry/pybind/mgr
+  $ find dashboard -name '*.py' -and -not -path '*frontend*' -and -not -path '*tox*' | xargs mypy --config-file=dashboard/mypy.ini
+
 How to add a new controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
