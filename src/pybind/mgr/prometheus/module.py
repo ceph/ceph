@@ -594,6 +594,7 @@ class Module(MgrModule):
                 r, outb, outs = result.wait()
                 if r != 0:
                     global_instance().log.error("Failed to retrieve port for mgr {}: {}".format(id_, outs))
+                    targets.append('{}:{}'.format(hostname, DEFAULT_PORT))
                 else:
                     port = json.loads(outb)
                     targets.append('{}:{}'.format(hostname, port))
