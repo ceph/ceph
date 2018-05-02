@@ -237,19 +237,15 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
 int do_protect_snap(librbd::Image& image, const char *snapname)
 {
   int r = image.snap_protect(snapname);
-  if (r < 0)
-    return r;
 
-  return 0;
+  return r < 0 ? r : 0;
 }
 
 int do_unprotect_snap(librbd::Image& image, const char *snapname)
 {
   int r = image.snap_unprotect(snapname);
-  if (r < 0)
-    return r;
 
-  return 0;
+  return r < 0 ? r : 0;
 }
 
 int do_set_limit(librbd::Image& image, uint64_t limit)
