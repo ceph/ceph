@@ -1405,13 +1405,13 @@ public:
     dbiter->Seek(slice_bound);
     return dbiter->status().ok() ? 0 : -1;
   }
-  int next(bool validate=true) {
+  int next(bool validate=true) override {
     if (valid()) {
       dbiter->Next();
     }
     return dbiter->status().ok() ? 0 : -1;
   }
-  int prev(bool validate=true) {
+  int prev(bool validate=true) override {
     if (valid()) {
       dbiter->Prev();
     }
@@ -1423,7 +1423,7 @@ public:
   string key() override {
     return dbiter->key().ToString();
   }
-  std::pair<std::string, std::string> raw_key() {
+  std::pair<std::string, std::string> raw_key() override {
     return make_pair(prefix, key());
   }
   bufferlist value() override {

@@ -172,7 +172,7 @@ public:
   LCMPExpiration_S3() {}
   ~LCMPExpiration_S3() {}
 
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
   void to_xml(ostream& out) {
     out << "<AbortIncompleteMultipartUpload>" << "<DaysAfterInitiation>" << days << "</DaysAfterInitiation>" << "</AbortIncompleteMultipartUpload>";
   }

@@ -1216,7 +1216,7 @@ public:
                                                            sync_marker);
   }
 
-  RGWOrderCallCR *allocate_order_control_cr() {
+  RGWOrderCallCR *allocate_order_control_cr() override {
     return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };
@@ -2496,7 +2496,7 @@ class PurgePeriodLogsCR : public RGWCoroutine {
       realm_epoch(realm_epoch), last_trim_epoch(last_trim)
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int PurgePeriodLogsCR::operate()
@@ -2776,7 +2776,7 @@ class MetaMasterTrimCR : public RGWCoroutine {
     : RGWCoroutine(env.store->ctx()), env(env)
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int MetaMasterTrimCR::operate()
@@ -2978,7 +2978,7 @@ class MetaPeerTrimCR : public RGWCoroutine {
  public:
   MetaPeerTrimCR(PeerTrimEnv& env) : RGWCoroutine(env.store->ctx()), env(env) {}
 
-  int operate();
+  int operate() override;
 };
 
 int MetaPeerTrimCR::operate()
@@ -3044,7 +3044,7 @@ class MetaTrimPollCR : public RGWCoroutine {
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int MetaTrimPollCR::operate()

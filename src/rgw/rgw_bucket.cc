@@ -2240,7 +2240,7 @@ public:
     delete info;
   }
 
-  string get_marker(void *handle) {
+  string get_marker(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     return info->store->list_raw_objs_get_cursor(info->ctx);
   }
@@ -2442,7 +2442,7 @@ public:
     delete info;
   }
 
-  string get_marker(void *handle) {
+  string get_marker(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     return info->store->list_raw_objs_get_cursor(info->ctx);
   }

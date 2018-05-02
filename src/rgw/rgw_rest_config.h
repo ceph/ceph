@@ -44,12 +44,12 @@ public:
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("admin", RGW_CAP_READ);
   }
-  int verify_permission() {
+  int verify_permission() override {
     return check_caps(s->user->caps);
   }
-  void execute() {} /* store already has the info we need, just need to send response */
-  void send_response();
-  const string name() {
+  void execute() override {} /* store already has the info we need, just need to send response */
+  void send_response() override ;
+  const string name() override {
     return "get_zone_config";
   }
 };

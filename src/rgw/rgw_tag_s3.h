@@ -53,7 +53,7 @@ public:
 
 class RGWObjTagsXMLParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el);
+  XMLObj *alloc_obj(const char *el) override;
 public:
   RGWObjTagsXMLParser() {}
   ~RGWObjTagsXMLParser() {}
