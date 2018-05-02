@@ -68,8 +68,9 @@ various aspects of your Ceph cluster:
 * **CephFS**: Lists all active filesystem clients and associated pools,
   including their usage statistics.
 * **Object Gateway**: Lists all active object gateways and their performance
-  counters, object gateway users and their details (e.g. quotas) as well as
-  all buckets and their details (e.g. owner, quotas). 
+  counters. Display and manage (add/edit/delete) object gateway users and their
+  details (e.g. quotas) as well as the users' buckets and their details (e.g.
+  owner, quotas). 
 
 Enabling
 --------
