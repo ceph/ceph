@@ -1,0 +1,96 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left"
+      i18n>Capability
+  </h4>
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="bsModalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<form class="form-horizontal"
+      #frm="ngForm"
+      [formGroup]="formGroup"
+      novalidate>
+  <div class="modal-body">
+
+    <!-- Type -->
+    <div class="form-group"
+         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.type.dirty) && formGroup.controls.type.invalid}">
+      <label class="control-label col-sm-3"
+             for="type"
+             i18n>Type
+        <span class="required"
+              *ngIf="!editing">
+        </span>
+      </label>
+      <div class="col-sm-9">
+        <input id="type"
+               class="form-control"
+               type="text"
+               *ngIf="editing"
+               [readonly]="true"
+               formControlName="type">
+        <select id="type"
+                class="form-control"
+                formControlName="type"
+                *ngIf="!editing"
+                autofocus>
+          <option i18n
+                  *ngIf="types !== null"
+                  [ngValue]="null">-- Select a type --
+          </option>
+          <option *ngFor="let type of types"
+                  [value]="type">{{ type }}</option>
+        </select>
+        <span class="help-block"
+              *ngIf="(frm.submitted || formGroup.controls.type.dirty) && formGroup.controls.type.hasError('required')"
+              i18n>
+          This field is required.
+        </span>
+      </div>
+    </div>
+
+    <!-- Permission -->
+    <div class="form-group"
+         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.perm.dirty) && formGroup.controls.perm.invalid}">
+      <label class="control-label col-sm-3"
+             for="perm"
+             i18n>Permission
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <select id="perm"
+                class="form-control"
+                formControlName="perm">
+          <option i18n
+                  [ngValue]="null">-- Select a permission --
+          </option>
+          <option *ngFor="let perm of ['read', 'write', '*']"
+                  [value]="perm">
+            {{ perm }}
+          </option>
+        </select>
+        <span class="help-block"
+              *ngIf="(frm.submitted || formGroup.controls.perm.dirty) && formGroup.controls.perm.hasError('required')"
+              i18n>
+          This field is required.
+        </span>
+      </div>
+    </div>
+
+  </div>
+  <div class="modal-footer">
+    <cd-submit-button (submitAction)="onSubmit()"
+                      [form]="formGroup"
+                      i18n>
+      {editing, select, 1 {Update} other {Add}}
+    </cd-submit-button>
+    <button class="btn btn-sm btn-default"
+            type="button"
+            (click)="bsModalRef.hide()"
+            i18n>Close
+    </button>
+  </div>
+</form>

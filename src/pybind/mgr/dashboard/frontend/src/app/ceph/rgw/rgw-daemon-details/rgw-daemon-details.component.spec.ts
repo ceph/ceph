@@ -12,10 +12,10 @@ describe('RgwDaemonDetailsComponent', () => {
   let component: RgwDaemonDetailsComponent;
   let fixture: ComponentFixture<RgwDaemonDetailsComponent>;
 
-  const fakeService = {
+  const fakeRgwDaemonService = {
     get: (id: string) => {
-      return new Promise(function(resolve, reject) {
-        return [];
+      return new Promise(function(resolve) {
+        resolve([]);
       });
     }
   };
@@ -28,7 +28,7 @@ describe('RgwDaemonDetailsComponent', () => {
         PerformanceCounterModule,
         TabsModule.forRoot()
       ],
-      providers: [{ provide: RgwDaemonService, useValue: fakeService }]
+      providers: [{ provide: RgwDaemonService, useValue: fakeRgwDaemonService }]
     });
   }));
 

@@ -16,8 +16,10 @@ import {
   PerformanceCounterComponent
 } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
+import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
 import { RgwBucketListComponent } from './ceph/rgw/rgw-bucket-list/rgw-bucket-list.component';
 import { RgwDaemonListComponent } from './ceph/rgw/rgw-daemon-list/rgw-daemon-list.component';
+import { RgwUserFormComponent } from './ceph/rgw/rgw-user-form/rgw-user-form.component';
 import { RgwUserListComponent } from './ceph/rgw/rgw-user-list/rgw-user-list.component';
 import { LoginComponent } from './core/auth/login/login.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
@@ -40,8 +42,28 @@ const routes: Routes = [
     canActivate: [AuthGuardService]
   },
   {
+    path: 'rgw/user/add',
+    component: RgwUserFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rgw/user/edit/:uid',
+    component: RgwUserFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
     path: 'rgw/bucket',
     component: RgwBucketListComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rgw/bucket/add',
+    component: RgwBucketFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rgw/bucket/edit/:bucket',
+    component: RgwBucketFormComponent,
     canActivate: [AuthGuardService]
   },
   { path: 'block/iscsi', component: IscsiComponent, canActivate: [AuthGuardService] },
