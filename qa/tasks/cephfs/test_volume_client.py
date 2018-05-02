@@ -283,21 +283,21 @@ vc.disconnect()
             # it has lost network, because there is nothing to tell it that is messages
             # are being dropped because it's identity is gone)
             background = self.mounts[2].write_n_mb("rogue.bin", 1, wait=False)
-            time.sleep(10)  # Approximate check for 'stuck' as 'still running after 10s'
-            self.assertFalse(background.finished)
+            try:
+                background.wait()
+            except CommandFailedError:
+                # command failed with EBLACKLISTED?
+                if "transport endpoint shutdown" in background.stderr.getvalue():
+                    pass
+                else:
+                    raise
 
             # After deauthorisation, the client ID should be gone (this was the only
             # volume it was authorised for)
             self.assertNotIn("client.{0}".format(guest_entity), [e['entity'] for e in self.auth_list()])
 
             # Clean up the dead mount (ceph-fuse's behaviour here is a bit undefined)
-            self.mounts[2].kill()
-            self.mounts[2].kill_cleanup()
-            try:
-                background.wait()
-            except CommandFailedError:
-                # We killed the mount out from under you
-                pass
+            self.mounts[2].umount_wait()
 
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
