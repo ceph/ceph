@@ -2081,7 +2081,7 @@ cdef class Image(object):
         Get the size of the image. If open to a snapshot, returns the
         size of that snapshot.
 
-        :returns: the size of the image in bytes
+        :returns: int - the size of the image in bytes
         """
         cdef uint64_t image_size
         with nogil:
@@ -2462,6 +2462,8 @@ cdef class Image(object):
     def get_snap_limit(self):
         """
         Get the snapshot limit for an image.
+
+        :returns: int - the snapshot limit for an image
         """
 
         cdef:
@@ -2491,6 +2493,7 @@ cdef class Image(object):
         """
         Get the snapshot timestamp for an image.
         :param snap_id: the snapshot id of a snap shot
+        :returns: datetime - the snapshot timestamp for an image
         """
         cdef:
             timespec timestamp
