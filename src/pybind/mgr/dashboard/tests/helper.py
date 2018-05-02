@@ -119,7 +119,7 @@ class ControllerTestCase(helper.CPWebCase):
                 self.status = thread.res_task['exception']['status']
             else:
                 self.status = 500
-            self.body = json.dumps(thread.rest_task['exception'])
+            self.body = json.dumps(thread.res_task['exception'])
             return
 
     def _task_post(self, url, data=None, timeout=60):

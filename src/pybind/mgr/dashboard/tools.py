@@ -113,8 +113,8 @@ class ViewCache(object):
 
         # pylint: disable=broad-except
         def run(self):
-            t0 = 0
-            t1 = 0
+            t0 = 0.0
+            t1 = 0.0
             try:
                 t0 = time.time()
                 logger.debug("VC: starting execution of %s", self.fn)
