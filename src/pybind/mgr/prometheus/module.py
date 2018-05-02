@@ -104,6 +104,8 @@ RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
 DISK_OCCUPATION = ( 'ceph_daemon', 'device','instance')
 
+NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
+
 
 class Metrics(object):
     def __init__(self):
@@ -254,6 +256,13 @@ class Metrics(object):
                 path,
                 'DF pool {}'.format(state),
                 ('pool_id',)
+            )
+        for state in NUM_OBJECTS:
+            path = 'num_objects_{}'.format(state)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'Number of {} objects'.format(state),
             )
 
         return metrics
@@ -544,6 +553,12 @@ class Module(MgrModule):
                 ('{}.{}'.format(service_type, service_id), hostname, version)
             )
 
+    def get_num_objects(self):
+        pg_sum = self.get('pg_summary')['pg_stats_sum']['stat_sum']
+        for obj in NUM_OBJECTS:
+            stat = 'num_objects_{}'.format(obj)
+            self.metrics.set(stat, pg_sum[stat])
+
     def collect(self):
         self.get_health()
         self.get_df()
@@ -552,6 +567,7 @@ class Module(MgrModule):
         self.get_quorum_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
+        self.get_num_objects()
 
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
