@@ -24,7 +24,8 @@ void TextTable::define_column(const string &heading,
 }
 
 void TextTable::clear() {
-  currow = curcol = 0;
+  currow = 0;
+  curcol = 0;
   indent = 0;
   row.clear();
   // reset widths to heading widths
@@ -45,7 +46,8 @@ static string
 pad(string s, int width, TextTable::Align align)
 {
   int lpad, rpad;
-  lpad = rpad = 0;
+  lpad = 0;
+  rpad = 0;
   switch (align) {
     case TextTable::LEFT:
       rpad = width - s.length();
