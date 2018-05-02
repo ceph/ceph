@@ -400,7 +400,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
       if (!py_module_registry.is_standby_running()) {
-        py_module_registry.standby_start();
+        py_module_registry.standby_start(monc);
       }
     }
   }

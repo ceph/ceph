@@ -81,6 +81,32 @@ ceph_config_get(BaseMgrStandbyModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_store_get(BaseMgrStandbyModule *self, PyObject *args)
+{
+  char *what = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_store_get", &what)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  // Drop GIL for blocking mon command execution
+  PyThreadState *tstate = PyEval_SaveThread();
+
+  std::string value;
+  bool found = self->this_module->get_store(what, &value);
+
+  PyEval_RestoreThread(tstate);
+
+  if (found) {
+    dout(10) << "ceph_store_get " << what << " found: " << value.c_str() << dendl;
+    return PyString_FromString(value.c_str());
+  } else {
+    dout(4) << "ceph_store_get " << what << " not found " << dendl;
+    Py_RETURN_NONE;
+  }
+}
+
+static PyObject*
 ceph_get_active_uri(BaseMgrStandbyModule *self, PyObject *args)
 {
   return PyString_FromString(self->this_module->get_active_uri().c_str());
@@ -109,6 +135,9 @@ PyMethodDef BaseMgrStandbyModule_methods[] = {
 
   {"_ceph_get_config", (PyCFunction)ceph_config_get, METH_VARARGS,
    "Get a configuration value"},
+
+  {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
+   "Get a KV store value"},
 
   {"_ceph_get_active_uri", (PyCFunction)ceph_get_active_uri, METH_NOARGS,
    "Get the URI of the active instance of this module, if any"},

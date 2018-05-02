@@ -96,7 +96,7 @@ public:
                 const std::map<std::string, std::string> &kv_store,
                 MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
                 Client &client_, Finisher &f);
-  void standby_start();
+  void standby_start(MonClient &mc);
 
   bool is_standby_running() const
   {

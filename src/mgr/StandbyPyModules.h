@@ -35,12 +35,13 @@ class StandbyPyModuleState
 
   MgrMap mgr_map;
   PyModuleConfig &module_config;
+  MonClient &monc;
 
 public:
 
   
-  StandbyPyModuleState(PyModuleConfig &module_config_)
-    : module_config(module_config_)
+  StandbyPyModuleState(PyModuleConfig &module_config_, MonClient &monc_)
+    : module_config(module_config_), monc(monc_)
   {}
 
   void set_mgr_map(const MgrMap &mgr_map_)
@@ -49,6 +50,10 @@ public:
 
     mgr_map = mgr_map_;
   }
+
+  // MonClient does all its own locking so we're happy to hand out
+  // references.
+  MonClient &get_monc() {return monc;};
 
   template<typename Callback, typename...Args>
   void with_mgr_map(Callback&& cb, Args&&...args) const
@@ -84,6 +89,7 @@ class StandbyPyModule : public PyModuleRunner
   }
 
   bool get_config(const std::string &key, std::string *value) const;
+  bool get_store(const std::string &key, std::string *value) const;
   std::string get_active_uri() const;
 
   int load();
@@ -104,7 +110,8 @@ public:
   StandbyPyModules(
       const MgrMap &mgr_map_,
       PyModuleConfig &module_config,
-      LogChannelRef clog_);
+      LogChannelRef clog_,
+      MonClient &monc);
 
   int start_one(PyModuleRef py_module);
 
