@@ -71,7 +71,12 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
-  r = do_resize(image, size, vm["allow-shrink"].as<bool>(), vm[at::NO_PROGRESS].as<bool>());
+  if (info.size > size && !vm["allow-shrink"].as<bool>()) {
+    r = -EINVAL;
+  } else {
+    r = do_resize(image, size, vm["allow-shrink"].as<bool>(), vm[at::NO_PROGRESS].as<bool>());
+  }
+
   if (r < 0) {
     if (r == -EINVAL && !vm["allow-shrink"].as<bool>()) {
       std::cerr << "rbd: shrinking an image is only allowed with the "
