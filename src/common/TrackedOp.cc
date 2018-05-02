@@ -350,6 +350,8 @@ bool OpTracker::with_slow_ops_in_flight(utime_t* oldest_secs,
       // no more slow ops in flight
       return false;
     }
+    if (!op.warn_interval_multiplier)
+      return true;
     slow++;
     if (warned >= log_threshold) {
       // enough samples of slow ops
@@ -398,7 +400,8 @@ bool OpTracker::check_ops_in_flight(std::string* summary,
     op.warn_interval_multiplier *= 2;
   };
   int slow = 0;
-  if (with_slow_ops_in_flight(&oldest_secs, &slow, &warned, warn_on_slow_op)) {
+  if (with_slow_ops_in_flight(&oldest_secs, &slow, &warned, warn_on_slow_op) &&
+      slow > 0) {
     stringstream ss;
     ss << slow << " slow requests, "
        << warned << " included below; oldest blocked for > "
