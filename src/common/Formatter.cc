@@ -346,7 +346,7 @@ void XMLFormatter::output_header()
 {
   if(!m_header_done) {
     m_header_done = true;
-    write_raw_data(XMLFormatter::XML_1_DTD);;
+    write_raw_data(XMLFormatter::XML_1_DTD);
     if (m_pretty)
       m_ss << "\n";
   }
