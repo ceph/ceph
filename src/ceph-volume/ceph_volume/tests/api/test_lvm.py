@@ -561,3 +561,42 @@ class TestVDOParents(object):
             '/sys/block': block_path})
         result = api._vdo_parents(['dm-3'])
         assert result == []
+
+
+class TestSplitNameParser(object):
+
+    def test_keys_are_parsed_without_prefix(self):
+        line = ["DM_VG_NAME='/dev/mapper/vg';DM_LV_NAME='lv';DM_LV_LAYER=''"]
+        result = api._splitname_parser(line)
+        assert result['VG_NAME'] == 'vg'
+        assert result['LV_NAME'] == 'lv'
+        assert result['LV_LAYER'] == ''
+
+    def test_vg_name_sans_mapper(self):
+        line = ["DM_VG_NAME='/dev/mapper/vg';DM_LV_NAME='lv';DM_LV_LAYER=''"]
+        result = api._splitname_parser(line)
+        assert '/dev/mapper' not in result['VG_NAME']
+
+
+class TestIsLV(object):
+
+    def test_is_not_an_lv(self, monkeypatch):
+        monkeypatch.setattr(api, 'dmsetup_splitname', lambda x: {})
+        assert api.is_lv('/dev/sda1', lvs=[]) is False
+
+    def test_lvs_not_found(self, monkeypatch, volumes):
+        CephVolume = api.Volume(lv_name='foo', lv_path='/dev/vg/foo', lv_tags="ceph.type=data")
+        volumes.append(CephVolume)
+        splitname = {'LV_NAME': 'data', 'VG_NAME': 'ceph'}
+        monkeypatch.setattr(api, 'dmsetup_splitname', lambda x: splitname)
+        assert api.is_lv('/dev/sda1', lvs=volumes) is False
+
+    def test_is_lv(self, monkeypatch, volumes):
+        CephVolume = api.Volume(
+            vg_name='ceph', lv_name='data',
+            lv_path='/dev/vg/foo', lv_tags="ceph.type=data"
+        )
+        volumes.append(CephVolume)
+        splitname = {'LV_NAME': 'data', 'VG_NAME': 'ceph'}
+        monkeypatch.setattr(api, 'dmsetup_splitname', lambda x: splitname)
+        assert api.is_lv('/dev/sda1', lvs=volumes) is True
