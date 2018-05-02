@@ -1317,7 +1317,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (p->is_dirty())
 	in->_mark_dirty(logseg);
       if (p->is_dirty_parent())
-	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
+	in->mark_dirty_parent(logseg, p->is_dirty_pool());
       if (p->need_snapflush())
 	logseg->open_files.push_back(&in->item_open_file);
       if (dn->is_auth())
