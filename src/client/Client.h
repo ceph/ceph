@@ -885,7 +885,7 @@ private:
 	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
 	  bool readonly, hidden;
 	  bool (Client::*exists_cb)(Inode *in);
-	  int flags;
+	  unsigned int flags;
   };
 
 /* Flags for VXattr */
