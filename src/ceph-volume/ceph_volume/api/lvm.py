@@ -46,6 +46,35 @@ def _output_parser(output, fields):
     return report
 
 
+def _splitname_parser(line):
+    """
+    Parses the output from ``dmsetup splitname``, that should contain prefixes
+    (--nameprefixes) and set the separator to ";"
+
+    Output for /dev/mapper/vg-lv will usually look like::
+
+        DM_VG_NAME='/dev/mapper/vg';DM_LV_NAME='lv';DM_LV_LAYER=''
+
+
+    The ``VG_NAME`` will usually not be what other callers need (e.g. just 'vg'
+    in the example), so this utility will split ``/dev/mapper/`` out, so that
+    the actual volume group name is kept
+
+    :returns: dictionary with stripped prefixes
+    """
+    parts = line[0].split(';')
+    parsed = {}
+    for part in parts:
+        part = part.replace("'", '')
+        key, value = part.split('=')
+        if 'DM_VG_NAME' in key:
+            value = value.split('/dev/mapper/')[-1]
+        key = key.split('DM_')[-1]
+        parsed[key] = value
+
+    return parsed
+
+
 def parse_tags(lv_tags):
     """
     Return a dictionary mapping of all the tags associated with
@@ -165,6 +194,36 @@ def is_vdo(path):
     except Exception:
         logger.exception('Unable to properly detect device as VDO: %s', path)
         return '0'
+
+
+def dmsetup_splitname(dev):
+    """
+    Run ``dmsetup splitname`` and parse the results.
+
+    .. warning:: This call does not ensure that the device is correct or that
+    it exists. ``dmsetup`` will happily take a non existing path and still
+    return a 0 exit status.
+    """
+    command = [
+        'dmsetup', 'splitname', '--noheadings',
+        "--separator=';'", '--nameprefixes', dev
+    ]
+    out, err, rc = process.call(command)
+    return _splitname_parser(out)
+
+
+def is_lv(dev, lvs=None):
+    """
+    Boolean to detect if a device is an LV or not.
+    """
+    splitname = dmsetup_splitname(dev)
+    # Allowing to optionally pass `lvs` can help reduce repetitive checks for
+    # multiple devices at once.
+    lvs = lvs if lvs is not None else Volumes()
+    if splitname.get('LV_NAME'):
+        lvs.filter(lv_name=splitname['LV_NAME'], vg_name=splitname['VG_NAME'])
+        return len(lvs) > 0
+    return False
 
 
 def get_api_vgs():
