@@ -111,6 +111,7 @@ class Thrasher:
         self.stopping = False
         self.logger = logger
         self.config = config
+        self.default_thrasher = self.config.get("default_thrasher", True)
         self.revive_timeout = self.config.get("revive_timeout", 360)
         self.pools_to_fix_pgp_num = set()
         if self.config.get('powercycle'):
@@ -149,6 +150,7 @@ class Thrasher:
         # another
         first_mon = teuthology.get_first_mon(manager.ctx, self.config).split('.')
         opts = [('mon', 'mon_osd_down_out_interval', 0)]
+        #why do we disable marking an OSD out automatically? :/
         for service, opt, new_value in opts:
             old_value = manager.get_config(first_mon[0],
                                            first_mon[1],
@@ -171,7 +173,10 @@ class Thrasher:
             self.ceph_objectstore_tool = \
                 self.config.get('ceph_objectstore_tool', True)
         # spawn do_thrash
-        self.thread = gevent.spawn(self.do_thrash)
+        if self.default_thrasher:
+            self.thread = gevent.spawn(self.do_thrash)
+        else:
+            self.thread = gevent.spawn(self.do_minsize_thrash)
         if self.sighup_delay:
             self.sighup_thread = gevent.spawn(self.do_sighup)
         if self.optrack_toggle_delay:
@@ -1026,6 +1031,71 @@ class Thrasher:
         self.saved_options = []
         self.all_up_in()
 
+
+    @log_exc
+    def do_minsize_thrash(self):
+        """
+        Loop to selectively push PGs below their min_size and test that recovery
+        still occurs.
+        """
+        minout = self.config.get("min_out", 1)
+        minlive = self.config.get("min_live", 2)
+        mindead = self.config.get("min_dead", 1)
+        assert self.ceph_manager.is_clean(), \
+            'not clean before minsize thrashing starts'
+        while not self.stopping:
+            # look up k and m from all the pools on each loop, in case it
+            # changes as the cluster runs
+            k = 0
+            m = 99
+            for pool in self.ceph_manager.list_pools():
+                min_size = self.ceph_manager.get_pool_property(pool, "min_size")
+                self.log("pool {pool} min_size is {min_size}".format(pool=pool,min_size=min_size))
+                ec_profile = self.ceph_manager.get_pool_property(pool, "erasure_code_profile")
+                ec_profile_json = self.ceph_manager.raw_cluster_cmd(
+                    'osd',
+                    'erasure-code-profile',
+                    'get',
+                    ec_profile,
+                    '--format=json')
+                ec_json = json.loads(ec_profile_json)
+                local_k = ec_json['k']
+                local_m = ec_json['m']
+                self.log("pool {pool} local_k={k} local_m={m}".format(pool=pool, k=k, m=m))
+                if local_k > k:
+                    self.log("setting k={local_k} from previous {k}".format(local_k=local_k, k=k))
+                    k = local_k
+                if local_m < m:
+                    self.log("setting m={local_m} from previous {m}".format(local_m=local_m, m=m))
+                    m = local_m
+                    
+            if minout > len(self.out_osds): # kill OSDs and mark out
+                kill_osd(mark_out=True)
+                continue
+            elif mindead > len(self.dead_osds): # kill OSDs but force timeout
+                kill_osd()
+                continue
+            else: # make mostly-random choice to kill or revive OSDs
+                minup = max(minlive, k)
+                rand_val = random.uniform(0, 1)
+                if (len(self.live_osds) > minup+1 and rand_val < 0.5):
+                    # chose to knock out as many OSDs as we can w/out downing PGs
+                    most_killable = min(len(self.live_osds) - minup, m)
+                    for i in range(1, most_killable):
+                        kill_osd(mark_out=True)
+                    time.sleep(5)
+                    assert self.ceph_manager.all_active_or_peered(), \
+                            'not all PGs are active or peered 5 seconds after marking out OSDs'
+                else: # chose to revive OSDs, bring up a random fraction of the dead ones
+                    for i in range(1, int(rand_val * len(self.dead_osds))):
+                        revive_osd()
+
+            # let PGs repair themselves or our next knockout might kill one
+            self.ceph_manager.wait_for_clean(timeout=self.config.get('timeout'))
+        # / while not self.stopping
+        
+        self.all_up_in()
+            
 
 class ObjectStoreTool:
 
@@ -2140,6 +2210,17 @@ class CephManager:
                 num += 1
         return num
 
+    def get_num_peered(self):
+        """
+        Find the number of PGs that are peered
+        """
+        pgs = self.get_pg_stats()
+        num = 0
+        for pg in pgs:
+            if (pg['state'].count('peered')):
+                 num += 1
+        return num
+
     def is_clean(self):
         """
         True if all pgs are clean
@@ -2341,6 +2422,12 @@ class CephManager:
         Wrapper to check if all pgs are active
         """
         return self.get_num_active() == self.get_num_pgs()
+
+    def all_active_or_peered(self):
+        """
+        Wrapper to check if all PGs are active or peered
+        """
+        return (self.get_num_active() + self.get_num_peered()) == self.get_num_pgs()
 
     def wait_till_active(self, timeout=None):
         """
