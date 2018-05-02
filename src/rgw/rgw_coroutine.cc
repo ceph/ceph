@@ -691,7 +691,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
       ret = completion_mgr->get_next(&io);
       lock.get_write();
       if (ret < 0) {
-       ldout(cct, 0) << "ERROR: completion_mgr.get_next() returned ret=" << ret << dendl;
+       ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count);
     }
@@ -702,7 +702,7 @@ next:
       ret = completion_mgr->get_next(&io);
       lock.get_write();
       if (ret < 0) {
-	ldout(cct, 0) << "ERROR: completion_mgr.get_next() returned ret=" << ret << dendl;
+        ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       if (going_down) {
 	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
