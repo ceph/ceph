@@ -1190,7 +1190,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   RGWZoneParams(const string& id, const string& name, const string& _realm_id)
     : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
 
-  rgw_pool get_pool(CephContext *cct);
+  rgw_pool get_pool(CephContext *cct) override;
   const string get_default_oid(bool old_format = false) override;
   const string& get_names_oid_prefix() override;
   const string& get_info_oid_prefix(bool old_format = false) override;
@@ -1575,7 +1575,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
                string *predirect_zone);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
-  rgw_pool get_pool(CephContext *cct);
+  rgw_pool get_pool(CephContext *cct) override;
   const string get_default_oid(bool old_region_format = false) override;
   const string& get_info_oid_prefix(bool old_region_format = false) override;
   const string& get_names_oid_prefix() override;
@@ -1755,7 +1755,7 @@ public:
 
   int create(bool exclusive = true) override;
   int delete_obj();
-  rgw_pool get_pool(CephContext *cct);
+  rgw_pool get_pool(CephContext *cct) override;
   const string get_default_oid(bool old_format = false) override;
   const string& get_names_oid_prefix() override;
   const string& get_info_oid_prefix(bool old_format = false) override;
@@ -4176,14 +4176,14 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
   string upload_id;
 
 protected:
-  int prepare(RGWRados *store, string *oid_rand);
+  int prepare(RGWRados *store, string *oid_rand) override;
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
                   const char *if_match, const char *if_nomatch, const string *user_data,
                   rgw_zone_set *zones_trace) override;
 public:
-  bool immutable_head() { return true; }
+  bool immutable_head() override { return true; }
   RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
                    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
   void get_mp(RGWMPObj** _mp);

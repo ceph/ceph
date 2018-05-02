@@ -268,7 +268,7 @@ class RDMAStack : public NetworkStack {
   explicit RDMAStack(CephContext *cct, const string &t);
   virtual ~RDMAStack();
   virtual bool support_zero_copy_read() const override { return false; }
-  virtual bool nonblock_connect_need_writable_event() const { return false; }
+  virtual bool nonblock_connect_need_writable_event() const override { return false; }
 
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override;

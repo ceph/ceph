@@ -969,7 +969,7 @@ public:
 
   int check_bucket_shards(uint64_t max_objs_per_shard, uint64_t num_shards,
 			  const rgw_user& user, const rgw_bucket& bucket, RGWQuotaInfo& bucket_quota,
-			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards)
+			  uint64_t num_objs, bool& need_resharding, uint32_t *suggested_num_shards) override
   {
     RGWStorageStats bucket_stats;
     int ret = bucket_stats_cache.get_stats(user, bucket, bucket_stats,

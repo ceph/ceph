@@ -459,8 +459,8 @@ class RGWRadosRemoveCR : public RGWSimpleCoroutine {
 public:
   RGWRadosRemoveCR(RGWRados *store, const rgw_raw_obj& obj);
 
-  int send_request();
-  int request_complete();
+  int send_request() override;
+  int request_complete() override;
 };
 
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
