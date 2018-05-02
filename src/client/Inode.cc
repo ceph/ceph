@@ -46,6 +46,7 @@ ostream& operator<<(ostream &out, const Inode &in)
       << " open=" << in.open_by_mode
       << " mode=" << oct << in.mode << dec
       << " size=" << in.size << "/" << in.max_size
+      << " nlink=" << in.nlink
       << " btime=" << in.btime
       << " mtime=" << in.mtime
       << " ctime=" << in.ctime
