@@ -84,7 +84,7 @@ build_dashboard_frontend() {
   cd src/pybind/mgr/dashboard/frontend
   . $TEMP_DIR/bin/activate
   npm install
-  npm run build -- --prod
+  npx ng build --prod
   deactivate
   cd $CURR_DIR
   rm -rf $TEMP_DIR
