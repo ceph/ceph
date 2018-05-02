@@ -415,8 +415,25 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 	// crc mismatch and request a full map from a mon.
 	derr << __func__ << " full map CRC mismatch, resetting to canonical"
 	     << dendl;
+
+	dout(20) << __func__ << " my (bad) full osdmap:\n";
+	JSONFormatter jf(true);
+	jf.dump_object("osdmap", osdmap);
+	jf.flush(*_dout);
+	*_dout << "\nhexdump:\n";
+	full_bl.hexdump(*_dout);
+	*_dout << dendl;
+
 	osdmap = OSDMap();
 	osdmap.decode(orig_full_bl);
+
+	dout(20) << __func__ << " canonical full osdmap:\n";
+	JSONFormatter jf(true);
+	jf.dump_object("osdmap", osdmap);
+	jf.flush(*_dout);
+	*_dout << "\nhexdump:\n";
+	orig_full_bl.hexdump(*_dout);
+	*_dout << dendl;
       }
     } else {
       assert(!inc.have_crc);
@@ -3261,6 +3278,7 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 	   !pending_inc.new_pools[p->first].removed_snaps.contains(*q))) {
 	pg_pool_t *newpi = pending_inc.get_new_pool(p->first, &pi);
 	newpi->removed_snaps.insert(*q);
+	newpi->flags |= pg_pool_t::FLAG_SELFMANAGED_SNAPS;
 	dout(10) << " pool " << p->first << " removed_snaps added " << *q
 		 << " (now " << newpi->removed_snaps << ")" << dendl;
 	if (*q > newpi->get_snap_seq()) {
