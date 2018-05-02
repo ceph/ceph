@@ -1004,6 +1004,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       mdcache->rejoin_recovered_caps(p->first, from, p->second, MDS_RANK_NONE);
     }
   }
+  mdcache->rejoin_recovered_client(session->get_client(), session->info.inst);
 
   // remove from gather set
   client_reconnect_gather.erase(from);
