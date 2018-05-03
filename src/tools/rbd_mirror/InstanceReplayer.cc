@@ -309,6 +309,8 @@ void InstanceReplayer<I>::start_image_replayer(
     m_image_replayers.erase(image_replayer->get_global_image_id());
     image_replayer->destroy();
     return;
+  } else if (m_manual_stop) {
+    return;
   }
 
   image_replayer->start(nullptr, false);
