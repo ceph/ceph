@@ -236,8 +236,11 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_ALLOW_SNAPS                  (1<<1)  /* cluster allowed to create snapshots */
 /* deprecated #define CEPH_MDSMAP_ALLOW_MULTIMDS (1<<2) cluster allowed to have >1 active MDS */
 /* deprecated #define CEPH_MDSMAP_ALLOW_DIRFRAGS (1<<3) cluster allowed to fragment directories */
+#define CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS	 (1<<4)  /* cluster alllowed to enable MULTIMDS
+							    and SNAPS at the same time */
 
-#define CEPH_MDSMAP_DEFAULTS (0)
+#define CEPH_MDSMAP_DEFAULTS (CEPH_MDSMAP_ALLOW_SNAPS | \
+			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS)
 
 /*
  * mds states
@@ -364,7 +367,8 @@ enum {
 	CEPH_MDS_OP_FLUSH      = 0x01502,
 	CEPH_MDS_OP_ENQUEUE_SCRUB  = 0x01503,
 	CEPH_MDS_OP_REPAIR_FRAGSTATS = 0x01504,
-	CEPH_MDS_OP_REPAIR_INODESTATS = 0x01505
+	CEPH_MDS_OP_REPAIR_INODESTATS = 0x01505,
+	CEPH_MDS_OP_UPGRADE_SNAPREALM = 0x01506
 };
 
 extern const char *ceph_mds_op_name(int op);

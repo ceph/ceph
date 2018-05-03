@@ -240,6 +240,53 @@ void MDSRank::hit_export_target(utime_t now, mds_rank_t rank, double amount)
   em.first->second.hit(now, amount);
 }
 
+class C_MDS_MonCommand : public MDSInternalContext {
+  std::string cmd;
+public:
+  std::string outs;
+  C_MDS_MonCommand(MDSRank *m, std::string_view c)
+    : MDSInternalContext(m), cmd(c) {}
+  void finish(int r) override {
+    mds->_mon_command_finish(r, cmd, outs);
+  }
+};
+
+void MDSRank::_mon_command_finish(int r, std::string_view cmd, std::string_view outs)
+{
+  if (r < 0) {
+    dout(0) << __func__ << ": mon command " << cmd << " failed with errno " << r
+	    << " (" << outs << ")" << dendl;
+  } else {
+    dout(1) << __func__ << ": mon command " << cmd << " succeed" << dendl;
+  }
+}
+
+void MDSRank::set_mdsmap_multimds_snaps_allowed()
+{
+  static bool already_sent = false;
+  if (already_sent)
+    return;
+
+  stringstream ss;
+  ss << "{\"prefix\":\"fs set\", \"fs_name\":\"" <<  mdsmap->get_fs_name() << "\", ";
+  ss << "\"var\":\"allow_multimds_snaps\", \"val\":\"true\", ";
+  ss << "\"confirm\":\"--yes-i-am-really-a-mds\"}";
+  std::vector<std::string> cmd = {ss.str()};
+
+  dout(0) << __func__ << ": sending mon command: " << cmd[0] << dendl;
+
+  C_MDS_MonCommand *fin = new C_MDS_MonCommand(this, cmd[0]);
+  monc->start_mon_command(cmd, {}, nullptr, &fin->outs, new C_IO_Wrapper(this, fin));
+
+  already_sent = true;
+}
+
+void MDSRank::mark_base_recursively_scrubbed(inodeno_t ino)
+{
+  if (mdsmap->get_tableserver() == whoami)
+    snapserver->mark_base_recursively_scrubbed(ino);
+}
+
 void MDSRankDispatcher::tick()
 {
   heartbeat_reset();
@@ -285,8 +332,16 @@ void MDSRankDispatcher::tick()
     balancer->tick();
     mdcache->find_stale_fragment_freeze();
     mdcache->migrator->find_stale_export_freeze();
-    if (snapserver)
+
+    if (mdsmap->get_tableserver() == whoami) {
       snapserver->check_osd_map(false);
+      // Filesystem was created by pre-mimic mds. Allow multi-active mds after
+      // all old snapshots are deleted.
+      if (!mdsmap->allows_multimds_snaps() &&
+	  snapserver->can_allow_multimds_snaps()) {
+	set_mdsmap_multimds_snaps_allowed();
+      }
+    }
   }
 
   if (is_active() || is_stopping()) {
@@ -1312,11 +1367,10 @@ void MDSRank::replay_done()
   mdlog->get_journaler()->set_writeable();
   mdlog->get_journaler()->trim_tail();
 
-  if (snapserver->get_version() == 0) {
-    // upgraded from old filesystem. version 0 snaptable confuses current code.
-    dout(1) << "upgrading snaptable version from 0 to 1" << dendl;
-    snapserver->reset();
-    sessionmap.save(new C_MDSInternalNoop);
+  if (mdsmap->get_tableserver() == whoami &&
+      snapserver->upgrade_format()) {
+    dout(1) << "upgrading snaptable format" << dendl;
+    snapserver->save(new C_MDSInternalNoop);
   }
 
   if (g_conf->mds_wipe_sessions) {
@@ -1520,7 +1574,6 @@ void MDSRank::boot_create()
 
   mdcache->init_layouts();
 
-  snapserver->set_rank(whoami);
   inotable->set_rank(whoami);
   sessionmap.set_rank(whoami);
 
@@ -1556,6 +1609,7 @@ void MDSRank::boot_create()
   // initialize tables
   if (mdsmap->get_tableserver() == whoami) {
     dout(10) << "boot_create creating fresh snaptable" << dendl;
+    snapserver->set_rank(whoami);
     snapserver->reset();
     snapserver->save(fin.new_sub());
   }
@@ -2750,7 +2804,8 @@ void MDSRank::check_ops_in_flight()
 
 void MDSRankDispatcher::handle_osd_map()
 {
-  if (is_active() && snapserver) {
+  if (is_active() &&
+      mdsmap->get_tableserver() == whoami) {
     snapserver->check_osd_map(true);
   }
 

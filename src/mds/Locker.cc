@@ -1815,25 +1815,28 @@ version_t Locker::issue_file_data_version(CInode *in)
 class C_Locker_FileUpdate_finish : public LockerLogContext {
   CInode *in;
   MutationRef mut;
-  bool share_max;
-  bool need_issue;
+  unsigned flags;
   client_t client;
   MClientCaps *ack;
 public:
-  C_Locker_FileUpdate_finish(Locker *l, CInode *i, MutationRef& m,
-				bool sm=false, bool ni=false, client_t c=-1,
-				MClientCaps *ac = 0)
-    : LockerLogContext(l), in(i), mut(m), share_max(sm), need_issue(ni),
-      client(c), ack(ac) {
+  C_Locker_FileUpdate_finish(Locker *l, CInode *i, MutationRef& m, unsigned f,
+			     client_t c=-1, MClientCaps *a=nullptr)
+    : LockerLogContext(l), in(i), mut(m), flags(f), client(c), ack(a) {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
-    locker->file_update_finish(in, mut, share_max, need_issue, client, ack);
+    locker->file_update_finish(in, mut, flags, client, ack);
     in->put(CInode::PIN_PTRWAITER);
   }
 };
 
-void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share_max, bool issue_client_cap,
+enum {
+  UPDATE_SHAREMAX = 1,
+  UPDATE_NEEDSISSUE = 2,
+  UPDATE_SNAPFLUSH = 4,
+};
+
+void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 				client_t client, MClientCaps *ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
@@ -1857,7 +1860,18 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share_max, bo
   set<CInode*> need_issue;
   drop_locks(mut.get(), &need_issue);
 
-  if (!in->is_head() && !in->client_snap_caps.empty()) {
+  if (in->is_head()) {
+    if ((flags & UPDATE_NEEDSISSUE) && need_issue.count(in) == 0) {
+      Capability *cap = in->get_client_cap(client);
+      if (cap && (cap->wanted() & ~cap->pending()))
+	issue_caps(in, cap);
+    }
+
+    if ((flags & UPDATE_SHAREMAX) && in->is_auth() &&
+	(in->filelock.gcaps_allowed(CAP_LONER) & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)))
+      share_inode_max_size(in);
+
+  } else if ((flags & UPDATE_SNAPFLUSH) && !in->client_snap_caps.empty()) {
     dout(10) << " client_snap_caps " << in->client_snap_caps << dendl;
     // check for snap writeback completion
     bool gather = false;
@@ -1886,16 +1900,6 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share_max, bo
       }
       eval_cap_gather(in, &need_issue);
     }
-  } else {
-    if (issue_client_cap && need_issue.count(in) == 0) {
-      Capability *cap = in->get_client_cap(client);
-      if (cap && (cap->wanted() & ~cap->pending()))
-	issue_caps(in, cap);
-    }
-  
-    if (share_max && in->is_auth() &&
-	(in->filelock.gcaps_allowed(CAP_LONER) & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)))
-      share_inode_max_size(in);
   }
   issue_caps_set(need_issue);
 
@@ -2456,8 +2460,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     metablob->add_dir_context(in->get_projected_parent_dn()->get_dir());
     mdcache->journal_dirty_inode(mut.get(), metablob, in);
   }
-  mds->mdlog->submit_entry(le,
-          new C_Locker_FileUpdate_finish(this, in, mut, true));
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut,
+							      UPDATE_SHAREMAX));
   wrlock_force(&in->filelock, mut);  // wrlock for duration of journal
   mut->auth_pin(in);
 
@@ -3176,7 +3180,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
     le->metablob.add_client_flush(metareqid_t(m->get_source(), ack->get_client_tid()),
 				  ack->get_oldest_flush_tid());
 
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, false, false,
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, UPDATE_SNAPFLUSH,
 							      client, ack));
 }
 
@@ -3439,8 +3443,12 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     le->metablob.add_client_flush(metareqid_t(m->get_source(), ack->get_client_tid()),
 				  ack->get_oldest_flush_tid());
 
-  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut,
-							      change_max, !!cap,
+  unsigned update_flags = 0;
+  if (change_max)
+    update_flags |= UPDATE_SHAREMAX;
+  if (cap)
+    update_flags |= UPDATE_NEEDSISSUE;
+  mds->mdlog->submit_entry(le, new C_Locker_FileUpdate_finish(this, in, mut, update_flags,
 							      client, ack));
   if (need_flush && !*need_flush &&
       ((change_max && new_max) || // max INCREASE

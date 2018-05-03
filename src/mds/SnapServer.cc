@@ -60,6 +60,7 @@ void SnapServer::reset_state()
   }
   last_created = last_snap;
   last_destroyed = last_snap;
+  snaprealm_v2_since = last_snap + 1;
   version++;
 }
 
@@ -120,8 +121,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       decode(info.name, p);
       decode(info.stamp, p);
 
-      // bump last_snap... we use it as a version value on the snaprealm.
-      ++last_snap;
       pending_update[version] = info;
       dout(10) << "prepare v" << version << " update " << info << dendl;
 

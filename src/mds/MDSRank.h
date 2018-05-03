@@ -217,6 +217,7 @@ class MDSRank {
     bool is_any_replay() const { return (is_replay() || is_standby_replay()); }
     bool is_stopped() const { return mdsmap->is_stopped(whoami); }
     bool is_cluster_degraded() const { return cluster_degraded; }
+    bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
 
     void handle_write_error(int err);
 
@@ -426,6 +427,8 @@ class MDSRank {
     bool evict_client(int64_t session_id, bool wait, bool blacklist,
                       std::stringstream& ss, Context *on_killed=nullptr);
 
+    void mark_base_recursively_scrubbed(inodeno_t ino);
+
   protected:
     void dump_clientreplay_status(Formatter *f) const;
     void command_scrub_path(Formatter *f, std::string_view path, vector<string>& scrubop_vec);
@@ -523,6 +526,9 @@ class MDSRank {
     /* Update MDSMap export_targets for this rank. Called on ::tick(). */
     void update_targets(utime_t now);
 
+    friend class C_MDS_MonCommand;
+    void _mon_command_finish(int r, std::string_view cmd, std::string_view outs);
+    void set_mdsmap_multimds_snaps_allowed();
 private:
     mono_time starttime = mono_clock::zero();
 };

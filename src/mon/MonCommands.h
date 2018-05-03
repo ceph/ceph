@@ -315,8 +315,8 @@ COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", "cli,rest", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds set " \
-	"name=var,type=CephChoices,strings=max_mds|max_file_size"
-	"|allow_new_snaps|inline_data|allow_multimds|allow_dirfrags " \
+	"name=var,type=CephChoices,strings=max_mds|max_file_size|inline_data|"
+	"allow_new_snaps|allow_multimds|allow_multimds_snaps|allow_dirfrags " \
 	"name=val,type=CephString "					\
 	"name=confirm,type=CephString,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", "cli,rest", FLAG(OBSOLETE))

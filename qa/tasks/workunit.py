@@ -160,6 +160,7 @@ def task(ctx, config):
         refspec = Head()
 
     timeout = config.get('timeout', '3h')
+    cleanup = config.get('cleanup', True)
 
     log.info('Pulling workunits from ref %s', refspec)
 
@@ -181,24 +182,28 @@ def task(ctx, config):
         created_mountpoint[role] = created_mnt_dir
 
     # Execute any non-all workunits
+    log.info("timeout={}".format(timeout))
+    log.info("cleanup={}".format(cleanup))
     with parallel() as p:
         for role, tests in clients.iteritems():
             if role != "all":
                 p.spawn(_run_tests, ctx, refspec, role, tests,
                         config.get('env'),
                         basedir=config.get('basedir','qa/workunits'),
-                        timeout=timeout)
+                        timeout=timeout,cleanup=cleanup)
 
-    # Clean up dirs from any non-all workunits
-    for role, created in created_mountpoint.items():
-        _delete_dir(ctx, role, created)
+    if cleanup:
+        # Clean up dirs from any non-all workunits
+        for role, created in created_mountpoint.items():
+            _delete_dir(ctx, role, created)
 
     # Execute any 'all' workunits
     if 'all' in clients:
         all_tasks = clients["all"]
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
                               config.get('basedir', 'qa/workunits'),
-                              config.get('subdir'), timeout=timeout)
+                              config.get('subdir'), timeout=timeout,
+                              cleanup=cleanup)
 
 
 def _client_mountpoint(ctx, cluster, id_):
@@ -326,7 +331,7 @@ def _make_scratch_dir(ctx, role, subdir):
     return created_mountpoint
 
 
-def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=None):
+def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=None, cleanup=True):
     """
     Make a scratch directory for each client in the cluster, and then for each
     test spawn _run_tests() for each role.
@@ -351,12 +356,13 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
                         timeout=timeout)
 
     # cleanup the generated client directories
-    for role, _ in client_remotes.items():
-        _delete_dir(ctx, role, created_mountpoint[role])
+    if cleanup:
+        for role, _ in client_remotes.items():
+            _delete_dir(ctx, role, created_mountpoint[role])
 
 
 def _run_tests(ctx, refspec, role, tests, env, basedir,
-               subdir=None, timeout=None):
+               subdir=None, timeout=None, cleanup=True):
     """
     Run the individual test. Create a scratch directory and then extract the
     workunits from git. Make the executables, and then run the tests.
@@ -472,10 +478,11 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     args=args,
                     label="workunit test {workunit}".format(workunit=workunit)
                 )
-                remote.run(
-                    logger=log.getChild(role),
-                    args=['sudo', 'rm', '-rf', '--', scratch_tmp],
-                )
+                if cleanup:
+                    remote.run(
+                        logger=log.getChild(role),
+                        args=['sudo', 'rm', '-rf', '--', scratch_tmp],
+                    )
     finally:
         log.info('Stopping %s on %s...', tests, role)
         remote.run(

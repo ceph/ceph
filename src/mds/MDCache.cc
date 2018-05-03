@@ -9356,6 +9356,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_REPAIR_INODESTATS:
       repair_inode_stats_work(mdr);
       break;
+    case CEPH_MDS_OP_UPGRADE_SNAPREALM:
+      upgrade_inode_snaprealm_work(mdr);
+      break;
     default:
       ceph_abort();
     }
@@ -12299,8 +12302,13 @@ void MDCache::enqueue_scrub(
 {
   dout(10) << __func__ << " " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
-  filepath fp(path);
-  mdr->set_filepath(fp);
+  if (path == "~mdsdir") {
+    filepath fp(MDS_INO_MDSDIR(mds->get_nodeid()));
+    mdr->set_filepath(fp);
+  } else {
+    filepath fp(path);
+    mdr->set_filepath(path);
+  }
 
   C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
   cs->header = std::make_shared<ScrubHeader>(
@@ -12325,7 +12333,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
     return;
 
   C_MDS_EnqueueScrub *cs = static_cast<C_MDS_EnqueueScrub*>(mdr->internal_op_finish);
-  ScrubHeaderRef &header = cs->header;
+  ScrubHeaderRef header = cs->header;
 
   // Cannot scrub same dentry twice at same time
   if (in->scrub_infop && in->scrub_infop->scrub_in_progress) {
@@ -12337,8 +12345,16 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   header->set_origin(in);
 
-  Context *fin = nullptr;
-  if (!header->get_recursive()) {
+  Context *fin;
+  if (header->get_recursive()) {
+    header->get_origin()->get(CInode::PIN_SCRUBQUEUE);
+    fin = new MDSInternalContextWrapper(mds,
+	    new FunctionContext([this, header](int r) {
+	      recursive_scrub_finish(header);
+	      header->get_origin()->put(CInode::PIN_SCRUBQUEUE);
+	    })
+	  );
+  } else {
     fin = cs->take_finisher();
   }
 
@@ -12385,9 +12401,25 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   return;
 }
 
-struct C_MDC_RepairDirfragStats : public MDCacheLogContext {
+void MDCache::recursive_scrub_finish(const ScrubHeaderRef& header)
+{
+  if (header->get_origin()->is_base() &&
+      header->get_force() && header->get_repair()) {
+    // notify snapserver that base directory is recursively scrubbed.
+    // After both root and mdsdir are recursively scrubbed, snapserver
+    // knows that all old format snaprealms are converted to the new
+    // format.
+    if (mds->mdsmap->get_num_in_mds() == 1 &&
+	mds->mdsmap->get_num_failed_mds() == 0 &&
+	mds->mdsmap->get_tableserver() == mds->get_nodeid()) {
+      mds->mark_base_recursively_scrubbed(header->get_origin()->ino());
+    }
+  }
+}
+
+struct C_MDC_RespondInternalRequest : public MDCacheLogContext {
   MDRequestRef mdr;
-  C_MDC_RepairDirfragStats(MDCache *c, MDRequestRef& m) :
+  C_MDC_RespondInternalRequest(MDCache *c, MDRequestRef& m) :
     MDCacheLogContext(c), mdr(m) {}
   void finish(int r) override {
     mdr->apply();
@@ -12497,7 +12529,7 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
   le->metablob.add_dir_context(dir);
   le->metablob.add_dir(dir, true);
 
-  mds->mdlog->submit_entry(le, new C_MDC_RepairDirfragStats(this, mdr));
+  mds->mdlog->submit_entry(le, new C_MDC_RespondInternalRequest(this, mdr));
 }
 
 void MDCache::repair_inode_stats(CInode *diri)
@@ -12591,6 +12623,53 @@ do_rdlocks:
   }
 
   mds->server->respond_to_request(mdr, 0);
+}
+
+void MDCache::upgrade_inode_snaprealm(CInode *in)
+{
+  MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_UPGRADE_SNAPREALM);
+  mdr->pin(in);
+  mdr->internal_op_private = in;
+  mdr->internal_op_finish = new C_MDSInternalNoop;
+  upgrade_inode_snaprealm_work(mdr);
+}
+
+void MDCache::upgrade_inode_snaprealm_work(MDRequestRef& mdr)
+{
+  CInode *in = static_cast<CInode*>(mdr->internal_op_private);
+  dout(10) << __func__ << " " << *in << dendl;
+
+  if (!in->is_auth()) {
+    mds->server->respond_to_request(mdr, -ESTALE);
+    return;
+  }
+
+  set<SimpleLock*> rdlocks, wrlocks, xlocks;
+  mds->locker->include_snap_rdlocks(rdlocks, in);
+  rdlocks.erase(&in->snaplock);
+  xlocks.insert(&in->snaplock);
+
+  if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+    return;
+
+  // project_snaprealm() upgrades snaprealm format
+  auto &pi = in->project_inode(false, true);
+  mdr->add_projected_inode(in);
+  pi.inode.version = in->pre_dirty();
+
+  mdr->ls = mds->mdlog->get_current_segment();
+  EUpdate *le = new EUpdate(mds->mdlog, "upgrade_snaprealm");
+  mds->mdlog->start_entry(le);
+
+  if (in->is_base()) {
+    le->metablob.add_root(true, in, in->get_projected_inode());
+  } else {
+    CDentry *pdn = in->get_projected_parent_dn();
+    le->metablob.add_dir_context(pdn->get_dir());
+    le->metablob.add_primary_dentry(pdn, in, true);
+  }
+
+  mds->mdlog->submit_entry(le, new C_MDC_RespondInternalRequest(this, mdr));
 }
 
 void MDCache::flush_dentry(std::string_view path, Context *fin)
