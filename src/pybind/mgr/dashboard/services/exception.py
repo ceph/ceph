@@ -59,9 +59,12 @@ if sys.version_info < (3, 0):
         return helper
 
 
-def serialize_dashboard_exception(e):
+def serialize_dashboard_exception(e, include_http_status=False, task=None):
+    """
+    :type e: Exception
+    :param include_http_status: Used for Tasks, where the HTTP status code is not available.
+    """
     from ..tools import ViewCache
-    cherrypy.response.status = getattr(e, 'status', 400)
     if isinstance(e, ViewCacheNoDataException):
         return {'status': ViewCache.VALUE_NONE, 'value': None}
 
@@ -72,6 +75,10 @@ def serialize_dashboard_exception(e):
         pass
     component = getattr(e, 'component', None)
     out['component'] = component if component else None
+    if include_http_status:
+        out['status'] = getattr(e, 'status', 500)
+    if task:
+        out['task'] = dict(name=task.name, metadata=task.metadata)
     return out
 
 
@@ -83,6 +90,7 @@ def dashboard_exception_handler(handler, *args, **kwargs):
     except (ViewCacheNoDataException, DashboardException) as e:
         logger.exception('dashboard_exception_handler')
         cherrypy.response.headers['Content-Type'] = 'application/json'
+        cherrypy.response.status = getattr(e, 'status', 400)
         return json.dumps(serialize_dashboard_exception(e)).encode('utf-8')
 
 
