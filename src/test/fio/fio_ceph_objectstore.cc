@@ -281,6 +281,11 @@ struct Engine {
         ostr << "FIO get_db_statistics ";
         f->flush(ostr);
       }
+      ostr << "Mempools: ";
+      f->open_object_section("mempools");
+      mempool::dump(f);
+      f->close_section();
+      f->flush(ostr);
       
       ostr << "Generate db histogram: ";
       os->generate_db_histogram(f);
