@@ -602,7 +602,7 @@ class Task(object):
         if exception and self.ex_handler:
             # pylint: disable=broad-except
             try:
-                ret_value = self.ex_handler(exception)
+                ret_value = self.ex_handler(exception, task=self)
             except Exception as ex:
                 exception = ex
         with self.lock:

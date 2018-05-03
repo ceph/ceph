@@ -73,7 +73,7 @@ class FooResource(RESTController):
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
-    @Task('task_exceptions/task_exception', {}, 1.0,
+    @Task('task_exceptions/task_exception', {1: 2}, 1.0,
           exception_handler=serialize_dashboard_exception)
     @handle_rados_error('foo')
     def task_exception(self):
@@ -152,7 +152,8 @@ class RESTControllerTest(ControllerTestCase):
         self._get('/foo/task_exception')
         self.assertStatus(400)
         self.assertJsonBody(
-            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo'}
+            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo',
+             'task': {'name': 'task_exceptions/task_exception', 'metadata': {'1': 2}}}
         )
 
         self._get('/foo/wait_task_exception')
