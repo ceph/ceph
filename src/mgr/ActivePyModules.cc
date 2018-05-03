@@ -260,6 +260,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
             f.dump_int(i.first.c_str(), i.second);
           }
           f.close_section();
+          f.open_object_section("pg_stats_sum");
+          pg_map.pg_sum.dump(&f);
+          f.close_section();
         }
     );
     return f.get();
