@@ -376,7 +376,7 @@ def cephfs_setup(ctx, config):
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
 
-        fs.set_max_mds(num_active)
+        fs.set_max_mds(config.get('max_mds', num_active))
 
     yield
 

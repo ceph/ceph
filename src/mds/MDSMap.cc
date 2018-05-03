@@ -421,6 +421,13 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 	<< " laggy";
     summary.push_back(make_pair(HEALTH_WARN, oss.str()));
   }
+
+  if (get_max_mds() > 1 &&
+      was_snaps_ever_allowed() && !allows_multimds_snaps()) {
+    std::ostringstream oss;
+    oss << "multi-active mds while there are snapshots possibly created by pre-mimic MDS";
+    summary.push_back(make_pair(HEALTH_WARN, oss.str()));
+  }
 }
 
 void MDSMap::get_health_checks(health_check_map_t *checks) const
@@ -468,13 +475,13 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   }
 
   // MDS_UP_LESS_THAN_MAX
-  if ((mds_rank_t)get_num_in_mds() < max_mds) {
+  if ((mds_rank_t)get_num_in_mds() < get_max_mds()) {
     health_check_t& check = checks->add(
       "MDS_UP_LESS_THAN_MAX", HEALTH_WARN,
       "%num% filesystem%plurals% %isorare% online with fewer MDS than max_mds");
     stringstream ss;
     ss << "fs " << fs_name << " has " << get_num_in_mds()
-       << " MDS online, but wants " << max_mds;
+       << " MDS online, but wants " << get_max_mds();
     check.detail.push_back(ss.str());
   }
 
@@ -485,6 +492,16 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
       "%num% filesystem%plurals% %isorare% offline");
     stringstream ss;
     ss << "fs " << fs_name << " is offline because no MDS is active for it.";
+    check.detail.push_back(ss.str());
+  }
+
+  if (get_max_mds() > 1 &&
+      was_snaps_ever_allowed() && !allows_multimds_snaps()) {
+    health_check_t &check = checks->add(
+      "MULTIMDS_WITH_OLDSNAPS", HEALTH_ERR,
+      "%num% filesystem%plurals% %isorare% multi-active mds with old snapshots");
+    stringstream ss;
+    ss << "multi-active mds while there are snapshots possibly created by pre-mimic MDS";
     check.detail.push_back(ss.str());
   }
 }
