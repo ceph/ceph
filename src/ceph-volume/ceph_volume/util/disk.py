@@ -1,6 +1,13 @@
+import errno
+import logging
 import os
+import re
 import stat
+import sys
 from ceph_volume import process
+
+
+logger = logging.getLogger(__name__)
 
 
 # The blkid CLI tool has some oddities which prevents having one common call
@@ -221,3 +228,89 @@ def is_partition(dev):
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
     return False
+
+
+def _map_dev_paths(_path, include_abspath=False, include_realpath=False):
+    """
+    Go through all the items in ``_path`` and map them to their absolute path::
+
+        {'sda': '/dev/sda'}
+
+    If ``include_abspath`` is set, then a reverse mapping is set as well::
+
+        {'sda': '/dev/sda', '/dev/sda': 'sda'}
+
+    If ``include_realpath`` is set then the same operation is done for any
+    links found when listing, these are *not* reversed to avoid clashing on
+    existing keys, but both abspath and basename can be included. For example::
+
+        {
+            'ceph-data': '/dev/mapper/ceph-data',
+            '/dev/mapper/ceph-data': 'ceph-data',
+            '/dev/dm-0': '/dev/mapper/ceph-data',
+            'dm-0': '/dev/mapper/ceph-data'
+        }
+
+
+    In case of possible exceptions the mapping is returned empty, and the
+    exception is logged.
+    """
+    mapping = {}
+    try:
+        dev_names = os.listdir(_path)
+    except (OSError, IOError):
+        logger.exception('unable to list block devices from: %s' % _path)
+        return {}
+
+    for dev_name in dev_names:
+        mapping[dev_name] = os.path.join(_path, dev_name)
+
+    if include_abspath:
+        for k, v in mapping.items():
+            mapping[v] = k
+
+    if include_realpath:
+        for abspath in mapping.values():
+            if not os.path.islink(abspath):
+                continue
+
+            realpath = os.path.realpath(abspath)
+            basename = os.path.basename(realpath)
+            mapping[basename] = abspath
+            if include_abspath:
+                mapping[realpath] = abspath
+
+    return mapping
+
+
+def get_block_devs(sys_block_path="/sys/block", skip_loop=True):
+    """
+    Go through all the items in /sys/block and return them as a list.
+
+    The ``sys_block_path`` argument is set for easier testing and is not
+    required for proper operation.
+    """
+    devices = _map_dev_paths(sys_block_path).keys()
+    if skip_loop:
+        return [d for d in devices if not d.startswith('loop')]
+    return devices
+
+
+def get_dev_devs(dev_path="/dev"):
+    """
+    Go through all the items in /dev and return them as a list.
+
+    The ``dev_path`` argument is set for easier testing and is not
+    required for proper operation.
+    """
+    return _map_dev_paths(dev_path, include_abspath=True)
+
+
+def get_mapper_devs(mapper_path="/dev/mapper"):
+    """
+    Go through all the items in /dev and return them as a list.
+
+    The ``dev_path`` argument is set for easier testing and is not
+    required for proper operation.
+    """
+    return _map_dev_paths(mapper_path, include_abspath=True, include_realpath=True)
