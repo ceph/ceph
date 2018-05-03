@@ -9485,14 +9485,15 @@ void OSDShard::consume_map(
         *pushes_to_free += qi.get_reserved_pushes();
 	slot->waiting.pop_front();
       }
-      if (slot->waiting.empty() &&
-	  slot->num_running == 0 &&
-	  !slot->pg) {
-	dout(20) << __func__ << "  " << pgid << " empty, pruning" << dendl;
-	p = pg_slots.erase(p);
-	continue;
-      }
     }
+    if (slot->waiting.empty() &&
+	slot->num_running == 0 &&
+	!slot->pg) {
+      dout(20) << __func__ << "  " << pgid << " empty, pruning" << dendl;
+      p = pg_slots.erase(p);
+      continue;
+    }
+
     ++p;
   }
   if (queued) {
