@@ -32,7 +32,7 @@ void Credentials::dump(Formatter *f) const
   encode_json("SessionToken", sessionToken , f);
 }
 
-int Credentials::generateCredentials(CephContext* cct)
+int Credentials::generateCredentials(CephContext* cct, const uint64_t& duration)
 {
   uuid_d accessKey, secretKey;
   char accessKeyId_str[MAX_ACCESS_KEY_LEN], secretAccessKey_str[MAX_ACCESS_KEY_LEN];
@@ -52,7 +52,7 @@ int Credentials::generateCredentials(CephContext* cct)
 
   struct timeval tv;
   real_clock::to_timeval(t, tv);
-  tv.tv_sec += EXPIRATION_TIME_IN_SECS;
+  tv.tv_sec += duration;
 
   struct tm result;
   gmtime_r(&tv.tv_sec, &result);
@@ -143,9 +143,9 @@ int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
   return 0;
 }
 
-AssumeRoleRequest::AssumeRoleRequest(string _duration, string _externalId, string _iamPolicy,
-                    string _roleArn, string _roleSessionName, string _serialNumber,
-                    string _tokenCode)
+AssumeRoleRequest::AssumeRoleRequest(string& _duration, string& _externalId, string& _iamPolicy,
+                    string& _roleArn, string& _roleSessionName, string& _serialNumber,
+                    string& _tokenCode)
     : externalId(_externalId), iamPolicy(_iamPolicy),
       roleArn(_roleArn), roleSessionName(_roleSessionName),
       serialNumber(_serialNumber), tokenCode(_tokenCode)
@@ -159,7 +159,8 @@ AssumeRoleRequest::AssumeRoleRequest(string _duration, string _externalId, strin
 
 int AssumeRoleRequest::validate_input() const
 {
-  if (duration < MIN_DURATION_IN_SECS) {
+  if (duration < MIN_DURATION_IN_SECS ||
+          duration > MAX_DURATION_IN_SECS) {
     return -EINVAL;
   }
 
@@ -211,29 +212,44 @@ int AssumeRoleRequest::validate_input() const
   return 0;
 }
 
-AssumeRoleResponse STSService::assumeRole(const AssumeRoleRequest& req)
+std::tuple<int, boost::optional<rgw::IAM::ARN>, RGWRole> STSService::_getRoleInfo(const string& arn)
 {
-  int ret = 0;
-  uint64_t packedPolicySize = 0;
+  if (auto r_arn = rgw::IAM::ARN::parse(arn); r_arn) {
+    auto pos = r_arn->resource.find_last_of('/');
+    string roleName = r_arn->resource.substr(pos + 1);
+    RGWRole role(cct, store, roleName, r_arn->account);
+    if (int ret = role.get(); ret < 0) {
+      return make_tuple(ret, r_arn, role);
+    } else {
+      return make_tuple(0, r_arn, role);
+    }
+  } else {
+    RGWRole dummyRole;
+    return make_tuple(-EINVAL, r_arn, dummyRole);
+  }
+}
+
+AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
+{
+  uint64_t packedPolicySize = 0, roleMaxSessionDuration = 0;
   AssumedRoleUser user;
   Credentials cred;
   string roleId;
 
   //Get the role info which is being assumed
-  auto r_arn = rgw::IAM::ARN::parse(req.getRoleARN());
+  const auto& [ret_val, r_arn, role] = _getRoleInfo(req.getRoleARN());
+  if (ret_val < 0) {
+    return make_tuple(ret_val, user, cred, packedPolicySize);
+  }
+
   if (r_arn) {
-    auto pos = r_arn->resource.find_last_of('/');
-    string roleName = r_arn->resource.substr(pos + 1);
-    RGWRole role(cct, store, roleName, r_arn->account);
-    if (ret = role.get(); ret < 0) {
-      return make_tuple(ret, user, cred, packedPolicySize);
-    }
     roleId = role.get_id();
-  } else {
-    return make_tuple(-EINVAL, user, cred, packedPolicySize);
+    roleMaxSessionDuration = role.get_max_session_duration();
+    req.setMaxDuration(roleMaxSessionDuration);
   }
 
   //Validate input
+  int ret = 0;
   if (ret = req.validate_input(); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
@@ -248,7 +264,7 @@ AssumeRoleResponse STSService::assumeRole(const AssumeRoleRequest& req)
   }
 
   //Generate Credentials
-  if (ret = cred.generateCredentials(cct); ret < 0) {
+  if (ret = cred.generateCredentials(cct, req.getDuration()); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
