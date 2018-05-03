@@ -1,5 +1,11 @@
 overrides:
   ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug osdc: 20
+        debug monc: 20
+        debug mgrc: 20
     log-whitelist:
     - but it is still running
     - overall HEALTH_
