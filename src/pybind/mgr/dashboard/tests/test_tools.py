@@ -11,7 +11,6 @@ from ..controllers import RESTController, ApiController
 from ..tools import is_valid_ipv6_address, dict_contains_path
 
 
-# pylint: disable=W0613
 @ApiController('foo')
 class FooResource(RESTController):
     elems = []
@@ -49,7 +48,7 @@ class FooArgs(RESTController):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
 
 
-# pylint: disable=C0102
+# pylint: disable=blacklisted-name
 class Root(object):
     foo = FooResource()
     fooargs = FooArgs()
