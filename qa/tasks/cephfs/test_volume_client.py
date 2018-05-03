@@ -343,6 +343,19 @@ vc.disconnect()
             vc.delete_volume(vp, data_isolated=True)
             vc.purge_volume(vp, data_isolated=True)
             vc.purge_volume(vp, data_isolated=True)
+
+            vc.create_volume(vp, 10, namespace_isolated=False)
+            vc.create_volume(vp, 10, namespace_isolated=False)
+            vc.authorize(vp, "{guest_entity}")
+            vc.authorize(vp, "{guest_entity}")
+            vc.deauthorize(vp, "{guest_entity}")
+            vc.deauthorize(vp, "{guest_entity}")
+            vc.evict("{guest_entity}")
+            vc.evict("{guest_entity}")
+            vc.delete_volume(vp)
+            vc.delete_volume(vp)
+            vc.purge_volume(vp)
+            vc.purge_volume(vp)
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -1014,3 +1027,43 @@ vc.disconnect()
         # Mount the volume in the guest using the auth ID to assert that the
         # auth caps are valid
         guest_mount.mount(mount_path=mount_path)
+
+    def test_volume_without_namespace_isolation(self):
+        """
+        That volume client can create volumes that do not have separate RADOS
+        namespace layouts.
+        """
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+
+        # Configure vc_mount as the handle for driving volumeclient
+        self._configure_vc_auth(vc_mount, "manila")
+
+        # Create a volume
+        volume_prefix = "/myprefix"
+        group_id = "grpid"
+        volume_id = "volid"
+        mount_path = self._volume_client_python(vc_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            create_result = vc.create_volume(vp, 1024*1024*10, namespace_isolated=False)
+            print create_result['mount_path']
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id
+        )), volume_prefix)
+
+        # The CephFS volume should be created
+        self.mounts[0].stat(os.path.join("myprefix", group_id, volume_id))
+        vol_namespace = self.mounts[0].getfattr(
+            os.path.join("myprefix", group_id, volume_id),
+            "ceph.dir.layout.pool_namespace")
+        assert not vol_namespace
+
+        self._volume_client_python(vc_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.delete_volume(vp)
+            vc.purge_volume(vp)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )), volume_prefix)
