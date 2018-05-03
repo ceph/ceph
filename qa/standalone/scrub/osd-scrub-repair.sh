@@ -4991,6 +4991,6 @@ EOF
 main osd-scrub-repair "$@"
 
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && \
-#    test/osd/osd-scrub-repair.sh # TEST_corrupt_and_repair_replicated"
+# compile-command: "cd build ; make -j4 && \
+#    ../qa/run-standalone.sh osd-scrub-repair.sh"
 # End:
