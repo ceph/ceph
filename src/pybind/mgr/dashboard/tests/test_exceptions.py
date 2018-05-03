@@ -7,7 +7,7 @@ import cherrypy
 
 import rados
 from ..services.ceph_service import SendCommandError
-from ..controllers import RESTController, ApiController, Task
+from ..controllers import RESTController, Controller, Task
 from .helper import ControllerTestCase
 from ..services.exception import handle_rados_error, handle_send_command_error, \
     serialize_dashboard_exception
@@ -15,7 +15,7 @@ from ..tools import ViewCache, TaskManager, NotificationQueue
 
 
 # pylint: disable=W0613
-@ApiController('foo')
+@Controller('foo')
 class FooResource(RESTController):
 
     @cherrypy.expose
