@@ -71,10 +71,10 @@ class TcmuIscsiControllerTest(ControllerTestCase):
         mgr.url_prefix = ''
         TcmuIscsi._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
-        cls.setup_controllers(TcmuIscsi, "/api/test")
+        cls.setup_controllers(TcmuIscsi, "/test")
 
     def test_list(self):
-        self._get('/api/test/tcmuiscsi')
+        self._get('/test/api/tcmuiscsi')
         self.assertStatus(200)
         self.assertJsonBody({
             'daemons': [

@@ -9,11 +9,13 @@ from mock import patch
 
 from ..services.exception import handle_rados_error
 from .helper import ControllerTestCase
-from ..controllers import RESTController, ApiController, BaseController
+from ..controllers import RESTController, ApiController, Controller, \
+                          BaseController
 from ..tools import is_valid_ipv6_address, dict_contains_path
 
 
-@ApiController('foo')
+# pylint: disable=W0613
+@Controller('foo')
 class FooResource(RESTController):
     elems = []
 
@@ -38,7 +40,7 @@ class FooResource(RESTController):
         return dict(key=key, newdata=newdata)
 
 
-@ApiController('foo/:key/:method')
+@Controller('foo/:key/:method')
 class FooResourceDetail(RESTController):
     def list(self, key, method):
         return {'detail': (key, [method])}
@@ -115,13 +117,13 @@ class RESTControllerTest(ControllerTestCase):
         assert 'traceback' in body
 
     def test_args_from_json(self):
-        self._put("/fooargs/hello", {'name': 'world'})
+        self._put("/api/fooargs/hello", {'name': 'world'})
         self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': None})
 
-        self._put("/fooargs/hello", {'name': 'world', 'opt1': 'opt1'})
+        self._put("/api/fooargs/hello", {'name': 'world', 'opt1': 'opt1'})
         self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': 'opt1', 'opt2': None})
 
-        self._put("/fooargs/hello", {'name': 'world', 'opt2': 'opt2'})
+        self._put("/api/fooargs/hello", {'name': 'world', 'opt2': 'opt2'})
         self.assertJsonBody({'code': 'hello', 'name': 'world', 'opt1': None, 'opt2': 'opt2'})
 
     def test_detail_route(self):

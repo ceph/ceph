@@ -282,16 +282,19 @@ class Module(MgrModule, SSLCherryPyConfig):
         # about to start serving
         self.set_uri(uri)
 
-        mapper = generate_routes(self.url_prefix)
+        mapper, parent_urls = generate_routes(self.url_prefix)
 
         config = {
             '{}/'.format(self.url_prefix): {
                 'tools.staticdir.on': True,
                 'tools.staticdir.dir': self.get_frontend_path(),
                 'tools.staticdir.index': 'index.html'
-            },
-            '{}/api'.format(self.url_prefix): {'request.dispatch': mapper}
+            }
         }
+        for purl in parent_urls:
+            config['{}/{}'.format(self.url_prefix, purl)] = {
+                'request.dispatch': mapper
+            }
         cherrypy.tree.mount(None, config=config)
 
         cherrypy.engine.start()
