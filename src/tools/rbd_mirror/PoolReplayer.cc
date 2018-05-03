@@ -550,6 +550,14 @@ void PoolReplayer<I>::print_status(Formatter *f, stringstream *ss)
   f->dump_stream("peer") << m_peer;
   f->dump_string("instance_id", m_instance_watcher->get_instance_id());
 
+  std::string state("running");
+  if (m_manual_stop) {
+    state = "stopped (manual)";
+  } else if (m_stopping) {
+    state = "stopped";
+  }
+  f->dump_string("state", state);
+
   std::string leader_instance_id;
   m_leader_watcher->get_leader_instance_id(&leader_instance_id);
   f->dump_string("leader_instance_id", leader_instance_id);
@@ -600,6 +608,7 @@ void PoolReplayer<I>::start()
     return;
   }
 
+  m_manual_stop = false;
   m_instance_replayer->start();
 }
 
@@ -617,6 +626,7 @@ void PoolReplayer<I>::stop(bool manual)
     return;
   }
 
+  m_manual_stop = true;
   m_instance_replayer->stop();
 }
 
