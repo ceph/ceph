@@ -14,8 +14,9 @@
 #include "include/stringify.h"
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
-#include "os/bluestore/BitAllocator.h"
 
+#include <boost/random/uniform_int.hpp>
+typedef boost::mt11213b gen_type;
 
 #if GTEST_HAS_PARAM_TEST
 
@@ -36,15 +37,15 @@ public:
 
 TEST_P(AllocTest, test_alloc_init)
 {
-  int64_t blocks = BmapEntry::size();
+  int64_t blocks = 64;
   init_alloc(blocks, 1);
   ASSERT_EQ(0U, alloc->get_free());
   alloc->shutdown(); 
-  blocks = BitMapZone::get_total_blocks() * 2 + 16;
+  blocks = 1024 * 2 + 16;
   init_alloc(blocks, 1);
   ASSERT_EQ(0U, alloc->get_free());
   alloc->shutdown(); 
-  blocks = BitMapZone::get_total_blocks() * 2;
+  blocks = 1024 * 2;
   init_alloc(blocks, 1);
   ASSERT_EQ(alloc->get_free(), (uint64_t) 0);
 }
@@ -52,10 +53,11 @@ TEST_P(AllocTest, test_alloc_init)
 TEST_P(AllocTest, test_alloc_min_alloc)
 {
   int64_t block_size = 1024;
-  int64_t blocks = BitMapZone::get_total_blocks() * 2 * block_size;
+  int64_t capacity = 4 * 1024 * block_size;
 
   {
-    init_alloc(blocks, block_size);
+    init_alloc(capacity, block_size);
+
     alloc->init_add_free(block_size, block_size);
     PExtentVector extents;
     EXPECT_EQ(block_size, alloc->allocate(block_size, block_size,
@@ -96,9 +98,9 @@ TEST_P(AllocTest, test_alloc_min_alloc)
 TEST_P(AllocTest, test_alloc_min_max_alloc)
 {
   int64_t block_size = 1024;
-  int64_t blocks = BitMapZone::get_total_blocks() * 2 * block_size;
 
-  init_alloc(blocks, block_size);
+  int64_t capacity = 4 * 1024 * block_size;
+  init_alloc(capacity, block_size);
 
   /*
    * Make sure we get all extents different when
@@ -169,9 +171,9 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
 TEST_P(AllocTest, test_alloc_failure)
 {
   int64_t block_size = 1024;
-  int64_t blocks = BitMapZone::get_total_blocks() * block_size;
+  int64_t capacity = 4 * 1024 * block_size;
 
-  init_alloc(blocks, block_size);
+  init_alloc(capacity, block_size);
   {
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
@@ -204,62 +206,6 @@ TEST_P(AllocTest, test_alloc_big)
     EXPECT_EQ(big,
 	      alloc->allocate(big, mas, 0, &extents));
   }
-}
-
-TEST_P(AllocTest, test_alloc_hint_bmap)
-{
-  if (GetParam() == std::string("stupid")) {
-    return;
-  }
-  int64_t blocks = BitMapArea::get_level_factor(g_ceph_context, 2) * 4;
-  int64_t allocated = 0;
-  int64_t zone_size = 1024;
-  g_conf->set_val("bluestore_bitmapallocator_blocks_per_zone",
-		  std::to_string(zone_size));
-
-  init_alloc(blocks, 1);
-  alloc->init_add_free(0, blocks);
-
-  PExtentVector extents;
-
-  allocated = alloc->allocate(1, 1, 1, zone_size, &extents);
-  ASSERT_EQ(1, allocated);
-  ASSERT_EQ(1u, extents.size());
-  ASSERT_EQ(extents[0].offset, (uint64_t) zone_size);
-
-  extents.clear();
-  allocated = alloc->allocate(1, 1, 1, zone_size * 2 - 1, &extents);
-  EXPECT_EQ(1, allocated);
-  ASSERT_EQ(1u, extents.size());
-  EXPECT_EQ((int64_t) extents[0].offset, zone_size * 2 - 1);
-
-  /*
-   * Wrap around with hint
-   */
-  extents.clear();
-  allocated = alloc->allocate(zone_size * 2, 1, 1,  blocks - zone_size * 2,
-			      &extents);
-  ASSERT_EQ(zone_size * 2, allocated);
-  EXPECT_EQ(zone_size * 2, (int)extents.size());
-  EXPECT_EQ((int64_t)extents[0].offset, blocks - zone_size * 2);
-
-  extents.clear();
-  allocated = alloc->allocate(zone_size, 1, 1, blocks - zone_size, &extents);
-  ASSERT_EQ(zone_size, allocated);
-  EXPECT_EQ(zone_size, (int)extents.size());
-  EXPECT_EQ(extents[0].offset, (uint64_t) 0);
-  /*
-   * Verify out-of-bound hint
-   */
-  extents.clear();
-  allocated = alloc->allocate(1, 1, 1, blocks, &extents);
-  ASSERT_EQ(1, allocated);
-  EXPECT_EQ(1, (int)extents.size());
-
-  extents.clear();
-  allocated = alloc->allocate(1, 1, 1, blocks * 3 + 1 , &extents);
-  ASSERT_EQ(1, allocated);
-  EXPECT_EQ(1, (int)extents.size());
 }
 
 TEST_P(AllocTest, test_alloc_non_aligned_len)
@@ -328,6 +274,176 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   // Hence leaving just two 
   // digits after decimal point due to this.
   EXPECT_EQ(0, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+}
+
+const uint64_t _1m = 1024 * 1024;
+const uint64_t _2m = 2 * 1024 * 1024;
+
+TEST_P(AllocTest, test_alloc_bench_seq)
+{
+  uint64_t capacity = uint64_t(1024) * 1024 * 1024 * 1024;
+  uint64_t alloc_unit = 4096;
+  uint64_t want_size = alloc_unit;
+  PExtentVector allocated, tmp;
+
+  init_alloc(capacity, alloc_unit);
+  alloc->init_add_free(0, capacity);
+
+  utime_t start = ceph_clock_now();
+  for (uint64_t i = 0; i < capacity; i += want_size)
+  {
+    tmp.clear();
+    EXPECT_EQ(0, alloc->reserve(want_size));
+    EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
+    if (0 == (i % (1 * 1024 * _1m))) {
+      std::cout << "alloc " << i / 1024 / 1024 << " mb of "
+        << capacity / 1024 / 1024 << std::endl;
+    }
+  }
+
+  std::cout << "releasing..." << std::endl;
+  for (size_t i = 0; i < capacity; i += want_size)
+  {
+    interval_set<uint64_t> release_set;
+    release_set.insert(i, want_size);
+    alloc->release(release_set);
+    if (0 == (i % (1 * 1024 * _1m))) {
+      std::cout << "release " << i / 1024 / 1024 << " mb of "
+        << capacity / 1024 / 1024 << std::endl;
+    }
+  }
+  std::cout<<"Executed in "<< ceph_clock_now() - start << std::endl;
+}
+
+class AllocTracker
+{
+  std::vector<uint64_t> allocations;
+  uint64_t head = 0;
+  uint64_t tail = 0;
+  uint64_t size = 0;
+  boost::uniform_int<> u1;
+
+public:
+  AllocTracker(uint64_t capacity, uint64_t alloc_unit)
+    : u1(capacity, alloc_unit)
+  {
+    assert(alloc_unit >= 0x100);
+    assert(capacity <= (uint64_t(1) << 48)); // we use 5 octets (bytes 1 - 5) to store
+				 // offset to save the required space.
+				 // This supports capacity up to 281 TB
+
+    allocations.resize(capacity / alloc_unit);
+  }
+  inline uint64_t get_head() const
+  {
+    return head;
+  }
+
+  inline uint64_t get_tail() const
+  {
+    return tail;
+  }
+
+  bool push(uint64_t offs, uint32_t len)
+  {
+    assert((len & 0xff) == 0);
+    assert((offs & 0xff) == 0);
+    assert((offs & 0xffff000000000000) == 0);
+
+    if (head + 1 == tail)
+      return false;
+    uint64_t val = (offs << 16) | (len >> 8);
+    allocations[head++] = val;
+    head %= allocations.size();
+    ++size;
+    return true;
+  }
+  bool pop(uint64_t* offs, uint32_t* len)
+  {
+    if (size == 0)
+      return false;
+    uint64_t val = allocations[tail++];
+    *len = uint64_t((val & 0xffffff) << 8);
+    *offs = (val >> 16) & ~uint64_t(0xff);
+    tail %= allocations.size();
+    --size;
+    return true;
+  }
+  bool pop_random(gen_type& rng, uint64_t* offs, uint32_t* len,
+    uint32_t max_len = 0)
+  {
+    if (size == 0)
+      return false;
+
+    uint64_t pos = (u1(rng) % size) + tail;
+    pos %= allocations.size();
+    uint64_t val = allocations[pos];
+    *len = uint64_t((val & 0xffffff) << 8);
+    *offs = (val >> 16) & ~uint64_t(0xff);
+    if (max_len && *len > max_len) {
+      val = ((*offs + max_len) << 16) | ((*len - max_len) >> 8);
+      allocations[pos] = val;
+      *len = max_len;
+    } else {
+      allocations[pos] = allocations[tail++];
+      tail %= allocations.size();
+      --size;
+    }
+    return true;
+  }
+};
+
+TEST_P(AllocTest, test_alloc_bench)
+{
+  uint64_t capacity = uint64_t(1024) * 1024 * 1024 * 1024;
+  uint64_t alloc_unit = 4096;
+  PExtentVector allocated, tmp;
+  AllocTracker at(capacity, alloc_unit);
+
+  init_alloc(capacity, alloc_unit);
+  alloc->init_add_free(0, capacity);
+
+  gen_type rng(time(NULL));
+  boost::uniform_int<> u1(0, 9); // 4K-2M
+  boost::uniform_int<> u2(0, 7); // 4K-512K
+
+  utime_t start = ceph_clock_now();
+  for (uint64_t i = 0; i < capacity * 2; )
+  {
+    uint32_t want = alloc_unit << u1(rng);
+    auto r = alloc->reserve(want);
+    if (r != 0) {
+      break;
+    }
+    i += want;
+    tmp.clear();
+
+    EXPECT_EQ(want, alloc->allocate(want, alloc_unit, 0, 0, &tmp));
+    for(auto a : tmp) {
+      bool full = !at.push(a.offset, a.length);
+      EXPECT_EQ(full, false);
+    }
+    uint64_t want_release = alloc_unit << u2(rng);
+    uint64_t released = 0;
+    do {
+      uint64_t o = 0;
+      uint32_t l = 0;
+      interval_set<uint64_t> release_set;
+      if (!at.pop_random(rng, &o, &l, want_release - released)) {
+	break;
+      }
+      release_set.insert(o, l);
+      alloc->release(release_set);
+      released += l;
+    } while (released < want_release);
+
+    if (0 == (i % (1 * 1024 * _1m))) {
+      std::cout << "alloc " << i / 1024 / 1024 << " mb of "
+        << capacity / 1024 / 1024 << std::endl;
+    }
+  }
+  std::cout<<"Executed in "<< ceph_clock_now() - start << std::endl;
+  std::cout<<"Avail "<< alloc->get_free() / _1m << " MB" << std::endl;
 }
 
 INSTANTIATE_TEST_CASE_P(
