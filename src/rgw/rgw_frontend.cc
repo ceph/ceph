@@ -13,7 +13,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 int RGWFrontendConfig::parse_config(const string& config,
-				    map<string, string>& config_map)
+				    std::multimap<string, string>& config_map)
 {
   list<string> config_list;
   get_str_list(config, " ", config_list);
@@ -33,7 +33,7 @@ int RGWFrontendConfig::parse_config(const string& config,
     ssize_t pos = entry.find('=');
     if (pos < 0) {
       dout(0) << "framework conf key: " << entry << dendl;
-      config_map[entry] = "";
+      config_map.emplace(std::move(entry), "");
       continue;
     }
 
@@ -44,7 +44,7 @@ int RGWFrontendConfig::parse_config(const string& config,
     }
 
     dout(0) << "framework conf key: " << key << ", val: " << val << dendl;
-    config_map[key] = val;
+    config_map.emplace(std::move(key), std::move(val));
   }
 
   return 0;
@@ -53,7 +53,7 @@ int RGWFrontendConfig::parse_config(const string& config,
 bool RGWFrontendConfig::get_val(const string& key, const string& def_val,
 				string *out)
 {
- map<string, string>::iterator iter = config_map.find(key);
+ auto iter = config_map.find(key);
  if (iter == config_map.end()) {
    *out = def_val;
    return false;
