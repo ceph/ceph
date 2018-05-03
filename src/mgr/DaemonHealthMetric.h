@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ostream>
 #include "include/denc.h"
 
 enum class daemon_metric : uint8_t {
@@ -11,6 +12,15 @@ enum class daemon_metric : uint8_t {
   PENDING_CREATING_PGS,
   NONE,
 };
+
+static inline const char *daemon_metric_name(daemon_metric t) {
+  switch (t) {
+  case daemon_metric::SLOW_OPS: return "SLOW_OPS";
+  case daemon_metric::PENDING_CREATING_PGS: return "PENDING_CREATING_PGS";
+  case daemon_metric::NONE: return "NONE";
+  default: return "???";
+  }
+}
 
 union daemon_metric_t {
   struct {
@@ -53,6 +63,11 @@ public:
     denc(v.type, p);
     denc(v.value.n, p);
     DENC_FINISH(p);
+  }
+
+  friend ostream& operator<<(ostream& out, const DaemonHealthMetric& m) {
+    return out << daemon_metric_name(m.get_type()) << "("
+	       << m.get_n() << "|(" << m.get_n1() << "," << m.get_n2() << "))";
   }
 private:
   daemon_metric type = daemon_metric::NONE;
