@@ -16,4 +16,3 @@ def choose_init():
 
     if os.path.isfile('/sbin/init') and not os.path.islink('/sbin/init'):
         return 'sysvinit'
-
