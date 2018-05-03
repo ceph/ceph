@@ -97,3 +97,29 @@ class TestGetBlockDevs(object):
         path = os.path.dirname(tmpfile(name='loop0', contents=''))
         result = disk.get_block_devs(sys_block_path=path, skip_loop=False)
         assert result == ['loop0']
+
+
+class TestGetDevDevs(object):
+
+    def test_abspaths_are_included(self, tmpfile):
+        sda_path = tmpfile(name='sda', contents='')
+        directory = os.path.dirname(sda_path)
+        result = disk.get_dev_devs(directory)
+        assert sorted(result.keys()) == sorted(['sda', sda_path])
+        assert result['sda'] == sda_path
+        assert result[sda_path] == 'sda'
+
+
+class TestGetMapperDevs(object):
+
+    def test_abspaths_and_realpaths_are_included(self, tmpfile):
+        dm_path = tmpfile(name='dm-0', contents='')
+        directory = os.path.dirname(dm_path)
+        sda_path = os.path.join(directory, 'sda')
+        os.symlink(sda_path, os.path.join(directory, 'sda'))
+        result = disk.get_mapper_devs(directory)
+        assert sorted(result.keys()) == sorted([dm_path, sda_path, 'sda', 'dm-0'])
+        assert result['sda'] == sda_path
+        assert result['dm-0'] == dm_path
+        assert result[sda_path] == sda_path
+        assert result[dm_path] == 'dm-0'
