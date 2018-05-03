@@ -84,3 +84,16 @@ class TestMapDevPaths(object):
         assert result['dm-0'] == dm_path
         assert result[sda_path] == sda_path
         assert result[dm_path] == 'dm-0'
+
+
+class TestGetBlockDevs(object):
+
+    def test_loop_devices_are_missing(self, tmpfile):
+        path = os.path.dirname(tmpfile(name='loop0', contents=''))
+        result = disk.get_block_devs(sys_block_path=path)
+        assert result == []
+
+    def test_loop_devices_are_included(self, tmpfile):
+        path = os.path.dirname(tmpfile(name='loop0', contents=''))
+        result = disk.get_block_devs(sys_block_path=path, skip_loop=False)
+        assert result == ['loop0']
