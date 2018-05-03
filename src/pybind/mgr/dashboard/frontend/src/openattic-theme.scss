@@ -1142,3 +1142,10 @@ hr.oa-hr-small {
   padding-left: 4px;
   vertical-align: text-top;
 }
+
+// awesome-bootstrap-checkbox + ForkAwesome
+input[type="checkbox"].styled:checked + label:after,
+input[type="radio"].styled:checked + label:after,
+.checkbox input[type=checkbox]:checked + label:after {
+    font-family: 'ForkAwesome';
+}
