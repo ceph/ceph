@@ -38,7 +38,6 @@ class Dashboard(BaseController):
         for l in lines:
             buf.appendleft(l)
 
-    # pylint: disable=R0914
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def health(self):
