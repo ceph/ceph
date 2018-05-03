@@ -123,3 +123,26 @@ class TestGetMapperDevs(object):
         assert result['dm-0'] == dm_path
         assert result[sda_path] == sda_path
         assert result[dm_path] == 'dm-0'
+
+
+class TestHumanReadableSize(object):
+
+    def test_bytes(self):
+        result = disk.human_readable_size(800)
+        assert result == '800.00 B'
+
+    def test_kilobytes(self):
+        result = disk.human_readable_size(800*1024)
+        assert result == '800.00 KB'
+
+    def test_megabytes(self):
+        result = disk.human_readable_size(800*1024*1024)
+        assert result == '800.00 MB'
+
+    def test_gigabytes(self):
+        result = disk.human_readable_size(8.19*1024*1024*1024)
+        assert result == '8.19 GB'
+
+    def test_terabytes(self):
+        result = disk.human_readable_size(81.2*1024*1024*1024*1024)
+        assert result == '81.20 TB'
