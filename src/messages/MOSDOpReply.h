@@ -217,7 +217,7 @@ public:
         if ((features & CEPH_FEATURE_QOS_DMC) == 0) {
           header.version = 8;
         } else {
-          ::encode(qos_resp, payload);
+          encode(qos_resp, payload);
         }
       }
       encode_trace(payload, features);
@@ -316,7 +316,7 @@ public:
       }
       if (header.version >= 8) {
 	if (header.version >= 9) {
-	  ::decode(qos_resp, p);
+	  decode(qos_resp, p);
 	}
         decode_trace(p);
       }

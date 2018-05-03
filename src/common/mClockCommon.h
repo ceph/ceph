@@ -22,20 +22,33 @@
 
 
 namespace ceph {
-  namespace dmc = crimson::dmclock;
+
+namespace dmc = crimson::dmclock;
+
+inline void encode(const dmc::ReqParams &rp,
+		   ::ceph::bufferlist& bl,
+                   uint64_t features=0) {
+  encode(rp.delta, bl);
+  encode(rp.rho, bl);
 }
 
-WRITE_RAW_ENCODER(dmc::ReqParams)
-
-inline void encode(const dmc::PhaseType &phase, bufferlist& bl,
-                   uint64_t features=0)
-{
-  ::encode(static_cast<uint8_t>(phase), bl);
+inline void decode(dmc::ReqParams &rp,
+		   ::ceph::bufferlist::iterator& p) {
+  decode(rp.delta, p);
+  decode(rp.rho, p);
 }
 
-inline void decode(dmc::PhaseType &phase, bufferlist::iterator& p)
-{
+inline void encode(const dmc::PhaseType &phase,
+		   ::ceph::bufferlist& bl,
+                   uint64_t features=0) {
+  encode(static_cast<uint8_t>(phase), bl);
+}
+
+inline void decode(dmc::PhaseType &phase,
+		   ::ceph::bufferlist::iterator& p) {
   uint8_t int_phase;
-  ::decode((uint8_t&)int_phase, p);
+  decode((uint8_t&)int_phase, p);
   phase = static_cast<dmc::PhaseType>(int_phase);
 }
+
+} // namespace ceph
