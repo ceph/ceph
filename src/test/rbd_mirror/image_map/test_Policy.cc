@@ -26,7 +26,7 @@ public:
     CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
     std::string policy_type = cct->_conf->get_val<string>("rbd_mirror_image_policy_type");
 
-    if (policy_type == "simple") {
+    if (policy_type == "none" || policy_type == "simple") {
       m_policy = image_map::SimplePolicy::create(m_local_io_ctx);
     } else {
       assert(false);

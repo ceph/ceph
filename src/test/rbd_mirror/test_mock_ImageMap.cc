@@ -169,8 +169,17 @@ public:
   void SetUp() override {
     TestFixture::SetUp();
 
+    m_local_instance_id = stringify(m_local_io_ctx.get_instance_id());
+
     EXPECT_EQ(0, _rados->conf_set("rbd_mirror_image_policy_migration_throttle",
                                   "0"));
+    EXPECT_EQ(0, _rados->conf_set("rbd_mirror_image_policy_type", "simple"));
+  }
+
+  void TearDown() override {
+    EXPECT_EQ(0, _rados->conf_set("rbd_mirror_image_policy_type", "none"));
+
+    TestFixture::TearDown();
   }
 
   void expect_work_queue(MockThreads &mock_threads) {
@@ -401,6 +410,7 @@ public:
   Cond m_cond;
   uint32_t m_notify_update_count;
   uint32_t m_map_update_count;
+  std::string m_local_instance_id;
 };
 
 TEST_F(TestMockImageMap, SetLocalImages) {
@@ -415,7 +425,8 @@ TEST_F(TestMockImageMap, SetLocalImages) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -460,7 +471,8 @@ TEST_F(TestMockImageMap, AddRemoveLocalImage) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -525,7 +537,8 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImage) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -596,7 +609,8 @@ TEST_F(TestMockImageMap, AddRemoveRemoteImageDuplicateNotification) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -674,7 +688,8 @@ TEST_F(TestMockImageMap, AcquireImageErrorRetry) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -724,7 +739,8 @@ TEST_F(TestMockImageMap, RemoveRemoteAndLocalImage) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -815,7 +831,8 @@ TEST_F(TestMockImageMap, AddInstance) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -846,8 +863,7 @@ TEST_F(TestMockImageMap, AddInstance) {
                          &peer_ack_ctxs);
   wait_for_scheduled_task();
 
-  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
-  mock_image_map->update_instances_added({local_instance_id});
+  mock_image_map->update_instances_added({m_local_instance_id});
 
   std::set<std::string> shuffled_global_image_ids;
 
@@ -887,7 +903,8 @@ TEST_F(TestMockImageMap, RemoveInstance) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -919,8 +936,7 @@ TEST_F(TestMockImageMap, RemoveInstance) {
                          &peer_ack_ctxs);
   wait_for_scheduled_task();
 
-  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
-  mock_image_map->update_instances_added({local_instance_id});
+  mock_image_map->update_instances_added({m_local_instance_id});
 
   std::set<std::string> shuffled_global_image_ids;
 
@@ -985,10 +1001,9 @@ TEST_F(TestMockImageMap, AddInstancePingPongImageTest) {
     "global id 11", "global id 12", "global id 13", "global id 14"
   };
 
-  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
   std::map<std::string, cls::rbd::MirrorImageMap> image_mapping;
   for (auto& global_image_id : global_image_ids) {
-    image_mapping[global_image_id] = {local_instance_id, {}, {}};
+    image_mapping[global_image_id] = {m_local_instance_id, {}, {}};
   }
 
   // ACQUIRE
@@ -1006,13 +1021,14 @@ TEST_F(TestMockImageMap, AddInstancePingPongImageTest) {
                           &peer_ack_ctxs);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
   ASSERT_EQ(0, cond.wait());
 
-  mock_image_map->update_instances_added({local_instance_id});
+  mock_image_map->update_instances_added({m_local_instance_id});
 
   std::set<std::string> global_image_ids_ack(global_image_ids);
 
@@ -1111,7 +1127,8 @@ TEST_F(TestMockImageMap, RemoveInstanceWithRemoveImage) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
@@ -1146,8 +1163,7 @@ TEST_F(TestMockImageMap, RemoveInstanceWithRemoveImage) {
                          &peer_ack_ctxs);
   wait_for_scheduled_task();
 
-  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
-  mock_image_map->update_instances_added({local_instance_id});
+  mock_image_map->update_instances_added({m_local_instance_id});
 
   std::set<std::string> shuffled_global_image_ids;
 
@@ -1212,14 +1228,14 @@ TEST_F(TestMockImageMap, AddErrorAndRemoveImage) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
   ASSERT_EQ(0, cond.wait());
 
-  auto local_instance_id = stringify(m_local_io_ctx.get_instance_id());
-  mock_image_map->update_instances_added({local_instance_id});
+  mock_image_map->update_instances_added({m_local_instance_id});
 
   std::set<std::string> global_image_ids{
     "global id 1", "global id 2", "global id 3", "remote id 4",
@@ -1326,7 +1342,8 @@ TEST_F(TestMockImageMap, MirrorUUIDUpdated) {
   MockListener mock_listener(this);
 
   std::unique_ptr<MockImageMap> mock_image_map{
-    MockImageMap::create(m_local_io_ctx, &mock_threads, mock_listener)};
+    MockImageMap::create(m_local_io_ctx, &mock_threads, m_local_instance_id,
+                         mock_listener)};
 
   C_SaferCond cond;
   mock_image_map->init(&cond);
