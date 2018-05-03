@@ -140,8 +140,9 @@ def tmpfile(tmpdir):
     Create a temporary file, optionally filling it with contents, returns an
     absolute path to the file when called
     """
-    def generate_file(name='file', contents=''):
-        path = os.path.join(str(tmpdir), name)
+    def generate_file(name='file', contents='', directory=None):
+        directory = directory or str(tmpdir)
+        path = os.path.join(directory, name)
         with open(path, 'w') as fp:
             fp.write(contents)
         return path
