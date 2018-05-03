@@ -352,7 +352,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         }
         if (_.isArray(cellValue)) {
           cellValue = cellValue.join(' ');
-        } else if (_.isNumber(cellValue)) {
+        } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
           cellValue = cellValue.toString();
         }
         return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
