@@ -311,6 +311,11 @@ int librados::RadosClient::connect()
   }
   messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
 
+  // Detect older cluster, put mgrclient into compatible mode
+  mgrclient.set_mgr_optional(
+      !get_required_monitor_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS));
+
   // MgrClient needs this (it doesn't have MonClient reference itself)
   monclient.sub_want("mgrmap", 0, 0);
   monclient.renew_subs();
@@ -1093,5 +1098,6 @@ int librados::RadosClient::service_daemon_update_status(
 
 mon_feature_t librados::RadosClient::get_required_monitor_features() const
 {
-  return monclient.monmap.get_required_features();
+  return monclient.with_monmap([](const MonMap &monmap) {
+      return monmap.get_required_features(); } );
 }
