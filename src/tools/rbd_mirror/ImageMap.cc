@@ -53,9 +53,10 @@ struct ImageMap<I>::C_NotifyInstance : public Context {
 };
 
 template <typename I>
-ImageMap<I>::ImageMap(librados::IoCtx &ioctx, Threads<I> *threads, image_map::Listener &listener)
-  : m_ioctx(ioctx),
-    m_threads(threads),
+ImageMap<I>::ImageMap(librados::IoCtx &ioctx, Threads<I> *threads,
+                      const std::string& instance_id,
+                      image_map::Listener &listener)
+  : m_ioctx(ioctx), m_threads(threads), m_instance_id(instance_id),
     m_listener(listener),
     m_lock(unique_lock_name("rbd::mirror::ImageMap::m_lock", this)) {
 }
@@ -160,12 +161,15 @@ void ImageMap<I>::process_updates() {
     image_map::ActionType action_type =
       m_policy->start_action(global_image_id);
     image_map::LookupInfo info = m_policy->lookup(global_image_id);
-    assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
 
+    dout(15) << "global_image_id=" << global_image_id << ", "
+             << "action=" << action_type << ", "
+             << "instance=" << info.instance_id << dendl;
     switch (action_type) {
     case image_map::ACTION_TYPE_NONE:
       continue;
     case image_map::ACTION_TYPE_MAP_UPDATE:
+      assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
       map_updates.emplace_back(global_image_id, info.instance_id,
                                info.mapped_time);
       break;
@@ -173,9 +177,11 @@ void ImageMap<I>::process_updates() {
       map_removals.emplace(global_image_id);
       break;
     case image_map::ACTION_TYPE_ACQUIRE:
+      assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
       acquire_updates.emplace_back(global_image_id, info.instance_id);
       break;
     case image_map::ACTION_TYPE_RELEASE:
+      assert(info.instance_id != image_map::UNMAPPED_INSTANCE_ID);
       release_updates.emplace_back(global_image_id, info.instance_id);
       break;
     }
@@ -366,16 +372,22 @@ void ImageMap<I>::update_images_removed(
 template <typename I>
 void ImageMap<I>::update_instances_added(
     const std::vector<std::string> &instance_ids) {
-  dout(20) << dendl;
-
   {
     Mutex::Locker locker(m_lock);
     if (m_shutting_down) {
       return;
     }
 
+    std::vector<std::string> filtered_instance_ids;
+    filter_instance_ids(instance_ids, &filtered_instance_ids, false);
+    if (filtered_instance_ids.empty()) {
+      return;
+    }
+
+    dout(20) << "instance_ids=" << filtered_instance_ids << dendl;
+
     std::set<std::string> remap_global_image_ids;
-    m_policy->add_instances(instance_ids, &remap_global_image_ids);
+    m_policy->add_instances(filtered_instance_ids, &remap_global_image_ids);
 
     for (auto const &global_image_id : remap_global_image_ids) {
       schedule_action(global_image_id);
@@ -388,16 +400,22 @@ void ImageMap<I>::update_instances_added(
 template <typename I>
 void ImageMap<I>::update_instances_removed(
     const std::vector<std::string> &instance_ids) {
-  dout(20) << dendl;
-
   {
     Mutex::Locker locker(m_lock);
     if (m_shutting_down) {
       return;
     }
 
+    std::vector<std::string> filtered_instance_ids;
+    filter_instance_ids(instance_ids, &filtered_instance_ids, true);
+    if (filtered_instance_ids.empty()) {
+      return;
+    }
+
+    dout(20) << "instance_ids=" << filtered_instance_ids << dendl;
+
     std::set<std::string> remap_global_image_ids;
-    m_policy->remove_instances(instance_ids, &remap_global_image_ids);
+    m_policy->remove_instances(filtered_instance_ids, &remap_global_image_ids);
 
     for (auto const &global_image_id : remap_global_image_ids) {
       schedule_action(global_image_id);
@@ -447,7 +465,7 @@ void ImageMap<I>::init(Context *on_finish) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   std::string policy_type = cct->_conf->get_val<string>("rbd_mirror_image_policy_type");
 
-  if (policy_type == "simple") {
+  if (policy_type == "none" || policy_type == "simple") {
     m_policy.reset(image_map::SimplePolicy::create(m_ioctx));
   } else {
     assert(false); // not really needed as such, but catch it.
@@ -484,6 +502,32 @@ void ImageMap<I>::shut_down(Context *on_finish) {
   }
 
   wait_for_async_ops(on_finish);
+}
+
+template <typename I>
+void ImageMap<I>::filter_instance_ids(
+    const std::vector<std::string> &instance_ids,
+    std::vector<std::string> *filtered_instance_ids, bool removal) const {
+  CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
+  std::string policy_type = cct->_conf->get_val<string>("rbd_mirror_image_policy_type");
+
+  if (policy_type != "none") {
+    *filtered_instance_ids = instance_ids;
+    return;
+  }
+
+  if (removal) {
+    // propagate removals for external instances
+    for (auto& instance_id : instance_ids) {
+      if (instance_id != m_instance_id) {
+        filtered_instance_ids->push_back(instance_id);
+      }
+    }
+  } else if (std::find(instance_ids.begin(), instance_ids.end(),
+                       m_instance_id) != instance_ids.end()) {
+    // propagate addition only for local instance
+    filtered_instance_ids->push_back(m_instance_id);
+  }
 }
 
 } // namespace mirror

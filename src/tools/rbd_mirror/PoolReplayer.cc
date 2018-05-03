@@ -729,6 +729,7 @@ void PoolReplayer<I>::init_image_map(Context *on_finish) {
   Mutex::Locker locker(m_lock);
   assert(!m_image_map);
   m_image_map.reset(ImageMap<I>::create(m_local_io_ctx, m_threads,
+                                        m_instance_watcher->get_instance_id(),
                                         m_image_map_listener));
 
   auto ctx = new FunctionContext([this, on_finish](int r) {
@@ -1030,16 +1031,15 @@ template <typename I>
 void PoolReplayer<I>::handle_instances_added(const InstanceIds &instance_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
 
-  // TODO only register ourselves for now
-  auto instance_id = m_instance_watcher->get_instance_id();
-  m_image_map->update_instances_added({instance_id});
+  m_image_map->update_instances_added(instance_ids);
 }
 
 template <typename I>
 void PoolReplayer<I>::handle_instances_removed(
     const InstanceIds &instance_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
-  // TODO
+
+  m_image_map->update_instances_removed(instance_ids);
 }
 
 } // namespace mirror
