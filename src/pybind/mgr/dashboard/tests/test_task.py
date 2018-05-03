@@ -6,7 +6,9 @@ import unittest
 import threading
 import time
 from collections import defaultdict
+from functools import partial
 
+from ..services.exception import serialize_dashboard_exception
 from ..tools import NotificationQueue, TaskManager, TaskExecutor
 
 
@@ -41,13 +43,11 @@ class MyTask(object):
         self.handle_ex = handle_ex
         self._event = threading.Event()
 
-    def _handle_exception(self, ex):
-        return {'status': 409, 'detail': str(ex)}
-
     def run(self, ns, timeout=None):
         args = ['dummy arg']
         kwargs = {'dummy': 'arg'}
-        h_ex = self._handle_exception if self.handle_ex else None
+        h_ex = partial(serialize_dashboard_exception,
+                       include_http_status=True) if self.handle_ex else None
         if not self.is_async:
             task = TaskManager.run(
                 ns, self.metadata(), self.task_op, args, kwargs,
@@ -416,6 +416,18 @@ class TaskTest(unittest.TestCase):
         self.assertEqual(fn_t[0]['progress'], 50)
         self.assertFalse(fn_t[0]['success'])
         self.assertIsNotNone(fn_t[0]['exception'])
-        self.assertEqual(fn_t[0]['exception'],
-                         {"status": 409,
-                          "detail": "Task Unexpected Exception"})
+        self.assertEqual(fn_t[0]['exception'], {
+            'component': None,
+            'detail': 'Task Unexpected Exception',
+            'status': 500,
+            'task': {
+                'metadata': {
+                    'fail': True,
+                    'handle_ex': True,
+                    'is_async': False,
+                    'op_seconds': 1,
+                    'progress': 50,
+                    'wait': False},
+                'name': 'test15/task1'
+            }
+        })
