@@ -7009,15 +7009,26 @@ vector<DaemonHealthMetric> OSD::get_health_metrics()
     auto too_old = now;
     too_old -= cct->_conf->get_val<double>("osd_op_complaint_time");
     int slow = 0;
+    TrackedOpRef oldest_op;
     auto count_slow_ops = [&](TrackedOp& op) {
       if (op.get_initiated() < too_old) {
+	lgeneric_subdout(cct,osd,20) << "slow op " << op.get_desc()
+	                             << " initiated "
+	                             << op.get_initiated() << dendl;
 	slow++;
+	if (!oldest_op || op.get_initiated() < oldest_op->get_initiated()) {
+	  oldest_op = &op;
+	}
 	return true;
       } else {
 	return false;
       }
     };
     if (op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops)) {
+      if (slow) {
+	derr << __func__ << " reporting " << slow << " slow ops, oldest is "
+	     << oldest_op->get_desc() << dendl;
+      }
       metrics.emplace_back(daemon_metric::SLOW_OPS, slow, oldest_secs);
     } else {
       // no news is not good news.

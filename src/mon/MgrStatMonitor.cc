@@ -198,6 +198,13 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   jf.close_section();
   jf.flush(*_dout);
   *_dout << dendl;
+  dout(20) << "health checks:\n";
+  JSONFormatter jf(true);
+  jf.open_object_section("health_checks");
+  pending_health_checks.dump(&jf);
+  jf.close_section();
+  jf.flush(*_dout);
+  *_dout << dendl;
   return true;
 }
 
