@@ -28,10 +28,12 @@ if(HAVE_LIBAIO)
     bluestore/BlueRocksEnv.cc
     bluestore/BlueStore.cc
     bluestore/bluestore_types.cc
+    bluestore/fastbmap_allocator_impl.cc
     bluestore/FreelistManager.cc
     bluestore/KernelDevice.cc
     bluestore/StupidAllocator.cc
     bluestore/BitMapAllocator.cc
+    bluestore/BitmapFastAllocator.cc
     bluestore/BitAllocator.cc
     bluestore/aio.cc
   )
