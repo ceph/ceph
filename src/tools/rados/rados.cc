@@ -1939,6 +1939,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
   }
 
+  i = opts.find("pgid");
+  boost::optional<pg_t> pgid(i != opts.end(), std::move(pg_t()));
+  if (pgid && (!pgid->parse(i->second.c_str()) || (pool_name && rados.pool_lookup(pool_name) != pgid->pool()))) {
+    cerr << "invalid pgid" << std::endl;
+    ret = -1;
+    goto out;
+  }
+
   // open rados
   ret = rados.init_with_context(g_ceph_context);
   if (ret < 0) {
@@ -1968,10 +1976,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   // open io context.
-  if (pool_name) {
-    ret = rados.ioctx_create(pool_name, io_ctx);
+  if (pool_name || pgid) {
+    ret = pool_name ? rados.ioctx_create(pool_name, io_ctx) : rados.ioctx_create2(pgid->pool(), io_ctx);
     if (ret < 0) {
-      cerr << "error opening pool " << pool_name << ": "
+      cerr << "error opening pool "
+           << (pool_name ? pool_name : std::string("with id ") + std::to_string(pgid->pool())) << ": "
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
@@ -2196,8 +2205,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
-    if (!pool_name) {
-      cerr << "pool name was not specified" << std::endl;
+    if (!pool_name && !pgid) {
+      cerr << "either pool name or pg id needs to be specified" << std::endl;
       ret = -1;
       goto out;
     }
@@ -2215,7 +2224,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       if (formatter)
         formatter->open_array_section("objects");
       try {
-	librados::NObjectIterator i = io_ctx.nobjects_begin();
+	librados::NObjectIterator i = pgid ? io_ctx.nobjects_begin(pgid->ps()) : io_ctx.nobjects_begin();
 	librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
 	  if (use_striper) {
@@ -2226,6 +2235,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    if (l <= 17 ||
 		(0 != i->get_oid().compare(l-17, 17,".0000000000000000"))) continue;
 	  }
+          if (pgid) {
+            uint32_t ps;
+            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps)
+              break;
+          }
 	  if (!formatter) {
 	    // Only include namespace in output when wildcard specified
 	    if (wildcard)
@@ -3780,6 +3794,8 @@ int main(int argc, const char **argv)
       opts["with-clones"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--omap-key-file", (char*)NULL)) {
       opts["omap-key-file"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--pgid", (char*)NULL)) {
+      opts["pgid"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();
