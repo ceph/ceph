@@ -9,5 +9,5 @@ tasks:
     cleanup: false
     clients:
       client.0:
-      - fs/snaps/snap-hierarchy.sh
+      - fs/snap-hierarchy.sh
 - print: "**** done snap hierarchy"
