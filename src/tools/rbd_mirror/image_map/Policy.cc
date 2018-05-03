@@ -53,6 +53,7 @@ void Policy::init(
 
   RWLock::WLocker map_lock(m_map_lock);
   for (auto& it : image_mapping) {
+    assert(!it.second.instance_id.empty());
     auto map_result = m_map[it.second.instance_id].emplace(it.first);
     assert(map_result.second);
 
@@ -111,6 +112,7 @@ void Policy::add_instances(const InstanceIds &instance_ids,
 
   RWLock::WLocker map_lock(m_map_lock);
   for (auto& instance : instance_ids) {
+    assert(!instance.empty());
     m_map.emplace(instance, std::set<std::string>{});
   }
 
@@ -286,6 +288,7 @@ void Policy::map(const std::string& global_image_id, ImageState* image_state) {
   }
 
   instance_id = do_map(m_map, global_image_id);
+  assert(!instance_id.empty());
   dout(5) << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
 
@@ -308,6 +311,7 @@ void Policy::unmap(const std::string &global_image_id,
   dout(5) << "global_image_id=" << global_image_id << ", "
           << "instance_id=" << instance_id << dendl;
 
+  assert(!instance_id.empty());
   m_map[instance_id].erase(global_image_id);
   image_state->instance_id = UNMAPPED_INSTANCE_ID;
   image_state->mapped_time = {};
