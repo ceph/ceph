@@ -412,7 +412,7 @@ all_admin_daemons()
     local cluster=$1 ; shift
 
     for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
-	admin_daemon "${cluster}" $@
+	admin_daemon "${cluster}:${instance}" $@
     done
 }
 
