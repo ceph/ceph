@@ -286,6 +286,7 @@ class Task(object):
                 if arg in kwargs:
                     arg_map[arg] = kwargs[arg]
             if arg in arg_map:
+                # This is not a type error. We are using the index here.
                 arg_map[idx] = arg_map[arg]
 
         return arg_map
