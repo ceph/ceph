@@ -704,13 +704,18 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       dout(20) << " killing client lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
-    if (client_reconnect_gather.count(session->info.get_client())) {
+    if (client_reconnect_gather.erase(session->info.get_client())) {
       dout(20) << " removing client from reconnect set" << dendl;
-      client_reconnect_gather.erase(session->info.get_client());
-
       if (client_reconnect_gather.empty()) {
         dout(7) << " client " << session->info.inst << " was last reconnect, finishing" << dendl;
         reconnect_gather_finish();
+      }
+    }
+    if (client_reclaim_gather.erase(session->info.get_client())) {
+      dout(20) << " removing client from reclaim set" << dendl;
+      if (client_reclaim_gather.empty()) {
+        dout(7) << " client " << session->info.inst << " was last reclaimed, finishing" << dendl;
+	mds->maybe_clientreplay_done();
       }
     }
     
@@ -1118,11 +1123,14 @@ void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 {
   reconnect_done = reconnect_done_;
 
+  auto now = clock::now();
   set<Session*> sessions;
   mds->sessionmap.get_client_session_set(sessions);
   for (auto session : sessions) {
-    if (session->is_open())
-	client_reconnect_gather.insert(session->get_client());
+    if (session->is_open()) {
+      client_reconnect_gather.insert(session->get_client());
+      session->last_cap_renew = now;
+    }
   }
 
   if (client_reconnect_gather.empty()) {
@@ -1383,7 +1391,18 @@ void Server::reconnect_tick()
 	 ++p) {
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
       ceph_assert(session);
-      dout(1) << "reconnect gave up on " << session->info.inst << dendl;
+
+      // Keep sessions that have specified timeout. These sessions will prevent
+      // mds from going to active. MDS goes to active after they all have been
+      // killed or reclaimed.
+      if (session->info.client_metadata.find("timeout") !=
+	  session->info.client_metadata.end()) {
+	dout(1) << "reconnect keeps " << session->info.inst << ", need to be reclaimed" << dendl;
+	client_reclaim_gather.insert(session->get_client());
+	continue;
+      }
+
+      dout(1) << "reconnect gives up on " << session->info.inst << dendl;
 
       mds->clog->warn() << "evicting unresponsive client " << *session
                         << ", after waiting " << g_conf()->mds_reconnect_timeout
