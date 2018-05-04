@@ -1479,13 +1479,25 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("cephx_require_version", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("Cephx version required (1 = pre-mimic, 2 = mimic+)"),
+
     Option("cephx_cluster_require_signatures", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
 
+    Option("cephx_cluster_require_version", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("Cephx version required by the cluster from clients (1 = pre-mimic, 2 = mimic+)"),
+
     Option("cephx_service_require_signatures", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
+
+    Option("cephx_service_require_version", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("Cephx version required from ceph services (1 = pre-mimic, 2 = mimic+)"),
 
     Option("cephx_sign_messages", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

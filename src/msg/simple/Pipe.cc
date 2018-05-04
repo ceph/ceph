@@ -484,11 +484,21 @@ int Pipe::accept()
 	  ldout(msgr->cct,10) << "using cephx, requiring MSG_AUTH feature bit for cluster" << dendl;
 	  policy.features_required |= CEPH_FEATURE_MSG_AUTH;
 	}
+	if (msgr->cct->_conf->cephx_require_version >= 2 ||
+	    msgr->cct->_conf->cephx_cluster_require_version >= 2) {
+	  ldout(msgr->cct,10) << "using cephx, requiring cephx v2 feature bit for cluster" << dendl;
+	  policy.features_required |= CEPH_FEATUREMASK_CEPHX_V2;
+	}
       } else {
 	if (msgr->cct->_conf->cephx_require_signatures ||
 	    msgr->cct->_conf->cephx_service_require_signatures) {
 	  ldout(msgr->cct,10) << "using cephx, requiring MSG_AUTH feature bit for service" << dendl;
 	  policy.features_required |= CEPH_FEATURE_MSG_AUTH;
+	}
+	if (msgr->cct->_conf->cephx_require_version >= 2 ||
+	    msgr->cct->_conf->cephx_service_require_version >= 2) {
+	  ldout(msgr->cct,10) << "using cephx, requiring cephx v2 feature bit for cluster" << dendl;
+	  policy.features_required |= CEPH_FEATUREMASK_CEPHX_V2;
 	}
       }
     }
