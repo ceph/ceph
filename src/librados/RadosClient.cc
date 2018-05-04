@@ -863,7 +863,11 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
     return r;
 
   lock.Unlock();
-  r = cond.wait();
+  if (conf->rados_mon_op_timeout) {
+    r = cond.wait_for(conf->rados_mon_op_timeout);
+  } else {
+    r = cond.wait();
+  }
   lock.Lock();
 
   return r;
