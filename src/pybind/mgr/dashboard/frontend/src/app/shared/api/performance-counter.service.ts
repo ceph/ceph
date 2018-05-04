@@ -1,12 +1,11 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { of as observableOf } from 'rxjs';
+import { mergeMap } from 'rxjs/operators';
 
 @Injectable()
 export class PerformanceCounterService {
-
   private url = 'api/perf_counters';
 
   constructor(private http: HttpClient) {}
@@ -17,9 +16,10 @@ export class PerformanceCounterService {
 
   get(service_type: string, service_id: string) {
     const serviceType = service_type.replace('-', '_');
-    return this.http.get(`${this.url}/${serviceType}/${service_id}`)
-      .flatMap((resp) => {
-        return Observable.of(resp['counters']);
-      });
+    return this.http.get(`${this.url}/${serviceType}/${service_id}`).pipe(
+      mergeMap((resp) => {
+        return observableOf(resp['counters']);
+      })
+    );
   }
 }

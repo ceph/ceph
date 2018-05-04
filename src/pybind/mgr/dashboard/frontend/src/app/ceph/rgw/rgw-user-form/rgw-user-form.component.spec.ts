@@ -4,8 +4,7 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalService } from 'ngx-bootstrap/modal';
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { of as observableOf } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -18,7 +17,7 @@ describe('RgwUserFormComponent', () => {
 
   class MockRgwUserService extends RgwUserService {
     enumerate() {
-      return Observable.of(queryResult);
+      return observableOf(queryResult);
     }
   }
 

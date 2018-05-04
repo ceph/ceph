@@ -2,9 +2,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
-import 'rxjs/add/observable/forkJoin';
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { forkJoin as observableForkJoin, of as observableOf } from 'rxjs';
+import { mergeMap } from 'rxjs/operators';
 
 @Injectable()
 export class RgwBucketService {
@@ -17,16 +16,16 @@ export class RgwBucketService {
    * @return {Observable<Object[]>}
    */
   list() {
-    return this.enumerate().flatMap((buckets: string[]) => {
-      if (buckets.length > 0) {
-        return Observable.forkJoin(
-          buckets.map((bucket: string) => {
-            return this.get(bucket);
-          })
-        );
-      }
-      return Observable.of([]);
-    });
+    return this.enumerate().pipe(
+      mergeMap((buckets: string[]) => {
+        if (buckets.length > 0) {
+          return observableForkJoin(
+            buckets.map((bucket: string) => {
+              return this.get(bucket);
+            }));
+        }
+        return observableOf([]);
+      }));
   }
 
   /**
@@ -72,9 +71,10 @@ export class RgwBucketService {
    * @return {Observable<boolean>}
    */
   exists(bucket: string) {
-    return this.enumerate().flatMap((resp: string[]) => {
-      const index = _.indexOf(resp, bucket);
-      return Observable.of(-1 !== index);
-    });
+    return this.enumerate().pipe(
+      mergeMap((resp: string[]) => {
+        const index = _.indexOf(resp, bucket);
+        return observableOf(-1 !== index);
+      }));
   }
 }

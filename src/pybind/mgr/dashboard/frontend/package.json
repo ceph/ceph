@@ -47,7 +47,8 @@
     "ng2-charts": "^1.6.0",
     "ng2-toastr": "4.1.2",
     "ngx-bootstrap": "^2.0.1",
-    "rxjs": "^5.5.2",
+    "rxjs": "^6.2.0",
+    "rxjs-compat": "^6.2.0",
     "zone.js": "^0.8.14"
   },
   "devDependencies": {

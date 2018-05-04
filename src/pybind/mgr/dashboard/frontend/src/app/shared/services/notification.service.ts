@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
 import { ToastsManager } from 'ng2-toastr';
-import { BehaviorSubject } from 'rxjs/BehaviorSubject';
+import { BehaviorSubject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification } from '../models/cd-notification';

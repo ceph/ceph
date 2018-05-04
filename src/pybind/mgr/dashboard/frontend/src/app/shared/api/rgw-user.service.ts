@@ -2,9 +2,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
-import 'rxjs/add/observable/forkJoin';
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import {forkJoin as observableForkJoin, of as observableOf } from 'rxjs';
+import { mergeMap } from 'rxjs/operators';
 
 @Injectable()
 export class RgwUserService {
@@ -17,16 +16,16 @@ export class RgwUserService {
    * @return {Observable<Object[]>}
    */
   list() {
-    return this.enumerate().flatMap((uids: string[]) => {
-      if (uids.length > 0) {
-        return Observable.forkJoin(
-          uids.map((uid: string) => {
-            return this.get(uid);
-          })
-        );
-      }
-      return Observable.of([]);
-    });
+    return this.enumerate().pipe(
+      mergeMap((uids: string[]) => {
+        if (uids.length > 0) {
+          return observableForkJoin(
+            uids.map((uid: string) => {
+              return this.get(uid);
+            }));
+        }
+        return observableOf([]);
+      }));
   }
 
   /**
@@ -161,9 +160,10 @@ export class RgwUserService {
    * @return {Observable<boolean>}
    */
   exists(uid: string) {
-    return this.enumerate().flatMap((resp: string[]) => {
-      const index = _.indexOf(resp, uid);
-      return Observable.of(-1 !== index);
-    });
+    return this.enumerate().pipe(
+      mergeMap((resp: string[]) => {
+        const index = _.indexOf(resp, uid);
+        return observableOf(-1 !== index);
+      }));
   }
 }

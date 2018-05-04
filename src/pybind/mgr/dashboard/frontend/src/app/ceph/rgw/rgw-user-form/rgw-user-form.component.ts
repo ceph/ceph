@@ -11,8 +11,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap';
-import 'rxjs/add/observable/forkJoin';
-import { Observable } from 'rxjs/Observable';
+import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { FormatterService } from '../../../shared/services/formatter.service';
@@ -163,7 +162,7 @@ export class RgwUserFormComponent implements OnInit {
       const observables = [];
       observables.push(this.rgwUserService.get(params.uid));
       observables.push(this.rgwUserService.getQuota(params.uid));
-      Observable.forkJoin(observables).subscribe(
+      observableForkJoin(observables).subscribe(
         (resp: any[]) => {
           this.loading = false;
           // Get the default values.
@@ -248,7 +247,7 @@ export class RgwUserFormComponent implements OnInit {
       this.submitObservables.push(this.rgwUserService.putQuota(bucketQuotaArgs));
     }
     // Finally execute all observables.
-    Observable.forkJoin(this.submitObservables).subscribe(
+    observableForkJoin(this.submitObservables).subscribe(
       () => {
         this.goToListView();
       },

@@ -1,8 +1,7 @@
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import * as _ from 'lodash';
-import 'rxjs/add/observable/of';
-import { Subject } from 'rxjs/Subject';
+import { Subject } from 'rxjs';
 
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';

@@ -3,8 +3,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { of as observableOf } from 'rxjs';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -18,7 +17,7 @@ describe('RgwBucketFormComponent', () => {
 
   class MockRgwBucketService extends RgwBucketService {
     enumerate() {
-      return Observable.of(queryResult);
+      return observableOf(queryResult);
     }
   }
 

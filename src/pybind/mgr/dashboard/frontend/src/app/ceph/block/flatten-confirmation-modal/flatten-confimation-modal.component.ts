@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap';
-import { Subject } from 'rxjs/Subject';
+import { Subject } from 'rxjs';
 
 @Component({
   selector: 'cd-flatten-confimation-modal',
@@ -10,7 +10,6 @@ import { Subject } from 'rxjs/Subject';
   styleUrls: ['./flatten-confimation-modal.component.scss']
 })
 export class FlattenConfirmationModalComponent implements OnInit {
-
   child: string;
   parent: string;
 

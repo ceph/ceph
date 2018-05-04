@@ -4,8 +4,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { of as observableOf } from 'rxjs';
 
 import { ModuleStatusGuardService } from './module-status-guard.service';
 
@@ -47,7 +46,7 @@ describe('ModuleStatusGuardService', () => {
         }
       };
       const httpClient = TestBed.get(HttpClient);
-      spyOn(httpClient, 'get').and.returnValue(Observable.of({ available: true, message: 'foo' }));
+      spyOn(httpClient, 'get').and.returnValue(observableOf({ available: true, message: 'foo' }));
       service.canActivate(route, null).subscribe((resp) => {
         result = resp;
       });
@@ -70,7 +69,7 @@ describe('ModuleStatusGuardService', () => {
       };
       const httpClient = TestBed.get(HttpClient);
       const router = TestBed.get(Router);
-      spyOn(httpClient, 'get').and.returnValue(Observable.of({ available: false, message: null }));
+      spyOn(httpClient, 'get').and.returnValue(observableOf({ available: false, message: null }));
       service.canActivateChild(route, null).subscribe((resp) => {
         result = resp;
       });
@@ -94,7 +93,7 @@ describe('ModuleStatusGuardService', () => {
       };
       const httpClient = TestBed.get(HttpClient);
       const router = TestBed.get(Router);
-      spyOn(httpClient, 'get').and.returnValue(Observable.of(null));
+      spyOn(httpClient, 'get').and.returnValue(observableOf(null));
       service.canActivateChild(route, null).subscribe((resp) => {
         result = resp;
       });
