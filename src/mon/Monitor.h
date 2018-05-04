@@ -51,6 +51,7 @@
 #include "mon/MonOpRequest.h"
 #include "common/WorkQueue.h"
 
+#include "mon/command_multiplexer.h"
 
 #define CEPH_MON_PROTOCOL     13 /* cluster internal */
 
@@ -985,11 +986,12 @@ public:
 
 /* Projection class (capture selected private members externally): */
 
-namespace ceph::mon::cmds { struct MonitorProjection; }
+namespace ceph::cmds::mon { struct MonitorProjection; }
 
 class Monitor::multiplexer_projection : public Monitor {
-  friend ceph::mon::cmds::MonitorProjection;
+  friend ceph::cmds::mon::MonitorProjection;
 
+  protected:
   using C_Command      = Monitor::C_Command;		// already public, but now matches C_RetryMessage
   using C_RetryMessage = Monitor::C_RetryMessage;
   
