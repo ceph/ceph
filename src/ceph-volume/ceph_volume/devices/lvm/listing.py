@@ -17,7 +17,7 @@ osd_list_header_template = """\n
 
 osd_device_header_template = """
 
-  [{type: >4}]    {path}
+  {type: <13} {path}
 """
 
 device_metadata_item_template = """
@@ -31,18 +31,18 @@ def readable_tag(tag):
 
 def pretty_report(report):
     output = []
-    for _id, devices in report.items():
+    for _id, devices in sorted(report.items()):
         output.append(
             osd_list_header_template.format(osd_id=" osd.%s " % _id)
         )
         for device in devices:
             output.append(
                 osd_device_header_template.format(
-                    type=device['type'],
+                    type='[%s]' % device['type'],
                     path=device['path']
                 )
             )
-            for tag_name, value in device.get('tags', {}).items():
+            for tag_name, value in sorted(device.get('tags', {}).items()):
                 output.append(
                     device_metadata_item_template.format(
                         tag_name=readable_tag(tag_name),
@@ -179,7 +179,6 @@ class List(object):
                 return self.full_report(lvs=lvs)
 
         if lv:
-
             try:
                 _id = lv.tags['ceph.osd_id']
             except KeyError:

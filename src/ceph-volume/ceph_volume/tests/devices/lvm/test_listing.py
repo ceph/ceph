@@ -26,7 +26,7 @@ class TestPrettyReport(object):
             {'type': 'data', 'path': '/dev/sda1', 'devices': ['/dev/sda']}
         ]})
         stdout, stderr = capsys.readouterr()
-        assert '[data]    /dev/sda1' in stdout
+        assert '[data]        /dev/sda1' in stdout
 
     def test_osd_id_header_is_reported(self, capsys):
         lvm.listing.pretty_report({0: [
