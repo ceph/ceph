@@ -1918,6 +1918,11 @@ extern "C" int ceph_set_deleg_timeout(class ceph_mount_info *cmount, uint32_t ti
   return cmount->get_client()->set_deleg_timeout(timeout);
 }
 
+extern "C" void ceph_set_session_timeout(class ceph_mount_info *cmount, unsigned timeout)
+{
+  cmount->get_client()->set_session_timeout(timeout);
+}
+
 extern "C" void ceph_set_uuid(class ceph_mount_info *cmount, const char *uuid)
 {
   cmount->get_client()->set_uuid(std::string(uuid));

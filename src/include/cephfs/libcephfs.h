@@ -1785,6 +1785,15 @@ mode_t ceph_umask(struct ceph_mount_info *cmount, mode_t mode);
 void ceph_set_uuid(struct ceph_mount_info *cmount, const char *uuid);
 
 /**
+ * Set ceph client session timeout
+ * @param cmount the ceph mount handle to use.
+ * @param timeout the timeout to set
+ *
+ * Must be called before mount.
+ */
+void ceph_set_session_timeout(struct ceph_mount_info *cmount, unsigned timeout);
+
+/**
  * Start to reclaim states of other client
  * @param cmount the ceph mount handle to use.
  * @param uuid uuid of client whose states need to be reclaimed
