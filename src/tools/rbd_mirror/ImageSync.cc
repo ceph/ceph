@@ -27,6 +27,7 @@ namespace rbd {
 namespace mirror {
 
 using namespace image_sync;
+using librbd::util::create_async_context_callback;
 using librbd::util::create_context_callback;
 using librbd::util::unique_lock_name;
 
@@ -85,14 +86,29 @@ void ImageSync<I>::send_notify_sync_request() {
 
   dout(20) << dendl;
 
-  Context *ctx = create_context_callback<
-    ImageSync<I>, &ImageSync<I>::handle_notify_sync_request>(this);
+  m_lock.Lock();
+  if (m_canceled) {
+    m_lock.Unlock();
+    BaseRequest::finish(-ECANCELED);
+    return;
+  }
+
+  Context *ctx = create_async_context_callback(
+    m_work_queue, create_context_callback<
+      ImageSync<I>, &ImageSync<I>::handle_notify_sync_request>(this));
   m_instance_watcher->notify_sync_request(m_local_image_ctx->id, ctx);
+  m_lock.Unlock();
 }
 
 template <typename I>
 void ImageSync<I>::handle_notify_sync_request(int r) {
   dout(20) << ": r=" << r << dendl;
+
+  m_lock.Lock();
+  if (r == 0 && m_canceled) {
+    r = -ECANCELED;
+  }
+  m_lock.Unlock();
 
   if (r < 0) {
     BaseRequest::finish(r);
