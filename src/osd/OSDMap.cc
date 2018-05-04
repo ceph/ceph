@@ -1661,7 +1661,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     set<int> parents;
     for (auto osd : raw) {
       if (type > 0) {
-        auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+        auto parent = tmpmap.crush->get_parent_of_type(osd, type, crush_rule);
         if (parent >= 0) {
           lderr(cct) << __func__ << " unable to get parent of raw osd."
                      << osd << " of pg " << pg
