@@ -8,11 +8,13 @@ import {
 import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
 
+import * as _ from 'lodash';
 import 'rxjs/add/observable/throw';
 import 'rxjs/add/operator/catch';
 import { Observable } from 'rxjs/Observable';
 
 import { NotificationType } from '../enum/notification-type.enum';
+import { FinishedTask } from '../models/finished-task';
 import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
 
@@ -28,15 +30,30 @@ export class ApiInterceptorService implements HttpInterceptor {
       if (resp instanceof HttpErrorResponse) {
         let showNotification = true;
         switch (resp.status) {
+          case 400:
+            const finishedTask = new FinishedTask();
+
+            const task = resp.error.task;
+            if (_.isPlainObject(task)) {
+              task.metadata.component = task.metadata.component || resp.error.component;
+
+              finishedTask.name = task.name;
+              finishedTask.metadata = task.metadata;
+            } else {
+              finishedTask.metadata = resp.error;
+            }
+
+            finishedTask.success = false;
+            finishedTask.exception = resp.error;
+            this.notificationService.notifyTask(finishedTask);
+            showNotification = false;
+            break;
           case 401:
             this.authStorageService.remove();
             this.router.navigate(['/login']);
             break;
           case 404:
             this.router.navigate(['/404']);
-            break;
-          case 409:
-            showNotification = false;
             break;
         }
 

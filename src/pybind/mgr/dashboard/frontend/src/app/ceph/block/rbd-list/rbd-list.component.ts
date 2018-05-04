@@ -258,9 +258,6 @@ export class RbdListComponent implements OnInit, OnDestroy {
         this.loadImages(null);
       }).catch((resp) => {
         this.modalRef.content.stopLoadingSpinner();
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 
@@ -300,10 +297,6 @@ export class RbdListComponent implements OnInit, OnDestroy {
         }
         this.modalRef.hide();
         this.loadImages(null);
-      }).catch((resp) => {
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 
