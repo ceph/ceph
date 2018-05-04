@@ -436,7 +436,9 @@ public:
     logger->dump_formatted(f, false);
     f->close_section();
   }
-
+  void get_db_statistics(Formatter *f) override {
+    db->get_statistics(f);
+  }
   int statfs(struct store_statfs_t *buf) override;
 
   CollectionHandle open_collection(const coll_t& c) override;
