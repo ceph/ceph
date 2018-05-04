@@ -39,5 +39,15 @@ bool ceph_heap_set_numeric_property(const char *property, size_t value)
   return false;
 }
 
+double ceph_heap_get_memory_release_rate()
+{
+  return 0.0;
+}
+
+void ceph_heap_set_memory_release_rate(double rate)
+{
+  return;
+}
+
 void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
                                        ostream& out) { return; }
