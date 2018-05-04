@@ -165,24 +165,32 @@ void Policy::remove_instances(const RWLock& lock,
 
   for (auto& instance_id : instance_ids) {
     auto map_it = m_map.find(instance_id);
-    if (map_it != m_map.end()) {
-      m_dead_instances.insert(instance_id);
-      dout(5) << "force shuffling global_image_ids=[" << map_it->second
-              << "]" << dendl;
-      for (auto& global_image_id : map_it->second) {
-        auto it = m_image_states.find(global_image_id);
-        assert(it != m_image_states.end());
+    if (map_it == m_map.end()) {
+      continue;
+    }
 
-        auto& image_state = it->second;
-        if (is_state_scheduled(image_state,
-                               StateTransition::STATE_DISSOCIATING)) {
-          // don't shuffle images that no longer exist
-          continue;
-        }
+    auto& instance_global_image_ids = map_it->second;
+    if (instance_global_image_ids.empty()) {
+      m_map.erase(map_it);
+      continue;
+    }
 
-        if (set_state(&image_state, StateTransition::STATE_SHUFFLING, true)) {
-          global_image_ids->emplace(global_image_id);
-        }
+    m_dead_instances.insert(instance_id);
+    dout(5) << "force shuffling: instance_id=" << instance_id << ", "
+            << "global_image_ids=[" << instance_global_image_ids << "]"<< dendl;
+    for (auto& global_image_id : instance_global_image_ids) {
+      auto it = m_image_states.find(global_image_id);
+      assert(it != m_image_states.end());
+
+      auto& image_state = it->second;
+      if (is_state_scheduled(image_state,
+                             StateTransition::STATE_DISSOCIATING)) {
+        // don't shuffle images that no longer exist
+        continue;
+      }
+
+      if (set_state(&image_state, StateTransition::STATE_SHUFFLING, true)) {
+        global_image_ids->emplace(global_image_id);
       }
     }
   }
