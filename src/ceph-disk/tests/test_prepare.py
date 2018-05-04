@@ -121,7 +121,7 @@ class TestPrepare(Base):
         with mock.patch.multiple(main.PrepareData,
                                  set_type=set_type):
             prepare = main.Prepare.factory(args)
-        assert isinstance(prepare.data, main.PrepareBluestoreData)
+        assert isinstance(prepare.data, main.PrepareFilestoreData)
         assert prepare.data.is_file()
         prepare.prepare()
         assert os.path.exists(os.path.join(data, 'fsid'))
