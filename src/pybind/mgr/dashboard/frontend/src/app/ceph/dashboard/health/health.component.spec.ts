@@ -1,7 +1,7 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { Observable } from 'rxjs/Observable';
+import { of as observableOf } from 'rxjs';
 
 import { DashboardService } from '../../../shared/api/dashboard.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -20,7 +20,7 @@ describe('HealthComponent', () => {
 
   const fakeService = {
     getHealth: () => {
-      return Observable.of({
+      return observableOf({
         health: {},
         df: {
           stats: {}

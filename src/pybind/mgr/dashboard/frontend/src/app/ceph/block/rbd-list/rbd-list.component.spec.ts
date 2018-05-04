@@ -11,8 +11,7 @@ import {
   TabsModule,
   TooltipModule
 } from 'ngx-bootstrap';
-import 'rxjs/add/observable/throw';
-import { Observable } from 'rxjs/Observable';
+import { throwError as observableThrowError } from 'rxjs';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
@@ -73,7 +72,7 @@ describe('RbdListComponent', () => {
         null,
         null
       );
-      spyOn(rbdService, 'delete').and.returnValue(Observable.throw({ status: 500 }));
+      spyOn(rbdService, 'delete').and.returnValue(observableThrowError({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();
       component.modalRef = new BsModalRef();
       component.modalRef.content = {

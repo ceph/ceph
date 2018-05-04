@@ -3,7 +3,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { BsDropdownModule, TabsModule } from 'ngx-bootstrap';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { Observable } from 'rxjs/Observable';
+import { Observable } from 'rxjs';
 
 import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
 import { SharedModule } from '../../../shared/shared.module';

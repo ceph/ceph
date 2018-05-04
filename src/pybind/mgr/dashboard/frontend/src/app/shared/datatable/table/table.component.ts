@@ -11,16 +11,15 @@ import {
   TemplateRef,
   ViewChild
 } from '@angular/core';
+
 import {
   DatatableComponent,
   SortDirection,
   SortPropDir,
   TableColumnProp
 } from '@swimlane/ngx-datatable';
-
 import * as _ from 'lodash';
-import 'rxjs/add/observable/timer';
-import { Observable } from 'rxjs/Observable';
+import { Observable, timer as observableTimer } from 'rxjs';
 
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
@@ -48,15 +47,15 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // Each item -> { prop: 'attribute name', dir: 'asc'||'desc'}
   @Input() sorts?: SortPropDir[];
   // Method used for setting column widths.
-  @Input() columnMode ?= 'flex';
+  @Input() columnMode? = 'flex';
   // Display the tool header, including reload button, pagination and search fields?
-  @Input() toolHeader ?= true;
+  @Input() toolHeader? = true;
   // Display the table header?
-  @Input() header ?= true;
+  @Input() header? = true;
   // Display the table footer?
-  @Input() footer ?= true;
+  @Input() footer? = true;
   // Page size to show. Set to 0 to show unlimited number of rows.
-  @Input() limit ?= 10;
+  @Input() limit? = 10;
 
   /**
    * Auto reload time in ms - per default every 5s
@@ -107,7 +106,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   tableColumns: CdTableColumn[];
   cellTemplates: {
-    [key: string]: TemplateRef<any>
+    [key: string]: TemplateRef<any>;
   } = {};
   search = '';
   rows = [];
@@ -138,8 +137,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       const exists = _.findIndex(this.columns, ['prop', this.identifier]) !== -1;
       // Auto-build the sorting configuration. If the specified identifier doesn't exist,
       // then use the property of the first column.
-      this.sorts = this.createSortingDefinition(exists ?
-        this.identifier : this.columns[0].prop + '');
+      this.sorts = this.createSortingDefinition(
+        exists ? this.identifier : this.columns[0].prop + ''
+      );
       // If the specified identifier doesn't exist and it is not forced to use it anyway,
       // then use the property of the first column.
       if (!exists && !this.forceIdentifier) {
@@ -147,7 +147,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       }
     }
     this.initUserConfig();
-    this.columns.forEach(c => {
+    this.columns.forEach((c) => {
       if (c.cellTransformation) {
         c.cellTemplate = this.cellTemplates[c.cellTransformation];
       }
@@ -166,9 +166,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (this.fetchData.observers.length > 0) {
       this.loadingIndicator = true;
     }
-    if (_.isInteger(this.autoReload) && (this.autoReload > 0)) {
+    if (_.isInteger(this.autoReload) && this.autoReload > 0) {
       this.ngZone.runOutsideAngular(() => {
-        this.reloadSubscriber = Observable.timer(0, this.autoReload).subscribe(x => {
+        this.reloadSubscriber = observableTimer(0, this.autoReload).subscribe((x) => {
           this.ngZone.run(() => {
             return this.reloadData();
           });
@@ -179,7 +179,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
   }
 
-  initUserConfig () {
+  initUserConfig() {
     if (this.autoSave) {
       this.tableName = this._calculateUniqueTableName(this.columns);
       this._loadUserConfig();
@@ -200,7 +200,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
   }
 
-  _calculateUniqueTableName (columns) {
+  _calculateUniqueTableName(columns) {
     const stringToNumber = (s) => {
       if (!_.isString(s)) {
         return 0;
@@ -211,12 +211,16 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       }
       return result;
     };
-    return columns.reduce((result, value, index) =>
-      ((stringToNumber(value.prop) + stringToNumber(value.name)) * (index + 1)) + result,
-      0).toString();
+    return columns
+      .reduce(
+        (result, value, index) =>
+          (stringToNumber(value.prop) + stringToNumber(value.name)) * (index + 1) + result,
+        0
+      )
+      .toString();
   }
 
-  _loadUserConfig () {
+  _loadUserConfig() {
     const loaded = this.localStorage.getItem(this.tableName);
     if (loaded) {
       this.userConfig = JSON.parse(loaded);
@@ -228,7 +232,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.saveSubscriber = source.subscribe(this._saveUserConfig.bind(this));
   }
 
-  _initUserConfigProxy (observer) {
+  _initUserConfigProxy(observer) {
     this.userConfig = new Proxy(this.userConfig, {
       set(config, prop, value) {
         config[prop] = value;
@@ -238,20 +242,20 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     });
   }
 
-  _saveUserConfig (config) {
+  _saveUserConfig(config) {
     this.localStorage.setItem(this.tableName, JSON.stringify(config));
   }
 
-  updateUserColumns () {
-    this.userConfig.columns = this.columns.map(c => ({
+  updateUserColumns() {
+    this.userConfig.columns = this.columns.map((c) => ({
       prop: c.prop,
       name: c.name,
       isHidden: !!c.isHidden
     }));
   }
 
-  filterHiddenColumns () {
-    this.tableColumns = this.columns.filter(c => !c.isHidden);
+  filterHiddenColumns() {
+    this.tableColumns = this.columns.filter((c) => !c.isHidden);
   }
 
   ngOnDestroy() {
@@ -302,7 +306,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
   }
 
-  refreshBtn () {
+  refreshBtn() {
     this.loadingIndicator = true;
     this.reloadData();
   }
@@ -366,18 +370,18 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.updateColumns();
   }
 
-  updateColumns () {
+  updateColumns() {
     this.updateUserColumns();
     this.filterHiddenColumns();
     const sortProp = this.userConfig.sorts[0].prop;
     if (!_.find(this.tableColumns, (c: CdTableColumn) => c.prop === sortProp)) {
       this.userConfig.sorts = this.createSortingDefinition(this.tableColumns[0].prop);
-      this.table.onColumnSort({sorts: this.userConfig.sorts});
+      this.table.onColumnSort({ sorts: this.userConfig.sorts });
     }
     this.table.recalculate();
   }
 
-  createSortingDefinition (prop: TableColumnProp): SortPropDir[] {
+  createSortingDefinition(prop: TableColumnProp): SortPropDir[] {
     return [
       {
         prop: prop,
@@ -386,7 +390,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     ];
   }
 
-  changeSorting ({sorts}) {
+  changeSorting({ sorts }) {
     this.userConfig.sorts = sorts;
   }
 
@@ -395,23 +399,26 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       this.search = '';
     }
     let search = this.search.toLowerCase().replace(/,/g, '');
-    const columns = this.columns.filter(c => c.cellTransformation !== CellTemplate.sparkline);
+    const columns = this.columns.filter((c) => c.cellTransformation !== CellTemplate.sparkline);
     if (search.match(/['"][^'"]+['"]/)) {
       search = search.replace(/['"][^'"]+['"]/g, (match: string) => {
         return match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+');
       });
     }
     // update the rows
-    this.rows = this.subSearch(this.data, search.split(' ').filter(s => s.length > 0), columns);
+    this.rows = this.subSearch(this.data, search.split(' ').filter((s) => s.length > 0), columns);
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
   }
 
-  subSearch (data: any[], currentSearch: string[], columns: CdTableColumn[]) {
+  subSearch(data: any[], currentSearch: string[], columns: CdTableColumn[]) {
     if (currentSearch.length === 0 || data.length === 0) {
       return data;
     }
-    const searchTerms: string[] = currentSearch.pop().replace('+', ' ').split(':');
+    const searchTerms: string[] = currentSearch
+      .pop()
+      .replace('+', ' ')
+      .split(':');
     const columnsClone = [...columns];
     const dataClone = [...data];
     const filterColumns = (columnName: string) =>
@@ -432,22 +439,24 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (searchTerm.length === 0) {
       return data;
     }
-    return data.filter(d => {
-      return columns.filter(c => {
-        let cellValue: any = _.get(d, c.prop);
-        if (!_.isUndefined(c.pipe)) {
-          cellValue = c.pipe.transform(cellValue);
-        }
-        if (_.isUndefined(cellValue)) {
-          return;
-        }
-        if (_.isArray(cellValue)) {
-          cellValue = cellValue.join(' ');
-        } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
-          cellValue = cellValue.toString();
-        }
-        return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
-      }).length > 0;
+    return data.filter((d) => {
+      return (
+        columns.filter((c) => {
+          let cellValue: any = _.get(d, c.prop);
+          if (!_.isUndefined(c.pipe)) {
+            cellValue = c.pipe.transform(cellValue);
+          }
+          if (_.isUndefined(cellValue)) {
+            return;
+          }
+          if (_.isArray(cellValue)) {
+            cellValue = cellValue.join(' ');
+          } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
+            cellValue = cellValue.toString();
+          }
+          return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
+        }).length > 0
+      );
     });
   }
 

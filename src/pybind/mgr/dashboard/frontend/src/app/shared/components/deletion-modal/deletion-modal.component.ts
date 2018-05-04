@@ -4,7 +4,7 @@ import {
 import { FormControl, FormGroup, Validators } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap';
-import { Observable } from 'rxjs/Observable';
+import { Observable } from 'rxjs';
 
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 
