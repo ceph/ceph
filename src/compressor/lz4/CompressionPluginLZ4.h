@@ -30,7 +30,7 @@ public:
 
   int factory(CompressorRef *cs, std::ostream *ss) override {
     if (compressor == 0) {
-      LZ4Compressor *interface = new LZ4Compressor();
+      LZ4Compressor *interface = new LZ4Compressor(cct);
       compressor = CompressorRef(interface);
     }
     *cs = compressor;

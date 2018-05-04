@@ -648,6 +648,9 @@ endif()
 if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
+if(HAVE_QATZIP)
+  list(APPEND ceph_common_deps ${QATZIP_LIBRARIES})
+endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
   ${CMAKE_SOURCE_DIR}/src/common/version.cc

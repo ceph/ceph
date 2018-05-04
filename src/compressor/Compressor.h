@@ -23,6 +23,9 @@
 #include "include/assert.h"    // boost clobbers this
 #include "include/buffer.h"
 #include "include/int_types.h"
+#ifdef HAVE_QATZIP
+  #include "QatAccel.h"
+#endif
 
 class Compressor;
 typedef std::shared_ptr<Compressor> CompressorRef;
@@ -64,6 +67,11 @@ public:
     COMP_AGGRESSIVE,            ///< compress unless hinted INCOMPRESSIBLE
     COMP_FORCE                  ///< compress always
   };
+
+#ifdef HAVE_QATZIP
+  bool qat_enabled;
+  QatAccel qat_accel;
+#endif
 
   static std::string get_comp_alg_name(int a);
   static boost::optional<CompressionAlgorithm> get_comp_alg_type(const std::string &s);
