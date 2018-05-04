@@ -2660,6 +2660,12 @@ int OSD::init()
   update_log_config();
 
   peering_tp.start();
+  
+  service.init();
+  service.publish_map(osdmap);
+  service.publish_superblock(superblock);
+  service.max_oldest_map = superblock.oldest_map;
+
   osd_op_tp.start();
   disk_tp.start();
   command_tp.start();
@@ -2675,11 +2681,6 @@ int OSD::init()
     Mutex::Locker l(tick_timer_lock);
     tick_timer_without_osd_lock.add_event_after(cct->_conf->osd_heartbeat_interval, new C_Tick_WithoutOSDLock(this));
   }
-
-  service.init();
-  service.publish_map(osdmap);
-  service.publish_superblock(superblock);
-  service.max_oldest_map = superblock.oldest_map;
 
   osd_lock.Unlock();
 
