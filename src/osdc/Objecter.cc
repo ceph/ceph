@@ -3126,8 +3126,10 @@ void Objecter::_finish_op(Op *op, int r)
 
   // op->session->lock is locked unique or op->session is null
 
-  if (!op->ctx_budgeted && op->budgeted)
-    put_op_budget(op);
+  if (!op->ctx_budgeted && op->budget >= 0) {
+    put_op_budget_bytes(op->budget);
+    op->budget = -1;
+  }
 
   if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
