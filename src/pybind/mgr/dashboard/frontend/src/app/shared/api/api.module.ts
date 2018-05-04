@@ -16,6 +16,7 @@ import { RgwDaemonService } from './rgw-daemon.service';
 import { RgwUserService } from './rgw-user.service';
 import { TablePerformanceCounterService } from './table-performance-counter.service';
 import { TcmuIscsiService } from './tcmu-iscsi.service';
+import { UserService } from './user.service';
 
 @NgModule({
   imports: [CommonModule],
@@ -35,7 +36,8 @@ import { TcmuIscsiService } from './tcmu-iscsi.service';
     RgwDaemonService,
     RgwUserService,
     TablePerformanceCounterService,
-    TcmuIscsiService
+    TcmuIscsiService,
+    UserService
   ]
 })
 export class ApiModule {}

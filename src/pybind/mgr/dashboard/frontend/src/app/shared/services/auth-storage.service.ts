@@ -10,6 +10,10 @@ export class AuthStorageService {
     localStorage.setItem('dashboard_username', username);
   }
 
+  get() {
+    return localStorage.getItem('dashboard_username');
+  }
+
   remove() {
     localStorage.removeItem('dashboard_username');
   }
