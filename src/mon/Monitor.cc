@@ -2198,7 +2198,8 @@ void Monitor::calc_quorum_requirements()
     required_features |= CEPH_FEATUREMASK_SERVER_LUMINOUS;
   }
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_MIMIC)) {
-    required_features |= CEPH_FEATUREMASK_SERVER_MIMIC;
+    required_features |= CEPH_FEATUREMASK_SERVER_MIMIC |
+      CEPH_FEATUREMASK_CEPHX_V2;
   }
 
   // monmap
@@ -2212,7 +2213,8 @@ void Monitor::calc_quorum_requirements()
   }
   if (monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_MIMIC)) {
-    required_features |= CEPH_FEATUREMASK_SERVER_MIMIC;
+    required_features |= CEPH_FEATUREMASK_SERVER_MIMIC |
+      CEPH_FEATUREMASK_CEPHX_V2;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }
