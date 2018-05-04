@@ -480,3 +480,78 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
 }
 
 #endif	// __x86_64__
+
+#ifdef HAVE_QATZIP
+TEST(QAT, enc_qat_dec_noqat) {
+#ifdef HAVE_LZ4
+  const char* alg_collection[] = {"zlib", "lz4", "snappy"}; 
+#else
+  const char* alg_collection[] = {"zlib", "snappy"}; 
+#endif
+  for (auto alg : alg_collection) {
+    g_conf->set_val("qat_compressor_enabled", "true");
+    CompressorRef q = Compressor::create(g_ceph_context, alg);
+    g_conf->set_val("qat_compressor_enabled", "false");
+    CompressorRef noq = Compressor::create(g_ceph_context, alg);
+
+    // generate random buffer
+    for (int cnt=0; cnt<100; cnt++) {
+      srand(cnt + 1000);
+      int log2 = (rand()%18) + 1;
+      int size = (rand() % (1 << log2)) + 1;
+  
+      char test[size];
+      for (int i=0; i<size; ++i)
+        test[i] = rand()%256;
+      bufferlist in, out;
+      in.append(test, size);
+  
+      int res = q->compress(in, out);
+      EXPECT_EQ(res, 0);
+      bufferlist after;
+      res = noq->decompress(out, after);
+      EXPECT_EQ(res, 0);
+      bufferlist exp;
+      exp.append(test, size);
+      EXPECT_TRUE(exp.contents_equal(after));
+    }
+  }
+}
+
+TEST(QAT, enc_noqat_dec_qat) {
+#ifdef HAVE_LZ4
+  const char* alg_collection[] = {"zlib", "lz4", "snappy"}; 
+#else
+  const char* alg_collection[] = {"zlib", "snappy"}; 
+#endif
+  for (auto alg : alg_collection) {
+    g_conf->set_val("qat_compressor_enabled", "true");
+    CompressorRef q = Compressor::create(g_ceph_context, alg);
+    g_conf->set_val("qat_compressor_enabled", "false");
+    CompressorRef noq = Compressor::create(g_ceph_context, alg);
+
+    // generate random buffer
+    for (int cnt=0; cnt<100; cnt++) {
+      srand(cnt + 1000);
+      int log2 = (rand()%18) + 1;
+      int size = (rand() % (1 << log2)) + 1;
+  
+      char test[size];
+      for (int i=0; i<size; ++i)
+        test[i] = rand()%256;
+      bufferlist in, out;
+      in.append(test, size);
+  
+      int res = noq->compress(in, out);
+      EXPECT_EQ(res, 0);
+      bufferlist after;
+      res = q->decompress(out, after);
+      EXPECT_EQ(res, 0);
+      bufferlist exp;
+      exp.append(test, size);
+      EXPECT_TRUE(exp.contents_equal(after));
+    }
+  }
+}
+
+#endif	// HAVE_QATZIP

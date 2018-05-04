@@ -17,6 +17,7 @@
 
 #include <snappy.h>
 #include <snappy-sinksource.h>
+#include "common/config.h"
 #include "compressor/Compressor.h"
 #include "include/buffer.h"
 
@@ -56,9 +57,20 @@ class CEPH_BUFFER_API BufferlistSource : public snappy::Source {
 
 class SnappyCompressor : public Compressor {
  public:
-  SnappyCompressor() : Compressor(COMP_ALG_SNAPPY, "snappy") {}
+  SnappyCompressor(CephContext* cct) : Compressor(COMP_ALG_SNAPPY, "snappy") {
+#ifdef HAVE_QATZIP
+    if (cct->_conf->qat_compressor_enabled && qat_accel.init("snappy"))
+      qat_enabled = true;
+    else
+      qat_enabled = false;
+#endif
+  }
 
   int compress(const bufferlist &src, bufferlist &dst) override {
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.compress(src, dst);
+#endif
     BufferlistSource source(const_cast<bufferlist&>(src).begin(), src.length());
     bufferptr ptr = buffer::create_page_aligned(
       snappy::MaxCompressedLength(src.length()));
@@ -69,6 +81,10 @@ class SnappyCompressor : public Compressor {
   }
 
   int decompress(const bufferlist &src, bufferlist &dst) override {
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.decompress(src, dst);
+#endif
     bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
     return decompress(i, src.length(), dst);
   }
@@ -76,6 +92,10 @@ class SnappyCompressor : public Compressor {
   int decompress(bufferlist::iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) override {
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.decompress(p, compressed_len, dst);
+#endif
     snappy::uint32 res_len = 0;
     BufferlistSource source_1(p, compressed_len);
     if (!snappy::GetUncompressedLength(&source_1, &res_len)) {

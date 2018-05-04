@@ -94,6 +94,8 @@ OPTION(xio_max_send_inline, OPT_INT) // xio maximum threshold to send inline
 OPTION(compressor_zlib_isal, OPT_BOOL)
 OPTION(compressor_zlib_level, OPT_INT) //regular zlib compression level, not applicable to isa-l optimized version
 
+OPTION(qat_compressor_enabled, OPT_BOOL)
+
 OPTION(plugin_crypto_accelerator, OPT_STR)
 
 OPTION(mempool_debug, OPT_BOOL)
