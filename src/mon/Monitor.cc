@@ -14,6 +14,7 @@
 
 
 #include <sstream>
+#include <tuple>
 #include <stdlib.h>
 #include <signal.h>
 #include <limits.h>
@@ -2067,10 +2068,29 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   finish_election();
 }
 
+namespace {
+std::string collect_compression_algorithms()
+{
+  ostringstream os;
+  bool printed = false;
+  for (auto [name, key] : Compressor::compression_algorithms) {
+    if (printed) {
+      os << ", ";
+    } else {
+      printed = true;
+    }
+    std::ignore = key;
+    os << name;
+  }
+  return os.str();
+}
+}
+
 void Monitor::collect_metadata(Metadata *m)
 {
   collect_sys_info(m, g_ceph_context);
   (*m)["addr"] = stringify(messenger->get_myaddr());
+  (*m)["compression_algorithms"] = collect_compression_algorithms();
 }
 
 void Monitor::finish_election()
