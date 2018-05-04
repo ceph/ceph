@@ -462,9 +462,6 @@ export class RbdFormComponent implements OnInit {
       this.router.navigate(['/block/rbd']);
     }, (resp) => {
       this.rbdForm.setErrors({'cdSubmitButton': true});
-      finishedTask.success = false;
-      finishedTask.exception = resp.error;
-      this.notificationService.notifyTask(finishedTask);
     });
   }
 
@@ -521,9 +518,6 @@ export class RbdFormComponent implements OnInit {
         this.router.navigate(['/block/rbd']);
       }).catch((resp) => {
         this.rbdForm.setErrors({'cdSubmitButton': true});
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 
@@ -556,9 +550,6 @@ export class RbdFormComponent implements OnInit {
         this.router.navigate(['/block/rbd']);
       }, (resp) => {
         this.rbdForm.setErrors({'cdSubmitButton': true});
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 
@@ -608,9 +599,6 @@ export class RbdFormComponent implements OnInit {
         this.router.navigate(['/block/rbd']);
       }).catch((resp) => {
         this.rbdForm.setErrors({'cdSubmitButton': true});
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 
