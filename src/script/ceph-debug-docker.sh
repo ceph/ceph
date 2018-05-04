@@ -74,7 +74,7 @@ function main {
         user="$(whoami)"
     fi
 
-    image="${user}/ceph-ci:${branch}:${sha}-${env/:/-}"
+    tag="${user}:ceph-ci-${branch}-${sha}-${env/:/-}"
 
     T=$(mktemp -d)
     pushd "$T"
@@ -93,9 +93,9 @@ RUN add-apt-repository "\$(wget --quiet -O - https://shaman.ceph.com/api/repos/c
     apt-get update --yes && \
     apt-get install --yes --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg
 EOF
-        time run docker build $CACHE --tag "$image" .
+        time run docker build $CACHE --tag "$tag" .
     else # try RHEL flavor
-        time run docker build $CACHE --tag "$image" - <<EOF
+        time run docker build $CACHE --tag "$tag" - <<EOF
 FROM ${env}
 
 WORKDIR /root
@@ -110,9 +110,9 @@ EOF
     popd
     rm -rf -- "$T"
 
-    printf "built image %s\n" "$image"
+    printf "built image %s\n" "$tag"
 
-    run docker run -ti -v /ceph:/ceph:ro "$image"
+    run docker run -ti -v /ceph:/ceph:ro "$tag"
     return 0
 }
 
