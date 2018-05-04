@@ -3,8 +3,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import 'rxjs/add/observable/of';
-import { Observable } from 'rxjs/Observable';
+import { of as observableOf } from 'rxjs';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -23,7 +22,7 @@ describe('RbdFormComponent', () => {
     subscribe: (name, metadata, onTaskFinished: (finishedTask: any) => any) => {
       return null;
     },
-    defaultFeatures: () => Observable.of([]),
+    defaultFeatures: () => observableOf([]),
     list: (attrs = []) => {
       return new Promise(function(resolve, reject) {
         return;
