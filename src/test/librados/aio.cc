@@ -235,6 +235,9 @@ TEST(LibRadosAio, PoolQuotaPP) {
   }
   ASSERT_LT(n, 1024);
 
+  // make sure we have latest map that marked the pool full
+  test_data.m_cluster.wait_for_latest_osdmap();
+
   // make sure we block without FULL_TRY
   {
     ObjectWriteOperation op;
