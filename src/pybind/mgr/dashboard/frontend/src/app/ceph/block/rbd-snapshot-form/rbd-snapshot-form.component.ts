@@ -74,9 +74,6 @@ export class RbdSnapshotFormComponent implements OnInit {
         this.onSubmit.next(this.snapName);
       }).catch((resp) => {
         this.snapshotForm.setErrors({'cdSubmitButton': true});
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 
@@ -99,9 +96,6 @@ export class RbdSnapshotFormComponent implements OnInit {
         this.onSubmit.next(snapshotName);
       }).catch((resp) => {
         this.snapshotForm.setErrors({'cdSubmitButton': true});
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 

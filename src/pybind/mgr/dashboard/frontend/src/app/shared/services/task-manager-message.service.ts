@@ -1,4 +1,6 @@
 import { Injectable } from '@angular/core';
+
+import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
 import { Task } from '../models/task';
 
@@ -130,11 +132,13 @@ export class TaskManagerMessageService {
         return {
         };
       }
-    ),
+    )
   };
 
   defaultMessage = new TaskManagerMessage(
-    (metadata) => 'Unknown Task',
+    (metadata) => {
+      return Components[metadata.component] || metadata.component || 'Unknown Task';
+    },
     (metadata) => 'Task executed successfully',
     () => {
       return {
@@ -151,7 +155,7 @@ export class TaskManagerMessageService {
 
   getErrorMessage(finishedTask: FinishedTask) {
     const taskManagerMessage = this.messages[finishedTask.name] || this.defaultMessage;
-    return taskManagerMessage.error(finishedTask.metadata)[finishedTask.exception.errno] ||
+    return taskManagerMessage.error(finishedTask.metadata)[finishedTask.exception.code] ||
       finishedTask.exception.detail;
   }
 
