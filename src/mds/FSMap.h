@@ -306,9 +306,9 @@ public:
    * Caller must already have validated all arguments vs. the existing
    * FSMap and OSDMap contents.
    */
-  void create_filesystem(std::string_view name,
-                         int64_t metadata_pool, int64_t data_pool,
-                         uint64_t features);
+  std::shared_ptr<Filesystem> create_filesystem(
+      std::string_view name, int64_t metadata_pool,
+      int64_t data_pool, uint64_t features);
 
   /**
    * Remove the filesystem (it must exist).  Caller should already
