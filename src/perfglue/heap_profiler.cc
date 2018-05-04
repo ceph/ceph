@@ -149,7 +149,7 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
   if (cmd.size() == 1 && cmd[0] == "stats") {
     char heap_stats[HEAP_PROFILER_STATS_SIZE];
     ceph_heap_profiler_stats(heap_stats, sizeof(heap_stats));
-    out << g_conf->name << " tcmalloc heap stats:"
+    out << g_conf->name << " tcmalloc heap stats:\n"
 	<< heap_stats;
   } else {
     out << "unknown command " << cmd;
