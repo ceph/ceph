@@ -2145,7 +2145,7 @@ class PrepareBluestore(Prepare):
         parser.add_argument(
             '--bluestore',
             dest='bluestore',
-            action='store_true', default=True,
+            action='store_true', default=False,
             help='bluestore objectstore',
         )
         parser.add_argument(
