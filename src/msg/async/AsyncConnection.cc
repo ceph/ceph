@@ -1485,7 +1485,8 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   // require signatures for cephx?
   if (connect.authorizer_protocol == CEPH_AUTH_CEPHX) {
     if (peer_type == CEPH_ENTITY_TYPE_OSD ||
-        peer_type == CEPH_ENTITY_TYPE_MDS) {
+        peer_type == CEPH_ENTITY_TYPE_MDS ||
+	peer_type == CEPH_ENTITY_TYPE_MGR) {
       if (async_msgr->cct->_conf->cephx_require_signatures ||
           async_msgr->cct->_conf->cephx_cluster_require_signatures) {
         ldout(async_msgr->cct, 10) << __func__ << " using cephx, requiring MSG_AUTH feature bit for cluster" << dendl;
