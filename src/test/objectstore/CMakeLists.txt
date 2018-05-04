@@ -124,6 +124,14 @@ if(HAVE_LIBAIO)
   add_ceph_unittest(unittest_alloc ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_alloc)
   target_link_libraries(unittest_alloc os global)
 
+
+  add_executable(unittest_alloc_bench
+    Allocator_bench.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_alloc_bench ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_alloc_bench)
+  target_link_libraries(unittest_alloc_bench os global)
+
   add_executable(unittest_fastbmap_allocator
     fastbmap_allocator_test.cc
     $<TARGET_OBJECTS:unit-main>
