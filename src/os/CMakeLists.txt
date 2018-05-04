@@ -38,6 +38,7 @@ endif(WITH_BLUESTORE)
 if(HAVE_LIBAIO)
   list(APPEND libos_srcs
     bluestore/KernelDevice.cc
+    bluestore/WriteCacheDevice.cc
     bluestore/aio.cc)
 endif()
 
