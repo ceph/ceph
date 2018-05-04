@@ -771,6 +771,7 @@ EOF
 
     if [ $new -eq 1 ]; then
         if [ "$CEPH_NUM_FS" -gt "0" ] ; then
+            sleep 5 # time for MDS to come up as standby to avoid health warnings on fs creation
             if [ "$CEPH_NUM_FS" -gt "1" ] ; then
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
