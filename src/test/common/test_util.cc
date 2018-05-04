@@ -32,3 +32,12 @@ TEST(util, collect_sys_info)
   cct->put();
 }
 #endif
+
+TEST(util, get_line)
+{
+ const auto input = "Hello, World!";
+
+ std::istringstream is(input);
+
+ ASSERT_TRUE(input == ceph::util::get_line(is));
+}
