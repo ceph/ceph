@@ -189,7 +189,7 @@ class Module(MgrModule):
         now = datetime.utcnow().isoformat() + 'Z'
 
         for daemon, counters in self.get_all_perf_counters().iteritems():
-            svc_type, svc_id = daemon.split(".")
+            svc_type, svc_id = daemon.split(".", 1)
             metadata = self.get_metadata(svc_type, svc_id)
 
             for path, counter_info in counters.items():

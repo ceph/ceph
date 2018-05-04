@@ -2211,12 +2211,17 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
     if (wildcard)
       io_ctx.set_namespace(all_nspaces);
-    bool use_stdout = (nargs.size() < 2) || (strcmp(nargs[1], "-") == 0);
+    bool use_stdout = (!output && (nargs.size() < 2 || (strcmp(nargs[1], "-") == 0)));
+    if (!use_stdout && !output) {
+      cerr << "Please use --output to specify the output file name" << std::endl;
+      ret = -1;
+      goto out;
+    }
     ostream *outstream;
     if(use_stdout)
       outstream = &cout;
     else
-      outstream = new ofstream(nargs[1]);
+      outstream = new ofstream(output);
 
     {
       if (formatter)
