@@ -195,6 +195,15 @@ public:
       cond.Wait(lock);
     return rval;
   }
+
+  /// Wait until the \c secs expires or \c complete() is called
+  int wait_for(double secs) {
+    utime_t interval;
+    interval.set_from_double(secs);
+    Mutex::Locker l{lock};
+    cond.WaitInterval(lock, interval);
+    return done ? rval : ETIMEDOUT;
+  }
 };
 
 #endif
