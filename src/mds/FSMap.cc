@@ -93,7 +93,6 @@ void FSMap::print(ostream& out) const
 
   if (filesystems.empty()) {
     out << "No filesystems configured" << std::endl;
-    return;
   }
 
   for (const auto &fs : filesystems) {
