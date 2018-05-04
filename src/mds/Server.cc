@@ -891,21 +891,53 @@ void Server::find_idle_sessions()
   //  (caps go stale, lease die)
   double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
   double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
-  while (1) {
-    Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
-    if (!session) break;
-    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
-    if (last_cap_renew_span < cutoff) {
-      dout(20) << "laggiest active session is " << session->info.inst << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
-      break;
+
+  std::vector<Session*> to_evict;
+
+  const auto sessions_p1 = mds->sessionmap.by_state.find(Session::STATE_OPEN);
+  if (sessions_p1 != mds->sessionmap.by_state.end() && !sessions_p1->second->empty()) {
+    std::vector<Session*> new_stale;
+
+    for (auto session : *(sessions_p1->second)) {
+      auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
+      if (last_cap_renew_span < cutoff) {
+	dout(20) << "laggiest active session is " << session->info.inst
+		 << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
+	continue;
+      }
+
+      auto it = session->info.client_metadata.find("timeout");
+      if (it != session->info.client_metadata.end()) {
+	unsigned timeout = strtoul(it->second.c_str(), nullptr, 0);
+	if (timeout == 0) {
+	  dout(10) << "skipping session " << session->info.inst
+		   << ", infinite timeout specified" << dendl;
+	  continue;
+	}
+	double cutoff = queue_max_age + timeout;
+	if  (last_cap_renew_span < cutoff) {
+	  dout(10) << "skipping session " << session->info.inst
+		   << ", timeout (" << timeout << ") specified"
+		   << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
+	  continue;
+	}
+
+	// do not go through stale, evict it directly.
+	to_evict.push_back(session);
+      } else {
+	dout(10) << "new stale session " << session->info.inst
+		 << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
+	new_stale.push_back(session);
+      }
     }
 
-    dout(10) << "new stale session " << session->info.inst << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
-    mds->sessionmap.set_state(session, Session::STATE_STALE);
-    mds->locker->revoke_stale_caps(session);
-    mds->locker->remove_stale_leases(session);
-    mds->send_message_client(MClientSession::create(CEPH_SESSION_STALE, session->get_push_seq()), session);
-    finish_flush_session(session, session->get_push_seq());
+    for (auto session : new_stale) {
+      mds->sessionmap.set_state(session, Session::STATE_STALE);
+      mds->locker->revoke_stale_caps(session);
+      mds->locker->remove_stale_leases(session);
+      mds->send_message_client(MClientSession::create(CEPH_SESSION_STALE, session->get_push_seq()), session);
+      finish_flush_session(session, session->get_push_seq());
+    }
   }
 
   // autoclose
@@ -924,38 +956,35 @@ void Server::find_idle_sessions()
   }
 
   // Collect a list of sessions exceeding the autoclose threshold
-  std::vector<Session *> to_evict;
-  const auto sessions_p = mds->sessionmap.by_state.find(Session::STATE_STALE);
-  if (sessions_p == mds->sessionmap.by_state.end() || sessions_p->second->empty()) {
-    return;
+  const auto sessions_p2 = mds->sessionmap.by_state.find(Session::STATE_STALE);
+  if (sessions_p2 != mds->sessionmap.by_state.end() && !sessions_p2->second->empty()) {
+    for (auto session : *(sessions_p2->second)) {
+      assert(session->is_stale());
+      auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
+      if (last_cap_renew_span < cutoff) {
+	dout(20) << "oldest stale session is " << session->info.inst
+		 << " and recently renewed caps " << last_cap_renew_span << "s ago" << dendl;
+	break;
+      }
+      to_evict.push_back(session);
+    }
   }
-  const auto &stale_sessions = sessions_p->second;
-  ceph_assert(stale_sessions != nullptr);
 
-  for (const auto &session: *stale_sessions) {
-    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
+  for (auto session: to_evict) {
     if (session->is_importing()) {
-      dout(10) << "stopping at importing session " << session->info.inst << dendl;
-      break;
-    }
-    ceph_assert(session->is_stale());
-    if (last_cap_renew_span < cutoff) {
-      dout(20) << "oldest stale session is " << session->info.inst << " and recently renewed caps " << last_cap_renew_span << "s ago" << dendl;
-      break;
+      dout(10) << "skipping session " << session->info.inst << ", it's being imported" << dendl;
+      continue;
     }
 
-    to_evict.push_back(session);
-  }
-
-  for (const auto &session: to_evict) {
-    auto last_cap_renew_span = std::chrono::duration<double>(now-session->last_cap_renew).count();
-    mds->clog->warn() << "evicting unresponsive client " << *session << ", after " << last_cap_renew_span << " seconds";
-    dout(10) << "autoclosing stale session " << session->info.inst << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
+    auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
+    mds->clog->warn() << "evicting unresponsive client " << *session
+		      << ", after " << last_cap_renew_span << " seconds";
+    dout(10) << "autoclosing stale session " << session->info.inst
+	     << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
 
     if (g_conf()->mds_session_blacklist_on_timeout) {
       std::stringstream ss;
-      mds->evict_client(session->get_client().v, false, true,
-                        ss, nullptr);
+      mds->evict_client(session->get_client().v, false, true, ss, nullptr);
     } else {
       kill_session(session, NULL);
     }

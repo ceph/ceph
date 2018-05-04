@@ -298,6 +298,7 @@ public:
   void abort_conn();
 
   void set_uuid(const std::string& uuid);
+  void set_session_timeout(unsigned timeout);
   int start_reclaim(const std::string& uuid, unsigned flags,
 		    const std::string& fs_name);
   void finish_reclaim();
