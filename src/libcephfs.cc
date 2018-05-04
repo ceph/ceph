@@ -1771,3 +1771,8 @@ extern "C" int ceph_set_deleg_timeout(class ceph_mount_info *cmount, uint32_t ti
     return -ENOTCONN;
   return cmount->get_client()->set_deleg_timeout(timeout);
 }
+
+extern "C" void ceph_set_session_timeout(class ceph_mount_info *cmount, unsigned timeout)
+{
+  cmount->get_client()->set_session_timeout(timeout);
+}

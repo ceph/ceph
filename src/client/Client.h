@@ -956,6 +956,8 @@ public:
 	    bool require_mds=false);
   void unmount();
 
+  void set_session_timeout(unsigned timeout);
+
   int mds_command(
     const std::string &mds_spec,
     const std::vector<std::string>& cmd,

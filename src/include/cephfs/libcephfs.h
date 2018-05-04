@@ -1655,6 +1655,15 @@ int ceph_set_deleg_timeout(struct ceph_mount_info *cmount, uint32_t timeout);
  */
 int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
 		       unsigned int cmd, ceph_deleg_cb_t cb, void *priv);
+
+/**
+ * Set ceph client session timeout
+ * @param cmount the ceph mount handle to use.
+ * @param timeout the timeout to set
+ *
+ * Must be called before mount.
+ */
+void ceph_set_session_timeout(struct ceph_mount_info *cmount, unsigned timeout);
 #ifdef __cplusplus
 }
 #endif
