@@ -37,15 +37,20 @@ class SlowOps final : public DaemonHealthMetricCollector {
     if (daemons.empty()) {
       return;
     }
-    static const char* fmt = "%1% slow ops, oldest one blocked for %2% sec";
-    check.summary = boost::str(boost::format(fmt) % value.n1 % value.n2);
+    static const char* fmt = "%1% slow ops, oldest one blocked for %2% sec, %3%";
     ostringstream ss;
     if (daemons.size() > 1) {
-      ss << "daemons " << daemons << " have slow ops.";
+      if (daemons.size() > 10) {
+        ss << "daemons " << vector<DaemonKey>(daemons.begin(), daemons.begin()+10)
+           << "..." << " have slow ops.";
+      } else {
+        ss << "daemons " << daemons << " have slow ops.";
+      }
     } else {
       ss << daemons.front() << " has slow ops";
     }
-    check.detail.push_back(ss.str());
+    check.summary = boost::str(boost::format(fmt) % value.n1 % value.n2 % ss.str());
+    // No detail
   }
   vector<DaemonKey> daemons;
 };
