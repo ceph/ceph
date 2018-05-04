@@ -4859,31 +4859,48 @@ void PG::scrub_compare_maps()
   scrubber.cleaned_meta_map.insert(scrubber.primary_scrubmap);
   map<hobject_t, pair<uint32_t, uint32_t>> missing_digest;
 
+  map<pg_shard_t, ScrubMap *> maps;
+  maps[pg_whoami] = &scrubber.primary_scrubmap;
+
+  for (const auto& i : actingbackfill) {
+    if (i == pg_whoami) continue;
+    dout(2) << __func__ << " replica " << i << " has "
+            << scrubber.received_maps[i].objects.size()
+            << " items" << dendl;
+    maps[i] = &scrubber.received_maps[i];
+  }
+
+  set<hobject_t> master_set;
+
+  // Construct master set
+  for (const auto map : maps) {
+    for (const auto i : map.second->objects) {
+      master_set.insert(i.first);
+    }
+  }
+
+  stringstream ss;
+  get_pgbackend()->be_large_omap_check(maps, master_set,
+                                       scrubber.large_omap_objects, ss);
+  if (!ss.str().empty()) {
+    osd->clog->warn(ss);
+  }
+
   if (acting.size() > 1) {
     dout(10) << __func__ << "  comparing replica scrub maps" << dendl;
 
-    stringstream ss;
-
     // Map from object with errors to good peer
     map<hobject_t, list<pg_shard_t>> authoritative;
-    map<pg_shard_t, ScrubMap *> maps;
 
     dout(2) << __func__ << "   osd." << acting[0] << " has "
 	    << scrubber.primary_scrubmap.objects.size() << " items" << dendl;
-    maps[pg_whoami] = &scrubber.primary_scrubmap;
 
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
-	 ++i) {
-      if (*i == pg_whoami) continue;
-      dout(2) << __func__ << " replica " << *i << " has "
-	      << scrubber.received_maps[*i].objects.size()
-	      << " items" << dendl;
-      maps[*i] = &scrubber.received_maps[*i];
-    }
+    ss.str("");
+    ss.clear();
 
     get_pgbackend()->be_compare_scrubmaps(
       maps,
+      master_set,
       state_test(PG_STATE_REPAIR),
       scrubber.missing,
       scrubber.inconsistent,
@@ -5077,6 +5094,7 @@ void PG::scrub_finish()
       info.history.last_clean_scrub_stamp = now;
     info.stats.stats.sum.num_shallow_scrub_errors = scrubber.shallow_errors;
     info.stats.stats.sum.num_deep_scrub_errors = scrubber.deep_errors;
+    info.stats.stats.sum.num_large_omap_objects = scrubber.large_omap_objects;
   } else {
     info.stats.stats.sum.num_shallow_scrub_errors = scrubber.shallow_errors;
     // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
