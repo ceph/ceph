@@ -55,16 +55,65 @@ This is a DRAFT for discussion.
 """
 
 
+class _Completion(object):
+    def get_result(self):
+        """
+        Return the result of the operation that we were waited
+        for.  Only valid after calling Orchestrator.wait() on this
+        completion.
+        """
+        raise NotImplementedError()
+
+class ReadCompletion(_Completion):
+    """
+    ``Orchestrator`` implementations should inherit from this
+    class to implement their own handles to operations in progress, and
+    return an instance of their subclass from calls into methods.
+    """
+
+    def __init__(self):
+        pass
+
+
+class WriteCompletion(_Completion):
+    """
+    ``Orchestrator`` implementations should inherit from this
+    class to implement their own handles to operations in progress, and
+    return an instance of their subclass from calls into methods.
+    """
+
+    def __init__(self):
+        pass
+
+
 class Orchestrator(object):
     """
-    Calls in this class are assumed to do network IO and may
-    take noticeable length of time to run.
+    Calls in this class may do long running remote operations, with time
+    periods ranging from network latencies to package install latencies and large
+    internet downloads.  For that reason, all are asynchronous, and return
+    ``Completion`` objects.
 
-    TBD: these calls could either be blocking (non-blocking implementations
-    handle their own waiting, and callers handle their own threading) or
-    async (blocking implementations handle their own threading).  We can
-    go with whichever is most convenient.
+    Implementations are not required to start work on an operation until
+    the caller waits on the relevant Completion objects.  Callers making
+    multiple updates should not wait on Completions until they're done
+    sending operations: this enables implementations to batch up a series
+    of updates when wait() is called on a set of Completion objects.
+
+    Implementations are encouraged to keep reasonably fresh caches of
+    the status of the system: it is better to serve a stale-but-recent
+    result read of e.g. device inventory than it is to keep the caller waiting
+    while you scan hosts every time.
     """
+
+    def wait(self, completions):
+        """
+        Given a list of Completion instances, check if they are complete
+        and return True if so.
+
+        For fast operations (e.g. reading from a database), implementations
+        may choose to do blocking IO in this call.
+        """
+        raise NotImplementedError()
 
     def get_inventory(self, node_filter=None):
         # Return list of InventoryHost
@@ -179,6 +228,43 @@ class PlacementSpec(object):
         self.label = None
 
 
+class ServiceLocation(object):
+    """
+    See ServiceDescription
+    """
+    def __init__(self):
+        # Node is at the same granularity as InventoryNode
+        self.nodename = None
+
+        # Not everyone runs in containers, but enough people do to
+        # justify having this field here.
+        self.container_id = None
+
+        # The orchestrator will have picked some names for daemons,
+        # typically either based on hostnames or on pod names.
+        # This is the <foo> in mds.<foo>, the ID that will appear
+        # in the FSMap/ServiceMap.
+        self.daemon_name = None
+
+
+
+class ServiceDescription(object):
+    """
+    For responding to queries about the status of a particular service,
+    stateful or stateless.
+
+    This is not about health or performance monitoring of services: it's
+    about letting the orchestrator tell Ceph whether and where a 
+    service is scheduled in the cluster.  When an orchestrator tells
+    Ceph "it's running on node123", that's not a promise that the process
+    is literally up this second, it's a description of where the orchestrator
+    has decided the service should run.
+    """
+
+    def __init__(self):
+        self.locations = []
+
+
 class StatefulServiceSpec(object):
     """
     Details of stateful service creation.
@@ -220,7 +306,7 @@ class StatelessServiceSpec(object):
         self.placement = PlacementSpec()
 
         # Give this set of statelss services a name: typically it would
-        # be the name of a CephFS pool, RGW zone, etc.  Must be unique
+        # be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
         # within one ceph cluster.
         self.name = ""
 
@@ -283,6 +369,7 @@ class InventoryBlockDevice(object):
 
 
 class InventoryNode(object):
-    def __init__(self):
-        self.name = None  # unique within cluster.  For example a hostname.
-        self.devices = []  # list of InventoryBlockDevice
+    def __init__(self, name, devices):
+        assert isinstance(devices, list)
+        self.name = name  # unique within cluster.  For example a hostname.
+        self.devices = devices  # list of InventoryBlockDevice
