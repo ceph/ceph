@@ -161,12 +161,46 @@ struct ElasticConfig {
 
 using ElasticConfigRef = std::shared_ptr<ElasticConfig>;
 
+std::optional<const char*> es_type_to_str(const ESType& t) {
+  switch (t) {
+  case ESType::String: return "string";
+  case ESType::Text: return "text";
+  case ESType::Keyword: return "keyword";
+  case ESType::Long: return "long";
+  case ESType::Integer: return "integer";
+  case ESType::Short: return "short";
+  case ESType::Byte: return "byte";
+  case ESType::Double: return "double";
+  case ESType::Float: return "float";
+  case ESType::Half_Float: return "half_float";
+  case ESType::Scaled_Float: return "scaled_float";
+  case ESType::Date: return "date";
+  case ESType::Boolean: return "boolean";
+  case ESType::Integer_Range: return "integer_range";
+  case ESType::Float_Range: return "float_range";
+  case ESType::Double_Range: return "date_range";
+  case ESType::Date_Range: return "date_range";
+  case ESType::Geo_Point: return "geo_point";
+  case ESType::Ip: return "ip";
+  default:
+    return std::nullopt;
+  }
+
+}
+
 struct es_dump_type {
   const char *type;
   const char *format;
   bool analyzed;
+  std::string default_type;
 
   es_dump_type(const char *t, const char *f = nullptr, bool a = false) : type(t), format(f), analyzed(a) {}
+
+  es_dump_type(ESType t, const char *f = nullptr, bool a = false,
+               std::string default_type="text"): format(f), analyzed(a),
+                                                 default_type(default_type) {
+    type = es_type_to_str(t).value_or(default_type.c_str());
+  }
 
   void dump(Formatter *f) const {
     encode_json("type", type, f);
@@ -180,37 +214,45 @@ struct es_dump_type {
 };
 
 struct es_index_mappings {
+  ESType string_type {ESType::String};
+
   void dump_custom(Formatter *f, const char *section, const char *type, const char *format) const {
     f->open_object_section(section);
     ::encode_json("type", "nested", f);
     f->open_object_section("properties");
-    encode_json("name", es_dump_type("string"), f);
+    encode_json("name", es_dump_type(string_type), f);
     encode_json("value", es_dump_type(type, format), f);
     f->close_section(); // entry
     f->close_section(); // custom-string
   }
+
+  void dump_custom(Formatter *f, const char* section, ESType t, const char *format) const {
+    const auto s = es_type_to_str(t).value_or("text");
+    dump_custom(f,section,s,format);
+  }
+
   void dump(Formatter *f) const {
     f->open_object_section("object");
     f->open_object_section("properties");
-    encode_json("bucket", es_dump_type("string"), f);
-    encode_json("name", es_dump_type("string"), f);
-    encode_json("instance", es_dump_type("string"), f);
-    encode_json("versioned_epoch", es_dump_type("long"), f);
+    encode_json("bucket", es_dump_type(string_type), f);
+    encode_json("name", es_dump_type(string_type), f);
+    encode_json("instance", es_dump_type(string_type), f);
+    encode_json("versioned_epoch", es_dump_type(ESType::Date), f);
     f->open_object_section("meta");
     f->open_object_section("properties");
-    encode_json("cache_control", es_dump_type("string"), f);
-    encode_json("content_disposition", es_dump_type("string"), f);
-    encode_json("content_encoding", es_dump_type("string"), f);
-    encode_json("content_language", es_dump_type("string"), f);
-    encode_json("content_type", es_dump_type("string"), f);
-    encode_json("etag", es_dump_type("string"), f);
-    encode_json("expires", es_dump_type("string"), f);
+    encode_json("cache_control", es_dump_type(string_type), f);
+    encode_json("content_disposition", es_dump_type(string_type), f);
+    encode_json("content_encoding", es_dump_type(string_type), f);
+    encode_json("content_language", es_dump_type(string_type), f);
+    encode_json("content_type", es_dump_type(string_type), f);
+    encode_json("etag", es_dump_type(string_type), f);
+    encode_json("expires", es_dump_type(string_type), f);
     f->open_object_section("mtime");
     ::encode_json("type", "date", f);
     ::encode_json("format", "strict_date_optional_time||epoch_millis", f);
     f->close_section(); // mtime
-    encode_json("size", es_dump_type("long"), f);
-    dump_custom(f, "custom-string", "string", nullptr);
+    encode_json("size", es_dump_type(ESType::Long), f);
+    dump_custom(f, "custom-string", string_type, nullptr);
     dump_custom(f, "custom-int", "long", nullptr);
     dump_custom(f, "custom-date", "date", "strict_date_optional_time||epoch_millis");
     f->close_section(); // properties
