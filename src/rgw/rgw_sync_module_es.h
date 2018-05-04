@@ -3,6 +3,33 @@
 
 #include "rgw_sync_module.h"
 
+enum ESType {
+  /* string datatypes */
+  String, /* Deprecated Since 5.X+ */
+  Text,
+  Keyword,
+
+  /* Numeric Types */
+  Long, Integer, Short, Byte, Double, Float, Half_Float, Scaled_Float,
+
+  /* Date Type */
+  Date,
+
+  /* Boolean */
+  Boolean,
+
+  /* Binary; Must Be Base64 Encoded */
+  Binary,
+
+  /* Range Types */
+  Integer_Range, Float_Range, Long_Range, Double_Range, Date_Range,
+
+  /* A Few Specialized Types */
+  Geo_Point,
+  Ip
+};
+
+
 class RGWElasticSyncModule : public RGWSyncModule {
 public:
   RGWElasticSyncModule() {}
