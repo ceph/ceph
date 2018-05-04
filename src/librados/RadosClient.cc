@@ -689,6 +689,9 @@ bool librados::RadosClient::put() {
 int librados::RadosClient::pool_create(string& name, unsigned long long auid,
 				       int16_t crush_rule)
 {
+  if (!name.length())
+    return -EINVAL;
+
   int r = wait_for_osdmap();
   if (r < 0) {
     return r;
