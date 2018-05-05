@@ -9740,15 +9740,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     osd->service.maybe_inject_dispatch_delay();
     sdata->shard_lock.Lock();
 
-    auto q = sdata->pg_slots.find(token);
-    if (q == sdata->pg_slots.end()) {
-      // this can happen if we race with pg removal.
-      dout(20) << __func__ << " slot " << token << " no longer there" << dendl;
-      pg->unlock();
-      sdata->shard_lock.Unlock();
-      return;
-    }
-    slot = q->second.get();
     --slot->num_running;
 
     if (slot->to_process.empty()) {
