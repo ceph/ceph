@@ -988,8 +988,7 @@ function test_mon_mds()
   expect_false ceph fs set cephfs max_file_size 123asdf
 
   expect_false ceph fs set cephfs allow_new_snaps
-  expect_false ceph fs set cephfs allow_new_snaps true
-  ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
+  ceph fs set cephfs allow_new_snaps true
   ceph fs set cephfs allow_new_snaps 0
   ceph fs set cephfs allow_new_snaps false
   ceph fs set cephfs allow_new_snaps no
