@@ -319,7 +319,7 @@ public:
     delete data;
   }
 
-  virtual string get_marker(void *handle) {
+  virtual string get_marker(void *handle) override {
     iter_data *data = static_cast<iter_data *>(handle);
 
     if (data->iter != data->sections.end()) {

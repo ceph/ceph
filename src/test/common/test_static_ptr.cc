@@ -40,7 +40,7 @@ protected:
   int val;
 public:
   explicit grandchild(int val) : val(val) {}
-  virtual int call(int n) { return n * val; }
+  virtual int call(int n) override { return n * val; }
 };
 
 class great_grandchild : public grandchild {

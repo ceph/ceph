@@ -361,7 +361,7 @@ public:
   const PGLog &get_log() const override {
     return pg_log;
   }
-  void add_local_next_event(const pg_log_entry_t& e) {
+  void add_local_next_event(const pg_log_entry_t& e) override {
     pg_log.missing_add_next_entry(e);
   }
   bool pgb_is_primary() const override {
@@ -1095,7 +1095,7 @@ protected:
 				  PGBackend::RecoveryHandle *h,
 				  bool *work_started);
 
-  void finish_degraded_object(const hobject_t& oid);
+  void finish_degraded_object(const hobject_t& oid) override;
 
   // Cancels/resets pulls from peer
   void check_recovery_sources(const OSDMapRef& map) override ;

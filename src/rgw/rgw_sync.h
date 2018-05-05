@@ -311,7 +311,7 @@ public:
 
   int operate() override;
 
-  void call_cr(RGWCoroutine *_cr) {
+  void call_cr(RGWCoroutine *_cr) override {
     if (cr) {
       cr->put();
     }
