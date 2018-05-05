@@ -955,7 +955,7 @@ public:
     return true;
   }
 
-  RGWOrderCallCR *allocate_order_control_cr() {
+  RGWOrderCallCR *allocate_order_control_cr() override {
     return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };
@@ -2456,7 +2456,7 @@ public:
                                           attrs);
   }
 
-  RGWOrderCallCR *allocate_order_control_cr() {
+  RGWOrderCallCR *allocate_order_control_cr() override {
     return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };
@@ -2532,7 +2532,7 @@ public:
     return (key_to_marker.find(key) == key_to_marker.end());
   }
 
-  RGWOrderCallCR *allocate_order_control_cr() {
+  RGWOrderCallCR *allocate_order_control_cr() override {
     return new RGWLastCallerWinsCR(sync_env->cct);
   }
 };

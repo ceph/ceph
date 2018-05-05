@@ -801,7 +801,7 @@ public:
                                                      sync_env(_sync_env), src_properties(_src_properties), target(_target), dest_obj(_dest_obj) {
   }
 
-  int init() {
+  int init() override {
     /* init output connection */
     RGWRESTStreamS3PutObj *out_req{nullptr};
 
@@ -1007,7 +1007,7 @@ public:
                                                    dest_obj(_dest_obj),
                                                    src_properties(_src_properties) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       /* init input */
       in_crf.reset(new RGWRESTStreamGetCRF(cct, get_env(), this, sync_env,
@@ -1068,7 +1068,7 @@ public:
                                                    part_info(_part_info),
                                                    petag(_petag) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       /* init input */
       in_crf.reset(new RGWRESTStreamGetCRF(cct, get_env(), this, sync_env,
@@ -1117,7 +1117,7 @@ public:
                                                    dest_obj(_dest_obj),
                                                    upload_id(_upload_id) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
 
       yield {
@@ -1177,7 +1177,7 @@ public:
                                                    attrs(_attrs),
                                                    upload_id(_upload_id) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
 
       yield {
@@ -1279,7 +1279,7 @@ public:
                                                    upload_id(_upload_id),
                                                    req_enc(_parts) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
 
       yield {
@@ -1359,7 +1359,7 @@ public:
                                                             status_obj(_status_obj),
                                                             upload_id(_upload_id) {}
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       yield call(new RGWAWSAbortMultipartCR(sync_env, dest_conn, dest_obj, upload_id));
       if (retcode < 0) {
@@ -1425,7 +1425,7 @@ public:
   }
 
 
-  int operate() {
+  int operate() override {
     reenter(this) {
       yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store,
                                                                  status_obj, &status, false));
@@ -1753,7 +1753,7 @@ public:
                   instance(_conf) {
   }
 
-  void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) {
+  void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) override {
     instance.init(sync_env, instance_id);
   }
 

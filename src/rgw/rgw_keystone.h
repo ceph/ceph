@@ -355,7 +355,7 @@ public:
   BarbicanTokenRequestVer2(CephContext * const _cct)
     : cct(_cct) {
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const override;
 };
 
 class BarbicanTokenRequestVer3 : public AdminTokenRequest {
@@ -365,7 +365,7 @@ public:
   BarbicanTokenRequestVer3(CephContext * const _cct)
     : cct(_cct) {
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const override;
 };
 
 

@@ -215,9 +215,9 @@ public:
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 
-  void execute();
+  void execute() override;
 
-  virtual const string name() { return "set_bucket_quota"; }
+  virtual const string name() override { return "set_bucket_quota"; }
 };
 
 #define QUOTA_INPUT_MAX_LEN 1024

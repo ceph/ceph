@@ -436,7 +436,7 @@ public:
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
   int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) override;
   bool has_attrs() override;
-  void get_attrs(std::map<string, string> *attrs);
+  void get_attrs(std::map<string, string> *attrs) override;
   bool is_done();
   virtual bool need_extra_data() { return false; }
 
@@ -532,7 +532,7 @@ public:
                     std::shared_ptr<RGWStreamWriteHTTPResourceCRF>& _out_crf);
   ~RGWStreamSpliceCR();
 
-  int operate();
+  int operate() override;
 };
 
 #endif

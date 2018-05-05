@@ -242,7 +242,7 @@ public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() override {}
 
-  int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) {
+  int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) override {
     auth_registry_ptr = &auth_registry;
     return RGWPostObj_ObjStore::verify_requester(auth_registry);
   }
@@ -437,7 +437,7 @@ public:
   RGWGetObjLayout_ObjStore_S3() {}
   ~RGWGetObjLayout_ObjStore_S3() {}
 
-  void send_response();
+  void send_response() override;
 };
 
 class RGWConfigBucketMetaSearch_ObjStore_S3 : public RGWConfigBucketMetaSearch {

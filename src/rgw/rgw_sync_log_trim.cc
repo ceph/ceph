@@ -732,7 +732,7 @@ class BucketTrimCR : public RGWCoroutine {
       observer(observer), obj(obj), counter(config.counter_size)
   {}
 
-  int operate();
+  int operate() override;
 };
 
 const std::string BucketTrimCR::section{"bucket.instance"};
@@ -889,7 +889,7 @@ class BucketTrimPollCR : public RGWCoroutine {
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int BucketTrimPollCR::operate()

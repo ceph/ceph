@@ -148,7 +148,7 @@ public:
     delete second;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter *f) const override {
     f->open_object_section("bool");
     const char *section = (op == "and" ? "must" : "should");
     f->open_array_section(section);
@@ -177,7 +177,7 @@ public:
     val = str_val;
     return true;
   }
-  void encode_json(const string& field, Formatter *f) const {
+  void encode_json(const string& field, Formatter *f) const override {
     ::encode_json(field.c_str(), val.c_str(), f);
   }
 };
@@ -195,7 +195,7 @@ public:
     }
     return true;
   }
-  void encode_json(const string& field, Formatter *f) const {
+  void encode_json(const string& field, Formatter *f) const override {
     ::encode_json(field.c_str(), val, f);
   }
 };
@@ -211,7 +211,7 @@ public:
     }
     return true;
   }
-  void encode_json(const string& field, Formatter *f) const {
+  void encode_json(const string& field, Formatter *f) const override {
     string s;
     rgw_to_iso8601(val, &s);
     ::encode_json(field.c_str(), s, f);
@@ -274,7 +274,7 @@ public:
     allow_restricted = allow;
   }
 
-  virtual void dump(Formatter *f) const = 0;
+  virtual void dump(Formatter *f) const override = 0;
 };
 
 class ESQueryNode_Op_Equal : public ESQueryNode_Op {
@@ -293,7 +293,7 @@ public:
     return do_init(pnode, perr);
   }
 
-  virtual void dump(Formatter *f) const {
+  virtual void dump(Formatter *f) const override {
     f->open_object_section("term");
     val->encode_json(field, f);
     f->close_section();
@@ -305,7 +305,7 @@ class ESQueryNode_Op_Range : public ESQueryNode_Op {
 public:
   ESQueryNode_Op_Range(ESQueryCompiler *compiler, const string& rs) : ESQueryNode_Op(compiler), range_str(rs) {}
 
-  virtual void dump(Formatter *f) const {
+  virtual void dump(Formatter *f) const override {
     f->open_object_section("range");
     f->open_object_section(field.c_str());
     val->encode_json(range_str, f);
@@ -332,7 +332,7 @@ public:
     delete next;
   }
 
-  virtual void dump(Formatter *f) const {
+  virtual void dump(Formatter *f) const override {
     f->open_object_section("nested");
     string s = string("meta.custom-") + type_str();
     encode_json("path", s.c_str(), f);
@@ -353,7 +353,7 @@ public:
   }
 
   string type_str() const;
-  string get_custom_leaf_field_name() {
+  string get_custom_leaf_field_name() override {
     return string("meta.custom-") + type_str() + ".value";
   }
 };
