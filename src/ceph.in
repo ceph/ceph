@@ -134,7 +134,7 @@ import subprocess
 from ceph_argparse import \
     concise_sig, descsort_key, parse_json_funcsigs, \
     matchnum, validate_command, find_cmd_target, \
-    send_command, json_command, run_in_thread
+    json_command, run_in_thread
 
 from ceph_daemon import admin_socket, DaemonWatcher, Termsize
 
@@ -566,7 +566,11 @@ def do_command(parsed_args, target, cmdargs, sigdict, inbuf, verbose):
         except KeyboardInterrupt:
             print('Interrupted')
             return ret, '', ''
-
+    if ret == errno.ETIMEDOUT:
+        ret = -ret
+        if not outs:
+            outs = ("Connection timed out. Please check the client's " +
+                    "permission and connection.")
     return ret, outbuf, outs
 
 
