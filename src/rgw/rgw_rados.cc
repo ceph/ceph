@@ -3683,14 +3683,7 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
-  auto admin_socket = cct->get_admin_socket();
-  for (auto cmd : admin_commands) {
-    int r = admin_socket->unregister_command(cmd[0]);
-    if (r < 0) {
-      lderr(cct) << "ERROR: fail to unregister admin socket command (r=" << r
-                 << ")" << dendl;
-    }
-  }
+  cct->get_admin_socket()->unregister_commands(this);
 
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
