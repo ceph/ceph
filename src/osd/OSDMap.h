@@ -431,7 +431,6 @@ public:
       encode_features(0),
       epoch(e), new_pool_max(-1), new_flags(-1), new_max_osd(-1),
       have_crc(false), full_crc(0), inc_crc(0) {
-      memset(&fsid, 0, sizeof(fsid));
     }
     explicit Incremental(bufferlist &bl) {
       bufferlist::iterator p = bl.begin();
@@ -596,7 +595,6 @@ private:
 	     cached_up_osd_features(0),
 	     crc_defined(false), crc(0),
 	     crush(std::make_shared<CrushWrapper>()) {
-    memset(&fsid, 0, sizeof(fsid));
   }
 
   // no copying

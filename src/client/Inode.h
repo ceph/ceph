@@ -255,7 +255,6 @@ struct Inode {
       fcntl_locks(NULL), flock_locks(NULL)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
-    memset(&quota, 0, sizeof(quota));
   }
   ~Inode();
 

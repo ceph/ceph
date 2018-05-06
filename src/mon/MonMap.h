@@ -118,7 +118,6 @@ public:
 
   MonMap()
     : epoch(0) {
-    memset(&fsid, 0, sizeof(fsid));
   }
 
   uuid_d& get_fsid() { return fsid; }
