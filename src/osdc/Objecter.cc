@@ -1643,6 +1643,7 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
   }
   if (op->map_dne_bound > 0) {
     if (osdmap->get_epoch() >= op->map_dne_bound) {
+      LingerOp::unique_lock wl{op->watch_lock};
       if (op->on_reg_commit) {
 	op->on_reg_commit->complete(-ENOENT);
 	op->on_reg_commit = nullptr;
