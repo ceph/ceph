@@ -4892,7 +4892,11 @@ int FileStore::list_collections(vector<coll_t>& ls, bool include_temp)
       // d_type not supported (non-ext[234], btrfs), must stat
       struct stat sb;
       char filename[PATH_MAX];
-      snprintf(filename, sizeof(filename), "%s/%s", fn, de->d_name);
+      if (int n = snprintf(filename, sizeof(filename), "%s/%s", fn, de->d_name);
+	  n >= static_cast<int>(sizeof(filename))) {
+	derr << __func__ << " path length overrun: " << n << dendl;
+	assert(false);
+      }
 
       r = ::stat(filename, &sb);
       if (r < 0) {
