@@ -130,7 +130,7 @@ class DaemonState
       auto p = config_defaults_bl.begin();
       try {
 	decode(config_defaults, p);
-      } catch (buffer::error e) {
+      } catch (buffer::error& e) {
       }
     }
     return config_defaults;
