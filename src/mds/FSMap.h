@@ -46,18 +46,9 @@ class health_check_map_t;
  */
 class Filesystem
 {
-  public:
-  fs_cluster_id_t fscid;
-  MDSMap mds_map;
-
+public:
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& p);
-
-  Filesystem()
-    :
-      fscid(FS_CLUSTER_ID_NONE)
-  {
-  }
 
   void dump(Formatter *f) const;
   void print(std::ostream& out) const;
@@ -78,6 +69,9 @@ class Filesystem
 
     return false;
   }
+
+  fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
+  MDSMap mds_map;
 };
 WRITE_CLASS_ENCODER_FEATURES(Filesystem)
 
