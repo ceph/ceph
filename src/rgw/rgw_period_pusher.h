@@ -23,7 +23,7 @@ using RGWZonesNeedPeriod = RGWPeriod;
 class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
                               public RGWRealmReloader::Pauser {
  public:
-  RGWPeriodPusher(RGWRados* store);
+  explicit RGWPeriodPusher(RGWRados* store);
   ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones

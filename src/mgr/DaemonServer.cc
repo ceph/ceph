@@ -666,7 +666,7 @@ bool DaemonServer::handle_command(MCommand *m)
     bufferlist odata;
     cmdmap_t cmdmap;
 
-    CommandContext(MCommand *m_)
+    explicit CommandContext(MCommand *m_)
       : m(m_)
     {
     }
@@ -710,7 +710,7 @@ bool DaemonServer::handle_command(MCommand *m)
     bufferlist from_mon;
     string outs;
 
-    ReplyOnFinish(const std::shared_ptr<CommandContext> &cmdctx_)
+    explicit ReplyOnFinish(const std::shared_ptr<CommandContext> &cmdctx_)
       : cmdctx(cmdctx_)
     {}
     void finish(int r) override {

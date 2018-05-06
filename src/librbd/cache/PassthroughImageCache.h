@@ -19,7 +19,7 @@ namespace cache {
 template <typename ImageCtxT = librbd::ImageCtx>
 class PassthroughImageCache : public ImageCache {
 public:
-  PassthroughImageCache(ImageCtx &image_ctx);
+  explicit PassthroughImageCache(ImageCtx &image_ctx);
 
   /// client AIO methods
   void aio_read(Extents&& image_extents, ceph::bufferlist *bl,

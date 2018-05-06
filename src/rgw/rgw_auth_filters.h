@@ -60,7 +60,7 @@ class DecoratedApplier : public rgw::auth::IdentityApplier {
   }
 
 public:
-  DecoratedApplier(DecorateeT&& decoratee)
+  explicit DecoratedApplier(DecorateeT&& decoratee)
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 

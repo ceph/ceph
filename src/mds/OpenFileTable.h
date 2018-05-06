@@ -26,7 +26,7 @@ class MDSInternalContextBase;
 class OpenFileTable
 {
 public:
-  OpenFileTable(MDSRank *m) : mds(m) {}
+  explicit OpenFileTable(MDSRank *m) : mds(m) {}
 
   void add_inode(CInode *in);
   void remove_inode(CInode *in);

@@ -217,7 +217,7 @@ class AsioFrontend {
     tcp::socket socket;
     bool use_ssl = false;
 
-    Listener(boost::asio::io_service& service)
+    explicit Listener(boost::asio::io_service& service)
       : acceptor(service), socket(service) {}
   };
   std::vector<Listener> listeners;

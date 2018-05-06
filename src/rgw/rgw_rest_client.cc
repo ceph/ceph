@@ -980,7 +980,7 @@ int RGWHTTPStreamRWRequest::send_data(void *ptr, size_t len, bool *pause)
 class StreamIntoBufferlist : public RGWGetDataCB {
   bufferlist& bl;
 public:
-  StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
+  explicit StreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
   int handle_data(bufferlist& inbl, off_t bl_ofs, off_t bl_len) override {
     bl.claim_append(inbl);
     return bl_len;

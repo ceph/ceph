@@ -127,7 +127,7 @@ class ESQueryNode_Bool : public ESQueryNode {
   ESQueryNode *first{nullptr};
   ESQueryNode *second{nullptr};
 public:
-  ESQueryNode_Bool(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
+  explicit ESQueryNode_Bool(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
   ESQueryNode_Bool(ESQueryCompiler *compiler, const string& _op, ESQueryNode *_first, ESQueryNode *_second) :ESQueryNode(compiler), op(_op), first(_first), second(_second) {}
   bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
     bool valid = s->pop(&op);
@@ -279,7 +279,7 @@ public:
 
 class ESQueryNode_Op_Equal : public ESQueryNode_Op {
 public:
-  ESQueryNode_Op_Equal(ESQueryCompiler *compiler) : ESQueryNode_Op(compiler) {}
+  explicit ESQueryNode_Op_Equal(ESQueryCompiler *compiler) : ESQueryNode_Op(compiler) {}
   ESQueryNode_Op_Equal(ESQueryCompiler *compiler, const string& f, const string& v) : ESQueryNode_Op(compiler) {
     op = "==";
     field = f;

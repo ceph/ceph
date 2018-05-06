@@ -40,7 +40,7 @@ protected:
     PyModuleRunner *mod;
 
   public:
-    PyModuleRunnerThread(PyModuleRunner *mod_)
+    explicit PyModuleRunnerThread(PyModuleRunner *mod_)
       : mod(mod_) {}
 
     void *entry() override;

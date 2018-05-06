@@ -34,7 +34,7 @@ TEST(BitAllocator, test_bmap_iter)
       BmapEntityTmp() {
 
       }
-      BmapEntityTmp(int num) {
+      explicit BmapEntityTmp(int num) {
         m_num = num;
         m_len = num;
       }

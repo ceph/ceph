@@ -79,7 +79,7 @@ class FlagSetHandler : public FileSystemCommandHandler
 class FsNewHandler : public FileSystemCommandHandler
 {
   public:
-  FsNewHandler(Paxos *paxos)
+  explicit FsNewHandler(Paxos *paxos)
     : FileSystemCommandHandler("fs new"), m_paxos(paxos)
   {
   }
@@ -527,7 +527,7 @@ public:
 class AddDataPoolHandler : public FileSystemCommandHandler
 {
   public:
-  AddDataPoolHandler(Paxos *paxos)
+  explicit AddDataPoolHandler(Paxos *paxos)
     : FileSystemCommandHandler("fs add_data_pool"), m_paxos(paxos)
   {}
 
@@ -823,7 +823,7 @@ class AliasHandler : public T
   std::string alias_prefix;
 
   public:
-  AliasHandler(const std::string &new_prefix)
+  explicit AliasHandler(const std::string &new_prefix)
     : T()
   {
     alias_prefix = new_prefix;

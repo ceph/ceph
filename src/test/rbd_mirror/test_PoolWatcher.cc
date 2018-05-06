@@ -73,7 +73,7 @@ public:
     Cond cond;
     ImageIds image_ids;
 
-    PoolWatcherListener(TestPoolWatcher *test) : test(test) {
+    explicit PoolWatcherListener(TestPoolWatcher *test) : test(test) {
     }
 
     void handle_update(const std::string &mirror_uuid,

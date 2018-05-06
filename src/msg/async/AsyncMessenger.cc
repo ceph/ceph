@@ -218,7 +218,7 @@ struct StackSingleton {
   CephContext *cct;
   std::shared_ptr<NetworkStack> stack;
 
-  StackSingleton(CephContext *c): cct(c) {}
+  explicit StackSingleton(CephContext *c): cct(c) {}
   void ready(std::string &type) {
     if (!stack)
       stack = NetworkStack::create(cct, type);

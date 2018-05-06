@@ -25,7 +25,7 @@ struct Request {
     value(0)
   {}
   Request(const Request& o) = default;
-  Request(int value) :
+  explicit Request(int value) :
     value(value)
   {}
 };

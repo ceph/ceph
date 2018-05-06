@@ -45,7 +45,7 @@ public:
 
 class great_grandchild : public grandchild {
 public:
-  great_grandchild(int val) : grandchild(val) {}
+  explicit great_grandchild(int val) : grandchild(val) {}
   int call(int n) override { return n + val; }
 };
 

@@ -78,7 +78,7 @@ namespace {
     std::vector<ZPage*> pages;
     struct iovec* iovs;
 
-    ZPageSet(int n) {
+    explicit ZPageSet(int n) {
       pages.reserve(n);
       iovs = (struct iovec*) calloc(n, sizeof(struct iovec));
       for (int page_ix = 0; page_ix < n; ++page_ix) {

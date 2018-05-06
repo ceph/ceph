@@ -330,7 +330,7 @@ class RGWHTTPManager {
     RGWHTTPManager *manager;
 
   public:
-    ReqsThread(RGWHTTPManager *_m) : manager(_m) {}
+    explicit ReqsThread(RGWHTTPManager *_m) : manager(_m) {}
     void *entry() override;
   };
 

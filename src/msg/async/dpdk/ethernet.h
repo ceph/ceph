@@ -32,11 +32,11 @@
 struct ethernet_address {
   ethernet_address() {}
 
-  ethernet_address(const uint8_t *eaddr) {
+  explicit ethernet_address(const uint8_t *eaddr) {
     std::copy(eaddr, eaddr + 6, mac.begin());
   }
 
-  ethernet_address(std::initializer_list<uint8_t> eaddr) {
+  explicit ethernet_address(std::initializer_list<uint8_t> eaddr) {
     assert(eaddr.size() == mac.size());
     std::copy(eaddr.begin(), eaddr.end(), mac.begin());
   }

@@ -240,7 +240,7 @@ int RGWRESTConn::get_json_resource(const string& resource,  const rgw_http_param
 class RGWStreamIntoBufferlist : public RGWHTTPStreamRWRequest::ReceiveCB {
   bufferlist& bl;
 public:
-  RGWStreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
+  explicit RGWStreamIntoBufferlist(bufferlist& _bl) : bl(_bl) {}
   int handle_data(bufferlist& inbl, bool *pause) override {
     bl.claim_append(inbl);
     return inbl.length();

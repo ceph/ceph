@@ -9,7 +9,7 @@
 // wrappers around scrub types to offer the necessary bits other than
 // the minimal set that the lirados requires
 struct object_id_wrapper : public librados::object_id_t {
-  object_id_wrapper(const hobject_t& hoid)
+  explicit object_id_wrapper(const hobject_t& hoid)
     : object_id_t{hoid.oid.name, hoid.nspace, hoid.get_key(), hoid.snap}
   {}
   void encode(bufferlist& bl) const;
@@ -40,7 +40,7 @@ namespace librados {
 struct shard_info_wrapper : public librados::shard_info_t {
 public:
   shard_info_wrapper() = default;
-  shard_info_wrapper(const ScrubMap::object& object) {
+  explicit shard_info_wrapper(const ScrubMap::object& object) {
     set_object(object);
   }
   void set_object(const ScrubMap::object& object);
@@ -103,7 +103,7 @@ namespace librados {
 }
 
 struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
-  inconsistent_obj_wrapper(const hobject_t& hoid);
+  explicit inconsistent_obj_wrapper(const hobject_t& hoid);
 
   void set_object_info_inconsistency() {
     errors |= obj_err_t::OBJECT_INFO_INCONSISTENCY;
@@ -149,7 +149,7 @@ inline void decode(librados::inconsistent_obj_t& obj,
 
 struct inconsistent_snapset_wrapper : public librados::inconsistent_snapset_t {
   inconsistent_snapset_wrapper() = default;
-  inconsistent_snapset_wrapper(const hobject_t& head);
+  explicit inconsistent_snapset_wrapper(const hobject_t& head);
   void set_headless();
   // soid claims that it is a head or a snapdir, but its SS_ATTR
   // is missing.

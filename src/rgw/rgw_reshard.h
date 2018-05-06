@@ -112,7 +112,7 @@ class RGWReshardWait {
 
   int do_wait();
 public:
-  RGWReshardWait(RGWRados *_store) : store(_store) {}
+  explicit RGWReshardWait(RGWRados *_store) : store(_store) {}
   ~RGWReshardWait() {
     assert(going_down);
   }

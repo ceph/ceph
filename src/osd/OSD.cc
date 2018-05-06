@@ -4149,7 +4149,7 @@ void OSD::build_initial_pg_history(
       bool operator()(const set<pg_shard_t> &have) const {
 	return have.size() >= pi->min_size;
       }
-      min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
+      explicit min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
     } min_size_predicate(osdmap->get_pg_pool(pgid.pgid.pool()));
 
     bool new_interval = PastIntervals::check_new_interval(

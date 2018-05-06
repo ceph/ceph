@@ -4581,7 +4581,7 @@ void PG::Scrubber::cleanup_store(ObjectStore::Transaction *t) {
     return;
   struct OnComplete : Context {
     std::unique_ptr<Scrub::Store> store;
-    OnComplete(
+    explicit OnComplete(
       std::unique_ptr<Scrub::Store> &&store)
       : store(std::move(store)) {}
     void finish(int) override {}

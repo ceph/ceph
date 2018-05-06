@@ -85,7 +85,7 @@ public:
     return store.assoc_name.c_str();
   }
 
-  MergeOperatorRouter(RocksDBStore &_store) : store(_store) {}
+  explicit MergeOperatorRouter(RocksDBStore &_store) : store(_store) {}
 
   bool Merge(const rocksdb::Slice& key,
 	     const rocksdb::Slice* existing_value,
@@ -124,7 +124,7 @@ class RocksDBStore::MergeOperatorLinker
 private:
   std::shared_ptr<KeyValueDB::MergeOperator> mop;
 public:
-  MergeOperatorLinker(const std::shared_ptr<KeyValueDB::MergeOperator> &o) : mop(o) {}
+  explicit MergeOperatorLinker(const std::shared_ptr<KeyValueDB::MergeOperator> &o) : mop(o) {}
 
   const char *Name() const override {
     return mop->name().c_str();

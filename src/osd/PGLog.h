@@ -136,7 +136,7 @@ public:
     { }
 
     template <typename... Args>
-    IndexedLog(Args&&... args) :
+    explicit IndexedLog(Args&&... args) :
       pg_log_t(std::forward<Args>(args)...),
       complete_to(log.end()),
       last_requested(0),
