@@ -476,7 +476,7 @@ void FSMap::decode(bufferlist::iterator& p)
     if (ev >= 3)
       ::decode(legacy_mds_map.compat, p);
     else
-      legacy_mds_map.compat = get_mdsmap_compat_set_base();
+      legacy_mds_map.compat = MDSMap::get_compat_set_base();
     if (ev < 5) {
       __u32 n;
       ::decode(n, p);

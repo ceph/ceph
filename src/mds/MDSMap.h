@@ -62,10 +62,6 @@
 class CephContext;
 class health_check_map_t;
 
-extern CompatSet get_mdsmap_compat_set_all();
-extern CompatSet get_mdsmap_compat_set_default();
-extern CompatSet get_mdsmap_compat_set_base(); // pre v0.20
-
 #define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")
 #define MDS_FEATURE_INCOMPAT_CLIENTRANGES CompatSet::Feature(2, "client writeable ranges")
 #define MDS_FEATURE_INCOMPAT_FILELAYOUT CompatSet::Feature(3, "default file layouts on dirs")
@@ -167,6 +163,9 @@ public:
     void encode_unversioned(bufferlist& bl) const;
   };
 
+  static CompatSet get_compat_set_all();
+  static CompatSet get_compat_set_default();
+  static CompatSet get_compat_set_base(); // pre v0.20
 
 protected:
   // base map

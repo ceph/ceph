@@ -246,7 +246,7 @@ void Beacon::_notify_mdsmap(MDSMap const *mdsmap)
 
   if (mdsmap->get_epoch() != epoch) {
     epoch = mdsmap->get_epoch();
-    compat = get_mdsmap_compat_set_default();
+    compat = MDSMap::get_compat_set_default();
     compat.merge(mdsmap->compat);
   }
 }

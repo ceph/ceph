@@ -891,7 +891,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
   mds_rank_t whoami = mdsmap->get_rank_gid(mds_gid_t(monc->get_global_id()));
 
   // verify compatset
-  CompatSet mdsmap_compat(get_mdsmap_compat_set_all());
+  CompatSet mdsmap_compat(MDSMap::get_compat_set_all());
   dout(10) << "     my compat " << mdsmap_compat << dendl;
   dout(10) << " mdsmap compat " << mdsmap->compat << dendl;
   if (!mdsmap_compat.writeable(mdsmap->compat)) {
