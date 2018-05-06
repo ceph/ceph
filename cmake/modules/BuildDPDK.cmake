@@ -71,7 +71,7 @@ function(do_build_dpdk dpdk_dir)
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND "true")
   ExternalProject_Add_Step(dpdk-ext patch-config
-    COMMAND ${CMAKE_MODULE_PATH}/patch-dpdk-conf.sh ${dpdk_dir} ${machine}
+    COMMAND ${CMAKE_MODULE_PATH}/patch-dpdk-conf.sh ${dpdk_dir} ${machine} ${arch}
     DEPENDEES configure
     DEPENDERS build)
   # easier to adjust the config
@@ -86,7 +86,7 @@ macro(build_dpdk)
   # target
   file(MAKE_DIRECTORY ${DPDK_INCLUDE_DIR})
   foreach(c
-      pci bus_pci
+      bus_pci pci
       eal
       mempool mempool_ring mempool_stack ring)
     add_library(dpdk::${c} STATIC IMPORTED)
