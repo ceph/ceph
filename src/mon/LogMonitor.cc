@@ -62,7 +62,6 @@ void LogMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
-  memset(&e.who, 0, sizeof(e.who));
   e.name = g_conf->name;
   e.stamp = ceph_clock_now();
   e.prio = CLOG_INFO;
