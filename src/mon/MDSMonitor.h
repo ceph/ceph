@@ -111,8 +111,10 @@ class MDSMonitor : public PaxosService, public PaxosFSMap {
 
   // beacons
   struct beacon_info_t {
-    utime_t stamp;
-    uint64_t seq;
+    mono_time stamp = mono_clock::zero();
+    uint64_t seq = 0;
+    beacon_info_t() {}
+    beacon_info_t(mono_time stamp, uint64_t seq) : stamp(stamp), seq(seq) {}
   };
   map<mds_gid_t, beacon_info_t> last_beacon;
 
@@ -151,7 +153,7 @@ protected:
   // When did the mon last call into our tick() method?  Used for detecting
   // when the mon was not updating us for some period (e.g. during slow
   // election) to reset last_beacon timeouts
-  utime_t last_tick;
+  mono_time last_tick = mono_clock::zero();
 };
 
 #endif

@@ -326,8 +326,9 @@ void MDSMonitor::_note_beacon(MMDSBeacon *m)
   version_t seq = m->get_seq();
 
   dout(15) << "_note_beacon " << *m << " noting time" << dendl;
-  last_beacon[gid].stamp = ceph_clock_now();
-  last_beacon[gid].seq = seq;
+  auto &beacon = last_beacon[gid];
+  beacon.stamp = mono_clock::now();
+  beacon.seq = seq;
 }
 
 bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
@@ -630,8 +631,9 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
     }
 
     // initialize the beacon timer
-    last_beacon[gid].stamp = ceph_clock_now();
-    last_beacon[gid].seq = seq;
+    auto &beacon = last_beacon[gid];
+    beacon.stamp = mono_clock::now();
+    beacon.seq = seq;
 
     // new incompat?
     if (!pending.compat.writeable(m->get_compat())) {
@@ -2066,13 +2068,14 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info
   // We will only take decisive action (replacing/removing a daemon)
   // if we have some indicating that some other daemon(s) are successfully
   // getting beacons through recently.
-  utime_t latest_beacon;
-  for (const auto & i : last_beacon) {
-    latest_beacon = MAX(i.second.stamp, latest_beacon);
+  mono_time latest_beacon = mono_clock::zero();
+  for (const auto &p : last_beacon) {
+    latest_beacon = std::max(p.second.stamp, latest_beacon);
   }
-  const bool may_replace = latest_beacon >
-    (ceph_clock_now() -
-     MAX(g_conf->mds_beacon_interval, g_conf->mds_beacon_grace * 0.5));
+  mono_time now = mono_clock::now();
+  chrono::duration<double> since = now-latest_beacon;
+  const bool may_replace = since.count() <
+      std::max(g_conf->mds_beacon_interval, g_conf->mds_beacon_grace * 0.5);
 
   // are we in?
   // and is there a non-laggy standby that can take over for us?
@@ -2272,57 +2275,56 @@ void MDSMonitor::tick()
     do_propose |= maybe_expand_cluster(p.second);
   }
 
-  const auto now = ceph_clock_now();
-  if (last_tick.is_zero()) {
+  mono_time now = mono_clock::now();
+  if (mono_clock::is_zero(last_tick)) {
     last_tick = now;
   }
+  chrono::duration<double> since_last = now-last_tick;
 
-  if (now - last_tick > (g_conf->mds_beacon_grace - g_conf->mds_beacon_interval)) {
+  if (since_last.count() >
+      (g_conf->mds_beacon_grace - g_conf->mds_beacon_interval)) {
     // This case handles either local slowness (calls being delayed
     // for whatever reason) or cluster election slowness (a long gap
     // between calls while an election happened)
     dout(4) << __func__ << ": resetting beacon timeouts due to mon delay "
             "(slow election?) of " << now - last_tick << " seconds" << dendl;
-    for (auto &i : last_beacon) {
-      i.second.stamp = now;
+    for (auto &p : last_beacon) {
+      p.second.stamp = now;
     }
   }
 
   last_tick = now;
 
-  // check beacon timestamps
-  utime_t cutoff = now;
-  cutoff -= g_conf->mds_beacon_grace;
-
   // make sure last_beacon is fully populated
   for (auto &p : pending.mds_roles) {
     auto &gid = p.first;
-    if (last_beacon.count(gid) == 0) {
-      last_beacon[gid].stamp = now;
-      last_beacon[gid].seq = 0;
-    }
+    last_beacon.emplace(std::piecewise_construct,
+        std::forward_as_tuple(gid),
+        std::forward_as_tuple(mono_clock::now(), 0));
   }
 
+
+  // check beacon timestamps
   bool propose_osdmap = false;
   bool osdmap_writeable = mon->osdmon()->is_writeable();
-  auto p = last_beacon.begin();
-  while (p != last_beacon.end()) {
-    mds_gid_t gid = p->first;
-    auto beacon_info = p->second;
-    ++p;
+  for (auto it = last_beacon.begin(); it != last_beacon.end(); it++) {
+    mds_gid_t gid = it->first;
+    auto beacon_info = it->second;
+    chrono::duration<double> since_last = now-beacon_info.stamp;
 
     if (!pending.gid_exists(gid)) {
       // clean it out
-      last_beacon.erase(gid);
+      it = last_beacon.erase(it);
       continue;
     }
 
-    if (beacon_info.stamp < cutoff) {
+
+    if (since_last.count() >= g_conf->mds_beacon_grace) {
       auto &info = pending.get_info_gid(gid);
       dout(1) << "no beacon from mds." << info.rank << "." << info.inc
               << " (gid: " << gid << " addr: " << info.addr
               << " state: " << ceph_mds_state_name(info.state) << ")"
-              << " since " << beacon_info.stamp << dendl;
+              << " since " << since_last.count() << "s" << dendl;
       // If the OSDMap is writeable, we can blacklist things, so we can
       // try failing any laggy MDS daemons.  Consider each one for failure.
       if (osdmap_writeable) {
@@ -2377,7 +2379,7 @@ MDSMonitor::MDSMonitor(Monitor *mn, Paxos *p, string service_name)
 void MDSMonitor::on_restart()
 {
   // Clear out the leader-specific state.
-  last_tick = utime_t();
+  last_tick = mono_clock::now();
   last_beacon.clear();
 }
 
