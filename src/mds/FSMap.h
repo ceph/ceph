@@ -109,7 +109,7 @@ public:
     : epoch(0),
       next_filesystem_id(FS_CLUSTER_ID_ANONYMOUS + 1),
       legacy_client_fscid(FS_CLUSTER_ID_NONE),
-      compat(get_mdsmap_compat_set_default()),
+      compat(MDSMap::get_compat_set_default()),
       enable_multiple(false), ever_enabled_multiple(false)
   { }
 
