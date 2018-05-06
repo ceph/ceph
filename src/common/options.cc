@@ -5974,6 +5974,19 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "Number of seconds between service-map updates of sync-trace events."),
 
+    Option("rgw_sync_multipart_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("")
+    .set_long_description(
+        "Size of object larger than this will using mulitpart sync between zones."
+        "0 means only atomic sync allowed."),
+
+    Option("rgw_sync_multipart_concurrent_requests", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("")
+    .set_long_description(
+        "Max num of threads a multipart sync will use to concurrently do put operation"),
+
     Option("rgw_period_push_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(2)
     .set_description("Period push interval")

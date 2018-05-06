@@ -69,6 +69,7 @@ struct rgw_http_req_data : public RefCountedObject {
     curl_handle = NULL;
     h = NULL;
     done = true;
+    client->signal(ret);
     cond.Signal();
   }
 

@@ -27,6 +27,7 @@
 #include "rgw_period_puller.h"
 #include "rgw_sync_module.h"
 #include "rgw_sync_log_trim.h"
+#include "rgw_sync_module_default.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -3196,6 +3197,36 @@ public:
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
                        rgw_zone_set *zones_trace= nullptr);
+
+  int init_multipart(RGWObjectCtx& obj_ctx,
+                     RGWBucketInfo& bucket_info,
+                     rgw_obj_key& key, string *upload_id,
+                     map<string, bufferlist>& attrs);
+
+  using parts_info = map<int, rgw_sync_default_multipart_part_info>;
+  int complete_multipart(RGWObjectCtx& obj_ctx,
+                         RGWBucketInfo& bucket_info,
+                         const rgw_obj_key& key,
+                         const string& upload_id,
+                         const map<int, string>& parts,
+                         const real_time& set_mtime);
+
+  int abort_multipart(RGWObjectCtx& obj_ctx,
+                      RGWBucketInfo& bucket_info,
+                      const rgw_obj_key& key,
+                      const string& upload_id);
+
+  int fetch_remote_obj_multipart_part(RGWObjectCtx& obj_ctx,
+                            const string& client_id,
+                            const string& op_id,
+                            const bool record_op_state,
+                            const string& source_zone,
+                            RGWBucketInfo& bucket_info,
+                            const rgw_obj_key& key,
+                            const string& upload_id,
+                            const rgw_sync_default_src_obj_properties& src_properties,
+                            const rgw_sync_default_multipart_part_info& part_info);
+
   /**
    * Copy an object.
    * dest_obj: the object to copy into
@@ -4170,11 +4201,10 @@ class RGWPutObjProcessor_Multipart : public RGWPutObjProcessor_Atomic
 {
   string part_num;
   RGWMPObj mp;
-  req_state *s;
+  req_state *s{nullptr};
   string upload_id;
 
 protected:
-  int prepare(RGWRados *store, string *oid_rand) override;
   int do_complete(size_t accounted_size, const string& etag,
                   ceph::real_time *mtime, ceph::real_time set_mtime,
                   map<string, bufferlist>& attrs, ceph::real_time delete_at,
@@ -4182,8 +4212,16 @@ protected:
                   rgw_zone_set *zones_trace) override;
 public:
   bool immutable_head() override { return true; }
+  int prepare(RGWRados *store, string *oid_rand);
   RGWPutObjProcessor_Multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, uint64_t _p, req_state *_s) :
                    RGWPutObjProcessor_Atomic(obj_ctx, bucket_info, _s->bucket, _s->object.name, _p, _s->req_id, false), s(_s) {}
+  RGWPutObjProcessor_Multipart(RGWObjectCtx& _obj_ctx, RGWBucketInfo& _bucket_info,
+                               const rgw_obj_key& _key, const uint64_t _part_num,
+                               const uint64_t _stripe_size, const string& _upload_id,
+                               const string& _req_id):
+                   RGWPutObjProcessor_Atomic(_obj_ctx, _bucket_info, _bucket_info.bucket,
+                                             _key.name, _stripe_size, _req_id, false),
+                               part_num(to_string(_part_num)), upload_id(_upload_id) {}
   void get_mp(RGWMPObj** _mp);
 }; /* RGWPutObjProcessor_Multipart */
 

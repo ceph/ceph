@@ -7645,6 +7645,158 @@ public:
   }
 };
 
+class RGWRadosPutObjMultipartPart : public RGWHTTPStreamRWRequest::ReceiveCB {
+  Mutex lock;
+  Cond cond;
+  CephContext *cct{nullptr}; //used for ldout
+  RGWHTTPStreamRWRequest *req{nullptr};
+  RGWPutObjProcessor *processor{nullptr};
+  bufferlist data; // for libcurl callback
+  bufferlist bl; // for obj processor
+  bufferlist extra_data;
+  bool got_all_extra_data{false};
+  bool paused{false};
+  bool req_done{false}; // to avoid dead lock in claim_data and req->finish()
+  bool req_ret_status{0};
+  uint64_t data_len{0};
+
+protected:
+  /* return data length we got,
+   * block if no data in buffer and req is not finished.
+   */
+  int claim_data(bufferlist *dest) {
+    uint64_t len = 0;
+    {
+      Mutex::Locker l(lock);
+      len = data.length();
+      if (len == 0) {
+        // can't use req->is_done() because the intersect lock sequence.
+        if (req_done) {
+          return req_ret_status;
+        }
+        // wait for more data
+        cond.Wait(lock);
+      }
+      len = data.length();
+
+      data.splice(0, len, dest);
+    }
+    if (req->is_done()) {
+      return len;
+    }
+
+    if (paused) {
+      req->unpause_receive();
+    }
+    return len;
+  }
+
+public:
+  RGWRadosPutObjMultipartPart(CephContext *_cct, RGWHTTPStreamRWRequest *_req,
+                              RGWPutObjProcessor *_processor) : lock("RGWRadosPutObjMultipartPart"),
+                                                                cct(_cct), req(_req),
+                                                                processor(_processor) {
+    if (req) {
+      req->set_in_cb(this);
+    }
+  }
+
+  void set_req(RGWHTTPStreamRWRequest *_req) {
+    if (req) {
+      delete req;
+      req = nullptr;
+    }
+    req = _req;
+  }
+
+  int handle_data(bufferlist& bl, bool *pause) override {
+    uint64_t bl_len = bl.length();
+    Mutex::Locker l(lock);
+
+    if (!got_all_extra_data) {
+      uint64_t max = extra_data_len - extra_data.length();
+      if (max > bl_len) {
+        max = bl_len;
+      }
+      bl.splice(0, max, &extra_data);
+      bl_len -= max;
+      got_all_extra_data = extra_data.length() == extra_data_len;
+    }
+
+    data.append(bl);
+#define GET_DATA_WINDOW_SIZE 2 * 1024 * 1024
+    uint64_t data_len = data.length();
+    if (data_len >= GET_DATA_WINDOW_SIZE) {
+      *pause = true;
+      paused = true;
+    }
+    if (data.length() > 0 || req->is_done())
+      cond.Signal();
+    return 0;
+  }
+
+  void signal(int _req_ret_status) {
+    Mutex::Locker l(lock);
+    req_done = true;
+    req_ret_status = _req_ret_status;
+    cond.Signal();
+  }
+
+/* synchronously write data to rados
+ * return -EXIST means this sync obj is old, ignore it.
+ */
+  int process_data() {
+    bool again = false;
+    int ret = 0;
+    uint64_t ofs = 0;
+    while ((ret = claim_data(&bl))) {
+      if (ret < 0) {
+        ldout(cct,0) << "ERROR: process_data get ret=" << ret
+            << " with http_status=" << req->get_http_status() << dendl;
+        /* 412 means PreconditionFailed (see rgw_common.cc)
+         * return -ENOENT so caller will clear existing
+         * parts.
+         */
+        if (req->get_http_status() == 412) {
+          ret = -ENOENT;
+        }
+        return ret;
+      }
+      do {
+        data_len += bl.length();
+        void *handle = nullptr;
+        rgw_raw_obj obj;
+        uint64_t size = bl.length();
+        ret = processor->handle_data(bl, ofs, &handle, &obj, &again);
+        if (ret < 0) {
+          ldout(cct,0)<<"ERROR: Multipart processor handle return erro="<<ret<<dendl;
+          return ret;
+        }
+        ofs += size;
+        ret = processor->throttle_data(handle, obj, size, false);
+        if (ret < 0) {
+          ldout(cct,0)<<"ERROR: Multipart processor throttle return erro="<<ret<<dendl;
+          return ret;
+        }
+      } while (again);
+    }
+    return data_len;
+  }
+
+  int complete(const string& etag, real_time *mtime, real_time set_mtime,
+               map<string, bufferlist>& attrs, real_time delete_at, rgw_zone_set *zones_trace) {
+    return processor->complete(data_len, etag, mtime, set_mtime, attrs, delete_at, nullptr, nullptr, nullptr, zones_trace);
+  }
+
+  bufferlist& get_extra_data() {
+    return extra_data;
+  }
+
+  bool has_all_extra_data() {
+    return got_all_extra_data;
+  }
+}; // RGWRadosPutObjMultipartPart
+
 /*
  * prepare attrset depending on attrs_mod.
  */
@@ -14716,5 +14868,428 @@ int RGWRados::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *res
   }
 
   return 0;
+}
+
+int RGWRados::init_multipart(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info,
+                             rgw_obj_key& key, string *upload_id,
+                             map<string, bufferlist>& attrs)
+{
+  int op_ret;
+  rgw_obj obj;
+  do {
+    char buf[33];
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    *upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
+    upload_id->append(buf);
+    ldout(cct, 10) << "RGWRados::init_multipart(), upload_id=" << *upload_id << dendl;
+
+    string tmp_obj_name;
+    RGWMPObj mp(key.name, *upload_id);
+    tmp_obj_name = mp.get_meta();
+    obj.init_ns(bucket_info.bucket, tmp_obj_name, RGW_OBJ_NS_MULTIPART);
+    obj.set_in_extra_data(true);
+    obj.index_hash_source = key.name;
+
+    RGWRados::Object op_target(this, bucket_info, obj_ctx, obj);
+    op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
+
+    RGWRados::Object::Write obj_op(&op_target);
+
+    obj_op.meta.owner = bucket_info.owner;
+    obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
+    obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
+
+    op_ret = obj_op.write_meta(0, 0, attrs);
+  } while (op_ret == -EEXIST);
+
+  return op_ret;
+}
+
+int RGWRados::complete_multipart(RGWObjectCtx& obj_ctx,
+                                 RGWBucketInfo& bucket_info,
+                                 const rgw_obj_key& key,
+                                 const string& upload_id,
+                                 const map<int, string>& parts,
+                                 const real_time& set_mtime) {
+  string meta_oid;
+  RGWMPObj mp;
+  rgw_obj meta_obj;
+  rgw_obj target_obj;
+  mp.init(key.name, upload_id);
+  meta_oid = mp.get_meta();
+  meta_obj.init_ns(bucket_info.bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
+  meta_obj.set_in_extra_data(true);
+  meta_obj.index_hash_source = key.name;
+
+  rgw_pool meta_pool;
+  rgw_raw_obj raw_obj;
+  int max_lock_secs_mp = cct->_conf->get_val<int64_t>("rgw_mp_lock_max_time");
+  utime_t dur(max_lock_secs_mp, 0);
+
+  obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_obj);
+  get_obj_data_pool(bucket_info.placement_rule, meta_obj, &meta_pool);
+  // Fix me: serializer is dumplicated with
+  // RGWCompleteMultipart::MPSerialize, which is a protected class.
+  /*
+  struct MPSerializer {
+    librados::IoCtx ioctx;
+    rados::cls::lock::Lock lock;
+    librados::ObjectWriteOperation op;
+    std::string oid;
+    bool locked;
+
+    MPSerializer() : lock("RGWCompleteMultipart"), locked(false)
+      {}
+
+    int try_lock(const std::string& _oid, utime_t dur) {
+      oid = _oid;
+      op.assert_exists();
+      lock.set_duration(dur);
+      lock.lock_exclusive(&op);
+      int ret = ioctx.operate(oid, &op);
+      if (! ret) {
+        locked = true;
+      }
+      return ret;
+    }
+
+    int unlock() {
+      return lock.unlock(&ioctx, oid);
+    }
+
+    void clear_locked() {
+      locked = false;
+    }
+  } serializer;
+  open_pool_ctx(meta_pool, serializer.ioctx);
+  int ret = 0;
+  ret = serializer.try_lock(raw_obj.oid, dur);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: complete_multipart() failed to acquire lock" << dendl;
+    return ret;
+  }
+  */
+
+  // get attrs
+  int ret = 0;
+  map<string, bufferlist> attrs;
+  {
+    RGWRados::Object op_target(this, bucket_info, obj_ctx, meta_obj);
+    RGWRados::Object::Read read_op(&op_target);
+    read_op.params.attrs = &attrs;
+    ret = read_op.prepare();
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to get obj attrs, obj=" << meta_obj
+                  << " ret=" << ret << dendl;
+      return ret;
+    }
+  }
+
+  int max_parts = 1000;
+  int marker = 0;
+  bool truncated = false;
+  size_t total_parts = 0;
+  int handled_parts = 0;
+  off_t ofs = 0;
+  uint64_t accounted_size = 0;
+  list<rgw_obj_index_key> remove_objs;
+  RGWObjManifest manifest;
+  RGWCompressionInfo cs_info;
+  bool compressed = false;
+  map<uint32_t, RGWUploadPartInfo> obj_parts;
+  map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
+  map<int, string>::const_iterator iter;
+  do {
+    ret = list_multipart_parts(this, bucket_info, cct, upload_id, meta_oid, max_parts,
+                               marker, obj_parts, &marker, &truncated);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to get parts info on obj=" << meta_oid << dendl;
+      return ret;
+    }
+    total_parts += obj_parts.size();
+    if (!truncated && total_parts != parts.size()) {
+      ldout(cct, 0) << "ERROR: total parts mismatch: have: " << total_parts
+                    << " expected: " << parts.size() << dendl;
+      return -ERR_INVALID_PART;
+    }
+
+    iter = parts.begin();
+    for (obj_iter = obj_parts.begin(); iter != parts.end() && obj_iter != obj_parts.end();
+         ++iter, ++obj_iter, ++handled_parts) {
+      uint64_t part_size = obj_iter->second.accounted_size;
+      if (handled_parts < (int)parts.size() - 1 &&
+          part_size < static_cast<uint64_t>(cct->_conf->rgw_multipart_min_part_size)) {
+        return -ERR_TOO_SMALL;
+      }
+      if (iter->first != (int)obj_iter->first) {
+        ldout(cct, 0) << "NOTICE: parts num mismatch: next requested: "
+                      << iter->first << " next uploaded: "
+                      << obj_iter->first << dendl;
+        return -ERR_INVALID_PART;
+      }
+
+      RGWUploadPartInfo& obj_part = obj_iter->second;
+
+      /* update manifest for part */
+      string oid = mp.get_part(obj_iter->second.num);
+      rgw_obj src_obj;
+      src_obj.init_ns(bucket_info.bucket, oid, RGW_OBJ_NS_MULTIPART);
+
+      if (obj_part.manifest.empty()) {
+        ldout(cct, 0) << "ERROR: empty manifest for object part: obj="
+                      << src_obj << dendl;
+        return -ERR_INVALID_PART;
+      } else {
+        manifest.append(obj_part.manifest, this);
+      }
+
+      bool part_compressed = (obj_part.cs_info.compression_type != "none");
+      if ((obj_iter != obj_parts.begin()) &&
+          ((part_compressed != compressed) ||
+          (cs_info.compression_type != obj_part.cs_info.compression_type))) {
+        ldout(cct, 0) << "ERROR: compression type was changed during multipart upload ("
+                      << cs_info.compression_type << ">>" << obj_part.cs_info.compression_type << ")" << dendl;
+        return -ERR_INVALID_PART;
+      }
+
+      if (part_compressed) {
+        int64_t new_ofs; // offset in compression data for new part
+        if (cs_info.blocks.size() > 0)
+          new_ofs = cs_info.blocks.back().new_ofs + cs_info.blocks.back().len;
+        else
+          new_ofs = 0;
+        for (const auto& block : obj_part.cs_info.blocks) {
+          compression_block cb;
+          cb.old_ofs = block.old_ofs + cs_info.orig_size;
+          cb.new_ofs = new_ofs;
+          cb.len = block.len;
+          cs_info.blocks.push_back(cb);
+          new_ofs = cb.new_ofs + cb.len;
+        }
+        if (!compressed)
+          cs_info.compression_type = obj_part.cs_info.compression_type;
+        cs_info.orig_size += obj_part.cs_info.orig_size;
+        compressed = true;
+      }
+
+      rgw_obj_index_key remove_key;
+      src_obj.key.get_index_key(&remove_key);
+
+      remove_objs.push_back(remove_key);
+
+      ofs += obj_part.size;
+      accounted_size += obj_part.accounted_size;
+    }
+  } while (truncated);
+
+  if (compressed) {
+    // write compression attribute to full object
+    bufferlist tmp;
+    encode(cs_info, tmp);
+    attrs[RGW_ATTR_COMPRESSION] = tmp;
+  }
+
+  target_obj.init(bucket_info.bucket, key.name);
+
+  if (bucket_info.versioning_enabled()) {
+    if (!key.instance.empty()) {
+      target_obj.key.set_instance(key.instance);
+    } else {
+      // Fix me: is empty instance right?
+      //gen_rand_obj_instance_name(&target_obj);
+    }
+  }
+
+  obj_ctx.obj.set_atomic(target_obj);
+
+  RGWRados::Object op_target(this, bucket_info, obj_ctx, target_obj);
+  RGWRados::Object::Write obj_op(&op_target);
+
+  obj_op.meta.manifest = &manifest;
+  obj_op.meta.remove_objs = &remove_objs;
+
+  //no need to initialize ptag, prepare_atomic_modification will help.
+  //obj_op.meta.ptag = &s->req_id;
+  obj_op.meta.owner = bucket_info.owner;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.modify_tail = true;
+  obj_op.meta.completeMultipart = true;
+  ret = obj_op.write_meta(ofs, accounted_size, attrs);
+
+  if (ret < 0) {
+    ldout(cct, 0) << "write meta failed with ret=" << ret << dendl;
+    return ret;
+  }
+
+  ret = delete_obj(obj_ctx, bucket_info, meta_obj, 0);
+  /*
+  if (ret >= 0)  {
+    / serializer's exclusive lock is released /
+    serializer.clear_locked();
+  } else {
+  */
+  if (ret < 0) {
+    ldout(cct, 0) << "WARNING: failed to remove object "
+                  << meta_obj << dendl;
+  }
+
+  return ret;
+}
+
+int RGWRados::abort_multipart(RGWObjectCtx& obj_ctx,
+                              RGWBucketInfo& bucket_info,
+                              const rgw_obj_key& key,
+                              const string& upload_id) {
+  string meta_oid;
+  rgw_obj meta_obj;
+  RGWMPObj mp;
+  int ret = 0;
+
+  if (upload_id.empty())
+    return 0;
+
+  mp.init(key.name, upload_id);
+  meta_oid = mp.get_meta();
+
+  ret = abort_multipart_upload(this, cct, &obj_ctx, bucket_info, mp);
+  if (ret < 0)
+    ldout(cct, 0)<<"ERROR: abort_multipart failed with ret="<<ret<<dendl;
+  return ret;
+}
+
+int RGWRados::fetch_remote_obj_multipart_part(RGWObjectCtx& obj_ctx,
+  //                                  const rgw_user& user_id,
+                                    const string& client_id,
+                                    const string& op_id,
+                                    const bool record_op_state,
+                                    /* const req_info *info, */
+                                    const string& source_zone,
+                                    RGWBucketInfo& bucket_info, // can't constilize because of atomic_processor
+                                    const rgw_obj_key& key,
+                                    const string& upload_id,
+                                    const rgw_sync_default_src_obj_properties& src_properties,
+                                    const rgw_sync_default_multipart_part_info& part_info) {
+  RGWPutObjProcessor_Multipart processor(obj_ctx,
+                                         bucket_info,
+                                         key,
+                                         part_info.part_num,
+                                         cct->_conf->rgw_obj_stripe_size,
+                                         upload_id,
+                                         //user_id,
+                                         op_id);
+  RGWRESTStreamRWRequest *in_stream_req;
+  rgw_obj obj(bucket_info.bucket, key.name);
+  bufferlist bl;
+  map<string, bufferlist> attrs;
+  map<string, string> non_used_attrs;
+
+  obj_time_weight set_mtime_weight;
+  set_mtime_weight.high_precision = false;
+  int ret = processor.prepare(this, NULL);
+  if (ret < 0) {
+    return ret;
+  }
+
+  RGWRESTConn *conn;
+  RGWRESTConn::get_obj_params params;
+  if (source_zone.empty()) {
+    if (bucket_info.zonegroup.empty()) {
+      /* source is in the master zonegroup */
+      conn = rest_master_conn;
+    } else {
+      map<string, RGWRESTConn *>::iterator iter = zonegroup_conn_map.find(bucket_info.zonegroup);
+      if (iter == zonegroup_conn_map.end()) {
+        ldout(cct, 0) << "could not find zonegroup connection to zonegroup: " << source_zone << dendl;
+        return -ENOENT;
+      }
+      conn = iter->second;
+    }
+  } else {
+    map<string, RGWRESTConn *>::iterator iter = zone_conn_map.find(source_zone);
+    if (iter == zone_conn_map.end()) {
+      ldout(cct, 0) << "could not find zone connection to zone: " << source_zone << dendl;
+      return -ENOENT;
+    }
+    conn = iter->second;
+  }
+
+  string obj_name = bucket_info.bucket.name + "/" + key.get_oid();
+
+  boost::optional<RGWPutObj_Compress> compressor;
+  CompressorRef plugin;
+
+  const auto& compression_type = zone_params.get_compression_type(
+      bucket_info.placement_rule);
+  if (compression_type != "none") {
+    plugin = Compressor::create(cct, compression_type);
+    if (!plugin) {
+      ldout(cct, 1) << "Cannot load plugin for compression type "
+          << compression_type << dendl;
+    }
+  }
+
+  RGWRadosPutObjMultipartPart cb(cct, nullptr, &processor);
+
+  real_time t = real_time();
+  string etag;
+  map<string, string> req_headers;
+  real_time set_mtime;
+
+//  params.uid = user_id;
+  params.info = nullptr;
+  params.unmod_ptr = &src_properties.mtime;
+  params.mod_pg_ver = src_properties.pg_ver;
+  params.mod_zone_id = src_properties.zone_short_id;
+  params.prepend_metadata = false;
+  params.get_op = true;
+  params.rgwx_stat = false;
+  params.sync_manifest = true;
+  params.skip_decrypt = true;
+  params.cb = &cb;
+  params.range_is_set = true;
+  params.range_start = part_info.ofs;
+  params.range_end = part_info.ofs + part_info.size - 1;
+  ret = conn->get_obj(obj, params, false, &in_stream_req);
+  if (ret < 0) {
+    delete in_stream_req;
+    in_stream_req = nullptr;
+    goto set_err_state;
+  }
+
+  cb.set_req(in_stream_req);
+  // send request!
+  ret = in_stream_req->send(nullptr);
+  if (ret < 0) {
+    delete in_stream_req;
+    in_stream_req = nullptr;
+    goto set_err_state;
+  }
+
+  ret = cb.process_data();
+
+  if (ret < 0)
+    goto set_err_state;
+
+  ret = conn->complete_request(in_stream_req, nullptr, nullptr, nullptr, nullptr, nullptr);
+  //ret = conn->complete_request(in_stream_req, etag, nullptr, nullptr, non_used_attrs);
+  if (ret < 0) {
+    goto set_err_state;
+  }
+
+  // now, all data has been writen to disk, do complete operation
+  ret = cb.complete(etag, nullptr, t, attrs, t/* delete_at */, nullptr /* zones_trace */);
+
+
+  return 0;
+set_err_state:
+  if (ret == -ERR_NOT_MODIFIED) {
+    ret = 0;
+  }
+  if (in_stream_req) {
+    delete in_stream_req;
+    in_stream_req = nullptr;
+  }
+  return ret;
 }
 

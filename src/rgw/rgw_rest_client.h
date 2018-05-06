@@ -118,6 +118,8 @@ protected:
 public:
   int send_data(void *ptr, size_t len, bool *pause) override;
   int receive_data(void *ptr, size_t len, bool *pause) override;
+  // tell cb the req_http_data has finished with return val ret
+  void signal(int ret) override { cb->signal(ret); }
 
   class ReceiveCB {
     protected:
@@ -129,6 +131,7 @@ public:
       virtual void set_extra_data_len(uint64_t len) {
         extra_data_len = len;
       }
+      virtual void signal(int ret) {}
   };
 
   RGWHTTPStreamRWRequest(CephContext *_cct, const string& _method, const string& _url,

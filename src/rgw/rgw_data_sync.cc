@@ -19,6 +19,7 @@
 #include "rgw_metadata.h"
 #include "rgw_sync_module.h"
 #include "rgw_sync_log_trim.h"
+#include "rgw_sync_module_default.h"
 
 #include "cls/lock/cls_lock_client.h"
 
@@ -1733,9 +1734,8 @@ int RGWDefaultSyncModule::create_instance(CephContext *cct, const JSONFormattabl
 
 RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
-  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone, bucket_info,
-                                 key, versioned_epoch,
-                                 true, zones_trace);
+  return new RGWDefaultHandleRemoteObjCR(sync_env, bucket_info, key, versioned_epoch,
+                                         true, zones_trace);
 }
 
 RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,

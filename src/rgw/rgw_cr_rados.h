@@ -7,6 +7,7 @@
 #include "rgw_rados.h"
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
+#include "rgw_sync_module_default.h"
 
 #include <atomic>
 
@@ -175,6 +176,54 @@ public:
   RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                         RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
 		        const string& _name, const string& _cookie);
+};
+
+class RGWAsyncDelSystemObj : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  RGWObjVersionTracker *objv_tracker;
+  rgw_raw_obj obj;
+
+protected:
+  int _send_request() override;
+public:
+  RGWAsyncDelSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                       RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj);
+};
+
+class RGWSimpleRadosRemoveCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  rgw_raw_obj obj;
+  RGWObjVersionTracker *objv_tracker;
+
+  RGWAsyncDelSystemObj *req;
+
+public:
+  RGWSimpleRadosRemoveCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                         const rgw_raw_obj& _obj, RGWObjVersionTracker *_objv_tracker = nullptr)
+    : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
+      obj(_obj), objv_tracker(_objv_tracker), req(nullptr) {}
+  ~RGWSimpleRadosRemoveCR() override {
+    request_cleanup();
+  }
+
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = nullptr;
+    }
+  }
+
+  int send_request() override {
+    req = new RGWAsyncDelSystemObj(this, stack->create_completion_notifier(),
+                                   store, objv_tracker, obj);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() override {
+    return req->get_ret_status();
+  }
 };
 
 template <class T>
@@ -1148,6 +1197,7 @@ class RGWAsyncStatObj : public RGWAsyncRadosRequest {
   uint64_t *psize;
   real_time *pmtime;
   uint64_t *pepoch;
+  map<string, bufferlist> *pattrs;
   RGWObjVersionTracker *objv_tracker;
 protected:
   int _send_request() override;
@@ -1155,9 +1205,10 @@ public:
   RGWAsyncStatObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *store,
                   const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
                   real_time *pmtime = nullptr, uint64_t *pepoch = nullptr,
+                  map<string, bufferlist> *pattrs = nullptr,
                   RGWObjVersionTracker *objv_tracker = nullptr)
 	  : RGWAsyncRadosRequest(caller, cn), store(store), obj(obj), psize(psize),
-	  pmtime(pmtime), pepoch(pepoch), objv_tracker(objv_tracker) {}
+	  pmtime(pmtime), pepoch(pepoch), pattrs(pattrs), objv_tracker(objv_tracker) {}
 };
 
 class RGWStatObjCR : public RGWSimpleCoroutine {
@@ -1168,12 +1219,14 @@ class RGWStatObjCR : public RGWSimpleCoroutine {
   uint64_t *psize;
   real_time *pmtime;
   uint64_t *pepoch;
+  map<string, bufferlist> *pattrs;
   RGWObjVersionTracker *objv_tracker;
   RGWAsyncStatObj *req = nullptr;
  public:
   RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
 	  const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize = nullptr,
 	  real_time* pmtime = nullptr, uint64_t *pepoch = nullptr,
+    map<string, bufferlist> *pattrs = nullptr,
 	  RGWObjVersionTracker *objv_tracker = nullptr);
   ~RGWStatObjCR() override {
     request_cleanup();
@@ -1201,6 +1254,289 @@ public:
 
   int send_request() override;
   int request_complete() override;
+};
+
+/// multipart sync CR and async ops
+class RGWAsyncInitMultipart : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  RGWBucketInfo bucket_info;
+  rgw_obj_key key;
+  string *upload_id;
+  map<string, bufferlist> attrs;
+
+protected:
+  int _send_request() override;
+public:
+  RGWAsyncInitMultipart(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                         const RGWBucketInfo& _bucket_info,
+                         const rgw_obj_key& _key,
+                         string *_upload_id,
+                         map<string, bufferlist>& _attrs) :
+                                 RGWAsyncRadosRequest(caller, cn), store(_store),
+                                 bucket_info(_bucket_info), key(_key),
+                                 upload_id(_upload_id), attrs(_attrs) {}
+};
+
+class RGWInitMultipartCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  const RGWBucketInfo& bucket_info;
+  const rgw_obj_key& key;
+  RGWAsyncInitMultipart *req;
+  string *upload_id;
+  map<string, bufferlist> attrs;
+
+public:
+  RGWInitMultipartCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                     const RGWBucketInfo& _bucket_info,
+                     const rgw_obj_key& _key,
+                     string *_upload_id,
+                     map<string, bufferlist>& _attrs) : RGWSimpleCoroutine(_store->ctx()),
+                                           async_rados(_async_rados), store(_store),
+                                           bucket_info(_bucket_info),
+                                           key(_key), req(nullptr),
+                                           upload_id(_upload_id),
+                                           attrs(_attrs) {}
+  ~RGWInitMultipartCR() {
+    request_cleanup();
+  }
+
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = nullptr;
+    }
+  }
+
+  int send_request() override {
+    req = new RGWAsyncInitMultipart(this, stack->create_completion_notifier(), store,
+                                    bucket_info, key, upload_id, attrs);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() override {
+    return req->get_ret_status();
+  }
+};
+
+class RGWAsyncCompleteMultipart : public RGWAsyncRadosRequest {
+  using parts_info = map<int, rgw_sync_default_multipart_part_info>;
+  RGWRados *store;
+  RGWBucketInfo bucket_info;
+  rgw_obj_key key;
+  string upload_id;
+  const real_time set_mtime;
+  map<int, string> parts;
+protected:
+  int _send_request() override;
+public:
+  RGWAsyncCompleteMultipart(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                         const RGWBucketInfo& _bucket_info,
+                         const rgw_obj_key& _key,
+                         const string& _upload_id,
+                         const parts_info& _parts,
+                         const real_time& _set_mtime) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                                    bucket_info(_bucket_info),
+                                                    key(_key),
+                                                    upload_id(_upload_id),
+                                                    set_mtime(_set_mtime)
+  {
+    parts_info::const_iterator it = _parts.begin();
+    for (; it != _parts.end(); it++) {
+      // Fix me: do not use etag in rgw multipart sync
+      parts[it->first].clear();
+    }
+  }
+};
+
+class RGWCompleteMultipartCR : public RGWSimpleCoroutine {
+  using parts_info = map<int, rgw_sync_default_multipart_part_info>;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  RGWBucketInfo bucket_info;
+  rgw_obj_key key;
+  string upload_id;
+  const parts_info& parts;
+  const real_time& set_mtime;
+  RGWAsyncCompleteMultipart *req;
+public:
+  RGWCompleteMultipartCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                            const RGWBucketInfo& _bucket_info,
+                            const rgw_obj_key& _key,
+                            const string& _upload_id,
+                            const parts_info& _parts,
+                            const real_time& _set_mtime) : RGWSimpleCoroutine(_store->ctx()),
+                                                 async_rados(_async_rados), store(_store),
+                                                 bucket_info(_bucket_info),
+                                                 key(_key), upload_id(_upload_id),
+                                                 parts(_parts),
+                                                 set_mtime(_set_mtime),
+                                                 req(nullptr) {}
+  ~RGWCompleteMultipartCR() override {
+    request_cleanup();
+  }
+
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = nullptr;
+    }
+  }
+
+  int send_request() override {
+    req = new RGWAsyncCompleteMultipart(this, stack->create_completion_notifier(), store,
+                                        bucket_info, key, upload_id, parts, set_mtime);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() override {
+    return req->get_ret_status();
+  }
+};
+
+class RGWAsyncAbortMultipart : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  RGWBucketInfo bucket_info;
+  const rgw_obj_key& key;
+  const string& upload_id;
+protected:
+  int _send_request() override;
+public:
+  RGWAsyncAbortMultipart(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
+                         RGWRados *_store,
+                         const RGWBucketInfo& _bucket_info,
+                         const rgw_obj_key& _key,
+                         const string& _upload_id) :
+                                     RGWAsyncRadosRequest(caller, cn), store(_store),
+                                     bucket_info(_bucket_info), key(_key),
+                                     upload_id(_upload_id) {}
+};
+
+class RGWAbortMultipartCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+  const RGWBucketInfo& bucket_info;
+  const rgw_obj_key& key;
+  const string& upload_id;
+  RGWAsyncAbortMultipart *req;
+
+public:
+  RGWAbortMultipartCR(RGWAsyncRadosProcessor *_async_rados,
+                      RGWRados *_store,
+                      const RGWBucketInfo& _bucket_info,
+                      const rgw_obj_key& _key,
+                      const string& _upload_id) :
+                                     RGWSimpleCoroutine(_store->ctx()),
+                                     async_rados(_async_rados), store(_store),
+                                     bucket_info(_bucket_info),
+                                     key(_key), upload_id(_upload_id),
+                                     req(nullptr) {}
+  ~RGWAbortMultipartCR() override {
+    request_cleanup();
+  }
+
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = nullptr;
+    }
+  }
+
+  int send_request() override {
+    req = new RGWAsyncAbortMultipart(this, stack->create_completion_notifier(), store,
+                                     bucket_info, key, upload_id);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() override {
+    return req->get_ret_status();
+  }
+};
+
+class RGWAsyncFetchRemoteObjMultipartPart : public RGWAsyncRadosRequest {
+  RGWRados *store;
+  const string& source_zone;
+  const RGWBucketInfo& bucket_info;
+  const rgw_obj_key& key;
+  const rgw_sync_default_src_obj_properties& src_properties;
+  const string& upload_id;
+  const rgw_sync_default_multipart_part_info& part_info;
+  int *done;
+protected:
+  int _send_request() override;
+public:
+  RGWAsyncFetchRemoteObjMultipartPart(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                             const string& _source_zone,
+                             const RGWBucketInfo& _bucket_info,
+                             const rgw_obj_key& _key,
+                             const rgw_sync_default_src_obj_properties& _src_properties,
+                             const string& _upload_id,
+                             const rgw_sync_default_multipart_part_info& _part_info,
+                             int *_done) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                                                    source_zone(_source_zone),
+                                                    bucket_info(_bucket_info),
+                                                    key(_key),
+                                                    src_properties(_src_properties),
+                                                    upload_id(_upload_id),
+                                                    part_info(_part_info),
+                                                    done(_done){}
+};
+
+class RGWFetchRemoteObjMultipartPartCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+
+  const string& source_zone;
+  const RGWBucketInfo& bucket_info;
+  const rgw_obj_key& key;
+  const rgw_sync_default_src_obj_properties& src_properties;
+  const string& upload_id;
+  const rgw_sync_default_multipart_part_info& part_info;
+  int *done;
+
+  RGWAsyncFetchRemoteObjMultipartPart *req;
+public:
+  RGWFetchRemoteObjMultipartPartCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
+                      const string& _source_zone,
+                      const RGWBucketInfo& _bucket_info,
+                      const rgw_obj_key& _key,
+                      const rgw_sync_default_src_obj_properties& _src_properties,
+                      const string& _upload_id,
+                      const rgw_sync_default_multipart_part_info& _part_info,
+                      int *_done) : RGWSimpleCoroutine(_store->ctx()),
+                                    async_rados(_async_rados), store(_store),
+                                    source_zone(_source_zone),
+                                    bucket_info(_bucket_info),
+                                    key(_key),
+                                    src_properties(_src_properties),
+                                    upload_id(_upload_id),
+                                    part_info(_part_info),
+                                    done(_done),
+                                    req(NULL) {}
+  ~RGWFetchRemoteObjMultipartPartCR() override {
+    request_cleanup();
+  }
+
+  void request_cleanup() {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request() override {
+    req = new RGWAsyncFetchRemoteObjMultipartPart(this, stack->create_completion_notifier(),
+                                             store, source_zone, bucket_info, key, src_properties, upload_id, part_info, done);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() override {
+    return req->get_ret_status();
+  }
 };
 
 #endif

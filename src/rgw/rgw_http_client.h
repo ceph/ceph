@@ -176,6 +176,8 @@ public:
 
   int process();
 
+  virtual void signal(int ret) {};
+
   int wait();
   void cancel();
   bool is_done();

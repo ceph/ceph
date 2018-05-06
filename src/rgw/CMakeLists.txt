@@ -76,6 +76,7 @@ set(rgw_a_srcs
   rgw_otp.cc
   rgw_sync_module.cc
   rgw_sync_module_aws.cc
+  rgw_sync_module_default.cc
   rgw_sync_module_es.cc
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc

@@ -178,6 +178,20 @@ RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioComplet
 {
 }
 
+int RGWAsyncDelSystemObj::_send_request()
+{
+  return store->delete_system_obj(obj, objv_tracker);
+}
+
+RGWAsyncDelSystemObj::RGWAsyncDelSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
+                      RGWObjVersionTracker *_objv_tracker,
+                      const rgw_raw_obj& _obj) : RGWAsyncRadosRequest(caller, cn),
+                                                 store(_store),
+                                                 objv_tracker(_objv_tracker),
+                                                 obj(_obj)
+{
+}
+
 int RGWAsyncUnlockSystemObj::_send_request()
 {
   rgw_rados_ref ref;
@@ -806,16 +820,16 @@ int RGWAsyncStatObj::_send_request()
   rgw_raw_obj raw_obj;
   store->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
   return store->raw_obj_stat(raw_obj, psize, pmtime, pepoch,
-                             nullptr, nullptr, objv_tracker);
+                             pattrs, nullptr, objv_tracker);
 }
 
 RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,
                            const RGWBucketInfo& _bucket_info, const rgw_obj& obj, uint64_t *psize,
-                           real_time* pmtime, uint64_t *pepoch,
+                           real_time* pmtime, uint64_t *pepoch, map<string, bufferlist> *pattrs,
                            RGWObjVersionTracker *objv_tracker)
   : RGWSimpleCoroutine(store->ctx()), store(store), async_rados(async_rados),
     bucket_info(_bucket_info), obj(obj), psize(psize), pmtime(pmtime), pepoch(pepoch),
-    objv_tracker(objv_tracker)
+    pattrs(pattrs), objv_tracker(objv_tracker)
 {
 }
 
@@ -830,7 +844,7 @@ void RGWStatObjCR::request_cleanup()
 int RGWStatObjCR::send_request()
 {
   req = new RGWAsyncStatObj(this, stack->create_completion_notifier(),
-                            store, bucket_info, obj, psize, pmtime, pepoch, objv_tracker);
+                            store, bucket_info, obj, psize, pmtime, pepoch, pattrs, objv_tracker);
   async_rados->queue(req);
   return 0;
 }
@@ -870,5 +884,60 @@ int RGWRadosNotifyCR::request_complete()
 
   set_status() << "request complete; ret=" << r;
 
+  return r;
+}
+
+int RGWAsyncInitMultipart::_send_request() {
+  RGWObjectCtx obj_ctx(store);
+  int r = store->init_multipart(obj_ctx, bucket_info, key, upload_id, attrs);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "store->init_multipart() return r=" << r << dendl;
+  }
+  return r;
+}
+
+int RGWAsyncCompleteMultipart::_send_request() {
+  RGWObjectCtx obj_ctx(store);
+  int r = store->complete_multipart(obj_ctx, bucket_info, key, upload_id, parts, set_mtime);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "store->complete_multipart() return r=" << r << dendl;
+  }
+  return r;
+}
+
+int RGWAsyncAbortMultipart::_send_request() {
+  RGWObjectCtx obj_ctx(store);
+  int r = store->abort_multipart(obj_ctx, bucket_info, key, upload_id);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "store->abort_multipart() return r=" << r << dendl;
+  }
+  return r;
+}
+
+int RGWAsyncFetchRemoteObjMultipartPart::_send_request() {
+  RGWObjectCtx obj_ctx(store);
+  string user_id;
+  char buf[16];
+  snprintf(buf, sizeof(buf), ".%lld", (long long)store->instance_id());
+  string client_id = store->zone_id() + buf;
+  string op_id = store->unique_id(store->get_new_req_id());
+  map<string, bufferlist> attrs;
+  RGWBucketInfo b_info = bucket_info; // constructor of RGWPutObjProcessor_Atomic only accept non-const bucket_info
+
+  int r = store->fetch_remote_obj_multipart_part(obj_ctx,
+                                       //user_id,
+                                       client_id,
+                                       op_id,
+                                       false, /* don't record op state in ops log */
+                                       source_zone,
+                                       b_info,
+                                       key,
+                                       upload_id,
+                                       src_properties,
+                                       part_info);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "store->fetch_remote_obj_multipart_part() return r=" << r << dendl;
+  }
+  *done = r;
   return r;
 }

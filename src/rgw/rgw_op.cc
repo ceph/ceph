@@ -3159,17 +3159,21 @@ void RGWPutObjProcessor_Multipart::get_mp(RGWMPObj** _mp){
 int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 {
   string oid = obj_str;
-  upload_id = s->info.args.get("uploadId");
+  if (s) {
+    upload_id = s->info.args.get("uploadId");
+  }
   if (!oid_rand) {
     mp.init(oid, upload_id);
   } else {
     mp.init(oid, upload_id, *oid_rand);
   }
 
-  part_num = s->info.args.get("partNumber");
-  if (part_num.empty()) {
-    ldout(s->cct, 10) << "part number is empty" << dendl;
-    return -EINVAL;
+  if (s) {
+    part_num = s->info.args.get("partNumber");
+    if (part_num.empty()) {
+      ldout(s->cct, 10) << "part number is empty" << dendl;
+      return -EINVAL;
+    }
   }
 
   string err;
@@ -3195,7 +3199,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
 
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, s->bucket_info.placement_rule, bucket, target_obj);
+  int r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, bucket, target_obj);
   if (r < 0) {
     return r;
   }
@@ -3218,17 +3222,19 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
                                               map<string, bufferlist>& attrs,
                                               real_time delete_at,
                                               const char *if_match,
-                                              const char *if_nomatch, const string *user_data, rgw_zone_set *zones_trace)
+                                              const char *if_nomatch,
+                                              const string *user_data,
+                                              rgw_zone_set *zones_trace)
 {
   complete_writing_data();
 
-  RGWRados::Object op_target(store, s->bucket_info, obj_ctx, head_obj);
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
   op_target.set_versioning_disabled(true);
   RGWRados::Object::Write head_obj_op(&op_target);
 
   head_obj_op.meta.set_mtime = set_mtime;
   head_obj_op.meta.mtime = mtime;
-  head_obj_op.meta.owner = s->owner.get_id();
+  head_obj_op.meta.owner = bucket_info.owner;
   head_obj_op.meta.delete_at = delete_at;
   head_obj_op.meta.zones_trace = zones_trace;
   head_obj_op.meta.modify_tail = true;
@@ -3279,7 +3285,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
 
   rgw_raw_obj raw_meta_obj;
 
-  store->obj_to_raw(s->bucket_info.placement_rule, meta_obj, &raw_meta_obj);
+  store->obj_to_raw(bucket_info.placement_rule, meta_obj, &raw_meta_obj);
   const bool must_exist = true;// detect races with abort
   r = store->omap_set(raw_meta_obj, p, bl, must_exist);
   return r;
