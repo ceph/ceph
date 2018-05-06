@@ -395,7 +395,7 @@ private:
 
   struct CmpPairBitwise {
     bool operator()(const pair<string, ghobject_t>& l,
-		    const pair<string, ghobject_t>& r)
+		    const pair<string, ghobject_t>& r) const
     {
       if (l.first < r.first)
 	return true;
@@ -408,7 +408,7 @@ private:
   };
 
   struct CmpHexdigitStringBitwise {
-    bool operator()(const string& l, const string& r) {
+    bool operator()(const string& l, const string& r) const {
       return reverse_hexdigit_bits_string(l) < reverse_hexdigit_bits_string(r);
     }
   };
