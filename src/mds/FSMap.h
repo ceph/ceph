@@ -47,12 +47,6 @@ class health_check_map_t;
 class Filesystem
 {
 public:
-  Filesystem()
-    :
-      fscid(FS_CLUSTER_ID_NONE)
-  {
-  }
-
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& p);
 
@@ -76,7 +70,7 @@ public:
     return false;
   }
 
-  fs_cluster_id_t fscid;
+  fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
   MDSMap mds_map;
 };
 WRITE_CLASS_ENCODER_FEATURES(Filesystem)
