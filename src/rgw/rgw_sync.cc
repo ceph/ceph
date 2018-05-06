@@ -2740,7 +2740,7 @@ class MetaMasterStatusCollectCR : public RGWShardCollectCR {
   connection_map::iterator c;
   std::vector<rgw_meta_sync_status>::iterator s;
  public:
-  MetaMasterStatusCollectCR(MasterTrimEnv& env)
+  explicit MetaMasterStatusCollectCR(MasterTrimEnv& env)
     : RGWShardCollectCR(env.store->ctx(), MAX_CONCURRENT_SHARDS),
       env(env), c(env.connections.begin()), s(env.peer_status.begin())
   {}
@@ -2772,7 +2772,7 @@ class MetaMasterTrimCR : public RGWCoroutine {
   int ret{0};
 
  public:
-  MetaMasterTrimCR(MasterTrimEnv& env)
+  explicit MetaMasterTrimCR(MasterTrimEnv& env)
     : RGWCoroutine(env.store->ctx()), env(env)
   {}
 
@@ -2976,7 +2976,7 @@ class MetaPeerTrimCR : public RGWCoroutine {
   rgw_mdlog_info mdlog_info; //< master's mdlog info
 
  public:
-  MetaPeerTrimCR(PeerTrimEnv& env) : RGWCoroutine(env.store->ctx()), env(env) {}
+  explicit MetaPeerTrimCR(PeerTrimEnv& env) : RGWCoroutine(env.store->ctx()), env(env) {}
 
   int operate() override;
 };

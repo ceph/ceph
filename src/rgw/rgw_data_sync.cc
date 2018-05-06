@@ -963,7 +963,7 @@ public:
 // ostream wrappers to print buckets without copying strings
 struct bucket_str {
   const rgw_bucket& b;
-  bucket_str(const rgw_bucket& b) : b(b) {}
+  explicit bucket_str(const rgw_bucket& b) : b(b) {}
 };
 std::ostream& operator<<(std::ostream& out, const bucket_str& rhs) {
   auto& b = rhs.b;
@@ -979,7 +979,7 @@ std::ostream& operator<<(std::ostream& out, const bucket_str& rhs) {
 
 struct bucket_str_noinstance {
   const rgw_bucket& b;
-  bucket_str_noinstance(const rgw_bucket& b) : b(b) {}
+  explicit bucket_str_noinstance(const rgw_bucket& b) : b(b) {}
 };
 std::ostream& operator<<(std::ostream& out, const bucket_str_noinstance& rhs) {
   auto& b = rhs.b;
@@ -992,7 +992,7 @@ std::ostream& operator<<(std::ostream& out, const bucket_str_noinstance& rhs) {
 
 struct bucket_shard_str {
   const rgw_bucket_shard& bs;
-  bucket_shard_str(const rgw_bucket_shard& bs) : bs(bs) {}
+  explicit bucket_shard_str(const rgw_bucket_shard& bs) : bs(bs) {}
 };
 std::ostream& operator<<(std::ostream& out, const bucket_shard_str& rhs) {
   auto& bs = rhs.bs;

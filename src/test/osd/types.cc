@@ -1308,7 +1308,7 @@ TEST(pool_opts_t, deep_scrub_interval) {
 
 struct RequiredPredicate : IsPGRecoverablePredicate {
   unsigned required_size;
-  RequiredPredicate(unsigned required_size) : required_size(required_size) {}
+  explicit RequiredPredicate(unsigned required_size) : required_size(required_size) {}
   bool operator()(const set<pg_shard_t> &have) const override {
     return have.size() >= required_size;
   }
@@ -1317,7 +1317,7 @@ struct RequiredPredicate : IsPGRecoverablePredicate {
 using namespace std;
 struct MapPredicate {
   map<int, pair<PastIntervals::osd_state_t, epoch_t>> states;
-  MapPredicate(
+  explicit MapPredicate(
     const vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> &_states)
    : states(_states.begin(), _states.end()) {}
   PastIntervals::osd_state_t operator()(epoch_t start, int osd, epoch_t *lost_at) {

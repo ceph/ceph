@@ -330,7 +330,7 @@ public:
 struct CopyFromFinisher : public PrimaryLogPG::OpFinisher {
   CopyFromCallback *copy_from_callback;
 
-  CopyFromFinisher(CopyFromCallback *copy_from_callback)
+  explicit CopyFromFinisher(CopyFromCallback *copy_from_callback)
     : copy_from_callback(copy_from_callback) {
   }
 
@@ -837,7 +837,7 @@ class PGLSParentFilter : public PGLSFilter {
   inodeno_t parent_ino;
 public:
   CephContext* cct;
-  PGLSParentFilter(CephContext* cct) : cct(cct) {
+  explicit PGLSParentFilter(CephContext* cct) : cct(cct) {
     xattr = "_parent";
   }
   int init(bufferlist::iterator &params) override
@@ -3422,7 +3422,7 @@ public:
 struct SetManifestFinisher : public PrimaryLogPG::OpFinisher {
   OSDOp& osd_op;
 
-  SetManifestFinisher(OSDOp& osd_op) : osd_op(osd_op) {
+  explicit SetManifestFinisher(OSDOp& osd_op) : osd_op(osd_op) {
   }
 
   int execute() override {
@@ -3703,7 +3703,7 @@ public:
 struct PromoteFinisher : public PrimaryLogPG::OpFinisher {
   PromoteManifestCallback *promote_callback;
 
-  PromoteFinisher(PromoteManifestCallback *promote_callback)
+  explicit PromoteFinisher(PromoteManifestCallback *promote_callback)
     : promote_callback(promote_callback) {
   }
 
@@ -5032,7 +5032,7 @@ void PrimaryLogPG::maybe_create_new_object(
 struct ReadFinisher : public PrimaryLogPG::OpFinisher {
   OSDOp& osd_op;
 
-  ReadFinisher(OSDOp& osd_op) : osd_op(osd_op) {
+  explicit ReadFinisher(OSDOp& osd_op) : osd_op(osd_op) {
   }
 
   int execute() override {

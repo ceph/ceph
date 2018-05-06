@@ -17,7 +17,7 @@ public:
   boost::scoped_ptr<ObjectStore> store;
   ObjectStore::CollectionHandle ch;
 
-  StoreTestFixture(const std::string& type)
+  explicit StoreTestFixture(const std::string& type)
     : type(type), data_dir(type + ".test_temp_dir")
   {}
 

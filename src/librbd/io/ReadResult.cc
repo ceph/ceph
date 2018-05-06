@@ -19,7 +19,7 @@ namespace io {
 struct ReadResult::SetClipLengthVisitor : public boost::static_visitor<void> {
   size_t length;
 
-  SetClipLengthVisitor(size_t length) : length(length) {
+  explicit SetClipLengthVisitor(size_t length) : length(length) {
   }
 
   void operator()(Linear &linear) const {

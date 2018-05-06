@@ -660,7 +660,7 @@ struct AWSSyncInstanceEnv {
   AWSSyncConfig conf;
   string id;
 
-  AWSSyncInstanceEnv(AWSSyncConfig& _conf) : conf(_conf) {}
+  explicit AWSSyncInstanceEnv(AWSSyncConfig& _conf) : conf(_conf) {}
 
   void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) {
     char buf[32];
@@ -1241,7 +1241,7 @@ class RGWAWSCompleteMultipartCR : public RGWCoroutine {
   struct CompleteMultipartReq {
     map<int, rgw_sync_aws_multipart_part_info> parts;
 
-    CompleteMultipartReq(const map<int, rgw_sync_aws_multipart_part_info>& _parts) : parts(_parts) {}
+    explicit CompleteMultipartReq(const map<int, rgw_sync_aws_multipart_part_info>& _parts) : parts(_parts) {}
 
     void dump_xml(Formatter *f) const {
       for (auto p : parts) {

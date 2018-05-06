@@ -786,7 +786,7 @@ namespace rgw {
     {
       RGWLibFS* fs;
     public:
-      ObjUnref(RGWLibFS* _fs) : fs(_fs) {}
+      explicit ObjUnref(RGWLibFS* _fs) : fs(_fs) {}
       void operator()(RGWFileHandle* fh) const {
 	lsubdout(fs->get_context(), rgw, 5)
 	  << __func__

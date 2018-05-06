@@ -37,7 +37,7 @@ private:
   CephContext* cct;
   uint8_t key[AES_256_KEYSIZE];
 public:
-  AES_256_CTR(CephContext* cct): cct(cct) {
+  explicit AES_256_CTR(CephContext* cct): cct(cct) {
   }
   ~AES_256_CTR() {
     memset(key, 0, AES_256_KEYSIZE);
@@ -200,7 +200,7 @@ private:
   CephContext* cct;
   uint8_t key[AES_256_KEYSIZE];
 public:
-  AES_256_CBC(CephContext* cct): cct(cct) {
+  explicit AES_256_CBC(CephContext* cct): cct(cct) {
   }
   ~AES_256_CBC() {
     memset(key, 0, AES_256_KEYSIZE);

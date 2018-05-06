@@ -16,7 +16,7 @@
 namespace librbd {
 
 struct MockManagedLockImageCtx : public MockImageCtx {
-  MockManagedLockImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {}
+  explicit MockManagedLockImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {}
 };
 
 namespace watcher {

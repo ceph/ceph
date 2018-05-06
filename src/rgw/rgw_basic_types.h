@@ -119,7 +119,7 @@ class Principal {
   types t;
   rgw_user u;
 
-  Principal(types t)
+  explicit Principal(types t)
     : t(t) {}
 
   Principal(types t, std::string&& n, std::string i)

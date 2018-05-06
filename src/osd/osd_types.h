@@ -2690,7 +2690,7 @@ private:
 
   unique_ptr<interval_rep> past_intervals;
 
-  PastIntervals(interval_rep *rep) : past_intervals(rep) {}
+  explicit PastIntervals(interval_rep *rep) : past_intervals(rep) {}
 
 public:
   void add_interval(bool ec_pool, const pg_interval_t &interval) {

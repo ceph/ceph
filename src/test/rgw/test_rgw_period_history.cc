@@ -45,7 +45,7 @@ using Ids = std::vector<std::string>;
 class RecordingPuller : public RGWPeriodHistory::Puller {
   const int error;
  public:
-  RecordingPuller(int error) : error(error) {}
+  explicit RecordingPuller(int error) : error(error) {}
   Ids ids;
   int pull(const std::string& id, RGWPeriod& period) override {
     ids.push_back(id);

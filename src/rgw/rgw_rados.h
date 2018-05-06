@@ -147,8 +147,8 @@ class rgw_obj_select {
 
 public:
   rgw_obj_select() : is_raw(false) {}
-  rgw_obj_select(const rgw_obj& _obj) : obj(_obj), is_raw(false) {}
-  rgw_obj_select(const rgw_raw_obj& _raw_obj) : raw_obj(_raw_obj), is_raw(true) {}
+  explicit rgw_obj_select(const rgw_obj& _obj) : obj(_obj), is_raw(false) {}
+  explicit rgw_obj_select(const rgw_raw_obj& _raw_obj) : raw_obj(_raw_obj), is_raw(true) {}
   rgw_obj_select(const rgw_obj_select& rhs) {
     placement_rule = rhs.placement_rule;
     is_raw = rhs.is_raw;
@@ -1185,7 +1185,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   JSONFormattable tier_config;
 
   RGWZoneParams() : RGWSystemMetaObj() {}
-  RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
+  explicit RGWZoneParams(const string& name) : RGWSystemMetaObj(name){}
   RGWZoneParams(const string& id, const string& name) : RGWSystemMetaObj(id, name) {}
   RGWZoneParams(const string& id, const string& name, const string& _realm_id)
     : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
@@ -1510,7 +1510,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
 
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
-  RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
+  explicit RGWZoneGroup(const std::string &_name):RGWSystemMetaObj(_name) {}
   RGWZoneGroup(const std::string &_name, bool _is_master, CephContext *cct, RGWRados* store,
 	       const string& _realm_id, const list<string>& _endpoints)
     : RGWSystemMetaObj(_name, cct , store), endpoints(_endpoints), is_master(_is_master),
@@ -2138,7 +2138,7 @@ class RGWObjectCtxImpl {
   RWLock lock;
 
 public:
-  RGWObjectCtxImpl(RGWRados *_store) : store(_store), lock("RGWObjectCtxImpl") {}
+  explicit RGWObjectCtxImpl(RGWRados *_store) : store(_store), lock("RGWObjectCtxImpl") {}
 
   S *get_state(const T& obj) {
     S *result;
@@ -2222,7 +2222,7 @@ struct tombstone_entry {
   uint64_t pg_ver;
 
   tombstone_entry() = default;
-  tombstone_entry(const RGWObjState& state)
+  explicit tombstone_entry(const RGWObjState& state)
     : mtime(state.mtime), zone_short_id(state.zone_short_id),
       pg_ver(state.pg_ver) {}
 };

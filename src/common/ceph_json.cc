@@ -643,8 +643,8 @@ struct field_entity {
   bool append{false};
 
   field_entity() {}
-  field_entity(const string& n) : is_obj(true), name(n) {}
-  field_entity(int i) : is_obj(false), index(i) {}
+  explicit field_entity(const string& n) : is_obj(true), name(n) {}
+  explicit field_entity(int i) : is_obj(false), index(i) {}
 };
 
 static int parse_entity(const string& s, vector<field_entity> *result)

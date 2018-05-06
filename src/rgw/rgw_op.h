@@ -186,7 +186,7 @@ protected:
   RGWGetObj_Filter *next{nullptr};
 public:
   RGWGetObj_Filter() {}
-  RGWGetObj_Filter(RGWGetObj_Filter *next): next(next) {}
+  explicit RGWGetObj_Filter(RGWGetObj_Filter *next): next(next) {}
   ~RGWGetObj_Filter() override {}
   /**
    * Passes data through filter.
@@ -555,7 +555,7 @@ protected:
   }
 
 public:
-  DecoratedStreamGetter(StreamGetter& decoratee)
+  explicit DecoratedStreamGetter(StreamGetter& decoratee)
     : decoratee(decoratee) {
   }
   virtual ~DecoratedStreamGetter() = default;
@@ -1081,7 +1081,7 @@ class RGWPutObj_Filter : public RGWPutObjDataProcessor
 protected:
   RGWPutObjDataProcessor* next;
 public:
-  RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
+  explicit RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
   next(next){}
   ~RGWPutObj_Filter() override {}
   int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override {

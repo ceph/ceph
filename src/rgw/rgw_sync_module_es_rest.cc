@@ -263,7 +263,7 @@ void RGWMetadataSearchOp::execute()
 
 class RGWMetadataSearch_ObjStore_S3 : public RGWMetadataSearchOp {
 public:
-  RGWMetadataSearch_ObjStore_S3(const RGWSyncModuleInstanceRef& _sync_module) : RGWMetadataSearchOp(_sync_module) {
+  explicit RGWMetadataSearch_ObjStore_S3(const RGWSyncModuleInstanceRef& _sync_module) : RGWMetadataSearchOp(_sync_module) {
     custom_prefix = "x-amz-meta-";
   }
 
@@ -383,7 +383,7 @@ protected:
     return nullptr;
   }
 public:
-  RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
+  explicit RGWHandler_REST_MDSearch_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
   virtual ~RGWHandler_REST_MDSearch_S3() {}
 };
 

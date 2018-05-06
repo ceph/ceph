@@ -385,7 +385,7 @@ protected:
   static int init_from_header(struct req_state* s,
                               const std::string& frontend_prefix);
 public:
-  RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
+  explicit RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
     : auth_strategy(auth_strategy) {
   }
   ~RGWHandler_REST_SWIFT() override = default;

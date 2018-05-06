@@ -284,7 +284,7 @@ struct ObjectOperation {
   // object cmpext
   struct C_ObjectOperation_cmpext : public Context {
     int *prval;
-    C_ObjectOperation_cmpext(int *prval)
+    explicit C_ObjectOperation_cmpext(int *prval)
       : prval(prval) {}
 
     void finish(int r) {
@@ -1313,7 +1313,7 @@ public:
 	base_oloc(oloc)
       {}
 
-    op_target_t(pg_t pgid)
+    explicit op_target_t(pg_t pgid)
       : base_oloc(pgid.pool(), pgid.ps()),
 	precalc_pgid(true),
 	base_pgid(pgid)
@@ -1732,7 +1732,7 @@ public:
       watch_pending_async.pop_front();
     }
 
-    LingerOp(Objecter *o) : linger_id(0),
+    explicit LingerOp(Objecter *o) : linger_id(0),
 			    target(object_t(), object_locator_t(), 0),
 			    snap(CEPH_NOSNAP), poutbl(NULL), pobjver(NULL),
 			    is_watch(false), last_error(0),

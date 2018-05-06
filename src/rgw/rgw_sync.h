@@ -116,7 +116,7 @@ class RGWSyncBackoff {
 
   void update_wait_time();
 public:
-  RGWSyncBackoff(int _max_secs = DEFAULT_BACKOFF_MAX) : cur_wait(0), max_secs(_max_secs) {}
+  explicit RGWSyncBackoff(int _max_secs = DEFAULT_BACKOFF_MAX) : cur_wait(0), max_secs(_max_secs) {}
 
   void backoff_sleep();
   void reset() {
@@ -302,7 +302,7 @@ class RGWLastCallerWinsCR : public RGWOrderCallCR
   RGWCoroutine *cr{nullptr};
 
 public:
-  RGWLastCallerWinsCR(CephContext *cct) : RGWOrderCallCR(cct) {}
+  explicit RGWLastCallerWinsCR(CephContext *cct) : RGWOrderCallCR(cct) {}
   ~RGWLastCallerWinsCR() {
     if (cr) {
       cr->put();

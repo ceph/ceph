@@ -92,7 +92,7 @@ protected:
   }
 
 public:
-  HeaderView(const char (&header)[BLOCK_SIZE])
+  explicit HeaderView(const char (&header)[BLOCK_SIZE])
     : header(reinterpret_cast<const header_t*>(header)) {
   }
 
