@@ -1,8 +1,13 @@
 #ifndef CEPH_RGW_REST_STS_H
 #define CEPH_RGW_REST_STS_H
 
+#include "sts-assume-role.h"
+
 class RGWREST_STS : public RGWRESTOp {
+protected:
+  STS::STSService sts;
 public:
+  RGWREST_STS() = default;
   int verify_permission() override;
   void send_response() override;
 };

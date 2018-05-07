@@ -468,6 +468,7 @@ static const actpair actpairs[] =
  { "iam:GetRolePolicy", iamGetRolePolicy},
  { "iam:ListRolePolicies", iamListRolePolicies},
  { "iam:DeleteRolePolicy", iamDeleteRolePolicy},
+ { "sts:AssumeRole", stsAssumeRole},
 };
 
 struct PolicyParser;
@@ -1309,6 +1310,14 @@ Effect Statement::eval(const Environment& e,
   return Effect::Pass;
 }
 
+Effect Statement::eval_principal(const Environment& e,
+		       boost::optional<const rgw::auth::Identity&> ida) const {
+  if (ida && (!ida->is_identity(princ) || ida->is_identity(noprinc))) {
+    return Effect::Deny;
+  }
+  return Effect::Allow;
+}
+
 namespace {
 const char* action_bit_string(uint64_t action) {
   switch (action) {
@@ -1511,6 +1520,9 @@ const char* action_bit_string(uint64_t action) {
 
   case iamDeleteRolePolicy:
     return "iam:DeleteRolePolicy";
+
+  case stsAssumeRole:
+    return "sts:AssumeRole";
   }
   return "s3Invalid";
 }
@@ -1634,6 +1646,20 @@ Effect Policy::eval(const Environment& e,
     }
   }
   return allowed ? Effect::Allow : Effect::Pass;
+}
+
+Effect Policy::eval_principal(const Environment& e,
+		    boost::optional<const rgw::auth::Identity&> ida) const {
+  auto allowed = false;
+  for (auto& s : statements) {
+    auto g = s.eval_principal(e, ida);
+    if (g == Effect::Deny) {
+      return g;
+    } else if (g == Effect::Allow) {
+      allowed = true;
+    }
+  }
+  return allowed ? Effect::Allow : Effect::Deny;
 }
 
 ostream& operator <<(ostream& m, const Policy& p) {

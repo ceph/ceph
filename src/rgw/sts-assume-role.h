@@ -52,7 +52,7 @@ public:
   int generateAssumedRoleUser( CephContext* cct,
                                 RGWRados *store,
                                 const string& roleId,
-                                const boost::optional<rgw::IAM::ARN>& roleArn,
+                                const rgw::IAM::ARN& roleArn,
                                 const string& roleSessionName);
   const string& getARN() const { return arn; }
   const string& getAssumeRoleId() const { return assumeRoleId; }
@@ -80,9 +80,11 @@ using AssumeRoleResponse = std::tuple<int, AssumedRoleUser, Credentials, uint64_
 class STSService {
   CephContext* cct;
   RGWRados *store;
-  std::tuple<int, boost::optional<rgw::IAM::ARN>, RGWRole> _getRoleInfo(const string& arn);
+  RGWRole role;
 public:
+  STSService() = default;
   STSService(CephContext* _cct, RGWRados *_store) : cct(_cct), store(_store) {}
+  std::tuple<int, RGWRole> getRoleInfo(const string& arn);
   AssumeRoleResponse assumeRole(AssumeRoleRequest& req);
 };
 }

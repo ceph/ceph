@@ -58,7 +58,7 @@ public:
     if (this->path.empty())
       this->path = "/";
     extract_name_tenant(this->name);
-    if (! max_session_duration_str.empty()) {
+    if (max_session_duration_str.empty()) {
       max_session_duration = SESSION_DURATION_MIN;
     } else {
       max_session_duration = std::stoull(max_session_duration_str);
