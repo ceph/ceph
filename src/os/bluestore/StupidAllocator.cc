@@ -12,7 +12,6 @@
 
 StupidAllocator::StupidAllocator(CephContext* cct)
   : cct(cct), num_free(0),
-    num_reserved(0),
     free(10),
     last_alloc(0)
 {
@@ -46,28 +45,6 @@ void StupidAllocator::_insert_free(uint64_t off, uint64_t len)
     free[bin].erase(off, len);
     bin = newbin;
   }
-}
-
-int StupidAllocator::reserve(uint64_t need)
-{
-  std::lock_guard<std::mutex> l(lock);
-  ldout(cct, 10) << __func__ << " need 0x" << std::hex << need
-	   	 << " num_free 0x" << num_free
-	   	 << " num_reserved 0x" << num_reserved << std::dec << dendl;
-  if ((int64_t)need > num_free - num_reserved)
-    return -ENOSPC;
-  num_reserved += need;
-  return 0;
-}
-
-void StupidAllocator::unreserve(uint64_t unused)
-{
-  std::lock_guard<std::mutex> l(lock);
-  ldout(cct, 10) << __func__ << " unused 0x" << std::hex << unused
-	   	 << " num_free 0x" << num_free
-	   	 << " num_reserved 0x" << num_reserved << std::dec << dendl;
-  assert(num_reserved >= (int64_t)unused);
-  num_reserved -= unused;
 }
 
 /// return the effective length of the extent if we align to alloc_unit
@@ -196,9 +173,7 @@ int64_t StupidAllocator::allocate_int(
   }
 
   num_free -= *length;
-  num_reserved -= *length;
   ceph_assert(num_free >= 0);
-  ceph_assert(num_reserved >= 0);
   last_alloc = *offset + *length;
   return 0;
 }
