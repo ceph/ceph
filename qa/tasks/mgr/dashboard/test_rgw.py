@@ -31,6 +31,23 @@ class RgwControllerTest(DashboardTestCase):
         self.assertIn('rgw_status', data)
         self.assertTrue(data['rgw_metadata'])
 
+    @authenticate
+    def test_rgw_status(self):
+        self._radosgw_admin_cmd([
+            'user', 'create', '--uid=admin', '--display-name=admin',
+            '--system', '--access-key=admin', '--secret=admin'
+        ])
+        self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'admin'])
+        self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
+        self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
+
+        data = self._get('/api/rgw/status')
+        self.assertStatus(200)
+        self.assertIn('available', data)
+        self.assertIn('message', data)
+        self.assertTrue(data['available'])
+
+
 class RgwProxyExceptionsTest(DashboardTestCase):
 
     @classmethod
