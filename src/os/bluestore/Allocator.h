@@ -41,6 +41,7 @@ public:
   /* Bulk release. Implementations may override this method to handle the whole
    * set at once. This could save e.g. unnecessary mutex dance. */
   virtual void release(const interval_set<uint64_t>& release_set) = 0;
+  void release(const PExtentVector& release_set);
 
   virtual void dump() = 0;
 
