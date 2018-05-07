@@ -495,6 +495,10 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 
 int librados::RadosClient::create_ioctx(int64_t pool_id, IoCtxImpl **io)
 {
+  std::string pool_name;
+  int r = pool_get_name(pool_id, &pool_name, true);
+  if (r < 0)
+    return r;
   *io = new librados::IoCtxImpl(this, objecter, pool_id, CEPH_NOSNAP);
   return 0;
 }
