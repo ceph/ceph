@@ -1595,7 +1595,6 @@ int SyntheticClient::full_walk(string& basedir)
   list<frag_info_t> statq;
   dirq.push_back(basedir);
   frag_info_t empty;
-  memset(&empty, 0, sizeof(empty));
   statq.push_back(empty);
 
   ceph::unordered_map<inodeno_t, int> nlink;
@@ -3358,7 +3357,6 @@ int SyntheticClient::chunk_file(string &filename)
   dout(0) << "file " << filename << " size is " << size << dendl;
 
   inode_t inode{};
-  memset(&inode, 0, sizeof(inode));
   inode.ino = st.st_ino;
   ret = client->fdescribe_layout(fd, &inode.layout);
   assert(ret == 0); // otherwise fstat did a bad thing
