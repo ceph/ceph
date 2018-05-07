@@ -76,7 +76,6 @@ TEST(mon_features, binary_ops) {
 
 TEST(mon_features, set_funcs) {
 
-  mon_feature_t FEATURE_NONE(0ULL);
   mon_feature_t FEATURE_A((1ULL << 1));
   mon_feature_t FEATURE_B((1ULL << 2));
   mon_feature_t FEATURE_C((1ULL << 3));
