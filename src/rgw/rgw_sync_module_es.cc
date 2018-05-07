@@ -515,6 +515,7 @@ struct es_obj_metadata {
 class RGWElasticInitConfigCBCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   ElasticConfigRef conf;
+  ESInfo es_info;
 public:
   RGWElasticInitConfigCBCR(RGWDataSyncEnv *_sync_env,
                           ElasticConfigRef _conf) : RGWCoroutine(_sync_env->cct),
@@ -523,18 +524,33 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 0) << ": init elasticsearch config zone=" << sync_env->source_zone << dendl;
+      yield call(new RGWReadRESTResourceCR<ESInfo> (sync_env->cct,
+                                                    conf->conn.get(),
+                                                    sync_env->http_manager,
+                                                    "/", nullptr, &es_info));
+      if (retcode < 0) {
+        return set_cr_error(retcode);
+      }
+
       yield {
         string path = conf->get_index_path();
+        ldout(sync_env->cct, 5) << "got elastic version=" << es_info.version.to_str() << dendl;
 
         es_index_settings settings(conf->num_replicas, conf->num_shards);
         es_index_mappings mappings;
+        if (es_info.version >= ESVersion(5,0)) {
+          ldout(sync_env->cct, 0) << "elasticsearch: using text type for string index mappings " << dendl;
+          mappings.string_type = ESType::Text;
+        }
 
         es_index_config index_conf(settings, mappings);
-
-        call(new RGWPutRESTResourceCR<es_index_config, int>(sync_env->cct, conf->conn.get(),
-                                                              sync_env->http_manager,
-                                                              path, nullptr /* params */,
-                                                              index_conf, nullptr /* result */));
+        std::map <string, string> hdrs = {{ "Content-Type", "application/json" }};
+        call(new RGWPutRESTResourceCR<es_index_config, int> (sync_env->cct,
+                                                             conf->conn.get(),
+                                                             sync_env->http_manager,
+                                                             path, nullptr /*params*/,
+                                                             &hdrs,
+                                                             index_conf, nullptr));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -563,9 +579,11 @@ public:
         string path = conf->get_obj_path(bucket_info, key);
         es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs, versioned_epoch);
 
+        std::map <string, string> hdrs = {{ "Content-Type", "application/json" }};
         call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf->conn.get(),
                                                             sync_env->http_manager,
                                                             path, nullptr /* params */,
+                                                            &hdrs,
                                                             doc, nullptr /* result */));
 
       }
