@@ -22,9 +22,6 @@ class Allocator {
 public:
   virtual ~Allocator() {}
 
-  virtual int reserve(uint64_t need) = 0;
-  virtual void unreserve(uint64_t unused) = 0;
-
   /*
    * Allocate required number of blocks in n number of extents.
    * Min and Max number of extents are limited by:

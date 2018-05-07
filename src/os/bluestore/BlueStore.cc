@@ -5173,17 +5173,12 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     dout(10) << __func__ << " gifting " << gift
 	     << " (" << byte_u_t(gift) << ")" << dendl;
 
-    // fixme: just do one allocation to start...
-    int r = alloc->reserve(gift);
-    assert(r == 0);
-
     int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
 					0, 0, extents);
 
     if (alloc_len <= 0) {
       dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
               << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
-      alloc->unreserve(gift);
       _dump_alloc_on_rebalance_failure();
       return 0;
     } else if (alloc_len < (int64_t)gift) {
@@ -5191,7 +5186,6 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
               << " min_alloc_size 0x" << min_alloc_size 
 	      << " allocated 0x" << alloc_len
 	      << std::dec << dendl;
-      alloc->unreserve(gift - alloc_len);
       _dump_alloc_on_rebalance_failure();
     }
     for (auto& e : *extents) {
@@ -10321,19 +10315,19 @@ int BlueStore::_do_alloc_write(
       need += wi.blob_length;
     }
   }
-  int r = alloc->reserve(need);
-  if (r < 0) {
-    derr << __func__ << " failed to reserve 0x" << std::hex << need << std::dec
-	 << dendl;
-    return r;
-  }
   PExtentVector prealloc;
   prealloc.reserve(2 * wctx->writes.size());;
   int prealloc_left = 0;
   prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
     0, &prealloc);
+  if (prealloc_left  < 0) {
+    derr << __func__ << " failed to allocate 0x" << std::hex << need << std::dec
+	 << dendl;
+    return -ENOSPC;
+  }
   assert(prealloc_left == (int64_t)need);
+
   dout(20) << __func__ << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();
 
