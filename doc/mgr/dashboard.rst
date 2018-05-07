@@ -147,7 +147,7 @@ enabled.
 If you do not have a user which shall be used for providing those credentials,
 you will also need to create one::
 
-  $ radosgw-admin user create --uid=<user id> --display-name=<display-name> \
+  $ radosgw-admin user create --uid=<user_id> --display-name=<display_name> \
       --system
 
 Take note of the keys ``access_key`` and ``secret_key`` in the output of this
@@ -156,7 +156,7 @@ command.
 The credentials of an existing user can also be obtained by using
 `radosgw-admin`::
 
-  $ radosgw-admin user info --uid=<user id>
+  $ radosgw-admin user info --uid=<user_id>
 
 Finally, provide the credentials to the dashboard module::
 
@@ -177,8 +177,8 @@ In addition to the settings mentioned so far, the following settings do also
 exist and you may find yourself in the situation that you have to use them::
 
   $ ceph dashboard set-rgw-api-scheme <scheme>  # http or https
-  $ ceph dashboard set-rgw-api-admin-resource <admin-resource>
-  $ ceph dashboard set-rgw-api-user-id <user-id>
+  $ ceph dashboard set-rgw-api-admin-resource <admin_resource>
+  $ ceph dashboard set-rgw-api-user-id <user_id>
 
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
