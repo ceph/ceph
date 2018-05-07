@@ -64,7 +64,7 @@ class MDSMonitor : public PaxosService, public PaxosFSMap {
   /**
    * Return true if a blacklist was done (i.e. OSD propose needed)
    */
-  bool fail_mds_gid(mds_gid_t gid);
+  bool fail_mds_gid(FSMap &fsmap, mds_gid_t gid);
 
   bool is_leader() const override { return mon->is_leader(); }
 
@@ -85,25 +85,24 @@ class MDSMonitor : public PaxosService, public PaxosFSMap {
   void get_health(list<pair<health_status_t,string> >& summary,
 		  list<pair<health_status_t,string> > *detail,
 		  CephContext *cct) const override;
-  int fail_mds(std::ostream &ss, const std::string &arg,
+  int fail_mds(FSMap &fsmap, std::ostream &ss,
+      const std::string &arg,
       MDSMap::mds_info_t *failed_info);
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
 
-  int parse_role(
-      const std::string &role_str,
-      mds_role_t *role,
-      std::ostream &ss);
-
   void modify_legacy_filesystem(
+      FSMap &fsmap,
       std::function<void(std::shared_ptr<Filesystem> )> fn);
   int legacy_filesystem_command(
+      FSMap &fsmap,
       MonOpRequestRef op,
       std::string const &prefix,
       map<string, cmd_vartype> &cmdmap,
       std::stringstream &ss);
   int filesystem_command(
+      FSMap &fsmap,
       MonOpRequestRef op,
       std::string const &prefix,
       map<string, cmd_vartype> &cmdmap,
@@ -118,37 +117,35 @@ class MDSMonitor : public PaxosService, public PaxosFSMap {
   };
   map<mds_gid_t, beacon_info_t> last_beacon;
 
-  bool try_standby_replay(
-      const MDSMap::mds_info_t& finfo,
-      const Filesystem &leader_fs,
-      const MDSMap::mds_info_t& ainfo);
+  bool try_standby_replay(FSMap &fsmap, const MDSMap::mds_info_t& finfo,
+      const Filesystem &leader_fs, const MDSMap::mds_info_t& ainfo);
 
   std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
 
-  bool maybe_promote_standby(std::shared_ptr<Filesystem> &fs);
-  bool maybe_expand_cluster(std::shared_ptr<Filesystem> &fs);
-  void maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info,
-      bool *mds_propose, bool *osd_propose);
+  bool maybe_promote_standby(FSMap &fsmap, std::shared_ptr<Filesystem> &fs);
+  bool maybe_expand_cluster(FSMap &fsmap, fs_cluster_id_t fscid);
+  void maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
+      const MDSMap::mds_info_t& info, bool *mds_propose, bool *osd_propose);
   void tick() override;     // check state, take actions
 
-  int dump_metadata(const string& who, Formatter *f, ostream& err);
+  int dump_metadata(const FSMap &fsmap, const std::string &who, Formatter *f,
+      ostream& err);
 
   void update_metadata(mds_gid_t gid, const Metadata& metadata);
-  void remove_from_metadata(MonitorDBStore::TransactionRef t);
+  void remove_from_metadata(const FSMap &fsmap, MonitorDBStore::TransactionRef t);
   int load_metadata(map<mds_gid_t, Metadata>& m);
-  void count_metadata(const string& field, Formatter *f);
+  void count_metadata(const std::string& field, Formatter *f);
 public:
-  void count_metadata(const string& field, map<string,int> *out);
+  void count_metadata(const std::string& field, map<string,int> *out);
 protected:
 
   // MDS daemon GID to latest health state from that GID
   std::map<uint64_t, MDSHealth> pending_daemon_health;
   std::set<uint64_t> pending_daemon_health_rm;
 
-
   map<mds_gid_t, Metadata> pending_metadata;
 
-  mds_gid_t gid_from_arg(const std::string& arg, std::ostream& err);
+  mds_gid_t gid_from_arg(const FSMap &fsmap, const std::string &arg, std::ostream& err);
 
   // When did the mon last call into our tick() method?  Used for detecting
   // when the mon was not updating us for some period (e.g. during slow

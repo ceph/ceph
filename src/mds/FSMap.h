@@ -407,6 +407,7 @@ public:
 
   size_t filesystem_count() const {return filesystems.size();}
   bool filesystem_exists(fs_cluster_id_t fscid) const {return filesystems.count(fscid) > 0;}
+  const std::shared_ptr<Filesystem> &get_filesystem(fs_cluster_id_t fscid) {return filesystems.at(fscid);}
   std::shared_ptr<const Filesystem> get_filesystem(fs_cluster_id_t fscid) const {return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));}
   std::shared_ptr<const Filesystem> get_filesystem(void) const {return std::const_pointer_cast<const Filesystem>(filesystems.begin()->second);}
   std::shared_ptr<const Filesystem> get_filesystem(boost::string_view name) const

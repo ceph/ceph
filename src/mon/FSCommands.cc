@@ -631,7 +631,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
     for (const auto &gid : to_fail) {
       // Standby replays don't write, so it isn't important to
       // wait for an osdmap propose here: ignore return value.
-      mon->mdsmon()->fail_mds_gid(gid);
+      mon->mdsmon()->fail_mds_gid(fsmap, gid);
     }
 
     fsmap.erase_filesystem(fs->fscid);
