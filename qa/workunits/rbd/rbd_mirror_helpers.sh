@@ -223,6 +223,7 @@ setup_cluster()
 [client.${MIRROR_USER_ID_PREFIX}${instance}]
     admin socket = ${TEMPDIR}/rbd-mirror.\$cluster-\$name.asok
     pid file = ${TEMPDIR}/rbd-mirror.\$cluster-\$name.pid
+    log file = ${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.log
 EOF
     done
 }
@@ -326,7 +327,6 @@ start_mirror()
     rbd-mirror \
 	--cluster ${cluster} \
         --id ${MIRROR_USER_ID_PREFIX}${instance} \
-	--log-file=${TEMPDIR}/rbd-mirror.${cluster}_daemon.${instance}.log \
 	--rbd-mirror-delete-retry-interval=5 \
 	--rbd-mirror-image-state-check-interval=5 \
 	--rbd-mirror-journal-poll-age=1 \
