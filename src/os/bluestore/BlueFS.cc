@@ -2002,11 +2002,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   }
   if (alloc_len < (int64_t)left) {
     if (alloc_len != 0) {
-      interval_set<uint64_t> to_release;
-      for (auto& p : extents) {
-        to_release.insert(p.offset, p.length);
-      }
-      alloc[id]->release(to_release);
+      alloc[id]->release(extents);
     }
     if (id != BDEV_SLOW) {
       if (bdev[id]) {

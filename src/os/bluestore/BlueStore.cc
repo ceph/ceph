@@ -6629,11 +6629,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	      derr << __func__ << " allocate failed on 0x" << std::hex << e->length
 		    << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
 	      if (alloc_len > 0) {
-		interval_set<uint64_t> release_set;
-		for (auto e : exts) {
-		  release_set.insert(e.offset, e.length);
-		}
-		alloc->release(release_set);
+		alloc->release(exts);
 	      }
 	      bypass_rest = true;
 	      break;
