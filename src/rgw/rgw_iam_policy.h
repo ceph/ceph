@@ -98,6 +98,8 @@ static constexpr std::uint64_t s3DeleteObjectVersionTagging = 1ULL << 53;
 static constexpr std::uint64_t s3Count = 54;
 static constexpr std::uint64_t s3All = (1ULL << s3Count) - 1;
 
+static constexpr std::uint64_t stsAssumeRole = 1ULL << 55;
+
 namespace {
 inline int op_to_perm(std::uint64_t op) {
   switch (op) {
@@ -435,6 +437,9 @@ struct Statement {
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
 	      std::uint64_t action, const ARN& resource) const;
+
+  Effect eval_principal(const Environment& e,
+		       boost::optional<const rgw::auth::Identity&> ida) const;
 };
 
 std::ostream& operator <<(ostream& m, const Statement& s);
@@ -463,6 +468,9 @@ struct Policy {
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
 	      std::uint64_t action, const ARN& resource) const;
+
+  Effect eval_principal(const Environment& e,
+	      boost::optional<const rgw::auth::Identity&> ida) const;
 
   template <typename F>
   bool has_conditional(const string& conditional, F p) const {
