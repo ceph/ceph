@@ -11,10 +11,7 @@ struct MClientQuota : public Message {
   MClientQuota() :
     Message(CEPH_MSG_CLIENT_QUOTA),
     ino(0)
-  {
-    memset(&rstat, 0, sizeof(rstat));
-    memset(&quota, 0, sizeof(quota));
-  }
+  {}
 private:
   ~MClientQuota() override {}
 
