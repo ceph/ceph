@@ -6,5 +6,5 @@ tasks:
       VERIFY: verify
     clients:
       client.0:
-      - fs/snaps/snap-hierarchy.sh
+      - fs/snap-hierarchy.sh
 - print: "**** done verify snap hierarchy"
