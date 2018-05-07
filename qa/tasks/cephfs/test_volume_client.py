@@ -777,52 +777,63 @@ vc.disconnect()
         # auth ID belongs to, the auth ID's authorized access levels
         # for different volumes, versioning details, etc.
         expected_auth_metadata = {
-            u"version": 2,
-            u"compat_version": 1,
-            u"dirty": False,
-            u"tenant_id": u"tenant1",
-            u"volumes": {
-                u"groupid/volumeid": {
-                    u"dirty": False,
-                    u"access_level": u"rw",
+            "version": 2,
+            "compat_version": 1,
+            "dirty": False,
+            "tenant_id": u"tenant1",
+            "volumes": {
+                "groupid/volumeid": {
+                    "dirty": False,
+                    "access_level": u"rw",
                 }
             }
         }
 
         auth_metadata = self._volume_client_python(volumeclient_mount, dedent("""
+            import json
             vp = VolumePath("{group_id}", "{volume_id}")
             auth_metadata = vc._auth_metadata_get("{auth_id}")
-            print auth_metadata
+            print(json.dumps(auth_metadata))
         """.format(
             group_id=group_id,
             volume_id=volume_id,
             auth_id=guestclient_1["auth_id"],
         )))
+        auth_metadata = json.loads(auth_metadata)
 
-        self.assertItemsEqual(str(expected_auth_metadata), auth_metadata)
+        self.assertGreaterEqual(auth_metadata["version"], expected_auth_metadata["version"])
+        del expected_auth_metadata["version"]
+        del auth_metadata["version"]
+        self.assertEqual(expected_auth_metadata, auth_metadata)
 
         # Verify that the volume metadata file stores info about auth IDs
         # and their access levels to the volume, versioning details, etc.
         expected_vol_metadata = {
-            u"version": 2,
-            u"compat_version": 1,
-            u"auths": {
-                u"guest": {
-                    u"dirty": False,
-                    u"access_level": u"rw"
+            "version": 2,
+            "compat_version": 1,
+            "auths": {
+                "guest": {
+                    "dirty": False,
+                    "access_level": u"rw"
                 }
             }
         }
 
         vol_metadata = self._volume_client_python(volumeclient_mount, dedent("""
+            import json
             vp = VolumePath("{group_id}", "{volume_id}")
             volume_metadata = vc._volume_metadata_get(vp)
-            print volume_metadata
+            print(json.dumps(volume_metadata))
         """.format(
             group_id=group_id,
             volume_id=volume_id,
         )))
-        self.assertItemsEqual(str(expected_vol_metadata), vol_metadata)
+        vol_metadata = json.loads(vol_metadata)
+
+        self.assertGreaterEqual(vol_metadata["version"], expected_vol_metadata["version"])
+        del expected_vol_metadata["version"]
+        del vol_metadata["version"]
+        self.assertEqual(expected_vol_metadata, vol_metadata)
 
         # Cannot authorize 'guestclient_2' to access the volume.
         # It uses auth ID 'guest', which has already been used by a
