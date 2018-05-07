@@ -443,7 +443,8 @@ static const actpair actpairs[] =
  { "s3:PutObjectTagging", s3PutObjectTagging },
  { "s3:PutObjectVersionTagging", s3PutObjectVersionTagging },
  { "s3:PutReplicationConfiguration", s3PutReplicationConfiguration },
- { "s3:RestoreObject", s3RestoreObject }};
+ { "s3:RestoreObject", s3RestoreObject },
+ { "sts:AssumeRole", stsAssumeRole}};
 
 struct PolicyParser;
 
@@ -1266,6 +1267,14 @@ Effect Statement::eval(const Environment& e,
   return Effect::Pass;
 }
 
+Effect Statement::eval_principal(const Environment& e,
+		       boost::optional<const rgw::auth::Identity&> ida) const {
+  if (ida && (!ida->is_identity(princ) || ida->is_identity(noprinc))) {
+    return Effect::Deny;
+  }
+  return Effect::Allow;
+}
+
 namespace {
 const char* action_bit_string(uint64_t action) {
   switch (action) {
@@ -1429,6 +1438,9 @@ const char* action_bit_string(uint64_t action) {
 
   case s3DeleteObjectVersionTagging:
     return "s3:DeleteObjectVersionTagging";
+
+  case stsAssumeRole:
+    return "sts:AssumeRole";
   }
   return "s3Invalid";
 }
@@ -1552,6 +1564,20 @@ Effect Policy::eval(const Environment& e,
     }
   }
   return allowed ? Effect::Allow : Effect::Pass;
+}
+
+Effect Policy::eval_principal(const Environment& e,
+		    boost::optional<const rgw::auth::Identity&> ida) const {
+  auto allowed = false;
+  for (auto& s : statements) {
+    auto g = s.eval_principal(e, ida);
+    if (g == Effect::Deny) {
+      return g;
+    } else if (g == Effect::Allow) {
+      allowed = true;
+    }
+  }
+  return allowed ? Effect::Allow : Effect::Deny;
 }
 
 ostream& operator <<(ostream& m, const Policy& p) {

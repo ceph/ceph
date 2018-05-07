@@ -99,10 +99,9 @@ int Credentials::generateCredentials(CephContext* cct, const uint64_t& duration)
   enc_output.append('\0');
   encrypted_str = enc_output.c_str();
 
-  std::string decoded_str;
   bufferlist enc_bp, encoded_op;
   enc_bp.append(encrypted_str);
-  encoded_op.encode_base64(enc_bp);
+  enc_bp.encode_base64(encoded_op);
   encoded_op.append('\0');
   sessionToken = encoded_op.c_str();
 
@@ -118,23 +117,17 @@ void AssumedRoleUser::dump(Formatter *f) const
 int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
                                               RGWRados *store,
                                               const string& roleId,
-                                              const boost::optional<rgw::IAM::ARN>& roleArn,
+                                              const rgw::IAM::ARN& roleArn,
                                               const string& roleSessionName)
 {
-  string resource, account;
-  rgw::IAM::ARN r_arn;
-  if (roleArn) {
-    r_arn = roleArn.get();
-    resource = r_arn.resource;
-    boost::replace_first(resource, "role", "assumed-role");
-    resource.append("/");
-    resource.append(roleSessionName);
-    account = r_arn.account;
-  }
+  string resource = std::move(roleArn.resource);
+  boost::replace_first(resource, "role", "assumed-role");
+  resource.append("/");
+  resource.append(roleSessionName);
   
   rgw::IAM::ARN assumed_role_arn(rgw::IAM::Partition::aws,
                                   rgw::IAM::Service::sts,
-                                  "", account, resource);
+                                  "", roleArn.account, resource);
   arn = assumed_role_arn.to_string();
 
   //Assumeroleid = roleid:rolesessionname
@@ -170,7 +163,7 @@ int AssumeRoleRequest::validate_input() const
       return -EINVAL;
     }
 
-    std::regex regex_externalId("[A-Za-z0-9_+=,.@:/-");
+    std::regex regex_externalId("[A-Za-z0-9_=,.@:/-]+");
     if (! std::regex_match(externalId, regex_externalId)) {
       return -EINVAL;
     }
@@ -190,7 +183,7 @@ int AssumeRoleRequest::validate_input() const
       return -EINVAL;
     }
 
-    std::regex regex_roleSession("[A-Za-z0-9_+=,.@-");
+    std::regex regex_roleSession("[A-Za-z0-9_=,.@-]+");
     if (! std::regex_match(roleSessionName, regex_roleSession)) {
       return -EINVAL;
     }
@@ -200,7 +193,7 @@ int AssumeRoleRequest::validate_input() const
       return -EINVAL;
     }
 
-    std::regex regex_serialNumber("[A-Za-z0-9_=/:,.@-");
+    std::regex regex_serialNumber("[A-Za-z0-9_=/:,.@-]+");
     if (! std::regex_match(serialNumber, regex_serialNumber)) {
       return -EINVAL;
     }
@@ -212,20 +205,23 @@ int AssumeRoleRequest::validate_input() const
   return 0;
 }
 
-std::tuple<int, boost::optional<rgw::IAM::ARN>, RGWRole> STSService::_getRoleInfo(const string& arn)
+std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
 {
   if (auto r_arn = rgw::IAM::ARN::parse(arn); r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
     RGWRole role(cct, store, roleName, r_arn->account);
     if (int ret = role.get(); ret < 0) {
-      return make_tuple(ret, r_arn, role);
+      if (ret == -ENOENT) {
+        ret = -ERR_NO_ROLE_FOUND;
+      }
+      return make_tuple(ret, this->role);
     } else {
-      return make_tuple(0, r_arn, role);
+      this->role = std::move(role);
+      return make_tuple(0, this->role);
     }
   } else {
-    RGWRole dummyRole;
-    return make_tuple(-EINVAL, r_arn, dummyRole);
+    return make_tuple(-EINVAL, this->role);
   }
 }
 
@@ -237,16 +233,14 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   string roleId;
 
   //Get the role info which is being assumed
-  const auto& [ret_val, r_arn, role] = _getRoleInfo(req.getRoleARN());
-  if (ret_val < 0) {
-    return make_tuple(ret_val, user, cred, packedPolicySize);
+  boost::optional<rgw::IAM::ARN> r_arn;
+  if (r_arn = rgw::IAM::ARN::parse(req.getRoleARN()); r_arn == boost::none) {
+    return make_tuple(-EINVAL, user, cred, packedPolicySize);
   }
 
-  if (r_arn) {
-    roleId = role.get_id();
-    roleMaxSessionDuration = role.get_max_session_duration();
-    req.setMaxDuration(roleMaxSessionDuration);
-  }
+  roleId = role.get_id();
+  roleMaxSessionDuration = role.get_max_session_duration();
+  req.setMaxDuration(roleMaxSessionDuration);
 
   //Validate input
   int ret = 0;
@@ -259,7 +253,7 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   packedPolicySize = (policy.size() / req.getMaxPolicySize()) * 100;
 
   //Generate Assumed Role User
-  if (ret = user.generateAssumedRoleUser(cct, store, roleId, r_arn, req.getRoleSessionName()); ret < 0) {
+  if (ret = user.generateAssumedRoleUser(cct, store, roleId, r_arn.get(), req.getRoleSessionName()); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 

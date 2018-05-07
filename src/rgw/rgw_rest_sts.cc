@@ -19,6 +19,8 @@
 
 #include "rgw_request.h"
 #include "rgw_process.h"
+#include "rgw_iam_policy.h"
+#include "rgw_iam_policy_keywords.h"
 
 #include "sts-assume-role.h"
 
@@ -33,6 +35,32 @@
 
 int RGWREST_STS::verify_permission()
 {
+  STS::STSService _sts(s->cct, store);
+  sts = std::move(_sts);
+
+  string rArn = s->info.args.get("RoleArn");
+  const auto& [ret, role] = sts.getRoleInfo(rArn);
+  if (ret < 0) {
+    return ret;
+  }
+  string policy = role.get_assume_role_policy();
+  bufferlist bl = bufferlist::static_from_string(policy);
+
+  //Parse the policy
+  //TODO - This step should be part of Role Creation
+  try {
+    const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+    //Check if the input role arn is there as one of the Principals in the policy,
+  // If yes, then return 0, else -EPERM
+    auto res = p.eval_principal(s->env, *s->auth.identity);
+    if (res == rgw::IAM::Effect::Deny) {
+      return -EPERM;
+    }
+  } catch (rgw::IAM::PolicyParseException& e) {
+    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+    return -EPERM;
+  }
+
   return 0;
 }
 
@@ -60,10 +88,12 @@ int RGWSTSAssumeRole::get_params()
     return -EINVAL;
   }
 
-  JSONParser p;
-  if (!p.parse(policy.c_str(), policy.length())) {
-    ldout(s->cct, 20) << "ERROR: failed to parse policy doc" << dendl;
-    return -ERR_MALFORMED_DOC;
+  if (! policy.empty()) {
+    JSONParser p;
+    if (!p.parse(policy.c_str(), policy.length())) {
+      ldout(s->cct, 20) << "ERROR: failed to parse policy doc" << dendl;
+      return -ERR_MALFORMED_DOC;
+    }
   }
 
   return 0;
@@ -71,11 +101,14 @@ int RGWSTSAssumeRole::get_params()
 
 void RGWSTSAssumeRole::execute()
 {
+  if (op_ret = get_params(); op_ret < 0) {
+    return;
+  }
+
   STS::AssumeRoleRequest req(duration, externalId, policy, roleArn,
                         roleSessionName, serialNumber, tokenCode);
-  STS::STSService sts(s->cct, store);
-  const auto& [op_ret, assumedRoleUser, creds, packedPolicySize] = sts.assumeRole(req);
-
+  const auto& [ret, assumedRoleUser, creds, packedPolicySize] = sts.assumeRole(req);
+  op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
     s->formatter->open_object_section("AssumeRole");
