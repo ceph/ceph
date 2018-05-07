@@ -2075,6 +2075,10 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_STALE:
+    // invalidate session caps/leases
+    session->cap_gen++;
+    session->cap_ttl = ceph_clock_now();
+    session->cap_ttl -= 1;
     renew_caps(session);
     break;
 
@@ -3893,6 +3897,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   cap.seq = seq;
   cap.issue_seq = seq;
   cap.mseq = mseq;
+  cap.gen = mds_session->cap_gen;
   cap.latest_perms = cap_perms;
   ldout(cct, 10) << __func__ << " issued " << ccap_string(old_caps) << " -> " << ccap_string(cap.issued)
 	   << " from mds." << mds
@@ -5028,6 +5033,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 		<< " caps now " << ccap_string(new_caps)
 		<< " was " << ccap_string(old_caps) << dendl;
   cap->seq = m->get_seq();
+  cap->gen = session->cap_gen;
 
   in->layout = m->get_layout();
 
@@ -7723,6 +7729,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     else
       dirp->next_offset = dirp->offset_low();
     dirp->last_name = dn_name; // we successfully returned this one; update!
+    dirp->release_count = 0; // last_name no longer match cache index
     if (r > 0)
       return r;
   }
