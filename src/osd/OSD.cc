@@ -9422,9 +9422,9 @@ void OSDShard::consume_map(
 	slot->waiting.pop_front();
       }
     }
-    if (slot->waiting.empty() &&
-	slot->num_running == 0 &&
-	!slot->pg) {
+    if (!slot->pg &&
+	slot->waiting.empty() &&
+	slot->num_running == 0) {
       dout(20) << __func__ << "  " << pgid << " empty, pruning" << dendl;
       p = pg_slots.erase(p);
       continue;
