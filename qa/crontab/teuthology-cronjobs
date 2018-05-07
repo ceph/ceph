@@ -179,7 +179,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 #35 05 * * 1,3,5 CEPH_BRANCH=mimic; MACHINE_NAME=smithi;/home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s samba -e $CEPH_QA_EMAIL
 55 05 * * 1,3,5  CEPH_BRANCH=mimic; MACHINE_NAME=mira; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-deploy -k distro -e $CEPH_QA_EMAIL
 10 05 * * 1,3,5  CEPH_BRANCH=mimic; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-disk -k distro -e $CEPH_QA_EMAIL
-15 05 * * 1,3,5  CEPH_BRANCH=; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
+15 05 * * 1,3,5  CEPH_BRANCH=mimic; MACHINE_NAME=ovh;  /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s ceph-ansible -k distro -e $CEPH_QA_EMAIL
 
 
 25 02 * * * CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -k distro -n 7 -m $MACHINE_NAME -s upgrade/luminous-x -e $CEPH_QA_EMAIL --suite-branch $CEPH_BRANCH -p 90 --filter ubuntu_latest,centos
