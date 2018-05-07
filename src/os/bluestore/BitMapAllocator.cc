@@ -80,35 +80,6 @@ void BitMapAllocator::insert_free(uint64_t off, uint64_t len)
              len / m_block_size);
 }
 
-int BitMapAllocator::reserve(uint64_t need)
-{
-  int nblks = need / m_block_size; // apply floor
-  assert(!(need % m_block_size));
-  dout(10) << __func__ << " instance " << (uint64_t) this
-           << " num_used " << m_bit_alloc->get_used_blocks()
-           << " total " << m_bit_alloc->total_blocks()
-           << dendl;
-
-  if (!m_bit_alloc->reserve_blocks(nblks)) {
-    return -ENOSPC;
-  }
-  return 0;
-}
-
-void BitMapAllocator::unreserve(uint64_t unused)
-{
-  int nblks = unused / m_block_size;
-  assert(!(unused % m_block_size));
-
-  dout(10) << __func__ << " instance " << (uint64_t) this
-           << " unused " << nblks
-           << " num used " << m_bit_alloc->get_used_blocks()
-           << " total " << m_bit_alloc->total_blocks()
-           << dendl;
-
-  m_bit_alloc->unreserve_blocks(nblks);
-}
-
 int64_t BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
   int64_t hint, PExtentVector *extents)
@@ -118,6 +89,8 @@ int64_t BitMapAllocator::allocate(
   assert(alloc_unit);
 
   assert(!max_alloc_size || max_alloc_size >= alloc_unit);
+
+  //FIXME: reproduce reserve/unreserve
 
   dout(10) << __func__ <<" instance "<< (uint64_t) this
      << " want_size " << want_size
