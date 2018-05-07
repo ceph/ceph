@@ -632,14 +632,14 @@ TEST(LibCephFS, StatDirNlink) {
   ASSERT_EQ(stx.stx_nlink, 2);
 
   {
-    char test_dir2[256];
+    char test_dir2[296];
     sprintf(test_dir2, "%s/.", test_dir1);
     ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
     ASSERT_EQ(stx.stx_nlink, 2);
   }
 
   {
-    char test_dir2[256];
+    char test_dir2[296];
     sprintf(test_dir2, "%s/1", test_dir1);
     ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
     ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
@@ -968,7 +968,7 @@ TEST(LibCephFS, LoopSyms) {
   ASSERT_EQ(fd, -ELOOP);
 
   // loop: /a -> /b, /b -> /c, /c -> /a
-  char a[256], b[256], c[256];
+  char a[264], b[264], c[264];
   sprintf(a, "/%s/a", test_dir1);
   sprintf(b, "/%s/b", test_dir1);
   sprintf(c, "/%s/c", test_dir1);
@@ -1565,7 +1565,7 @@ TEST(LibCephFS, SlashDotDot) {
   ASSERT_EQ(ino, stx.stx_ino);
 
   /* Test accessing the parent of an unlinked directory */
-  char dir1[32], dir2[32];
+  char dir1[32], dir2[56];
   sprintf(dir1, "/sldotdot%x", getpid());
   sprintf(dir2, "%s/sub%x", dir1, getpid());
 
@@ -1781,7 +1781,7 @@ TEST(LibCephFS, DirChangeAttr) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, "/"), 0);
 
-  char dirname[32], filename[32];
+  char dirname[32], filename[56];
   sprintf(dirname, "/dirchange%x", getpid());
   sprintf(filename, "%s/foo", dirname);
 
