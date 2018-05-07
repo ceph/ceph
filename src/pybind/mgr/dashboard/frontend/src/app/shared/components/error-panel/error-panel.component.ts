@@ -6,12 +6,11 @@ import { Component, EventEmitter, Input, Output } from '@angular/core';
   styleUrls: ['./error-panel.component.scss']
 })
 export class ErrorPanelComponent {
-
   /**
-   * The title to be displayed. Defaults to 'Error!'.
+   * The title to be displayed. Defaults to 'Error'.
    * @type {string}
    */
-  @Input() title = 'Error!';
+  @Input() title = 'Error';
 
   /**
    * The event that is triggered when the 'Back' button is pressed.
