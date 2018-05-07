@@ -208,7 +208,7 @@ public:
                         MockMockManagedLock &managed_lock, uint64_t &client_id) {
     expect_get_watch_handle(watcher);
     EXPECT_CALL(managed_lock, post_reacquire_lock_handler(_, _))
-      .WillOnce(Invoke([&watcher, &client_id](int r, Context *on_finish){
+      .WillOnce(Invoke([&client_id](int r, Context *on_finish){
         if (r >= 0) {
           client_id = 98765;
         }

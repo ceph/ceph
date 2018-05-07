@@ -740,7 +740,7 @@ void PoolReplayer<I>::handle_init_image_map(int r, Context *on_finish) {
   dout(5) << "r=" << r << dendl;
   if (r < 0) {
     derr << "failed to init image map: " << cpp_strerror(r) << dendl;
-    on_finish = new FunctionContext([this, on_finish, r](int) {
+    on_finish = new FunctionContext([on_finish, r](int) {
         on_finish->complete(r);
       });
     shut_down_image_map(on_finish);
@@ -774,7 +774,7 @@ void PoolReplayer<I>::handle_init_local_pool_watcher(
   dout(10) << "r=" << r << dendl;
   if (r < 0) {
     derr << "failed to retrieve local images: " << cpp_strerror(r) << dendl;
-    on_finish = new FunctionContext([this, on_finish, r](int) {
+    on_finish = new FunctionContext([on_finish, r](int) {
         on_finish->complete(r);
       });
     shut_down_pool_watchers(on_finish);
@@ -806,7 +806,7 @@ void PoolReplayer<I>::handle_init_remote_pool_watcher(
   dout(10) << "r=" << r << dendl;
   if (r < 0) {
     derr << "failed to retrieve remote images: " << cpp_strerror(r) << dendl;
-    on_finish = new FunctionContext([this, on_finish, r](int) {
+    on_finish = new FunctionContext([on_finish, r](int) {
         on_finish->complete(r);
       });
     shut_down_pool_watchers(on_finish);
@@ -837,7 +837,7 @@ void PoolReplayer<I>::handle_init_image_deleter(int r, Context *on_finish) {
   dout(10) << "r=" << r << dendl;
   if (r < 0) {
     derr << "failed to init image deleter: " << cpp_strerror(r) << dendl;
-    on_finish = new FunctionContext([this, on_finish, r](int) {
+    on_finish = new FunctionContext([on_finish, r](int) {
         on_finish->complete(r);
       });
     shut_down_image_deleter(on_finish);
