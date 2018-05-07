@@ -103,6 +103,55 @@ public:
 #define ES_NUM_SHARDS_DEFAULT 16
 #define ES_NUM_REPLICAS_DEFAULT 1
 
+struct ESVersion {
+  int major_ver;
+  int minor_ver;
+
+  ESVersion(int _major, int _minor): major_ver(_major), minor_ver(_minor) {}
+  ESVersion(): major_ver(0), minor_ver(0) {}
+
+  void from_str(const char* s) {
+    sscanf(s, "%d.%d", &major_ver, &minor_ver);
+  }
+
+  std::string to_str() const {
+    return std::to_string(major_ver) + "." + std::to_string(minor_ver);
+  }
+
+  void decode_json(JSONObj *obj);
+};
+
+bool operator >= (const ESVersion& v1, const ESVersion& v2)
+{
+  if (v1.major_ver == v2.major_ver)
+    return v1.minor_ver >= v2.minor_ver;
+
+  return v1.major_ver > v2.major_ver;
+}
+
+struct ESInfo {
+  std::string name;
+  std::string cluster_name;
+  std::string cluster_uuid;
+  ESVersion version;
+
+  void decode_json(JSONObj *obj);
+};
+
+void ESInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("cluster_name", cluster_name, obj);
+  JSONDecoder::decode_json("cluster_uuid", cluster_uuid, obj);
+  JSONDecoder::decode_json("version", version, obj);
+}
+
+void ESVersion::decode_json(JSONObj *obj)
+{
+  std::string s;
+  JSONDecoder::decode_json("number", s, obj);
+  this->from_str(s.c_str());
+}
 
 struct ElasticConfig {
   uint64_t sync_instance{0};
