@@ -534,7 +534,6 @@ struct inode_t {
   {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
-    memset(&quota, 0, sizeof(quota));
   }
 
   // file type
