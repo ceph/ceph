@@ -9,6 +9,7 @@ import { PipesModule } from '../pipes/pipes.module';
 import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
 import { ErrorPanelComponent } from './error-panel/error-panel.component';
 import { HelperComponent } from './helper/helper.component';
+import { InfoPanelComponent } from './info-panel/info-panel.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
@@ -37,6 +38,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     UsageBarComponent,
     ErrorPanelComponent,
     LoadingPanelComponent,
+    InfoPanelComponent,
     ModalComponent,
     DeletionModalComponent
   ],
@@ -48,6 +50,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     SubmitButtonComponent,
     ErrorPanelComponent,
     LoadingPanelComponent,
+    InfoPanelComponent,
     UsageBarComponent
   ],
   entryComponents: [
