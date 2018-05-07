@@ -1521,6 +1521,7 @@ int librados::IoCtxImpl::notify(const object_t& oid, bufferlist& bl,
   } else {
     ldout(client->cct, 10) << __func__ << " failed to initiate notify, r = "
 			   << r << dendl;
+    notify_finish_cond.wait();
   }
 
   objecter->linger_cancel(linger_op);
