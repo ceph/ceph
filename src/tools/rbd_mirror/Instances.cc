@@ -26,9 +26,10 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 Instances<I>::Instances(Threads<I> *threads, librados::IoCtx &ioctx,
+                        const std::string& instance_id,
                         instances::Listener& listener) :
-  m_threads(threads), m_ioctx(ioctx), m_listener(listener),
-  m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
+  m_threads(threads), m_ioctx(ioctx), m_instance_id(instance_id),
+  m_listener(listener), m_cct(reinterpret_cast<CephContext *>(ioctx.cct())),
   m_lock("rbd::mirror::Instances " + ioctx.get_pool_name()) {
 }
 
@@ -243,6 +244,9 @@ void Instances<I>::remove_instances(const utime_t& time) {
 
   InstanceIds instance_ids;
   for (auto& instance_pair : m_instances) {
+    if (instance_pair.first == m_instance_id) {
+      continue;
+    }
     auto& instance = instance_pair.second;
     if (instance.state != INSTANCE_STATE_REMOVING &&
         instance.acked_time <= time) {
@@ -317,6 +321,9 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
   bool schedule = false;
   utime_t oldest_time = time;
   for (auto& instance : m_instances) {
+    if (instance.first == m_instance_id) {
+      continue;
+    }
     if (instance.second.state == INSTANCE_STATE_REMOVING) {
       // removal is already in-flight
       continue;

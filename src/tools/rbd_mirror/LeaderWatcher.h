@@ -210,6 +210,7 @@ private:
   InstancesListener m_instances_listener;
   mutable Mutex m_lock;
   uint64_t m_notifier_id;
+  std::string m_instance_id;
   LeaderLock *m_leader_lock;
   Context *m_on_finish = nullptr;
   Context *m_on_shut_down_finish = nullptr;
