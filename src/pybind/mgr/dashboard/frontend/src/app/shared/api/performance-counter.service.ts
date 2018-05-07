@@ -1,28 +1,25 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import 'rxjs/add/observable/of';
+import { Observable } from 'rxjs/Observable';
+
 @Injectable()
-export class TablePerformanceCounterService {
+export class PerformanceCounterService {
 
   private url = 'api/perf_counters';
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient) {}
 
   list() {
-    return this.http.get(this.url)
-      .toPromise()
-      .then((resp: object): object => {
-        return resp;
-      });
+    return this.http.get(this.url);
   }
 
   get(service_type: string, service_id: string) {
     const serviceType = service_type.replace('-', '_');
-
     return this.http.get(`${this.url}/${serviceType}/${service_id}`)
-      .toPromise()
-      .then((resp: object): Array<object> => {
-        return resp['counters'];
+      .flatMap((resp) => {
+        return Observable.of(resp['counters']);
       });
   }
 }
