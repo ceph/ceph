@@ -264,6 +264,17 @@ public:
     : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
                                   "PUT", _path,
                                   _params, nullptr, _input, _result) {}
+
+  RGWPutRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                       RGWHTTPManager *_http_manager,
+                       const string& _path,
+                       rgw_http_param_pair *_params,
+                       map <string, string> *_attrs,
+                       S& _input, T *_result)
+    : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
+                                  "PUT", _path,
+                                  _params, _attrs, _input, _result) {}
+
 };
 
 class RGWDeleteRESTResourceCR : public RGWSimpleCoroutine {
