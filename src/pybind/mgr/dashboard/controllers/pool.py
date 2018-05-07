@@ -64,6 +64,9 @@ class Pool(RESTController):
         return CephService.send_command('mon', 'osd pool delete', pool=pool_name, pool2=pool_name,
                                         sure='--yes-i-really-really-mean-it')
 
+    def set(self, pool_name, flags=None, application_metadata=None, **kwargs):
+        self._set_pool_values(pool_name, application_metadata, flags, True, kwargs)
+
     @handle_send_command_error('pool')
     def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
                application_metadata=None, rule_name=None, **kwargs):
@@ -72,14 +75,27 @@ class Pool(RESTController):
                                  pgp_num=int(pg_num), pool_type=pool_type, erasure_code_profile=ecp,
                                  rule=rule_name)
 
+        self._set_pool_values(pool, application_metadata, flags, False, kwargs)
+
+    def _set_pool_values(self, pool, application_metadata, flags, update_existing, kwargs):
         if flags and 'ec_overwrites' in flags:
             CephService.send_command('mon', 'osd pool set', pool=pool, var='allow_ec_overwrites',
                                      val='true')
-
         if application_metadata:
-            for app in application_metadata:
-                CephService.send_command('mon', 'osd pool application enable', pool=pool, app=app,
+            def set_app(what, app):
+                CephService.send_command('mon', 'osd pool application ' + what, pool=pool, app=app,
                                          force='--yes-i-really-mean-it')
+
+            if update_existing:
+                original_app_metadata = set(
+                    self.get(pool, 'application_metadata')['application_metadata'])
+            else:
+                original_app_metadata = set()
+
+            for app in original_app_metadata - set(application_metadata):
+                set_app('disable', app)
+            for app in set(application_metadata) - original_app_metadata:
+                set_app('enable', app)
 
         for key, value in kwargs.items():
             CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=value)
