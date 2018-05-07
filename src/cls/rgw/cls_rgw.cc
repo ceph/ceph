@@ -1618,7 +1618,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   if (olh_key == dest_key) {
     /* this is the current head, need to update! */
     cls_rgw_obj_key next_key;
-    bool found;
+    bool found = false;
     ret = obj.find_next_key(&next_key, &found);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
