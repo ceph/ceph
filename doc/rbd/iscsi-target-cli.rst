@@ -127,7 +127,7 @@ For rpm based instructions execute the following commands:
           # api_port = 5001
           # trusted_ip_list = 192.168.0.10,192.168.0.11
 
-      ..note::
+      .. note::
         trusted_ip_list is a list of IP addresses on each iscsi gateway that
         will be used for management operations like target creation, lun
         exporting, etc. The IP can be the same that will be used for iSCSI
