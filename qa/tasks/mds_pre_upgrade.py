@@ -25,20 +25,7 @@ def task(ctx, config):
     status = fs.getinfo()
 
     fs.set_max_mds(1)
-    status = fs.getinfo()
-    targets = filter(lambda r: r['rank'] >= 1, fs.get_ranks(status=status))
-    if len(targets) > 0:
-        # deactivate mds in decending order
-        targets = sorted(targets, key=lambda r: r['rank'], reverse=True)
-        for target in targets:
-            self.log("deactivating rank %d" % target['rank'])
-            self.fs.deactivate(target['rank'])
-            status = self.wait_for_stable()[0]
-        else:
-            status = self.wait_for_stable()[0]
-
-    assert(fs.get_mds_map(status=status)['max_mds'] == 1)
-    assert(fs.get_mds_map(status=status)['in'] == [0])
+    fs.reach_max_mds()
 
     # Stop standbys now to minimize time rank 0 is down in subsequent:
     # tasks:
