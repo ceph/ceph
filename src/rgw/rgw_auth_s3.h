@@ -129,20 +129,17 @@ public:
       add_engine(Control::SUFFICIENT, anonymous_engine);
     }
 
+    /* The local auth. */
+    if (cct->_conf->rgw_s3_auth_use_rados) {
+      add_engine(Control::SUFFICIENT, local_engine);
+    }
+
     /* The external auth. */
     Control local_engine_mode;
     if (! external_engines.is_empty()) {
       add_engine(Control::SUFFICIENT, external_engines);
-
-      local_engine_mode = Control::FALLBACK;
-    } else {
-      local_engine_mode = Control::SUFFICIENT;
     }
 
-    /* The local auth. */
-    if (cct->_conf->rgw_s3_auth_use_rados) {
-      add_engine(local_engine_mode, local_engine);
-    }
   }
 
   const char* get_name() const noexcept override {
