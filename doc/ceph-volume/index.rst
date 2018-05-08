@@ -22,7 +22,13 @@ Migrating
 ---------
 Starting on Ceph version 12.2.2, ``ceph-disk`` is deprecated. Deprecation
 warnings will show up that will link to this page. It is strongly suggested
-that users start consuming ``ceph-volume``.
+that users start consuming ``ceph-volume``. There are two paths for migrating:
+
+#. Keep OSDs deployed with ``ceph-disk``: The :ref:`ceph-volume-simple` command
+   provides a way to take over the management while disabling ``ceph-disk``
+   triggers.
+#. Redeploy existing OSDs with ``ceph-volume``: This is covered in depth on
+   :ref:`rados-replacing-an-osd`
 
 New deployments
 ^^^^^^^^^^^^^^^
