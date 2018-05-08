@@ -5,16 +5,13 @@ import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
 import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
 import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
 import { RbdListComponent } from './ceph/block/rbd-list/rbd-list.component';
-import { CephfsComponent } from './ceph/cephfs/cephfs/cephfs.component';
-import { ClientsComponent } from './ceph/cephfs/clients/clients.component';
+import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
-import {
-  PerformanceCounterComponent
-} from './ceph/performance-counter/performance-counter/performance-counter.component';
+import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
 import { Rgw501Component } from './ceph/rgw/rgw-501/rgw-501.component';
 import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
@@ -107,17 +104,16 @@ const routes: Routes = [
     canActivate: [AuthGuardService]
   },
   { path: 'monitor', component: MonitorComponent, canActivate: [AuthGuardService] },
-  { path: 'cephfs/:id/clients', component: ClientsComponent, canActivate: [AuthGuardService] },
-  { path: 'cephfs/:id', component: CephfsComponent, canActivate: [AuthGuardService] },
+  { path: 'cephfs', component: CephfsListComponent, canActivate: [AuthGuardService] },
   { path: 'configuration', component: ConfigurationComponent, canActivate: [AuthGuardService] },
   { path: 'mirroring', component: MirroringComponent, canActivate: [AuthGuardService] },
   { path: '404', component: NotFoundComponent },
   { path: 'osd', component: OsdListComponent, canActivate: [AuthGuardService] },
-  { path: '**', redirectTo: '/404'}
+  { path: '**', redirectTo: '/404' }
 ];
 
 @NgModule({
   imports: [RouterModule.forRoot(routes, { useHash: true })],
   exports: [RouterModule]
 })
-export class AppRoutingModule { }
+export class AppRoutingModule {}
