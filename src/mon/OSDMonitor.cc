@@ -1240,7 +1240,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
           uint32_t match_count = 0;
 
           // CephFS
-          FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
+          const FSMap &pending_fsmap = mon->mdsmon()->get_pending_fsmap();
           if (pending_fsmap.pool_in_use(pool_id)) {
             dout(10) << __func__ << " auto-enabling CephFS on pool '"
                      << pool_name << "'" << dendl;
@@ -11748,7 +11748,7 @@ int OSDMonitor::_check_remove_pool(int64_t pool_id, const pg_pool_t& pool,
   const string& poolstr = osdmap.get_pool_name(pool_id);
 
   // If the Pool is in use by CephFS, refuse to delete it
-  FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
+  FSMap const &pending_fsmap = mon->mdsmon()->get_pending_fsmap();
   if (pending_fsmap.pool_in_use(pool_id)) {
     *ss << "pool '" << poolstr << "' is in use by CephFS";
     return -EBUSY;
@@ -11797,7 +11797,7 @@ bool OSDMonitor::_check_become_tier(
   const std::string &tier_pool_name = osdmap.get_pool_name(tier_pool_id);
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
-  const FSMap &pending_fsmap = mon->mdsmon()->get_pending();
+  const FSMap &pending_fsmap = mon->mdsmon()->get_pending_fsmap();
   if (pending_fsmap.pool_in_use(tier_pool_id)) {
     *ss << "pool '" << tier_pool_name << "' is in use by CephFS";
     *err = -EBUSY;
@@ -11857,7 +11857,7 @@ bool OSDMonitor::_check_remove_tier(
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
   // Apply CephFS-specific checks
-  const FSMap &pending_fsmap = mon->mdsmon()->get_pending();
+  const FSMap &pending_fsmap = mon->mdsmon()->get_pending_fsmap();
   if (pending_fsmap.pool_in_use(base_pool_id)) {
     if (base_pool->is_erasure() && !base_pool->allows_ecoverwrites()) {
       // If the underlying pool is erasure coded and does not allow EC
