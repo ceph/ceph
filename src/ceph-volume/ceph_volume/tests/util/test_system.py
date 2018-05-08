@@ -168,6 +168,30 @@ class TestIsBinary(object):
         assert system.is_binary(binary_path) is False
 
 
+class TestGetFileContents(object):
+
+    def test_path_does_not_exist(self, tmpdir):
+        filepath = os.path.join(str(tmpdir), 'doesnotexist')
+        assert system.get_file_contents(filepath, 'default') == 'default'
+
+    def test_path_has_contents(self, tmpfile):
+        interesting_file = tmpfile(contents="1")
+        result = system.get_file_contents(interesting_file)
+        assert result == "1"
+
+    def test_path_has_multiline_contents(self, tmpfile):
+        interesting_file = tmpfile(contents="0\n1")
+        result = system.get_file_contents(interesting_file)
+        assert result == "0\n1"
+
+    def test_exception_returns_default(self, tmpfile):
+        interesting_file = tmpfile(contents="0")
+        # remove read, causes IOError
+        os.chmod(interesting_file, 0o000)
+        result = system.get_file_contents(interesting_file)
+        assert result == ''
+
+
 class TestWhich(object):
 
     def test_executable_exists_but_is_not_file(self, monkeypatch):
