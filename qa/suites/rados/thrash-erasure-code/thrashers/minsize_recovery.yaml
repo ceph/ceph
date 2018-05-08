@@ -3,6 +3,7 @@ overrides:
     log-whitelist:
     - but it is still running
     - objects unfound and apparently lost
+    create_rbd_pool: False
     conf:
       osd:
         osd debug reject backfill probability: .3
