@@ -93,7 +93,6 @@ void FSMap::print(ostream& out) const
 
   if (filesystems.empty()) {
     out << "No filesystems configured" << std::endl;
-    return;
   }
 
   for (const auto &fs : filesystems) {
@@ -227,9 +226,8 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
 }
 
 
-void FSMap::create_filesystem(std::string_view name,
-                              int64_t metadata_pool, int64_t data_pool,
-                              uint64_t features)
+std::shared_ptr<Filesystem> FSMap::create_filesystem(std::string_view name,
+    int64_t metadata_pool, int64_t data_pool, uint64_t features)
 {
   auto fs = std::make_shared<Filesystem>();
   fs->mds_map.epoch = epoch;
@@ -259,6 +257,8 @@ void FSMap::create_filesystem(std::string_view name,
   if (filesystems.size() == 1) {
     legacy_client_fscid = fs->fscid;
   }
+
+  return fs;
 }
 
 void FSMap::reset_filesystem(fs_cluster_id_t fscid)
