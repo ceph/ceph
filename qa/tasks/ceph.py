@@ -1550,7 +1550,7 @@ def created_pool(ctx, config):
     """
     for new_pool in config:
         if new_pool not in ctx.managers['ceph'].pools:
-            ctx.managers['ceph'].pools[new_pool] = ctx.managers['ceph'].get_pool_property(
+            ctx.managers['ceph'].pools[new_pool] = ctx.managers['ceph'].get_pool_int_property(
                 new_pool, 'pg_num')
 
 
