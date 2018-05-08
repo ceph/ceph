@@ -64,7 +64,7 @@ def create_id(fsid, json_secrets, osd_id=None):
         '-i', '-',
         'osd', 'new', fsid
     ]
-    if check_id(osd_id):
+    if not check_id(osd_id):
         cmd.append(osd_id)
     stdout, stderr, returncode = process.call(
         cmd,
