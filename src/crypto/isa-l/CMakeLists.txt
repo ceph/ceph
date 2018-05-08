@@ -26,7 +26,6 @@ add_library(isal_crypto_plugin_objs OBJECT ${isal_crypto_plugin_srcs})
 target_include_directories(isal_crypto_plugin_objs PRIVATE ${isal_dir}/include)
 set(isal_crypto_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/crypto)
 
-add_custom_target(crypto_plugins)
 if(HAVE_GOOD_YASM_ELF64)
 add_dependencies(crypto_plugins ceph_crypto_isal)
 endif(HAVE_GOOD_YASM_ELF64)
