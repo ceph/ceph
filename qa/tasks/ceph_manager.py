@@ -1070,10 +1070,10 @@ class Thrasher:
                     m = local_m
                     
             if minout > len(self.out_osds): # kill OSDs and mark out
-                kill_osd(mark_out=True)
+                self.kill_osd(mark_out=True)
                 continue
             elif mindead > len(self.dead_osds): # kill OSDs but force timeout
-                kill_osd()
+                self.kill_osd()
                 continue
             else: # make mostly-random choice to kill or revive OSDs
                 minup = max(minlive, k)
@@ -1082,7 +1082,7 @@ class Thrasher:
                     # chose to knock out as many OSDs as we can w/out downing PGs
                     most_killable = min(len(self.live_osds) - minup, m)
                     for i in range(1, most_killable):
-                        kill_osd(mark_out=True)
+                        self.kill_osd(mark_out=True)
                     time.sleep(5)
                     assert self.ceph_manager.all_active_or_peered(), \
                             'not all PGs are active or peered 5 seconds after marking out OSDs'
