@@ -33,4 +33,29 @@ class real_time_wrapper {
 };
 WRITE_CLASS_ENCODER(real_time_wrapper)
 
+// wrapper for ceph::timespan that implements the dencoder interface
+class timespan_wrapper {
+  ceph::timespan d;
+ public:
+  timespan_wrapper() = default;
+  explicit timespan_wrapper(const ceph::timespan& d) : d(d) {}
+
+  void encode(bufferlist& bl) const {
+    using ceph::encode;
+    encode(d, bl);
+  }
+  void decode(bufferlist::iterator &p) {
+    using ceph::decode;
+    decode(d, p);
+  }
+  void dump(Formatter* f) {
+    f->dump_int("timespan", d.count());
+  }
+  static void generate_test_instances(std::list<timespan_wrapper*>& ls) {
+    constexpr std::chrono::seconds d{7377}; // marathon world record (2:02:57)
+    ls.push_back(new timespan_wrapper(d));
+  }
+};
+WRITE_CLASS_ENCODER(timespan_wrapper)
+
 #endif
