@@ -4310,7 +4310,7 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
   try {
     deleter = std::unique_ptr<RGWBulkDelete::Deleter>(\
           new RGWBulkDelete::Deleter(store, s));
-  } catch (std::bad_alloc) {
+  } catch (const std::bad_alloc&) {
     return -ENOMEM;
   }
 
