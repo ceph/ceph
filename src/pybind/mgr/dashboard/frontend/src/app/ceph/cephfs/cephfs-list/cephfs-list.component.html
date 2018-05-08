@@ -1,0 +1,19 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li i18n
+        class="breadcrumb-item active">Filesystems</li>
+  </ol>
+</nav>
+
+<cd-table [data]="filesystems"
+          columnMode="flex"
+          [columns]="columns"
+          (fetchData)="loadFilesystems()"
+          identifier="id"
+          forceIdentifier="true"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <cd-cephfs cdTableDetail
+             [selection]="selection">
+  </cd-cephfs>
+</cd-table>
