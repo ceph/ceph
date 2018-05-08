@@ -426,7 +426,7 @@ vc.disconnect()
         # It should have followed the heuristic for PG count
         # (this is an overly strict test condition, so we may want to remove
         #  it at some point as/when the logic gets fancier)
-        created_pg_num = self.fs.mon_manager.get_pool_property(list(new_pools)[0], "pg_num")
+        created_pg_num = self.fs.mon_manager.get_pool_int_property(list(new_pools)[0], "pg_num")
         self.assertEqual(expected_pg_num, created_pg_num)
 
     def test_15303(self):
