@@ -552,7 +552,7 @@ RGWHTTPClient::~RGWHTTPClient()
 
 int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
 {
-  const boost::string_ref header_line(static_cast<const char * const>(ptr), len);
+  const boost::string_ref header_line(static_cast<const char *>(ptr), len);
 
   /* We're tokening the line that way due to backward compatibility. */
   const size_t sep_loc = header_line.find_first_of(" \t:");
