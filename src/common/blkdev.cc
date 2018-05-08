@@ -89,7 +89,10 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
     if (*p == '/')
       *p = '!';
 
-  snprintf(fn, sizeof(fn), "%s/sys/block/%s", sandbox_dir, devname);
+  if (static_cast<size_t>(snprintf(fn, sizeof(fn), "%s/sys/block/%s",
+                                   sandbox_dir, devname))
+      >= sizeof(fn))
+    return -ERANGE;
   if (stat(fn, &st) == 0) {
     if (strlen(devname) + 1 > out_len) {
       return -ERANGE;
@@ -107,8 +110,10 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   while ((de = ::readdir(dir))) {
     if (de->d_name[0] == '.')
       continue;
-    snprintf(fn, sizeof(fn), "%s/sys/block/%s/%s", sandbox_dir, de->d_name,
-	     devname);
+    if (static_cast<size_t>(snprintf(fn, sizeof(fn), "%s/sys/block/%s/%s",
+                                     sandbox_dir, de->d_name,
+                                     devname)) >= sizeof(fn))
+      return -ERANGE;
 
     if (stat(fn, &st) == 0) {
       // match!
