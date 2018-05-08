@@ -11,12 +11,195 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 
+#ifdef USE_NSS
+# include <nspr.h>
+# include <nss.h>
+# include <pk11pub.h>
+#endif // USE_NSS
+
 class CryptoEnvironment: public ::testing::Environment {
 public:
   void SetUp() override {
     ceph::crypto::init(g_ceph_context);
   }
 };
+
+#ifdef USE_NSS
+// when we say AES, we mean AES-128
+# define AES_KEY_LEN	16
+# define AES_BLOCK_LEN   16
+
+static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
+			     CK_MECHANISM_TYPE mechanism,
+			     PK11SymKey *key,
+			     SECItem *param,
+			     const bufferlist& in, bufferlist& out,
+			     std::string *error)
+{
+  // sample source said this has to be at least size of input + 8,
+  // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
+  bufferptr out_tmp(in.length()+16);
+  bufferlist incopy;
+
+  SECStatus ret;
+  int written;
+  unsigned char *in_buf;
+
+  PK11Context *ectx;
+  ectx = PK11_CreateContextBySymKey(mechanism, op, key, param);
+  assert(ectx);
+
+  incopy = in;  // it's a shallow copy!
+  in_buf = (unsigned char*)incopy.c_str();
+  ret = PK11_CipherOp(ectx,
+		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
+		      in_buf, in.length());
+  if (ret != SECSuccess) {
+    PK11_DestroyContext(ectx, PR_TRUE);
+    if (error) {
+      ostringstream oss;
+      oss << "NSS AES failed: " << PR_GetError();
+      *error = oss.str();
+    }
+    return -1;
+  }
+
+  unsigned int written2;
+  ret = PK11_DigestFinal(ectx,
+			 (unsigned char*)out_tmp.c_str()+written, &written2,
+			 out_tmp.length()-written);
+  PK11_DestroyContext(ectx, PR_TRUE);
+  if (ret != SECSuccess) {
+    if (error) {
+      ostringstream oss;
+      oss << "NSS AES final round failed: " << PR_GetError();
+      *error = oss.str();
+    }
+    return -1;
+  }
+
+  out_tmp.set_length(written + written2);
+  out.append(out_tmp);
+  return 0;
+}
+
+class LegacyCryptoAESKeyHandler : public CryptoKeyHandler {
+  CK_MECHANISM_TYPE mechanism;
+  PK11SlotInfo *slot;
+  PK11SymKey *key;
+  SECItem *param;
+
+public:
+  LegacyCryptoAESKeyHandler()
+    : CryptoKeyHandler(CryptoKeyHandler::BLOCK_SIZE_16B()),
+      mechanism(CKM_AES_CBC_PAD),
+      slot(NULL),
+      key(NULL),
+      param(NULL) {}
+  ~LegacyCryptoAESKeyHandler() override {
+    SECITEM_FreeItem(param, PR_TRUE);
+    if (key)
+      PK11_FreeSymKey(key);
+    if (slot)
+      PK11_FreeSlot(slot);
+  }
+
+  int init(const bufferptr& s, string& err) {
+    ostringstream oss;
+    const int ret = init(s, oss);
+    err = oss.str();
+    return ret;
+  }
+
+  int init(const bufferptr& s, ostringstream& err) {
+    secret = s;
+
+    slot = PK11_GetBestSlot(mechanism, NULL);
+    if (!slot) {
+      err << "cannot find NSS slot to use: " << PR_GetError();
+      return -1;
+    }
+
+    SECItem keyItem;
+    keyItem.type = siBuffer;
+    keyItem.data = (unsigned char*)secret.c_str();
+    keyItem.len = secret.length();
+    key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
+			    &keyItem, NULL);
+    if (!key) {
+      err << "cannot convert AES key for NSS: " << PR_GetError();
+      return -1;
+    }
+
+    SECItem ivItem;
+    ivItem.type = siBuffer;
+    // losing constness due to SECItem.data; IV should never be
+    // modified, regardless
+    ivItem.data = (unsigned char*)CEPH_AES_IV;
+    ivItem.len = sizeof(CEPH_AES_IV);
+
+    param = PK11_ParamFromIV(mechanism, &ivItem);
+    if (!param) {
+      err << "cannot set NSS IV param: " << PR_GetError();
+      return -1;
+    }
+
+    return 0;
+  }
+
+  using CryptoKeyHandler::encrypt;
+  using CryptoKeyHandler::decrypt;
+
+  int encrypt(const bufferlist& in,
+	      bufferlist& out, std::string *error) const override {
+    return nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out, error);
+  }
+  int decrypt(const bufferlist& in,
+	       bufferlist& out, std::string *error) const override {
+    return nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out, error);
+  }
+};
+
+TEST(AES, ValidateLegacy) {
+  CryptoHandler* const newh = \
+    g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+
+  const char secret_s[] = {
+    0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
+    0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
+  };
+  ceph::bufferptr secret(secret_s, sizeof(secret_s));
+
+  std::string error;
+  std::unique_ptr<CryptoKeyHandler> newkh(
+    newh->get_key_handler(secret, error));
+  ASSERT_TRUE(error.empty());
+
+  LegacyCryptoAESKeyHandler oldkh;
+  oldkh.init(secret, error);
+  ASSERT_TRUE(error.empty());
+
+  unsigned char plaintext_s[] = {
+    0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
+  };
+  ceph::bufferlist plaintext;
+  plaintext.append((char *)plaintext_s, sizeof(plaintext_s));
+
+  ceph::bufferlist ciphertext;
+  int r = newkh->encrypt(plaintext, ciphertext, &error);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(error, "");
+
+  ceph::bufferlist restored_plaintext;
+  r = oldkh.decrypt(ciphertext, restored_plaintext, &error);
+  ASSERT_EQ(r, 0);
+  ASSERT_TRUE(error.empty());
+
+  ASSERT_EQ(plaintext, restored_plaintext);
+}
+
+#endif // USE_NSS
 
 TEST(AES, ValidateSecret) {
   CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
