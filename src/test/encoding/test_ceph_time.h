@@ -8,11 +8,13 @@
 #include "common/Formatter.h"
 
 // wrapper for ceph::real_time that implements the dencoder interface
-class real_time_wrapper {
-  ceph::real_time t;
+template <typename Clock>
+class time_point_wrapper {
+  using time_point = typename Clock::time_point;
+  time_point t;
  public:
-  real_time_wrapper() = default;
-  real_time_wrapper(const ceph::real_time& t) : t(t) {}
+  time_point_wrapper() = default;
+  time_point_wrapper(const time_point& t) : t(t) {}
 
   void encode(bufferlist& bl) const {
     using ceph::encode;
@@ -23,14 +25,19 @@ class real_time_wrapper {
     decode(t, p);
   }
   void dump(Formatter* f) {
-    auto epoch_time = ceph::real_clock::to_time_t(t);
+    auto epoch_time = Clock::to_time_t(t);
     f->dump_string("time", std::ctime(&epoch_time));
   }
-  static void generate_test_instances(std::list<real_time_wrapper*>& ls) {
+  static void generate_test_instances(std::list<time_point_wrapper*>& ls) {
     constexpr time_t t{455500800}; // Ghostbusters release date
-    ls.push_back(new real_time_wrapper(ceph::real_clock::from_time_t(t)));
+    ls.push_back(new time_point_wrapper(Clock::from_time_t(t)));
   }
 };
+
+using real_time_wrapper = time_point_wrapper<ceph::real_clock>;
 WRITE_CLASS_ENCODER(real_time_wrapper)
+
+using coarse_real_time_wrapper = time_point_wrapper<ceph::coarse_real_clock>;
+WRITE_CLASS_ENCODER(coarse_real_time_wrapper)
 
 #endif
