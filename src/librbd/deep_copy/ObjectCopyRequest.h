@@ -105,6 +105,7 @@ private:
     COPY_OP_TYPE_ZERO,
     COPY_OP_TYPE_TRUNC,
     COPY_OP_TYPE_REMOVE,
+    COPY_OP_TYPE_REMOVE_TRUNC,
   };
 
   typedef std::map<uint64_t, uint64_t> ExtentMap;
