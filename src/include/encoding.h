@@ -280,7 +280,8 @@ inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
 
 // Time, since the templates are defined in std::chrono
 
-template<typename Clock, typename Duration>
+template<typename Clock, typename Duration,
+         typename std::enable_if_t<converts_to_timespec_v<Clock>>* = nullptr>
 void encode(const std::chrono::time_point<Clock, Duration>& t,
 	    ceph::bufferlist &bl) {
   auto ts = Clock::to_timespec(t);
@@ -291,7 +292,8 @@ void encode(const std::chrono::time_point<Clock, Duration>& t,
   encode(ns, bl);
 }
 
-template<typename Clock, typename Duration>
+template<typename Clock, typename Duration,
+         typename std::enable_if_t<converts_to_timespec_v<Clock>>* = nullptr>
 void decode(std::chrono::time_point<Clock, Duration>& t,
 	    bufferlist::iterator& p) {
   uint32_t s;
