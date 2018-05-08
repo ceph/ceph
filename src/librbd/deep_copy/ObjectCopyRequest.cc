@@ -338,6 +338,10 @@ void ObjectCopyRequest<I>::send_write_object() {
                        << copy_op.length << dendl;
       op.zero(copy_op.dst_offset, copy_op.length);
       break;
+    case COPY_OP_TYPE_REMOVE_TRUNC:
+      ldout(m_cct, 20) << "create op" << dendl;
+      op.create(false);
+      // fall through
     case COPY_OP_TYPE_TRUNC:
       ldout(m_cct, 20) << "trunc op: " << copy_op.dst_offset << dendl;
       op.truncate(copy_op.dst_offset);
@@ -542,8 +546,9 @@ void ObjectCopyRequest<I>::compute_read_ops() {
   m_zero_interval = {};
 
   librados::snap_t src_copy_point_snap_id = m_snap_map.rbegin()->first;
-  uint64_t prev_end_size = 0;
-  bool prev_exists = false;
+  bool prev_exists = m_src_parent_image_ctx != nullptr;
+  uint64_t prev_end_size = prev_exists ?
+      m_src_image_ctx->layout.object_size : 0;
   librados::snap_t start_src_snap_id = 0;
 
   for (auto &pair : m_snap_map) {
@@ -569,6 +574,13 @@ void ObjectCopyRequest<I>::compute_read_ops() {
 
     if (!exists) {
       end_size = 0;
+      if (end_src_snap_id == m_snap_map.begin()->first &&
+          m_src_parent_image_ctx != nullptr && m_snap_set.clones.empty()) {
+        ldout(m_cct, 20) << "no clones for existing object" << dendl;
+        exists = true;
+        diff.insert(0, m_src_image_ctx->layout.object_size);
+        clone_end_snap_id = end_src_snap_id;
+      }
     }
 
     ldout(m_cct, 20) << "start_src_snap_id=" << start_src_snap_id << ", "
@@ -655,6 +667,11 @@ void ObjectCopyRequest<I>::compute_read_ops() {
 
     prev_end_size = end_size;
     prev_exists = exists;
+    if (prev_exists && prev_end_size == 0 &&
+        m_src_parent_image_ctx != nullptr) {
+      // hide parent
+      prev_end_size = m_src_image_ctx->layout.object_size;
+    }
     start_src_snap_id = end_src_snap_id;
   }
 
@@ -799,6 +816,39 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
   bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
   uint64_t prev_end_size = 0;
+  bool hide_parent = false;
+  if (m_src_parent_image_ctx != nullptr) {
+    RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+    RWLock::RLocker parent_locker(m_dst_image_ctx->parent_lock);
+    auto dst_snap_seq = m_snap_map.begin()->second.front();
+    uint64_t parent_overlap = 0;
+    int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &parent_overlap);
+    if (r < 0) {
+      ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
+                      << dst_snap_seq << ": " << cpp_strerror(r) << dendl;
+    }
+    if (parent_overlap == 0) {
+      ldout(m_cct, 20) << "no parent overlap" << dendl;
+    } else {
+      std::vector<std::pair<uint64_t, uint64_t>> image_extents;
+      Striper::extent_to_file(m_cct, &m_dst_image_ctx->layout,
+                              m_dst_object_number, 0,
+                              m_dst_image_ctx->layout.object_size,
+                              image_extents);
+      uint64_t overlap = m_dst_image_ctx->prune_parent_extents(image_extents,
+                                                               parent_overlap);
+      if (overlap == 0) {
+        ldout(m_cct, 20) << "no parent overlap" << dendl;
+      } else {
+        for (auto e : image_extents) {
+          prev_end_size += e.second;
+        }
+        assert(prev_end_size <= m_dst_image_ctx->layout.object_size);
+        hide_parent = true;
+      }
+    }
+  }
+
   for (auto &it : m_dst_zero_interval) {
     auto src_snap_seq = it.first;
     auto &zero_interval = it.second;
@@ -818,7 +868,11 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     for (auto z = zero_interval.begin(); z != zero_interval.end(); z++) {
       if (z.get_start() + z.get_len() >= end_size) {
         // zero interval at the object end
-        if (z.get_start() < prev_end_size) {
+        if (z.get_start() == 0 && hide_parent) {
+          m_write_ops[src_snap_seq]
+            .emplace_back(COPY_OP_TYPE_REMOVE_TRUNC, 0, 0, 0);
+          ldout(m_cct, 20) << "COPY_OP_TYPE_REMOVE_TRUNC" << dendl;
+        } else if (z.get_start() < prev_end_size) {
           if (z.get_start() == 0) {
             m_write_ops[src_snap_seq]
               .emplace_back(COPY_OP_TYPE_REMOVE, 0, 0, 0);
@@ -840,7 +894,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     }
     ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", end_size="
                      << end_size << dendl;
-    if (end_size > 0) {
+    if (end_size > 0 || hide_parent) {
       m_dst_object_state[src_snap_seq] = OBJECT_EXISTS;
       if (fast_diff && end_size == prev_end_size &&
           m_write_ops[src_snap_seq].empty()) {
