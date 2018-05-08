@@ -1418,6 +1418,8 @@ public:
         status.part_size = std::max(conf.s3.multipart_min_part_size, min_part_size);
         status.num_parts = (obj_size + status.part_size - 1) / status.part_size;
         status.cur_part = 1;
+      } else {
+        status.cur_part++;
       }
 
       for (; (uint32_t)status.cur_part <= status.num_parts; ++status.cur_part) {
