@@ -920,9 +920,7 @@ if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
   add_subdirectory(dmclock/support/test)
 endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
 
-if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
-  add_subdirectory(crypto/isa-l)
-endif()
+add_subdirectory(crypto)
 
 if(WITH_TESTS)
   configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
