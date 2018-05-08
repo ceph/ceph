@@ -1,5 +1,4 @@
-import { Component, OnInit } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { Component, Input, OnInit } from '@angular/core';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -10,13 +9,12 @@ import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
   styleUrls: ['./clients.component.scss']
 })
 export class ClientsComponent implements OnInit {
+  @Input() id: number;
 
-  id: number;
-  name: string;
   clients: any;
   viewCacheStatus: ViewCacheStatus;
 
-  constructor(private route: ActivatedRoute, private cephfsService: CephfsService) {}
+  constructor(private cephfsService: CephfsService) {}
 
   ngOnInit() {
     this.clients = {
@@ -31,15 +29,8 @@ export class ClientsComponent implements OnInit {
       data: []
     };
 
-    this.route.params.subscribe((params: { id: number }) => {
-      this.id = params.id;
-      this.clients.data = [];
-      this.viewCacheStatus = ViewCacheStatus.ValueNone;
-
-      this.cephfsService.getCephfs(this.id).subscribe((data: any) => {
-        this.name = data.cephfs.name;
-      });
-    });
+    this.clients.data = [];
+    this.viewCacheStatus = ViewCacheStatus.ValueNone;
   }
 
   refresh() {

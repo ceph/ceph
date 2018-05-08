@@ -1,67 +1,59 @@
-<nav aria-label="breadcrumb">
-  <ol class="breadcrumb">
-    <li i18n
-        class="breadcrumb-item">Filesystem</li>
-    <li class="breadcrumb-item active"
-        aria-current="page">{{ name }}</li>
-  </ol>
-</nav>
+<tabset *ngIf="selectedItem">
+  <tab i18n-heading
+       heading="Details">
+    <div class="row">
+      <div class="col-sm-6">
+        <fieldset>
+          <legend i18n>Ranks</legend>
 
-<div class="row">
-  <div class="col-md-12">
-    <i class="fa fa-desktop"></i>
-    <a i18n
-       [routerLink]="['/cephfs/' + id + '/clients']">
-      <span style="font-weight:bold;">{{ clientCount }}</span>
-      Clients
-    </a>
-  </div>
-</div>
+          <cd-table [data]="ranks.data"
+                    [columns]="ranks.columns"
+                    (fetchData)="refresh()"
+                    [toolHeader]="false">
+          </cd-table>
+        </fieldset>
 
-<div class="row">
-  <div class="col-sm-6">
-    <fieldset>
-      <legend i18n>Ranks</legend>
+        <cd-table-key-value [data]="standbys">
+        </cd-table-key-value>
+      </div>
 
-      <cd-table [data]="ranks.data"
-                [columns]="ranks.columns"
-                (fetchData)="refresh()"
-                [toolHeader]="false">
-      </cd-table>
-    </fieldset>
+      <div class="col-sm-6">
+        <fieldset>
+          <legend i18n>Pools</legend>
 
-    <cd-table-key-value [data]="standbys">
-    </cd-table-key-value>
-  </div>
+          <cd-table [data]="pools.data"
+                    [columns]="pools.columns"
+                    [toolHeader]="false">
+          </cd-table>
 
-  <div class="col-sm-6">
-    <fieldset>
-      <legend i18n>Pools</legend>
+        </fieldset>
+      </div>
+    </div>
 
-      <cd-table [data]="pools.data"
-                [columns]="pools.columns"
-                [toolHeader]="false">
-      </cd-table>
+    <div class="row"
+         *ngFor="let mdsCounter of objectValues(mdsCounters); trackBy: trackByFn">
+      <div class="cold-md-12">
+        <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
+      </div>
+    </div>
 
-    </fieldset>
-  </div>
-</div>
+    <!-- templates -->
+    <ng-template #poolUsageTpl
+                 let-row="row">
+      <cd-usage-bar [totalBytes]="row.size"
+                    [usedBytes]="row.used"></cd-usage-bar>
+    </ng-template>
 
-<div class="row"
-     *ngFor="let mdsCounter of objectValues(mdsCounters); trackBy: trackByFn">
-  <div class="cold-md-12">
-    <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
-  </div>
-</div>
-
-<!-- templates -->
-<ng-template #poolUsageTpl
-             let-row="row">
-    <cd-usage-bar [totalBytes]="row.size" [usedBytes]="row.used"></cd-usage-bar>
-</ng-template>
-
-<ng-template #activityTmpl
-             let-row="row"
-             let-value="value">
-  {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
-</ng-template>
+    <ng-template #activityTmpl
+                 let-row="row"
+                 let-value="value">
+      {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
+    </ng-template>
+  </tab>
+  <tab i18n-heading
+       heading="Clients: {{ clientCount }}"
+       (select)="clientsSelect=true"
+       (deselect)="clientsSelect=false">
+    <cd-clients [id]="id" *ngIf="clientsSelect"></cd-clients>
+  </tab>
+</tabset>
