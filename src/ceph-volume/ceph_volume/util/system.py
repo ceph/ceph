@@ -65,6 +65,19 @@ def get_ceph_user_ids():
     return user[2], user[3]
 
 
+def get_file_contents(path, default=''):
+    contents = default
+    if not os.path.exists(path):
+        return contents
+    try:
+        with open(path, 'r') as open_file:
+            contents = open_file.read().strip()
+    except Exception:
+        logger.exception('Failed to read contents from: %s' % path)
+
+    return contents
+
+
 def mkdir_p(path, chown=True):
     """
     A `mkdir -p` that defaults to chown the path to the ceph user
