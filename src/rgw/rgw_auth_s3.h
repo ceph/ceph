@@ -135,7 +135,6 @@ public:
     }
 
     /* The external auth. */
-    Control local_engine_mode;
     if (! external_engines.is_empty()) {
       add_engine(Control::SUFFICIENT, external_engines);
     }
