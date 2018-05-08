@@ -5,7 +5,6 @@
 #define CEPH_RGW_LOG_H
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
-#include "include/utime.h"
 #include "common/Formatter.h"
 #include "common/OutputDataSocket.h"
 
@@ -14,11 +13,12 @@ class RGWRados;
 struct rgw_log_entry {
 
   using headers_map = boost::container::flat_map<std::string, std::string>;
+  using Clock = req_state::Clock;
 
   rgw_user object_owner;
   rgw_user bucket_owner;
   string bucket;
-  utime_t time;
+  Clock::time_point time;
   string remote_addr;
   string user;
   rgw_obj_key obj;
@@ -29,7 +29,7 @@ struct rgw_log_entry {
   uint64_t bytes_sent;
   uint64_t bytes_received;
   uint64_t obj_size;
-  utime_t total_time;
+  Clock::duration total_time;
   string user_agent;
   string referrer;
   string bucket_id;

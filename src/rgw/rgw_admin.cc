@@ -5343,7 +5343,8 @@ int main(int argc, const char **argv)
         formatter->open_array_section("log_entries");
 
       do {
-	uint64_t total_time =  entry.total_time.to_msec();
+        using namespace std::chrono;
+        uint64_t total_time = duration_cast<milliseconds>(entry.total_time).count();
 
         agg_time += total_time;
         agg_bytes_sent += entry.bytes_sent;
