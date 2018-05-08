@@ -7117,7 +7117,22 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   st->st_dev = in->snapid;
   st->st_mode = in->mode;
   st->st_rdev = in->rdev;
-  st->st_nlink = in->nlink;
+  if (in->is_dir()) {
+    switch (in->nlink) {
+      case 0:
+        st->st_nlink = 0; /* dir is unlinked */
+        break;
+      case 1:
+        st->st_nlink = 1 /* parent dentry */
+                       + 1 /* <dir>/. */
+                       + in->dirstat.nsubdirs; /* include <dir>/. self-reference */
+        break;
+      default:
+        ceph_abort();
+    }
+  } else {
+    st->st_nlink = in->nlink;
+  }
   st->st_uid = in->uid;
   st->st_gid = in->gid;
   if (in->ctime > in->mtime) {
@@ -7184,7 +7199,22 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
   }
 
   if (mask & CEPH_CAP_LINK_SHARED) {
-    stx->stx_nlink = in->nlink;
+    if (in->is_dir()) {
+      switch (in->nlink) {
+        case 0:
+          stx->stx_nlink = 0; /* dir is unlinked */
+          break;
+        case 1:
+          stx->stx_nlink = 1 /* parent dentry */
+                           + 1 /* <dir>/. */
+                           + in->dirstat.nsubdirs; /* include <dir>/. self-reference */
+          break;
+        default:
+          ceph_abort();
+      }
+    } else {
+      stx->stx_nlink = in->nlink;
+    }
     stx->stx_mask |= CEPH_STATX_NLINK;
   }
 
