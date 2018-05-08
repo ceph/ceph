@@ -1719,7 +1719,6 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
 
 void RGWGetObj::execute()
 {
-  utime_t start_time = s->time;
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now();
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
@@ -1876,8 +1875,7 @@ void RGWGetObj::execute()
   if (op_ret >= 0)
     op_ret = filter->flush();
 
-  perfcounter->tinc(l_rgw_get_lat,
-		    (ceph_clock_now() - start_time));
+  perfcounter->tinc(l_rgw_get_lat, s->time_elapsed());
   if (op_ret < 0) {
     goto done_err;
   }
@@ -3812,8 +3810,7 @@ void RGWPutObj::execute()
 
 done:
   dispose_processor(processor);
-  perfcounter->tinc(l_rgw_put_lat,
-		    (ceph_clock_now() - s->time));
+  perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
 }
 
 int RGWPostObj::verify_permission()
