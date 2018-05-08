@@ -4128,7 +4128,7 @@ void MDCache::rejoin_send_rejoins()
   rejoins_pending = false;
 
   // nothing?
-  if (mds->is_rejoin() && rejoins.empty()) {
+  if (mds->is_rejoin() && rejoin_gather.empty()) {
     dout(10) << "nothing to rejoin" << dendl;
     rejoin_gather_finish();
   }
@@ -5363,11 +5363,10 @@ bool MDCache::process_imported_caps()
   } else {
     trim_non_auth();
 
+    assert(rejoin_gather.count(mds->get_nodeid()));
     rejoin_gather.erase(mds->get_nodeid());
+    assert(!rejoin_ack_gather.count(mds->get_nodeid()));
     maybe_send_pending_rejoins();
-
-    if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid()))
-      rejoin_gather_finish();
   }
   return false;
 }
