@@ -97,12 +97,12 @@ class PoolTest(DashboardTestCase):
 
     def _pool_create(self, data):
         try:
-            self._post('/api/pool/', data)
+            self._task_post('/api/pool/', data)
             self.assertStatus(201)
 
             self._check_pool_properties(data)
 
-            self._delete("/api/pool/" + data['pool'])
+            self._task_delete("/api/pool/" + data['pool'])
             self.assertStatus(204)
         except Exception:
             log.exception("test_pool_create: data=%s", data)
@@ -190,16 +190,16 @@ class PoolTest(DashboardTestCase):
             }
 
         ]
-        self._post('/api/pool/', pool[0])
+        self._task_post('/api/pool/', pool[0])
         self.assertStatus(201)
 
         self._check_pool_properties(pool[0])
 
         for data in pool[1:]:
-            self._put('/api/pool/' + pool[0]['pool'], data)
+            self._task_put('/api/pool/' + pool[0]['pool'], data)
             self._check_pool_properties(data, pool_name=pool[0]['pool'])
 
-        self._delete("/api/pool/" + pool[0]['pool'])
+        self._task_delete("/api/pool/" + pool[0]['pool'])
         self.assertStatus(204)
 
     def test_pool_create_fail(self):
