@@ -13242,7 +13242,7 @@ int Client::ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv)
   default:
     try {
       ret = inode->set_deleg(fh, cmd, cb, priv);
-    } catch (std::bad_alloc) {
+    } catch (std::bad_alloc&) {
       ret = -ENOMEM;
     }
     break;
