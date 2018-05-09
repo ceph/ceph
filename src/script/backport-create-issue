@@ -88,7 +88,7 @@ def connect_to_redmine(a):
         return Redmine(redmine_endpoint, key=a.key)
     elif a.user and a.password:
         logging.info("Redmine username and password were provided; using them")
-        return Redmine(redmine_endpoint, user=a.key, password=a.password)
+        return Redmine(redmine_endpoint, username=a.user, password=a.password)
     else:
         usage()
 
