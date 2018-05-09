@@ -90,6 +90,11 @@ bool Policy::add_image(const std::string &global_image_id) {
   auto image_state_result = m_image_states.emplace(global_image_id,
                                                    ImageState{});
   auto& image_state = image_state_result.first->second;
+  if (image_state.state == StateTransition::STATE_INITIALIZING) {
+    // avoid duplicate acquire notifications upon leader startup
+    return false;
+  }
+
   return set_state(&image_state, StateTransition::STATE_ASSOCIATING, false);
 }
 
