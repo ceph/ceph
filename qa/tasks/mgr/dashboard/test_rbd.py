@@ -260,9 +260,12 @@ class RbdTest(DashboardTestCase):
         res = self.create_image('rbd', 'test_rbd_twice', 10240)
 
         res = self.create_image('rbd', 'test_rbd_twice', 10240)
-        self.assertStatus(409)
-        self.assertEqual(res, {"errno": 17, "status": 409, "component": "rbd",
-                               "detail": "[errno 17] error creating image"})
+        self.assertStatus(400)
+        self.assertEqual(res, {"code": '17', 'status': 400, "component": "rbd",
+                               "detail": "[errno 17] error creating image",
+                               'task': {'name': 'rbd/create',
+                                        'metadata': {'pool_name': 'rbd',
+                                                     'image_name': 'test_rbd_twice'}}})
         self.remove_image('rbd', 'test_rbd_twice')
         self.assertStatus(204)
 
@@ -316,9 +319,12 @@ class RbdTest(DashboardTestCase):
 
     def test_delete_non_existent_image(self):
         res = self.remove_image('rbd', 'i_dont_exist')
-        self.assertStatus(409)
-        self.assertEqual(res, {"errno": 2, "status": 409, "component": "rbd",
-                               "detail": "[errno 2] error removing image"})
+        self.assertStatus(400)
+        self.assertEqual(res, {u'code': u'2', "status": 400, "component": "rbd",
+                               "detail": "[errno 2] error removing image",
+                               'task': {'name': 'rbd/delete',
+                                        'metadata': {'pool_name': 'rbd',
+                                                     'image_name': 'i_dont_exist'}}})
 
     def test_image_delete(self):
         self.create_image('rbd', 'delete_me', 2**30)
@@ -472,9 +478,9 @@ class RbdTest(DashboardTestCase):
                                      'snap_name': 'snap1'})
 
         res = self.remove_image('rbd', 'cimg')
-        self.assertStatus(409)
-        self.assertIn('errno', res)
-        self.assertEqual(res['errno'], 39)
+        self.assertStatus(400)
+        self.assertIn('code', res)
+        self.assertEqual(res['code'], '39')
 
         self.remove_image('rbd', 'cimg-clone')
         self.assertStatus(204)
@@ -525,7 +531,7 @@ class RbdTest(DashboardTestCase):
         self.assertIsNotNone(img['parent'])
 
         self.flatten_image('rbd_iscsi', 'img1_snapf_clone')
-        self.assertStatus(200)
+        self.assertStatus([200, 201])
 
         img = self._get('/api/block/image/rbd_iscsi/img1_snapf_clone')
         self.assertStatus(200)

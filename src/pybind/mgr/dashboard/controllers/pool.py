@@ -6,6 +6,7 @@ import cherrypy
 from . import ApiController, RESTController, AuthRequired
 from .. import mgr
 from ..services.ceph_service import CephService
+from ..services.exception import handle_send_command_error
 
 
 @ApiController('pool')
@@ -55,12 +56,17 @@ class Pool(RESTController):
 
     def get(self, pool_name, attrs=None, stats=False):
         pools = self.list(attrs, stats)
-        return [pool for pool in pools if pool['pool_name'] == pool_name][0]
+        pool = [pool for pool in pools if pool['pool_name'] == pool_name]
+        if not pool:
+            return cherrypy.NotFound('No such pool')
+        return pool[0]
 
+    @handle_send_command_error('pool')
     def delete(self, pool_name):
         return CephService.send_command('mon', 'osd pool delete', pool=pool_name, pool2=pool_name,
                                         sure='--yes-i-really-really-mean-it')
 
+    @handle_send_command_error('pool')
     def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
                application_metadata=None, rule_name=None, **kwargs):
         ecp = erasure_code_profile if erasure_code_profile else None
