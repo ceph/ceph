@@ -1148,7 +1148,3 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
 endif()
 
 add_subdirectory(script)
-
-if(WITH_EMBEDDED)
-  add_subdirectory(libcephd)
-endif()

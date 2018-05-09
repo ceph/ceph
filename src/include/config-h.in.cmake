@@ -142,9 +142,6 @@
 /* define if bluestore enabled */
 #cmakedefine WITH_BLUESTORE
 
-/* define if embedded enabled */
-#cmakedefine WITH_EMBEDDED
-
 /* define if cephfs enabled */
 #cmakedefine WITH_CEPHFS
 

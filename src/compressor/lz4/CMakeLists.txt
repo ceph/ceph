@@ -11,8 +11,3 @@ set_target_properties(ceph_lz4 PROPERTIES
   SOVERSION 2
   INSTALL_RPATH "")
 install(TARGETS ceph_lz4 DESTINATION ${compressor_plugin_dir})
-
-if(WITH_EMBEDDED)
-  add_library(cephd_compressor_lz4 STATIC ${lz4_sources})
-  set_target_properties(cephd_compressor_lz4 PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
-endif()
