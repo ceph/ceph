@@ -1221,6 +1221,7 @@ public:
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
+  int ll_sync_inode(Inode *in, bool syncdataonly);
   int ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length);
   int ll_release(Fh *fh);
   int ll_getlk(Fh *fh, struct flock *fl, uint64_t owner);
