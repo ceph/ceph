@@ -6885,9 +6885,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       f->dump_int("blocksize", bsize);
       f->dump_unsigned("bytes_per_sec", rate);
       f->close_section();
-      f->flush(ss);
+      f->flush(ds);
     } else {
-      ss << "bench: wrote " << byte_u_t(count)
+      ds << "bench: wrote " << byte_u_t(count)
 	 << " in blocks of " << byte_u_t(bsize) << " in "
 	 << (end-start) << " sec at " << byte_u_t(rate) << "/sec";
     }
