@@ -58,10 +58,12 @@ int KrbServiceHandler::handle_request(bufferlist::iterator& indata,
 
   ldout(cct, SUBSYSTEM_ID) 
       << "KrbServiceHandler::handle_request() " << dendl; 
+
   KrbRequest krb_request; 
   KrbTokenBlob krb_token; 
-  ::decode(krb_request, indata); 
-  ::decode(krb_token, indata);
+  using ceph::decode;
+  decode(krb_request, indata); 
+  decode(krb_token, indata);
 
   gss_buffer_in.length = krb_token.m_token_blob.length();
   gss_buffer_in.value  = krb_token.m_token_blob.c_str();
@@ -145,13 +147,14 @@ int KrbServiceHandler::handle_request(bufferlist::iterator& indata,
     krb_response.m_response_type = 
         static_cast<int>(gss_client_auth::
                          GSSAuthenticationRequest::GSS_TOKEN);
-    ::encode(krb_response, buff_list);
+    using ceph::encode;
+    encode(krb_response, buff_list);
 
     krb_token.m_token_blob.append(buffer::create_static(
                                     m_gss_buffer_out.length, 
                                     reinterpret_cast<char*>
                                       (m_gss_buffer_out.value)));
-    ::encode(krb_token, buff_list);
+    encode(krb_token, buff_list);
     ldout(cct, SUBSYSTEM_ID) 
         << "KrbServiceHandler::handle_request() : Token Blob: " << "\n"; 
     krb_token.m_token_blob.hexdump(*_dout);
@@ -228,10 +231,10 @@ int KrbServiceHandler::start_session(EntityName& name,
     krb_response.m_response_type = 
         static_cast<int>(gss_client_auth::
                             GSSAuthenticationRequest::GSS_MUTUAL);
-    ::encode(krb_response, buff_list);
+    using ceph::encode;
+    encode(krb_response, buff_list);
     return (CEPH_AUTH_KRB5);
   }
-  //return result;
 }
 
 KrbServiceHandler::~KrbServiceHandler()

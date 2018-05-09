@@ -82,7 +82,8 @@ int KrbClientHandler::build_request(bufferlist& buff_list) const
   krb_request.m_request_type = 
       static_cast<int>(gss_client_auth::
                           GSSAuthenticationRequest::GSS_TOKEN);
-  ::encode(krb_request, buff_list);
+  using ceph::encode;
+  encode(krb_request, buff_list);
 
   if (m_gss_buffer_out.length != 0) {
     krb_token.m_token_blob.append(buffer::create_static(
@@ -90,7 +91,7 @@ int KrbClientHandler::build_request(bufferlist& buff_list) const
                                     reinterpret_cast<char*>
                                       (m_gss_buffer_out.value)));
 
-    ::encode(krb_token, buff_list);
+    encode(krb_token, buff_list);
     ldout(cct, SUBSYSTEM_ID) 
         << "KrbClientHandler::build_request() : Token Blob: " << "\n"; 
     krb_token.m_token_blob.hexdump(*_dout);
@@ -126,7 +127,8 @@ int KrbClientHandler::handle_response(int ret,
   gss_mechs_wanted.count = 1; 
 
   KrbResponse krb_response; 
-  ::decode(krb_response, buff_list);
+  using ceph::decode;
+  decode(krb_response, buff_list);
   if (m_gss_credentials == GSS_C_NO_CREDENTIAL) {
     gss_buffer_desc krb_client_name_buff;
     gss_OID krb_client_type = GSS_C_NT_USER_NAME;
@@ -205,7 +207,8 @@ int KrbClientHandler::handle_response(int ret,
   }
   else {
     KrbTokenBlob krb_token; 
-    ::decode(krb_token, buff_list);
+    using ceph::decode;
+    decode(krb_token, buff_list);
     ldout(cct, SUBSYSTEM_ID) 
         << "KrbClientHandler::handle_response() : Token Blob: " << "\n"; 
     krb_token.m_token_blob.hexdump(*_dout);

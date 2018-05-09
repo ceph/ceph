@@ -59,6 +59,7 @@ class KrbAuthorizer : public AuthAuthorizer
     bool build_authorizer(const EntityName& entity_name, 
                           const uint64_t guid) 
     {
+      using ceph::encode;
       uint8_t value(1);
       encode(value, bl, 0);
       encode(entity_name, bl, 0); 
@@ -73,14 +74,16 @@ class KrbAuthorizer : public AuthAuthorizer
 class KrbRequest
 {
   public:
-    void decode(bufferlist::iterator& buff_list) const 
+    void decode(bufferlist::iterator& buff_list) 
     {
-      /* decode(m_request_type, buff_list); */
+      using ceph::decode;
+      decode(m_request_type, buff_list);
     }
 
     void encode(bufferlist& buff_list) const 
     {
-      /*encode(m_request_type, buff_list);*/
+      using ceph::encode;
+      encode(m_request_type, buff_list);
     }
 
     uint16_t m_request_type; 
@@ -90,14 +93,16 @@ WRITE_CLASS_ENCODER(KrbRequest);
 class KrbResponse
 {
   public: 
-    void decode(bufferlist::iterator& buff_list) const 
+    void decode(bufferlist::iterator& buff_list) 
     {
-      /* decode(m_response_type, buff_list); */
+      using ceph::decode;
+      decode(m_response_type, buff_list); 
     }    
 
-    void encode(bufferlist& buff_list) const 
+    void encode(bufferlist& buff_list) const
     {
-      /* encode(m_response_type, buff_list); */
+      using ceph::encode;
+      encode(m_response_type, buff_list); 
     }
 
     uint16_t m_response_type;
@@ -107,22 +112,22 @@ WRITE_CLASS_ENCODER(KrbResponse);
 class KrbTokenBlob 
 {
   public:
-    void decode(bufferlist::iterator& buff_list) const
+    void decode(bufferlist::iterator& buff_list) 
     {
       uint8_t value(0); 
-      /*
+     
+      using ceph::decode; 
       decode(value, buff_list);
       decode(m_token_blob, buff_list);
-      */
     }
         
     void encode(bufferlist& buff_list) const
     {
       uint8_t value(1); 
-      /*
+      
+      using ceph::encode;
       encode(value, buff_list, 0);
       encode(m_token_blob, buff_list, 0);
-      */
     }
 
     bufferlist m_token_blob;

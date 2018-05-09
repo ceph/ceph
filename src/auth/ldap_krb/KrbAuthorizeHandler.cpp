@@ -44,6 +44,8 @@ bool KrbAuthorizeHandler::verify_authorizer(CephContext* ceph_ctx,
 
   try {
     uint8_t value(1);
+
+    using ceph::decode;
     decode(value, itr);
     decode(entity_name, itr);
     decode(global_id, itr);
