@@ -2398,8 +2398,15 @@ docompareandwrite(unsigned offset, unsigned size)
 
 void clone_filename(char *buf, size_t len, int clones)
 {
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 	snprintf(buf, len, "%s/fsx-%s-parent%d",
 		 dirpath, iname, clones);
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic pop
+#endif
 }
 
 void clone_imagename(char *buf, size_t len, int clones)
