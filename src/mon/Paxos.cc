@@ -1230,6 +1230,8 @@ void Paxos::trim()
 
   if (first_committed >= end)
     return;
+  if (get_version() > g_conf->paxos_max)
+    end = std::max(end, get_version() - g_conf->paxos_max);
 
   dout(10) << "trim to " << end << " (was " << first_committed << ")" << dendl;
 
