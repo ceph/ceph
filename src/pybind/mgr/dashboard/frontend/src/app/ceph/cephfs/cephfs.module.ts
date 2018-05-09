@@ -8,8 +8,8 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
 import { CephfsChartComponent } from './cephfs-chart/cephfs-chart.component';
+import { CephfsDetailComponent } from './cephfs-detail/cephfs-detail.component';
 import { CephfsListComponent } from './cephfs-list/cephfs-list.component';
-import { CephfsComponent } from './cephfs/cephfs.component';
 import { ClientsComponent } from './clients/clients.component';
 
 @NgModule({
@@ -21,6 +21,6 @@ import { ClientsComponent } from './clients/clients.component';
     ProgressbarModule.forRoot(),
     TabsModule.forRoot()
   ],
-  declarations: [CephfsComponent, ClientsComponent, CephfsChartComponent, CephfsListComponent]
+  declarations: [CephfsDetailComponent, ClientsComponent, CephfsChartComponent, CephfsListComponent]
 })
 export class CephfsModule {}
