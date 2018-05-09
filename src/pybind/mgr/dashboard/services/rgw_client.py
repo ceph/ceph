@@ -6,8 +6,15 @@ from ..awsauth import S3Auth
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
 from ..tools import build_url, dict_contains_path
-from ..exceptions import NoCredentialsException
 from .. import mgr, logger
+
+
+class NoCredentialsException(RequestException):
+    def __init__(self):
+        super(NoCredentialsException, self).__init__(
+            'No RGW credentials found, '
+            'please consult the documentation on how to enable RGW for '
+            'the dashboard.')
 
 
 def _determine_rgw_addr():
@@ -83,18 +90,18 @@ class RgwClient(RestClient):
 
     @staticmethod
     def _load_settings():
-        if Settings.RGW_API_SCHEME and Settings.RGW_API_ACCESS_KEY and \
-                Settings.RGW_API_SECRET_KEY:
-            if Options.has_default_value('RGW_API_HOST') and \
-                    Options.has_default_value('RGW_API_PORT'):
-                host, port = _determine_rgw_addr()
-            else:
-                host, port = Settings.RGW_API_HOST, Settings.RGW_API_PORT
-        else:
+        # The API access key and secret key are mandatory for a minimal configuration.
+        if not (Settings.RGW_API_ACCESS_KEY and Settings.RGW_API_SECRET_KEY):
             logger.warning('No credentials found, please consult the '
                            'documentation about how to enable RGW for the '
                            'dashboard.')
             raise NoCredentialsException()
+
+        if Options.has_default_value('RGW_API_HOST') and \
+                Options.has_default_value('RGW_API_PORT'):
+            host, port = _determine_rgw_addr()
+        else:
+            host, port = Settings.RGW_API_HOST, Settings.RGW_API_PORT
 
         RgwClient._host = host
         RgwClient._port = port
@@ -103,7 +110,7 @@ class RgwClient(RestClient):
         RgwClient._SYSTEM_USERID = Settings.RGW_API_USER_ID
 
         logger.info("Creating new connection for user: %s",
-                    Settings.RGW_API_USER_ID)
+                    RgwClient._SYSTEM_USERID)
         RgwClient._user_instances[RgwClient._SYSTEM_USERID] = \
             RgwClient(Settings.RGW_API_USER_ID, Settings.RGW_API_ACCESS_KEY,
                       Settings.RGW_API_SECRET_KEY)
@@ -165,10 +172,14 @@ class RgwClient(RestClient):
 
         logger.info("Creating new connection")
 
-    @RestClient.api_get('/', resp_structure='[0] > ID')
+    @RestClient.api_get('/', resp_structure='[0] > (ID & DisplayName)')
     def is_service_online(self, request=None):
-        response = request({'format': 'json'})
-        return response[0]['ID'] == 'online'
+        """
+        Consider the service as online if the response contains the
+        specified keys. Nothing more is checked here.
+        """
+        request({'format': 'json'})
+        return True
 
     @RestClient.api_get('/{admin_path}/metadata/user', resp_structure='[+]')
     def _is_system_user(self, admin_path, request=None):
