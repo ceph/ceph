@@ -188,11 +188,12 @@ int librados::RadosClient::pool_get_auid(uint64_t pool_id,
   return r;
 }
 
-int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
+int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s, bool wait_latest_map)
 {
   int r = wait_for_osdmap();
   if (r < 0)
     return r;
+  retry:
   objecter->with_osdmap([&](const OSDMap& o) {
       if (!o.have_pg_pool(pool_id)) {
 	r = -ENOENT;
@@ -201,6 +202,14 @@ int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
 	*s = o.get_pool_name(pool_id);
       }
     });
+  if (r == -ENOENT && wait_latest_map) {
+    r = wait_for_latest_osdmap();
+    if (r < 0)
+      return r;
+    wait_latest_map = false;
+    goto retry;
+  }
+
   return r;
 }
 
@@ -491,6 +500,10 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 
 int librados::RadosClient::create_ioctx(int64_t pool_id, IoCtxImpl **io)
 {
+  std::string pool_name;
+  int r = pool_get_name(pool_id, &pool_name, true);
+  if (r < 0)
+    return r;
   *io = new librados::IoCtxImpl(this, objecter, pool_id, CEPH_NOSNAP);
   return 0;
 }
