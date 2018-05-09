@@ -8,8 +8,6 @@ import { Observable } from 'rxjs/Observable';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { CephfsChartComponent } from '../cephfs-chart/cephfs-chart.component';
-import { ClientsComponent } from '../clients/clients.component';
 import { CephfsDetailComponent } from './cephfs-detail.component';
 
 @Component({ selector: 'cd-cephfs-chart', template: '' })
@@ -17,8 +15,8 @@ class CephfsChartStubComponent {
   @Input() mdsCounter: any;
 }
 
-@Component({ selector: 'cd-clients', template: '' })
-class ClientsStubComponent {
+@Component({ selector: 'cd-cephfs-clients', template: '' })
+class CephfsClientsStubComponent {
   @Input() mdsCounter: any;
 }
 
@@ -49,7 +47,7 @@ describe('CephfsDetailComponent', () => {
         ProgressbarModule.forRoot(),
         TabsModule.forRoot()
       ],
-      declarations: [CephfsDetailComponent, CephfsChartStubComponent, ClientsStubComponent],
+      declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent],
       providers: [{ provide: CephfsService, useValue: fakeFilesystemService }]
     }).compileComponents();
   }));
