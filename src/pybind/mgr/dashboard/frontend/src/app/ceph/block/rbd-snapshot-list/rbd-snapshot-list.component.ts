@@ -178,10 +178,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
           (asyncFinishedTask: FinishedTask) => {
             this.notificationService.notifyTask(asyncFinishedTask);
           });
-      }).catch((resp) => {
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 
@@ -208,9 +204,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
       })
       .catch((resp) => {
         this.modalRef.content.stopLoadingSpinner();
-        finishedTask.success = false;
-        finishedTask.exception = resp.error;
-        this.notificationService.notifyTask(finishedTask);
       });
   }
 
