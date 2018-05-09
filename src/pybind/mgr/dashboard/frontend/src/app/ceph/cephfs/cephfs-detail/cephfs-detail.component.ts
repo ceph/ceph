@@ -8,11 +8,11 @@ import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 
 @Component({
-  selector: 'cd-cephfs',
-  templateUrl: './cephfs.component.html',
-  styleUrls: ['./cephfs.component.scss']
+  selector: 'cd-cephfs-detail',
+  templateUrl: './cephfs-detail.component.html',
+  styleUrls: ['./cephfs-detail.component.scss']
 })
-export class CephfsComponent implements OnChanges, OnInit {
+export class CephfsDetailComponent implements OnChanges, OnInit {
   @ViewChild('poolUsageTpl') poolUsageTpl: TemplateRef<any>;
   @ViewChild('activityTmpl') activityTmpl: TemplateRef<any>;
 

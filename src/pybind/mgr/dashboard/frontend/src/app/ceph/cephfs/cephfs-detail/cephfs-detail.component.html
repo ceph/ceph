@@ -54,6 +54,7 @@
        heading="Clients: {{ clientCount }}"
        (select)="clientsSelect=true"
        (deselect)="clientsSelect=false">
-    <cd-clients [id]="id" *ngIf="clientsSelect"></cd-clients>
+    <cd-clients [id]="id"
+                *ngIf="clientsSelect"></cd-clients>
   </tab>
 </tabset>
