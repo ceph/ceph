@@ -8,8 +8,8 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsListComponent } from './cephfs-list.component';
 
-@Component({ selector: 'cd-cephfs', template: '' })
-class CephfsStubComponent {
+@Component({ selector: 'cd-cephfs-detail', template: '' })
+class CephfsDetailStubComponent {
   @Input() selection: CdTableSelection;
 }
 
@@ -28,7 +28,7 @@ describe('CephfsListComponent', () => {
   beforeEach(async(() => {
     TestBed.configureTestingModule({
       imports: [SharedModule],
-      declarations: [CephfsListComponent, CephfsStubComponent],
+      declarations: [CephfsListComponent, CephfsDetailStubComponent],
       providers: [{ provide: CephfsService, useValue: fakeService }]
     }).compileComponents();
   }));
