@@ -397,14 +397,19 @@ admin_daemons()
     local cluster_instance=$1 ; shift
     local cluster="${cluster_instance%:*}"
     local instance="${cluster_instance##*:}"
+    local loop_instance
 
-    if [ "${instance}" != "${cluster_instance}" ]; then
-	admin_daemon "${cluster}:${instance}" $@
-    else
-        for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
+    for s in 0 1 2 4 8 8 8 8 8 8 8 8 16 16; do
+	sleep ${s}
+	if [ "${instance}" != "${cluster_instance}" ]; then
 	    admin_daemon "${cluster}:${instance}" $@ && return 0
-        done
-    fi
+	else
+	    for loop_instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
+		admin_daemon "${cluster}:${loop_instance}" $@ && return 0
+	    done
+	fi
+    done
+    return 1
 }
 
 all_admin_daemons()
@@ -512,11 +517,7 @@ flush()
        cmd="${cmd} ${pool}/${image}"
     fi
 
-    for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
-	sleep ${s}
-	admin_daemons "${cluster}" ${cmd} && return 0
-    done
-    return 1
+    admin_daemons "${cluster}" ${cmd}
 }
 
 test_image_replay_state()
