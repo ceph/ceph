@@ -2498,11 +2498,7 @@ int create_new_bucket_instance(RGWRados *store,
 }
 
 
-#ifdef BUILDING_FOR_EMBEDDED
-extern "C" int cephd_rgw_admin(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
