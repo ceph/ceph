@@ -64,6 +64,7 @@
 #include "mon/MonClient.h"
 
 #include "mds/flock.h"
+#include "mds/cephfs_features.h"
 #include "osd/OSDMap.h"
 #include "osdc/Filer.h"
 
@@ -1985,9 +1986,10 @@ void Client::update_metadata(std::string const &k, std::string const &v)
   Mutex::Locker l(client_lock);
   assert(initialized);
 
-  if (metadata.count(k)) {
+  auto it = metadata.find(k);
+  if (it != metadata.end()) {
     ldout(cct, 1) << __func__ << " warning, overriding metadata field '" << k
-      << "' from '" << metadata[k] << "' to '" << v << "'" << dendl;
+		  << "' from '" << it->second << "' to '" << v << "'" << dendl;
   }
 
   metadata[k] = v;
@@ -2018,7 +2020,8 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   }
 
   MClientSession *m = new MClientSession(CEPH_SESSION_REQUEST_OPEN);
-  m->client_meta = metadata;
+  m->metadata = metadata;
+  m->supported_features = feature_bitset_t(CEPHFS_FEATURES_CLIENT_SUPPORTED);
   session->con->send_message(m);
   return session;
 }
@@ -2056,14 +2059,27 @@ void Client::handle_client_session(MClientSession *m)
 
   switch (m->get_op()) {
   case CEPH_SESSION_OPEN:
-    renew_caps(session);
-    session->state = MetaSession::STATE_OPEN;
-    if (unmounting)
-      mount_cond.Signal();
-    else
-      connect_mds_targets(from);
-    signal_context_list(session->waiting_for_open);
-    break;
+    {
+      feature_bitset_t missing_features(CEPHFS_FEATURES_CLIENT_REQUIRED);
+      missing_features -= m->supported_features;
+      if (!missing_features.empty()) {
+	lderr(cct) << "mds." << from << " lacks required features '"
+		   << missing_features << "', closing session " << dendl;
+	rejected_by_mds[session->mds_num] = session->inst;
+	_close_mds_session(session);
+	_closed_mds_session(session);
+	break;
+      }
+
+      renew_caps(session);
+      session->state = MetaSession::STATE_OPEN;
+      if (unmounting)
+	mount_cond.Signal();
+      else
+	connect_mds_targets(from);
+      signal_context_list(session->waiting_for_open);
+      break;
+    }
 
   case CEPH_SESSION_CLOSE:
     _closed_mds_session(session);

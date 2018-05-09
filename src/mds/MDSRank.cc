@@ -2225,9 +2225,7 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
     f->dump_bool("reconnecting", server->waiting_for_reconnect(p.first.num()));
     f->dump_stream("inst") << s->info.inst;
     f->open_object_section("client_metadata");
-    for (auto& q : s->info.client_metadata) {
-      f->dump_string(q.first.c_str(), q.second);
-    }
+    s->info.client_metadata.dump(f);
     f->close_section(); // client_metadata
     f->close_section(); //session
   }
