@@ -89,11 +89,7 @@ static void handle_mds_signal(int signum)
     mds->handle_signal(signum);
 }
 
-#ifdef BUILDING_FOR_EMBEDDED
-extern "C" int cephd_mds(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   ceph_pthread_setname(pthread_self(), "ceph-mds");
 
