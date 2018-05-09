@@ -155,13 +155,16 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
     assert(m_peers.size() == 1);
     auto peer = *m_peers.begin();
     image_replayer->add_peer(peer.peer_uuid, peer.io_ctx);
+    start_image_replayer(image_replayer);
+  } else {
+    // A duplicate acquire notification implies (1) connection hiccup or
+    // (2) new leader election. For the second case, restart the replayer to
+    // detect if the image has been deleted while the leader was offline
+    auto& image_replayer = it->second;
+    image_replayer->set_finished(false);
+    image_replayer->restart();
   }
 
-  auto& image_replayer = it->second;
-  // TODO temporary until policy integrated
-  image_replayer->set_finished(false);
-
-  start_image_replayer(image_replayer);
   m_threads->work_queue->queue(on_finish, 0);
 }
 
