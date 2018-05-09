@@ -425,7 +425,7 @@
   rbd help disk-usage
   usage: rbd disk-usage [--pool <pool>] [--image <image>] [--snap <snap>] 
                         [--format <format>] [--pretty-format] 
-                        [--from-snap <from-snap>] 
+                        [--from-snap <from-snap>] [--exact] 
                         <image-or-snap-spec> 
   
   Show disk usage stats for pool, image or snapshot.
@@ -441,6 +441,7 @@
     --format arg          output format (plain, json, or xml) [default: plain]
     --pretty-format       pretty formatting (json and xml)
     --from-snap arg       snapshot starting point
+    --exact               compute exact disk usage (slow)
   
   rbd help export
   usage: rbd export [--pool <pool>] [--image <image>] [--snap <snap>] 
