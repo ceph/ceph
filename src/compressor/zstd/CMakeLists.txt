@@ -39,8 +39,3 @@ set_target_properties(ceph_zstd PROPERTIES
   SOVERSION 2
   INSTALL_RPATH "")
 install(TARGETS ceph_zstd DESTINATION ${compressor_plugin_dir})
-
-if(WITH_EMBEDDED)
-  add_library(cephd_compressor_zstd STATIC ${zstd_sources})
-  set_target_properties(cephd_compressor_zstd PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
-endif()

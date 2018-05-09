@@ -31,7 +31,6 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D CEPH_MAN_DIR=man \
 	-D WITH_LIBCEPHFS=OFF \
 	-D WITH_CEPHFS=OFF \
-	-D WITH_EMBEDDED=OFF \
 	-D WITH_MGR=YES \
 	-D WITH_SPDK=OFF \
 	2>&1 | tee cmake.log
