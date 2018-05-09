@@ -1758,9 +1758,7 @@ void ESession::dump(Formatter *f) const
   f->dump_stream("inos") << inos;
   f->dump_int("inotable version", inotablev);
   f->open_object_section("client_metadata");
-  for (auto& p : client_metadata) {
-    f->dump_string(p.first.c_str(), p.second);
-  }
+  client_metadata.dump(f);
   f->close_section();  // client_metadata
 }
 

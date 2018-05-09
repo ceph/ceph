@@ -85,6 +85,8 @@ private:
   bool reconnect_evicting;  // true if I am waiting for evictions to complete
                             // before proceeding to reconnect_gather_finish
 
+  feature_bitset_t supported_features;
+
   friend class MDSContinuation;
   friend class ServerContext;
   friend class ServerLogContext;
