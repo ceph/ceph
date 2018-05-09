@@ -323,7 +323,11 @@ class Task(object):
             if status == TaskManager.VALUE_EXECUTING:
                 cherrypy.response.status = 202
                 return {'name': self.name, 'metadata': md}
-            return value
+            return {
+                'name': task.name,
+                'metadata': task.metadata,
+                'ret_value': value,
+            }
         wrapper.__wrapped__ = func
         return wrapper
 

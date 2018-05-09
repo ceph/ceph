@@ -57,7 +57,8 @@ class TaskControllerTest(ControllerTestCase):
 
     def test_create_task(self):
         self._task_post('/test/task', {'param': 'hello'})
-        self.assertJsonBody({'my_param': 'hello'})
+        self.assertJsonBody({'name': 'task/create', 'metadata': {'param': 'hello'},
+                             'ret_value': {'my_param': 'hello'}})
 
     def test_long_set_task(self):
         TaskTest.sleep_time = 2.0
@@ -69,8 +70,10 @@ class TaskControllerTest(ControllerTestCase):
 
     def test_foo_task(self):
         self._task_post('/test/task/foo', {'param': 'hello'})
-        self.assertJsonBody({'my_param': 'hello'})
+        self.assertJsonBody({'name': 'task/foo', 'metadata': {'param': 'hello'},
+                             'ret_value': {'my_param': 'hello'}})
 
     def test_bar_task(self):
         self._task_put('/test/task/3/bar', {'param': 'hello'})
-        self.assertJsonBody({'my_param': 'hello', 'key': '3'})
+        self.assertJsonBody({'name': 'task/bar', 'metadata': {'key': '3', 'param': 'hello'},
+                             'ret_value': {'my_param': 'hello', 'key': '3'}})
