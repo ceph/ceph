@@ -4,11 +4,11 @@ import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 
 @Component({
-  selector: 'cd-clients',
-  templateUrl: './clients.component.html',
-  styleUrls: ['./clients.component.scss']
+  selector: 'cd-cephfs-clients',
+  templateUrl: './cephfs-clients.component.html',
+  styleUrls: ['./cephfs-clients.component.scss']
 })
-export class ClientsComponent implements OnInit {
+export class CephfsClientsComponent implements OnInit {
   @Input() id: number;
 
   clients: any;
