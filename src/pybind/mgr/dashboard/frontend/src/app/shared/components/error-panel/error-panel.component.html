@@ -1,9 +1,20 @@
 <alert type="danger">
-  <strong>
-    <i class="fa fa-exclamation-triangle fa-fw alert-danger"
-       aria-hidden="true"></i> {{ title }}
-  </strong>
-  <ng-content></ng-content>
+  <table>
+    <tr>
+      <td rowspan="2" class="error-panel-alert-icon">
+        <i class="fa fa-3x fa-exclamation-triangle alert-danger"
+           aria-hidden="true"></i>
+      </td>
+      <td class="error-panel-alert-title">
+        {{ title }}
+      </td>
+    </tr>
+    <tr>
+      <td class="error-panel-alert-text">
+        <ng-content></ng-content>
+      </td>
+    </tr>
+  </table>
 </alert>
 
 <div class="button-group text-right"
