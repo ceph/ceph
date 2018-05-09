@@ -295,12 +295,11 @@ void InstanceReplayer<I>::start_image_replayer(
   assert(m_lock.is_locked());
 
   std::string global_image_id = image_replayer->get_global_image_id();
-  dout(10) << "global_image_id=" << global_image_id << dendl;
-
   if (!image_replayer->is_stopped()) {
     return;
   } else if (image_replayer->is_blacklisted()) {
-    derr << "blacklisted detected during image replay" << dendl;
+    derr << "global_image_id=" << global_image_id << ": blacklisted detected "
+         << "during image replay" << dendl;
     return;
   } else if (image_replayer->is_finished()) {
     // TODO temporary until policy integrated
@@ -313,6 +312,7 @@ void InstanceReplayer<I>::start_image_replayer(
     return;
   }
 
+  dout(10) << "global_image_id=" << global_image_id << dendl;
   image_replayer->start(nullptr, false);
 }
 
