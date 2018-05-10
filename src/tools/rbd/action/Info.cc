@@ -82,10 +82,15 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   uint64_t overlap, features, flags, snap_limit;
   bool snap_protected = false;
   librbd::mirror_image_info_t mirror_image;
+  std::vector<librbd::snap_info_t> snaps;
   int r;
 
   std::string imgname;
   r = image.get_name(&imgname);
+  if (r < 0)
+    return r;
+
+  r = image.snap_list(snaps);
   if (r < 0)
     return r;
 
@@ -197,6 +202,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
     f->dump_unsigned("objects", info.num_objs);
     f->dump_int("order", info.order);
     f->dump_unsigned("object_size", info.obj_size);
+    f->dump_int("snapshot_count", snaps.size());
     if (!data_pool.empty()) {
       f->dump_string("data_pool", data_pool);
     }
@@ -209,6 +215,8 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
               << std::endl
               << "\torder " << info.order
               << " (" << byte_u_t(info.obj_size) << " objects)"
+              << std::endl
+              << "\tsnapshot_count: " << snaps.size()
               << std::endl;
     if (!imgid.empty()) {
       std::cout << "\tid: " << imgid << std::endl;
