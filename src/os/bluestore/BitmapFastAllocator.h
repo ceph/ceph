@@ -15,7 +15,6 @@
 class BitmapFastAllocator : public Allocator,
   public AllocatorLevel02<AllocatorLevel01Loose> {
   CephContext* cct;
-  uint64_t last_pos = 0;
 
 public:
   BitmapFastAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit);
