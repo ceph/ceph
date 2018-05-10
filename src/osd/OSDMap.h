@@ -520,7 +520,8 @@ private:
     CEPH_FEATUREMASK_CRUSH_TUNABLES5 |
     CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS |
     CEPH_FEATUREMASK_SERVER_LUMINOUS |
-    CEPH_FEATUREMASK_SERVER_MIMIC;
+    CEPH_FEATUREMASK_SERVER_MIMIC |
+    CEPH_FEATUREMASK_SERVER_NAUTILUS;
 
   struct addrs_s {
     mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > client_addr;
