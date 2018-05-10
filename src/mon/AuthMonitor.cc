@@ -1582,7 +1582,7 @@ bool AuthMonitor::_upgrade_format_to_dumpling()
       bufferlist::iterator it = p->second.caps["mon"].begin();
       decode(mon_caps, it);
     }
-    catch (buffer::error) {
+    catch (const buffer::error&) {
       dout(10) << __func__ << " unable to parse mon cap for "
 	       << p->first << dendl;
       continue;

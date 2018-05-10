@@ -106,7 +106,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
 
     grant.set_referer(url_spec, is_negative ? 0 : perm);
     return grant;
-  } catch (std::out_of_range) {
+  } catch (const std::out_of_range&) {
     return boost::none;
   }
 }

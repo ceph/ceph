@@ -79,6 +79,12 @@ bool ceph_heap_profiler_running()
 
 static void get_profile_name(char *profile_name, int profile_name_len)
 {
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic push
+  // Don't care, it doesn't matter, and we can't do anything about it.
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
+
   char path[PATH_MAX];
   snprintf(path, sizeof(path), "%s", g_conf->log_file.c_str());
   char *last_slash = rindex(path, '/');
@@ -92,6 +98,9 @@ static void get_profile_name(char *profile_name, int profile_name_len)
     snprintf(profile_name, profile_name_len, "%s/%s.profile",
 	     path, g_conf->name.to_cstr());
   }
+#if __GNUC__ && __GNUC__ >= 8
+#pragma GCC diagnostic pop
+#endif
 }
 
 void ceph_heap_profiler_start()

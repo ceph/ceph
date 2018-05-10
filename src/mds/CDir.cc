@@ -208,8 +208,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   num_dentries_auth_subtree_nested(0),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
-  memset(&fnode, 0, sizeof(fnode));
-
   // auth
   assert(in->is_dir());
   if (auth) state_set(STATE_AUTH);

@@ -4310,7 +4310,7 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
   try {
     deleter = std::unique_ptr<RGWBulkDelete::Deleter>(\
           new RGWBulkDelete::Deleter(store, s));
-  } catch (std::bad_alloc) {
+  } catch (const std::bad_alloc&) {
     return -ENOMEM;
   }
 
@@ -6549,7 +6549,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   RGWPutObjDataProcessor *filter = nullptr;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  if (size > static_cast<const size_t>(s->cct->_conf->rgw_max_put_size)) {
+  if (size > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
     op_ret = -ERR_TOO_LARGE;
     return op_ret;
   }
