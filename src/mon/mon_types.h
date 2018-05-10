@@ -494,6 +494,7 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_LUMINOUS(   (1ULL << 1));
       constexpr mon_feature_t FEATURE_MIMIC(      (1ULL << 2));
       constexpr mon_feature_t FEATURE_OSDMAP_PRUNE (1ULL << 3);
+      constexpr mon_feature_t FEATURE_NAUTILUS(    (1ULL << 4));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -509,6 +510,7 @@ namespace ceph {
 	  FEATURE_LUMINOUS |
 	  FEATURE_MIMIC |
           FEATURE_OSDMAP_PRUNE |
+	  FEATURE_NAUTILUS |
 	  FEATURE_NONE
 	  );
       }
@@ -527,6 +529,7 @@ namespace ceph {
 	  FEATURE_KRAKEN |
 	  FEATURE_LUMINOUS |
 	  FEATURE_MIMIC |
+	  FEATURE_NAUTILUS |
 	  FEATURE_OSDMAP_PRUNE |
 	  FEATURE_NONE
 	  );
@@ -555,6 +558,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "mimic";
   } else if (f == FEATURE_OSDMAP_PRUNE) {
     return "osdmap-prune";
+  } else if (f == FEATURE_NAUTILUS) {
+    return "nautilus";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -571,6 +576,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_MIMIC;
   } else if (n == "osdmap-prune") {
     return FEATURE_OSDMAP_PRUNE;
+  } else if (n == "nautilus") {
+    return FEATURE_NAUTILUS;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }
