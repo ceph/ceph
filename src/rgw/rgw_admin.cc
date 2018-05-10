@@ -2347,7 +2347,7 @@ static int bucket_source_sync_status(RGWRados *store, const RGWZone& zone,
   int num_full = 0;
   int num_inc = 0;
   uint64_t full_complete = 0;
-  const int total_shards = status.size();
+  const size_t total_shards = status.size();
 
   using BucketSyncState = rgw_bucket_shard_sync_info::SyncState;
   for (size_t shard_id = 0; shard_id < total_shards; shard_id++) {

@@ -308,7 +308,6 @@ int main(int argc, const char **argv)
       num_osd = -1;
     }
     uuid_d fsid;
-    memset(&fsid, 0, sizeof(uuid_d));
     if (createpool) {
       osdmap.build_simple_with_pool(
 	g_ceph_context, 0, fsid, num_osd, pg_bits, pgp_bits);
