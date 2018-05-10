@@ -284,7 +284,7 @@ req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
   enable_usage_log = e->get_enable_usage_log();
   defer_to_bucket_acls = e->get_defer_to_bucket_acls();
 
-  time = ceph_clock_now();
+  time = Clock::now();
 }
 
 req_state::~req_state() {

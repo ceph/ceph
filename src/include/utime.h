@@ -71,10 +71,12 @@ public:
     tv.tv_sec = v.tv_sec;
     tv.tv_nsec = v.tv_nsec;
   }
-  explicit utime_t(const ceph::real_time& rt) {
-    ceph_timespec ts = real_clock::to_ceph_timespec(rt);
-    decode_timeval(&ts);
-  }
+  // conversion from ceph::real_time/coarse_real_time
+  template <typename Clock, typename std::enable_if_t<
+            ceph::converts_to_timespec_v<Clock>>* = nullptr>
+  explicit utime_t(const std::chrono::time_point<Clock>& t)
+    : utime_t(Clock::to_timespec(t)) {} // forward to timespec ctor
+
   utime_t(const struct timeval &v) {
     set_from_timeval(&v);
   }

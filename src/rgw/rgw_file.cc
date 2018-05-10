@@ -1511,8 +1511,7 @@ namespace rgw {
 
   done:
     dispose_processor(processor);
-    perfcounter->tinc(l_rgw_put_lat,
-		      (ceph_clock_now() - s->time));
+    perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
     return op_ret;
   } /* exec_finish */
 

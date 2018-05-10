@@ -16,6 +16,8 @@ TYPE(compressible_bloom_filter)
 
 #include "test_ceph_time.h"
 TYPE(real_time_wrapper)
+TYPE(coarse_real_time_wrapper)
+TYPE(timespan_wrapper)
 
 #include "test_sstring.h"
 TYPE(sstring_wrapper)
