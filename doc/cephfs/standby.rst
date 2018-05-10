@@ -83,10 +83,10 @@ will behave while in standby:
 
 ::
 
+    mds_standby_replay
     mds_standby_for_name
     mds_standby_for_rank
     mds_standby_for_fscid
-    mds_standby_replay
 
 These may be set in the ceph.conf on the host where the MDS daemon
 runs (as opposed to on the monitor).  The daemon loads these settings
