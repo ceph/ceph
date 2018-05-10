@@ -1,13 +1,15 @@
+import { Component, Input } from '@angular/core';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { BsDropdownModule } from 'ngx-bootstrap';
-
-import {
-  PerformanceCounterService
-} from '../../../shared/api/performance-counter.service';
-import { PerformanceCounterModule } from '../performance-counter.module';
+import { PerformanceCounterService } from '../../../shared/api/performance-counter.service';
 import { PerformanceCounterComponent } from './performance-counter.component';
+
+@Component({ selector: 'cd-table-performance-counter', template: '' })
+class TablePerformanceCounterStubComponent {
+  @Input() serviceType: string;
+  @Input() serviceId: string;
+}
 
 describe('PerformanceCounterComponent', () => {
   let component: PerformanceCounterComponent;
@@ -26,14 +28,13 @@ describe('PerformanceCounterComponent', () => {
     }
   };
 
-  beforeEach(
-    async(() => {
-      TestBed.configureTestingModule({
-        imports: [PerformanceCounterModule, BsDropdownModule.forRoot(), RouterTestingModule],
-        providers: [{ provide: PerformanceCounterService, useValue: fakeService }]
-      }).compileComponents();
-    })
-  );
+  beforeEach(async(() => {
+    TestBed.configureTestingModule({
+      declarations: [PerformanceCounterComponent, TablePerformanceCounterStubComponent],
+      imports: [RouterTestingModule],
+      providers: [{ provide: PerformanceCounterService, useValue: fakeService }]
+    }).compileComponents();
+  }));
 
   beforeEach(() => {
     fixture = TestBed.createComponent(PerformanceCounterComponent);
