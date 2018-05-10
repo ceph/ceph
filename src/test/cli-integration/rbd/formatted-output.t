@@ -60,6 +60,7 @@ For now, use a more inclusive regex.
   \torder 22 (4MiB objects) (esc)
   \tsnapshot_count: 1 (esc)
   [^^]+ (re)
+  \tblock_name_prefix: rb.0.*  (glob)
   \tformat: 1 (esc)
   $ rbd info foo --format json | python -mjson.tool | sed 's/,$/, /'
   {
@@ -93,6 +94,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   \torder 22 (4MiB objects) (esc)
   \tsnapshot_count: 1 (esc)
   [^^]+ (re)
+  \tblock_name_prefix: rb.0.*  (glob)
   \tformat: 1 (esc)
   \tprotected: False (esc)
   $ rbd info foo@snap --format json | python -mjson.tool | sed 's/,$/, /'
