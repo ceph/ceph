@@ -388,6 +388,7 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KRAKEN);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_LUMINOUS);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_MIMIC);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS);
   return compat;
 }
 
@@ -2178,6 +2179,13 @@ void Monitor::apply_monmap_to_compatset_features()
     assert(HAVE_FEATURE(quorum_con_features, SERVER_MIMIC));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_MIMIC);
   }
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+    assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_NAUTILUS));
+    // this feature should only ever be set if the quorum supports it.
+    assert(HAVE_FEATURE(quorum_con_features, SERVER_NAUTILUS));
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS);
+  }
 
   dout(5) << __func__ << dendl;
   _apply_compatset_features(new_features);
@@ -2200,6 +2208,9 @@ void Monitor::calc_quorum_requirements()
   if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_MIMIC)) {
     required_features |= CEPH_FEATUREMASK_SERVER_MIMIC;
   }
+  if (features.incompat.contains(CEPH_MON_FEATURE_INCOMPAT_NAUTILUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_NAUTILUS;
+  }
 
   // monmap
   if (monmap->get_required_features().contains_all(
@@ -2213,6 +2224,10 @@ void Monitor::calc_quorum_requirements()
   if (monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_MIMIC)) {
     required_features |= CEPH_FEATUREMASK_SERVER_MIMIC;
+  }
+  if (monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_NAUTILUS)) {
+    required_features |= CEPH_FEATUREMASK_SERVER_NAUTILUS;
   }
   dout(10) << __func__ << " required_features " << required_features << dendl;
 }

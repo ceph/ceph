@@ -1678,6 +1678,11 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
+    Option("mon_debug_no_require_nautilus", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
+    .set_description(""),
+
     Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
