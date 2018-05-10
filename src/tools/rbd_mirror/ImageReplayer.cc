@@ -270,7 +270,7 @@ ImageReplayer<I>::ImageReplayer(Threads<I> *threads,
   m_local(local),
   m_local_mirror_uuid(local_mirror_uuid),
   m_local_pool_id(local_pool_id),
-  m_global_image_id(global_image_id),
+  m_global_image_id(global_image_id), m_local_image_name(global_image_id),
   m_lock("rbd::mirror::ImageReplayer " + stringify(local_pool_id) + " " +
 	 global_image_id),
   m_progress_cxt(this),
@@ -426,7 +426,7 @@ void ImageReplayer<I>::prepare_local_image() {
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_local_image>(this);
   auto req = PrepareLocalImageRequest<I>::create(
-    m_local_ioctx, m_global_image_id, &m_local_image_id,
+    m_local_ioctx, m_global_image_id, &m_local_image_id, &m_local_image_name,
     &m_local_image_tag_owner, m_threads->work_queue, ctx);
   req->send();
 }
@@ -440,6 +440,8 @@ void ImageReplayer<I>::handle_prepare_local_image(int r) {
   } else if (r < 0) {
     on_start_fail(r, "error preparing local image for replay");
     return;
+  } else {
+    reregister_admin_socket_hook();
   }
 
   // local image doesn't exist or is non-primary
@@ -581,8 +583,6 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     on_start_fail(-EINVAL, "error accessing local journal");
     return;
   }
-
-  on_name_changed();
 
   update_mirror_image_status(false, boost::none);
   init_remote_journaler();
@@ -1224,7 +1224,12 @@ void ImageReplayer<I>::handle_process_entry_ready(int r) {
   dout(20) << dendl;
   assert(r == 0);
 
-  on_name_changed();
+  {
+    RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
+    m_local_image_name = m_local_image_ctx->name;
+  }
+
+  reregister_admin_socket_hook();
 
   // attempt to process the next event
   handle_replay_ready();
@@ -1768,7 +1773,7 @@ void ImageReplayer<I>::register_admin_socket_hook() {
       return;
     }
 
-    dout(20) << "registered asok hook: " << m_name << dendl;
+    dout(15) << "registered asok hook: " << m_name << dendl;
     asok_hook = new ImageReplayerAdminSocketHook<I>(g_ceph_context, m_name,
                                                     this);
     int r = asok_hook->register_commands();
@@ -1783,7 +1788,7 @@ void ImageReplayer<I>::register_admin_socket_hook() {
 
 template <typename I>
 void ImageReplayer<I>::unregister_admin_socket_hook() {
-  dout(20) << dendl;
+  dout(15) << dendl;
 
   AdminSocketHook *asok_hook = nullptr;
   {
@@ -1794,11 +1799,10 @@ void ImageReplayer<I>::unregister_admin_socket_hook() {
 }
 
 template <typename I>
-void ImageReplayer<I>::on_name_changed() {
+void ImageReplayer<I>::reregister_admin_socket_hook() {
   {
     Mutex::Locker locker(m_lock);
-    std::string name = m_local_ioctx.get_pool_name() + "/" +
-      m_local_image_ctx->name;
+    auto name = m_local_ioctx.get_pool_name() + "/" + m_local_image_name;
     if (m_name == name) {
       return;
     }
