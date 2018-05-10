@@ -29,7 +29,6 @@
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
-#include "rgw_replica_log.h"
 #include "rgw_object_expirer_core.h"
 
 #include "cls/lock/cls_lock_client.h"

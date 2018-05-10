@@ -40,7 +40,6 @@
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
-#include "rgw_replica_log.h"
 #include "rgw_orphan.h"
 #include "rgw_sync.h"
 #include "rgw_sync_log_trim.h"
@@ -193,9 +192,6 @@ void usage()
   cout << "  opstate set                set state on an entry (use client_id, op_id, object, state)\n";
   cout << "  opstate renew              renew state on an entry (use client_id, op_id, object)\n";
   cout << "  opstate rm                 remove entry (use client_id, op_id, object)\n";
-  cout << "  replicalog get             get replica metadata log entry\n";
-  cout << "  replicalog update          update replica metadata log entry\n";
-  cout << "  replicalog rm              remove replica metadata log entry\n";
   cout << "  orphans find               init and run search for leaked rados objects (use job-id, pool)\n";
   cout << "  orphans finish             clean up search for leaked rados objects\n";
   cout << "  orphans list-jobs          list the current job-ids for orphans search\n";
@@ -245,8 +241,6 @@ void usage()
   cout << "                               data sync status\n";
   cout << "                             required for: \n";
   cout << "                               mdlog trim\n";
-  cout << "                               replica mdlog get/delete\n";
-  cout << "                               replica datalog get/delete\n";
   cout << "   --max-entries=<entries>   max entries for listing operations\n";
   cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
   cout << "   --remote=<remote>         zone or zonegroup id of remote gateway\n";
@@ -311,9 +305,6 @@ void usage()
   cout << "                             in one of the numeric field\n";
   cout << "   --infile=<file>           specify a file to read in when setting data\n";
   cout << "   --state=<state>           specify a state for the opstate set command\n";
-  cout << "   --replica-log-type=<logtypestr>\n";
-  cout << "                             replica log type (metadata, data, bucket), required for\n";
-  cout << "                             replica log operations\n";
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
   cout << "   --yes-i-really-mean-it    required for certain operations\n";
@@ -470,9 +461,6 @@ enum {
   OPT_OPSTATE_SET,
   OPT_OPSTATE_RENEW,
   OPT_OPSTATE_RM,
-  OPT_REPLICALOG_GET,
-  OPT_REPLICALOG_UPDATE,
-  OPT_REPLICALOG_DELETE,
   OPT_REALM_CREATE,
   OPT_REALM_DELETE,
   OPT_REALM_GET,
@@ -550,7 +538,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "pools") == 0 ||
       strcmp(cmd, "quota") == 0 ||
       strcmp(cmd, "realm") == 0 ||
-      strcmp(cmd, "replicalog") == 0 ||
       strcmp(cmd, "role") == 0 ||
       strcmp(cmd, "role-policy") == 0 ||
       strcmp(cmd, "subuser") == 0 ||
@@ -930,13 +917,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_OPSTATE_RENEW;
     if (strcmp(cmd, "rm") == 0)
       return OPT_OPSTATE_RM;
-  } else if (strcmp(prev_cmd, "replicalog") == 0) {
-    if (strcmp(cmd, "get") == 0)
-      return OPT_REPLICALOG_GET;
-    if (strcmp(cmd, "update") == 0)
-      return OPT_REPLICALOG_UPDATE;
-    if (strcmp(cmd, "delete") == 0)
-      return OPT_REPLICALOG_DELETE;
   } else if (strcmp(prev_cmd, "sync") == 0) {
     if (strcmp(cmd, "status") == 0)
       return OPT_SYNC_STATUS;
@@ -989,24 +969,6 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   }
 
   return -EINVAL;
-}
-
-enum ReplicaLogType {
-  ReplicaLog_Invalid = 0,
-  ReplicaLog_Metadata,
-  ReplicaLog_Data,
-  ReplicaLog_Bucket,
-};
-
-ReplicaLogType get_replicalog_type(const string& name) {
-  if (name == "md" || name == "meta" || name == "metadata")
-    return ReplicaLog_Metadata;
-  if (name == "data")
-    return ReplicaLog_Data;
-  if (name == "bucket")
-    return ReplicaLog_Bucket;
-
-  return ReplicaLog_Invalid;
 }
 
 BIIndexType get_bi_index_type(const string& type_str) {
@@ -2712,13 +2674,9 @@ int main(int argc, const char **argv)
   bool system_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
-  string daemon_id;
-  bool specified_daemon_id = false;
   string client_id;
   string op_id;
   string state_str;
-  string replica_log_type_str;
-  ReplicaLogType replica_log_type = ReplicaLog_Invalid;
   string op_mask_str;
   string quota_scope;
   string object_version;
@@ -2924,9 +2882,6 @@ int main(int argc, const char **argv)
         return EINVAL;
       }
       specified_shard_id = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*)NULL)) {
-      daemon_id = val;
-      specified_daemon_id = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
@@ -2999,13 +2954,6 @@ int main(int argc, const char **argv)
       end_marker = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*)NULL)) {
       quota_scope = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*)NULL)) {
-      replica_log_type_str = val;
-      replica_log_type = get_replicalog_type(replica_log_type_str);
-      if (replica_log_type == ReplicaLog_Invalid) {
-        cerr << "ERROR: invalid replica log type" << std::endl;
-        return EINVAL;
-      }
     } else if (ceph_argparse_witharg(args, i, &val, "--index-type", (char*)NULL)) {
       string index_type_str = val;
       bi_index_type = get_bi_index_type(index_type_str);
@@ -3284,7 +3232,6 @@ int main(int argc, const char **argv)
 			 OPT_DATALOG_LIST,
 			 OPT_DATALOG_STATUS,
 			 OPT_OPSTATE_LIST,
-			 OPT_REPLICALOG_GET,
 			 OPT_REALM_GET,
 			 OPT_REALM_GET_DEFAULT,
 			 OPT_REALM_LIST,
@@ -7459,169 +7406,6 @@ next:
     if (ret < 0) {
       cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
       return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT_REPLICALOG_GET || opt_cmd == OPT_REPLICALOG_UPDATE ||
-      opt_cmd == OPT_REPLICALOG_DELETE) {
-    if (replica_log_type_str.empty()) {
-      cerr << "ERROR: need to specify --replica-log-type=<metadata | data | bucket>" << std::endl;
-      return EINVAL;
-    }
-  }
-
-  if (opt_cmd == OPT_REPLICALOG_GET) {
-    RGWReplicaBounds bounds;
-    if (replica_log_type == ReplicaLog_Metadata) {
-      if (!specified_shard_id) {
-        cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
-        return EINVAL;
-      }
-
-      RGWReplicaObjectLogger logger(store, pool, META_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.get_bounds(shard_id, bounds);
-      if (ret < 0)
-        return -ret;
-    } else if (replica_log_type == ReplicaLog_Data) {
-      if (!specified_shard_id) {
-        cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
-        return EINVAL;
-      }
-      RGWReplicaObjectLogger logger(store, pool, DATA_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.get_bounds(shard_id, bounds);
-      if (ret < 0)
-        return -ret;
-    } else if (replica_log_type == ReplicaLog_Bucket) {
-      if (bucket_name.empty()) {
-        cerr << "ERROR: bucket not specified" << std::endl;
-        return EINVAL;
-      }
-      RGWBucketInfo bucket_info;
-      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-      if (ret < 0) {
-        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      RGWReplicaBucketLogger logger(store);
-      ret = logger.get_bounds(bucket, shard_id, bounds);
-      if (ret < 0)
-        return -ret;
-    } else { // shouldn't get here
-      ceph_abort();
-    }
-    encode_json("bounds", bounds, formatter);
-    formatter->flush(cout);
-    cout << std::endl;
-  }
-
-  if (opt_cmd == OPT_REPLICALOG_DELETE) {
-    if (replica_log_type == ReplicaLog_Metadata) {
-      if (!specified_shard_id) {
-        cerr << "ERROR: shard-id must be specified for delete operation" << std::endl;
-        return EINVAL;
-      }
-      if (!specified_daemon_id) {
-        cerr << "ERROR: daemon-id must be specified for delete operation" << std::endl;
-        return EINVAL;
-      }
-      RGWReplicaObjectLogger logger(store, pool, META_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.delete_bound(shard_id, daemon_id, false);
-      if (ret < 0)
-        return -ret;
-    } else if (replica_log_type == ReplicaLog_Data) {
-      if (!specified_shard_id) {
-        cerr << "ERROR: shard-id must be specified for delete operation" << std::endl;
-        return EINVAL;
-      }
-      if (!specified_daemon_id) {
-        cerr << "ERROR: daemon-id must be specified for delete operation" << std::endl;
-        return EINVAL;
-      }
-      RGWReplicaObjectLogger logger(store, pool, DATA_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.delete_bound(shard_id, daemon_id, false);
-      if (ret < 0)
-        return -ret;
-    } else if (replica_log_type == ReplicaLog_Bucket) {
-      if (bucket_name.empty()) {
-        cerr << "ERROR: bucket not specified" << std::endl;
-        return EINVAL;
-      }
-      RGWBucketInfo bucket_info;
-      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-      if (ret < 0) {
-        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      RGWReplicaBucketLogger logger(store);
-      ret = logger.delete_bound(bucket, shard_id, daemon_id, false);
-      if (ret < 0)
-        return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT_REPLICALOG_UPDATE) {
-    if (marker.empty()) {
-      cerr << "ERROR: marker was not specified" <<std::endl;
-      return EINVAL;
-    }
-    utime_t time = ceph_clock_now();
-    if (!date.empty()) {
-      ret = parse_date_str(date, time);
-      if (ret < 0) {
-        cerr << "ERROR: failed to parse start date" << std::endl;
-        return EINVAL;
-      }
-    }
-    list<RGWReplicaItemMarker> entries;
-    int ret = read_decode_json(infile, entries);
-    if (ret < 0) {
-      cerr << "ERROR: failed to decode entries" << std::endl;
-      return EINVAL;
-    }
-    RGWReplicaBounds bounds;
-    if (replica_log_type == ReplicaLog_Metadata) {
-      if (!specified_shard_id) {
-        cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
-        return EINVAL;
-      }
-
-      RGWReplicaObjectLogger logger(store, pool, META_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.update_bound(shard_id, daemon_id, marker, time, &entries);
-      if (ret < 0) {
-        cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    } else if (replica_log_type == ReplicaLog_Data) {
-      if (!specified_shard_id) {
-        cerr << "ERROR: shard-id must be specified for get operation" << std::endl;
-        return EINVAL;
-      }
-      RGWReplicaObjectLogger logger(store, pool, DATA_REPLICA_LOG_OBJ_PREFIX);
-      int ret = logger.update_bound(shard_id, daemon_id, marker, time, &entries);
-      if (ret < 0) {
-        cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    } else if (replica_log_type == ReplicaLog_Bucket) {
-      if (bucket_name.empty()) {
-        cerr << "ERROR: bucket not specified" << std::endl;
-        return EINVAL;
-      }
-      RGWBucketInfo bucket_info;
-      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-      if (ret < 0) {
-        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      RGWReplicaBucketLogger logger(store);
-      ret = logger.update_bound(bucket, shard_id, daemon_id, marker, time, &entries);
-      if (ret < 0) {
-        cerr << "ERROR: failed to update bounds: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
     }
   }
 

@@ -1972,7 +1972,6 @@ WRITE_CLASS_ENCODER(RGWPeriod)
 class RGWDataChangesLog;
 class RGWMetaSyncStatusManager;
 class RGWDataSyncStatusManager;
-class RGWReplicaLogger;
 class RGWCoroutinesManagerRegistry;
   
 class RGWStateLog {
@@ -2239,7 +2238,6 @@ class RGWRados : public AdminSocketHook
   friend class RGWMetaSyncProcessorThread;
   friend class RGWDataSyncProcessorThread;
   friend class RGWStateLog;
-  friend class RGWReplicaLogger;
   friend class RGWReshard;
   friend class RGWBucketReshard;
   friend class BucketIndexLockGuard;

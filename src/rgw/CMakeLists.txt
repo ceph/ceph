@@ -97,7 +97,6 @@ set(rgw_a_srcs
   rgw_process.cc
   rgw_quota.cc
   rgw_rados.cc
-  rgw_replica_log.cc
   rgw_request.cc
   rgw_resolve.cc
   rgw_rest_bucket.cc
@@ -109,7 +108,6 @@ set(rgw_a_srcs
   rgw_rest_metadata.cc
   rgw_rest_opstate.cc
   rgw_rest_realm.cc
-  rgw_rest_replica_log.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
   rgw_rest_swift.cc
@@ -154,7 +152,7 @@ endif()
 
 target_link_libraries(rgw_a librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
-  cls_replica_log_client cls_user_client ceph-common common_utf8 global
+  cls_user_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
@@ -193,14 +191,14 @@ add_executable(radosgw rgw_main.cc)
 target_link_libraries(radosgw radosgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
-  cls_version_client cls_replica_log_client cls_user_client
+  cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
 # radosgw depends on cls libraries at runtime, but not as link dependencies
 add_dependencies(radosgw cls_rgw cls_lock cls_refcount
   cls_log cls_statelog cls_timeindex
-  cls_version cls_replica_log cls_user)
+  cls_version cls_user)
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
@@ -210,7 +208,7 @@ add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin rgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
-  cls_version_client cls_replica_log_client cls_user_client
+  cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
@@ -221,7 +219,7 @@ add_executable(radosgw-es ${radosgw_es_srcs})
 target_link_libraries(radosgw-es rgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
-  cls_version_client cls_replica_log_client cls_user_client
+  cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-es DESTINATION bin)
@@ -239,7 +237,7 @@ add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
 target_link_libraries(radosgw-object-expirer rgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client
-  cls_version_client cls_replica_log_client cls_user_client
+  cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
@@ -259,7 +257,6 @@ target_link_libraries(rgw PRIVATE
   cls_statelog_client
   cls_timeindex_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   global
   ${LIB_RESOLV}

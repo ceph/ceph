@@ -1428,7 +1428,6 @@ OPTION(rgw_data_log_window, OPT_INT) // data log entries window (in seconds)
 OPTION(rgw_data_log_changes_size, OPT_INT) // number of in-memory entries to hold for data changes log
 OPTION(rgw_data_log_num_shards, OPT_INT) // number of objects to keep data changes log on
 OPTION(rgw_data_log_obj_prefix, OPT_STR) //
-OPTION(rgw_replica_log_obj_prefix, OPT_STR) //
 
 OPTION(rgw_bucket_quota_ttl, OPT_INT) // time for cached bucket stats to be cached within rgw instance
 OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE) // threshold from which we don't rely on cached info for quota decisions

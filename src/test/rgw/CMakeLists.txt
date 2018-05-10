@@ -39,7 +39,6 @@ target_link_libraries(ceph_test_rgw_manifest
   cls_statelog_client
   cls_timeindex_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -67,7 +66,6 @@ target_link_libraries(ceph_test_rgw_obj
   cls_log_client
   cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -95,7 +93,6 @@ target_link_libraries(unittest_rgw_crypto
   cls_log_client
   cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global
@@ -118,7 +115,6 @@ target_link_libraries(unittest_rgw_iam_policy
   cls_log_client
   cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   librados
   global

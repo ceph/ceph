@@ -175,24 +175,6 @@ add_library(cls_timeindex_client STATIC ${cls_timeindex_client_srcs})
 
 list(APPEND cls_embedded_srcs ${cls_timeindex_srcs} ${cls_timeindex_client_srcs})
 
-# cls_replica_log
-set(cls_replica_log_srcs replica_log/cls_replica_log.cc)
-add_library(cls_replica_log SHARED ${cls_replica_log_srcs})
-set_target_properties(cls_replica_log PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
-  INSTALL_RPATH ""
-  CXX_VISIBILITY_PRESET hidden)
-install(TARGETS cls_replica_log DESTINATION ${cls_dir})
-
-set(cls_replica_log_client_srcs
-  replica_log/cls_replica_log_types.cc
-  replica_log/cls_replica_log_ops.cc
-  replica_log/cls_replica_log_client.cc)
-add_library(cls_replica_log_client STATIC ${cls_replica_log_client_srcs})
-
-list(APPEND cls_embedded_srcs ${cls_replica_log_srcs} ${cls_replica_log_client_srcs})
-
 # cls_user
 set(cls_user_srcs user/cls_user.cc)
 add_library(cls_user SHARED ${cls_user_srcs})
