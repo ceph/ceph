@@ -210,6 +210,7 @@ private:
   bool unsuspend_notify_request(C_NotifyInstanceRequest *req);
   void unsuspend_notify_requests();
 
+  void notify_sync_complete(const Mutex& lock, const std::string &sync_id);
   void handle_notify_sync_request(C_SyncRequest *sync_ctx, int r);
   void handle_notify_sync_complete(C_SyncRequest *sync_ctx, int r);
 
