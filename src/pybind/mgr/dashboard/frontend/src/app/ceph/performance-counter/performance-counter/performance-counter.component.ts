@@ -1,4 +1,4 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
 @Component({
@@ -6,13 +6,12 @@ import { ActivatedRoute } from '@angular/router';
   templateUrl: './performance-counter.component.html',
   styleUrls: ['./performance-counter.component.scss']
 })
-export class PerformanceCounterComponent implements OnDestroy {
+export class PerformanceCounterComponent {
   serviceId: string;
   serviceType: string;
-  routeParamsSubscribe: any;
 
   constructor(private route: ActivatedRoute) {
-    this.routeParamsSubscribe = this.route.params.subscribe(
+    this.route.params.subscribe(
       (params: { type: string; id: string }) => {
         this.serviceId = params.id;
         this.serviceType = params.type;
@@ -20,7 +19,4 @@ export class PerformanceCounterComponent implements OnDestroy {
     );
   }
 
-  ngOnDestroy() {
-    this.routeParamsSubscribe.unsubscribe();
-  }
 }
