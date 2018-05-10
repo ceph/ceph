@@ -33,7 +33,9 @@ add_subdirectory(journal)
 add_subdirectory(libcephfs)
 add_subdirectory(librados)
 add_subdirectory(librados_test_stub)
-add_subdirectory(libradosstriper)
+if(WITH_LIBRADOSSTRIPER)
+  add_subdirectory(libradosstriper)
+endif()
 if(WITH_RBD)
   add_subdirectory(librbd)
 endif(WITH_RBD)
@@ -642,12 +644,14 @@ add_ceph_unittest(unittest_workqueue)
 target_link_libraries(unittest_workqueue global)
 
 # unittest_striper
-add_executable(unittest_striper
-  test_striper.cc
-  $<TARGET_OBJECTS:unit-main>
-  )
+if(WITH_LIBRADOSSTRIPER)
+  add_executable(unittest_striper
+    test_striper.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
 add_ceph_unittest(unittest_striper)
 target_link_libraries(unittest_striper global ${BLKID_LIBRARIES})
+endif(WITH_LIBRADOSSTRIPER)
 
 # unittest_prebufferedstreambuf
 add_executable(unittest_prebufferedstreambuf
