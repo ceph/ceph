@@ -545,6 +545,7 @@ protected:
   slot_vector_t l2;
   uint64_t l2_granularity = 0; // space per entry
   uint64_t available = 0;
+  uint64_t last_pos = 0;
 
   enum {
     CHILD_PER_SLOT = bits_per_slot, // 64
@@ -641,28 +642,30 @@ protected:
   void _allocate_l2(uint64_t length,
     uint64_t min_length,
     uint64_t max_length,
-    uint64_t* pos_start,
+    uint64_t hint,
+    
     uint64_t* allocated,
     interval_vector_t* res)
   {
     uint64_t prev_allocated = *allocated;
     uint64_t d = CHILD_PER_SLOT;
-    assert((*pos_start % d) == 0);
     assert(min_length <= l2_granularity);
     assert(max_length == 0 || max_length >= min_length);
     assert(max_length == 0 || (max_length % min_length) == 0);
 
     uint64_t l1_w = slotset_width * l1._children_per_slot();
 
-    auto last_pos = *pos_start;
-
-    auto l2_pos = *pos_start;
     std::lock_guard<std::mutex> l(lock);
 
     if (available < min_length) {
       return;
     }
-    auto pos = *pos_start / d;
+    if (hint != 0) {
+      last_pos = (hint / d) < l2.size() ? P2ALIGN(hint, d) : 0;
+    }
+    auto l2_pos = last_pos;
+    auto last_pos0 = last_pos;
+    auto pos = last_pos / d;
     auto pos_end = l2.size();
     // outer loop below is intended to optimize the performance by
     // avoiding 'modulo' operations inside the internal loop.
@@ -688,7 +691,7 @@ protected:
 	  bool empty = l1._allocate_l1(length,
 	    min_length,
 	    max_length,
-	    (l2_pos + free_pos)* l1_w,
+	    (l2_pos + free_pos) * l1_w,
 	    (l2_pos + free_pos + 1) * l1_w,
 	    allocated,
 	    res);
@@ -708,14 +711,13 @@ protected:
       }
       l2_pos = 0;
       pos = 0;
-      pos_end = *pos_start;
+      pos_end = last_pos0 / d;
     }
 
     ++l2_allocs;
     auto allocated_here = *allocated - prev_allocated;
     assert(available >= allocated_here);
     available -= allocated_here;
-    *pos_start = last_pos;
   }
 
 #ifndef NON_CEPH_BUILD
@@ -770,6 +772,10 @@ protected:
     std::lock_guard<std::mutex> l(lock);
     available += l1._free_l1(o, len);
     _mark_l2_free(l2_pos, l2_pos_end);
+  }
+  void _shutdown()
+  {
+    last_pos = 0;
   }
 };
 

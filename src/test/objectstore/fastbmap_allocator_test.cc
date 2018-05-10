@@ -36,8 +36,8 @@ public:
     interval_vector_t* res)
   {
     uint64_t allocated = 0;
-    uint64_t last_pos = 0; // do hint support so far
-    _allocate_l2(length, min_length, 0, &last_pos, &allocated, res);
+    uint64_t hint = 0; // trigger internal l2 hint support
+    _allocate_l2(length, min_length, 0, hint, &allocated, res);
     *allocated0 += allocated;
   }
   void free_l2(const interval_vector_t& r)
