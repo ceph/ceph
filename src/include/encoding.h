@@ -280,7 +280,8 @@ inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
 
 // Time, since the templates are defined in std::chrono
 
-template<typename Clock, typename Duration>
+template<typename Clock, typename Duration,
+         typename std::enable_if_t<converts_to_timespec_v<Clock>>* = nullptr>
 void encode(const std::chrono::time_point<Clock, Duration>& t,
 	    ceph::bufferlist &bl) {
   auto ts = Clock::to_timespec(t);
@@ -291,7 +292,8 @@ void encode(const std::chrono::time_point<Clock, Duration>& t,
   encode(ns, bl);
 }
 
-template<typename Clock, typename Duration>
+template<typename Clock, typename Duration,
+         typename std::enable_if_t<converts_to_timespec_v<Clock>>* = nullptr>
 void decode(std::chrono::time_point<Clock, Duration>& t,
 	    bufferlist::iterator& p) {
   uint32_t s;
@@ -303,6 +305,28 @@ void decode(std::chrono::time_point<Clock, Duration>& t,
     static_cast<long int>(ns)};
 
   t = Clock::from_timespec(ts);
+}
+
+template<typename Rep, typename Period,
+         typename std::enable_if_t<std::is_integral_v<Rep>>* = nullptr>
+void encode(const std::chrono::duration<Rep, Period>& d,
+	    ceph::bufferlist &bl) {
+  using namespace std::chrono;
+  uint32_t s = duration_cast<seconds>(d).count();
+  uint32_t ns = (duration_cast<nanoseconds>(d) % seconds(1)).count();
+  encode(s, bl);
+  encode(ns, bl);
+}
+
+template<typename Rep, typename Period,
+         typename std::enable_if_t<std::is_integral_v<Rep>>* = nullptr>
+void decode(std::chrono::duration<Rep, Period>& d,
+	    bufferlist::iterator& p) {
+  uint32_t s;
+  uint32_t ns;
+  decode(s, p);
+  decode(ns, p);
+  d = std::chrono::seconds(s) + std::chrono::nanoseconds(ns);
 }
 
 // -----------------------------
