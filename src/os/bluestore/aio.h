@@ -62,7 +62,7 @@ struct aio_queue_t {
       ctx(0) {
   }
   ~aio_queue_t() {
-    assert(ctx == 0);
+    //assert(ctx == 0);
   }
 
   int init() {

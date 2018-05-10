@@ -3855,6 +3855,30 @@ std::vector<Option> get_global_options() {
     .add_see_also("bluestore_block_wal_path")
     .add_see_also("bluestore_block_wal_size"),
 
+    Option("bluestore_block_writecache_enable", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_CREATE)
+    .set_description("Use bluestore ssd cache for hdd mass storage")
+    .add_see_also("bluestore_block_writecache_path")
+    .add_see_also("bluestore_block_writecache_size"),
+
+    Option("bluestore_block_writecache_path", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("")
+    .set_flag(Option::FLAG_CREATE)
+    .set_description("Path to block device/file working as cache for spin disks"),
+
+    Option("bluestore_block_writecache_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(96_M)
+    .set_flag(Option::FLAG_CREATE)
+    .set_description("Size of file to create for bluestore_block_writecache_path"),
+
+    Option("bluestore_block_writecache_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_CREATE)
+    .set_description("Create bluestore_block_writecache_path if it doesn't exist")
+    .add_see_also("bluestore_block_writecache_path")
+    .add_see_also("bluestore_block_writecache_size"),
+
     Option("bluestore_block_preallocate_file", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_flag(Option::FLAG_CREATE)

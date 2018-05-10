@@ -33,6 +33,7 @@
 #include "BlueRocksEnv.h"
 #include "auth/Crypto.h"
 #include "common/EventTrace.h"
+#include "WriteCacheDevice.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -4323,10 +4324,14 @@ int BlueStore::_open_bdev(bool create)
   assert(bdev == NULL);
   string p = path + "/block";
   uint64_t dev_size;
-  bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
+  WriteCacheDevice* wcd;
+  //bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
+  bdev = wcd = new WriteCacheDevice(cct, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
   int r = bdev->open(p);
   if (r < 0)
     goto fail;
+
+  wcd->open_write_cache(cct, path + "/writecache");
 
   dev_size = bdev->get_size();
   if (create && cct->_conf->bdev_enable_discard) {
@@ -5418,6 +5423,13 @@ int BlueStore::mkfs()
 				   cct->_conf->bluestore_block_create);
   if (r < 0)
     goto out_close_fsid;
+  if (cct->_conf->bluestore_block_writecache_enable) {
+    r = _setup_block_symlink_or_file("writecache", cct->_conf->bluestore_block_writecache_path,
+                                    cct->_conf->bluestore_block_writecache_size,
+                                    cct->_conf->bluestore_block_writecache_create);
+    if (r < 0)
+      goto out_close_fsid;
+  }
   if (cct->_conf->bluestore_bluefs) {
     r = _setup_block_symlink_or_file("block.wal", cct->_conf->bluestore_block_wal_path,
 	cct->_conf->bluestore_block_wal_size,

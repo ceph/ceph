@@ -105,7 +105,7 @@ class KernelDevice : public BlockDevice {
 
 public:
   KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
-
+  virtual ~KernelDevice(){ close(); };
   void aio_submit(IOContext *ioc) override;
   void discard_drain() override;
 

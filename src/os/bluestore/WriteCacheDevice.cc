@@ -32,14 +32,137 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
+/**
+ * Cache organization
+ *
+ * Cache area split for 2 separate rows
+ * ROW1: [0 ... size/2]
+ * [header] [data] [header] [data] ....
+ * ROW2: [size/2 ... size]
+ * [header] [data] [header] [data] ....
+ *
+ * header: 4K
+ * - cons.id (8bytes)
+ * - size
+ * - destination position
+ */
+
+
+
 WriteCacheDevice::WriteCacheDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
-  : BlockDevice(cct, cb, cbpriv),
-    block_data(cct, cb, cbpriv, d_cb, d_cbpriv),
-    write_cache(nullptr)
+  : KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv),
+    write_cache(nullptr),
+    flushing(nullptr),
+    current(nullptr),
+    empty(nullptr),
+    last_id(0)
 {
 }
 
+WriteCacheDevice::~WriteCacheDevice()
+{
+  if (write_cache)
+    delete write_cache;
+}
+bool WriteCacheDevice::store_in_cache(uint64_t disk_off, bufferlist& bl)
+{
+  std::lock_guard<std::mutex> l(lock);
+  size_t length_align_up = align_up((size_t)bl.length(), block_size);
+  string path;
+  dout(20) << __func__ <<
+      " disk_off=" << disk_off <<
+      " bl.length()=" << bl.length() <<
+      " length_align_up=" << length_align_up << dendl;
 
+  if (current->pos + (block_size + length_align_up) > current->size) {
+    /* must switch cache row */
+    if (flushing != nullptr) {
+      /* wait for flushing to finish */
+      //TODO!!!
+    }
+    assert(flushing == nullptr);
+    assert(empty != nullptr);
+    flushing = current;
+    current = empty;
+    flushing->pos = 0;
+    empty = flushing;
+    flushing = nullptr;
+    KernelDevice::flush();
+  }
+  dout(20) << __func__ <<
+      " current->pos=" << current->pos <<
+      " current->size=" << current->size <<
+      " current->disk_offset=" << current->disk_offset << dendl;
+
+  bufferlist header_bl;
+  buffer::raw* header_data = buffer::create(block_size);
+  header_bl.append(header_data);
+  header* h = reinterpret_cast<header*>(header_bl.c_str());
+  h->id = last_id;
+  last_id++;
+  h->dest = disk_off;
+  h->size = bl.length();
+
+  write_cache->write(current->disk_offset + current->pos, header_bl, false);
+  current->pos += block_size;
+  write_cache->write(current->disk_offset + current->pos, bl, false);
+  current->pos += length_align_up;
+  return true;
+}
+
+static void aio_cb(void *priv, void *priv2)
+{
+  //BlueStore *store = static_cast<BlueStore*>(priv);
+  //BlueStore::AioContext *c = static_cast<BlueStore::AioContext*>(priv2);
+  //c->aio_finish(store);
+}
+
+static void discard_cb(void *priv, void *priv2)
+{
+  //BlueStore *store = static_cast<BlueStore*>(priv);
+  //interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
+  //store->handle_discard(*tmp);
+}
+
+int WriteCacheDevice::open_write_cache(CephContext* cct, const std::string& path)
+{
+  int r;
+  int fd;
+  fd = ::open(path.c_str(), O_RDONLY);
+  if (fd < 0) {
+    derr << __func__ << " cannot open '" << path << "'"  << dendl;
+    return -1;
+  }
+  struct stat st;
+  r = ::fstat(fd, &st);
+  ::close(fd);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " fstat '" << path << "' failed: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  if (st.st_size < 2*10*1024*1024) {
+    dout(5) << __func__ << " size of '" << path << "' is " << st.st_size << ", writecache NOT ENABLED" << dendl;
+    return -1;
+  }
+  if (write_cache)
+    delete write_cache;
+  write_cache = new KernelDevice(cct, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
+  r = write_cache->open(path);
+  if (r < 0) {
+    dout(20) << __func__ << " cannot open write cache '" << path << "'" << dendl;
+    delete write_cache;
+    write_cache = nullptr;
+    return r;
+  }
+
+  current = new row{0, 10*1024*1024, 0};
+  empty = new row{10*1024*1024, 10*1024*1024, 0};
+
+  return r;
+}
+
+/*
 int WriteCacheDevice::open(const string& p)
 {
   int res;
@@ -57,14 +180,14 @@ void WriteCacheDevice::close()
   //TODO AK writeback cache before close...
   block_data.close();
 }
-
+*/
 static string get_dev_property(const char *dev, const char *property)
 {
   char val[1024] = {0};
   get_block_device_string_property(dev, property, val, sizeof(val));
   return val;
 }
-
+/*
 int WriteCacheDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   return
@@ -75,7 +198,7 @@ bool WriteCacheDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) co
 {
   return block_data.get_thin_utilization(total,avail);
 }
-
+*/
 int WriteCacheDevice::flush()
 {
   // protect flush with a mutex.  note that we are not really protecting
@@ -89,7 +212,10 @@ int WriteCacheDevice::flush()
 
   //AK make flush to write_cache
   int res;
-  res = write_cache->flush();
+  if (write_cache)
+    res = write_cache->flush();
+  else
+    res = KernelDevice::flush();
   return res;
 #if AKAK
   std::lock_guard<std::mutex> l(flush_mutex);
@@ -126,17 +252,17 @@ int WriteCacheDevice::flush()
 #endif
 }
 
-
+/*
 void WriteCacheDevice::discard_drain()
 {
   block_data.discard_drain();
 }
-
+*/
 
 
 void WriteCacheDevice::aio_submit(IOContext *ioc)
 {
-  block_data.aio_submit(ioc);
+  KernelDevice::aio_submit(ioc);
 }
 
 
@@ -145,9 +271,11 @@ int WriteCacheDevice::write(
   bufferlist &bl,
   bool buffered)
 {
+  if (write_cache)
+    store_in_cache(off, bl);
   //TODO AK - write also to write cache
   int res;
-  res = block_data.write(off, bl, buffered);
+  res = KernelDevice::write(off, bl, buffered);
   return res;
 #if AKAK
   uint64_t len = bl.length();
@@ -174,9 +302,11 @@ int WriteCacheDevice::aio_write(
   IOContext *ioc,
   bool buffered)
 {
+  if (write_cache)
+     store_in_cache(off, bl);
   //TODO AK - write also to write cache
   int res;
-  res = block_data.aio_write(off, bl, ioc, buffered);
+  res = KernelDevice::aio_write(off, bl, ioc, buffered);
   return res;
 #if AKAK
   uint64_t len = bl.length();
@@ -232,7 +362,7 @@ int WriteCacheDevice::aio_write(
   return 0;
 #endif
 }
-
+/*
 int WriteCacheDevice::discard(uint64_t offset, uint64_t len)
 {
   int res;
@@ -250,7 +380,9 @@ int WriteCacheDevice::discard(uint64_t offset, uint64_t len)
   return r;
 #endif
 }
+*/
 
+#if AKAK
 int WriteCacheDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 		      IOContext *ioc,
 		      bool buffered)
@@ -286,7 +418,9 @@ int WriteCacheDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   return r < 0 ? r : 0;
   */
 }
+#endif
 
+#if AKAK
 int WriteCacheDevice::aio_read(
   uint64_t off,
   uint64_t len,
@@ -322,9 +456,9 @@ int WriteCacheDevice::aio_read(
   return r;
 #endif
 }
+#endif
 
-
-
+#if AKAK
 int WriteCacheDevice::read_random(uint64_t off, uint64_t len, char *buf,
                        bool buffered)
 {
@@ -384,7 +518,9 @@ int WriteCacheDevice::read_random(uint64_t off, uint64_t len, char *buf,
   return r < 0 ? r : 0;
 #endif
 }
+#endif
 
+#if AKAK
 int WriteCacheDevice::invalidate_cache(uint64_t off, uint64_t len)
 {
   int res;
@@ -404,4 +540,4 @@ int WriteCacheDevice::invalidate_cache(uint64_t off, uint64_t len)
   return r;
 #endif
 }
-
+#endif
