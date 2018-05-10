@@ -523,6 +523,63 @@ TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
   ASSERT_EQ(-EREMOTEIO, ctx.wait());
 }
 
+TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteNotTagOwner) {
+  create_local_image();
+
+  InSequence seq;
+
+  // lookup remote image tag class
+  cls::journal::Client client;
+  librbd::journal::ClientData client_data{
+    librbd::journal::ImageClientMeta{123}};
+  encode(client_data, client.data);
+  ::journal::MockJournaler mock_journaler;
+  expect_journaler_get_client(mock_journaler,
+                              librbd::Journal<>::IMAGE_CLIENT_ID,
+                              client, 0);
+
+  // open the remote image
+  librbd::MockJournal mock_journal;
+  librbd::MockTestImageCtx mock_remote_image_ctx(*m_remote_image_ctx);
+  MockOpenImageRequest mock_open_image_request;
+  expect_open_image(mock_open_image_request, m_remote_io_ctx,
+                    mock_remote_image_ctx.id, mock_remote_image_ctx, 0);
+
+  // test if remote image is primary
+  MockIsPrimaryRequest mock_is_primary_request;
+  expect_is_primary(mock_is_primary_request, false, 0);
+
+  // open the local image
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+  mock_local_image_ctx.journal = &mock_journal;
+  MockOpenLocalImageRequest mock_open_local_image_request;
+  expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
+                          mock_local_image_ctx.id, &mock_local_image_ctx, 0);
+  expect_is_resync_requested(mock_journal, false, 0);
+
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {librbd::Journal<>::LOCAL_MIRROR_UUID,
+                                             librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                                             true, 344, 0});
+
+  MockCloseImageRequest mock_close_image_request;
+  expect_close_image(mock_close_image_request, mock_local_image_ctx, 0);
+  expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
+
+  C_SaferCond ctx;
+  MockInstanceWatcher mock_instance_watcher;
+  cls::journal::ClientState client_state = cls::journal::CLIENT_STATE_CONNECTED;
+  librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta{
+    mock_local_image_ctx.id};
+  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+  MockBootstrapRequest *request = create_request(
+    &mock_instance_watcher, mock_journaler, mock_local_image_ctx.id,
+    mock_remote_image_ctx.id, "global image id", "local mirror uuid",
+    "remote mirror uuid", &client_state, &mirror_peer_client_meta, &ctx);
+  request->send();
+  ASSERT_EQ(-EREMOTEIO, ctx.wait());
+}
+
 TEST_F(TestMockImageReplayerBootstrapRequest, RemoteDemotePromote) {
   create_local_image();
 
@@ -547,7 +604,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, RemoteDemotePromote) {
 
   // test if remote image is primary
   MockIsPrimaryRequest mock_is_primary_request;
-  expect_is_primary(mock_is_primary_request, true, 0);
+  expect_is_primary(mock_is_primary_request, false, 0);
 
   // open the local image
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
@@ -556,6 +613,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, RemoteDemotePromote) {
   expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
                           mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
+
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {"remote mirror uuid"});
 
   // remote demotion / promotion event
   Tags tags = {
@@ -573,8 +633,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, RemoteDemotePromote) {
                               true, 4, 369})}
   };
   expect_journaler_get_tags(mock_journaler, 123, tags, 0);
-  expect_journal_get_tag_tid(mock_journal, 345);
-  expect_journal_get_tag_data(mock_journal, {"remote mirror uuid"});
 
   MockCloseImageRequest mock_close_image_request;
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
@@ -627,6 +685,10 @@ TEST_F(TestMockImageReplayerBootstrapRequest, MultipleRemoteDemotePromotes) {
                           mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
 
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                                             "remote mirror uuid", true, 4, 1});
+
   // remote demotion / promotion event
   Tags tags = {
     {2, 123, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
@@ -652,9 +714,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, MultipleRemoteDemotePromotes) {
                               true, 7, 1})}
   };
   expect_journaler_get_tags(mock_journaler, 123, tags, 0);
-  expect_journal_get_tag_tid(mock_journal, 345);
-  expect_journal_get_tag_data(mock_journal, {librbd::Journal<>::ORPHAN_MIRROR_UUID,
-                                             "remote mirror uuid", true, 4, 1});
 
   MockCloseImageRequest mock_close_image_request;
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
@@ -707,6 +766,12 @@ TEST_F(TestMockImageReplayerBootstrapRequest, LocalDemoteRemotePromote) {
                           mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
 
+  expect_journal_get_tag_tid(mock_journal, 346);
+  expect_journal_get_tag_data(mock_journal,
+                              {librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                               librbd::Journal<>::LOCAL_MIRROR_UUID,
+                               true, 345, 1});
+
   // remote demotion / promotion event
   Tags tags = {
     {2, 123, encode_tag_data({"local mirror uuid", "local mirror uuid",
@@ -718,11 +783,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, LocalDemoteRemotePromote) {
                               true, 3, 1})}
   };
   expect_journaler_get_tags(mock_journaler, 123, tags, 0);
-  expect_journal_get_tag_tid(mock_journal, 346);
-  expect_journal_get_tag_data(mock_journal,
-                              {librbd::Journal<>::ORPHAN_MIRROR_UUID,
-                               librbd::Journal<>::LOCAL_MIRROR_UUID,
-                               true, 345, 1});
 
   MockCloseImageRequest mock_close_image_request;
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
@@ -775,6 +835,11 @@ TEST_F(TestMockImageReplayerBootstrapRequest, SplitBrainForcePromote) {
                           mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
 
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {librbd::Journal<>::LOCAL_MIRROR_UUID,
+                                             librbd::Journal<>::ORPHAN_MIRROR_UUID,
+                                             true, 344, 0});
+
   // remote demotion / promotion event
   Tags tags = {
     {2, 123, encode_tag_data({librbd::Journal<>::LOCAL_MIRROR_UUID,
@@ -785,10 +850,6 @@ TEST_F(TestMockImageReplayerBootstrapRequest, SplitBrainForcePromote) {
                               true, 2, 1})}
   };
   expect_journaler_get_tags(mock_journaler, 123, tags, 0);
-  expect_journal_get_tag_tid(mock_journal, 345);
-  expect_journal_get_tag_data(mock_journal, {librbd::Journal<>::LOCAL_MIRROR_UUID,
-                                             librbd::Journal<>::ORPHAN_MIRROR_UUID,
-                                             true, 344, 0});
 
   MockCloseImageRequest mock_close_image_request;
   expect_close_image(mock_close_image_request, mock_local_image_ctx, 0);
@@ -845,6 +906,8 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ResyncRequested) {
   // resync is requested
   expect_is_resync_requested(mock_journal, true, 0);
 
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {"remote mirror uuid"});
 
   MockCloseImageRequest mock_close_image_request;
   expect_close_image(mock_close_image_request, mock_remote_image_ctx, 0);
@@ -913,6 +976,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemote) {
   expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
                           mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
+
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {"remote mirror uuid"});
 
   // sync the remote image to the local image
   MockImageSync mock_image_sync;
@@ -996,6 +1062,9 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemoteLocalDeleted) {
   expect_open_local_image(mock_open_local_image_request, m_local_io_ctx,
                           mock_local_image_ctx.id, &mock_local_image_ctx, 0);
   expect_is_resync_requested(mock_journal, false, 0);
+
+  expect_journal_get_tag_tid(mock_journal, 345);
+  expect_journal_get_tag_data(mock_journal, {"remote mirror uuid"});
 
   // sync the remote image to the local image
   MockImageSync mock_image_sync;
