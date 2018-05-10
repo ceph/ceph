@@ -1277,7 +1277,8 @@ public:
     int num_digest_updates_pending;
 
     // chunky scrub
-    hobject_t start, end;
+    hobject_t start, end;    // [start,end)
+    hobject_t max_end;       // Largest end that may have been sent to replicas
     eversion_t subset_last_update;
 
     // chunky scrub state
@@ -1353,6 +1354,7 @@ public:
       state = PG::Scrubber::INACTIVE;
       start = hobject_t();
       end = hobject_t();
+      max_end = hobject_t();
       subset_last_update = eversion_t();
       shallow_errors = 0;
       deep_errors = 0;
