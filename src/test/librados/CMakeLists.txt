@@ -6,7 +6,8 @@ set(libradostest_srcs
 add_library(radostest STATIC
   ${libradostest_srcs}
   $<TARGET_OBJECTS:libradostest_obj>)
-target_link_libraries(radostest librados ceph-common json_spirit ${EXTRALIBS})
+target_link_libraries(radostest librados ceph-common json_spirit 
+	${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES} ${EXTRALIBS})
 set_target_properties(radostest PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 
 # ceph_test_rados_api_cmd
@@ -181,7 +182,8 @@ add_executable(unittest_librados
   librados.cc
   )
 add_ceph_unittest(unittest_librados)
-target_link_libraries(unittest_librados librados ${BLKID_LIBRARIES})
+target_link_libraries(unittest_librados librados 
+	${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES})
 
 # unittest_librados_config
 add_executable(unittest_librados_config
@@ -190,6 +192,5 @@ add_executable(unittest_librados_config
 add_ceph_unittest(unittest_librados_config)
 target_link_libraries(unittest_librados_config
   librados
-  ${BLKID_LIBRARIES}
-  )
+  ${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES})
 
