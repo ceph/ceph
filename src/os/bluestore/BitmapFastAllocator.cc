@@ -24,11 +24,7 @@ int64_t BitmapFastAllocator::allocate(
 {
   uint64_t allocated = 0;
 
-  if (hint != 0) {
-    last_pos = hint;
-  }
-
-  _allocate_l2(want_size, alloc_unit, max_alloc_size, &last_pos,
+  _allocate_l2(want_size, alloc_unit, max_alloc_size, hint,
     &allocated, extents);
   if (!allocated) {
     return -ENOSPC;
@@ -69,5 +65,5 @@ void BitmapFastAllocator::init_rm_free(uint64_t offset, uint64_t length)
 void BitmapFastAllocator::shutdown()
 {
   ldout(cct, 1) << __func__ << dendl;
-  last_pos = 0;
+  _shutdown();
 }
