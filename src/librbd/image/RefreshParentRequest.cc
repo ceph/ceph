@@ -99,7 +99,11 @@ void RefreshParentRequest<I>::send_open_parent() {
 
   librados::IoCtx parent_io_ctx;
   int r = rados.ioctx_create2(m_parent_md.spec.pool_id, parent_io_ctx);
-  assert(r == 0);
+  if (r < 0) {
+    lderr(cct) << "failed to create IoCtx: " << cpp_strerror(r) << dendl;
+    send_complete(r);
+    return;
+  }
 
   // since we don't know the image and snapshot name, set their ids and
   // reset the snap_name and snap_exists fields after we read the header
