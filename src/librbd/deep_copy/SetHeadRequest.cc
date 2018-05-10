@@ -27,6 +27,7 @@ SetHeadRequest<I>::SetHeadRequest(I *image_ctx, uint64_t size,
   : m_image_ctx(image_ctx), m_size(size), m_parent_spec(spec),
     m_parent_overlap(parent_overlap), m_on_finish(on_finish),
     m_cct(image_ctx->cct) {
+  assert(m_parent_overlap <= m_size);
 }
 
 template <typename I>
@@ -84,6 +85,13 @@ void SetHeadRequest<I>::handle_set_size(int r) {
   {
     // adjust in-memory image size now that it's updated on disk
     RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
+    if (m_image_ctx->size > m_size) {
+      RWLock::WLocker parent_locker(m_image_ctx->parent_lock);
+      if (m_image_ctx->parent_md.spec.pool_id != -1 &&
+          m_image_ctx->parent_md.overlap > m_size) {
+        m_image_ctx->parent_md.overlap = m_size;
+      }
+    }
     m_image_ctx->size = m_size;
   }
 
