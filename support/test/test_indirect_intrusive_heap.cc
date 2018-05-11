@@ -28,7 +28,7 @@ struct Elem {
   crimson::IndIntruHeapData heap_data;
   crimson::IndIntruHeapData heap_data_alt;
 
-  Elem(int _data) : data(_data) { }
+  explicit Elem(int _data) : data(_data) { }
 
   bool operator==(const Elem& other) {
     return data == other.data;

@@ -175,6 +175,8 @@ int crimson::qos_simulation::parse_config_file(const std::string &fname, sim_con
       ct.client_limit = std::stod(val);
     if (!cf.read(section, "client_weight", val))
       ct.client_weight = std::stod(val);
+    if (!cf.read(section, "client_req_cost", val))
+      ct.client_req_cost = std::stoul(val);
     g_conf.cli_group.push_back(ct);
   }
 
