@@ -649,9 +649,9 @@ if(WITH_LIBRADOSSTRIPER)
     test_striper.cc
     $<TARGET_OBJECTS:unit-main>
     )
-add_ceph_unittest(unittest_striper)
-target_link_libraries(unittest_striper global ${BLKID_LIBRARIES})
-endif(WITH_LIBRADOSSTRIPER)
+  add_ceph_unittest(unittest_striper)
+  target_link_libraries(unittest_striper global ${BLKID_LIBRARIES})
+endif()
 
 # unittest_prebufferedstreambuf
 add_executable(unittest_prebufferedstreambuf
