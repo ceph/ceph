@@ -301,7 +301,6 @@ public:
 void Server::handle_client_session(MClientSession *m)
 {
   version_t pv;
-  bool blacklisted = false;
   Session *session = mds->get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
@@ -352,19 +351,26 @@ void Server::handle_client_session(MClientSession *m)
       return;
     }
 
-    blacklisted = mds->objecter->with_osdmap(
-        [session](const OSDMap &osd_map) -> bool {
-          return osd_map.is_blacklisted(session->info.inst.addr);
-        });
-
-    if (blacklisted) {
-      dout(10) << "rejecting blacklisted client " << session->info.inst.addr << dendl;
-      mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
-      m->put();
-      return;
-    }
-
     {
+      auto send_reject_message = [this, session](std::string_view err_str) {
+	MClientSession *m = new MClientSession(CEPH_SESSION_REJECT);
+	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
+	  m->metadata["error_string"] = err_str;
+	mds->send_message_client(m, session);
+      };
+
+      bool blacklisted = mds->objecter->with_osdmap(
+	  [session](const OSDMap &osd_map) -> bool {
+	    return osd_map.is_blacklisted(session->info.inst.addr);
+	  });
+
+      if (blacklisted) {
+	dout(10) << "rejecting blacklisted client " << session->info.inst.addr << dendl;
+	send_reject_message("blacklisted");
+	session->clear();
+	break;
+      }
+
       client_metadata_t client_metadata(std::move(m->metadata),
 					std::move(m->supported_features));
       dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN metadata entries:" << dendl;
@@ -376,7 +382,9 @@ void Server::handle_client_session(MClientSession *m)
       feature_bitset_t missing_features(CEPHFS_FEATURES_MDS_REQUIRED);
       missing_features -= client_metadata.features;
       if (!missing_features.empty()) {
-	mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
+	stringstream ss;
+	ss << "missing required features '" << missing_features << "'";
+	send_reject_message(ss.str());
 	mds->clog->warn() << "client session lacks required features '"
 			  << missing_features << "' denied (" << session->info.inst << ")";
 	session->clear();
@@ -389,14 +397,23 @@ void Server::handle_client_session(MClientSession *m)
       it = client_metadata.find("root");
       if (it != client_metadata.end()) {
 	auto claimed_root = it->second;
+	stringstream ss;
+	bool denied = false;
 	// claimed_root has a leading "/" which we strip before passing
 	// into caps check
-	if (claimed_root.empty() || claimed_root[0] != '/' ||
-	    !session->auth_caps.path_capable(claimed_root.substr(1))) {
+	if (claimed_root.empty() || claimed_root[0] != '/') {
+	  denied = true;
+	  ss << "invalue root '" << claimed_root << "'";
+	} else if (!session->auth_caps.path_capable(claimed_root.substr(1))) {
+	  denied = true;
+	  ss << "non-allowable root '" << claimed_root << "'";
+	}
+
+	if (denied) {
 	  // Tell the client we're rejecting their open
-	  mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
-	  mds->clog->warn() << "client session with invalid root '" << claimed_root
-			    << "' denied (" << session->info.inst << ")";
+	  send_reject_message(ss.str());
+	  mds->clog->warn() << "client session with " << ss.str()
+			    << " denied (" << session->info.inst << ")";
 	  session->clear();
 	  break;
 	}
