@@ -4213,7 +4213,7 @@ void MDCache::rejoin_send_rejoins()
   rejoins_pending = false;
 
   // nothing?
-  if (mds->is_rejoin() && rejoins.empty()) {
+  if (mds->is_rejoin() && rejoin_gather.empty()) {
     dout(10) << "nothing to rejoin" << dendl;
     rejoin_gather_finish();
   }
@@ -4598,21 +4598,13 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   } else {
     // done?
-    if (rejoin_gather.empty()) {
+    if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid())) {
       rejoin_gather_finish();
     } else {
       dout(7) << "still need rejoin from (" << rejoin_gather << ")" << dendl;
     }
   }
 }
-
-class C_MDC_RejoinGatherFinish : public MDCacheContext {
-public:
-  explicit C_MDC_RejoinGatherFinish(MDCache *c) : MDCacheContext(c) {}
-  void finish(int r) override {
-    mdcache->rejoin_gather_finish();
-  }
-};
 
 /*
  * rejoin_scour_survivor_replica - remove source from replica list on unmentioned objects
@@ -4972,7 +4964,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   // done?
   assert(rejoin_gather.count(from));
   rejoin_gather.erase(from);
-  if (rejoin_gather.empty()) {
+  if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid())) {
     rejoin_gather_finish();
   } else {
     dout(7) << "still need rejoin from (" << rejoin_gather << ")" << dendl;
@@ -5315,6 +5307,7 @@ void MDCache::rejoin_gather_finish()
 {
   dout(10) << "rejoin_gather_finish" << dendl;
   assert(mds->is_rejoin());
+  assert(rejoin_ack_gather.count(mds->get_nodeid()));
 
   if (open_undef_inodes_dirfrags())
     return;
@@ -5328,7 +5321,6 @@ void MDCache::rejoin_gather_finish()
   rejoin_send_acks();
   
   // signal completion of fetches, rejoin_gather_finish, etc.
-  assert(rejoin_ack_gather.count(mds->get_nodeid()));
   rejoin_ack_gather.erase(mds->get_nodeid());
 
   // did we already get our acks too?
@@ -5542,11 +5534,10 @@ bool MDCache::process_imported_caps()
   } else {
     trim_non_auth();
 
+    assert(rejoin_gather.count(mds->get_nodeid()));
     rejoin_gather.erase(mds->get_nodeid());
+    assert(!rejoin_ack_gather.count(mds->get_nodeid()));
     maybe_send_pending_rejoins();
-
-    if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid()))
-      rejoin_gather_finish();
   }
   return false;
 }
@@ -6011,7 +6002,15 @@ bool MDCache::open_undef_inodes_dirfrags()
   if (fetch_queue.empty())
     return false;
 
-  MDSGatherBuilder gather(g_ceph_context, new C_MDC_RejoinGatherFinish(this));
+  MDSGatherBuilder gather(g_ceph_context,
+      new MDSInternalContextWrapper(mds,
+	new FunctionContext([this](int r) {
+	    if (rejoin_gather.empty())
+	      rejoin_gather_finish();
+	  })
+	)
+      );
+
   for (set<CDir*>::iterator p = fetch_queue.begin();
        p != fetch_queue.end();
        ++p) {
