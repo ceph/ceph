@@ -18,6 +18,7 @@
 #include <iostream>
 #include <list>
 #include <vector>
+#include <atomic>
 
 
 #include "dmclock_server.h"
@@ -97,6 +98,7 @@ namespace crimson {
       using Queue = dmc::PushPriorityQueue<ClientId,Request>;
       int client = 17;
       double reservation = 100.0;
+      std::atomic<std::uint32_t> idle_erase_counter(0u);
 
       dmc::ClientInfo ci(reservation, 1.0, 0.0);
       auto client_info_f = [&] (ClientId c) -> const dmc::ClientInfo* {
@@ -109,6 +111,9 @@ namespace crimson {
 			      uint64_t req_cost) {
 	// empty; do nothing
       };
+      auto idle_erase_listener_f = [&idle_erase_counter](const ClientId& c) {
+	idle_erase_counter++;
+      };
 
       Queue pq(client_info_f,
 	       server_ready_f,
@@ -116,7 +121,9 @@ namespace crimson {
 	       std::chrono::seconds(3),
 	       std::chrono::seconds(5),
 	       std::chrono::seconds(2),
-	       false);
+	       false,
+	       0.0,
+	       idle_erase_listener_f);
 
       auto lock_pq = [&](std::function<void()> code) {
 	test_locked(pq.data_mtx, code);
@@ -171,12 +178,19 @@ namespace crimson {
 	    "after idle age client map entry shows idle.";
 	});
 
+      EXPECT_EQ(0u, idle_erase_counter) <<
+	"idle erase counter is still 0 since client has not yet been "
+	"idle-erased";
+
       std::this_thread::sleep_for(std::chrono::seconds(2));
 
       lock_pq([&] () {
 	  EXPECT_EQ(0u, pq.client_map.size()) <<
 	    "client map loses its entry after erase age";
 	});
+
+      EXPECT_EQ(1u, idle_erase_counter) <<
+	"idle erase counter is now 1 since client has been idle-erased";
     } // TEST
 
 
