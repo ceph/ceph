@@ -177,11 +177,10 @@ class CommandsRequest(object):
                 self.finished
             ),
             'waiting': map(
-                lambda x: {
-                    'command': x.command,
-                    'outs': x.outs,
-                    'outb': x.outb,
-                },
+                lambda x: map(
+                    lambda y: common.humanify_command(y),
+                    x
+                ),
                 self.waiting
             ),
             'failed': map(
