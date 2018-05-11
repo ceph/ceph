@@ -1224,7 +1224,6 @@ void Paxos::lease_renew_timeout()
  */
 void Paxos::trim()
 {
-  assert(should_trim());
   version_t end = std::min(get_version() - g_conf->paxos_min,
 		      get_first_committed() + g_conf->paxos_trim_max);
 
