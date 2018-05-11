@@ -346,6 +346,8 @@ int execute_list(const po::variables_map &vm,
     return r;
   }
 
+  utils::disable_cache();
+
   librbd::RBD rbd;
   r = do_list(rbd, io_ctx, vm["long"].as<bool>(), vm["all"].as<bool>(),
               formatter.get());
@@ -383,6 +385,8 @@ int execute_purge (const po::variables_map &vm,
   if (r < 0) {
     return r;
   }
+
+  utils::disable_cache();
 
   io_ctx.set_osdmap_full_try();
   librbd::RBD rbd;
