@@ -10,6 +10,7 @@ import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { Permission } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
 import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
 
 @Component({
@@ -96,5 +97,9 @@ export class OsdListComponent implements OnInit {
     };
 
     this.bsModalRef = this.modalService.show(OsdScrubModalComponent, { initialState });
+  }
+
+  configureClusterAction() {
+    this.bsModalRef = this.modalService.show(OsdFlagsModalComponent, {});
   }
 }
