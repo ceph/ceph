@@ -84,17 +84,18 @@ namespace crimson {
       double limit_inv;
 
       // order parameters -- min, "normal", max
-      ClientInfo(double _reservation, double _weight, double _limit) :
-	reservation(_reservation),
-	weight(_weight),
-	limit(_limit),
-	reservation_inv(0.0 == reservation ? 0.0 : 1.0 / reservation),
-	weight_inv(     0.0 == weight      ? 0.0 : 1.0 / weight),
-	limit_inv(      0.0 == limit       ? 0.0 : 1.0 / limit)
-      {
-	// empty
+      ClientInfo(double _reservation, double _weight, double _limit) {
+	update(_reservation, _weight, _limit);
       }
 
+      inline void update(double _reservation, double _weight, double _limit) {
+	reservation = _reservation;
+	weight = _weight;
+	limit = _limit;
+	reservation_inv = (0.0 == reservation) ? 0.0 : 1.0 / reservation;
+	weight_inv = (0.0 == weight) ? 0.0 : 1.0 / weight;
+	limit_inv = (0.0 == limit) ? 0.0 : 1.0 / limit;
+      }
 
       friend std::ostream& operator<<(std::ostream& out,
 				      const ClientInfo& client) {
@@ -492,6 +493,12 @@ namespace crimson {
       // a function that can be called to look up client information
       using ClientInfoFunc = std::function<const ClientInfo*(const C&)>;
 
+      // a function that can be called when dmclock decides to idle a
+      // client and remove its information; if the owner's
+      // ClientInfoFunc is maintaining information about the client,
+      // that information can be removed
+      using IdleEraseListener = std::function<void(const C&)>;
+
 
       bool empty() const {
 	DataGuard g(data_mtx);
@@ -708,6 +715,7 @@ namespace crimson {
       };
 
       ClientInfoFunc        client_info_f;
+      IdleEraseListener     idle_erase_f;
       static constexpr bool is_dynamic_cli_info_f = U1;
 
       mutable std::mutex data_mtx;
@@ -766,12 +774,11 @@ namespace crimson {
       Duration                  idle_age;
       Duration                  erase_age;
       Duration                  check_time;
-      std::deque<MarkPoint>     clean_mark_points;
+      std::deque<MarkPoint>     idle_erase_mark_points;
 
       // NB: All threads declared at end, so they're destructed first!
 
-      std::unique_ptr<RunEvery> cleaning_job;
-
+      std::unique_ptr<RunEvery> idle_erase_job;
 
       // COMMON constructor that others feed into; we can accept three
       // different variations of durations
@@ -781,8 +788,10 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
 			bool _allow_limit_break,
-			double _anticipation_timeout) :
+			double _anticipation_timeout,
+			IdleEraseListener _idle_erase_f) :
 	client_info_f(_client_info_f),
+	idle_erase_f(_idle_erase_f),
 	allow_limit_break(_allow_limit_break),
 	anticipation_timeout(_anticipation_timeout),
 	finishing(false),
@@ -792,10 +801,10 @@ namespace crimson {
       {
 	assert(_erase_age >= _idle_age);
 	assert(_check_time < _idle_age);
-	cleaning_job =
+	idle_erase_job =
 	  std::unique_ptr<RunEvery>(
 	    new RunEvery(check_time,
-			 std::bind(&PriorityQueueBase::do_clean, this)));
+			 std::bind(&PriorityQueueBase::do_idle_erase, this)));
       }
 
 
@@ -1016,8 +1025,8 @@ namespace crimson {
       void reduce_reservation_tags(const C& client_id) {
 	auto client_it = client_map.find(client_id);
 
-	// means the client was cleaned from map; should never happen
-	// as long as cleaning times are long enough
+	// means the client was idle-erased from map; should never
+	// happen as long as idle erase times are long enough
 	assert(client_map.end() != client_it);
 	reduce_reservation_tags(*client_it->second);
       }
@@ -1111,27 +1120,27 @@ namespace crimson {
        * This is being called regularly by RunEvery. Every time it's
        * called it notes the time and delta counter (mark point) in a
        * deque. It also looks at the deque to find the most recent
-       * mark point that is older than clean_age. It then walks the
-       * map and delete all server entries that were last used before
-       * that mark point.
+       * mark point that is older than idle-erase age. It then walks
+       * the map and delete all server entries that were last used
+       * before that mark point.
        */
-      void do_clean() {
+      void do_idle_erase() {
 	TimePoint now = std::chrono::steady_clock::now();
 	DataGuard g(data_mtx);
-	clean_mark_points.emplace_back(MarkPoint(now, tick));
+	idle_erase_mark_points.emplace_back(MarkPoint(now, tick));
 
 	// first erase the super-old client records
 
 	Counter erase_point = 0;
-	auto point = clean_mark_points.front();
+	auto point = idle_erase_mark_points.front();
 	while (point.first <= now - erase_age) {
 	  erase_point = point.second;
-	  clean_mark_points.pop_front();
-	  point = clean_mark_points.front();
+	  idle_erase_mark_points.pop_front();
+	  point = idle_erase_mark_points.front();
 	}
 
 	Counter idle_point = 0;
-	for (auto i : clean_mark_points) {
+	for (auto i : idle_erase_mark_points) {
 	  if (i.first <= now - idle_age) {
 	    idle_point = i.second;
 	  } else {
@@ -1143,6 +1152,9 @@ namespace crimson {
 	  for (auto i = client_map.begin(); i != client_map.end(); /* empty */) {
 	    auto i2 = i++;
 	    if (erase_point && i2->second->last_tick <= erase_point) {
+	      if (nullptr != idle_erase_f) {
+		idle_erase_f(i2->second->client);
+	      }
 	      delete_from_heaps(i2->second);
 	      client_map.erase(i2);
 	    } else if (idle_point && i2->second->last_tick <= idle_point) {
@@ -1150,7 +1162,7 @@ namespace crimson {
 	    }
 	  } // for
 	} // if
-      } // do_clean
+      } // do_idle_erase
 
 
       // data_mtx must be held by caller
@@ -1215,10 +1227,13 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
 			bool _allow_limit_break = false,
-			double _anticipation_timeout = 0.0) :
+			double _anticipation_timeout = 0.0,
+			typename super::IdleEraseListener _idle_erase_f = nullptr) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _allow_limit_break, _anticipation_timeout)
+	      _allow_limit_break, _anticipation_timeout,
+	      _idle_erase_f)
+
       {
 	// empty
       }
@@ -1227,13 +1242,15 @@ namespace crimson {
       // pull convenience constructor
       PullPriorityQueue(typename super::ClientInfoFunc _client_info_f,
 			bool _allow_limit_break = false,
-			double _anticipation_timeout = 0.0) :
+			double _anticipation_timeout = 0.0,
+			typename super::IdleEraseListener _idle_erase_f = nullptr) :
 	PullPriorityQueue(_client_info_f,
 			  std::chrono::minutes(10),
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
 			  _allow_limit_break,
-			  _anticipation_timeout)
+			  _anticipation_timeout,
+			  _idle_erase_f)
       {
 	// empty
       }
@@ -1446,10 +1463,11 @@ namespace crimson {
 			std::chrono::duration<Rep,Per> _erase_age,
 			std::chrono::duration<Rep,Per> _check_time,
 			bool _allow_limit_break = false,
-			double anticipation_timeout = 0.0) :
+			double anticipation_timeout = 0.0,
+			typename super::IdleEraseListener _idle_erase_f = nullptr) :
 	super(_client_info_f,
 	      _idle_age, _erase_age, _check_time,
-	      _allow_limit_break, anticipation_timeout)
+	      _allow_limit_break, anticipation_timeout, _idle_erase_f)
       {
 	can_handle_f = _can_handle_f;
 	handle_f = _handle_f;
@@ -1462,7 +1480,8 @@ namespace crimson {
 			CanHandleRequestFunc _can_handle_f,
 			HandleRequestFunc _handle_f,
 			bool _allow_limit_break = false,
-			double _anticipation_timeout = 0.0) :
+			double _anticipation_timeout = 0.0,
+			typename super::IdleEraseListener _idle_erase_f = nullptr) :
 	PushPriorityQueue(_client_info_f,
 			  _can_handle_f,
 			  _handle_f,
@@ -1470,7 +1489,8 @@ namespace crimson {
 			  std::chrono::minutes(15),
 			  std::chrono::minutes(6),
 			  _allow_limit_break,
-			  _anticipation_timeout)
+			  _anticipation_timeout,
+			  _idle_erase_f)
       {
 	// empty
       }
@@ -1482,7 +1502,6 @@ namespace crimson {
 	sched_ahead_thd.join();
       }
 
-    public:
 
       inline void add_request(R&& request,
 			      const C& client_id,

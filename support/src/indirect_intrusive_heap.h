@@ -227,6 +227,8 @@ namespace crimson {
 
     bool empty() const { return 0 == count; }
 
+    void clear() { data.clear(); count = 0; }
+
     size_t size() const { return (size_t) count; }
 
     T& top() { return *data[0]; }
