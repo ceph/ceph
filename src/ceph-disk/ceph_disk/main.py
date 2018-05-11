@@ -781,6 +781,10 @@ def get_partition_dev(dev, pnum):
                 if not partname or len(f) < len(partname):
                     partname = f
     if partname:
+        # BLOCKDIR is populated but is it the case of get_dev_path(partname) ?
+        if not os.path.exists(get_dev_path(partname)):
+            raise Error('%s is not populated while %s has it' %
+                        (get_dev_path(partname), sys_entry))
         return get_dev_path(partname)
     else:
         raise Error('partition %d for %s does not appear to exist%s' %
