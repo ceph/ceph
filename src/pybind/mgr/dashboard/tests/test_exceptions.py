@@ -116,19 +116,19 @@ class RESTControllerTest(ControllerTestCase):
         self._get('/foo/error_send_command')
         self.assertStatus(400)
         self.assertJsonBody(
-            {'detail': 'hi', 'code': "42", 'component': 'foo'}
+            {'detail': '[errno -42] hi', 'code': "42", 'component': 'foo'}
         )
 
     def test_error_send_command_list(self):
         self._get('/foo/')
         self.assertStatus(400)
         self.assertJsonBody(
-            {'detail': 'list', 'code': "42", 'component': 'foo'}
+            {'detail': '[errno -42] list', 'code': "42", 'component': 'foo'}
         )
 
     def test_error_send_command_bowsable_api(self):
         self.getPage('/foo/error_send_command', headers=[('Accept', 'text/html')])
-        for err in ["'detail': 'hi'", "'component': 'foo'"]:
+        for err in ["'detail': '[errno -42] hi'", "'component': 'foo'"]:
             self.assertIn(err.replace("'", "\'").encode('utf-8'), self.body)
 
     def test_error_foo_generic(self):
