@@ -204,7 +204,8 @@ def configure(ctx, config):
                 path='{tdir}/boto.cfg'.format(tdir=testdir),
                 data=conf,
                 )
-
+    remote.run(args=['cat', '{tdir}/boto.cfg'.format(tdir=testdir)],
+               check_status=False)
     try:
         yield
 
