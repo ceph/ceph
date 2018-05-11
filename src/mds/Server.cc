@@ -356,7 +356,8 @@ void Server::handle_client_session(MClientSession *m)
         });
 
     if (blacklisted) {
-      dout(10) << "ignoring blacklisted client " << session->info.inst.addr << dendl;
+      dout(10) << "rejecting blacklisted client " << session->info.inst.addr << dendl;
+      mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
       m->put();
       return;
     }
