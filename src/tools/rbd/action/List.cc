@@ -163,6 +163,8 @@ int do_list(std::string &pool_name, bool lflag, int threads, Formatter *f) {
     return r;
   }
 
+  utils::disable_cache();
+
   r = rbd.list(ioctx, names);
   if (r < 0)
     return r;
