@@ -3242,7 +3242,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
 	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
 	    if (session)
-	      rejoin_imported_client_map.emplace(q->first, session->info.inst);
+	      rejoin_client_map.emplace(q->first, session->info.inst);
 	  }
 
 	  // will process these caps in rejoin stage
@@ -4423,7 +4423,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     assert(gather_locks.empty());
 
     // check cap exports.
-    rejoin_imported_client_map.insert(weak->client_map.begin(), weak->client_map.end());
+    rejoin_client_map.insert(weak->client_map.begin(), weak->client_map.end());
 
     for (auto p = weak->cap_exports.begin(); p != weak->cap_exports.end(); ++p) {
       CInode *in = get_inode(p->first);
@@ -5371,19 +5371,19 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
 
 class C_MDC_RejoinSessionsOpened : public MDCacheLogContext {
 public:
-  map<client_t,pair<Session*,uint64_t> > imported_session_map;
+  map<client_t,pair<Session*,uint64_t> > session_map;
   C_MDC_RejoinSessionsOpened(MDCache *c) : MDCacheLogContext(c) {}
   void finish(int r) override {
     assert(r == 0);
-    mdcache->rejoin_open_sessions_finish(imported_session_map);
+    mdcache->rejoin_open_sessions_finish(session_map);
   }
 };
 
-void MDCache::rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >& imported_session_map)
+void MDCache::rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >& session_map)
 {
   dout(10) << "rejoin_open_sessions_finish" << dendl;
-  mds->server->finish_force_open_sessions(imported_session_map);
-  rejoin_imported_session_map.swap(imported_session_map);
+  mds->server->finish_force_open_sessions(session_map);
+  rejoin_session_map.swap(session_map);
   if (rejoin_gather.empty())
     rejoin_gather_finish();
 }
@@ -5445,14 +5445,14 @@ bool MDCache::process_imported_caps()
 
   // called by rejoin_gather_finish() ?
   if (rejoin_gather.count(mds->get_nodeid()) == 0) {
-    if (!rejoin_imported_client_map.empty() &&
-	rejoin_imported_session_map.empty()) {
+    if (!rejoin_client_map.empty() &&
+	rejoin_session_map.empty()) {
       C_MDC_RejoinSessionsOpened *finish = new C_MDC_RejoinSessionsOpened(this);
-      version_t pv = mds->server->prepare_force_open_sessions(rejoin_imported_client_map,
-							      finish->imported_session_map);
-      mds->mdlog->start_submit_entry(new ESessions(pv, rejoin_imported_client_map), finish);
+      version_t pv = mds->server->prepare_force_open_sessions(rejoin_client_map,
+							      finish->session_map);
+      mds->mdlog->start_submit_entry(new ESessions(pv, rejoin_client_map), finish);
       mds->mdlog->flush();
-      rejoin_imported_client_map.clear();
+      rejoin_client_map.clear();
       return true;
     }
 
@@ -5465,8 +5465,8 @@ bool MDCache::process_imported_caps()
       for (map<client_t,Capability::Export>::iterator q = p->second.second.begin();
 	   q != p->second.second.end();
 	   ++q) {
-	auto r = rejoin_imported_session_map.find(q->first);
-	if (r == rejoin_imported_session_map.end())
+	auto r = rejoin_session_map.find(q->first);
+	if (r == rejoin_session_map.end())
 	  continue;
 
 	Session *session = r->second.first;
@@ -5504,8 +5504,8 @@ bool MDCache::process_imported_caps()
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
 	Session *session;
 	{
-	  auto r = rejoin_imported_session_map.find(q->first);
-	  session = (r != rejoin_imported_session_map.end() ? r->second.first : nullptr);
+	  auto r = rejoin_session_map.find(q->first);
+	  session = (r != rejoin_session_map.end() ? r->second.first : nullptr);
 	}
 
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
