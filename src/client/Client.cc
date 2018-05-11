@@ -2114,9 +2114,18 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_REJECT:
-    rejected_by_mds[session->mds_num] = session->inst;
-    _closed_mds_session(session);
+    {
+      std::string_view error_str;
+      auto it = m->metadata.find("error_string");
+      if (it != m->metadata.end())
+	error_str = it->second;
+      else
+	error_str = "unknown error";
+      lderr(cct) << "mds." << from << " rejected us (" << error_str << ")" << dendl;
 
+      rejected_by_mds[session->mds_num] = session->inst;
+      _closed_mds_session(session);
+    }
     break;
 
   default:
