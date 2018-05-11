@@ -129,6 +129,10 @@ The name is provided by the user and can be any useful identifying string.  The 
 
   ceph balancer show <plan-name>
 
+All plans can be shown with::
+
+  ceph balancer ls
+
 Old plans can be discarded with::
 
   ceph balancer rm <plan-name>
