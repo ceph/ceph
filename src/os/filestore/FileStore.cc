@@ -5948,8 +5948,12 @@ int FileStore::set_throttle_params()
     cct->_conf->filestore_queue_low_threshhold,
     cct->_conf->filestore_queue_high_threshhold,
     cct->_conf->filestore_expected_throughput_bytes,
-    cct->_conf->filestore_queue_high_delay_multiple,
-    cct->_conf->filestore_queue_max_delay_multiple,
+    cct->_conf->filestore_queue_high_delay_multiple?
+    cct->_conf->filestore_queue_high_delay_multiple:
+    cct->_conf->filestore_queue_high_delay_multiple_bytes,
+    cct->_conf->filestore_queue_max_delay_multiple?
+    cct->_conf->filestore_queue_max_delay_multiple:
+    cct->_conf->filestore_queue_max_delay_multiple_bytes,
     cct->_conf->filestore_queue_max_bytes,
     &ss);
 
@@ -5957,8 +5961,12 @@ int FileStore::set_throttle_params()
     cct->_conf->filestore_queue_low_threshhold,
     cct->_conf->filestore_queue_high_threshhold,
     cct->_conf->filestore_expected_throughput_ops,
-    cct->_conf->filestore_queue_high_delay_multiple,
-    cct->_conf->filestore_queue_max_delay_multiple,
+    cct->_conf->filestore_queue_high_delay_multiple?
+    cct->_conf->filestore_queue_high_delay_multiple:
+    cct->_conf->filestore_queue_high_delay_multiple_ops,
+    cct->_conf->filestore_queue_max_delay_multiple?
+    cct->_conf->filestore_queue_max_delay_multiple:
+    cct->_conf->filestore_queue_max_delay_multiple_ops,
     cct->_conf->filestore_queue_max_ops,
     &ss);
 
