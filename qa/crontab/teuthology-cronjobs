@@ -189,6 +189,8 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 45 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-hammer -k distro -e $CEPH_QA_EMAIL --suite-branch hammer
 47 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel
 50 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-kraken -k distro -e $CEPH_QA_EMAIL --suite-branch kraken
+50 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous -k distro -e $CEPH_QA_EMAIL --suite-branch luminous
+
 
 #********** mimic branch END
 
