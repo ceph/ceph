@@ -34,11 +34,11 @@ namespace crimson {
 	// emptry
       }
 
-
-      void track_resp(const S& server_id, const NullData& ignore) {
+      void track_resp(const S& server_id,
+		      const NullData& ignore,
+		      uint64_t request_cost) {
 	// empty
       }
-
 
       /*
        * Returns the ReqParams for the given server.

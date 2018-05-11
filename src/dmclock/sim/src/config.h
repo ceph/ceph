@@ -23,6 +23,8 @@
 
 #include "ConfUtils.h"
 
+#include "sim_recs.h"
+
 
 namespace crimson {
   namespace qos_simulation {
@@ -37,6 +39,7 @@ namespace crimson {
       double client_reservation;
       double client_limit;
       double client_weight;
+      Cost client_req_cost;
 
       cli_group_t(uint _client_count = 100,
 		  uint _client_wait = 0,
@@ -46,7 +49,8 @@ namespace crimson {
 		  uint _client_outstanding_ops = 100,
 		  double _client_reservation = 20.0,
 		  double _client_limit = 60.0,
-		  double _client_weight = 1.0) :
+		  double _client_weight = 1.0,
+		  Cost _client_req_cost = 1u) :
 	client_count(_client_count),
 	client_wait(std::chrono::seconds(_client_wait)),
 	client_total_ops(_client_total_ops),
@@ -55,7 +59,8 @@ namespace crimson {
 	client_outstanding_ops(_client_outstanding_ops),
 	client_reservation(_client_reservation),
 	client_limit(_client_limit),
-	client_weight(_client_weight)
+	client_weight(_client_weight),
+	client_req_cost(_client_req_cost)
       {
 	// empty
       }
@@ -72,7 +77,8 @@ namespace crimson {
 	  std::fixed << std::setprecision(1) <<
 	  "client_reservation = " << cli_group.client_reservation << "\n" <<
 	  "client_limit = " << cli_group.client_limit << "\n" <<
-	  "client_weight = " << cli_group.client_weight;
+	  "client_weight = " << cli_group.client_weight << "\n" <<
+	  "client_req_cost = " << cli_group.client_req_cost;
 	return out;
       }
     }; // class cli_group_t

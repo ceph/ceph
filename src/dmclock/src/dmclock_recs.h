@@ -24,6 +24,12 @@ namespace crimson {
   namespace dmclock {
     using Counter = uint64_t;
 
+    // we're abstracting cost to its own type to better allow for
+    // future changes; we're assuming that Cost is relatively small
+    // and that it would be more efficient to pass-by-value than
+    // by-reference.
+    using Cost = uint32_t;
+
     enum class PhaseType : uint8_t { reservation, priority };
 
     inline std::ostream& operator<<(std::ostream& out, const PhaseType& phase) {
@@ -32,21 +38,21 @@ namespace crimson {
     }
 
     struct ReqParams {
-      // count of all replies since last request; MUSTN'T BE 0
+      // count of all replies since last request
       uint32_t delta;
 
-      // count of reservation replies since last request; MUSTN'T BE 0
+      // count of reservation replies since last request
       uint32_t rho;
 
       ReqParams(uint32_t _delta, uint32_t _rho) :
 	delta(_delta),
 	rho(_rho)
       {
-	assert(0 != delta && 0 != rho && rho <= delta);
+	assert(rho <= delta);
       }
 
       ReqParams() :
-	ReqParams(1, 1)
+	ReqParams(0, 0)
       {
 	// empty
       }
