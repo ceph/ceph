@@ -104,6 +104,12 @@ protected:
   inline bool _is_slot_fully_allocated(uint64_t idx) const {
     return l1[idx] == all_slot_clear;
   }
+public:
+  inline uint64_t get_min_alloc_size() const
+  {
+    return l0_granularity;
+  }
+
 };
 
 template <class T>
@@ -537,6 +543,10 @@ public:
   {
     std::lock_guard<std::mutex> l(lock);
     return available;
+  }
+  inline uint64_t get_min_alloc_size() const
+  {
+    return l1.get_min_alloc_size();
   }
 
 protected:
