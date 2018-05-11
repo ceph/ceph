@@ -97,9 +97,10 @@ class PoolTest(DashboardTestCase):
                                          data['application_metadata'].split(','))
                     elif k == 'pool':
                         self.assertEqual(pool['pool_name'], v)
-                    elif k in ['compression_mode', 'compression_algorithm',
-                               'compression_max_blob_size']:
+                    elif k in ['compression_mode', 'compression_algorithm']:
                         self.assertEqual(pool['options'][k], data[k])
+                    elif k == 'compression_max_blob_size':
+                        self.assertEqual(pool['options'][k], int(data[k]))
                     elif k == 'compression_required_ratio':
                         self.assertEqual(pool['options'][k], float(data[k]))
                     else:
@@ -136,7 +137,7 @@ class PoolTest(DashboardTestCase):
             'pool_type': 'replicated',
             'compression_algorithm': 'zstd',
             'compression_mode': 'aggressive',
-            'compression_max_blob_size': 10000000,
+            'compression_max_blob_size': "10000000",
             'compression_required_ratio': '0.8',
         }]
         for data in pools:
@@ -150,7 +151,7 @@ class PoolTest(DashboardTestCase):
         self.assertJsonBody({
             'component': 'pool',
             'code': "2",
-            'detail': "specified rule dnf doesn't exist"
+            'detail': "[errno -2] specified rule dnf doesn't exist"
         })
 
     @authenticate
