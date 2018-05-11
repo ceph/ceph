@@ -10,9 +10,9 @@ add_executable(rados ${rados_srcs})
 
 target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 if(WITH_LIBRADOSSTRIPER)
-target_link_libraries(rados radosstriper)
+  target_link_libraries(rados radosstriper)
 else()
-target_link_libraries(rados cls_lock_client)
+  target_link_libraries(rados cls_lock_client)
 endif()
 install(TARGETS rados DESTINATION bin)
 
