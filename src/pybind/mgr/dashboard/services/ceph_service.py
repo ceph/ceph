@@ -24,10 +24,9 @@ from .. import logger, mgr
 
 class SendCommandError(rados.Error):
     def __init__(self, err, prefix, argdict, errno):
-        self.errno = errno
         self.prefix = prefix
         self.argdict = argdict
-        super(SendCommandError, self).__init__(err)
+        super(SendCommandError, self).__init__(err, errno)
 
 
 class CephService(object):
