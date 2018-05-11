@@ -22,4 +22,12 @@ export class OsdService {
   scrub(id, deep) {
     return this.http.post(`${this.path}/${id}/scrub?deep=${deep}`, null);
   }
+
+  getFlags() {
+    return this.http.get(`${this.path}/flags`);
+  }
+
+  updateFlags(flags: string[]) {
+    return this.http.put(`${this.path}/flags`, { flags: flags });
+  }
 }
