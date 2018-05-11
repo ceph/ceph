@@ -350,7 +350,6 @@ bool PurgeQueue::_consume()
 
   bool could_consume = false;
   while(can_consume()) {
-    could_consume = true;
 
     if (delayed_flush) {
       // We are now going to read from the journal, so any proactive
@@ -376,6 +375,7 @@ bool PurgeQueue::_consume()
       return could_consume;
     }
 
+    could_consume = true;
     // The journaler is readable: consume an entry
     bufferlist bl;
     bool readable = journaler.try_read_entry(bl);
