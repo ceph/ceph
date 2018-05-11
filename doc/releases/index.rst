@@ -12,6 +12,14 @@ Release Index
 
    Release Schedule <schedule>
 
+Release Candidates
+~~~~~~~~~~~~~~~~~~
+
+.. toctree::
+   :maxdepth: 1
+
+   Mimic <mimic>
+
 Active Releases
 ~~~~~~~~~~~~~~~
 

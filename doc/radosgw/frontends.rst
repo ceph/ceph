@@ -1,3 +1,5 @@
+.. _rgw_frontends:
+
 ==============
 HTTP Frontends
 ==============
