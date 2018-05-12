@@ -11713,15 +11713,19 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
   if (m->op == POOL_OP_CREATE)
     return preprocess_pool_op_create(op);
 
-  if (!osdmap.get_pg_pool(m->pool)) {
+  const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
+  if (p == nullptr) {
     dout(10) << "attempt to operate on non-existent pool id " << m->pool << dendl;
-    _pool_op_reply(op, 0, osdmap.get_epoch());
+    if (m->op == POOL_OP_DELETE) {
+      _pool_op_reply(op, 0, osdmap.get_epoch());
+    } else {
+      _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+    }
     return true;
   }
 
   // check if the snap and snapname exist
   bool snap_exists = false;
-  const pg_pool_t *p = osdmap.get_pg_pool(m->pool);
   if (p->snap_exists(m->name.c_str()))
     snap_exists = true;
 
