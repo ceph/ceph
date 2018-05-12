@@ -6301,16 +6301,18 @@ int OSD::probe_smart_device(const char *device, int timeout, std::string *result
   ret = output.read_fd(smartctl.get_stdout(), 100*1024);
   if (ret < 0) {
     derr << "failed read from smartctl: " << cpp_strerror(-ret) << dendl;
-    return ret;
+  } else {
+    *result = output.to_str();
+    dout(10) << "smartctl output is: " << *result << dendl;
   }
-
-  derr << "smartctl output is: " << output.c_str() << dendl;
-  *result = output.c_str(); 
 
   if (smartctl.join() != 0) {
     derr << smartctl.err() << dendl;
     return -EINVAL;
   }
+
+  if (ret < 0)
+    return ret;
 
   return 0;
 }
