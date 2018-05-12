@@ -6257,24 +6257,23 @@ void OSD::probe_smart(ostream& ss)
   json_spirit::mValue smart_json;
 
   for (auto dev : devnames) {
-      // smartctl works only on physical devices; filter out any logical device
-      if (dev.find("dm-") == 0) {
-	  continue;
-      }
+    // smartctl works only on physical devices; filter out any logical device
+    if (dev.find("dm-") == 0) {
+      continue;
+    }
 
-      if (probe_smart_device(("/dev/" + dev).c_str(), smart_timeout, &result)) {
-	  derr << "probe_smart_device failed for /dev/" << dev << ", continuing to next device"<< dendl;
-	  continue;
-      }
+    if (probe_smart_device(("/dev/" + dev).c_str(), smart_timeout, &result)) {
+      dout(10) << "probe_smart_device failed for /dev/" << dev << dendl;
+      continue;
+    }
 
-      // TODO: change to read_or_throw?
-      if (!json_spirit::read(result, smart_json)) {
-	  derr << "smartctl JSON output of /dev/" + dev + " is invalid" << dendl;
-      }
-      else { //json is valid, assigning
-	  json_map[dev] = smart_json;
-      }
-      // no need to result.clear() or clear smart_json
+    // TODO: change to read_or_throw?
+    if (!json_spirit::read(result, smart_json)) {
+      derr << "smartctl JSON output of /dev/" + dev + " is invalid" << dendl;
+    } else { //json is valid, assigning
+      json_map[dev] = smart_json;
+    }
+    // no need to result.clear() or clear smart_json
   }
   json_spirit::write(json_map, ss, json_spirit::pretty_print);
 }
@@ -6282,14 +6281,15 @@ void OSD::probe_smart(ostream& ss)
 int OSD::probe_smart_device(const char *device, int timeout, std::string *result)
 {
   // when using --json, smartctl will report its errors in JSON format to stdout 
-  SubProcessTimed smartctl("sudo", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE, timeout);
+  SubProcessTimed smartctl("sudo", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE,
+			   timeout);
   smartctl.add_cmd_args(
-      "smartctl",
-      "-a",
-      //"-x",
-      "--json",
-      device,
-      NULL);
+    "smartctl",
+    "-a",
+    //"-x",
+    "--json",
+    device,
+    NULL);
 
   int ret = smartctl.spawn();
   if (ret != 0) {
@@ -6301,18 +6301,18 @@ int OSD::probe_smart_device(const char *device, int timeout, std::string *result
   ret = output.read_fd(smartctl.get_stdout(), 100*1024);
   if (ret < 0) {
     derr << "failed read from smartctl: " << cpp_strerror(-ret) << dendl;
-    return ret;
+  } else {
+    ret = 0;
+    *result = output.to_str();
+    dout(10) << "smartctl output is: " << *result << dendl;
   }
-
-  derr << "smartctl output is: " << output.c_str() << dendl;
-  *result = output.c_str(); 
 
   if (smartctl.join() != 0) {
     derr << smartctl.err() << dendl;
     return -EINVAL;
   }
 
-  return 0;
+  return ret;
 }
 
 bool OSD::heartbeat_dispatch(Message *m)
