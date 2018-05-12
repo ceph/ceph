@@ -6157,7 +6157,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       f->close_section();
     }
     f->close_section();
-    f->flush(ss);
+    f->flush(ds);
   }
   else if (prefix == "debug kick_recovery_wq") {
     int64_t delay;
