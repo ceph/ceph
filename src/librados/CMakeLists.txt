@@ -37,11 +37,6 @@ endif()
 target_link_libraries(librados ${rados_libs})
 install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
-if(WITH_EMBEDDED)
-  add_library(cephd_rados STATIC
-    $<TARGET_OBJECTS:librados_api_obj>
-    $<TARGET_OBJECTS:librados_objs>)
-endif()
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_dependencies(librados_api_obj eventtrace_tp)
 endif()

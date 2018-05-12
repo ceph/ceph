@@ -142,7 +142,6 @@ build() {
 		-DWITH_PYTHON3=OFF \
 		-DWITH_LTTNG=OFF \
 		-DWITH_SYSTEM_BOOST=ON \
-		-DWITH_EMBEDDED=OFF \
 		-DWITH_TESTS=${_with_tests:-OFF} \
 		|| return 1
 	make -j${JOBS:-2} || return 1
