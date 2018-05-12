@@ -45,9 +45,3 @@ set_target_properties(ceph_zlib PROPERTIES
   SOVERSION 2
   INSTALL_RPATH "")
 install(TARGETS ceph_zlib DESTINATION ${compressor_plugin_dir})
-
-if(WITH_EMBEDDED)
-  add_library(cephd_compressor_zlib STATIC ${zlib_sources})
-	target_include_directories(cephd_compressor_zlib SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include")
-  set_target_properties(cephd_compressor_zlib PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
-endif()
