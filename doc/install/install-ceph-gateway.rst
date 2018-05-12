@@ -173,6 +173,41 @@ non-ssl connections are hosted by a single rgw instance. For eg::
  [client.rgw.gateway-node1]
  rgw_frontends = civetweb port=80+443s ssl_certificate=/etc/ceph/private/keyandcert.pem
 
+Additional Civetweb Configuration Options
+-----------------------------------------
+Some additional configuration options can be adjusted for the embedded Civetweb web server
+in the **Client RADOS Gateway** section of the **/etc/ceph/ceph.conf** file.
+
+If no value is specified, the **Default** value is set
+
++-------------------------+---------------------------------------------------------------+---------+
+| Option                  | Description                                                   | Default |
++=========================+===============================================================+=========+
+|                         | Path to a file for access logs. Either full path, or relative |         |
+| **access_log_file**     | to the current working directory. If absent (default), then   | EMPTY   |
+|                         | accesses are not logged.                                      |         |
++-------------------------+---------------------------------------------------------------+---------+
+|                         | Path to a file for error logs. Either full path, or relative  |         |
+| **error_log_file**      | to the current working directory. If absent (default), then   | EMPTY   |
+|                         | errors are not logged.                                        |         |
++-------------------------+---------------------------------------------------------------+---------+
+|                         | Number of worker threads. Civetweb handles each incoming      |         |
+| **num_threads**         | connection in a separate thread. Therefore, the value of this | 50      |
+|                         | option is effectively the number of concurrent HTTP           |         |
+|                         | connections Civetweb can handle.                              |         |
++-------------------------+---------------------------------------------------------------+---------+
+|                         | Timeout for network read and network write operations, in     |         |
+| **request_timeout_ms**  | milliseconds. If a client intends to keep long-running        | 30000   |
+|                         | connection, either increase this value or (better) use        |         |
+|                         | keep-alive messages.                                          |         |
++-------------------------+---------------------------------------------------------------+---------+
+
+
+The following is an example of the **/etc/ceph/ceph.conf** file with some of these options set:
+ 
+ [client.rgw.gateway-node1]
+ rgw frontends = civetweb request_timeout_ms=30000 error_log_file=/var/log/radosgw/civetweb.error.log access_log_file=/var/log/radosgw/civetweb.access.log
+ 
 
 Migrating from Apache to Civetweb
 ---------------------------------
