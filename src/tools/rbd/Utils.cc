@@ -907,6 +907,10 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
   return 0;
 }
 
+void disable_cache() {
+  g_conf->set_val_or_die("rbd_cache", "false");
+}
+
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image) {
   int r;
