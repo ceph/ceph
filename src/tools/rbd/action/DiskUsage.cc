@@ -283,6 +283,8 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
+  utils::disable_cache();
+
   librbd::RBD rbd;
   r = do_disk_usage(rbd, io_ctx,
                     image_name.empty() ? nullptr: image_name.c_str(),
