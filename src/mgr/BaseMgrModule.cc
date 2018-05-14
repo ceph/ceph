@@ -644,11 +644,11 @@ BaseMgrModule_init(BaseMgrModule *self, PyObject *args, PyObject *kwds)
         return -1;
     }
 
-    self->py_modules = (ActivePyModules*)PyCapsule_GetPointer(
-        py_modules_capsule, nullptr);
+    self->py_modules = static_cast<ActivePyModules*>(PyCapsule_GetPointer(
+        py_modules_capsule, nullptr));
     assert(self->py_modules);
-    self->this_module = (ActivePyModule*)PyCapsule_GetPointer(
-        this_module_capsule, nullptr);
+    self->this_module = static_cast<ActivePyModule*>(PyCapsule_GetPointer(
+        this_module_capsule, nullptr));
     assert(self->this_module);
 
     return 0;
