@@ -35,4 +35,4 @@ sensible.
     Prometheus plugin <prometheus>
     Influx plugin <influx>
     Hello plugin <hello>
-
+    Telemetry plugin <telemetry>
