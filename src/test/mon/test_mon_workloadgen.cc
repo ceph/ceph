@@ -377,7 +377,6 @@ class OSDStub : public TestStub
 				    &throttler, NULL);
     messenger->set_policy(entity_name_t::TYPE_MON,
 	Messenger::Policy::lossy_client(
-	  CEPH_FEATURE_UID |
 	  CEPH_FEATURE_PGID64 |
 	  CEPH_FEATURE_OSDENC));
     messenger->set_policy(entity_name_t::TYPE_OSD,
