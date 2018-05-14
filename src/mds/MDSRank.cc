@@ -901,9 +901,29 @@ Session *MDSRank::get_session(Message *m)
 {
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   if (session) {
+    session->put(); // do not carry ref
     dout(20) << "get_session have " << session << " " << session->info.inst
 	     << " state " << session->get_state_name() << dendl;
-    session->put();  // not carry ref
+    // Check if we've imported an open session since (new sessions start closed)
+    if (session->is_closed()) {
+      Session *imported_session = sessionmap.get_session(session->info.inst.name);
+      if (imported_session && imported_session != session) {
+        dout(10) << __func__ << " replacing connection bootstrap session " << session << " with imported session " << imported_session << dendl;
+        imported_session->info.auth_name = session->info.auth_name;
+        //assert(session->info.auth_name == imported_session->info.auth_name);
+        assert(session->info.inst == imported_session->info.inst);
+        imported_session->connection = session->connection;
+        // send out any queued messages
+        while (!session->preopen_out_queue.empty()) {
+          imported_session->connection->send_message(session->preopen_out_queue.front());
+          session->preopen_out_queue.pop_front();
+        }
+        imported_session->auth_caps = session->auth_caps;
+        assert(session->get_nref() == 1);
+        imported_session->connection->set_priv(imported_session->get());
+        session = imported_session;
+      }
+    }
   } else {
     dout(20) << "get_session dne for " << m->get_source_inst() << dendl;
   }
