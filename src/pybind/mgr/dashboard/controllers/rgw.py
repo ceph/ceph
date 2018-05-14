@@ -14,7 +14,27 @@ from ..rest_client import RequestException
 @ApiController('rgw')
 @AuthRequired()
 class Rgw(RESTController):
-    pass
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out()
+    def status(self):
+        status = {'available': False, 'message': None}
+        try:
+            instance = RgwClient.admin_instance()
+            # Check if the service is online.
+            if not instance.is_service_online():
+                status['message'] = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
+                raise RequestException(status['message'])
+            # If the API user ID is configured via 'ceph dashboard set-rgw-api-user-id <user_id>'
+            # (which is not mandatory), then ensure it is known by the RGW.
+            if instance.userid and not instance.is_system_user():
+                status['message'] = 'The user "{}" is unknown to the Object Gateway.'.format(
+                    instance.userid)
+                raise RequestException(status['message'])
+            status['available'] = True
+        except RequestException:
+            pass
+        return status
 
 
 @ApiController('rgw/daemon')

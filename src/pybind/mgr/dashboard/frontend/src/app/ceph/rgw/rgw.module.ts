@@ -2,11 +2,18 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
-import { BsDropdownModule, ModalModule, TabsModule, TooltipModule } from 'ngx-bootstrap';
+import {
+  AlertModule,
+  BsDropdownModule,
+  ModalModule,
+  TabsModule,
+  TooltipModule
+} from 'ngx-bootstrap';
 
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
+import { Rgw501Component } from './rgw-501/rgw-501.component';
 import { RgwBucketDetailsComponent } from './rgw-bucket-details/rgw-bucket-details.component';
 import { RgwBucketFormComponent } from './rgw-bucket-form/rgw-bucket-form.component';
 import { RgwBucketListComponent } from './rgw-bucket-list/rgw-bucket-list.component';
@@ -45,12 +52,14 @@ import {
     FormsModule,
     ReactiveFormsModule,
     PerformanceCounterModule,
+    AlertModule.forRoot(),
     BsDropdownModule.forRoot(),
     TabsModule.forRoot(),
     TooltipModule.forRoot(),
     ModalModule.forRoot()
   ],
   exports: [
+    Rgw501Component,
     RgwDaemonListComponent,
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,
@@ -60,6 +69,7 @@ import {
     RgwUserDetailsComponent
   ],
   declarations: [
+    Rgw501Component,
     RgwDaemonListComponent,
     RgwDaemonDetailsComponent,
     RgwBucketFormComponent,

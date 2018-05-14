@@ -16,6 +16,7 @@ import {
   PerformanceCounterComponent
 } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
+import { Rgw501Component } from './ceph/rgw/rgw-501/rgw-501.component';
 import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
 import { RgwBucketListComponent } from './ceph/rgw/rgw-bucket-list/rgw-bucket-list.component';
 import { RgwDaemonListComponent } from './ceph/rgw/rgw-daemon-list/rgw-daemon-list.component';
@@ -24,6 +25,7 @@ import { RgwUserListComponent } from './ceph/rgw/rgw-user-list/rgw-user-list.com
 import { LoginComponent } from './core/auth/login/login.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { AuthGuardService } from './shared/services/auth-guard.service';
+import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 
 const routes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
@@ -31,40 +33,53 @@ const routes: Routes = [
   { path: 'hosts', component: HostsComponent, canActivate: [AuthGuardService] },
   { path: 'login', component: LoginComponent },
   { path: 'hosts', component: HostsComponent, canActivate: [AuthGuardService] },
+  { path: 'rgw/501/:message', component: Rgw501Component, canActivate: [AuthGuardService] },
   {
-    path: 'rgw/daemon',
-    component: RgwDaemonListComponent,
-    canActivate: [AuthGuardService]
-  },
-  {
-    path: 'rgw/user',
-    component: RgwUserListComponent,
-    canActivate: [AuthGuardService]
-  },
-  {
-    path: 'rgw/user/add',
-    component: RgwUserFormComponent,
-    canActivate: [AuthGuardService]
-  },
-  {
-    path: 'rgw/user/edit/:uid',
-    component: RgwUserFormComponent,
-    canActivate: [AuthGuardService]
-  },
-  {
-    path: 'rgw/bucket',
-    component: RgwBucketListComponent,
-    canActivate: [AuthGuardService]
-  },
-  {
-    path: 'rgw/bucket/add',
-    component: RgwBucketFormComponent,
-    canActivate: [AuthGuardService]
-  },
-  {
-    path: 'rgw/bucket/edit/:bucket',
-    component: RgwBucketFormComponent,
-    canActivate: [AuthGuardService]
+    path: 'rgw',
+    canActivateChild: [ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        apiPath: 'rgw',
+        redirectTo: 'rgw/501'
+      }
+    },
+    children: [
+      {
+        path: 'daemon',
+        component: RgwDaemonListComponent,
+        canActivate: [AuthGuardService]
+      },
+      {
+        path: 'user',
+        component: RgwUserListComponent,
+        canActivate: [AuthGuardService]
+      },
+      {
+        path: 'user/add',
+        component: RgwUserFormComponent,
+        canActivate: [AuthGuardService]
+      },
+      {
+        path: 'user/edit/:uid',
+        component: RgwUserFormComponent,
+        canActivate: [AuthGuardService]
+      },
+      {
+        path: 'bucket',
+        component: RgwBucketListComponent,
+        canActivate: [AuthGuardService]
+      },
+      {
+        path: 'bucket/add',
+        component: RgwBucketFormComponent,
+        canActivate: [AuthGuardService]
+      },
+      {
+        path: 'bucket/edit/:bucket',
+        component: RgwBucketFormComponent,
+        canActivate: [AuthGuardService]
+      }
+    ]
   },
   { path: 'block/iscsi', component: IscsiComponent, canActivate: [AuthGuardService] },
   { path: 'block/rbd', component: RbdListComponent, canActivate: [AuthGuardService] },
