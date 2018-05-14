@@ -28,15 +28,15 @@ export class CephfsChartComponent implements OnChanges, OnInit {
       return;
     }
 
-    const getTitle = title => {
-      return moment(title).format('LTS');
+    const getTitle = (ts) => {
+      return moment(ts, 'x').format('LTS');
     };
 
-    const getStyleTop = tooltip => {
+    const getStyleTop = (tooltip) => {
       return tooltip.caretY - tooltip.height - 15 + 'px';
     };
 
-    const getStyleLeft = tooltip => {
+    const getStyleLeft = (tooltip) => {
       return tooltip.caretX + 'px';
     };
 
@@ -105,7 +105,18 @@ export class CephfsChartComponent implements OnChanges, OnInit {
           mode: 'index',
           intersect: false,
           position: 'nearest',
-          custom: tooltip => {
+          callbacks: {
+            // Pick the Unix timestamp of the first tooltip item.
+            title: function(tooltipItems, data) {
+              let ts = 0;
+              if (tooltipItems.length > 0) {
+                const item = tooltipItems[0];
+                ts = data.datasets[item.datasetIndex].data[item.index].x;
+              }
+              return ts;
+            }
+          },
+          custom: (tooltip) => {
             chartTooltip.customTooltips(tooltip);
           }
         }
@@ -132,7 +143,7 @@ export class CephfsChartComponent implements OnChanges, OnInit {
   // timestamps)
   convert_timeseries(sourceSeries) {
     const data = [];
-    _.each(sourceSeries, dp => {
+    _.each(sourceSeries, (dp) => {
       data.push({
         x: dp[0] * 1000,
         y: dp[1]
