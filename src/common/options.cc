@@ -6940,6 +6940,9 @@ std::vector<Option> get_mds_options() {
     Option("mds_hack_allow_loading_invalid_metadata", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk. Allows testing repair tools."),
+
+    Option("mds_inject_migrator_session_race", Option::TYPE_BOOL, Option::LEVEL_DEV)
+     .set_default(false),
   });
 }
 
