@@ -32,9 +32,7 @@ if(HAVE_LIBAIO)
     bluestore/FreelistManager.cc
     bluestore/KernelDevice.cc
     bluestore/StupidAllocator.cc
-    bluestore/BitMapAllocator.cc
     bluestore/BitmapFastAllocator.cc
-    bluestore/BitAllocator.cc
     bluestore/aio.cc
   )
 endif(HAVE_LIBAIO)
