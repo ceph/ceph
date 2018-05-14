@@ -1,11 +1,13 @@
 import { TestBed } from '@angular/core/testing';
 
 import { DimlessBinaryPipe } from '../pipes/dimless-binary.pipe';
+import { DimlessPipe } from '../pipes/dimless.pipe';
 import { FormatterService } from './formatter.service';
 
 describe('FormatterService', () => {
   let service: FormatterService;
   let dimlessBinaryPipe: DimlessBinaryPipe;
+  let dimlessPipe: DimlessPipe;
 
   const convertToBytesAndBack = (value: string, newValue?: string) => {
     expect(dimlessBinaryPipe.transform(service.toBytes(value))).toBe(newValue || value);
@@ -17,6 +19,7 @@ describe('FormatterService', () => {
     });
     service = new FormatterService();
     dimlessBinaryPipe = new DimlessBinaryPipe(service);
+    dimlessPipe = new DimlessPipe(service);
   });
 
   it('should be created', () => {
@@ -50,16 +53,25 @@ describe('FormatterService', () => {
       expect(service.format_number(service, 1024, formats)).toBe('-');
       expect(service.format_number(undefined, 1024, formats)).toBe('-');
       expect(service.format_number(null, 1024, formats)).toBe('-');
-      expect(service.format_number('0', 1024, formats)).toBe('-');
     });
 
     it('should test some values', () => {
+      expect(service.format_number('0', 1024, formats)).toBe('0B');
+      expect(service.format_number('0.1', 1024, formats)).toBe('0.1B');
+      expect(service.format_number('1.2', 1024, formats)).toBe('1.2B');
       expect(service.format_number('1', 1024, formats)).toBe('1B');
       expect(service.format_number('1024', 1024, formats)).toBe('1KiB');
       expect(service.format_number(23.45678 * Math.pow(1024, 3), 1024, formats)).toBe('23.4568GiB');
       expect(service.format_number(23.45678 * Math.pow(1024, 3), 1024, formats, 2)).toBe(
         '23.46GiB'
       );
+    });
+
+    it('should test some dimless values', () => {
+      expect(dimlessPipe.transform(0.6)).toBe('0.6 ');
+      expect(dimlessPipe.transform(1000.608)).toBe('1.0006k');
+      expect(dimlessPipe.transform(1e10)).toBe('10G');
+      expect(dimlessPipe.transform(2.37e16)).toBe('23.7P');
     });
   });
 
