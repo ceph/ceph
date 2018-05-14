@@ -164,7 +164,7 @@ DEFINE_CEPH_FEATURE(59, 1, FS_CHANGE_ATTR) // overlap
 DEFINE_CEPH_FEATURE(59, 1, MSG_ADDR2) // overlap
 DEFINE_CEPH_FEATURE(60, 1, OSD_RECOVERY_DELETES) // *do not share this bit*
 
-DEFINE_CEPH_FEATURE(61, 1, RESERVED2)          // unused, but slow down!
+DEFINE_CEPH_FEATURE(61, 1, RESERVED2)		   // unused, but slow down!
 DEFINE_CEPH_FEATURE(62, 1, RESERVED)           // do not use; used as a sentinal
 DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facing
 
@@ -256,7 +256,6 @@ DEFINE_CEPH_FEATURE_DEPRECATED(63, 1, RESERVED_BROKEN, LUMINOUS) // client-facin
 static inline void ____build_time_check_for_reserved_bits(void) {
 	CEPH_STATIC_ASSERT((CEPH_FEATURES_ALL &
 			    (CEPH_FEATURE_RESERVED |
-			     CEPH_FEATURE_RESERVED2 |
 			     DEPRECATED_CEPH_FEATURE_RESERVED_BROKEN)) == 0);
 }
 

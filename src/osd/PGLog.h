@@ -1371,20 +1371,29 @@ public:
 
 	set<hobject_t> did;
 	set<hobject_t> checked;
+	set<hobject_t> del;
 	set<hobject_t> skipped;
 	for (list<pg_log_entry_t>::reverse_iterator i = log.log.rbegin();
 	     i != log.log.rend();
 	     ++i) {
-	  if (!debug_verify_stored_missing && i->version <= info.last_complete) break;
 	  if (i->soid > info.last_backfill)
 	    continue;
 	  if (i->is_error())
 	    continue;
 	  if (did.count(i->soid)) continue;
+    // merge clean_regions in pg_log_entry_t if needed
+    // there is no need to merge the items before object is deleted
+    if (!del.count(i->soid))
+      missing.merge(*i);
+    if(i->version <= info.last_complete) continue;
+    if (did.count(i->soid)) continue;
 	  did.insert(i->soid);
 
-	  if (!missing.may_include_deletes && i->is_delete())
-	    continue;
+	  if (i->is_delete()) {
+	    del.insert(i->soid);
+	    if(!missing.may_include_deletes)
+	      continue;
+	  }
 
 	  bufferlist bv;
 	  int r = store->getattr(
@@ -1396,7 +1405,8 @@ public:
 	    object_info_t oi(bv);
 	    if (oi.version < i->version) {
 	      ldpp_dout(dpp, 15) << "read_log_and_missing  missing " << *i
-				 << " (have " << oi.version << ")" << dendl;
+				 << " (have " << oi.version << ")" 
+				 << " clean_regions " << i->clean_regions << dendl;
 	      if (debug_verify_stored_missing) {
 		auto miter = missing.get_items().find(i->soid);
 		assert(miter != missing.get_items().end());
@@ -1407,6 +1417,7 @@ public:
 		checked.insert(i->soid);
 	      } else {
 		missing.add(i->soid, i->version, oi.version, i->is_delete());
+		missing.merge(*i);
 	      }
 	    }
 	  } else {
