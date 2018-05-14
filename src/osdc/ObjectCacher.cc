@@ -609,8 +609,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
       bh->bl.clear();
       bh->set_nocache(true);
       oc->mark_zero(bh);
-      // we should mark all Rx bh to zero
-      continue;
+      return;
     } else {
       assert(bh->waitfor_read.empty());
     }
@@ -2490,8 +2489,8 @@ void ObjectCacher::discard_writeback(ObjectSet *oset,
 
   if (gather.has_subs()) {
     gather.set_finisher(new FunctionContext(
-      [this, oset, on_finish](int) {
-        _discard_finish(oset, false, on_finish);
+      [this, oset, was_dirty, on_finish](int) {
+        _discard_finish(oset, was_dirty, on_finish);
       }));
     gather.activate();
     return;
