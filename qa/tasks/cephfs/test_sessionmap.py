@@ -145,10 +145,10 @@ class TestSessionMap(CephFSTestCase):
         # a single session get written out (the first of the two, triggered by the second getting marked
         # dirty)
         # The number of writes is two per session, because the header (sessionmap version) update and
-        # KV write both count.
+        # KV write both count. Also, multiply by 2 for each openfile table update.
         self.wait_until_true(
-            lambda: get_omap_wrs() - initial_omap_wrs == 2,
-            timeout=10  # Long enough for an export to get acked
+            lambda: get_omap_wrs() - initial_omap_wrs == 2*2,
+            timeout=30  # Long enough for an export to get acked
         )
 
         # Now end our sessions and check the backing sessionmap is updated correctly
