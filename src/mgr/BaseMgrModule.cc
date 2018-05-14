@@ -553,6 +553,22 @@ ceph_have_mon_connection(BaseMgrModule *self, PyObject *args)
   }
 }
 
+static PyObject *
+ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
+{
+  char *other_module = nullptr;
+  char *method = nullptr;
+  PyObject *remote_args = nullptr;
+  PyObject *remote_kwargs = nullptr;
+  if (!PyArg_ParseTuple(args, "ssOO:ceph_dispatch_remote",
+        &other_module, &method, &remote_args, &remote_kwargs)) {
+    return nullptr;
+  }
+
+  return self->py_modules->dispatch_remote(other_module, method,
+      remote_args, remote_kwargs);
+}
+
 
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
@@ -615,6 +631,9 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_have_mon_connection", (PyCFunction)ceph_have_mon_connection,
     METH_NOARGS, "Find out whether this mgr daemon currently has "
                  "a connection to a monitor"},
+
+  {"_ceph_dispatch_remote", (PyCFunction)ceph_dispatch_remote,
+    METH_VARARGS, "Dispatch a call to another module"},
 
   {NULL, NULL, 0, NULL}
 };
