@@ -48,17 +48,23 @@ int RGWCreateRole::get_params()
   role_name = s->info.args.get("RoleName");
   role_path = s->info.args.get("Path");
   trust_policy = s->info.args.get("AssumeRolePolicyDocument");
+  max_session_duration = s->info.args.get("MaxSessionDuration");
 
   if (role_name.empty() || trust_policy.empty()) {
     ldout(s->cct, 20) << "ERROR: one of role name or assume role policy document is empty"
     << dendl;
     return -EINVAL;
   }
-  JSONParser p;
-  if (!p.parse(trust_policy.c_str(), trust_policy.length())) {
-    ldout(s->cct, 20) << "ERROR: failed to parse assume role policy doc" << dendl;
+
+  bufferlist bl = bufferlist::static_from_string(trust_policy);
+  try {
+    const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+  }
+  catch (rgw::IAM::PolicyParseException& e) {
+    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
     return -ERR_MALFORMED_DOC;
   }
+
   return 0;
 }
 
@@ -68,7 +74,8 @@ void RGWCreateRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store, role_name, role_path, trust_policy, s->user->user_id.tenant);
+  RGWRole role(s->cct, store, role_name, role_path, trust_policy,
+                s->user->user_id.tenant, max_session_duration);
   op_ret = role.create(true);
 
   if (op_ret == -EEXIST) {
@@ -213,12 +220,14 @@ int RGWPutRolePolicy::get_params()
     ldout(s->cct, 20) << "ERROR: One of role name, policy name or perm policy is empty"<< dendl;
     return -EINVAL;
   }
-  JSONParser p;
-  if (!p.parse(perm_policy.c_str(), perm_policy.length())) {
-    ldout(s->cct, 20) << "ERROR: failed to parse perm role policy doc" << dendl;
+  bufferlist bl = bufferlist::static_from_string(perm_policy);
+  try {
+    const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+  }
+  catch (rgw::IAM::PolicyParseException& e) {
+    ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
     return -ERR_MALFORMED_DOC;
   }
-
   return 0;
 }
 
