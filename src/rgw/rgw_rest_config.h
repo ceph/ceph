@@ -41,7 +41,7 @@ class RGWOp_ZoneConfig_Get : public RGWRESTOp {
 public:
   RGWOp_ZoneConfig_Get() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("admin", RGW_CAP_READ);
   }
   int verify_permission() override {

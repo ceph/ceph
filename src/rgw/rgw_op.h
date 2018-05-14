@@ -2190,15 +2190,15 @@ public:
   void execute() override {}
 
   const char* name() const override { return "get_bucket_meta_search"; }
-  virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_META_SEARCH; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_META_SEARCH; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 class RGWDelBucketMetaSearch : public RGWOp {
 public:
   RGWDelBucketMetaSearch() {}
 
-  int verify_permission();
+  int verify_permission() override;
   void pre_exec() override;
   void execute() override;
 
