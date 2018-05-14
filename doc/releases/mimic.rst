@@ -6,8 +6,162 @@ this is not the final release yet, consider testing this on your testing and non
 production clusters for a preview of upcoming features and please report all the
 bugs to the tracker.
 
+Major Changes from Luminous
+---------------------------
+
+- *Dashbaord*:
+
+  * The dashboard has been reimplemented by and/or ported from
+    openATTIC with significantly expanded functionality.
+
+- *RADOS*:
+
+  * Config options can now be centrally stored and managed by the monitor.
+  * The monitor daemon uses significantly less disk space when undergoing
+    recovery or rebalancing operations.
+  * An *async recovery* feature reduces the tail latency of requests
+    when the OSDs are recovering from a recent failure.
+  * OSD preemption of scrub by conflicting requests reduces tail latency.
+
+- *RGW*:
+
+  * RGW can now replicate a zone (or a subset of buckets) to an
+    external cloud storage service like S3.
+
+- *CephFS*:
+
+  * Snapshots are now stable when combined with multiple MDS daemons.
+
+- *RBD*:
+
+  * Image clones no longer require explicit *protect* and *unprotect*
+    steps.
+  * Image groups?
+
+Upgrading from Luminous
+-----------------------
+
+Notes
+~~~~~
+
+* Avoid creating any RADOS pools while the upgrade is in process
+  (Optional, but recommended.)
+
+* You can monitor the progress of your upgrade at each stage with the
+  ``ceph versions`` command, which will tell you what ceph version is
+  running for each type of daemon.
+
+Instructions
+~~~~~~~~~~~~
+
+#. Make sure your cluster is stable and healthy (no down or
+   recoverying OSDs).  (Optional, but recommended.)
+
+#. Set the ``noout`` flag for the duration of the upgrade. (Optional,
+   but recommended.)::
+
+     # ceph osd set noout
+
+#. Upgrade monitors by installing the new packages and restarting the
+   monitor daemons.::
+
+     # systemctl restart ceph-mon.target
+
+   Verify the monitor upgrade is complete once all monitors are up by
+   looking for the ``mimic`` feature string in the mon map.  For
+   example::
+
+     # ceph mon feature ls
+
+   should include `mimic` under persistent features::
+
+     on current monmap (epoch NNN)
+        persistent: [kraken,luminous,mimic]
+        required: [kraken,luminous,mimic]
+
+#. Upgrade ``ceph-mgr`` daemons by installing the new packages and
+   restarting with::
+
+     # systemctl restart ceph-mgr.target
+
+   Verify the ceph-mgr daemons are running by checking ``ceph -s``::
+
+     # ceph -s
+
+     ...
+       services:
+        mon: 3 daemons, quorum foo,bar,baz
+        mgr: foo(active), standbys: bar, baz
+     ...
+
+#. Upgrade all OSDs by installing the new packages and restarting the
+   ceph-osd daemons on all hosts::
+
+     # systemctl restart ceph-osd.target
+
+   You can monitor the progress of the OSD upgrades with the new
+   ``ceph versions`` or ``ceph osd versions`` command::
+
+     # ceph osd versions
+     {
+        "ceph version 12.2.5 (...) luminous (stable)": 12,
+        "ceph version 13.2.0 (...) mimic (stable)": 22,
+     }
+
+#. Upgrade all CephFS MDS daemons.  For each CephFS file system,
+
+   #. Reduce the number of ranks to 1.  (Make note of the original
+      number of MDS daemons first if you plan to restore it later.)::
+
+	# ceph status
+	# ceph fs set <fs_name> max_mds 1
+
+   #. Wait for the cluster to deactivate any non-zero ranks by
+      periodically checking the status::
+
+	# ceph status
+
+   #. Take all standby MDS daemons offline on the appropriate hosts with::
+
+	# systemctl stop ceph-mds@<daemon_name>
+
+   #. Confirm that only one MDS is online and is rank 0 for your FS::
+
+	# ceph status
+
+   #. Upgrade the last remaining MDS daemon by installing the new
+      packages and restarting the daemon::
+
+        # systemctl restart ceph-mds.target
+
+   #. Restore the original value of ``max_mds`` for the volume::
+
+	# ceph fs set <fs_name> max_mds <original_max_mds>
+
+#. Upgrade all radosgw daemons by upgrading packages and restarting
+   daemons on all hosts::
+
+     # systemctl restart radosgw.target
+
+#. Complete the upgrade by disallowing pre-mimic OSDs and enabling
+   all new Mimic-only functionality::
+
+     # ceph osd require-osd-release mimic
+
+#. If you set ``noout`` at the beginning, be sure to clear it with::
+
+     # ceph osd unset noout
+
+#. Verify the cluster is healthy with ``ceph health``.
+
+Upgrading from pre-Luminous releases (like Jewel)
+-------------------------------------------------
+
+You *must* first upgrade to Luminous (12.2.z) before attempting an
+upgrade to Mimic.
+     
 Notable Changes
-~~~~~~~~~~~~~~~
+---------------
 
 * *core*:
 
@@ -245,7 +399,7 @@ Notable Changes
 
 
 Other Notable Changes
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 * bluestore: BlueStore::ExtentMap::dup impl (`pr#19719 <https://github.com/ceph/ceph/pull/19719>`_, Shinobu Kinjo)
 * bluestore: bluestore/NVMEDevice: accurate the latency perf counter of queue latency (`pr#17435 <https://github.com/ceph/ceph/pull/17435>`_, Ziye Yang, Pan Liu)
 * bluestore: bluestore/NVMEDevice: code cleanup (`pr#17284 <https://github.com/ceph/ceph/pull/17284>`_, Ziye Yang, Pan Liu)
