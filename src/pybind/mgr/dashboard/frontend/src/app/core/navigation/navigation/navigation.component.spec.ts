@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { PopoverModule } from 'ngx-bootstrap/popover';
+import { CollapseModule, PopoverModule } from 'ngx-bootstrap';
 
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -17,25 +17,24 @@ describe('NavigationComponent', () => {
 
   const fakeService = new NotificationService(null, null);
 
-  beforeEach(
-    async(() => {
-      TestBed.configureTestingModule({
-        imports: [
-          SharedModule,
-          RouterTestingModule,
-          HttpClientTestingModule,
-          PopoverModule.forRoot()
-        ],
-        declarations: [
-          NavigationComponent,
-          NotificationsComponent,
-          LogoutComponent,
-          TaskManagerComponent
-        ],
-        providers: [{ provide: NotificationService, useValue: fakeService }]
-      }).compileComponents();
-    })
-  );
+  beforeEach(async(() => {
+    TestBed.configureTestingModule({
+      imports: [
+        SharedModule,
+        RouterTestingModule,
+        HttpClientTestingModule,
+        CollapseModule.forRoot(),
+        PopoverModule.forRoot()
+      ],
+      declarations: [
+        NavigationComponent,
+        NotificationsComponent,
+        LogoutComponent,
+        TaskManagerComponent
+      ],
+      providers: [{ provide: NotificationService, useValue: fakeService }]
+    }).compileComponents();
+  }));
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NavigationComponent);
