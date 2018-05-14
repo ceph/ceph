@@ -39,8 +39,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "net "
 
-interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
-    : cct(c), _dev(dev),
+interface::interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
+    : cct(cct), _dev(dev),
       _rx(_dev->receive(
           center->get_id(),
           [center, this] (Packet p) {
