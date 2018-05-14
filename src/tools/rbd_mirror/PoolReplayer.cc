@@ -1040,7 +1040,12 @@ void PoolReplayer<I>::handle_remove_image(const std::string &mirror_uuid,
 template <typename I>
 void PoolReplayer<I>::handle_instances_added(const InstanceIds &instance_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
+  Mutex::Locker locker(m_lock);
+  if (!m_leader_watcher->is_leader()) {
+    return;
+  }
 
+  assert(m_image_map);
   m_image_map->update_instances_added(instance_ids);
 }
 
@@ -1048,7 +1053,12 @@ template <typename I>
 void PoolReplayer<I>::handle_instances_removed(
     const InstanceIds &instance_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
+  Mutex::Locker locker(m_lock);
+  if (!m_leader_watcher->is_leader()) {
+    return;
+  }
 
+  assert(m_image_map);
   m_image_map->update_instances_removed(instance_ids);
 }
 
