@@ -220,6 +220,7 @@ class MDSRank {
     void handle_conf_change(const struct md_config_t *conf,
                             const std::set <std::string> &changed)
     {
+      mdcache->migrator->handle_conf_change(conf, changed, *mdsmap);
       purge_queue.handle_conf_change(conf, changed, *mdsmap);
     }
 
@@ -263,6 +264,7 @@ class MDSRank {
     ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
     list<MDSInternalContextBase*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
+    list<MDSInternalContextBase*> waiting_for_any_client_connection;
     list<MDSInternalContextBase*> replay_queue;
     map<mds_rank_t, list<MDSInternalContextBase*> > waiting_for_active_peer;
     map<epoch_t, list<MDSInternalContextBase*> > waiting_for_mdsmap;
@@ -377,6 +379,12 @@ class MDSRank {
       waiting_for_active_peer[MDS_RANK_NONE].push_back(c);
     }
 
+    void wait_for_any_client_connection(MDSInternalContextBase *c) {
+      waiting_for_any_client_connection.push_back(c);
+    }
+    void kick_waiters_for_any_client_connection(void) {
+      finish_contexts(g_ceph_context, waiting_for_any_client_connection);
+    }
     void wait_for_active(MDSInternalContextBase *c) {
       waiting_for_active.push_back(c);
     }

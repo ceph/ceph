@@ -101,9 +101,13 @@ public:
   }
 
   // -- cons --
-  Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {}
+  Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {
+    inject_session_race = g_conf->get_val<bool>("mds_inject_migrator_session_race");
+  }
 
-
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed,
+                          const MDSMap &mds_map);
 
 protected:
   // export fun
@@ -347,6 +351,7 @@ public:
 private:
   MDSRank *mds;
   MDCache *cache;
+  bool inject_session_race = false;
 };
 
 #endif
