@@ -9,6 +9,7 @@ import { SummaryService } from '../../../shared/services/summary.service';
 export class NavigationComponent implements OnInit {
   summaryData: any;
   rbdPools: Array<any> = [];
+  isCollapsed = true;
 
   constructor(private summaryService: SummaryService) {}
 

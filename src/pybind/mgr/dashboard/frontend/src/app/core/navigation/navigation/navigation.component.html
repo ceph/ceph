@@ -10,8 +10,7 @@
 
     <button type="button"
             class="navbar-toggle collapsed"
-            data-toggle="collapse"
-            data-target="#bs-example-navbar-collapse-1">
+            (click)="isCollapsed = !isCollapsed">
       <span i18n
             class="sr-only">Toggle navigation
       </span>
@@ -23,7 +22,8 @@
 
   <!-- Collect the nav links, forms, and other content for toggling -->
   <div class="collapse navbar-collapse"
-       id="bs-example-navbar-collapse-1">
+       id="bs-example-navbar-collapse-1"
+       [collapse]="isCollapsed">
     <ul class="nav navbar-nav navbar-primary">
 
       <!-- Dashboard -->
