@@ -134,6 +134,17 @@ void SnapMapper::object_snaps::decode(bufferlist::iterator &bl)
   DECODE_FINISH(bl);
 }
 
+bool SnapMapper::check(const hobject_t &hoid) const
+{
+  if (hoid.match(mask_bits, match)) {
+    return true;
+  }
+  derr << __func__ << " " << hoid << " mask_bits " << mask_bits
+       << " match 0x" << std::hex << match << std::dec << " is false"
+       << dendl;
+  return false;
+}
+
 int SnapMapper::get_snaps(
   const hobject_t &oid,
   object_snaps *out)
@@ -155,7 +166,10 @@ int SnapMapper::get_snaps(
     bufferlist::iterator bp = got.begin()->second.begin();
     decode(*out, bp);
     dout(20) << __func__ << " " << oid << " " << out->snaps << dendl;
-    assert(!out->snaps.empty());
+    if (out->snaps.empty()) {
+      dout(1) << __func__ << " " << oid << " empty snapset" << dendl;
+      assert(!cct->_conf->osd_debug_verify_snaps);
+    }
   } else {
     dout(20) << __func__ << " " << oid << " (out == NULL)" << dendl;
   }

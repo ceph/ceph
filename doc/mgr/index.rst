@@ -27,10 +27,12 @@ sensible.
 
     Installation and Configuration <administrator>
     Writing plugins <plugins>
+    Balancer plugin <balancer>
     Dashboard plugin <dashboard>
     Local pool plugin <localpool>
     RESTful plugin <restful>
     Zabbix plugin <zabbix>
     Prometheus plugin <prometheus>
     Influx plugin <influx>
-
+    Hello plugin <hello>
+    Telegraf plugin <telegraf>

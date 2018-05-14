@@ -13,6 +13,7 @@
 #include "include/stringify.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_otp.h"
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
@@ -25,8 +26,6 @@
 #include "rgw_rest_metadata.h"
 #include "rgw_rest_log.h"
 #include "rgw_rest_opstate.h"
-#include "rgw_replica_log.h"
-#include "rgw_rest_replica_log.h"
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_swift_auth.h"
@@ -162,11 +161,7 @@ static RGWRESTMgr *rest_filter(RGWRados *store, int dialect, RGWRESTMgr *orig)
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
-#ifdef BUILDING_FOR_EMBEDDED
-extern "C" int cephd_rgw(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
@@ -297,14 +292,15 @@ int main(int argc, const char **argv)
 
   rgw_init_resolver();
   rgw::curl::setup_curl(fe_map);
-
+  rgw_http_client_init(g_ceph_context);
+  
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
   FCGX_Init();
 #endif
 
   RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
       g_conf->rgw_enable_gc_threads, g_conf->rgw_enable_lc_threads, g_conf->rgw_enable_quota_threads,
-      g_conf->rgw_run_sync_thread, g_conf->rgw_dynamic_resharding);
+      g_conf->rgw_run_sync_thread, g_conf->rgw_dynamic_resharding, g_conf->rgw_cache_enabled);
   if (!store) {
     mutex.Lock();
     init_timer.cancel_all_events();
@@ -329,6 +325,7 @@ int main(int argc, const char **argv)
 
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
+  rgw_otp_init(store);
   rgw_log_usage_init(g_ceph_context, store);
 
   RGWREST rest;
@@ -401,7 +398,6 @@ int main(int argc, const char **argv)
     admin_resource->register_resource("metadata", new RGWRESTMgr_Metadata);
     admin_resource->register_resource("log", new RGWRESTMgr_Log);
     admin_resource->register_resource("opstate", new RGWRESTMgr_Opstate);
-    admin_resource->register_resource("replica_log", new RGWRESTMgr_ReplicaLog);
     admin_resource->register_resource("config", new RGWRESTMgr_Config);
     admin_resource->register_resource("realm", new RGWRESTMgr_Realm);
     rest.register_resource(g_conf->rgw_admin_entry, admin_resource);
@@ -466,8 +462,7 @@ int main(int argc, const char **argv)
       fe = new RGWLoadGenFrontend(env, config);
     }
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
-    else if ((framework == "beast") &&
-	cct->check_experimental_feature_enabled("rgw-beast-frontend")) {
+    else if (framework == "beast") {
       int port;
       config->get_val("port", 80, &port);
       std::string uri_prefix;
@@ -570,6 +565,7 @@ int main(int argc, const char **argv)
   rgw::auth::s3::LDAPEngine::shutdown();
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
+  rgw_http_client_cleanup();
   rgw::curl::cleanup_curl();
 
   rgw_perf_stop(g_ceph_context);

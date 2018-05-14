@@ -1,0 +1,53 @@
+<ng-template #popTemplate>
+  <div *ngIf="notifications.length > 0">
+    <div class="separator">
+      Recent Notifications
+
+      <div *ngIf="notifications.length > 0"
+           class="pull-right">
+        <a (click)="removeAll()"
+           i18n>Remove all</a>
+      </div>
+    </div>
+    <hr>
+    <div *ngFor="let notification of notifications">
+      <table>
+        <tr>
+          <td rowspan="3" class="icon-col text-center">
+            <span [ngClass]="['fa-stack fa-2x', notification.textClass()]">
+              <i class="fa fa-circle fa-stack-2x"></i>
+              <i [ngClass]="['fa fa-stack-1x fa-inverse', notification.iconClass()]"></i>
+            </span>
+          </td>
+          <td>
+            <strong>{{ notification.title }}</strong>
+          </td>
+        </tr>
+        <tr>
+          <td>
+            {{ notification.message }}
+          </td>
+        </tr>
+        <tr>
+          <td>
+            <small class="date">{{ notification.timestamp | cdDate }}</small>
+          </td>
+        </tr>
+      </table>
+      <hr>
+    </div>
+  </div>
+  <!-- Empty -->
+  <div *ngIf="notifications.length === 0">
+    <div class="message">
+      There are no notifications.
+    </div>
+  </div>
+</ng-template>
+<a [popover]="popTemplate"
+   placement="bottom"
+   container="body"
+   outsideClick="true">
+  <i class="fa fa-bell"></i>
+  <span i18n>Recent Notifications</span>
+</a>

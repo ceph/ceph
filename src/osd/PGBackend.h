@@ -142,6 +142,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual Context *bless_context(Context *c) = 0;
      virtual GenContext<ThreadPool::TPHandle&> *bless_gencontext(
        GenContext<ThreadPool::TPHandle&> *c) = 0;
+     virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
+       GenContext<ThreadPool::TPHandle&> *c) = 0;
 
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(
@@ -160,7 +162,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual const set<pg_shard_t> &get_acting_shards() const = 0;
      virtual const set<pg_shard_t> &get_backfill_shards() const = 0;
 
-     virtual std::string gen_dbg_prefix() const = 0;
+     virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
      virtual const map<hobject_t, set<pg_shard_t>> &get_missing_loc_shards()
        const = 0;
@@ -297,7 +299,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, coll_t coll,
+   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, const coll_t &coll,
 	     ObjectStore::CollectionHandle &ch) :
      cct(cct),
      store(store),
@@ -308,8 +310,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
 
-   std::string gen_prefix() const {
-     return parent->gen_dbg_prefix();
+   std::ostream& gen_prefix(std::ostream& out) const {
+     return parent->gen_dbg_prefix(out);
    }
 
    /**
@@ -531,7 +533,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    int objects_list_range(
      const hobject_t &start,
      const hobject_t &end,
-     snapid_t seq,
      vector<hobject_t> *ls,
      vector<ghobject_t> *gen_obs=0);
 
@@ -604,7 +605,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
-     const OSDMapRef curmap,
+     const map<string,string>& profile,
      Listener *l,
      coll_t coll,
      ObjectStore::CollectionHandle &ch,

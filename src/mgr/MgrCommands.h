@@ -75,7 +75,7 @@ COMMAND("osd blocked-by", \
 	"print histogram of which OSDs are blocking their peers", \
 	"osd", "r", "cli,rest")
 COMMAND("osd pool stats " \
-        "name=name,type=CephString,req=false",
+        "name=pool_name,type=CephPoolname,req=false",
         "obtain stats from all pools, or from specified pool",
         "osd", "r", "cli,rest")
 COMMAND("osd reweight-by-utilization " \
@@ -116,15 +116,15 @@ COMMAND("osd ok-to-stop name=ids,type=CephString,n=N",
 
 COMMAND("osd scrub " \
 	"name=who,type=CephString", \
-	"initiate scrub on osd <who>, or use <all|any|*> to scrub all", \
+	"initiate scrub on osd <who>, or use <all|any> to scrub all", \
         "osd", "rw", "cli,rest")
 COMMAND("osd deep-scrub " \
 	"name=who,type=CephString", \
-	"initiate deep scrub on osd <who>, or use <all|any|*> to deep scrub all", \
+	"initiate deep scrub on osd <who>, or use <all|any> to deep scrub all", \
         "osd", "rw", "cli,rest")
 COMMAND("osd repair " \
 	"name=who,type=CephString", \
-	"initiate repair on osd <who>, or use <all|any|*> to repair all", \
+	"initiate repair on osd <who>, or use <all|any> to repair all", \
         "osd", "rw", "cli,rest")
 
 COMMAND("service dump",

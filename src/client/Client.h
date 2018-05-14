@@ -87,11 +87,12 @@ class MDSCommandOp : public CommandOp
   public:
   mds_gid_t     mds_gid;
 
-  MDSCommandOp(ceph_tid_t t) : CommandOp(t) {}
+  explicit MDSCommandOp(ceph_tid_t t) : CommandOp(t) {}
 };
 
 /* error code for ceph_fuse */
-#define CEPH_FUSE_NO_MDS_UP    -(1<<2) /* no mds up deteced in ceph_fuse */
+#define CEPH_FUSE_NO_MDS_UP    -((1<<16)+0) /* no mds up deteced in ceph_fuse */
+#define CEPH_FUSE_LAST         -((1<<16)+1) /* (unused) */
 
 // ============================================
 // types for my local metadata cache
@@ -131,7 +132,6 @@ typedef void (*client_dentry_callback_t)(void *handle, vinodeno_t dirino,
 					 vinodeno_t ino, string& name);
 typedef int (*client_remount_callback_t)(void *handle);
 
-typedef int (*client_getgroups_callback_t)(void *handle, gid_t **sgids);
 typedef void(*client_switch_interrupt_callback_t)(void *handle, void *data);
 typedef mode_t (*client_umask_callback_t)(void *handle);
 
@@ -144,7 +144,6 @@ struct client_callback_args {
   client_dentry_callback_t dentry_cb;
   client_switch_interrupt_callback_t switch_intr_cb;
   client_remount_callback_t remount_cb;
-  client_getgroups_callback_t getgroups_cb;
   client_umask_callback_t umask_cb;
 };
 
@@ -205,7 +204,7 @@ struct dir_result_t {
     int64_t offset;
     string name;
     InodeRef inode;
-    dentry(int64_t o) : offset(o) {}
+    explicit dentry(int64_t o) : offset(o) {}
     dentry(int64_t o, const string& n, const InodeRef& in) :
       offset(o), name(n), inode(in) {}
   };
@@ -272,7 +271,6 @@ class Client : public Dispatcher, public md_config_obs_t {
   client_remount_callback_t remount_cb;
   client_ino_callback_t ino_invalidate_cb;
   client_dentry_callback_t dentry_invalidate_cb;
-  client_getgroups_callback_t getgroups_cb;
   client_umask_callback_t umask_cb;
   bool can_invalidate_dentries;
 
@@ -863,9 +861,6 @@ private:
     MAY_READ = 4,
   };
 
-  void init_groups(UserPerm *groups);
-
-  int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
   int may_setattr(Inode *in, struct ceph_statx *stx, int mask,
@@ -877,10 +872,8 @@ private:
   int may_hardlink(Inode *in, const UserPerm& perms);
 
   int _getattr_for_perm(Inode *in, const UserPerm& perms);
-  int _getgrouplist(gid_t **sgids, uid_t uid, gid_t gid);
 
   vinodeno_t _get_vino(Inode *in);
-  inodeno_t _get_inodeno(Inode *in);
 
   /*
    * These define virtual xattrs exposing the recursive directory
@@ -891,7 +884,11 @@ private:
 	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
 	  bool readonly, hidden;
 	  bool (Client::*exists_cb)(Inode *in);
+	  unsigned int flags;
   };
+
+/* Flags for VXattr */
+#define VXATTR_RSTAT 0x1
 
   bool _vxattrcb_quota_exists(Inode *in);
   size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
@@ -1130,15 +1127,13 @@ public:
   int mksnap(const char *path, const char *name, const UserPerm& perm);
   int rmsnap(const char *path, const char *name, const UserPerm& perm);
 
+  // Inode permission checking
+  int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
+
   // expose caps
   int get_caps_issued(int fd);
   int get_caps_issued(const char *path, const UserPerm& perms);
 
-  // low-level interface v2
-  inodeno_t ll_get_inodeno(Inode *in) {
-    Mutex::Locker lock(client_lock);
-    return _get_inodeno(in);
-  }
   snapid_t ll_get_snapid(Inode *in);
   vinodeno_t ll_get_vino(Inode *in) {
     Mutex::Locker lock(client_lock);

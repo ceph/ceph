@@ -739,7 +739,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "mgr metadata") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "id", name);
+    cmd_getval(g_ceph_context, cmdmap, "who", name);
     if (name.size() > 0 && !map.have_name(name)) {
       ss << "mgr." << name << " does not exist";
       r = -ENOENT;
@@ -750,7 +750,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (name.size()) {
       f->open_object_section("mgr_metadata");
-      f->dump_string("id", name);
+      f->dump_string("name", name);
       r = dump_metadata(name, f.get(), &ss);
       if (r < 0)
         goto reply;
@@ -760,7 +760,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       f->open_array_section("mgr_metadata");
       for (auto& i : map.get_all_names()) {
 	f->open_object_section("mgr");
-	f->dump_string("id", i);
+	f->dump_string("name", i);
 	r = dump_metadata(i, f.get(), NULL);
 	if (r == -EINVAL || r == -ENOENT) {
 	  // Drop error, continue to get other daemons' metadata
@@ -887,6 +887,21 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       r = -ENOENT;
       goto out;
     }
+
+    std::string can_run_error;
+    if (force != "--force" && !pending_map.can_run_module(module, &can_run_error)) {
+      ss << "module '" << module << "' reports that it cannot run on the active "
+            "manager daemon: " << can_run_error << " (pass --force to force "
+            "enablement)";
+      r = -ENOENT;
+      goto out;
+    }
+
+    if (pending_map.module_enabled(module)) {
+      ss << "module '" << module << "' is already enabled";
+      r = 0;
+      goto out;
+    }
     pending_map.modules.insert(module);
   } else if (prefix == "mgr module disable") {
     string module;
@@ -894,6 +909,14 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     if (module.empty()) {
       r = -EINVAL;
       goto out;
+    }
+    if (!pending_map.module_enabled(module)) {
+      ss << "module '" << module << "' is already disabled";
+      r = 0;
+      goto out;
+    }
+    if (!pending_map.any_supports_module(module)) {
+      ss << "module '" << module << "' does not exist";
     }
     pending_map.modules.erase(module);
   } else {

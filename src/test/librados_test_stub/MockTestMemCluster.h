@@ -14,15 +14,12 @@ namespace librados {
 
 class TestRadosClient;
 
-class MockTestMemCluster : public TestCluster {
+class MockTestMemCluster : public TestMemCluster {
 public:
   TestRadosClient *create_rados_client(CephContext *cct) override {
     return new ::testing::NiceMock<librados::MockTestMemRadosClient>(
-      cct, &m_mem_cluster);
+      cct, this);
   }
-
-private:
-  TestMemCluster m_mem_cluster;
 
 };
 

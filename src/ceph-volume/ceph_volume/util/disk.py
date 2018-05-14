@@ -1,6 +1,13 @@
+import logging
 import os
+import re
 import stat
 from ceph_volume import process
+from ceph_volume.api import lvm
+from ceph_volume.util.system import get_file_contents
+
+
+logger = logging.getLogger(__name__)
 
 
 # The blkid CLI tool has some oddities which prevents having one common call
@@ -179,18 +186,6 @@ def lsblk(device, columns=None, abspath=False):
     return _lsblk_parser(' '.join(out))
 
 
-def _lsblk_type(device):
-    """
-    Helper function that will use the ``TYPE`` label output of ``lsblk`` to determine
-    if a device is a partition or disk.
-    It does not process the output to return a boolean, but it does process it to return the
-    """
-    out, err, rc = process.call(
-        ['blkid', '-s', 'PARTUUID', '-o', 'value', device]
-    )
-    return ' '.join(out).strip()
-
-
 def is_device(dev):
     """
     Boolean to determine if a given device is a block device (**not**
@@ -233,3 +228,205 @@ def is_partition(dev):
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
     return False
+
+
+def _map_dev_paths(_path, include_abspath=False, include_realpath=False):
+    """
+    Go through all the items in ``_path`` and map them to their absolute path::
+
+        {'sda': '/dev/sda'}
+
+    If ``include_abspath`` is set, then a reverse mapping is set as well::
+
+        {'sda': '/dev/sda', '/dev/sda': 'sda'}
+
+    If ``include_realpath`` is set then the same operation is done for any
+    links found when listing, these are *not* reversed to avoid clashing on
+    existing keys, but both abspath and basename can be included. For example::
+
+        {
+            'ceph-data': '/dev/mapper/ceph-data',
+            '/dev/mapper/ceph-data': 'ceph-data',
+            '/dev/dm-0': '/dev/mapper/ceph-data',
+            'dm-0': '/dev/mapper/ceph-data'
+        }
+
+
+    In case of possible exceptions the mapping is returned empty, and the
+    exception is logged.
+    """
+    mapping = {}
+    try:
+        dev_names = os.listdir(_path)
+    except (OSError, IOError):
+        logger.exception('unable to list block devices from: %s' % _path)
+        return {}
+
+    for dev_name in dev_names:
+        mapping[dev_name] = os.path.join(_path, dev_name)
+
+    if include_abspath:
+        for k, v in list(mapping.items()):
+            mapping[v] = k
+
+    if include_realpath:
+        for abspath in list(mapping.values()):
+            if not os.path.islink(abspath):
+                continue
+
+            realpath = os.path.realpath(abspath)
+            basename = os.path.basename(realpath)
+            mapping[basename] = abspath
+            if include_abspath:
+                mapping[realpath] = abspath
+
+    return mapping
+
+
+def get_block_devs(sys_block_path="/sys/block", skip_loop=True):
+    """
+    Go through all the items in /sys/block and return them as a list.
+
+    The ``sys_block_path`` argument is set for easier testing and is not
+    required for proper operation.
+    """
+    devices = _map_dev_paths(sys_block_path).keys()
+    if skip_loop:
+        return [d for d in devices if not d.startswith('loop')]
+    return list(devices)
+
+
+def get_dev_devs(dev_path="/dev"):
+    """
+    Go through all the items in /dev and return them as a list.
+
+    The ``dev_path`` argument is set for easier testing and is not
+    required for proper operation.
+    """
+    return _map_dev_paths(dev_path, include_abspath=True)
+
+
+def get_mapper_devs(mapper_path="/dev/mapper"):
+    """
+    Go through all the items in /dev and return them as a list.
+
+    The ``dev_path`` argument is set for easier testing and is not
+    required for proper operation.
+    """
+    return _map_dev_paths(mapper_path, include_abspath=True, include_realpath=True)
+
+
+def human_readable_size(size):
+    """
+    Take a size in bytes, and transform it into a human readable size with up
+    to two decimals of precision.
+    """
+    suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
+    suffix_index = 0
+    while size > 1024:
+        suffix_index += 1
+        size = size / 1024.0
+    return "{size:.2f} {suffix}".format(
+        size=size,
+        suffix=suffixes[suffix_index])
+
+
+def get_partitions_facts(sys_block_path):
+    partition_metadata = {}
+    for folder in os.listdir(sys_block_path):
+        folder_path = os.path.join(sys_block_path, folder)
+        if os.path.exists(os.path.join(folder_path, 'partition')):
+            contents = get_file_contents(os.path.join(folder_path, 'partition'))
+            if '1' in contents:
+                part = {}
+                partname = folder
+                part_sys_block_path = os.path.join(sys_block_path, partname)
+
+                part['start'] = get_file_contents(part_sys_block_path + "/start", 0)
+                part['sectors'] = get_file_contents(part_sys_block_path + "/size", 0)
+
+                part['sectorsize'] = get_file_contents(
+                    part_sys_block_path + "/queue/logical_block_size")
+                if not part['sectorsize']:
+                    part['sectorsize'] = get_file_contents(
+                        part_sys_block_path + "/queue/hw_sector_size", 512)
+                part['size'] = human_readable_size(float(part['sectors']) * 512)
+
+                partition_metadata[partname] = part
+    return partition_metadata
+
+
+def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper'):
+    """
+    Captures all available devices from /sys/block/, including its partitions,
+    along with interesting metadata like sectors, size, vendor,
+    solid/rotational, etc...
+
+    Returns a dictionary, where keys are the full paths to devices.
+
+    ..note:: dmapper devices get their path updated to what they link from, if
+            /dev/dm-0 is linked by /dev/mapper/ceph-data, then the latter gets
+            used as the key.
+
+    ..note:: loop devices, removable media, and logical volumes are never included.
+    """
+    # Portions of this detection process are inspired by some of the fact
+    # gathering done by Ansible in module_utils/facts/hardware/linux.py. The
+    # processing of metadata and final outcome *is very different* and fully
+    # imcompatible. There are ignored devices, and paths get resolved depending
+    # on dm devices, loop, and removable media
+
+    device_facts = {}
+
+    block_devs = get_block_devs(_sys_block_path)
+    dev_devs = get_dev_devs(_dev_path)
+    mapper_devs = get_mapper_devs(_mapper_path)
+
+    for block in block_devs:
+        sysdir = os.path.join(_sys_block_path, block)
+        metadata = {}
+
+        # Ensure that the diskname is an absolute path and that it never points
+        # to a /dev/dm-* device
+        diskname = mapper_devs.get(block) or dev_devs.get(block)
+
+        # If the mapper device is a logical volume it gets excluded
+        if diskname.startswith(('/dev/mapper', '/dev/dm-')):
+            if lvm.is_lv(diskname):
+                continue
+
+        # If the device reports itself as 'removable', get it excluded
+        metadata['removable'] = get_file_contents(os.path.join(sysdir, 'removable'))
+        if metadata['removable'] == '1':
+            continue
+
+        for key in ['vendor', 'model', 'sas_address', 'sas_device_handle']:
+            metadata[key] = get_file_contents(sysdir + "/device/" + key)
+
+        for key in ['sectors', 'size']:
+            metadata[key] = get_file_contents(os.path.join(sysdir, key), 0)
+
+        for key, _file in [('support_discard', '/queue/discard_granularity')]:
+            metadata[key] = get_file_contents(os.path.join(sysdir, _file))
+
+        metadata['partitions'] = get_partitions_facts(sysdir)
+
+        metadata['rotational'] = get_file_contents(sysdir + "/queue/rotational")
+        metadata['scheduler_mode'] = ""
+        scheduler = get_file_contents(sysdir + "/queue/scheduler")
+        if scheduler is not None:
+            m = re.match(r".*?(\[(.*)\])", scheduler)
+            if m:
+                metadata['scheduler_mode'] = m.group(2)
+
+        if not metadata['sectors']:
+            metadata['sectors'] = 0
+        size = metadata['sectors'] or metadata['size']
+        metadata['sectorsize'] = get_file_contents(sysdir + "/queue/logical_block_size")
+        if not metadata['sectorsize']:
+            metadata['sectorsize'] = get_file_contents(sysdir + "/queue/hw_sector_size", 512)
+        metadata['human_readable_size'] = human_readable_size(float(size) * 512)
+        metadata['size'] = human_readable_size(float(size) * 512)
+
+        device_facts[diskname] = metadata
+    return device_facts

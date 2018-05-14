@@ -446,7 +446,7 @@ template <typename I>
 void Journal<I>::get_tag_owner(IoCtx& io_ctx, std::string& image_id,
                                std::string *mirror_uuid,
                                ContextWQ *op_work_queue, Context *on_finish) {
-  CephContext *cct = (CephContext *)io_ctx.cct();
+  CephContext *cct = static_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << __func__ << dendl;
 
   auto ctx = new C_GetTagOwner(io_ctx, image_id, mirror_uuid, on_finish);
@@ -1620,7 +1620,7 @@ struct C_RefreshTags : public Context {
   uint64_t tag_tid = 0;
   journal::TagData tag_data;
 
-  C_RefreshTags(util::AsyncOpTracker &async_op_tracker)
+  explicit C_RefreshTags(util::AsyncOpTracker &async_op_tracker)
     : async_op_tracker(async_op_tracker),
       lock("librbd::Journal::C_RefreshTags::lock") {
     async_op_tracker.start_op();

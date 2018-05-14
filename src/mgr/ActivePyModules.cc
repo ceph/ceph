@@ -25,24 +25,26 @@
 #include "mgr/MgrContext.h"
 
 // For ::config_prefix
-#include "PyModuleRegistry.h"
+#include "PyModule.h"
 
 #include "ActivePyModules.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
-#define dout_prefix *_dout << "mgr " << __func__ << " "
+#define dout_prefix *_dout << "mgr " << __func__ << " "    
 
-
-ActivePyModules::ActivePyModules(PyModuleConfig const &config_,
+ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
+          std::map<std::string, std::string> store_data,
           DaemonStateIndex &ds, ClusterState &cs,
 	  MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
           Client &client_, Finisher &f)
-  : config_cache(config_), daemon_state(ds), cluster_state(cs),
+  : module_config(module_config_), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), objecter(objecter_), client(client_), finisher(f),
     lock("ActivePyModules")
-{}
+{
+  store_cache = std::move(store_data);
+}
 
 ActivePyModules::~ActivePyModules() = default;
 
@@ -263,6 +265,9 @@ PyObject *ActivePyModules::get_python(const std::string &what)
             f.dump_int(i.first.c_str(), i.second);
           }
           f.close_section();
+          f.open_object_section("pg_stats_sum");
+          pg_map.pg_sum.dump(&f);
+          f.close_section();
         }
     );
     return f.get();
@@ -282,6 +287,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
         }
     );
     return f.get();
+  } else if (what == "io_rate") {
+    PyFormatter f;
+    cluster_state.with_pgmap(
+      [&f](const PGMap &pg_map) {
+        pg_map.dump_delta(&f);
+      }
+    );
+    return f.get();
   } else if (what == "df") {
     PyFormatter f;
 
@@ -298,6 +311,21 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     cluster_state.with_pgmap(
         [&f](const PGMap &pg_map) {
       pg_map.dump_osd_stats(&f);
+    });
+    return f.get();
+  } else if (what == "osd_pool_stats") {
+    int64_t poolid = -ENOENT;
+    string pool_name;
+    PyFormatter f;
+    cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+        f.open_array_section("pool_stats");
+        for (auto &p : osdmap.get_pools()) {
+          poolid = p.first;
+          pg_map.dump_pool_stats_and_io_rate(poolid, osdmap, &f, nullptr);
+        }
+        f.close_section();
+      });
     });
     return f.get();
   } else if (what == "health" || what == "mon_status") {
@@ -410,6 +438,27 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
   }
 }
 
+bool ActivePyModules::get_store(const std::string &module_name,
+    const std::string &key, std::string *val) const
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  Mutex::Locker l(lock);
+  PyEval_RestoreThread(tstate);
+
+  const std::string global_key = PyModule::config_prefix
+    + module_name + "/" + key;
+
+  dout(4) << __func__ << " key: " << global_key << dendl;
+
+  auto i = store_cache.find(global_key);
+  if (i != store_cache.end()) {
+    *val = i->second;
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
@@ -417,55 +466,62 @@ bool ActivePyModules::get_config(const std::string &module_name,
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  const std::string global_key = PyModuleRegistry::config_prefix
+  const std::string global_key = PyModule::config_prefix
     + module_name + "/" + key;
 
-  dout(4) << __func__ << "key: " << global_key << dendl;
+  dout(4) << __func__ << " key: " << global_key << dendl;
 
-  if (config_cache.count(global_key)) {
-    *val = config_cache.at(global_key);
+  Mutex::Locker lock(module_config.lock);
+  
+  auto i = module_config.config.find(global_key);
+  if (i != module_config.config.end()) {
+    *val = i->second;
     return true;
   } else {
     return false;
   }
 }
 
-PyObject *ActivePyModules::get_config_prefix(const std::string &module_name,
+PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
     const std::string &prefix) const
 {
   PyThreadState *tstate = PyEval_SaveThread();
   Mutex::Locker l(lock);
   PyEval_RestoreThread(tstate);
 
-  const std::string base_prefix = PyModuleRegistry::config_prefix
+  const std::string base_prefix = PyModule::config_prefix
                                     + module_name + "/";
   const std::string global_prefix = base_prefix + prefix;
-  dout(4) << __func__ << "prefix: " << global_prefix << dendl;
+  dout(4) << __func__ << " prefix: " << global_prefix << dendl;
 
   PyFormatter f;
-  for (auto p = config_cache.lower_bound(global_prefix);
-       p != config_cache.end() && p->first.find(global_prefix) == 0;
+  
+  Mutex::Locker lock(module_config.lock);
+  
+  for (auto p = store_cache.lower_bound(global_prefix);
+       p != store_cache.end() && p->first.find(global_prefix) == 0;
        ++p) {
     f.dump_string(p->first.c_str() + base_prefix.size(), p->second);
   }
   return f.get();
 }
 
-void ActivePyModules::set_config(const std::string &module_name,
+void ActivePyModules::set_store(const std::string &module_name,
     const std::string &key, const boost::optional<std::string>& val)
 {
-  const std::string global_key = PyModuleRegistry::config_prefix
+  const std::string global_key = PyModule::config_prefix
                                    + module_name + "/" + key;
-
+  
   Command set_cmd;
   {
     PyThreadState *tstate = PyEval_SaveThread();
     Mutex::Locker l(lock);
     PyEval_RestoreThread(tstate);
+
     if (val) {
-      config_cache[global_key] = *val;
+      store_cache[global_key] = *val;
     } else {
-      config_cache.erase(global_key);
+      store_cache.erase(global_key);
     }
 
     std::ostringstream cmd_json;
@@ -493,6 +549,12 @@ void ActivePyModules::set_config(const std::string &module_name,
       << cpp_strerror(set_cmd.r) << dendl;
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
   }
+}
+
+void ActivePyModules::set_config(const std::string &module_name,
+    const std::string &key, const boost::optional<std::string>& val)
+{
+  module_config.set_config(&monc, module_name, key, val);
 }
 
 std::map<std::string, std::string> ActivePyModules::get_services() const
@@ -552,7 +614,7 @@ PyObject* ActivePyModules::get_counter_python(
 }
 
 PyObject* ActivePyModules::get_perf_schema_python(
-    const std::string svc_type,
+    const std::string &svc_type,
     const std::string &svc_id)
 {
   PyThreadState *tstate = PyEval_SaveThread();
@@ -697,9 +759,14 @@ int ActivePyModules::handle_command(
   std::stringstream *ss)
 {
   lock.Lock();
-  auto mod = modules.at(module_name).get();
+  auto mod_iter = modules.find(module_name);
+  if (mod_iter == modules.end()) {
+    *ss << "Module '" << module_name << "' is not available";
+    return -ENOENT;
+  }
+
   lock.Unlock();
-  return mod->handle_command(cmdmap, ds, ss);
+  return mod_iter->second->handle_command(cmdmap, ds, ss);
 }
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)

@@ -128,7 +128,7 @@ void ScrubStack::scrub_dir_inode(CInode *in,
                                  bool *terminal,
                                  bool *done)
 {
-  dout(10) << __func__ << *in << dendl;
+  dout(10) << __func__ << " " << *in << dendl;
 
   *added_children = false;
   bool all_frags_terminal = true;
@@ -266,7 +266,7 @@ class C_InodeValidated : public MDSInternalContext
 
 void ScrubStack::scrub_dir_inode_final(CInode *in)
 {
-  dout(20) << __func__ << *in << dendl;
+  dout(20) << __func__ << " " << *in << dendl;
 
   // Two passes through this function.  First one triggers inode validation,
   // second one sets finally_done
@@ -377,13 +377,14 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
     in->make_path_string(path, true);
   }
 
-  if (result.backtrace.checked && !result.backtrace.passed
-      && !result.backtrace.repaired)
+  if (result.backtrace.checked && !result.backtrace.passed &&
+      !result.backtrace.repaired)
   {
     // Record backtrace fails as remote linkage damage, as
     // we may not be able to resolve hard links to this inode
     mdcache->mds->damage_table.notify_remote_damaged(in->inode.ino, path);
-  } else if (result.inode.checked && !result.inode.passed) {
+  } else if (result.inode.checked && !result.inode.passed &&
+             !result.inode.repaired) {
     // Record damaged inode structures as damaged dentries as
     // that is where they are stored
     auto parent = in->get_projected_parent_dn();

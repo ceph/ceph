@@ -4,8 +4,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BsDropdownModule } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 
+import { CephfsService } from '../../../shared/api/cephfs.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { CephfsService } from '../cephfs.service';
 import { ClientsComponent } from './clients.component';
 
 describe('ClientsComponent', () => {

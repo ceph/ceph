@@ -54,10 +54,10 @@ private:
 
   bool init_sockets();
   bool gather_socket_output();
-  std::string get_result(const std::string target, const std::string command) const;
+  std::string get_result(const std::string &target, const std::string &command) const;
 
   std::pair<std::string, std::string>
-  run_command(AdminSocketClient &client, const std::string raw_command,
+  run_command(AdminSocketClient &client, const std::string &raw_command,
               bool send_untouched = false);
 
   bool run_tests() const;

@@ -172,7 +172,7 @@ public:
   LCMPExpiration_S3() {}
   ~LCMPExpiration_S3() {}
 
-  bool xml_end(const char *el);
+  bool xml_end(const char *el) override;
   void to_xml(ostream& out) {
     out << "<AbortIncompleteMultipartUpload>" << "<DaysAfterInitiation>" << days << "</DaysAfterInitiation>" << "</AbortIncompleteMultipartUpload>";
   }
@@ -189,7 +189,7 @@ private:
   CephContext *cct;
 public:
   LCRule_S3(): cct(nullptr) {}
-  LCRule_S3(CephContext *_cct): cct(_cct) {}
+  explicit LCRule_S3(CephContext *_cct): cct(_cct) {}
   ~LCRule_S3() override {}
 
   void to_xml(ostream& out);
@@ -233,13 +233,13 @@ class RGWLCXMLParser_S3 : public RGWXMLParser
 
   XMLObj *alloc_obj(const char *el) override;
 public:
-  RGWLCXMLParser_S3(CephContext *_cct) : cct(_cct) {}
+  explicit RGWLCXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
 
 class RGWLifecycleConfiguration_S3 : public RGWLifecycleConfiguration, public XMLObj
 {
 public:
-  RGWLifecycleConfiguration_S3(CephContext *_cct) : RGWLifecycleConfiguration(_cct) {}
+  explicit RGWLifecycleConfiguration_S3(CephContext *_cct) : RGWLifecycleConfiguration(_cct) {}
   RGWLifecycleConfiguration_S3() : RGWLifecycleConfiguration(NULL) {}
   ~RGWLifecycleConfiguration_S3() override {}
 

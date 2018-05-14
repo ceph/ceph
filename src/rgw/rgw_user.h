@@ -180,6 +180,8 @@ struct RGWUserAdminOpState {
   std::string key; // secret key
   int32_t key_type;
 
+  std::set<string> mfa_ids;
+
   // operation attributes
   bool existing_user;
   bool existing_key;
@@ -209,6 +211,7 @@ struct RGWUserAdminOpState {
   bool found_by_uid; 
   bool found_by_email;  
   bool found_by_key;
+  bool mfa_ids_specified;
  
   // req parameters
   bool populated;
@@ -389,6 +392,11 @@ struct RGWUserAdminOpState {
     user_quota_specified = true;
   }
 
+  void set_mfa_ids(const std::set<string>& ids) {
+    mfa_ids = ids;
+    mfa_ids_specified = true;
+  }
+
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
   bool has_existing_user() { return existing_user; }
@@ -425,6 +433,7 @@ struct RGWUserAdminOpState {
   uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
+  set<string>& get_mfa_ids() { return mfa_ids; }
 
   rgw_user& get_user_id() { return user_id; }
   std::string get_subuser() { return subuser; }
@@ -524,6 +533,7 @@ struct RGWUserAdminOpState {
     found_by_uid = false;
     found_by_email = false;
     found_by_key = false;
+    mfa_ids_specified = false;
   }
 };
 

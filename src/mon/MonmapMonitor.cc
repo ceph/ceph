@@ -672,7 +672,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.last_changed = ceph_clock_now();
     propose = true;
 
-    dout(1) << __func__ << ss.str() << "; new features will be: "
+    dout(1) << __func__ << " " << ss.str() << "; new features will be: "
             << "persistent = " << pending_map.persistent_features
             // output optional nevertheless, for auditing purposes.
             << ", optional = " << pending_map.optional_features << dendl;

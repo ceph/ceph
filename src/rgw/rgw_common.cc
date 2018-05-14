@@ -84,6 +84,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_USER_SUSPENDED, {403, "UserSuspended" }},
     { ERR_REQUEST_TIME_SKEWED, {403, "RequestTimeTooSkewed" }},
     { ERR_QUOTA_EXCEEDED, {403, "QuotaExceeded" }},
+    { ERR_MFA_REQUIRED, {403, "AccessDenied" }},
     { ENOENT, {404, "NoSuchKey" }},
     { ERR_NO_SUCH_BUCKET, {404, "NoSuchBucket" }},
     { ERR_NO_SUCH_WEBSITE_CONFIGURATION, {404, "NoSuchWebsiteConfiguration" }},
@@ -137,7 +138,7 @@ rgw_http_errors rgw_http_swift_errors({
 
 int rgw_perf_start(CephContext *cct)
 {
-  PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_rgw_first, l_rgw_last);
+  PerfCountersBuilder plb(cct, "rgw", l_rgw_first, l_rgw_last);
 
   // RGW emits comparatively few metrics, so let's be generous
   // and mark them all USEFUL to get transmission to ceph-mgr by default.
@@ -276,32 +277,14 @@ void req_info::rebuild_from(req_info& src)
 
 
 req_state::req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u)
-  : cct(_cct), cio(NULL), op(OP_UNKNOWN), user(u), has_acl_header(false),
+  : cct(_cct), user(u),
     info(_cct, e)
 {
   enable_ops_log = e->get_enable_ops_log();
   enable_usage_log = e->get_enable_usage_log();
   defer_to_bucket_acls = e->get_defer_to_bucket_acls();
-  content_started = false;
-  format = 0;
-  formatter = NULL;
-  expect_cont = false;
 
-  obj_size = 0;
-  prot_flags = 0;
-
-  system_request = false;
-
-  time = ceph_clock_now();
-  perm_mask = 0;
-  bucket_instance_shard_id = -1;
-  content_length = 0;
-  bucket_exists = false;
-  has_bad_meta = false;
-  length = NULL;
-  local_source = false;
-
-  obj_ctx = NULL;
+  time = Clock::now();
 }
 
 req_state::~req_state() {
@@ -1443,23 +1426,22 @@ static bool char_needs_url_encoding(char c)
   return false;
 }
 
-void url_encode(const string& src, string& dst)
+void url_encode(const string& src, string& dst, bool encode_slash)
 {
   const char *p = src.c_str();
   for (unsigned i = 0; i < src.size(); i++, p++) {
-    if (char_needs_url_encoding(*p)) {
+    if ((!encode_slash && *p == 0x2F) || !char_needs_url_encoding(*p)) {
+      dst.append(p, 1);
+    }else {
       rgw_uri_escape_char(*p, dst);
-      continue;
     }
-
-    dst.append(p, 1);
   }
 }
 
-std::string url_encode(const std::string& src)
+std::string url_encode(const std::string& src, bool encode_slash)
 {
   std::string dst;
-  url_encode(src, dst);
+  url_encode(src, dst, encode_slash);
 
   return dst;
 }

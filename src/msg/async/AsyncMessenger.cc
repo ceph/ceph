@@ -218,7 +218,7 @@ struct StackSingleton {
   CephContext *cct;
   std::shared_ptr<NetworkStack> stack;
 
-  StackSingleton(CephContext *c): cct(c) {}
+  explicit StackSingleton(CephContext *c): cct(c) {}
   void ready(std::string &type) {
     if (!stack)
       stack = NetworkStack::create(cct, type);
@@ -583,7 +583,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
 {
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, MSG_CRC_ALL);
-    ldout(cct, 0) << __func__ << "submit_message " << *m << "\n";
+    ldout(cct, 0) << __func__ << " submit_message " << *m << "\n";
     m->get_payload().hexdump(*_dout);
     if (m->get_data().length() > 0) {
       *_dout << " data:\n";

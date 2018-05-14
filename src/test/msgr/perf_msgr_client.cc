@@ -119,7 +119,7 @@ class MessengerClient {
   vector<ClientThread*> clients;
 
  public:
-  MessengerClient(string t, string addr, int delay):
+  MessengerClient(const string &t, const string &addr, int delay):
       type(t), serveraddr(addr), think_time_us(delay) {
   }
   ~MessengerClient() {

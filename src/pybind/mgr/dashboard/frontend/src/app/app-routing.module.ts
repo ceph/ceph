@@ -3,7 +3,8 @@ import { RouterModule, Routes } from '@angular/router';
 
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
 import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
-import { PoolDetailComponent } from './ceph/block/pool-detail/pool-detail.component';
+import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
+import { RbdListComponent } from './ceph/block/rbd-list/rbd-list.component';
 import { CephfsComponent } from './ceph/cephfs/cephfs/cephfs.component';
 import { ClientsComponent } from './ceph/cephfs/clients/clients.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
@@ -14,7 +15,12 @@ import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.compone
 import {
   PerformanceCounterComponent
 } from './ceph/performance-counter/performance-counter/performance-counter.component';
+import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
+import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
+import { RgwBucketListComponent } from './ceph/rgw/rgw-bucket-list/rgw-bucket-list.component';
 import { RgwDaemonListComponent } from './ceph/rgw/rgw-daemon-list/rgw-daemon-list.component';
+import { RgwUserFormComponent } from './ceph/rgw/rgw-user-form/rgw-user-form.component';
+import { RgwUserListComponent } from './ceph/rgw/rgw-user-list/rgw-user-list.component';
 import { LoginComponent } from './core/auth/login/login.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { AuthGuardService } from './shared/services/auth-guard.service';
@@ -26,12 +32,60 @@ const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'hosts', component: HostsComponent, canActivate: [AuthGuardService] },
   {
-    path: 'rgw',
+    path: 'rgw/daemon',
     component: RgwDaemonListComponent,
     canActivate: [AuthGuardService]
   },
+  {
+    path: 'rgw/user',
+    component: RgwUserListComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rgw/user/add',
+    component: RgwUserFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rgw/user/edit/:uid',
+    component: RgwUserFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rgw/bucket',
+    component: RgwBucketListComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rgw/bucket/add',
+    component: RgwBucketFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rgw/bucket/edit/:bucket',
+    component: RgwBucketFormComponent,
+    canActivate: [AuthGuardService]
+  },
   { path: 'block/iscsi', component: IscsiComponent, canActivate: [AuthGuardService] },
-  { path: 'block/pool/:name', component: PoolDetailComponent, canActivate: [AuthGuardService] },
+  { path: 'block/rbd', component: RbdListComponent, canActivate: [AuthGuardService] },
+  { path: 'rbd/add', component: RbdFormComponent, canActivate: [AuthGuardService] },
+  { path: 'rbd/edit/:pool/:name', component: RbdFormComponent, canActivate: [AuthGuardService] },
+  { path: 'pool', component: PoolListComponent, canActivate: [AuthGuardService] },
+  {
+    path: 'rbd/clone/:pool/:name/:snap',
+    component: RbdFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rbd/copy/:pool/:name',
+    component: RbdFormComponent,
+    canActivate: [AuthGuardService]
+  },
+  {
+    path: 'rbd/copy/:pool/:name/:snap',
+    component: RbdFormComponent,
+    canActivate: [AuthGuardService]
+  },
   {
     path: 'perf_counters/:type/:id',
     component: PerformanceCounterComponent,

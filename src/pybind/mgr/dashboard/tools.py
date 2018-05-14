@@ -1,216 +1,21 @@
 # -*- coding: utf-8 -*-
-# pylint: disable=W0212
 from __future__ import absolute_import
+
+import sys
+import inspect
+import functools
 
 import collections
 from datetime import datetime, timedelta
 import fnmatch
-import importlib
-import inspect
-import json
-import os
-import pkgutil
-import sys
 import time
 import threading
-import types  # pylint: disable=import-error
-
+import socket
+from six.moves import urllib
 import cherrypy
-from six import add_metaclass
 
-from .settings import Settings
-from . import logger, mgr
-
-
-def ApiController(path):
-    def decorate(cls):
-        cls._cp_controller_ = True
-        cls._cp_path_ = path
-        config = {
-            'tools.sessions.on': True,
-            'tools.sessions.name': Session.NAME,
-            'tools.session_expire_at_browser_close.on': True
-        }
-        if not hasattr(cls, '_cp_config'):
-            cls._cp_config = {}
-        if 'tools.authenticate.on' not in cls._cp_config:
-            config['tools.authenticate.on'] = False
-        cls._cp_config.update(config)
-        return cls
-    return decorate
-
-
-def AuthRequired(enabled=True):
-    def decorate(cls):
-        if not hasattr(cls, '_cp_config'):
-            cls._cp_config = {
-                'tools.authenticate.on': enabled
-            }
-        else:
-            cls._cp_config['tools.authenticate.on'] = enabled
-        return cls
-    return decorate
-
-
-def load_controllers():
-    # setting sys.path properly when not running under the mgr
-    dashboard_dir = os.path.dirname(os.path.realpath(__file__))
-    mgr_dir = os.path.dirname(dashboard_dir)
-    if mgr_dir not in sys.path:
-        sys.path.append(mgr_dir)
-
-    controllers = []
-    ctrls_path = '{}/controllers'.format(dashboard_dir)
-    mods = [mod for _, mod, _ in pkgutil.iter_modules([ctrls_path])]
-    for mod_name in mods:
-        mod = importlib.import_module('.controllers.{}'.format(mod_name),
-                                      package='dashboard')
-        for _, cls in mod.__dict__.items():
-            # Controllers MUST be derived from the class BaseController.
-            if inspect.isclass(cls) and issubclass(cls, BaseController) and \
-                    hasattr(cls, '_cp_controller_'):
-                controllers.append(cls)
-
-    return controllers
-
-
-def json_error_page(status, message, traceback, version):
-    cherrypy.response.headers['Content-Type'] = 'application/json'
-    return json.dumps(dict(status=status, detail=message, traceback=traceback,
-                           version=version))
-
-
-# pylint: disable=too-many-locals
-def browsable_api_view(meth):
-    def wrapper(self, *vpath, **kwargs):
-        assert isinstance(self, BaseController)
-        if not Settings.ENABLE_BROWSABLE_API:
-            return meth(self, *vpath, **kwargs)
-        if 'text/html' not in cherrypy.request.headers.get('Accept', ''):
-            return meth(self, *vpath, **kwargs)
-        if '_method' in kwargs:
-            cherrypy.request.method = kwargs.pop('_method').upper()
-        if '_raw' in kwargs:
-            kwargs.pop('_raw')
-            return meth(self, *vpath, **kwargs)
-
-        template = """
-        <html>
-        <h1>Browsable API</h1>
-        {docstring}
-        <h2>Request</h2>
-        <p>{method} {breadcrump}</p>
-        <h2>Response</h2>
-        <p>Status: {status_code}<p>
-        <pre>{reponse_headers}</pre>
-        <form action="/api/{path}/{vpath}" method="get">
-        <input type="hidden" name="_raw" value="true" />
-        <button type="submit">GET raw data</button>
-        </form>
-        <h2>Data</h2>
-        <pre>{data}</pre>
-        {create_form}
-        <h2>Note</h2>
-        <p>Please note that this API is not an official Ceph REST API to be
-        used by third-party applications. It's primary purpose is to serve
-        the requirements of the Ceph Dashboard and is subject to change at
-        any time. Use at your own risk.</p>
-        """
-
-        create_form_template = """
-        <h2>Create Form</h2>
-        <form action="/api/{path}/{vpath}" method="post">
-        {fields}<br>
-        <input type="hidden" name="_method" value="post" />
-        <button type="submit">Create</button>
-        </form>
-        """
-
-        try:
-            data = meth(self, *vpath, **kwargs)
-        except Exception as e:  # pylint: disable=broad-except
-            except_template = """
-            <h2>Exception: {etype}: {tostr}</h2>
-            <pre>{trace}</pre>
-            Params: {kwargs}
-            """
-            import traceback
-            tb = sys.exc_info()[2]
-            cherrypy.response.headers['Content-Type'] = 'text/html'
-            data = except_template.format(
-                etype=e.__class__.__name__,
-                tostr=str(e),
-                trace='\n'.join(traceback.format_tb(tb)),
-                kwargs=kwargs
-            )
-
-        if cherrypy.response.headers['Content-Type'] == 'application/json':
-            data = json.dumps(json.loads(data), indent=2, sort_keys=True)
-
-        try:
-            create = getattr(self, 'create')
-            f_args = RESTController._function_args(create)
-            input_fields = ['{name}:<input type="text" name="{name}">'.format(name=name) for name in
-                            f_args]
-            create_form = create_form_template.format(
-                fields='<br>'.join(input_fields),
-                path=self._cp_path_,
-                vpath='/'.join(vpath)
-            )
-        except AttributeError:
-            create_form = ''
-
-        def mk_breadcrump(elems):
-            return '/'.join([
-                '<a href="/{}">{}</a>'.format('/'.join(elems[0:i+1]), e)
-                for i, e in enumerate(elems)
-            ])
-
-        cherrypy.response.headers['Content-Type'] = 'text/html'
-        return template.format(
-            docstring='<pre>{}</pre>'.format(self.__doc__) if self.__doc__ else '',
-            method=cherrypy.request.method,
-            path=self._cp_path_,
-            vpath='/'.join(vpath),
-            breadcrump=mk_breadcrump(['api', self._cp_path_] + list(vpath)),
-            status_code=cherrypy.response.status,
-            reponse_headers='\n'.join(
-                '{}: {}'.format(k, v) for k, v in cherrypy.response.headers.items()),
-            data=data,
-            create_form=create_form
-        )
-
-    wrapper.exposed = True
-    if hasattr(meth, '_cp_config'):
-        wrapper._cp_config = meth._cp_config
-    return wrapper
-
-
-class BaseControllerMeta(type):
-    def __new__(mcs, name, bases, dct):
-        new_cls = type.__new__(mcs, name, bases, dct)
-
-        for a_name in new_cls.__dict__:
-            thing = new_cls.__dict__[a_name]
-            if isinstance(thing, (types.FunctionType, types.MethodType))\
-                    and getattr(thing, 'exposed', False):
-
-                # @cherrypy.tools.json_out() is incompatible with our browsable_api_view decorator.
-                cp_config = getattr(thing, '_cp_config', {})
-                if not cp_config.get('tools.json_out.on', False):
-                    setattr(new_cls, a_name, browsable_api_view(thing))
-        return new_cls
-
-
-@add_metaclass(BaseControllerMeta)
-class BaseController(object):
-    """
-    Base class for all controllers providing API endpoints.
-    """
-
-    @cherrypy.expose
-    def default(self, *_vpath, **_params):
-        raise cherrypy.NotFound()
+from . import logger
+from .exceptions import ViewCacheNoDataException
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -300,7 +105,6 @@ class ViewCache(object):
     VALUE_OK = 0
     VALUE_STALE = 1
     VALUE_NONE = 2
-    VALUE_EXCEPTION = 3
 
     class GetterThread(threading.Thread):
         def __init__(self, view, fn, args, kwargs):
@@ -313,17 +117,21 @@ class ViewCache(object):
 
         # pylint: disable=broad-except
         def run(self):
+            t0 = 0.0
+            t1 = 0.0
             try:
                 t0 = time.time()
+                logger.debug("VC: starting execution of %s", self.fn)
                 val = self.fn(*self.args, **self.kwargs)
                 t1 = time.time()
             except Exception as ex:
-                logger.exception("Error while calling fn=%s ex=%s", self.fn,
-                                 str(ex))
-                self._view.value = None
-                self._view.value_when = None
-                self._view.getter_thread = None
-                self._view.exception = ex
+                with self._view.lock:
+                    logger.exception("Error while calling fn=%s ex=%s", self.fn,
+                                     str(ex))
+                    self._view.value = None
+                    self._view.value_when = None
+                    self._view.getter_thread = None
+                    self._view.exception = ex
             else:
                 with self._view.lock:
                     self._view.latency = t1 - t0
@@ -332,6 +140,8 @@ class ViewCache(object):
                     self._view.getter_thread = None
                     self._view.exception = None
 
+            logger.debug("VC: execution of %s finished in: %s", self.fn,
+                         t1 - t0)
             self.event.set()
 
     class RemoteViewCache(object):
@@ -373,6 +183,8 @@ class ViewCache(object):
                     self.getter_thread = ViewCache.GetterThread(self, fn, args,
                                                                 kwargs)
                     self.getter_thread.start()
+                else:
+                    logger.debug("VC: getter_thread still alive for: %s", fn)
 
                 ev = self.getter_thread.event
 
@@ -383,13 +195,14 @@ class ViewCache(object):
                     # We fetched the data within the timeout
                     if self.exception:
                         # execution raised an exception
-                        return ViewCache.VALUE_EXCEPTION, self.exception
+                        # pylint: disable=raising-bad-type
+                        raise self.exception
                     return ViewCache.VALUE_OK, self.value
                 elif self.value_when is not None:
                     # We have some data, but it doesn't meet freshness requirements
                     return ViewCache.VALUE_STALE, self.value
                 # We have no data, not even stale data
-                return ViewCache.VALUE_NONE, None
+                raise ViewCacheNoDataException()
 
     def __init__(self, timeout=5):
         self.timeout = timeout
@@ -403,145 +216,6 @@ class ViewCache(object):
                 self.cache_by_args[args] = rvc
             return rvc.run(fn, args, kwargs)
         return wrapper
-
-
-class RESTController(BaseController):
-    """
-    Base class for providing a RESTful interface to a resource.
-
-    To use this class, simply derive a class from it and implement the methods
-    you want to support.  The list of possible methods are:
-
-    * list()
-    * bulk_set(data)
-    * create(data)
-    * bulk_delete()
-    * get(key)
-    * set(data, key)
-    * delete(key)
-
-    Test with curl:
-
-    curl -H "Content-Type: application/json" -X POST \
-         -d '{"username":"xyz","password":"xyz"}'  http://127.0.0.1:8080/foo
-    curl http://127.0.0.1:8080/foo
-    curl http://127.0.0.1:8080/foo/0
-
-    """
-
-    def _not_implemented(self, is_sub_path):
-        methods = [method
-                   for ((method, _is_element), (meth, _))
-                   in self._method_mapping.items()
-                   if _is_element == is_sub_path is not None and hasattr(self, meth)]
-        cherrypy.response.headers['Allow'] = ','.join(methods)
-        raise cherrypy.HTTPError(405, 'Method not implemented.')
-
-    _method_mapping = {
-        ('GET', False): ('list', 200),
-        ('PUT', False): ('bulk_set', 200),
-        ('PATCH', False): ('bulk_set', 200),
-        ('POST', False): ('create', 201),
-        ('DELETE', False): ('bulk_delete', 204),
-        ('GET', True): ('get', 200),
-        ('PUT', True): ('set', 200),
-        ('PATCH', True): ('set', 200),
-        ('DELETE', True): ('delete', 204),
-    }
-
-    def _get_method(self, vpath):
-        is_sub_path = bool(len(vpath))
-        try:
-            method_name, status_code = self._method_mapping[
-                (cherrypy.request.method, is_sub_path)]
-        except KeyError:
-            self._not_implemented(is_sub_path)
-        method = getattr(self, method_name, None)
-        if not method:
-            self._not_implemented(is_sub_path)
-        return method, status_code
-
-    @cherrypy.expose
-    def default(self, *vpath, **params):
-        if cherrypy.request.path_info.startswith(
-                '{}/api/{}/default'.format(mgr.url_prefix, self._cp_path_)) or \
-                cherrypy.request.path_info.startswith('/{}/default'.format(self._cp_path_)):
-            # These two calls to default() are identical: `vpath` and
-            # params` are both empty:
-            # $ curl 'http://localhost/api/cp_path/'
-            # and
-            # $ curl 'http://localhost/api/cp_path/default'
-            # But we need to distinguish them. To fix this, we need
-            # to add the missing `default`
-            vpath = ['default'] + list(vpath)
-
-        method, status_code = self._get_method(vpath)
-
-        if cherrypy.request.method not in ['GET', 'DELETE']:
-            method = RESTController._takes_json(method)
-
-        if cherrypy.request.method != 'DELETE':
-            method = RESTController._returns_json(method)
-
-        cherrypy.response.status = status_code
-
-        return method(*vpath, **params)
-
-    @staticmethod
-    def args_from_json(func):
-        func._args_from_json_ = True
-        return func
-
-    @staticmethod
-    def _function_args(func):
-        if sys.version_info > (3, 0):  # pylint: disable=no-else-return
-            return list(inspect.signature(func).parameters.keys())
-        else:
-            return inspect.getargspec(func).args[1:]  # pylint: disable=deprecated-method
-
-    # pylint: disable=W1505
-    @staticmethod
-    def _takes_json(func):
-        def inner(*args, **kwargs):
-            if cherrypy.request.headers.get('Content-Type',
-                                            '') == 'application/x-www-form-urlencoded':
-                if hasattr(func, '_args_from_json_'):  # pylint: disable=no-else-return
-                    return func(*args, **kwargs)
-                else:
-                    return func(kwargs)
-
-            content_length = int(cherrypy.request.headers['Content-Length'])
-            body = cherrypy.request.body.read(content_length)
-            if not body:
-                raise cherrypy.HTTPError(400, 'Empty body. Content-Length={}'
-                                         .format(content_length))
-            try:
-                data = json.loads(body.decode('utf-8'))
-            except Exception as e:
-                raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
-                                         .format(str(e)))
-            if hasattr(func, '_args_from_json_'):
-                kwargs.update(data.items())
-                return func(*args, **kwargs)
-
-            return func(data, *args, **kwargs)
-        return inner
-
-    @staticmethod
-    def _returns_json(func):
-        def inner(*args, **kwargs):
-            cherrypy.response.headers['Content-Type'] = 'application/json'
-            ret = func(*args, **kwargs)
-            return json.dumps(ret).encode('utf8')
-        return inner
-
-    @staticmethod
-    def split_vpath(vpath):
-        if not vpath:
-            return None, None
-        if len(vpath) == 1:
-            return vpath[0], None
-        return vpath[0], vpath[1]
 
 
 class Session(object):
@@ -725,7 +399,7 @@ class NotificationQueue(threading.Thread):
         logger.debug("notification queue finished")
 
 
-# pylint: disable=too-many-arguments
+# pylint: disable=too-many-arguments, protected-access
 class TaskManager(object):
     FINISHED_TASK_SIZE = 10
     FINISHED_TASK_TTL = 60.0
@@ -734,7 +408,7 @@ class TaskManager(object):
     VALUE_EXECUTING = "executing"
 
     _executing_tasks = set()
-    _finished_tasks = set()
+    _finished_tasks = []
     _lock = threading.Lock()
 
     _task_local_data = threading.local()
@@ -748,17 +422,19 @@ class TaskManager(object):
         logger.info("TM: finished %s", task)
         with cls._lock:
             cls._executing_tasks.remove(task)
-            cls._finished_tasks.add(task)
+            cls._finished_tasks.append(task)
 
     @classmethod
-    def run(cls, name, metadata, fn, args=None, kwargs=None, executor=None):
+    def run(cls, name, metadata, fn, args=None, kwargs=None, executor=None,
+            exception_handler=None):
         if not args:
             args = []
         if not kwargs:
             kwargs = {}
         if not executor:
             executor = ThreadedExecutor()
-        task = Task(name, metadata, fn, args, kwargs, executor)
+        task = Task(name, metadata, fn, args, kwargs, executor,
+                    exception_handler)
         with cls._lock:
             if task in cls._executing_tasks:
                 logger.debug("TM: task already executing: %s", task)
@@ -787,13 +463,12 @@ class TaskManager(object):
         value.
         """
         now = datetime.now()
-        # list of finished tasks that are older than TTL
-        to_remove = [t for t in task_list
-                     if now - datetime.fromtimestamp(t.end_time) >
-                     timedelta(seconds=cls.FINISHED_TASK_TTL)]
-        to_remove.sort(key=lambda t: t.end_time, reverse=True)
-        for task in to_remove[cls.FINISHED_TASK_SIZE:]:
-            cls._finished_tasks.remove(task)
+        for idx, t in enumerate(task_list):
+            if idx < cls.FINISHED_TASK_SIZE:
+                continue
+            if now - datetime.fromtimestamp(t[1].end_time) > \
+                    timedelta(seconds=cls.FINISHED_TASK_TTL):
+                del cls._finished_tasks[t[0]]
 
     @classmethod
     def list(cls, name_glob=None):
@@ -803,13 +478,13 @@ class TaskManager(object):
             for task in cls._executing_tasks:
                 if not name_glob or fnmatch.fnmatch(task.name, name_glob):
                     executing_tasks.append(task)
-            for task in cls._finished_tasks:
+            for idx, task in enumerate(cls._finished_tasks):
                 if not name_glob or fnmatch.fnmatch(task.name, name_glob):
-                    finished_tasks.append(task)
+                    finished_tasks.append((idx, task))
+            finished_tasks.sort(key=lambda t: t[1].end_time, reverse=True)
             cls._cleanup_old_tasks(finished_tasks)
         executing_tasks.sort(key=lambda t: t.begin_time, reverse=True)
-        finished_tasks.sort(key=lambda t: t.end_time, reverse=True)
-        return executing_tasks, finished_tasks
+        return executing_tasks, [t[1] for t in finished_tasks]
 
     @classmethod
     def list_serializable(cls, ns_glob=None):
@@ -827,11 +502,13 @@ class TaskManager(object):
             'duration': t.duration,
             'progress': t.progress,
             'success': not t.exception,
-            'ret_value': t.ret_value,
-            'exception': t.exception
+            'ret_value': t.ret_value if not t.exception else None,
+            'exception': t.ret_value if t.exception and t.ret_value else (
+                {'detail': str(t.exception)} if t.exception else None)
         } for t in fn_t]
 
 
+# pylint: disable=protected-access
 class TaskExecutor(object):
     def __init__(self):
         self.task = None
@@ -856,6 +533,7 @@ class TaskExecutor(object):
         self.task._complete(ret_value, exception)
 
 
+# pylint: disable=protected-access
 class ThreadedExecutor(TaskExecutor):
     def __init__(self):
         super(ThreadedExecutor, self).__init__()
@@ -878,13 +556,15 @@ class ThreadedExecutor(TaskExecutor):
 
 
 class Task(object):
-    def __init__(self, name, metadata, fn, args, kwargs, executor):
+    def __init__(self, name, metadata, fn, args, kwargs, executor,
+                 exception_handler=None):
         self.name = name
         self.metadata = metadata
         self.fn = fn
         self.fn_args = args
         self.fn_kwargs = kwargs
         self.executor = executor
+        self.ex_handler = exception_handler
         self.running = False
         self.event = threading.Event()
         self.progress = None
@@ -905,6 +585,9 @@ class Task(object):
         return "Task(ns={}, md={})" \
                .format(self.name, self.metadata)
 
+    def __repr__(self):
+        return str(self)
+
     def _run(self):
         with self.lock:
             assert not self.running
@@ -916,6 +599,12 @@ class Task(object):
 
     def _complete(self, ret_value, exception=None):
         now = time.time()
+        if exception and self.ex_handler:
+            # pylint: disable=broad-except
+            try:
+                ret_value = self.ex_handler(exception, task=self)
+            except Exception as ex:
+                exception = ex
         with self.lock:
             assert self.running, "_complete cannot be called before _run"
             self.end_time = now
@@ -965,3 +654,88 @@ class Task(object):
         self.progress = percentage
         if not in_lock:
             self.lock.release()
+
+
+def is_valid_ipv6_address(addr):
+    try:
+        socket.inet_pton(socket.AF_INET6, addr)
+        return True
+    except socket.error:
+        return False
+
+
+def build_url(host, scheme=None, port=None):
+    """
+    Build a valid URL. IPv6 addresses specified in host will be enclosed in brackets
+    automatically.
+
+    >>> build_url('example.com', 'https', 443)
+    'https://example.com:443'
+
+    >>> build_url(host='example.com', port=443)
+    '//example.com:443'
+
+    >>> build_url('fce:9af7:a667:7286:4917:b8d3:34df:8373', port=80, scheme='http')
+    'http://[fce:9af7:a667:7286:4917:b8d3:34df:8373]:80'
+
+    :param scheme: The scheme, e.g. http, https or ftp.
+    :type scheme: str
+    :param host: Consisting of either a registered name (including but not limited to
+                 a hostname) or an IP address.
+    :type host: str
+    :type port: int
+    :rtype: str
+    """
+    netloc = host if not is_valid_ipv6_address(host) else '[{}]'.format(host)
+    if port:
+        netloc += ':{}'.format(port)
+    pr = urllib.parse.ParseResult(
+        scheme=scheme if scheme else '',
+        netloc=netloc,
+        path='',
+        params='',
+        query='',
+        fragment='')
+    return pr.geturl()
+
+
+def dict_contains_path(dct, keys):
+    """
+    Tests whether the keys exist recursively in `dictionary`.
+
+    :type dct: dict
+    :type keys: list
+    :rtype: bool
+    """
+    if keys:
+        if not isinstance(dct, dict):
+            return False
+        key = keys.pop(0)
+        if key in dct:
+            dct = dct[key]
+            return dict_contains_path(dct, keys)
+        return False
+    return True
+
+
+if sys.version_info > (3, 0):
+    wraps = functools.wraps
+    _getargspec = inspect.getfullargspec
+else:
+    def wraps(func):
+        def decorator(wrapper):
+            new_wrapper = functools.wraps(func)(wrapper)
+            new_wrapper.__wrapped__ = func  # set __wrapped__ even for Python 2
+            return new_wrapper
+        return decorator
+
+    _getargspec = inspect.getargspec
+
+
+def getargspec(func):
+    try:
+        while True:
+            func = func.__wrapped__
+    except AttributeError:
+        pass
+    return _getargspec(func)

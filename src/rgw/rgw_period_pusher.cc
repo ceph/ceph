@@ -136,8 +136,8 @@ class RGWPeriodPusher::CRThread {
       http(cct, coroutines.get_completion_mgr()),
       push_all(new PushAllCR(cct, &http, std::move(period), std::move(conns)))
   {
-    http.set_threaded();
-    // must spawn the CR thread after set_threaded
+    http.start();
+    // must spawn the CR thread after start
     thread = std::thread([this] { coroutines.run(push_all.get()); });
   }
   ~CRThread()
@@ -245,7 +245,7 @@ void RGWPeriodPusher::handle_notify(RGWZonesNeedPeriod&& period)
       hint = conns.emplace_hint(
           hint, std::piecewise_construct,
           std::forward_as_tuple(zonegroup.get_id()),
-          std::forward_as_tuple(cct, store, zonegroup.get_id(), zonegroup.endpoints));
+          std::forward_as_tuple(cct, store, zonegroup.get_id(), zonegroup.endpoints, RGWAccessKey()));
     }
   }
 

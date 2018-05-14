@@ -19,15 +19,11 @@
 #include "PyOSDMap.h"
 #include "BaseMgrStandbyModule.h"
 #include "Gil.h"
+#include "MgrContext.h"
 
 #include "ActivePyModules.h"
 
 #include "PyModuleRegistry.h"
-
-// definition for non-const static member
-std::string PyModuleRegistry::config_prefix;
-
-
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -40,9 +36,6 @@ std::string PyModuleRegistry::config_prefix;
 void PyModuleRegistry::init()
 {
   Mutex::Locker locker(lock);
-
-  // namespace in config-key prefixed by "mgr/"
-  config_prefix = std::string(g_conf->name.get_type_str()) + "/";
 
   // Set up global python interpreter
 #if PY_MAJOR_VERSION >= 3
@@ -88,10 +81,11 @@ void PyModuleRegistry::init()
         << cpp_strerror(r) << dendl;
       failed_modules.push_back(module_name);
       // Don't drop out here, load the other modules
-    } else {
-      // Success!
-      modules[module_name] = std::move(mod);
     }
+
+    // Record the module even if the load failed, so that we can
+    // report its loading error
+    modules[module_name] = std::move(mod);
   }
 
   if (!failed_modules.empty()) {
@@ -128,7 +122,9 @@ bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
   }
 }
 
-void PyModuleRegistry::standby_start(MonClient *monc)
+
+
+void PyModuleRegistry::standby_start(MonClient &mc)
 {
   Mutex::Locker l(lock);
   assert(active_modules == nullptr);
@@ -140,11 +136,12 @@ void PyModuleRegistry::standby_start(MonClient *monc)
 
   dout(4) << "Starting modules in standby mode" << dendl;
 
-  standby_modules.reset(new StandbyPyModules(monc, mgr_map, clog));
+  standby_modules.reset(new StandbyPyModules(
+        mgr_map, module_config, clog, mc));
 
   std::set<std::string> failed_modules;
   for (const auto &i : modules) {
-    if (!i.second->is_enabled()) {
+    if (!(i.second->is_enabled() && i.second->get_can_run())) {
       continue;
     }
 
@@ -171,10 +168,10 @@ void PyModuleRegistry::standby_start(MonClient *monc)
 }
 
 void PyModuleRegistry::active_start(
-            PyModuleConfig &config_,
-            DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            LogChannelRef clog_, Objecter &objecter_, Client &client_,
-            Finisher &f)
+            DaemonStateIndex &ds, ClusterState &cs,
+            const std::map<std::string, std::string> &kv_store,
+            MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
+            Client &client_, Finisher &f)
 {
   Mutex::Locker locker(lock);
 
@@ -192,10 +189,13 @@ void PyModuleRegistry::active_start(
   }
 
   active_modules.reset(new ActivePyModules(
-              config_, ds, cs, mc, clog_, objecter_, client_, f));
+              module_config, kv_store, ds, cs, mc,
+              clog_, objecter_, client_, f));
 
   for (const auto &i : modules) {
-    if (!i.second->is_enabled()) {
+    // Anything we're skipping because of !can_run will be flagged
+    // to the user separately via get_health_checks
+    if (!(i.second->is_enabled() && i.second->is_loaded())) {
       continue;
     }
 
@@ -316,8 +316,12 @@ std::vector<MonCommand> PyModuleRegistry::get_commands() const
   std::vector<ModuleCommand> commands = get_py_commands();
   std::vector<MonCommand> result;
   for (auto &pyc: commands) {
+    uint64_t flags = MonCommand::FLAG_MGR;
+    if (pyc.polling) {
+      flags |= MonCommand::FLAG_POLL;
+    }
     result.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
-                        pyc.perm, "cli", MonCommand::FLAG_MGR});
+                        pyc.perm, "cli", flags});
   }
   return result;
 }
@@ -349,7 +353,13 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
       if (module->is_enabled() && !module->get_can_run()) {
         dependency_modules[module->get_name()] = module->get_error_string();
       } else if ((module->is_enabled() && !module->is_loaded())
-              || module->is_failed()) {
+              || (module->is_failed() && module->get_can_run())) {
+        // - Unloadable modules are only reported if they're enabled,
+        //   to avoid spamming users about modules they don't have the
+        //   dependencies installed for because they don't use it.
+        // - Failed modules are only reported if they passed the can_run
+        //   checks (to avoid outputting two health messages about a
+        //   module that said can_run=false but we tried running it anyway)
         failed_modules[module->get_name()] = module->get_error_string();
       }
     }
@@ -377,6 +387,97 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
       }
       checks->add("MGR_MODULE_ERROR", HEALTH_ERR, ss.str());
     }
+  }
+}
+
+void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
+{
+  Mutex::Locker l(module_config.lock);
+
+  if (!v.empty()) {
+    dout(4) << "Loaded module_config entry " << k << ":" << v << dendl;
+    module_config.config[k] = v;
+  } else {
+    module_config.config.erase(k);
+  }
+}
+
+void PyModuleRegistry::upgrade_config(
+    MonClient *monc,
+    const std::map<std::string, std::string> &old_config)
+{
+  // Only bother doing anything if we didn't already have
+  // some new-style config.
+  if (module_config.config.empty()) {
+    dout(1) << "Upgrading module configuration for Mimic" << dendl;
+    // Upgrade luminous->mimic: migrate config-key configuration
+    // into main configuration store
+    for(auto &i : old_config) {
+      auto last_slash = i.first.rfind('/');
+      const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
+      const std::string key = i.first.substr(last_slash + 1);
+
+      const auto &value = i.second;
+
+      // Heuristic to skip things that look more like stores
+      // than configs.
+      bool is_config = true;
+      for (const auto &c : value) {
+        if (c == '\n' || c == '\r' || c < 0x20) {
+          is_config = false;
+          break;
+        }
+      }
+
+      if (value.size() > 256) {
+        is_config = false;
+      }
+
+      if (!is_config) {
+        dout(1) << "Not migrating config module:key "
+                << module_name << " : " << key << dendl;
+        continue;
+      }
+
+      // Check that the named module exists
+      auto module_iter = modules.find(module_name);
+      if (module_iter == modules.end()) {
+        dout(1) << "KV store contains data for unknown module '"
+                << module_name << "'" << dendl;
+        continue;
+      }
+      PyModuleRef module = module_iter->second;
+
+      // Parse option name out of key
+      std::string option_name;
+      auto slash_loc = key.find("/");
+      if (slash_loc != std::string::npos) {
+        if (key.size() > slash_loc + 1) {
+          // Localized option
+          option_name = key.substr(slash_loc + 1);
+        } else {
+          // Trailing slash: garbage.
+          derr << "Invalid mgr store key: '" << key << "'" << dendl;
+          continue;
+        }
+      } else {
+        option_name = key;
+      }
+
+      // Consult module schema to see if this is really
+      // a configuration value
+      if (!option_name.empty() && module->is_option(option_name)) {
+        module_config.set_config(monc, module_name, key, i.second);
+        dout(4) << "Rewrote configuration module:key "
+                << module_name << ":" << key << dendl;
+      } else {
+        dout(4) << "Leaving store module:key " << module_name
+                << ":" << key << " in store, not config" << dendl;
+      }
+    }
+  } else {
+    dout(10) << "Module configuration contains "
+             << module_config.config.size() << " keys" << dendl;
   }
 }
 

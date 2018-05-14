@@ -61,7 +61,7 @@ Build the Project
 
 Run ``npm run build`` to build the project. The build artifacts will be
 stored in the ``dist/`` directory. Use the ``-prod`` flag for a
-production build. Navigate to ``http://localhost:8080``.
+production build. Navigate to ``https://localhost:8080``.
 
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
@@ -72,8 +72,30 @@ Run ``npm run test`` to execute the unit tests via `Karma
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-Run ``npm run e2e`` to execute the end-to-end tests via
-`Protractor <http://www.protractortest.org/>`__.
+We use `Protractor <http://www.protractortest.org/>`__ to run our frontend e2e
+tests.
+
+Our ``run-frontend-e2e-tests.sh`` script will check if Chrome or Docker is
+installed and run the tests if either is found.
+
+Start all frontend e2e tests by running::
+
+  $ ./run-frontend-e2e-tests.sh
+
+Device:
+  You can force the script to use a specific device with the ``-d`` flag::
+
+    $ ./run-frontend-e2e-tests.sh -d <chrome|docker>
+
+Remote:
+  If you want to run the tests outside the ceph environment, you will need to
+  manually define the dashboard url using ``-r``::
+
+    $ ./run-frontend-e2e-tests.sh -r <DASHBOARD_URL>
+
+Note:
+  When using docker, as your device, you might need to run the script with sudo
+  permissions.
 
 Further Help
 ~~~~~~~~~~~~
@@ -243,11 +265,11 @@ following code::
 Every path given in the ``ApiController`` decorator will automatically be
 prefixed with ``api``. After reloading the Dashboard module you can access the
 above mentioned controller by pointing your browser to
-http://mgr_hostname:8080/api/ping2.
+https://mgr_hostname:8080/api/ping2.
 
 It is also possible to have nested controllers. The ``RgwController`` uses
 this technique to make the daemons available through the URL
-http://mgr_hostname:8080/api/rgw/daemon::
+https://mgr_hostname:8080/api/rgw/daemon::
 
   @ApiController('rgw')
   @AuthRequired()
@@ -815,4 +837,150 @@ updates its progress:
       def default(self):
           task = TaskManager.run("dummy/task", {}, self._dummy)
           return task.wait(5)  # wait for five seconds
+
+
+How to deal with asynchronous tasks in the front-end?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+All executing and most recently finished asynchronous tasks are displayed on the
+"Backgroud-Tasks" menu.
+
+The front-end developer should provide a description, success message and error
+messages for each task on ``TaskManagerMessageService.messages``.
+This messages can make use of the task metadata to provide more personalized messages.
+
+When submitting an asynchronous task, the developer should provide a callback
+that will be automatically triggered after the execution of that task.
+This can be done by using the ``TaskManagerService.subscribe``.
+
+Most of the times, all we want to do after a task completes the execution, is
+displaying a notification message based on the execution result. The
+``NotificationService.notifyTask`` will use the messages from
+``TaskManagerMessageService`` to display a success / error message based on the
+execution result of a task.
+
+Usage example:
+
+.. code-block:: javascript
+
+  export class TaskManagerMessageService {
+
+    messages = {
+      // Messages for 'rbd/create' task
+      'rbd/create': new TaskManagerMessage(
+        // Description
+        (metadata) => `Create RBD '${metadata.pool_name}/${metadata.image_name}'`,
+        // Success message
+        (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'
+                       have been created successfully`,
+        // Error messages
+        (metadata) => {
+          return {
+            '17': `Name '${metadata.pool_name}/${metadata.image_name}' is already
+                   in use.`
+          };
+        }
+      ),
+      // ...
+    };
+
+    // ...
+  }
+
+  export class RBDFormComponent {
+    // ...
+
+    submit() {
+      // ...
+      this.rbdService.create(request).then((resp) => {
+        // Subscribe the submitted task
+        this.taskManagerService.subscribe('rbd/create',
+          {'pool_name': request.pool_name, 'rbd_name': request.name},
+          // Callback that will be invoked after task is finished
+          (finishedTask: FinishedTask) => {
+            // Will display a notification message (success or error)
+            this.notificationService.notifyTask(finishedTask, finishedTask.ret_value.success);
+          });
+        // ...
+      })
+    }
+  }
+
+Error Handling in Python
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+Good error handling is a key requirement in creating a good user experience
+and providing a good API.
+
+Dashboard code should not duplicate C++ code. Thus, if error handling in C++
+is sufficient to provide good feedback, a new wrapper to catch these errors
+is not necessary. On the other hand, input validation is the best place to
+catch errors and generate the best error messages. If required, generate
+errors as soon as possible.
+
+The backend provides few standard ways of returning errors.
+
+First, there is a generic Internal Server Error::
+
+    Status Code: 500
+    {
+        "version": <cherrypy version, e.g. 13.1.0>,
+        "detail": "The server encountered an unexpected condition which prevented it from fulfilling the request.",
+    }
+
+
+For errors generated by the backend, we provide a standard error
+format::
+
+    Status Code: 400
+    {
+        "detail": str(e),     # E.g. "[errno -42] <some error message>"
+        "component": "rbd",   # this can be null to represent a global error code
+        "code": "3",          # Or a error name, e.g. "code": "some_error_key"
+    }
+
+
+In case, the API Endpoints uses @ViewCache to temporarily cache results,
+the error looks like so::
+
+    Status Code 400
+    {
+        "detail": str(e),     # E.g. "[errno -42] <some error message>"
+        "component": "rbd",   # this can be null to represent a global error code
+        "code": "3",          # Or a error name, e.g. "code": "some_error_key"
+        'status': 3,          # Indicating the @ViewCache error status
+    }
+
+In case, the API Endpoints uses a task the error looks like so::
+
+    Status Code 400
+    {
+        "detail": str(e),     # E.g. "[errno -42] <some error message>"
+        "component": "rbd",   # this can be null to represent a global error code
+        "code": "3",          # Or a error name, e.g. "code": "some_error_key"
+        "task": {             # Information about the task itself
+            "name": "taskname",
+            "metadata": {...}
+        }
+    }
+
+
+Our WebUI should show errors generated by the API to the user. Especially
+field-related errors in wizards and dialogs or show non-intrusive notifications.
+
+Handling exceptions in Python should be an exception. In general, we
+should have few exception handlers in our project. Per default, propagate
+errors to the API, as it will take care of all exceptions anyway. In general,
+log the exception by adding ``logger.exception()`` with a description to the
+handler.
+
+We need to distinguish between user errors from internal errors and
+programming errors. Using different exception types will ease the
+task for the API layer and for the user interface:
+
+Standard Python errors, like ``SystemError``, ``ValueError`` or ``KeyError``
+will end up as internal server errors in the API.
+
+In general, do not ``return`` error responses in the REST API. They will be
+returned by the  error handler. Instead, raise the appropriate exception.
 

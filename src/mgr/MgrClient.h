@@ -25,6 +25,7 @@
 
 class MMgrMap;
 class MMgrConfigure;
+class MMgrClose;
 class Messenger;
 class MCommandReply;
 class MPGStats;
@@ -43,7 +44,7 @@ class MgrCommand : public CommandOp
 {
   public:
 
-  MgrCommand(ceph_tid_t t) : CommandOp(t) {}
+  explicit MgrCommand(ceph_tid_t t) : CommandOp(t) {}
   MgrCommand() : CommandOp() {}
 };
 
@@ -57,6 +58,7 @@ protected:
   unique_ptr<MgrSessionState> session;
 
   Mutex lock = {"MgrClient::lock"};
+  Cond shutdown_cond;
 
   uint32_t stats_period = 0;
   uint32_t stats_threshold = 0;
@@ -86,6 +88,10 @@ protected:
   void reconnect();
   void _send_open();
 
+  // In pre-luminous clusters, the ceph-mgr service is absent or optional,
+  // so we must not block in start_command waiting for it.
+  bool mgr_optional = false;
+
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_);
 
@@ -94,6 +100,8 @@ public:
   void init();
   void shutdown();
 
+  void set_mgr_optional(bool optional_) {mgr_optional = optional_;}
+
   bool ms_dispatch(Message *m) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
@@ -101,13 +109,14 @@ public:
 
   bool handle_mgr_map(MMgrMap *m);
   bool handle_mgr_configure(MMgrConfigure *m);
+  bool handle_mgr_close(MMgrClose *m);
   bool handle_command_reply(MCommandReply *m);
 
   void send_pgstats();
-  void set_pgstats_cb(std::function<MPGStats*()> cb_)
+  void set_pgstats_cb(std::function<MPGStats*()>&& cb_)
   {
     Mutex::Locker l(lock);
-    pgstats_cb = cb_;
+    pgstats_cb = std::move(cb_);
   }
 
   int start_command(const vector<string>& cmd, const bufferlist& inbl,

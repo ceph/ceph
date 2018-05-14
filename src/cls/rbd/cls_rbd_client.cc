@@ -1109,14 +1109,14 @@ namespace librbd {
       return get_id_finish(&it, id);
     }
 
-    void set_id(librados::ObjectWriteOperation *op, const std::string id)
+    void set_id(librados::ObjectWriteOperation *op, const std::string &id)
     {
       bufferlist bl;
       encode(id, bl);
       op->exec("rbd", "set_id", bl);
     }
 
-    int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id)
+    int set_id(librados::IoCtx *ioctx, const std::string &oid, const std::string &id)
     {
       librados::ObjectWriteOperation op;
       set_id(&op, id);

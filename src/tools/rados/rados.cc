@@ -52,6 +52,8 @@ using namespace libradosstriper;
 #include "PoolDump.h"
 #include "RadosImport.h"
 
+#include "osd/ECUtil.h"
+
 using namespace librados;
 using ceph::util::generate_random_number;
 
@@ -124,9 +126,9 @@ void usage(ostream& out)
 "   listwatchers <obj-name>          list the watchers of this object\n"
 "   set-alloc-hint <obj-name> <expected-object-size> <expected-write-size>\n"
 "                                    set allocation hint for an object\n"
-"   set-redirect <object A> --target-pool <caspool> <target object A>\n"
+"   set-redirect <object A> --target-pool <caspool> <target object A> [--with-reference]\n"
 "                                    set redirect target\n"
-"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset>\n"
+"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset> [--with-reference]\n"
 "                                    convert an object to chunked object\n"
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
 "\n"
@@ -248,7 +250,7 @@ unsigned default_op_size = 1 << 22;
 template <typename I, typename T>
 static int rados_sistrtoll(I &i, T *val) {
   std::string err;
-  *val = strict_sistrtoll(i->second.c_str(), &err);
+  *val = strict_iecstrtoll(i->second.c_str(), &err);
   if (err != "") {
     cerr << "Invalid value for " << i->first << ": " << err << std::endl;
     return -EINVAL;
@@ -1328,26 +1330,30 @@ static void dump_errors(const err_t &err, Formatter &f, const char *name)
     f.dump_string("error", "stat_error");
   if (err.has_read_error())
     f.dump_string("error", "read_error");
-  if (err.has_data_digest_mismatch_oi())
-    f.dump_string("error", "data_digest_mismatch_oi");
-  if (err.has_omap_digest_mismatch_oi())
-    f.dump_string("error", "omap_digest_mismatch_oi");
-  if (err.has_size_mismatch_oi())
-    f.dump_string("error", "size_mismatch_oi");
+  if (err.has_data_digest_mismatch_info())
+    f.dump_string("error", "data_digest_mismatch_info");
+  if (err.has_omap_digest_mismatch_info())
+    f.dump_string("error", "omap_digest_mismatch_info");
+  if (err.has_size_mismatch_info())
+    f.dump_string("error", "size_mismatch_info");
   if (err.has_ec_hash_error())
     f.dump_string("error", "ec_hash_error");
   if (err.has_ec_size_error())
     f.dump_string("error", "ec_size_error");
-  if (err.has_oi_attr_missing())
-    f.dump_string("error", "oi_attr_missing");
-  if (err.has_oi_attr_corrupted())
-    f.dump_string("error", "oi_attr_corrupted");
-  if (err.has_obj_size_oi_mismatch())
-    f.dump_string("error", "obj_size_oi_mismatch");
-  if (err.has_ss_attr_missing())
-    f.dump_string("error", "ss_attr_missing");
-  if (err.has_ss_attr_corrupted())
-    f.dump_string("error", "ss_attr_corrupted");
+  if (err.has_info_missing())
+    f.dump_string("error", "info_missing");
+  if (err.has_info_corrupted())
+    f.dump_string("error", "info_corrupted");
+  if (err.has_obj_size_info_mismatch())
+    f.dump_string("error", "obj_size_info_mismatch");
+  if (err.has_snapset_missing())
+    f.dump_string("error", "snapset_missing");
+  if (err.has_snapset_corrupted())
+    f.dump_string("error", "snapset_corrupted");
+  if (err.has_hinfo_missing())
+    f.dump_string("error", "hinfo_missing");
+  if (err.has_hinfo_corrupted())
+    f.dump_string("error", "hinfo_corrupted");
   f.close_section();
 }
 
@@ -1369,35 +1375,73 @@ static void dump_shard(const shard_info_t& shard,
     f.dump_format("data_digest", "0x%08x", shard.data_digest);
   }
 
-  if (!shard.has_oi_attr_missing() && !shard.has_oi_attr_corrupted() &&
-      inc.has_object_info_inconsistency()) {
-    object_info_t oi;
-    bufferlist bl;
+  if ((inc.union_shards.has_info_missing()
+     || inc.union_shards.has_info_corrupted()
+     || inc.has_object_info_inconsistency()
+     || shard.has_obj_size_info_mismatch()) &&
+        !shard.has_info_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(OI_ATTR);
     assert(k != shard.attrs.end()); // Can't be missing
-    bufferlist::iterator bliter = k->second.begin();
-    decode(oi, bliter);  // Can't be corrupted
-    f.dump_stream("object_info") << oi;
+    if (!shard.has_info_corrupted()) {
+      object_info_t oi;
+      bufferlist bl;
+      bufferlist::iterator bliter = k->second.begin();
+      decode(oi, bliter);  // Can't be corrupted
+      f.open_object_section("object_info");
+      oi.dump(&f);
+      f.close_section();
+    } else {
+      bool b64;
+      f.dump_string("object_info", cleanbin(k->second, b64));
+    }
   }
-  if (!shard.has_ss_attr_missing() && !shard.has_ss_attr_corrupted() &&
-      inc.has_snapset_inconsistency()) {
-    SnapSet ss;
-    bufferlist bl;
+  if ((inc.union_shards.has_snapset_missing()
+       || inc.union_shards.has_snapset_corrupted()
+       || inc.has_snapset_inconsistency()) &&
+       !shard.has_snapset_missing()) {
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(SS_ATTR);
     assert(k != shard.attrs.end()); // Can't be missing
-    bufferlist::iterator bliter = k->second.begin();
-    decode(ss, bliter);  // Can't be corrupted
-    f.dump_stream("snapset") << ss;
+    if (!shard.has_snapset_corrupted()) {
+      SnapSet ss;
+      bufferlist bl;
+      bufferlist::iterator bliter = k->second.begin();
+      decode(ss, bliter);  // Can't be corrupted
+      f.open_object_section("snapset");
+      ss.dump(&f);
+      f.close_section();
+    } else {
+      bool b64;
+      f.dump_string("snapset", cleanbin(k->second, b64));
+    }
   }
-  if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
-     || inc.union_shards.has_oi_attr_missing()
-     || inc.union_shards.has_oi_attr_corrupted()
-     || inc.union_shards.has_ss_attr_missing()
-     || inc.union_shards.has_ss_attr_corrupted()) {
+  if ((inc.union_shards.has_hinfo_missing()
+       || inc.union_shards.has_hinfo_corrupted()
+       || inc.has_hinfo_inconsistency()) &&
+       !shard.has_hinfo_missing()) {
+    map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(ECUtil::get_hinfo_key());
+    assert(k != shard.attrs.end()); // Can't be missing
+    if (!shard.has_hinfo_corrupted()) {
+      ECUtil::HashInfo hi;
+      bufferlist bl;
+      bufferlist::iterator bliter = k->second.begin();
+      decode(hi, bliter);  // Can't be corrupted
+      f.open_object_section("hashinfo");
+      hi.dump(&f);
+      f.close_section();
+    } else {
+      bool b64;
+      f.dump_string("hashinfo", cleanbin(k->second, b64));
+    }
+  }
+  if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()) {
     f.open_array_section("attrs");
     for (auto kv : shard.attrs) {
+      // System attribute handled above
+      if (kv.first == OI_ATTR || kv.first[0] != '_')
+        continue;
       f.open_object_section("attr");
-      f.dump_string("name", kv.first);
+      // Skip leading underscore since only giving user attrs
+      f.dump_string("name", kv.first.substr(1));
       bool b64;
       f.dump_string("value", cleanbin(kv.second, b64));
       f.dump_bool("Base64", b64);
@@ -1424,6 +1468,8 @@ static void dump_obj_errors(const obj_err_t &err, Formatter &f)
     f.dump_string("error", "attr_name_mismatch");
   if (err.has_snapset_inconsistency())
     f.dump_string("error", "snapset_inconsistency");
+  if (err.has_hinfo_inconsistency())
+    f.dump_string("error", "hinfo_inconsistency");
   f.close_section();
 }
 
@@ -1465,7 +1511,9 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
       assert(k != shard.attrs.end()); // Can't be missing
       bufferlist::iterator bliter = k->second.begin();
       decode(oi, bliter);  // Can't be corrupted
-      f.dump_stream("selected_object_info") << oi;
+      f.open_object_section("selected_object_info");
+      oi.dump(&f);
+      f.close_section();
       break;
     }
   }
@@ -1489,19 +1537,26 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
 {
   dump_object_id(inc.object, f);
 
+  if (inc.ss_bl.length()) {
+    SnapSet ss;
+    bufferlist bl = inc.ss_bl;
+    bufferlist::iterator bliter = bl.begin();
+    decode(ss, bliter);  // Can't be corrupted
+    f.open_object_section("snapset");
+    ss.dump(&f);
+    f.close_section();
+  }
   f.open_array_section("errors");
-  if (inc.ss_attr_missing())
-    f.dump_string("error", "ss_attr_missing");
-  if (inc.ss_attr_corrupted())
-    f.dump_string("error", "ss_attr_corrupted");
-  if (inc.oi_attr_missing())
-    f.dump_string("error", "oi_attr_missing");
-  if (inc.oi_attr_corrupted())
-    f.dump_string("error", "oi_attr_corrupted");
-  if (inc.snapset_mismatch())
-    f.dump_string("error", "snapset_mismatch");
-  if (inc.head_mismatch())
-    f.dump_string("error", "head_mismatch");
+  if (inc.snapset_missing())
+    f.dump_string("error", "snapset_missing");
+  if (inc.snapset_corrupted())
+    f.dump_string("error", "snapset_corrupted");
+  if (inc.info_missing())
+    f.dump_string("error", "info_missing");
+  if (inc.info_corrupted())
+    f.dump_string("error", "info_corrupted");
+  if (inc.snapset_error())
+    f.dump_string("error", "snapset_error");
   if (inc.headless())
     f.dump_string("error", "headless");
   if (inc.size_mismatch())
@@ -1670,6 +1725,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool omap_key_valid = false;
   std::string omap_key;
   std::string omap_key_pretty;
+  bool with_reference = false;
 
   Rados rados;
   IoCtx io_ctx;
@@ -1885,6 +1941,18 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
         omap_key_pretty = "(binary key)";
     }
   }
+  i = opts.find("with-reference");
+  if (i != opts.end()) {
+    with_reference = true;
+  }
+
+  i = opts.find("pgid");
+  boost::optional<pg_t> pgid(i != opts.end(), std::move(pg_t()));
+  if (pgid && (!pgid->parse(i->second.c_str()) || (pool_name && rados.pool_lookup(pool_name) != pgid->pool()))) {
+    cerr << "invalid pgid" << std::endl;
+    ret = -1;
+    goto out;
+  }
 
   // open rados
   ret = rados.init_with_context(g_ceph_context);
@@ -1915,10 +1983,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   // open io context.
-  if (pool_name) {
-    ret = rados.ioctx_create(pool_name, io_ctx);
+  if (pool_name || pgid) {
+    ret = pool_name ? rados.ioctx_create(pool_name, io_ctx) : rados.ioctx_create2(pgid->pool(), io_ctx);
     if (ret < 0) {
-      cerr << "error opening pool " << pool_name << ": "
+      cerr << "error opening pool "
+           << (pool_name ? pool_name : std::string("with id ") + std::to_string(pgid->pool())) << ": "
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
@@ -2073,7 +2142,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       librados::pool_stat_t& s = i->second;
       if (!formatter) {
         tab << pool_name
-            << si_t(s.num_bytes)
+            << byte_u_t(s.num_bytes)
             << s.num_objects
             << s.num_object_clones
             << s.num_object_copies
@@ -2081,9 +2150,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
             << s.num_objects_unfound
             << s.num_objects_degraded
             << s.num_rd
-            << si_t(s.num_rd_kb << 10)
+            << byte_u_t(s.num_rd_kb << 10)
             << s.num_wr
-            << si_t(s.num_wr_kb << 10)
+            << byte_u_t(s.num_wr_kb << 10)
             << TextTable::endrow;
       } else {
         formatter->open_object_section("pool");
@@ -2125,11 +2194,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << std::endl;
       cout << "total_objects    " << tstats.num_objects
            << std::endl;
-      cout << "total_used       " << si_t(tstats.kb_used << 10)
+      cout << "total_used       " << byte_u_t(tstats.kb_used << 10)
            << std::endl;
-      cout << "total_avail      " << si_t(tstats.kb_avail << 10)
+      cout << "total_avail      " << byte_u_t(tstats.kb_avail << 10)
            << std::endl;
-      cout << "total_space      " << si_t(tstats.kb << 10)
+      cout << "total_space      " << byte_u_t(tstats.kb << 10)
            << std::endl;
     } else {
       formatter->close_section();
@@ -2143,26 +2212,31 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   }
 
   else if (strcmp(nargs[0], "ls") == 0) {
-    if (!pool_name) {
-      cerr << "pool name was not specified" << std::endl;
+    if (!pool_name && !pgid) {
+      cerr << "either pool name or pg id needs to be specified" << std::endl;
       ret = -1;
       goto out;
     }
 
     if (wildcard)
       io_ctx.set_namespace(all_nspaces);
-    bool use_stdout = (nargs.size() < 2) || (strcmp(nargs[1], "-") == 0);
+    bool use_stdout = (!output && (nargs.size() < 2 || (strcmp(nargs[1], "-") == 0)));
+    if (!use_stdout && !output) {
+      cerr << "Please use --output to specify the output file name" << std::endl;
+      ret = -1;
+      goto out;
+    }
     ostream *outstream;
     if(use_stdout)
       outstream = &cout;
     else
-      outstream = new ofstream(nargs[1]);
+      outstream = new ofstream(output);
 
     {
       if (formatter)
         formatter->open_array_section("objects");
       try {
-	librados::NObjectIterator i = io_ctx.nobjects_begin();
+	librados::NObjectIterator i = pgid ? io_ctx.nobjects_begin(pgid->ps()) : io_ctx.nobjects_begin();
 	librados::NObjectIterator i_end = io_ctx.nobjects_end();
 	for (; i != i_end; ++i) {
 	  if (use_striper) {
@@ -2173,6 +2247,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	    if (l <= 17 ||
 		(0 != i->get_oid().compare(l-17, 17,".0000000000000000"))) continue;
 	  }
+          if (pgid) {
+            uint32_t ps;
+            if (io_ctx.get_object_pg_hash_position2(i->get_oid(), &ps) || pgid->ps() != ps)
+              break;
+          }
 	  if (!formatter) {
 	    // Only include namespace in output when wildcard specified
 	    if (wildcard)
@@ -3542,7 +3621,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     ObjectWriteOperation op;
-    op.set_redirect(target_obj, target_ctx, 0);
+    if (with_reference) {
+      op.set_redirect(target_obj, target_ctx, 0, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    } else {
+      op.set_redirect(target_obj, target_ctx, 0);
+    }
     ret = io_ctx.operate(nargs[1], &op);
     if (ret < 0) {
       cerr << "error set-redirect " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << cpp_strerror(ret) << std::endl;
@@ -3588,7 +3671,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     IoCtx target_ctx;
     ret = rados.ioctx_create(target, target_ctx);
     ObjectWriteOperation op;
-    op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset);
+    if (with_reference) {
+      op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    } else {
+      op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset);
+    }
     ret = io_ctx.operate(nargs[1], &op);
     if (ret < 0) {
       cerr << "error set-chunk " << pool_name << "/" << nargs[1] << " " << " offset " << offset
@@ -3853,6 +3940,10 @@ int main(int argc, const char **argv)
       opts["with-clones"] = "true";
     } else if (ceph_argparse_witharg(args, i, &val, "--omap-key-file", (char*)NULL)) {
       opts["omap-key-file"] = val;
+    } else if (ceph_argparse_flag(args, i, "--with-reference", (char*)NULL)) {
+      opts["with-reference"] = "true";
+    } else if (ceph_argparse_witharg(args, i, &val, "--pgid", (char*)NULL)) {
+      opts["pgid"] = val;
     } else {
       if (val[0] == '-')
         usage_exit();

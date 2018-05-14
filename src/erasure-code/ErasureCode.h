@@ -48,7 +48,7 @@ namespace ceph {
 
     int create_rule(const std::string &name,
 		    CrushWrapper &crush,
-		    std::ostream *ss) const;
+		    std::ostream *ss) const override;
 
     int sanity_check_k(int k, std::ostream *ss);
 
@@ -56,7 +56,7 @@ namespace ceph {
       return get_chunk_count() - get_data_chunk_count();
     }
 
-    virtual int get_sub_chunk_count() {
+    virtual int get_sub_chunk_count() override {
       return 1;
     }
 

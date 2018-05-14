@@ -2,5 +2,7 @@ export enum CellTemplate {
   bold = 'bold',
   sparkline = 'sparkline',
   perSecond = 'perSecond',
-  routerLink = 'routerLink'
+  checkIcon = 'checkIcon',
+  routerLink = 'routerLink',
+  executing = 'executing'
 }

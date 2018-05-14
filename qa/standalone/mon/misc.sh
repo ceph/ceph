@@ -230,7 +230,7 @@ function TEST_mon_features() {
 
     # monmap must have not all k l m persistent
     # features set.
-    jqfilter='.monmap.features.persistent | length == 3'
+    jqfilter='.monmap.features.persistent | length == 4'
     jq_success "$jqinput" "$jqfilter" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
@@ -238,6 +238,8 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "mimic")'
     jq_success "$jqinput" "$jqfilter" "mimic" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "osdmap-prune")'
+    jq_success "$jqinput" "$jqfilter" "osdmap-prune" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig
     # that's all folks. thank you for tuning in.

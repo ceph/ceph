@@ -180,6 +180,46 @@ public:
   virtual int error_handler(int err_no, string *error_content);
 };
 
+class RGWGetObj_Filter : public RGWGetDataCB
+{
+protected:
+  RGWGetObj_Filter *next{nullptr};
+public:
+  RGWGetObj_Filter() {}
+  explicit RGWGetObj_Filter(RGWGetObj_Filter *next): next(next) {}
+  ~RGWGetObj_Filter() override {}
+  /**
+   * Passes data through filter.
+   * Filter can modify content of bl.
+   * When bl_len == 0 , it means 'flush
+   */
+  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
+    if (next) {
+      return next->handle_data(bl, bl_ofs, bl_len);
+    }
+    return 0;
+  }
+  /**
+   * Flushes any cached data. Used by RGWGetObjFilter.
+   * Return logic same as handle_data.
+   */
+  virtual int flush() {
+    if (next) {
+      return next->flush();
+    }
+    return 0;
+  }
+  /**
+   * Allows filter to extend range required for successful filtering
+   */
+  virtual int fixup_range(off_t& ofs, off_t& end) {
+    if (next) {
+      return next->fixup_range(ofs, end);
+    }
+    return 0;
+  }
+};
+
 class RGWGetObj : public RGWOp {
 protected:
   seed torrent; // get torrent
@@ -281,13 +321,13 @@ public:
   /**
    * calculates filter used to decrypt RGW objects data
    */
-  virtual int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter, RGWGetDataCB* cb, bufferlist* manifest_bl) {
+  virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl) {
     *filter = nullptr;
     return 0;
   }
 };
 
-class RGWGetObj_CB : public RGWGetDataCB
+class RGWGetObj_CB : public RGWGetObj_Filter
 {
   RGWGetObj *op;
 public:
@@ -299,49 +339,19 @@ public:
   }
 };
 
-class RGWGetObj_Filter : public RGWGetDataCB
-{
-protected:
-  RGWGetDataCB* next;
-public:
-  RGWGetObj_Filter(RGWGetDataCB* next): next(next) {}
-  ~RGWGetObj_Filter() override {}
-  /**
-   * Passes data through filter.
-   * Filter can modify content of bl.
-   * When bl_len == 0 , it means 'flush
-   */
-  int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
-    return next->handle_data(bl, bl_ofs, bl_len);
-  }
-  /**
-   * Flushes any cached data. Used by RGWGetObjFilter.
-   * Return logic same as handle_data.
-   */
-  int flush() override {
-    return next->flush();
-  }
-  /**
-   * Allows filter to extend range required for successful filtering
-   */
-  int fixup_range(off_t& ofs, off_t& end) override {
-    return next->fixup_range(ofs, end);
-  }
-};
-
 class RGWGetObjTags : public RGWOp {
  protected:
   bufferlist tags_bl;
   bool has_tags{false};
  public:
-  int verify_permission();
-  void execute();
-  void pre_exec();
+  int verify_permission() override;
+  void execute() override;
+  void pre_exec() override;
 
   virtual void send_response_data(bufferlist& bl) = 0;
   virtual const string name() noexcept override { return "get_obj_tags"; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
-  RGWOpType get_type() { return RGW_OP_GET_OBJ_TAGGING; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  RGWOpType get_type() override { return RGW_OP_GET_OBJ_TAGGING; }
 
 };
 
@@ -349,27 +359,27 @@ class RGWPutObjTags : public RGWOp {
  protected:
   bufferlist tags_bl;
  public:
-  int verify_permission();
-  void execute();
+  int verify_permission() override;
+  void execute() override;
 
-  virtual void send_response() = 0;
+  virtual void send_response() override = 0;
   virtual int get_params() = 0;
-  virtual const string name() { return "put_obj_tags"; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
-  RGWOpType get_type() { return RGW_OP_PUT_OBJ_TAGGING; }
+  virtual const string name() override { return "put_obj_tags"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  RGWOpType get_type() override { return RGW_OP_PUT_OBJ_TAGGING; }
 
 };
 
 class RGWDeleteObjTags: public RGWOp {
  public:
-  void pre_exec();
-  int verify_permission();
-  void execute();
+  void pre_exec() override;
+  int verify_permission() override;
+  void execute() override;
 
-  virtual void send_response() = 0;
-  virtual const string name() { return "delete_obj_tags"; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_DELETE; }
-  RGWOpType get_type() { return RGW_OP_DELETE_OBJ_TAGGING;}
+  virtual void send_response() override = 0;
+  virtual const string name() override { return "delete_obj_tags"; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_OBJ_TAGGING;}
 };
 
 class RGWBulkDelete : public RGWOp {
@@ -477,7 +487,7 @@ protected:
   class AlignedStreamGetter;
 
   virtual std::unique_ptr<StreamGetter> create_stream() = 0;
-  virtual void send_response() = 0;
+  virtual void send_response() override = 0;
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
   parse_path(const boost::string_ref& path);
@@ -545,7 +555,7 @@ protected:
   }
 
 public:
-  DecoratedStreamGetter(StreamGetter& decoratee)
+  explicit DecoratedStreamGetter(StreamGetter& decoratee)
     : decoratee(decoratee) {
   }
   virtual ~DecoratedStreamGetter() = default;
@@ -639,7 +649,7 @@ public:
   const string name() override { return "list_buckets"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKETS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-};
+}; // class RGWListBuckets
 
 class RGWGetUsage : public RGWOp {
 protected:
@@ -703,6 +713,7 @@ protected:
 
   int default_max;
   bool is_truncated;
+  bool allow_unordered;
 
   int shard_id;
 
@@ -710,7 +721,8 @@ protected:
 
 public:
   RGWListBucket() : list_versions(false), max(0),
-                    default_max(0), is_truncated(false), shard_id(-1) {}
+                    default_max(0), is_truncated(false),
+		    allow_unordered(false), shard_id(-1) {}
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
@@ -750,10 +762,11 @@ public:
 
 class RGWGetBucketVersioning : public RGWOp {
 protected:
-  bool versioned;
-  bool versioning_enabled;
+  bool versioned{false};
+  bool versioning_enabled{false};
+  bool mfa_enabled{false};
 public:
-  RGWGetBucketVersioning() : versioned(false), versioning_enabled(false) {}
+  RGWGetBucketVersioning() = default;
 
   int verify_permission() override;
   void pre_exec() override;
@@ -766,6 +779,7 @@ public:
 };
 
 enum BucketVersionStatus {
+  VersioningStatusInvalid = -1,
   VersioningNotChanged = 0,
   VersioningEnabled = 1,
   VersioningSuspended =2,
@@ -774,6 +788,8 @@ enum BucketVersionStatus {
 class RGWSetBucketVersioning : public RGWOp {
 protected:
   int versioning_status;
+  bool mfa_set_status{false};
+  bool mfa_status{false};
   bufferlist in_data;
 public:
   RGWSetBucketVersioning() : versioning_status(VersioningNotChanged) {}
@@ -1037,8 +1053,8 @@ public:
   void execute() override;
 
   /* this is for cases when copying data from other object */
-  virtual int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
-                                 RGWGetDataCB* cb,
+  virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
+                                 RGWGetObj_Filter* cb,
                                  map<string, bufferlist>& attrs,
                                  bufferlist* manifest_bl) {
     *filter = nullptr;
@@ -1065,7 +1081,7 @@ class RGWPutObj_Filter : public RGWPutObjDataProcessor
 protected:
   RGWPutObjDataProcessor* next;
 public:
-  RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
+  explicit RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
   next(next){}
   ~RGWPutObj_Filter() override {}
   int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override {
@@ -1292,7 +1308,7 @@ protected:
   string source_zone;
   string client_id;
   string op_id;
-  ceph::buffer::list etag;
+  string etag;
 
   off_t last_ofs;
 
@@ -2081,16 +2097,16 @@ public:
   int check_caps(RGWUserCaps& caps) {
     return caps.check_cap("admin", RGW_CAP_READ);
   }
-  int verify_permission() {
+  int verify_permission() override {
     return check_caps(s->user->caps);
   }
-  void pre_exec();
-  void execute();
+  void pre_exec() override;
+  void execute() override;
 
-  virtual void send_response() = 0;
-  virtual const string name() { return "get_obj_layout"; }
-  virtual RGWOpType get_type() { return RGW_OP_GET_OBJ_LAYOUT; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
+  virtual void send_response() override = 0;
+  virtual const string name() override { return "get_obj_layout"; }
+  virtual RGWOpType get_type() override { return RGW_OP_GET_OBJ_LAYOUT; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
 class RGWPutBucketPolicy : public RGWOp {
@@ -2161,26 +2177,26 @@ protected:
 public:
   RGWConfigBucketMetaSearch() {}
 
-  int verify_permission();
-  void pre_exec();
-  void execute();
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override;
 
   virtual int get_params() = 0;
-  virtual void send_response() = 0;
-  virtual const string name() { return "config_bucket_meta_search"; }
-  virtual RGWOpType get_type() { return RGW_OP_CONFIG_BUCKET_META_SEARCH; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+  virtual void send_response() override = 0;
+  virtual const string name() override { return "config_bucket_meta_search"; }
+  virtual RGWOpType get_type() override { return RGW_OP_CONFIG_BUCKET_META_SEARCH; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWGetBucketMetaSearch : public RGWOp {
 public:
   RGWGetBucketMetaSearch() {}
 
-  int verify_permission();
-  void pre_exec();
-  void execute() {}
+  int verify_permission() override;
+  void pre_exec() override;
+  void execute() override {}
 
-  virtual void send_response() = 0;
+  virtual void send_response() override = 0;
   virtual const string name() { return "get_bucket_meta_search"; }
   virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
@@ -2191,13 +2207,13 @@ public:
   RGWDelBucketMetaSearch() {}
 
   int verify_permission();
-  void pre_exec();
-  void execute();
+  void pre_exec() override;
+  void execute() override;
 
-  virtual void send_response() = 0;
-  virtual const string name() { return "delete_bucket_meta_search"; }
+  virtual void send_response() override = 0;
+  virtual const string name() override { return "delete_bucket_meta_search"; }
   virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
-  virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
+  virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
 
 class RGWGetClusterStat : public RGWOp {
@@ -2210,10 +2226,10 @@ public:
     RGWOp::init(store, s, h);
   }
   int verify_permission() override {return 0;}
-  virtual void send_response() = 0;
+  virtual void send_response() override = 0;
   virtual int get_params() = 0;
   void execute() override;
-  virtual const string name() { return "get_cluster_stat"; }
+  virtual const string name() override { return "get_cluster_stat"; }
 };
 
 

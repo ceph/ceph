@@ -14,6 +14,7 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_CONF_PATH=$VSTART_DEST
   CEPH_DEV_DIR=$VSTART_DEST/dev
   CEPH_OUT_DIR=$VSTART_DEST/out
+  CEPH_ASOK_DIR=$VSTART_DEST/out
 fi
 
 get_cmake_variable() {
@@ -137,6 +138,7 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]]; then
 fi
 
 filestore_path=
+kstore_path=
 
 VSTART_SEC="client.vstart.sh"
 
@@ -172,6 +174,7 @@ usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
 usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
 usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend (default)\n"
 usage=$usage"\t-f, --filestore use filestore as the osd objectstore backend\n"
+usage=$usage"\t-K, --kstore use kstore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
@@ -264,6 +267,10 @@ case $1 in
             rgw_compression=$2
             shift
             ;;
+    --kstore_path )
+	kstore_path=$2
+	shift
+	;;
     --filestore_path )
 	filestore_path=$2
 	shift
@@ -295,6 +302,9 @@ case $1 in
     -f | --filestore )
 	    objectstore="filestore"
 	    ;;
+    -K | --kstore )
+            objectstore="kstore"
+            ;;
     --hitset )
 	    hitset="$hitset $2 $3"
 	    shift
@@ -360,7 +370,9 @@ else
             CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
         fi
     else
-        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
+	if [ -z "$CEPH_ASOK_DIR" ]; then
+            CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
+        fi
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
@@ -515,6 +527,9 @@ $DAEMONOPTS
 	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true
+
+        ; kstore
+        kstore fsck on mount = true
         osd objectstore = $objectstore
 $COSDSHORT
 $extra_conf
@@ -621,6 +636,8 @@ EOF
             fi
 	    if [ -n "$filestore_path" ]; then
 		ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
+	    elif [ -n "$kstore_path" ]; then
+		ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
 	    else
 		mkdir -p $CEPH_DEV_DIR/osd$osd
 	    fi
@@ -667,16 +684,16 @@ start_mgr() {
 EOF
 
         if $with_mgr_dashboard ; then
-            ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
+            ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT
             if [ $mgr -eq 1 ]; then
-                DASH_URLS="http://$IP:$MGR_PORT"
+                DASH_URLS="https://$IP:$MGR_PORT"
             else
-                DASH_URLS+=", http://$IP:$MGR_PORT"
+                DASH_URLS+=", https://$IP:$MGR_PORT"
             fi
         fi
 	MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
+	ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT
         if [ $mgr -eq 1 ]; then
             RESTFUL_URLS="https://$IP:$MGR_PORT"
         else
@@ -694,6 +711,9 @@ EOF
     # setting login credentials for dashboard
     if $with_mgr_dashboard; then
         ceph_adm tell mgr dashboard set-login-credentials admin admin
+        if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+            echo dashboard module not working correctly!
+        fi
     fi
 
     if ceph_adm tell mgr restful create-self-signed-cert; then
@@ -751,6 +771,7 @@ EOF
 
     if [ $new -eq 1 ]; then
         if [ "$CEPH_NUM_FS" -gt "0" ] ; then
+            sleep 5 # time for MDS to come up as standby to avoid health warnings on fs creation
             if [ "$CEPH_NUM_FS" -gt "1" ] ; then
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
@@ -946,7 +967,6 @@ do
     [ $fs -eq $CEPH_NUM_FS ] && break
     fs=$(($fs + 1))
     if [ "$CEPH_MAX_MDS" -gt 1 ]; then
-        ceph_adm fs set "cephfs_${name}" allow_multimds true --yes-i-really-mean-it
         ceph_adm fs set "cephfs_${name}" max_mds "$CEPH_MAX_MDS"
     fi
 done

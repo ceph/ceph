@@ -91,7 +91,7 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
     f->close_section();
   } else {
     tbl << w->name
-        << stringify(si_t(info.size))
+        << stringify(byte_u_t(info.size))
         << parent
         << ((old_format) ? '1' : '2')
         << ""                         // protect doesn't apply to images
@@ -131,7 +131,7 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
         f->close_section();
       } else {
         tbl << w->name + "@" + s->name
-            << stringify(si_t(s->size))
+            << stringify(byte_u_t(s->size))
             << parent
             << ((old_format) ? '1' : '2')
             << (is_protected ? "yes" : "")
@@ -162,6 +162,8 @@ int do_list(std::string &pool_name, bool lflag, int threads, Formatter *f) {
   if (r < 0) {
     return r;
   }
+
+  utils::disable_cache();
 
   r = rbd.list(ioctx, names);
   if (r < 0)

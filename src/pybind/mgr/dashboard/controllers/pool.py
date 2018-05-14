@@ -3,9 +3,10 @@ from __future__ import absolute_import
 
 import cherrypy
 
+from . import ApiController, RESTController, AuthRequired
 from .. import mgr
 from ..services.ceph_service import CephService
-from ..tools import ApiController, RESTController, AuthRequired
+from ..services.exception import handle_send_command_error
 
 
 @ApiController('pool')
@@ -27,6 +28,8 @@ class Pool(RESTController):
                 res[attr] = {1: 'replicated', 3: 'erasure'}[pool[attr]]
             elif attr == 'crush_rule':
                 res[attr] = crush_rules[pool[attr]]
+            elif attr == 'application_metadata':
+                res[attr] = list(pool[attr].keys())
             else:
                 res[attr] = pool[attr]
 
@@ -53,14 +56,17 @@ class Pool(RESTController):
 
     def get(self, pool_name, attrs=None, stats=False):
         pools = self.list(attrs, stats)
-        return [pool for pool in pools if pool['pool_name'] == pool_name][0]
+        pool = [pool for pool in pools if pool['pool_name'] == pool_name]
+        if not pool:
+            return cherrypy.NotFound('No such pool')
+        return pool[0]
 
+    @handle_send_command_error('pool')
     def delete(self, pool_name):
         return CephService.send_command('mon', 'osd pool delete', pool=pool_name, pool2=pool_name,
                                         sure='--yes-i-really-really-mean-it')
 
-    # pylint: disable=too-many-arguments, too-many-locals
-    @RESTController.args_from_json
+    @handle_send_command_error('pool')
     def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
                application_metadata=None, rule_name=None, **kwargs):
         ecp = erasure_code_profile if erasure_code_profile else None
@@ -84,7 +90,7 @@ class Pool(RESTController):
     def _info(self):
         """Used by the create-pool dialog"""
         def rules(pool_type):
-            return [r["rule_name"]
+            return [r
                     for r in mgr.get('osd_map_crush')['rules']
                     if r['type'] == pool_type]
 
@@ -101,6 +107,7 @@ class Pool(RESTController):
             "crush_rules_replicated": rules(1),
             "crush_rules_erasure": rules(3),
             "is_all_bluestore": all_bluestore(),
+            "osd_count": len(mgr.get('osd_map')['osds']),
             "compression_algorithms": compression_enum('bluestore_compression_algorithm'),
             "compression_modes": compression_enum('bluestore_compression_mode'),
         }

@@ -85,7 +85,7 @@ public:
     return store.assoc_name.c_str();
   }
 
-  MergeOperatorRouter(RocksDBStore &_store) : store(_store) {}
+  explicit MergeOperatorRouter(RocksDBStore &_store) : store(_store) {}
 
   bool Merge(const rocksdb::Slice& key,
 	     const rocksdb::Slice* existing_value,
@@ -124,7 +124,7 @@ class RocksDBStore::MergeOperatorLinker
 private:
   std::shared_ptr<KeyValueDB::MergeOperator> mop;
 public:
-  MergeOperatorLinker(std::shared_ptr<KeyValueDB::MergeOperator> o) : mop(o) {}
+  explicit MergeOperatorLinker(const std::shared_ptr<KeyValueDB::MergeOperator> &o) : mop(o) {}
 
   const char *Name() const override {
     return mop->name().c_str();
@@ -212,14 +212,14 @@ int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Op
 {
   if (key == "compaction_threads") {
     std::string err;
-    int f = strict_sistrtoll(val.c_str(), &err);
+    int f = strict_iecstrtoll(val.c_str(), &err);
     if (!err.empty())
       return -EINVAL;
     //Low priority threadpool is used for compaction
     opt.env->SetBackgroundThreads(f, rocksdb::Env::Priority::LOW);
   } else if (key == "flusher_threads") {
     std::string err;
-    int f = strict_sistrtoll(val.c_str(), &err);
+    int f = strict_iecstrtoll(val.c_str(), &err);
     if (!err.empty())
       return -EINVAL;
     //High priority threadpool is used for flusher
@@ -432,20 +432,22 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
 				    std::bind(std::equal_to<std::string>(), _1,
 					      "two_level")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
-  bbt_opts.cache_index_and_filter_blocks = 
-      g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks");
-  bbt_opts.cache_index_and_filter_blocks_with_high_priority = 
-      g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks_with_high_priority");
+  if (!bbt_opts.no_block_cache) {
+    bbt_opts.cache_index_and_filter_blocks =
+        g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks");
+    bbt_opts.cache_index_and_filter_blocks_with_high_priority =
+        g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks_with_high_priority");
+    bbt_opts.pin_l0_filter_and_index_blocks_in_cache =
+      g_conf->get_val<bool>("rocksdb_pin_l0_filter_and_index_blocks_in_cache");
+  }
   bbt_opts.partition_filters = g_conf->get_val<bool>("rocksdb_partition_filters");
   if (g_conf->get_val<uint64_t>("rocksdb_metadata_block_size") > 0)
     bbt_opts.metadata_block_size = g_conf->get_val<uint64_t>("rocksdb_metadata_block_size");
-  bbt_opts.pin_l0_filter_and_index_blocks_in_cache = 
-      g_conf->get_val<bool>("rocksdb_pin_l0_filter_and_index_blocks_in_cache");
 
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " block size " << g_conf->rocksdb_block_size
-           << ", block_cache size " << prettybyte_t(block_cache_size)
-	   << ", row_cache size " << prettybyte_t(row_cache_size)
+           << ", block_cache size " << byte_u_t(block_cache_size)
+	   << ", row_cache size " << byte_u_t(row_cache_size)
 	   << "; shards "
 	   << (1 << g_conf->rocksdb_cache_shard_bits)
 	   << ", type " << g_conf->rocksdb_cache_type
@@ -674,7 +676,7 @@ void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std
 void RocksDBStore::get_statistics(Formatter *f)
 {
   if (!g_conf->rocksdb_perf)  {
-    dout(20) << __func__ << "RocksDB perf is disabled, can't probe for stats"
+    dout(20) << __func__ << " RocksDB perf is disabled, can't probe for stats"
 	     << dendl;
     return;
   }
@@ -711,12 +713,15 @@ void RocksDBStore::get_statistics(Formatter *f)
   }
   if (g_conf->rocksdb_collect_memory_stats) {
     f->open_object_section("rocksdb_memtable_statistics");
-    std::string str(stringify(bbt_opts.block_cache->GetUsage()));
-    f->dump_string("block_cache_usage", str.data());
-    str.clear();
-    str.append(stringify(bbt_opts.block_cache->GetPinnedUsage()));
-    f->dump_string("block_cache_pinned_blocks_usage", str);
-    str.clear();
+    std::string str;
+    if (!bbt_opts.no_block_cache) {
+      str.append(stringify(bbt_opts.block_cache->GetUsage()));
+      f->dump_string("block_cache_usage", str.data());
+      str.clear();
+      str.append(stringify(bbt_opts.block_cache->GetPinnedUsage()));
+      f->dump_string("block_cache_pinned_blocks_usage", str);
+      str.clear();
+    }
     db->GetProperty("rocksdb.cur-size-all-mem-tables", &str);
     f->dump_string("rocksdb_memtable_usage", str);
     str.clear();
@@ -1400,13 +1405,13 @@ public:
     dbiter->Seek(slice_bound);
     return dbiter->status().ok() ? 0 : -1;
   }
-  int next(bool validate=true) {
+  int next(bool validate=true) override {
     if (valid()) {
       dbiter->Next();
     }
     return dbiter->status().ok() ? 0 : -1;
   }
-  int prev(bool validate=true) {
+  int prev(bool validate=true) override {
     if (valid()) {
       dbiter->Prev();
     }
@@ -1418,7 +1423,7 @@ public:
   string key() override {
     return dbiter->key().ToString();
   }
-  std::pair<std::string, std::string> raw_key() {
+  std::pair<std::string, std::string> raw_key() override {
     return make_pair(prefix, key());
   }
   bufferlist value() override {

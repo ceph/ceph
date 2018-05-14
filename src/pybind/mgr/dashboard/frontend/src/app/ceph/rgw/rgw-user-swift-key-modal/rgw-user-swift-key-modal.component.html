@@ -1,0 +1,68 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left"
+      i18n>Swift key
+  </h4>
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="bsModalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<div class="modal-body">
+  <form class="form-horizontal"
+        novalidate>
+
+    <!-- Username -->
+    <div class="form-group">
+      <label class="control-label col-sm-3"
+             for="user"
+             i18n>Username
+      </label>
+      <div class="col-sm-9">
+        <input id="user"
+               name="user"
+               class="form-control"
+               type="text"
+               [readonly]="true"
+               [(ngModel)]="user">
+      </div>
+    </div>
+
+    <!-- Secret key -->
+    <div class="form-group">
+      <label class="control-label col-sm-3"
+             for="secret_key"
+             i18n>Secret key
+      </label>
+      <div class="col-sm-9">
+        <div class="input-group">
+          <input id="secret_key"
+                 name="secret_key"
+                 class="form-control"
+                 type="password"
+                 [(ngModel)]="secret_key"
+                 [readonly]="true">
+          <span class="input-group-btn">
+            <button type="button"
+                    class="btn btn-default"
+                    cdPasswordButton="secret_key">
+            </button>
+            <button type="button"
+                    class="btn btn-default"
+                    cdCopy2ClipboardButton="secret_key">
+            </button>
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </form>
+</div>
+<div class="modal-footer">
+  <button class="btn btn-sm btn-default"
+          type="button"
+          (click)="bsModalRef.hide()"
+          i18n>Close
+  </button>
+</div>

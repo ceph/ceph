@@ -18,9 +18,6 @@ class PoolTest(DashboardTestCase):
             cls._ceph_cmd(['osd', 'pool', 'delete', name, name, '--yes-i-really-really-mean-it'])
         cls._ceph_cmd(['osd', 'erasure-code-profile', 'rm', 'ecprofile'])
 
-
-
-
     @authenticate
     def test_pool_list(self):
         data = self._get("/api/pool")
@@ -31,6 +28,8 @@ class PoolTest(DashboardTestCase):
         for pool in data:
             self.assertIn('pool_name', pool)
             self.assertIn('type', pool)
+            self.assertIn('application_metadata', pool)
+            self.assertIsInstance(pool['application_metadata'], list)
             self.assertIn('flags', pool)
             self.assertIn('flags_names', pool)
             self.assertNotIn('stats', pool)
@@ -61,6 +60,7 @@ class PoolTest(DashboardTestCase):
         for pool in data:
             self.assertIn('pool_name', pool)
             self.assertIn('type', pool)
+            self.assertIn('application_metadata', pool)
             self.assertIn('flags', pool)
             self.assertIn('stats', pool)
             self.assertIn('flags_names', pool)
@@ -92,8 +92,9 @@ class PoolTest(DashboardTestCase):
                     elif k == 'pg_num':
                         self.assertEqual(pool[k], int(v), '{}: {} != {}'.format(k, pool[k], v))
                     elif k == 'application_metadata':
+                        self.assertIsInstance(pool[k], list)
                         self.assertEqual(pool[k],
-                                         {name: {} for name in data['application_metadata'].split(',')})
+                                         data['application_metadata'].split(','))
                     elif k == 'pool':
                         self.assertEqual(pool['pool_name'], v)
                     elif k in ['compression_mode', 'compression_algorithm',
@@ -142,17 +143,30 @@ class PoolTest(DashboardTestCase):
             self._pool_create(data)
 
     @authenticate
+    def test_pool_create_fail(self):
+        data = {'pool_type': u'replicated', 'rule_name': u'dnf', 'pg_num': u'8', 'pool': u'sadfs'}
+        self._post('/api/pool/', data)
+        self.assertStatus(400)
+        self.assertJsonBody({
+            'component': 'pool',
+            'code': "2",
+            'detail': "specified rule dnf doesn't exist"
+        })
+
+    @authenticate
     def test_pool_info(self):
         info_data = self._get("/api/pool/_info")
         self.assertEqual(set(info_data),
                          {'pool_names', 'crush_rules_replicated', 'crush_rules_erasure',
-                          'is_all_bluestore', 'compression_algorithms', 'compression_modes'})
+                          'is_all_bluestore', 'compression_algorithms', 'compression_modes',
+                          'osd_count'})
         self.assertTrue(all(isinstance(n, six.string_types) for n in info_data['pool_names']))
         self.assertTrue(
-            all(isinstance(n, six.string_types) for n in info_data['crush_rules_replicated']))
+            all(isinstance(n, dict) for n in info_data['crush_rules_replicated']))
         self.assertTrue(
-            all(isinstance(n, six.string_types) for n in info_data['crush_rules_erasure']))
+            all(isinstance(n, dict) for n in info_data['crush_rules_erasure']))
         self.assertIsInstance(info_data['is_all_bluestore'], bool)
+        self.assertIsInstance(info_data['osd_count'], int)
         self.assertTrue(
             all(isinstance(n, six.string_types) for n in info_data['compression_algorithms']))
         self.assertTrue(

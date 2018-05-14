@@ -50,8 +50,8 @@ public:
   int send_response_data_error() override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }
-  int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
-                         RGWGetDataCB* cb,
+  int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
+                         RGWGetObj_Filter* cb,
                          bufferlist* manifest_bl) override;
 };
 
@@ -215,8 +215,8 @@ public:
 
   int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor>* filter,
                          RGWPutObjDataProcessor* cb) override;
-  int get_decrypt_filter(std::unique_ptr<RGWGetDataCB>* filter,
-                         RGWGetDataCB* cb,
+  int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
+                         RGWGetObj_Filter* cb,
                          map<string, bufferlist>& attrs,
                          bufferlist* manifest_bl) override;
 };
@@ -242,7 +242,7 @@ public:
   RGWPostObj_ObjStore_S3() {}
   ~RGWPostObj_ObjStore_S3() override {}
 
-  int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) {
+  int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) override {
     auth_registry_ptr = &auth_registry;
     return RGWPostObj_ObjStore::verify_requester(auth_registry);
   }
@@ -437,7 +437,7 @@ public:
   RGWGetObjLayout_ObjStore_S3() {}
   ~RGWGetObjLayout_ObjStore_S3() {}
 
-  void send_response();
+  void send_response() override;
 };
 
 class RGWConfigBucketMetaSearch_ObjStore_S3 : public RGWConfigBucketMetaSearch {
@@ -478,7 +478,7 @@ class RGWHandler_Auth_S3 : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
 
 public:
-  RGWHandler_Auth_S3(const rgw::auth::StrategyRegistry& auth_registry)
+  explicit RGWHandler_Auth_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
       auth_registry(auth_registry) {
   }
@@ -503,7 +503,7 @@ class RGWHandler_REST_S3 : public RGWHandler_REST {
 public:
   static int init_from_header(struct req_state *s, int default_formatter, bool configurable_format);
 
-  RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
+  explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
       auth_registry(auth_registry) {
   }
@@ -772,7 +772,7 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   auth_data_t get_auth_data_v4(const req_state* s, const bool using_qs) const;
 
 public:
-  AWSGeneralAbstractor(CephContext* const cct)
+  explicit AWSGeneralAbstractor(CephContext* const cct)
     : cct(cct) {
   }
 
@@ -799,7 +799,7 @@ class AWSBrowserUploadAbstractor : public AWSEngine::VersionAbstractor {
   auth_data_t get_auth_data_v4(const req_state* s) const;
 
 public:
-  AWSBrowserUploadAbstractor(CephContext*) {
+  explicit AWSBrowserUploadAbstractor(CephContext*) {
   }
 
   auth_data_t get_auth_data(const req_state* s) const override;
@@ -897,14 +897,14 @@ class S3AuthFactory : public rgw::auth::RemoteApplier::Factory,
   RGWRados* const store;
 
 public:
-  S3AuthFactory(RGWRados* const store)
+  explicit S3AuthFactory(RGWRados* const store)
     : store(store) {
   }
 
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
-                             const rgw::auth::RemoteApplier::AuthInfo info
+                             const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
     return aplptr_t(
       new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,

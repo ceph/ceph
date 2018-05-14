@@ -2,10 +2,13 @@
 from __future__ import absolute_import
 
 import json
+import cherrypy
 
+from . import ApiController, BaseController, RESTController, AuthRequired
 from .. import logger
 from ..services.ceph_service import CephService
-from ..tools import ApiController, RESTController, AuthRequired
+from ..services.rgw_client import RgwClient
+from ..rest_client import RequestException
 
 
 @ApiController('rgw')
@@ -43,7 +46,7 @@ class RgwDaemon(RESTController):
         }
         service = CephService.get_service('rgw', svc_id)
         if not service:
-            return daemon
+            raise cherrypy.NotFound('Service rgw {} is not available'.format(svc_id))
 
         metadata = service['metadata']
         status = service['status']
@@ -59,3 +62,42 @@ class RgwDaemon(RESTController):
         daemon['rgw_metadata'] = metadata
         daemon['rgw_status'] = status
         return daemon
+
+
+@ApiController('rgw/proxy/{path:.*}')
+@AuthRequired()
+class RgwProxy(BaseController):
+
+    @cherrypy.expose
+    def __call__(self, path, **params):
+        try:
+            rgw_client = RgwClient.admin_instance()
+
+            method = cherrypy.request.method
+            data = None
+
+            if cherrypy.request.body.length:
+                data = cherrypy.request.body.read()
+
+            return rgw_client.proxy(method, path, params, data)
+        except RequestException as e:
+            # Always use status code 500 and NOT the status that may delivered
+            # by the exception. That's because we do not want to forward e.g.
+            # 401 or 404 that may trigger unwanted actions in the UI.
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 500
+            return json.dumps({'detail': str(e)}).encode('utf-8')
+
+
+@ApiController('rgw/bucket')
+@AuthRequired()
+class RgwBucket(RESTController):
+
+    def create(self, bucket, uid):
+        try:
+            rgw_client = RgwClient.instance(uid)
+            return rgw_client.create_bucket(bucket)
+        except RequestException as e:
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 500
+            return {'detail': str(e)}

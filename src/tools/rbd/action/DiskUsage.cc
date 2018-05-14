@@ -34,7 +34,7 @@ static int compute_image_disk_usage(const std::string& name,
                                     const std::string& snap_name,
                                     const std::string& from_snap_name,
                                     librbd::Image &image, uint64_t size,
-                                    TextTable& tbl, Formatter *f,
+                                    bool exact, TextTable& tbl, Formatter *f,
                                     uint64_t *used_size) {
   const char* from = NULL;
   if (!from_snap_name.empty()) {
@@ -55,7 +55,7 @@ static int compute_image_disk_usage(const std::string& name,
   }
 
   *used_size = 0;
-  r = image.diff_iterate2(from, 0, size, false, true,
+  r = image.diff_iterate2(from, 0, size, false, !exact,
                           &disk_usage_callback, used_size);
   if (r < 0) {
     std::cerr << "rbd: failed to iterate diffs: " << cpp_strerror(r)
@@ -78,8 +78,8 @@ static int compute_image_disk_usage(const std::string& name,
       full_name += "@" + snap_name;
     }
     tbl << full_name
-        << stringify(si_t(size))
-        << stringify(si_t(*used_size))
+        << stringify(byte_u_t(size))
+        << stringify(byte_u_t(*used_size))
         << TextTable::endrow;
   }
   return 0;
@@ -87,7 +87,7 @@ static int compute_image_disk_usage(const std::string& name,
 
 static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                          const char *imgname, const char *snapname,
-                         const char *from_snapname, Formatter *f) {
+                         const char *from_snapname, bool exact, Formatter *f) {
   std::vector<std::string> names;
   int r = rbd.list(io_ctx, names);
   if (r == -ENOENT) {
@@ -179,7 +179,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       if (imgname == nullptr || found_from_snap ||
          (found_from_snap && snapname != nullptr && snap->name == snapname)) {
         r = compute_image_disk_usage(*name, snap->name, last_snap_name,
-                                     snap_image, snap->size, tbl, f,
+                                     snap_image, snap->size, exact, tbl, f,
                                      &used_size);
         if (r < 0) {
           goto out;
@@ -204,7 +204,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
 
     if (snapname == NULL) {
       r = compute_image_disk_usage(*name, "", last_snap_name, image, info.size,
-                                   tbl, f, &used_size);
+                                   exact, tbl, f, &used_size);
       if (r < 0) {
         goto out;
       }
@@ -230,8 +230,8 @@ out:
   } else {
     if (count > 1) {
       tbl << "<TOTAL>"
-          << stringify(si_t(total_prov))
-          << stringify(si_t(total_used))
+          << stringify(byte_u_t(total_prov))
+          << stringify(byte_u_t(total_used))
           << TextTable::endrow;
     }
     std::cout << tbl;
@@ -247,7 +247,8 @@ void get_arguments(po::options_description *positional,
   at::add_format_options(options);
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
-     "snapshot starting point");
+     "snapshot starting point")
+    ("exact", po::bool_switch(), "compute exact disk usage (slow)");
 }
 
 int execute(const po::variables_map &vm,
@@ -282,12 +283,14 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
+  utils::disable_cache();
+
   librbd::RBD rbd;
   r = do_disk_usage(rbd, io_ctx,
                     image_name.empty() ? nullptr: image_name.c_str(),
                     snap_name.empty() ? nullptr : snap_name.c_str(),
                     from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
-                    formatter.get());
+                    vm["exact"].as<bool>(), formatter.get());
   if (r < 0) {
     std::cerr << "rbd: du failed: " << cpp_strerror(r) << std::endl;
     return r;

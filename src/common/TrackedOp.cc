@@ -108,7 +108,7 @@ void OpHistory::cleanup(utime_t now)
   }
 }
 
-void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters)
+void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters, bool by_duration)
 {
   Mutex::Locker history_lock(ops_history_lock);
   cleanup(now);
@@ -117,50 +117,20 @@ void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters)
   f->dump_int("duration", history_duration);
   {
     f->open_array_section("ops");
-    for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
-	   arrived.begin();
-	 i != arrived.end();
-	 ++i) {
-      if (!i->second->filter_out(filters))
-        continue;
-      f->open_object_section("op");
-      i->second->dump(now, f);
-      f->close_section();
-    }
-    f->close_section();
-  }
-  f->close_section();
-}
-
-void OpHistory::dump_ops_by_duration(utime_t now, Formatter *f, set<string> filters)
-{
-  Mutex::Locker history_lock(ops_history_lock);
-  cleanup(now);
-  f->open_object_section("op_history");
-  f->dump_int("size", history_size);
-  f->dump_int("duration", history_duration);
-  {
-    f->open_array_section("ops");
-    if (arrived.size()) {
-      vector<pair<double, TrackedOpRef> > durationvec;
-      durationvec.reserve(arrived.size());
-
-      for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
-	     arrived.begin();
-	   i != arrived.end();
-	   ++i) {
+    auto dump_fn = [&f, &now, &filters](auto begin_iter, auto end_iter) {
+      for (auto i=begin_iter; i!=end_iter; ++i) {
 	if (!i->second->filter_out(filters))
 	  continue;
-	durationvec.push_back(pair<double, TrackedOpRef>(i->second->get_duration(), i->second));
-      }
-
-      sort(durationvec.begin(), durationvec.end());
-
-      for (auto i = durationvec.rbegin(); i != durationvec.rend(); ++i) {
 	f->open_object_section("op");
 	i->second->dump(now, f);
 	f->close_section();
       }
+    };
+
+    if (by_duration) {
+      dump_fn(duration.rbegin(), duration.rend());
+    } else {
+      dump_fn(arrived.begin(), arrived.end());
     }
     f->close_section();
   }
@@ -182,7 +152,7 @@ OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
   lock("OpTracker::lock"), cct(cct_) {
     for (uint32_t i = 0; i < num_optracker_shards; i++) {
       char lock_name[32] = {0};
-      snprintf(lock_name, sizeof(lock_name), "%s:%d", "OpTracker::ShardedLock", i);
+      snprintf(lock_name, sizeof(lock_name), "%s:%" PRIu32, "OpTracker::ShardedLock", i);
       ShardedTrackingData* one_shard = new ShardedTrackingData(lock_name);
       sharded_in_flight_list.push_back(one_shard);
     }
@@ -203,11 +173,7 @@ bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration, set<string> fi
 
   RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
-  if (by_duration) {
-    history.dump_ops_by_duration(now, f, filters);
-  } else {
-    history.dump_ops(now, f, filters);
-  }
+  history.dump_ops(now, f, filters, by_duration);
   return true;
 }
 
@@ -371,6 +337,7 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
 
 bool OpTracker::with_slow_ops_in_flight(utime_t* oldest_secs,
 					int* num_slow_ops,
+					int* num_warned_ops,
 					std::function<void(TrackedOp&)>&& on_warn)
 {
   const utime_t now = ceph_clock_now();
@@ -383,6 +350,8 @@ bool OpTracker::with_slow_ops_in_flight(utime_t* oldest_secs,
       // no more slow ops in flight
       return false;
     }
+    if (!op.warn_interval_multiplier)
+      return true;
     slow++;
     if (warned >= log_threshold) {
       // enough samples of slow ops
@@ -402,6 +371,7 @@ bool OpTracker::with_slow_ops_in_flight(utime_t* oldest_secs,
   if (visit_ops_in_flight(oldest_secs, check)) {
     if (num_slow_ops) {
       *num_slow_ops = slow;
+      *num_warned_ops = warned;
     }
     return true;
   } else {
@@ -430,7 +400,8 @@ bool OpTracker::check_ops_in_flight(std::string* summary,
     op.warn_interval_multiplier *= 2;
   };
   int slow = 0;
-  if (with_slow_ops_in_flight(&oldest_secs, &slow, warn_on_slow_op)) {
+  if (with_slow_ops_in_flight(&oldest_secs, &slow, &warned, warn_on_slow_op) &&
+      slow > 0) {
     stringstream ss;
     ss << slow << " slow requests, "
        << warned << " included below; oldest blocked for > "

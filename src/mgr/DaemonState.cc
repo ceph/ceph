@@ -95,6 +95,14 @@ DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
   }
 }
 
+void DaemonStateIndex::rm(const DaemonKey &key)
+{
+  RWLock::WLocker l(lock);
+  if (all.count(key)) {
+    _erase(key);
+  }
+}
+
 void DaemonStateIndex::cull(const std::string& svc_name,
 			    const std::set<std::string>& names_exist)
 {

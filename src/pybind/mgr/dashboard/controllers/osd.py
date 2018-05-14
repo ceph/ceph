@@ -1,34 +1,15 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import json
-
-from mgr_module import CommandResult
-
-from .. import logger, mgr
-from ..tools import ApiController, AuthRequired, RESTController
+from . import ApiController, AuthRequired, RESTController
+from .. import mgr
+from ..services.ceph_service import CephService
+from ..services.exception import handle_send_command_error
 
 
 @ApiController('osd')
 @AuthRequired()
 class Osd(RESTController):
-    def get_counter(self, daemon_name, stat):
-        return mgr.get_counter('osd', daemon_name, stat)[stat]
-
-    def get_rate(self, daemon_name, stat):
-        data = self.get_counter(daemon_name, stat)
-        rate = 0
-        if data and len(data) > 1:
-            rate = (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
-        return rate
-
-    def get_latest(self, daemon_name, stat):
-        data = self.get_counter(daemon_name, stat)
-        latest = 0
-        if data and data[-1] and len(data[-1]) == 2:
-            latest = data[-1][1]
-        return latest
-
     def list(self):
         osds = self.get_osd_map()
         # Extending by osd stats information
@@ -53,11 +34,11 @@ class Osd(RESTController):
             osd_spec = str(o['osd'])
             for s in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
                 prop = s.split('.')[1]
-                o['stats'][prop] = self.get_rate(osd_spec, s)
-                o['stats_history'][prop] = self.get_counter(osd_spec, s)
+                o['stats'][prop] = CephService.get_rate('osd', osd_spec, s)
+                o['stats_history'][prop] = CephService.get_rates('osd', osd_spec, s)
             # Gauge stats
             for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
-                o['stats'][s.split('.')[1]] = self.get_latest(osd_spec, s)
+                o['stats'][s.split('.')[1]] = mgr.get_latest('osd', osd_spec, s)
         return list(osds.values())
 
     def get_osd_map(self):
@@ -67,20 +48,9 @@ class Osd(RESTController):
             osds[str(osd['id'])] = osd
         return osds
 
+    @handle_send_command_error('osd')
     def get(self, svc_id):
-        result = CommandResult('')
-        mgr.send_command(result, 'osd', svc_id,
-                         json.dumps({
-                             'prefix': 'perf histogram dump',
-                         }),
-                         '')
-        r, outb, outs = result.wait()
-        if r != 0:
-            logger.warning('Failed to load histogram for OSD %s', svc_id)
-            logger.debug(outs)
-            histogram = outs
-        else:
-            histogram = json.loads(outb)
+        histogram = CephService.send_command('osd', srv_spec=svc_id, prefix='perf histogram dump')
         return {
             'osd_map': self.get_osd_map()[svc_id],
             'osd_metadata': mgr.get_metadata('osd', svc_id),

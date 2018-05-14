@@ -172,7 +172,7 @@ private:
 
   struct object_extent_set : boost::intrusive::set_base_hook<> {
     hobject_t oid;
-    object_extent_set(const hobject_t &oid) : oid(oid) {}
+    explicit object_extent_set(const hobject_t &oid) : oid(oid) {}
 
     using set_member_options = boost::intrusive::member_hook<
       extent,

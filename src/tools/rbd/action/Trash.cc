@@ -23,6 +23,7 @@
 #include <iostream>
 #include <sstream>
 #include <boost/program_options.hpp>
+#include <boost/bind.hpp>
 #include <json_spirit/json_spirit.h>
 
 namespace rbd {
@@ -36,6 +37,10 @@ namespace po = boost::program_options;
 static const std::string EXPIRES_AT("expires-at");
 static const std::string EXPIRED_BEFORE("expired-before");
 static const std::string THRESHOLD("threshold");
+
+static bool is_not_trash_user(const librbd::trash_image_info_t &trash_info) {
+  return trash_info.source != RBD_TRASH_IMAGE_SOURCE_USER;
+}
 
 void get_move_arguments(po::options_description *positional,
                         po::options_description *options) {
@@ -192,18 +197,23 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
     return r;
   }
 
+  if (!all_flag) {
+    trash_entries.erase(remove_if(trash_entries.begin(),
+                                  trash_entries.end(),
+                                  boost::bind(is_not_trash_user, _1)),
+                        trash_entries.end());
+  }
+
   if (!long_flag) {
     if (f) {
       f->open_array_section("trash");
     }
     for (const auto& entry : trash_entries) {
-      if (!all_flag &&
-          entry.source == RBD_TRASH_IMAGE_SOURCE_MIRRORING) {
-        continue;
-      }
        if (f) {
+         f->open_object_section("image");
          f->dump_string("id", entry.id);
          f->dump_string("name", entry.name);
+         f->close_section();
        } else {
          std::cout << entry.id << " " << entry.name << std::endl;
        }
@@ -229,10 +239,6 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
   }
 
   for (const auto& entry : trash_entries) {
-    if (!all_flag &&
-        entry.source == RBD_TRASH_IMAGE_SOURCE_MIRRORING) {
-      continue;
-    }
     librbd::Image im;
 
     r = rbd.open_by_id_read_only(io_ctx, im, entry.id.c_str(), NULL);
@@ -340,6 +346,8 @@ int execute_list(const po::variables_map &vm,
     return r;
   }
 
+  utils::disable_cache();
+
   librbd::RBD rbd;
   r = do_list(rbd, io_ctx, vm["long"].as<bool>(), vm["all"].as<bool>(),
               formatter.get());
@@ -377,6 +385,8 @@ int execute_purge (const po::variables_map &vm,
   if (r < 0) {
     return r;
   }
+
+  utils::disable_cache();
 
   io_ctx.set_osdmap_full_try();
   librbd::RBD rbd;

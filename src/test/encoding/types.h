@@ -16,6 +16,8 @@ TYPE(compressible_bloom_filter)
 
 #include "test_ceph_time.h"
 TYPE(real_time_wrapper)
+TYPE(coarse_real_time_wrapper)
+TYPE(timespan_wrapper)
 
 #include "test_sstring.h"
 TYPE(sstring_wrapper)
@@ -443,16 +445,6 @@ TYPE_FEATUREFUL(cls_lock_get_info_reply)
 TYPE(cls_lock_list_locks_reply)
 TYPE(cls_lock_assert_op)
 TYPE(cls_lock_set_cookie_op)
-
-#include "cls/replica_log/cls_replica_log_types.h"
-TYPE(cls_replica_log_item_marker)
-TYPE(cls_replica_log_progress_marker)
-TYPE(cls_replica_log_bound)
-#include "cls/replica_log/cls_replica_log_ops.h"
-TYPE(cls_replica_log_delete_marker_op)
-TYPE(cls_replica_log_set_marker_op)
-TYPE(cls_replica_log_get_bounds_op)
-TYPE(cls_replica_log_get_bounds_ret)
 
 #include "cls/refcount/cls_refcount_ops.h"
 TYPE(cls_refcount_get_op)

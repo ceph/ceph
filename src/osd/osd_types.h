@@ -390,7 +390,7 @@ struct pg_t {
   ps_t ps() const {
     return m_seed;
   }
-  uint64_t pool() const {
+  int64_t pool() const {
     return m_pool;
   }
 
@@ -520,6 +520,11 @@ struct spg_t {
   bool parse(const std::string& s) {
     return parse(s.c_str());
   }
+
+  spg_t get_ancestor(unsigned old_pg_num) const {
+    return spg_t(pgid.get_ancestor(old_pg_num), shard);
+  }
+
   bool is_split(unsigned old_pg_num, unsigned new_pg_num,
 		set<spg_t> *pchildren) const {
     set<pg_t> _children;
@@ -963,9 +968,9 @@ inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
 
 
 inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
-  return out << "osd_stat(" << kb_t(s.kb_used) << " used, "
-	     << kb_t(s.kb_avail) << " avail, "
-	     << kb_t(s.kb) << " total, "
+  return out << "osd_stat(" << byte_u_t(s.kb_used << 10) << " used, "
+	     << byte_u_t(s.kb_avail << 10) << " avail, "
+	     << byte_u_t(s.kb << 10) << " total, "
 	     << "peers " << s.hb_peers
 	     << " op hist " << s.op_queue_age_hist.h
 	     << ")";
@@ -1290,6 +1295,7 @@ struct pg_pool_t {
     }
   }
 
+  utime_t create_time;
   uint64_t flags;           ///< FLAG_*
   __u8 type;                ///< TYPE_*
   __u8 size, min_size;      ///< number of osds in each pg
@@ -1451,6 +1457,7 @@ public:
 
   void dump(Formatter *f) const;
 
+  const utime_t &get_create_time() const { return create_time; }
   uint64_t get_flags() const { return flags; }
   bool has_flag(uint64_t f) const { return flags & f; }
   void set_flag(uint64_t f) { flags |= f; }
@@ -1713,11 +1720,11 @@ struct object_stat_sum_t {
     FLOOR(num_rd_kb);
     FLOOR(num_wr);
     FLOOR(num_wr_kb);
-    FLOOR(num_scrub_errors);
     FLOOR(num_large_omap_objects);
     FLOOR(num_objects_manifest);
     FLOOR(num_shallow_scrub_errors);
     FLOOR(num_deep_scrub_errors);
+    num_scrub_errors = num_shallow_scrub_errors + num_deep_scrub_errors;
     FLOOR(num_objects_recovered);
     FLOOR(num_bytes_recovered);
     FLOOR(num_keys_recovered);
@@ -1769,11 +1776,14 @@ struct object_stat_sum_t {
     SPLIT(num_rd_kb);
     SPLIT(num_wr);
     SPLIT(num_wr_kb);
-    SPLIT(num_scrub_errors);
     SPLIT(num_large_omap_objects);
     SPLIT(num_objects_manifest);
-    SPLIT(num_shallow_scrub_errors);
-    SPLIT(num_deep_scrub_errors);
+    SPLIT_PRESERVE_NONZERO(num_shallow_scrub_errors);
+    SPLIT_PRESERVE_NONZERO(num_deep_scrub_errors);
+    for (unsigned i = 0; i < out.size(); ++i) {
+      out[i].num_scrub_errors = out[i].num_shallow_scrub_errors +
+				out[i].num_deep_scrub_errors;
+    }
     SPLIT(num_objects_recovered);
     SPLIT(num_bytes_recovered);
     SPLIT(num_keys_recovered);
@@ -2680,7 +2690,7 @@ private:
 
   unique_ptr<interval_rep> past_intervals;
 
-  PastIntervals(interval_rep *rep) : past_intervals(rep) {}
+  explicit PastIntervals(interval_rep *rep) : past_intervals(rep) {}
 
 public:
   void add_interval(bool ec_pool, const pg_interval_t &interval) {
@@ -3129,6 +3139,7 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
   out << "query(" << q.get_type_name() << " " << q.since;
   if (q.type == pg_query_t::LOG)
     out << " " << q.history;
+  out << " epoch_sent " << q.epoch_sent;
   out << ")";
   return out;
 }
@@ -4558,6 +4569,7 @@ struct chunk_info_t {
   enum {
     FLAG_DIRTY = 1, 
     FLAG_MISSING = 2,
+    FLAG_HAS_REFERENCE = 4,
   };
   uint32_t offset;
   uint32_t length;
@@ -4573,6 +4585,9 @@ struct chunk_info_t {
     }
     if (flags & FLAG_MISSING) {
       r += "|missing";
+    }
+    if (flags & FLAG_HAS_REFERENCE) {
+      r += "|has_reference";
     }
     if (r.length())
       return r.substr(1);
@@ -4657,33 +4672,44 @@ struct object_info_t {
     FLAG_CACHE_PIN   = 1<<6, // pin the object in cache tier
     FLAG_MANIFEST    = 1<<7, // has manifest
     FLAG_USES_TMAP   = 1<<8, // deprecated; no longer used
+    FLAG_REDIRECT_HAS_REFERENCE = 1<<9, // has reference
   } flag_t;
 
   flag_t flags;
 
   static string get_flag_string(flag_t flags) {
     string s;
-    if (flags & FLAG_LOST)
-      s += "|lost";
-    if (flags & FLAG_WHITEOUT)
-      s += "|whiteout";
-    if (flags & FLAG_DIRTY)
-      s += "|dirty";
-    if (flags & FLAG_USES_TMAP)
-      s += "|uses_tmap";
-    if (flags & FLAG_OMAP)
-      s += "|omap";
-    if (flags & FLAG_DATA_DIGEST)
-      s += "|data_digest";
-    if (flags & FLAG_OMAP_DIGEST)
-      s += "|omap_digest";
-    if (flags & FLAG_CACHE_PIN)
-      s += "|cache_pin";
-    if (flags & FLAG_MANIFEST)
-      s += "|manifest";
+    vector<string> sv = get_flag_vector(flags);
+    for (auto ss : sv) {
+      s += string("|") + ss;
+    }
     if (s.length())
       return s.substr(1);
     return s;
+  }
+  static vector<string> get_flag_vector(flag_t flags) {
+    vector<string> sv;
+    if (flags & FLAG_LOST)
+      sv.insert(sv.end(), "lost");
+    if (flags & FLAG_WHITEOUT)
+      sv.insert(sv.end(), "whiteout");
+    if (flags & FLAG_DIRTY)
+      sv.insert(sv.end(), "dirty");
+    if (flags & FLAG_USES_TMAP)
+      sv.insert(sv.end(), "uses_tmap");
+    if (flags & FLAG_OMAP)
+      sv.insert(sv.end(), "omap");
+    if (flags & FLAG_DATA_DIGEST)
+      sv.insert(sv.end(), "data_digest");
+    if (flags & FLAG_OMAP_DIGEST)
+      sv.insert(sv.end(), "omap_digest");
+    if (flags & FLAG_CACHE_PIN)
+      sv.insert(sv.end(), "cache_pin");
+    if (flags & FLAG_MANIFEST)
+      sv.insert(sv.end(), "manifest");
+    if (flags & FLAG_REDIRECT_HAS_REFERENCE)
+      sv.insert(sv.end(), "redirect_has_reference");
+    return sv;
   }
   string get_flag_string() const {
     return get_flag_string(flags);

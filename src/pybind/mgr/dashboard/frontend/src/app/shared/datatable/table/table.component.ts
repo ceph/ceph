@@ -3,12 +3,12 @@ import {
   Component,
   EventEmitter,
   Input,
+  NgZone,
   OnChanges,
   OnDestroy,
   OnInit,
   Output,
   TemplateRef,
-  Type,
   ViewChild
 } from '@angular/core';
 import {
@@ -22,6 +22,7 @@ import * as _ from 'lodash';
 import 'rxjs/add/observable/timer';
 import { Observable } from 'rxjs/Observable';
 
+import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
 import { CdTableSelection } from '../../models/cd-table-selection';
 
@@ -35,7 +36,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   @ViewChild('tableCellBoldTpl') tableCellBoldTpl: TemplateRef<any>;
   @ViewChild('sparklineTpl') sparklineTpl: TemplateRef<any>;
   @ViewChild('routerLinkTpl') routerLinkTpl: TemplateRef<any>;
+  @ViewChild('checkIconTpl') checkIconTpl: TemplateRef<any>;
   @ViewChild('perSecondTpl') perSecondTpl: TemplateRef<any>;
+  @ViewChild('executingTpl') executingTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input() data: any[];
@@ -61,11 +64,17 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
    */
   @Input() autoReload: any = 5000;
 
-  // Which row property is unique for a row
+  // Which row property is unique for a row. If the identifier is not specified in any
+  // column, then the property name of the first column is used. Defaults to 'id'.
   @Input() identifier = 'id';
+  // If 'true', then the specified identifier is used anyway, although it is not specified
+  // in any column. Defaults to 'false'.
+  @Input() forceIdentifier = false;
   // Allows other components to specify which type of selection they want,
   // e.g. 'single' or 'multi'.
   @Input() selectionType: string = undefined;
+  // If `true` selected item details will be updated on table refresh
+  @Input() updateSelectionOnRefresh = true;
 
   /**
    * Should be a function to update the input data if undefined nothing will be triggered
@@ -113,15 +122,22 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // table columns after the browser window has been resized.
   private currentWidth: number;
 
-  constructor() {}
+  constructor(private ngZone: NgZone) {}
 
   ngOnInit() {
     this._addTemplates();
     if (!this.sorts) {
-      this.identifier = this.columns.some(c => c.prop === this.identifier) ?
-        this.identifier :
-        this.columns[0].prop + '';
-      this.sorts = this.createSortingDefinition(this.identifier);
+      // Check whether the specified identifier exists.
+      const exists = _.findIndex(this.columns, ['prop', this.identifier]) !== -1;
+      // Auto-build the sorting configuration. If the specified identifier doesn't exist,
+      // then use the property of the first column.
+      this.sorts = this.createSortingDefinition(exists ?
+        this.identifier : this.columns[0].prop + '');
+      // If the specified identifier doesn't exist and it is not forced to use it anyway,
+      // then use the property of the first column.
+      if (!exists && !this.forceIdentifier) {
+        this.identifier = this.columns[0].prop + '';
+      }
     }
     this.columns.map(c => {
       if (c.cellTransformation) {
@@ -136,13 +152,23 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       return c;
     });
     this.tableColumns = this.columns.filter(c => !c.isHidden);
-    if (this.autoReload) { // Also if nothing is bound to fetchData nothing will be triggered
-      // Force showing the loading indicator because it has been set to False in
-      // useData() when this method was triggered by ngOnChanges().
+    // Load the data table content every N ms or at least once.
+    // Force showing the loading indicator if there are subscribers to the fetchData
+    // event. This is necessary because it has been set to False in useData() when
+    // this method was triggered by ngOnChanges().
+    if (this.fetchData.observers.length > 0) {
       this.loadingIndicator = true;
-      this.subscriber = Observable.timer(0, this.autoReload).subscribe(x => {
-        return this.reloadData();
+    }
+    if (_.isInteger(this.autoReload) && (this.autoReload > 0)) {
+      this.ngZone.runOutsideAngular(() => {
+        this.subscriber = Observable.timer(0, this.autoReload).subscribe(x => {
+          this.ngZone.run(() => {
+            return this.reloadData();
+          });
+        });
       });
+    } else {
+      this.reloadData();
     }
   }
 
@@ -166,9 +192,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   _addTemplates() {
     this.cellTemplates.bold = this.tableCellBoldTpl;
+    this.cellTemplates.checkIcon = this.checkIconTpl;
     this.cellTemplates.sparkline = this.sparklineTpl;
     this.cellTemplates.routerLink = this.routerLinkTpl;
     this.cellTemplates.perSecond = this.perSecondTpl;
+    this.cellTemplates.executing = this.executingTpl;
   }
 
   ngOnChanges(changes) {
@@ -214,6 +242,27 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
     this.loadingIndicator = false;
     this.updating = false;
+    if (this.updateSelectionOnRefresh) {
+      this.updateSelected();
+    }
+  }
+
+  /**
+   * After updating the data, we have to update the selected items
+   * because details may have changed,
+   * or some selected items may have been removed.
+   */
+  updateSelected() {
+    const newSelected = [];
+    this.selection.selected.forEach((selectedItem) => {
+      for (const row of this.data) {
+        if (selectedItem[this.identifier] === row[this.identifier]) {
+          newSelected.push(row);
+        }
+      }
+    });
+    this.selection.selected = newSelected;
+    this.onSelect();
   }
 
   onSelect() {
@@ -250,25 +299,65 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     ];
   }
 
-  updateFilter(event?) {
+  updateFilter(event?: any) {
     if (!event) {
       this.search = '';
     }
-    const val = this.search.toLowerCase();
-    const columns = this.columns;
+    let search = this.search.toLowerCase().replace(/,/g, '');
+    const columns = this.columns.filter(c => c.cellTransformation !== CellTemplate.sparkline);
+    if (search.match(/['"][^'"]+['"]/)) {
+      search = search.replace(/['"][^'"]+['"]/g, (match: string) => {
+        return match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+');
+      });
+    }
     // update the rows
-    this.rows = this.data.filter((d) => {
-      return (
-        columns.filter(c => {
-          return (
-            (_.isString(d[c.prop]) || _.isNumber(d[c.prop])) &&
-            (d[c.prop] + '').toLowerCase().indexOf(val) !== -1
-          );
-        }).length > 0
-      );
-    });
+    this.rows = this.subSearch(this.data, search.split(' ').filter(s => s.length > 0), columns);
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
+  }
+
+  subSearch (data: any[], currentSearch: string[], columns: CdTableColumn[]) {
+    if (currentSearch.length === 0 || data.length === 0) {
+      return data;
+    }
+    const searchTerms: string[] = currentSearch.pop().replace('+', ' ').split(':');
+    const columnsClone = [...columns];
+    const dataClone = [...data];
+    const filterColumns = (columnName: string) =>
+      columnsClone.filter((c) => c.name.toLowerCase().indexOf(columnName) !== -1);
+    if (searchTerms.length === 2) {
+      columns = filterColumns(searchTerms[0]);
+    }
+    const searchTerm: string = _.last(searchTerms);
+    data = this.basicDataSearch(searchTerm, data, columns);
+    // Checks if user searches for column but he is still typing
+    if (data.length === 0 && searchTerms.length === 1 && filterColumns(searchTerm).length > 0) {
+      data = dataClone;
+    }
+    return this.subSearch(data, currentSearch, columnsClone);
+  }
+
+  basicDataSearch(searchTerm: string, data: any[], columns: CdTableColumn[]) {
+    if (searchTerm.length === 0) {
+      return data;
+    }
+    return data.filter(d => {
+      return columns.filter(c => {
+        let cellValue: any = _.get(d, c.prop);
+        if (!_.isUndefined(c.pipe)) {
+          cellValue = c.pipe.transform(cellValue);
+        }
+        if (_.isUndefined(cellValue)) {
+          return;
+        }
+        if (_.isArray(cellValue)) {
+          cellValue = cellValue.join(' ');
+        } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
+          cellValue = cellValue.toString();
+        }
+        return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
+      }).length > 0;
+    });
   }
 
   getRowClass() {

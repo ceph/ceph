@@ -379,6 +379,8 @@ protected:
 
   load_spread_t pop_spread;
 
+  elist<CInode*> pop_lru_subdirs;
+
   // and to provide density
   int num_dentries_nested;
   int num_dentries_auth_subtree;
@@ -521,7 +523,7 @@ private:
  public:
   mds_authority_t authority() const override;
   mds_authority_t get_dir_auth() const { return dir_auth; }
-  void set_dir_auth(mds_authority_t a);
+  void set_dir_auth(const mds_authority_t &a);
   void set_dir_auth(mds_rank_t a) { set_dir_auth(mds_authority_t(a, CDIR_AUTH_UNKNOWN)); }
   bool is_ambiguous_dir_auth() const {
     return dir_auth.second != CDIR_AUTH_UNKNOWN;
@@ -703,6 +705,7 @@ public:
     put(PIN_TEMPEXPORTING);
   }
   void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);
+  void abort_import(utime_t now);
 
   // -- auth pins --
   bool can_auth_pin() const override { return is_auth() && !(is_frozen() || is_freezing()); }

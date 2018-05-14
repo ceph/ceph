@@ -315,7 +315,7 @@ protected:
 public:
   bool is_subtrees() { return !subtrees.empty(); }
   void list_subtrees(list<CDir*>& ls);
-  void adjust_subtree_auth(CDir *root, mds_authority_t auth);
+  void adjust_subtree_auth(CDir *root, mds_authority_t auth, bool adjust_pop=true);
   void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN) {
     adjust_subtree_auth(root, mds_authority_t(a,b));
   }
@@ -323,13 +323,13 @@ public:
   void adjust_bounded_subtree_auth(CDir *dir, set<CDir*>& bounds, mds_rank_t a) {
     adjust_bounded_subtree_auth(dir, bounds, mds_authority_t(a, CDIR_AUTH_UNKNOWN));
   }
-  void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, mds_authority_t auth);
+  void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, const mds_authority_t &auth);
   void adjust_bounded_subtree_auth(CDir *dir, vector<dirfrag_t>& bounds, mds_rank_t a) {
     adjust_bounded_subtree_auth(dir, bounds, mds_authority_t(a, CDIR_AUTH_UNKNOWN));
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
-  void try_subtree_merge_at(CDir *root, set<CInode*> *to_eval);
+  void try_subtree_merge_at(CDir *root, set<CInode*> *to_eval, bool adjust_pop=true);
   void subtree_merge_writebehind_finish(CInode *in, MutationRef& mut);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
@@ -553,9 +553,9 @@ protected:
   map<mds_rank_t,map<inodeno_t,map<client_t,Capability::Import> > > rejoin_imported_caps;
   map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > > rejoin_slave_exports;
   map<client_t,entity_inst_t> rejoin_client_map;
+  map<client_t,pair<Session*,uint64_t> > rejoin_session_map;
 
-  map<inodeno_t,map<client_t,cap_reconnect_t> > cap_exports; // ino -> client -> capex
-  map<inodeno_t,mds_rank_t> cap_export_targets; // ino -> auth mds
+  map<inodeno_t,pair<mds_rank_t,map<client_t,cap_reconnect_t> > > cap_exports; // ino -> target, client -> capex
 
   map<inodeno_t,map<client_t,map<mds_rank_t,cap_reconnect_t> > > cap_imports;  // ino -> client -> frommds -> capex
   set<inodeno_t> cap_imports_missing;
@@ -595,12 +595,16 @@ public:
   void rejoin_send_rejoins();
   void rejoin_export_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr,
 			  int target=-1) {
-    cap_exports[ino][client] = icr;
-    cap_export_targets[ino] = target;
+    auto& ex = cap_exports[ino];
+    ex.first = target;
+    ex.second[client] = icr;
   }
   void rejoin_recovered_caps(inodeno_t ino, client_t client, const cap_reconnect_t& icr, 
 			     mds_rank_t frommds=MDS_RANK_NONE) {
     cap_imports[ino][client][frommds] = icr;
+  }
+  void rejoin_recovered_client(client_t client, const entity_inst_t& inst) {
+    rejoin_client_map.emplace(client, inst);
   }
   bool rejoin_has_cap_reconnect(inodeno_t ino) const {
     return cap_imports.count(ino);
@@ -656,8 +660,7 @@ public:
   friend class C_MDC_RejoinSessionsOpened;
   void rejoin_open_ino_finish(inodeno_t ino, int ret);
   void rejoin_prefetch_ino_finish(inodeno_t ino, int ret);
-  void rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map,
-				   map<client_t,uint64_t>& sseqmap);
+  void rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >& session_map);
   bool process_imported_caps();
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
@@ -915,6 +918,7 @@ public:
   void open_root_inode(MDSInternalContextBase *c);
   void open_root();
   void open_mydir_inode(MDSInternalContextBase *c);
+  void open_mydir_frag(MDSInternalContextBase *c);
   void populate_mydir();
 
   void _create_system_file(CDir *dir, const char *name, CInode *in, MDSInternalContextBase *fin);
@@ -1052,8 +1056,6 @@ private:
 public:
   SnapRealm *get_global_snaprealm() const { return global_snaprealm; }
   void create_global_snaprealm();
-  void snaprealm_create(MDRequestRef& mdr, CInode *in);
-  void _snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CInode *in);
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients=true);
   void send_snap_update(CInode *in, version_t stid, int snap_op);
   void handle_snap_update(MMDSSnapUpdate *m);
@@ -1229,9 +1231,11 @@ protected:
    * long time)
    */
   void enqueue_scrub_work(MDRequestRef& mdr);
+  void recursive_scrub_finish(const ScrubHeaderRef& header);
   void repair_inode_stats_work(MDRequestRef& mdr);
   void repair_dirfrag_stats_work(MDRequestRef& mdr);
-  friend class C_MDC_RepairDirfragStats;
+  void upgrade_inode_snaprealm_work(MDRequestRef& mdr);
+  friend class C_MDC_RespondInternalRequest;
 public:
   void flush_dentry(std::string_view path, Context *fin);
   /**
@@ -1242,6 +1246,7 @@ public:
 		     Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
+  void upgrade_inode_snaprealm(CInode *in);
 
 public:
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */

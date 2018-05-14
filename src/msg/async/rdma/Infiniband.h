@@ -99,7 +99,7 @@ class DeviceList {
   int num;
   Device** devices;
  public:
-  DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
+  explicit DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
     if (device_list == NULL || num == 0) {
       lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
       ceph_abort();
@@ -250,7 +250,7 @@ class Infiniband {
       unsigned n_bufs_allocated;
       // true if it is possible to alloc
       // more memory for the pool
-      MemPoolContext(MemoryManager *m) :
+      explicit MemPoolContext(MemoryManager *m) :
         perf_logger(nullptr),
         manager(m),
         n_bufs_allocated(0) {}

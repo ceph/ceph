@@ -1,0 +1,30 @@
+<div class="modal-header">
+  <h4 i18n
+      class="modal-title pull-left">RBD flatten</h4>
+  <button type="button" class="close pull-right" aria-label="Close" (click)="modalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<form name="flattenForm"
+      class="form-horizontal"
+      #formDir="ngForm"
+      [formGroup]="flattenForm"
+      novalidate>
+  <div class="modal-body">
+    You are about to flatten <strong>{{ child }}</strong>.
+    <br>
+    <br>
+    All blocks will be copied from parent <strong>{{ parent }}</strong> to child <strong>{{ child }}</strong>.
+  </div>
+  <div class="modal-footer">
+    <div class="button-group text-right">
+      <cd-submit-button i18n
+                        [form]="flattenForm"
+                        (submitAction)="submit()">
+        Flatten
+      </cd-submit-button>
+      <button i18n type="button" class="btn btn-sm btn-default" (click)="modalRef.hide()">Cancel</button>
+    </div>
+  </div>
+</form>
+

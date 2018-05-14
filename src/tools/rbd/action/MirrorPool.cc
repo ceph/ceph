@@ -972,6 +972,8 @@ int execute_promote(const po::variables_map &vm,
     return r;
   }
 
+  utils::disable_cache();
+
   std::atomic<unsigned> counter = { 0 };
   ImageRequestGenerator<PromoteImageRequest> generator(io_ctx, &counter,
                                                        vm["force"].as<bool>());
@@ -1002,6 +1004,8 @@ int execute_demote(const po::variables_map &vm,
   if (r < 0) {
     return r;
   }
+
+  utils::disable_cache();
 
   std::atomic<unsigned> counter { 0 };
   ImageRequestGenerator<DemoteImageRequest> generator(io_ctx, &counter);

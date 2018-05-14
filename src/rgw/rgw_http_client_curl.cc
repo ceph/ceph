@@ -21,13 +21,13 @@ class RGWSSLSetup
 {
   std::vector <std::mutex> locks;
 public:
-  RGWSSLSetup(int n) : locks (n){}
+  explicit RGWSSLSetup(int n) : locks (n){}
 
   void set_lock(int id){
     try {
       locks.at(id).lock();
     } catch (std::out_of_range& e) {
-      dout(0) << __func__ << "failed to set locks" << dendl;
+      dout(0) << __func__ << " failed to set locks" << dendl;
     }
   }
 
@@ -35,7 +35,7 @@ public:
     try {
       locks.at(id).unlock();
     } catch (std::out_of_range& e) {
-      dout(0) << __func__ << "failed to unlock" << dendl;
+      dout(0) << __func__ << " failed to unlock" << dendl;
     }
   }
 };

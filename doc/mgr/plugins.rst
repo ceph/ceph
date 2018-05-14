@@ -51,33 +51,107 @@ like this::
         {
             "cmd": "foobar name=myarg,type=CephString",
             "desc": "Do something awesome",
-            "perm": "rw"
+            "perm": "rw",
+            # optional:
+            "poll": "true"
         }
     ]
 
 The ``cmd`` part of each entry is parsed in the same way as internal
 Ceph mon and admin socket commands (see mon/MonCommands.h in
-the Ceph source for examples)
+the Ceph source for examples). Note that the "poll" field is optional,
+and is set to False by default.
 
-Config settings
----------------
+Configuration options
+---------------------
 
-Modules have access to a simple key/value store (keys and values are
-byte strings) for storing configuration.  Don't use this for
-storing large amounts of data.
+Modules can load and store configuration options using the
+``set_config`` and ``get_config`` methods.
 
-Config values are stored using the mon's config-key commands.
+.. note:: Use ``set_config`` and ``get_config`` to manage user-visible
+   configuration options that are not blobs (like certificates). If you want to
+   persist module-internal data or binary configuration data consider using
+   the `KV store`_.
 
-Hints for using these:
+You must declare your available configuration options in the
+``OPTIONS`` class attribute, like this:
 
-* Reads are fast: ceph-mgr keeps a local in-memory copy
-* Don't set things by hand with "ceph config-key", the mgr doesn't update
-  at runtime (only set things from within modules).
-* Writes block until the value is persisted, but reads from another
-  thread will see the new value immediately.
+::
 
-Any config settings you want to expose to users from your module will
-need corresponding hooks in ``COMMANDS`` to expose a setter.
+    OPTIONS = [
+        {
+            "name": "my_option"
+        }
+    ]
+
+If you try to use set_config or get_config on options not declared
+in ``OPTIONS``, an exception will be raised.
+
+You may choose to provide setter commands in your module to perform
+high level validation.  Users can also modify configuration using
+the normal `ceph config set` command, where the configuration options
+for a mgr module are named like `mgr/<module name>/<option>`.
+
+If a configuration option is different depending on which node
+the mgr is running on, then use *localized* configuration (
+``get_localized_config``, ``set_localized_config``).  This may be necessary
+for options such as what address to listen on.  Localized options may
+also be set externally with ``ceph config set``, where they key name
+is like ``mgr/<module name>/<mgr id>/<option>``
+
+If you need to load and store data (e.g. something larger, binary, or multiline),
+use the KV store instead of configuration options (see next section).
+
+Hints for using config options:
+
+* Reads are fast: ceph-mgr keeps a local in-memory copy, so in many cases
+  you can just do a get_config every time you use a option, rather than
+  copying it out into a variable.
+* Writes block until the value is persisted (i.e. round trip to the monitor),
+  but reads from another thread will see the new value immediately.
+* If a user has used `config set` from the command line, then the new
+  value will become visible to `get_config` immediately, although the
+  mon->mgr update is asynchronous, so `config set` will return a fraction
+  of a second before the new value is visible on the mgr.
+
+.. py:currentmodule:: mgr_module
+.. automethod:: MgrModule.get_config
+.. automethod:: MgrModule.set_config
+.. automethod:: MgrModule.get_localized_config
+.. automethod:: MgrModule.set_localized_config
+
+KV store
+--------
+
+Modules have access to a private (per-module) key value store, which
+is implemented using the monitor's "config-key" commands.  Use
+the ``set_store`` and ``get_store`` methods to access the KV store from
+your module.
+
+The KV store commands work in a similar way to the configuration
+commands.  Reads are fast, operating from a local cache.  Writes block
+on persistence and do a round trip to the monitor.
+
+This data can be access from outside of ceph-mgr using the
+``ceph config-key [get|set]`` commands.  Key names follow the same
+conventions as configuration options.  Note that any values updated
+from outside of ceph-mgr will not be seen by running modules until
+the next restart.  Users should be discouraged from accessing module KV
+data externally -- if it is necessary for users to populate data, modules
+should provide special commands to set the data via the module.
+
+Use the ``get_store_prefix`` function to enumerate keys within
+a particular prefix (i.e. all keys starting with a particular substring).
+
+
+.. automethod:: MgrModule.get_store
+.. automethod:: MgrModule.set_store
+.. automethod:: MgrModule.set_store_json
+.. automethod:: MgrModule.get_store_json
+.. automethod:: MgrModule.get_localized_store
+.. automethod:: MgrModule.set_localized_store
+.. automethod:: MgrModule.get_store_prefix
+
 
 Accessing cluster data
 ----------------------
@@ -100,7 +174,6 @@ to cope with the possibility.
 Note that these accessors must not be called in the modules ``__init__``
 function. This will result in a circular locking exception.
 
-.. py:currentmodule:: mgr_module
 .. automethod:: MgrModule.get
 .. automethod:: MgrModule.get_server
 .. automethod:: MgrModule.list_servers
@@ -192,6 +265,15 @@ Shutting down cleanly
 If a module implements the ``serve()`` method, it should also implement
 the ``shutdown()`` method to shutdown cleanly: misbehaving modules
 may otherwise prevent clean shutdown of ceph-mgr.
+
+Limitations
+-----------
+
+It is not possible to call back into C++ code from a module's
+``__init__()`` method.  For example calling ``self.get_config()`` at
+this point will result in an assertion failure in ceph-mgr.  For modules
+that implement the ``serve()`` method, it usually makes sense to do most
+initialization inside that method instead.
 
 Is something missing?
 ---------------------

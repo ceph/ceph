@@ -173,6 +173,7 @@ void ObjectCopyRequest<I>::send_read_object() {
   if (!read_required) {
     // nothing written to this object for this snapshot (must be trunc/remove)
     handle_read_object(0);
+    return;
   }
 
   auto ctx = create_context_callback<
@@ -373,15 +374,16 @@ void ObjectCopyRequest<I>::send_update_object_map() {
       finish_op_ctx->complete(0);
     });
 
-  RWLock::WLocker object_map_locker(m_dst_image_ctx->object_map_lock);
+  m_dst_image_ctx->object_map_lock.get_write();
   bool sent = m_dst_image_ctx->object_map->template aio_update<
     Context, &Context::complete>(dst_snap_id, m_dst_object_number, object_state,
                                  {}, {}, ctx);
+  m_dst_image_ctx->object_map_lock.put_write();
   m_dst_image_ctx->snap_lock.put_read();
   m_dst_image_ctx->owner_lock.put_read();
   if (!sent) {
     assert(dst_snap_id == CEPH_NOSNAP);
-    handle_update_object_map(0);
+    ctx->complete(0);
   }
 }
 

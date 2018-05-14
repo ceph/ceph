@@ -8,6 +8,7 @@
 #include <vector>
 #include <algorithm>
 
+#include "common/likely.h"
 #include "common/subsys_types.h"
 
 #include "include/assert.h"
@@ -74,11 +75,14 @@ public:
 
     if constexpr (LvlV <= 0) {
       // handle the -1 and 0 levels entirely at compile-time.
-      // Such debugs are intended be gathered regardless even
+      // Such debugs are intended to be gathered regardless even
       // of the user configuration.
       return true;
     } else {
-      return LvlV <= static_cast<int>(m_gather_levels[SubV]);
+      // we expect that setting level different than the default
+      // is rather unusual.
+      return expect(LvlV <= static_cast<int>(m_gather_levels[SubV]),
+		    LvlV <= ceph_subsys_get_max_default_level(SubV));
     }
   }
   bool should_gather(const unsigned sub, int level) {

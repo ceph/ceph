@@ -254,7 +254,7 @@ struct Engine {
   int ref_count;
   const bool unlink; //< unlink objects on destruction
 
-  Engine(thread_data* td);
+  explicit Engine(thread_data* td);
   ~Engine();
 
   static Engine* get_instance(thread_data* td) {
@@ -504,8 +504,8 @@ int fio_ceph_os_getevents(thread_data* td, unsigned int min,
 {
   auto job = static_cast<Job*>(td->io_ops_data);
   unsigned int events = 0;
-  io_u* u;
-  unsigned int i;
+  io_u* u = NULL;
+  unsigned int i = 0;
 
   // loop through inflight ios until we find 'min' completions
   do {
@@ -531,7 +531,7 @@ int fio_ceph_os_getevents(thread_data* td, unsigned int min,
 class UnitComplete : public Context {
   io_u* u;
  public:
-  UnitComplete(io_u* u) : u(u) {}
+  explicit UnitComplete(io_u* u) : u(u) {}
   void finish(int r) {
     // mark the pointer to indicate completion for fio_ceph_os_getevents()
     u->engine_data = reinterpret_cast<void*>(1ull);

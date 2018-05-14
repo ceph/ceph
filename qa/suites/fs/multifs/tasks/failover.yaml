@@ -3,6 +3,8 @@ overrides:
     log-whitelist:
       - not responding, replacing
       - \(MDS_INSUFFICIENT_STANDBY\)
+      - \(MDS_ALL_DOWN\)
+      - \(MDS_UP_LESS_THAN_MAX\)
   ceph-fuse:
     disabled: true
 tasks:

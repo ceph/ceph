@@ -6,7 +6,6 @@ import { ChartsModule } from 'ng2-charts';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { SharedModule } from '../../shared/shared.module';
-import { DashboardService } from './dashboard.service';
 import { DashboardComponent } from './dashboard/dashboard.component';
 import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
@@ -31,7 +30,6 @@ import { PgStatusPipe } from './pg-status.pipe';
     MdsSummaryPipe,
     PgStatusStylePipe,
     HealthPieComponent
-  ],
-  providers: [DashboardService]
+  ]
 })
 export class DashboardModule {}

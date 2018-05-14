@@ -6,7 +6,6 @@ import { SharedModule } from '../../shared/shared.module';
 import {
   PerformanceCounterComponent
 } from './performance-counter/performance-counter.component';
-import { TablePerformanceCounterService } from './services/table-performance-counter.service';
 import {
   TablePerformanceCounterComponent
 } from './table-performance-counter/table-performance-counter.component';
@@ -20,9 +19,6 @@ import {
   declarations: [
     TablePerformanceCounterComponent,
     PerformanceCounterComponent
-  ],
-  providers: [
-    TablePerformanceCounterService
   ],
   exports: [
     TablePerformanceCounterComponent

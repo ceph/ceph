@@ -734,9 +734,6 @@ extern int64_t parse_content_length(const char *content_length);
 extern void dump_etag(struct req_state *s,
                       const boost::string_ref& etag,
                       bool quoted = false);
-extern void dump_etag(struct req_state *s,
-                      ceph::buffer::list& bl_etag,
-                      bool quoted = false);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
 extern void dump_last_modified(struct req_state *s, real_time t);

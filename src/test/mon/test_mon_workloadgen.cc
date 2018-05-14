@@ -67,7 +67,7 @@ using namespace std;
 #define dout_subsys ceph_subsys_
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, get_name())
-static ostream& _prefix(std::ostream *_dout, string n) {
+static ostream& _prefix(std::ostream *_dout, const string &n) {
   return *_dout << " stub(" << n << ") ";
 }
 

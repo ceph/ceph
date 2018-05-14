@@ -44,7 +44,7 @@ class AuthAuthorizeHandlerRegistry {
   AuthMethodList supported;
 
 public:
-  AuthAuthorizeHandlerRegistry(CephContext *cct_, std::string methods)
+  AuthAuthorizeHandlerRegistry(CephContext *cct_, const std::string &methods)
     : m_lock("AuthAuthorizeHandlerRegistry::m_lock"), supported(cct_, methods)
   {}
   ~AuthAuthorizeHandlerRegistry();

@@ -43,7 +43,7 @@ private:
   std::string uri;
 
 public:
-  ActivePyModule(PyModuleRef py_module_,
+  ActivePyModule(const PyModuleRef &py_module_,
       LogChannelRef clog_)
     : PyModuleRunner(py_module_, clog_)
   {}

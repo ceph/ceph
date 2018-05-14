@@ -1618,7 +1618,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   if (olh_key == dest_key) {
     /* this is the current head, need to update! */
     cls_rgw_obj_key next_key;
-    bool found;
+    bool found = false;
     ret = obj.find_next_key(&next_key, &found);
     if (ret < 0) {
       CLS_LOG(0, "ERROR: obj.find_next_key() returned ret=%d", ret);
@@ -2292,6 +2292,9 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
   for (iter = keys.begin(); iter != keys.end(); ++iter) {
     if (iter->first >= end_key) {
       /* past the end of plain namespace */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2313,6 +2316,10 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
     CLS_LOG(20, "%s(): entry.idx=%s e.key.name=%s", __func__, escape_str(entry.idx).c_str(), escape_str(e.key.name).c_str());
 
     if (!name.empty() && e.key.name != name) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2375,6 +2382,10 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
     entry.data = iter->second;
 
     if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2391,6 +2402,10 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
     }
 
     if (!name.empty() && e.key.name != name) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2452,6 +2467,10 @@ static int list_olh_entries(cls_method_context_t hctx, const string& name, const
     entry.data = iter->second;
 
     if (!filter.empty() && entry.idx.compare(0, filter.size(), filter) != 0) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2468,6 +2487,10 @@ static int list_olh_entries(cls_method_context_t hctx, const string& name, const
     }
 
     if (!name.empty() && e.key.name != name) {
+      /* we are skipping the rest of the entries */
+      if (pmore) {
+	*pmore = false;
+      }
       return count;
     }
 
@@ -2498,7 +2521,7 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   int32_t max = (op.max < MAX_BI_LIST_ENTRIES ? op.max : MAX_BI_LIST_ENTRIES);
   string start_key = op.marker;
   bool more;
-  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries, &more); 
+  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries, &more);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s(): list_plain_entries returned ret=%d", __func__, ret);
     return ret;
@@ -2916,6 +2939,8 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   string user_key;
   bool truncated_status = false;
 
+  assert(truncated != nullptr);
+
   if (!by_user) {
     usage_record_prefix_by_time(end, end_key);
   } else {
@@ -2938,9 +2963,7 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
   if (ret < 0)
     return ret;
 
-  if (truncated) {
-    *truncated = truncated_status;
-  }
+  *truncated = truncated_status;
       
   map<string, bufferlist>::iterator iter = keys.begin();
   if (iter == keys.end())
@@ -2954,12 +2977,14 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
 
     if (!by_user && key.compare(end_key) >= 0) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+      *truncated = false;
       key_iter = key;
       return 0;
     }
 
     if (by_user && key.compare(0, user_key.size(), user_key) != 0) {
       CLS_LOG(20, "usage_iterate_range reached key=%s, done", key.c_str());
+      *truncated = false;
       key_iter = key;
       return 0;
     }
@@ -2972,8 +2997,10 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
       continue;
 
     /* keys are sorted by epoch, so once we're past end we're done */
-    if (e.epoch >= end)
+    if (e.epoch >= end) {
+      *truncated = false;
       return 0;
+    }
 
     ret = cb(hctx, key, e, param);
     if (ret < 0)
@@ -3036,6 +3063,10 @@ int rgw_user_usage_log_read(cls_method_context_t hctx, bufferlist *in, bufferlis
 
 static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_usage_log_entry& entry, void *param)
 {
+  bool *found = (bool *)param;
+  if (found) {
+    *found = true;
+  }
   string key_by_time;
   string key_by_user;
 
@@ -3071,12 +3102,13 @@ int rgw_user_usage_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlis
 
   string iter;
   bool more;
+  bool found = false;
 #define MAX_USAGE_TRIM_ENTRIES 128
-  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, NULL);
+  ret = usage_iterate_range(hctx, op.start_epoch, op.end_epoch, op.user, iter, MAX_USAGE_TRIM_ENTRIES, &more, usage_log_trim_cb, (void *)&found);
   if (ret < 0)
     return ret;
 
-  if (!more && iter.empty())
+  if (!more && !found)
     return -ENODATA;
 
   return 0;

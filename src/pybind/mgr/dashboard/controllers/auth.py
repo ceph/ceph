@@ -6,8 +6,9 @@ import time
 import bcrypt
 import cherrypy
 
-from ..tools import ApiController, RESTController, Session
+from . import ApiController, RESTController
 from .. import logger, mgr
+from ..tools import Session
 
 
 @ApiController('auth')
@@ -25,7 +26,6 @@ class Auth(RESTController):
       |                           | seconds without activity                  |
     """
 
-    @RESTController.args_from_json
     def create(self, username, password, stay_signed_in=False):
         now = time.time()
         config_username = mgr.get_config('username', None)

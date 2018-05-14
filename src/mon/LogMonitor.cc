@@ -62,7 +62,6 @@ void LogMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
-  memset(&e.who, 0, sizeof(e.who));
   e.name = g_conf->name;
   e.stamp = ceph_clock_now();
   e.prio = CLOG_INFO;
@@ -428,29 +427,57 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 
     // We'll apply this twice, once while counting out lines
     // and once while outputting them.
-    auto match = [level, channel](const LogEntry &entry) {
-      return entry.prio >= level && (entry.channel == channel || channel == "*");
+    auto match = [level](const LogEntry &entry) {
+      return entry.prio >= level;
     };
 
-    auto rp = summary.tail.rbegin();
-    for (; num > 0 && rp != summary.tail.rend(); ++rp) {
-      if (match(*rp)) {
-        num--;
-      }
-    }
-    if (rp == summary.tail.rend()) {
-      --rp;
-    }
     ostringstream ss;
-    for (; rp != summary.tail.rbegin(); --rp) {
-      if (!match(*rp)) {
-        continue;
+    if (channel == "*") {
+      list<LogEntry> full_tail;
+      summary.build_ordered_tail(&full_tail);
+      derr << "full " << full_tail << dendl;
+      auto rp = full_tail.rbegin();
+      for (; num > 0 && rp != full_tail.rend(); ++rp) {
+	if (match(*rp)) {
+	  num--;
+	}
       }
-
-      if (f) {
-	f->dump_object("entry", *rp);
-      } else {
-	ss << *rp << "\n";
+      if (rp == full_tail.rend()) {
+	--rp;
+      }
+      for (; rp != full_tail.rbegin(); --rp) {
+	if (!match(*rp)) {
+	  continue;
+	}
+	if (f) {
+	  f->dump_object("entry", *rp);
+	} else {
+	  ss << *rp << "\n";
+	}
+      }
+    } else {
+      derr << "bar" << dendl;
+      auto p = summary.tail_by_channel.find(channel);
+      if (p != summary.tail_by_channel.end()) {
+	auto rp = p->second.rbegin();
+	for (; num > 0 && rp != p->second.rend(); ++rp) {
+	  if (match(rp->second)) {
+	    num--;
+	  }
+	}
+	if (rp == p->second.rend()) {
+	  --rp;
+	}
+	for (; rp != p->second.rbegin(); --rp) {
+	  if (!match(rp->second)) {
+	    continue;
+	  }
+	  if (f) {
+	    f->dump_object("entry", rp->second);
+	  } else {
+	    ss << rp->second << "\n";
+	  }
+	}
       }
     }
     if (f) {
@@ -563,12 +590,7 @@ void LogMonitor::check_sub(Subscription *s)
 
   if (s->next == 0) { 
     /* First timer, heh? */
-    bool ret = _create_sub_summary(mlog, sub_level);
-    if (!ret) {
-      dout(1) << __func__ << " ret = " << ret << dendl;
-      mlog->put();
-      return;
-    }
+    _create_sub_incremental(mlog, sub_level, get_last_committed());
   } else {
     /* let us send you an incremental log... */
     _create_sub_incremental(mlog, sub_level, s->next);
@@ -587,37 +609,6 @@ void LogMonitor::check_sub(Subscription *s)
     mon->session_map.remove_sub(s);
   else
     s->next = summary_version+1;
-}
-
-/**
- * Create a log message containing only the last message in the summary.
- *
- * @param mlog	Log message we'll send to the client.
- * @param level Maximum log level the client is interested in.
- * @return	'true' if we consider we successfully populated @mlog;
- *		'false' otherwise.
- */
-bool LogMonitor::_create_sub_summary(MLog *mlog, int level)
-{
-  dout(10) << __func__ << dendl;
-
-  assert(mlog != NULL);
-
-  if (!summary.tail.size())
-    return false;
-
-  list<LogEntry>::reverse_iterator it = summary.tail.rbegin();
-  for (; it != summary.tail.rend(); ++it) {
-    LogEntry e = *it;
-    if (e.prio < level)
-      continue;
-
-    mlog->entries.push_back(e);
-    mlog->version = summary.version;
-    break;
-  }
-
-  return true;
 }
 
 /**
@@ -647,7 +638,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
   }
 
   version_t summary_ver = summary.version;
-  while (sv <= summary_ver) {
+  while (sv && sv <= summary_ver) {
     bufferlist bl;
     int err = get_version(sv, bl);
     assert(err == 0);

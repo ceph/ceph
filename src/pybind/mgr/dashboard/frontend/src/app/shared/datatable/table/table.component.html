@@ -3,7 +3,7 @@
        *ngIf="toolHeader">
     <!-- actions -->
     <div class="oadatatableactions">
-      <ng-content select="table-actions"></ng-content>
+      <ng-content select=".table-actions"></ng-content>
     </div>
     <!-- end actions -->
 
@@ -65,7 +65,8 @@
     <!-- end show hide columns -->
 
     <!-- refresh button -->
-    <div class="widget-toolbar tc_refreshBtn">
+    <div class="widget-toolbar tc_refreshBtn"
+         *ngIf="fetchData.observers.length > 0">
       <a (click)="refreshBtn()">
         <i class="fa fa-lg fa-refresh"
            [class.fa-spin]="updating || loadingIndicator"></i>
@@ -113,8 +114,25 @@
   <a [routerLink]="[row.cdLink]">{{ value }}</a>
 </ng-template>
 
+<ng-template #checkIconTpl
+             let-value="value">
+  <i class="fa fa-check fa-fw"
+     [hidden]="!value"></i>
+</ng-template>
+
+
 <ng-template #perSecondTpl
              let-row="row"
              let-value="value">
   {{ value }} /s
+</ng-template>
+
+<ng-template #executingTpl
+             let-row="row"
+             let-value="value">
+  <i class="fa fa-spinner fa-spin fa-fw"
+     *ngIf="row.cdExecuting"></i>
+  {{ value }}
+  <span *ngIf="row.cdExecuting"
+        class="text-muted italic">({{ row.cdExecuting }}... )</span>
 </ng-template>

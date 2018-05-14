@@ -6,8 +6,27 @@ import collections
 from collections import defaultdict
 import json
 
+import rados
+
 from mgr_module import CommandResult
+
+try:
+    from more_itertools import pairwise
+except ImportError:
+    def pairwise(iterable):
+        from itertools import tee
+        a, b = tee(iterable)
+        next(b, None)
+        return zip(a, b)
+
 from .. import logger, mgr
+
+
+class SendCommandError(rados.Error):
+    def __init__(self, err, prefix, argdict, errno):
+        self.prefix = prefix
+        self.argdict = argdict
+        super(SendCommandError, self).__init__(err, errno)
 
 
 class CephService(object):
@@ -90,8 +109,7 @@ class CephService(object):
 
             def get_rate(series):
                 if len(series) >= 2:
-                    return (float(series[0][1]) - float(series[1][1])) / \
-                        (float(series[0][0]) - float(series[1][0]))
+                    return differentiate(*series[0:1])
                 return 0
 
             for stat_name, stat_series in stats.items():
@@ -103,6 +121,14 @@ class CephService(object):
             pool['stats'] = s
             pools_w_stats.append(pool)
         return pools_w_stats
+
+    @classmethod
+    def get_pool_name_from_id(cls, pool_id):
+        pool_list = cls.get_pool_list()
+        for pool in pool_list:
+            if pool['pool'] == pool_id:
+                return pool['pool_name']
+        return None
 
     @classmethod
     def send_command(cls, srv_type, prefix, srv_spec='', **kwargs):
@@ -136,9 +162,40 @@ class CephService(object):
             msg = "send_command '{}' failed. (r={}, outs=\"{}\", kwargs={})".format(prefix, r, outs,
                                                                                     kwargs)
             logger.error(msg)
-            raise ValueError(msg)
+            raise SendCommandError(outs, prefix, argdict, r)
         else:
             try:
                 return json.loads(outb)
             except Exception:  # pylint: disable=broad-except
                 return outb
+
+    @classmethod
+    def get_rates(cls, svc_type, svc_name, path):
+        """
+        :return: the derivative of mgr.get_counter()
+        :rtype: list[tuple[int, float]]"""
+        data = mgr.get_counter(svc_type, svc_name, path)[path]
+        if not data:
+            return [(0, 0)]
+        elif len(data) == 1:
+            return [(data[0][0], 0)]
+        return [(data2[0], differentiate(data1, data2)) for data1, data2 in pairwise(data)]
+
+    @classmethod
+    def get_rate(cls, svc_type, svc_name, path):
+        """returns most recent rate"""
+        data = mgr.get_counter(svc_type, svc_name, path)[path]
+
+        if data and len(data) > 1:
+            return differentiate(*data[-2:])
+        return 0.0
+
+
+def differentiate(data1, data2):
+    """
+    >>> times = [0, 2]
+    >>> values = [100, 101]
+    >>> differentiate(*zip(times, values))
+    0.5
+    """
+    return (data2[1] - data1[1]) / float(data2[0] - data1[0])

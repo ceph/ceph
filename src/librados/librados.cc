@@ -607,22 +607,24 @@ void librados::ObjectReadOperation::cache_evict()
 
 void librados::ObjectWriteOperation::set_redirect(const std::string& tgt_obj, 
 						  const IoCtx& tgt_ioctx,
-						  uint64_t tgt_version)
+						  uint64_t tgt_version,
+						  int flag)
 {
   ::ObjectOperation *o = &impl->o;
   o->set_redirect(object_t(tgt_obj), tgt_ioctx.io_ctx_impl->snap_seq,
-			  tgt_ioctx.io_ctx_impl->oloc, tgt_version);
+			  tgt_ioctx.io_ctx_impl->oloc, tgt_version, flag);
 }
 
 void librados::ObjectWriteOperation::set_chunk(uint64_t src_offset,
 					       uint64_t src_length,
 					       const IoCtx& tgt_ioctx,
 					       string tgt_oid,
-					       uint64_t tgt_offset)
+					       uint64_t tgt_offset,
+					       int flag)
 {
   ::ObjectOperation *o = &impl->o;
   o->set_chunk(src_offset, src_length, 
-	       tgt_ioctx.io_ctx_impl->oloc, object_t(tgt_oid), tgt_offset);
+	       tgt_ioctx.io_ctx_impl->oloc, object_t(tgt_oid), tgt_offset, flag);
 }
 
 void librados::ObjectWriteOperation::tier_promote()
@@ -1500,6 +1502,8 @@ static int translate_flags(int flags)
     op_flags |= CEPH_OSD_FLAG_FULL_FORCE;
   if (flags & librados::OPERATION_IGNORE_REDIRECT)
     op_flags |= CEPH_OSD_FLAG_IGNORE_REDIRECT;
+  if (flags & librados::OPERATION_ORDERSNAP)
+    op_flags |= CEPH_OSD_FLAG_ORDERSNAP;
 
   return op_flags;
 }
@@ -1559,6 +1563,21 @@ int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
   SnapContext snapc(snap_seq, snv);
   return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc,
           snapc, 0, trace_info);
+}
+
+int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+         librados::ObjectWriteOperation *o,
+         snap_t snap_seq, std::vector<snap_t>& snaps, int flags,
+         const blkin_trace_info *trace_info)
+{
+  object_t obj(oid);
+  vector<snapid_t> snv;
+  snv.resize(snaps.size());
+  for (size_t i = 0; i < snaps.size(); ++i)
+    snv[i] = snaps[i];
+  SnapContext snapc(snap_seq, snv);
+  return io_ctx_impl->aio_operate(obj, &o->impl->o, c->pc, snapc,
+                                  translate_flags(flags), trace_info);
 }
 
 int librados::IoCtx::aio_operate(const std::string& oid, AioCompletion *c,

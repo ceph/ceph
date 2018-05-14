@@ -128,6 +128,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         net/openldap-client \
         security/nss \
         archivers/snappy \
+        archivers/liblz4 \
         ftp/curl \
         misc/e2fsprogs-libuuid \
         misc/getopt \
@@ -146,8 +147,10 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
+	www/py-routes \
         www/py-flask \
         www/fcgi \
+	security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
 
@@ -253,7 +256,7 @@ else
 	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
-    opensuse|suse|sles)
+    opensuse|suse|sles|opensuse-tumbleweed)
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install lsb-release systemd-rpm-macros

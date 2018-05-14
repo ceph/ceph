@@ -11,10 +11,13 @@
 
 using namespace rgw::asio;
 
-ClientIO::ClientIO(tcp::socket& socket,
-                   parser_type& parser,
-                   beast::flat_buffer& buffer)
-  : socket(socket), parser(parser), buffer(buffer), txbuf(*this)
+ClientIO::ClientIO(parser_type& parser, bool is_ssl,
+                   const endpoint_type& local_endpoint,
+                   const endpoint_type& remote_endpoint)
+  : parser(parser), is_ssl(is_ssl),
+    local_endpoint(local_endpoint),
+    remote_endpoint(remote_endpoint),
+    txbuf(*this)
 {
 }
 
@@ -77,51 +80,14 @@ int ClientIO::init_env(CephContext *cct)
   env.set("SCRIPT_URI", url.to_string()); /* FIXME */
 
   char port_buf[16];
-  snprintf(port_buf, sizeof(port_buf), "%d", socket.local_endpoint().port());
+  snprintf(port_buf, sizeof(port_buf), "%d", local_endpoint.port());
   env.set("SERVER_PORT", port_buf);
-  env.set("REMOTE_ADDR", socket.remote_endpoint().address().to_string());
-  // TODO: set SERVER_PORT_SECURE if using ssl
+  if (is_ssl) {
+    env.set("SERVER_PORT_SECURE", port_buf);
+  }
+  env.set("REMOTE_ADDR", remote_endpoint.address().to_string());
   // TODO: set REMOTE_USER if authenticated
   return 0;
-}
-
-size_t ClientIO::write_data(const char* buf, size_t len)
-{
-  boost::system::error_code ec;
-  auto bytes = boost::asio::write(socket, boost::asio::buffer(buf, len), ec);
-  if (ec) {
-    derr << "write_data failed: " << ec.message() << dendl;
-    throw rgw::io::Exception(ec.value(), std::system_category());
-  }
-  /* According to the documentation of boost::asio::write if there is
-   * no error (signalised by ec), then bytes == len. We don't need to
-   * take care of partial writes in such situation. */
-  return bytes;
-}
-
-size_t ClientIO::read_data(char* buf, size_t max)
-{
-  auto& message = parser.get();
-  auto& body_remaining = message.body();
-  body_remaining.data = buf;
-  body_remaining.size = max;
-
-  dout(30) << this << " read_data for " << max << " with "
-      << buffer.size() << " bytes buffered" << dendl;
-
-  while (body_remaining.size && !parser.is_done()) {
-    boost::system::error_code ec;
-    beast::http::read_some(socket, buffer, parser, ec);
-    if (ec == beast::http::error::partial_message ||
-        ec == beast::http::error::need_buffer) {
-      break;
-    }
-    if (ec) {
-      derr << "failed to read body: " << ec.message() << dendl;
-      throw rgw::io::Exception(ec.value(), std::system_category());
-    }
-  }
-  return max - body_remaining.size;
 }
 
 size_t ClientIO::complete_request()

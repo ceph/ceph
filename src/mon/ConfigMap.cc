@@ -161,10 +161,50 @@ bool ConfigMap::parse_mask(
     } else {
       type = i;
     }
-    if (str_to_ceph_entity_type(type.c_str()) == CEPH_ENTITY_TYPE_ANY) {
+    if (EntityName::str_to_ceph_entity_type(type) == CEPH_ENTITY_TYPE_ANY) {
       return false;
     }
     *section = i;
   }
   return true;
+}
+
+
+// --------------
+
+void ConfigChangeSet::dump(Formatter *f) const
+{
+  f->dump_int("version", version);
+  f->dump_stream("timestamp") << stamp;
+  f->dump_string("name", name);
+  f->open_array_section("changes");
+  for (auto& i : diff) {
+    f->open_object_section("change");
+    f->dump_string("name", i.first);
+    if (i.second.first) {
+      f->dump_string("previous_value", *i.second.first);
+    }
+    if (i.second.second) {
+      f->dump_string("new_value", *i.second.second);
+    }
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void ConfigChangeSet::print(ostream& out) const
+{
+  out << "--- " << version << " --- " << stamp;
+  if (name.size()) {
+    out << " --- " << name;
+  }
+  out << " ---\n";
+  for (auto& i : diff) {
+    if (i.second.first) {
+      out << "- " << i.first << " = " << *i.second.first << "\n";
+    }
+    if (i.second.second) {
+      out << "+ " << i.first << " = " << *i.second.second << "\n";
+    }
+  }
 }

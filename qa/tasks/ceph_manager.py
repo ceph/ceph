@@ -1384,7 +1384,7 @@ class CephManager:
         assert False
 
     def wait_for_pg_stats(func):
-        # both osd_mon_report_interval_min and mgr_stats_period are 5 seconds
+        # both osd_mon_report_interval and mgr_stats_period are 5 seconds
         # by default, and take the faulty injection in ms into consideration,
         # 12 seconds are more than enough
         delays = [1, 1, 2, 3, 5, 8, 13]
@@ -2091,7 +2091,7 @@ class CephManager:
         """
         return self.get_num_active_down() == self.get_num_pgs()
 
-    def wait_for_clean(self, timeout=None):
+    def wait_for_clean(self, timeout=1200):
         """
         Returns true when all pgs are clean.
         """

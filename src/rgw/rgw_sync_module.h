@@ -43,6 +43,8 @@ public:
 
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
 
+class JSONFormattable;
+
 class RGWSyncModule {
 
 public:
@@ -50,7 +52,7 @@ public:
   virtual ~RGWSyncModule() {}
 
   virtual bool supports_data_export() = 0;
-  virtual int create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) = 0;
+  virtual int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) = 0;
 };
 
 typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
@@ -93,7 +95,7 @@ public:
     return module.get()->supports_data_export();
   }
 
-  int create_instance(CephContext *cct, const string& name, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
+  int create_instance(CephContext *cct, const string& name, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
     RGWSyncModuleRef module;
     if (!get_module(name, &module)) {
       return -ENOENT;
@@ -122,7 +124,9 @@ protected:
 
   ceph::real_time mtime;
   uint64_t size = 0;
+  string etag;
   map<string, bufferlist> attrs;
+  map<string, string> headers;
 public:
   RGWStatRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                        RGWBucketInfo& _bucket_info, rgw_obj_key& _key);
@@ -130,17 +134,23 @@ public:
 
   void set_result(ceph::real_time& _mtime,
                   uint64_t _size,
-                  map<string, bufferlist>&& _attrs) {
+                  const string& _etag,
+                  map<string, bufferlist>&& _attrs,
+                  map<string, string>&& _headers) {
     mtime = _mtime;
     size = _size;
+    etag = _etag;
     attrs = std::move(_attrs);
+    headers = std::move(_headers);
   }
 };
 
 class RGWCallStatRemoteObjCR : public RGWCoroutine {
   ceph::real_time mtime;
   uint64_t size{0};
+  string etag;
   map<string, bufferlist> attrs;
+  map<string, string> headers;
 
 protected:
   RGWDataSyncEnv *sync_env;

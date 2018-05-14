@@ -28,7 +28,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, ReplicatedBackend *pgb) {
-  return *_dout << pgb->get_parent()->gen_dbg_prefix();
+  return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
 
 namespace {
@@ -100,7 +100,7 @@ static void log_subop_stats(
 
 ReplicatedBackend::ReplicatedBackend(
   PGBackend::Listener *pg,
-  coll_t coll,
+  const coll_t &coll,
   ObjectStore::CollectionHandle &c,
   ObjectStore *store,
   CephContext *cct) :
@@ -821,7 +821,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     t.register_on_complete(
       new PG_RecoveryQueueAsync(
 	get_parent(),
-	get_parent()->bless_gencontext(c)));
+	get_parent()->bless_unlocked_gencontext(c)));
   }
   replies.erase(replies.end() - 1);
 

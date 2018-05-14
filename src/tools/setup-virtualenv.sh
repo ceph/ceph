@@ -17,6 +17,11 @@
 
 SCRIPTNAME="$(basename $0)"
 PYTHON_BINARY="python2.7"
+if [ `uname` == FreeBSD ]; then
+    GETOPT="/usr/local/bin/getopt"
+else
+    GETOPT=getopt
+fi
 
 function usage {
     echo
@@ -33,7 +38,7 @@ function usage {
     exit 1
 }
 
-TEMP=$(getopt --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
+TEMP=$($GETOPT --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
 test $? != 0 && usage
 eval set -- "$TEMP"
 
@@ -79,7 +84,7 @@ if test -d wheelhouse ; then
     export NO_INDEX=--no-index
 fi
 
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse 'tox >=1.9'
+pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse 'tox >=2.9.1'
 if test -f requirements.txt ; then
     pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse -r requirements.txt
 fi

@@ -58,7 +58,7 @@ int InstanceReplayer<I>::init() {
 
 template <typename I>
 void InstanceReplayer<I>::init(Context *on_finish) {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *ctx = new FunctionContext(
     [this, on_finish] (int r) {
@@ -82,7 +82,7 @@ void InstanceReplayer<I>::shut_down() {
 
 template <typename I>
 void InstanceReplayer<I>::shut_down(Context *on_finish) {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -101,7 +101,7 @@ void InstanceReplayer<I>::shut_down(Context *on_finish) {
 template <typename I>
 void InstanceReplayer<I>::add_peer(std::string peer_uuid,
                                    librados::IoCtx io_ctx) {
-  dout(20) << peer_uuid << dendl;
+  dout(10) << peer_uuid << dendl;
 
   Mutex::Locker locker(m_lock);
   auto result = m_peers.insert(Peer(peer_uuid, io_ctx)).second;
@@ -110,7 +110,7 @@ void InstanceReplayer<I>::add_peer(std::string peer_uuid,
 
 template <typename I>
 void InstanceReplayer<I>::release_all(Context *on_finish) {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -133,7 +133,7 @@ template <typename I>
 void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
                                         const std::string &global_image_id,
                                         Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << dendl;
+  dout(10) << "global_image_id=" << global_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -145,7 +145,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
         m_threads, instance_watcher, m_local_rados,
         m_local_mirror_uuid, m_local_pool_id, global_image_id);
 
-    dout(20) << global_image_id << ": creating replayer " << image_replayer
+    dout(10) << global_image_id << ": creating replayer " << image_replayer
              << dendl;
 
     it = m_image_replayers.insert(std::make_pair(global_image_id,
@@ -168,14 +168,14 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
 template <typename I>
 void InstanceReplayer<I>::release_image(const std::string &global_image_id,
                                         Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << dendl;
+  dout(10) << "global_image_id=" << global_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
   assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
   if (it == m_image_replayers.end()) {
-    dout(20) << global_image_id << ": not found" << dendl;
+    dout(5) << global_image_id << ": not found" << dendl;
     m_threads->work_queue->queue(on_finish, 0);
     return;
   }
@@ -195,7 +195,7 @@ template <typename I>
 void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
                                             const std::string &peer_mirror_uuid,
                                             Context *on_finish) {
-  dout(20) << "global_image_id=" << global_image_id << ", "
+  dout(10) << "global_image_id=" << global_image_id << ", "
            << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
 
   Mutex::Locker locker(m_lock);
@@ -215,7 +215,7 @@ void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
 
 template <typename I>
 void InstanceReplayer<I>::print_status(Formatter *f, stringstream *ss) {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   if (!f) {
     return;
@@ -234,7 +234,7 @@ void InstanceReplayer<I>::print_status(Formatter *f, stringstream *ss) {
 template <typename I>
 void InstanceReplayer<I>::start()
 {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -249,7 +249,7 @@ void InstanceReplayer<I>::start()
 template <typename I>
 void InstanceReplayer<I>::stop()
 {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -264,7 +264,7 @@ void InstanceReplayer<I>::stop()
 template <typename I>
 void InstanceReplayer<I>::restart()
 {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -279,7 +279,7 @@ void InstanceReplayer<I>::restart()
 template <typename I>
 void InstanceReplayer<I>::flush()
 {
-  dout(20) << "enter" << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -295,7 +295,7 @@ void InstanceReplayer<I>::start_image_replayer(
   assert(m_lock.is_locked());
 
   std::string global_image_id = image_replayer->get_global_image_id();
-  dout(20) << "global_image_id=" << global_image_id << dendl;
+  dout(10) << "global_image_id=" << global_image_id << dendl;
 
   if (!image_replayer->is_stopped()) {
     return;
@@ -316,7 +316,7 @@ void InstanceReplayer<I>::start_image_replayer(
 
 template <typename I>
 void InstanceReplayer<I>::queue_start_image_replayers() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *ctx = create_context_callback<
     InstanceReplayer, &InstanceReplayer<I>::start_image_replayers>(this);
@@ -326,7 +326,7 @@ void InstanceReplayer<I>::queue_start_image_replayers() {
 
 template <typename I>
 void InstanceReplayer<I>::start_image_replayers(int r) {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Mutex::Locker locker(m_lock);
   if (m_on_shut_down != nullptr) {
@@ -365,7 +365,7 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
 template <typename I>
 void InstanceReplayer<I>::stop_image_replayer(ImageReplayer<I> *image_replayer,
                                               Context *on_finish) {
-  dout(20) << image_replayer << " global_image_id="
+  dout(10) << image_replayer << " global_image_id="
            << image_replayer->get_global_image_id() << ", on_finish="
            << on_finish << dendl;
 
@@ -386,7 +386,7 @@ void InstanceReplayer<I>::stop_image_replayer(ImageReplayer<I> *image_replayer,
     image_replayer->stop(ctx, false);
   } else {
     int after = 1;
-    dout(20) << "scheduling image replayer " << image_replayer << " stop after "
+    dout(10) << "scheduling image replayer " << image_replayer << " stop after "
              << after << " sec (task " << ctx << ")" << dendl;
     ctx = new FunctionContext(
       [this, after, ctx] (int r) {
@@ -399,7 +399,7 @@ void InstanceReplayer<I>::stop_image_replayer(ImageReplayer<I> *image_replayer,
 
 template <typename I>
 void InstanceReplayer<I>::wait_for_ops() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   Context *ctx = create_context_callback<
     InstanceReplayer, &InstanceReplayer<I>::handle_wait_for_ops>(this);
@@ -409,7 +409,7 @@ void InstanceReplayer<I>::wait_for_ops() {
 
 template <typename I>
 void InstanceReplayer<I>::handle_wait_for_ops(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   assert(r == 0);
 
@@ -419,7 +419,7 @@ void InstanceReplayer<I>::handle_wait_for_ops(int r) {
 
 template <typename I>
 void InstanceReplayer<I>::stop_image_replayers() {
-  dout(20) << dendl;
+  dout(10) << dendl;
 
   assert(m_lock.is_locked());
 
@@ -436,7 +436,7 @@ void InstanceReplayer<I>::stop_image_replayers() {
 
 template <typename I>
 void InstanceReplayer<I>::handle_stop_image_replayers(int r) {
-  dout(20) << "r=" << r << dendl;
+  dout(10) << "r=" << r << dendl;
 
   assert(r == 0);
 
@@ -464,7 +464,7 @@ void InstanceReplayer<I>::cancel_image_state_check_task() {
     return;
   }
 
-  dout(20) << m_image_state_check_task << dendl;
+  dout(10) << m_image_state_check_task << dendl;
   bool canceled = m_threads->timer->cancel_event(m_image_state_check_task);
   assert(canceled);
   m_image_state_check_task = nullptr;
@@ -486,7 +486,7 @@ void InstanceReplayer<I>::schedule_image_state_check_task() {
   int after = g_ceph_context->_conf->get_val<int64_t>(
     "rbd_mirror_image_state_check_interval");
 
-  dout(20) << "scheduling image state check after " << after << " sec (task "
+  dout(10) << "scheduling image state check after " << after << " sec (task "
            << m_image_state_check_task << ")" << dendl;
   m_threads->timer->add_event_after(after, m_image_state_check_task);
 }

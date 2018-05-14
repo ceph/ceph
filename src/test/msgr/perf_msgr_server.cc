@@ -113,7 +113,7 @@ class MessengerServer {
   ServerDispatcher dispatcher;
 
  public:
-  MessengerServer(string t, string addr, int threads, int delay):
+  MessengerServer(const string &t, const string &addr, int threads, int delay):
       msgr(NULL), type(t), bindaddr(addr), dispatcher(threads, delay) {
     msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0, 0);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));

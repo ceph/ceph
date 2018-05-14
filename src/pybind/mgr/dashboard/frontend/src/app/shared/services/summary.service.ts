@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 
 import { Subject } from 'rxjs/Subject';
 
@@ -13,7 +13,11 @@ export class SummaryService {
   // Observable streams
   summaryData$ = this.summaryDataSource.asObservable();
 
-  constructor(private http: HttpClient, private authStorageService: AuthStorageService) {
+  constructor(
+    private http: HttpClient,
+    private authStorageService: AuthStorageService,
+    private ngZone: NgZone
+  ) {
     this.refresh();
   }
 
@@ -24,8 +28,18 @@ export class SummaryService {
       });
     }
 
-    setTimeout(() => {
-      this.refresh();
-    }, 5000);
+    this.ngZone.runOutsideAngular(() => {
+      setTimeout(() => {
+        this.ngZone.run(() => {
+          this.refresh();
+        });
+      }, 5000);
+    });
+  }
+
+  get() {
+    return this.http.get('api/summary').toPromise().then((resp: any) => {
+      return resp;
+    });
   }
 }

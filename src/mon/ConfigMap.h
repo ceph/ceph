@@ -7,6 +7,7 @@
 #include <ostream>
 #include <string>
 
+#include "include/utime.h"
 #include "common/options.h"
 #include "common/entity_name.h"
 
@@ -124,4 +125,17 @@ struct ConfigMap {
     const std::string& in,
     std::string *section,
     OptionMask *mask);
+};
+
+
+struct ConfigChangeSet {
+  version_t version;
+  utime_t stamp;
+  string name;
+
+  // key -> (old value, new value)
+  map<string,pair<boost::optional<string>,boost::optional<string>>> diff;
+
+  void dump(Formatter *f) const;
+  void print(ostream& out) const;
 };

@@ -202,6 +202,7 @@ protected:
    */
 
   mds_rank_t max_mds; /* The maximum number of active MDSes. Also, the maximum rank. */
+  mds_rank_t old_max_mds; /* Value to restore when MDS cluster is marked up */
   mds_rank_t standby_count_wanted;
   string balancer;    /* The name/version of the mantle balancer (i.e. the rados obj name) */
 
@@ -238,6 +239,7 @@ public:
       cas_pool(-1),
       metadata_pool(-1),
       max_mds(1),
+      old_max_mds(0),
       standby_count_wanted(-1),
       ever_allowed_features(0),
       explicitly_allowed_features(0),
@@ -279,22 +281,15 @@ public:
   }
   void clear_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   bool allows_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
+  bool was_snaps_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_ALLOW_SNAPS; }
 
-  void set_multimds_allowed() {
-    set_flag(CEPH_MDSMAP_ALLOW_MULTIMDS);
-    ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS;
-    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS;
+  void set_multimds_snaps_allowed() {
+    set_flag(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS);
+    ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS;
+    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS;
   }
-  void clear_multimds_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_MULTIMDS); }
-  bool allows_multimds() const { return test_flag(CEPH_MDSMAP_ALLOW_MULTIMDS); }
-
-  void set_dirfrags_allowed() {
-    set_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS);
-    ever_allowed_features |= CEPH_MDSMAP_ALLOW_DIRFRAGS;
-    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_DIRFRAGS;
-  }
-  void clear_dirfrags_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS); }
-  bool allows_dirfrags() const { return test_flag(CEPH_MDSMAP_ALLOW_DIRFRAGS); }
+  void clear_multimds_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS); }
+  bool allows_multimds_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS); }
 
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
@@ -311,6 +306,8 @@ public:
 
   mds_rank_t get_max_mds() const { return max_mds; }
   void set_max_mds(mds_rank_t m) { max_mds = m; }
+  void set_old_max_mds() { old_max_mds = max_mds; }
+  mds_rank_t get_old_max_mds() const { return old_max_mds; }
 
   mds_rank_t get_standby_count_wanted(mds_rank_t standby_daemon_count) const {
     assert(standby_daemon_count >= 0);
@@ -508,6 +505,17 @@ public:
    * to mount.
    */
   availability_t is_cluster_available() const;
+
+  /**
+   * Return whether this MDSMap is suitable for resizing based on the state
+   * of the ranks.
+   */
+  bool is_resizeable() const {
+    return !is_degraded() &&
+        get_num_mds(CEPH_MDS_STATE_CREATING) == 0 &&
+        get_num_mds(CEPH_MDS_STATE_STARTING) == 0 &&
+        get_num_mds(CEPH_MDS_STATE_STOPPING) == 0;
+  }
 
   // mds states
   bool is_down(mds_rank_t m) const { return up.count(m) == 0; }

@@ -1,8 +1,8 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { HostService } from '../../../shared/api/host.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
-import { HostService } from '../../../shared/services/host.service';
 
 @Component({
   selector: 'cd-hosts',

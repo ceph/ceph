@@ -1,28 +1,31 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import unittest
+
 import cherrypy
 from cherrypy.lib.sessions import RamSession
 from mock import patch
 
+from ..services.exception import handle_rados_error
 from .helper import ControllerTestCase
-from ..tools import RESTController, ApiController
+from ..controllers import RESTController, ApiController, BaseController
+from ..tools import is_valid_ipv6_address, dict_contains_path
 
 
-# pylint: disable=W0613
 @ApiController('foo')
 class FooResource(RESTController):
     elems = []
 
-    def list(self, *vpath, **params):
+    def list(self):
         return FooResource.elems
 
-    def create(self, data, *args, **kwargs):
-        FooResource.elems.append(data)
-        return data
+    def create(self, a):
+        FooResource.elems.append({'a': a})
+        return {'a': a}
 
-    def get(self, key, *args, **kwargs):
-        return {'detail': (key, args)}
+    def get(self, key):
+        return {'detail': (key, [])}
 
     def delete(self, key):
         del FooResource.elems[int(key)]
@@ -30,19 +33,38 @@ class FooResource(RESTController):
     def bulk_delete(self):
         FooResource.elems = []
 
-    def set(self, data, key):
-        FooResource.elems[int(key)] = data
-        return dict(key=key, **data)
+    def set(self, key, newdata):
+        FooResource.elems[int(key)] = {'newdata': newdata}
+        return dict(key=key, newdata=newdata)
+
+
+@ApiController('foo/:key/:method')
+class FooResourceDetail(RESTController):
+    def list(self, key, method):
+        return {'detail': (key, [method])}
+
+
+@ApiController('rgw/proxy/{path:.*}')
+class GenerateControllerRoutesController(BaseController):
+    @cherrypy.expose
+    def __call__(self, path, **params):
+        pass
 
 
 @ApiController('fooargs')
 class FooArgs(RESTController):
-    @RESTController.args_from_json
-    def set(self, code, name, opt1=None, opt2=None):
+    def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}
 
+    @handle_rados_error('foo')
+    def create(self, my_arg_name):
+        return my_arg_name
 
-# pylint: disable=C0102
+    def list(self):
+        raise cherrypy.NotFound()
+
+
+# pylint: disable=blacklisted-name
 class Root(object):
     foo = FooResource()
     fooargs = FooArgs()
@@ -52,7 +74,8 @@ class RESTControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
-        cherrypy.tree.mount(Root())
+        cls.setup_controllers(
+            [FooResource, FooResourceDetail, FooArgs, GenerateControllerRoutesController])
 
     def test_empty(self):
         self._delete("/foo")
@@ -84,11 +107,11 @@ class RESTControllerTest(ControllerTestCase):
 
     def test_not_implemented(self):
         self._put("/foo")
-        self.assertStatus(405)
+        self.assertStatus(404)
         body = self.jsonBody()
         self.assertIsInstance(body, dict)
-        assert body['detail'] == 'Method not implemented.'
-        assert '405' in body['status']
+        assert body['detail'] == "The path '/foo' was not found."
+        assert '404' in body['status']
         assert 'traceback' in body
 
     def test_args_from_json(self):
@@ -112,7 +135,7 @@ class RESTControllerTest(ControllerTestCase):
         self.assertJsonBody({'detail': ['1', ['detail']]})
 
         self._post('/foo/1/detail', 'post-data')
-        self.assertStatus(405)
+        self.assertStatus(404)
 
     def test_developer_page(self):
         self.getPage('/foo', headers=[('Accept', 'text/html')])
@@ -126,8 +149,33 @@ class RESTControllerTest(ControllerTestCase):
         self.getPage('/foo',
                      headers=[('Accept', 'text/html'), ('Content-Length', '0')],
                      method='put')
-        assert '<p>PUT' in self.body.decode('utf-8')
-        assert 'Exception' in self.body.decode('utf-8')
-        assert 'Content-Type: text/html' in self.body.decode('utf-8')
-        assert '<form action="/api/foo/" method="post">' in self.body.decode('utf-8')
-        assert '<input type="hidden" name="_method" value="post" />' in self.body.decode('utf-8')
+        self.assertStatus(404)
+
+    def test_create_form(self):
+        self.getPage('/fooargs', headers=[('Accept', 'text/html')])
+        self.assertIn('my_arg_name', self.body.decode('utf-8'))
+
+    def test_generate_controller_routes(self):
+        # We just need to add this controller in setup_server():
+        # noinspection PyStatementEffect
+        # pylint: disable=pointless-statement
+        GenerateControllerRoutesController
+
+
+class TestFunctions(unittest.TestCase):
+
+    def test_is_valid_ipv6_address(self):
+        self.assertTrue(is_valid_ipv6_address('::'))
+        self.assertTrue(is_valid_ipv6_address('::1'))
+        self.assertFalse(is_valid_ipv6_address('127.0.0.1'))
+        self.assertFalse(is_valid_ipv6_address('localhost'))
+        self.assertTrue(is_valid_ipv6_address('1200:0000:AB00:1234:0000:2552:7777:1313'))
+        self.assertFalse(is_valid_ipv6_address('1200::AB00:1234::2552:7777:1313'))
+
+    def test_dict_contains_path(self):
+        x = {'a': {'b': {'c': 'foo'}}}
+        self.assertTrue(dict_contains_path(x, ['a', 'b', 'c']))
+        self.assertTrue(dict_contains_path(x, ['a', 'b', 'c']))
+        self.assertTrue(dict_contains_path(x, ['a']))
+        self.assertFalse(dict_contains_path(x, ['a', 'c']))
+        self.assertTrue(dict_contains_path(x, []))

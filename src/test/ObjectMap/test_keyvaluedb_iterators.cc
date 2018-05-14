@@ -93,8 +93,8 @@ public:
   ::testing::AssertionResult validate_iterator(
 				KeyValueDB::WholeSpaceIterator it,
 				string expected_prefix,
-				string expected_key,
-				string expected_value) {
+				const string &expected_key,
+				const string &expected_value) {
     if (!it->valid()) {
       return ::testing::AssertionFailure()
 	      << __func__
@@ -214,13 +214,13 @@ public:
     return str;
   }
 
-  string _gen_val_str(string key) {
+  string _gen_val_str(const string &key) {
     ostringstream ss;
     ss << "##value##" << key << "##";
     return ss.str();
  }
 
-  bufferlist _gen_val(string key) {
+  bufferlist _gen_val(const string &key) {
     bufferlist bl;
     bl.append(_gen_val_str(key));
     return bl;

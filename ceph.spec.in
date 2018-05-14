@@ -140,6 +140,7 @@ BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
+BuildRequires:	liboath-devel
 BuildRequires:	libtool
 BuildRequires:	libxml2-devel
 BuildRequires:	libuuid-devel
@@ -189,6 +190,7 @@ BuildRequires:	python%{_python_buildid}-Cython
 BuildRequires:	python%{_python_buildid}-PrettyTable
 BuildRequires:	python%{_python_buildid}-Sphinx
 BuildRequires:  rdma-core-devel
+BuildRequires:	liblz4-devel >= 1.7
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
@@ -204,6 +206,7 @@ BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython%{_python_buildid}
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
+BuildRequires:	lz4-devel >= 1.7
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
 %if 0%{?rhel}
@@ -219,6 +222,7 @@ BuildRequires:	python3-Cython
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	python%{_python_buildid}-cherrypy
+BuildRequires:	python%{_python_buildid}-routes
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-werkzeug
 BuildRequires:	python%{_python_buildid}-tox
@@ -232,6 +236,7 @@ BuildRequires:	py-bcrypt
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python%{_python_buildid}-CherryPy
+BuildRequires:	python%{_python_buildid}-Routes
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-numpy-devel
@@ -284,17 +289,23 @@ Requires:      librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:      ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
 Requires:      cryptsetup
+Requires:      e2fsprogs
 Requires:      findutils
 Requires:      grep
 Requires:      logrotate
+Requires:      parted
 Requires:      psmisc
 Requires:      python%{_python_buildid}-requests
 Requires:      python%{_python_buildid}-setuptools
 Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
+%if 0%{?fedora} || 0%{?rhel}
+Requires:      gdisk
+%endif
 %if 0%{?suse_version}
 Recommends:    chrony
+Requires:      gptfdisk
 %endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
@@ -358,6 +369,7 @@ Group:          System/Filesystems
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
+Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-jinja2
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-werkzeug
@@ -371,6 +383,7 @@ Requires:	py-bcrypt
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
+Requires:       python%{_python_buildid}-Routes
 Requires:       python%{_python_buildid}-Jinja2
 Requires:       python%{_python_buildid}-Werkzeug
 Requires:       python%{_python_buildid}-pecan
@@ -464,14 +477,6 @@ Summary:	Ceph Object Storage Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-# for sgdisk, used by ceph-disk
-%if 0%{?fedora} || 0%{?rhel}
-Requires:	gdisk
-%endif
-%if 0%{?suse_version}
-Requires:	gptfdisk
-%endif
-Requires:	parted
 Requires:	lvm2
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
@@ -855,7 +860,6 @@ done
 # the following setting fixed an OOM condition we once encountered in the OBS
 RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %endif
-export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
 export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
@@ -896,7 +900,6 @@ cmake .. \
     -DCMAKE_INSTALL_MANDIR=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
-    -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=ON \
     -DWITH_MGR_DASHBOARD_FRONTEND=OFF \

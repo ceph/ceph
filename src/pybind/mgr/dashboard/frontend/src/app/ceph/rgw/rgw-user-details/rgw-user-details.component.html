@@ -1,0 +1,148 @@
+<tabset *ngIf="selection.hasSingleSelection">
+  <tab i18n-heading heading="Details">
+    <div *ngIf="user">
+      <table class="table table-striped table-bordered">
+        <tbody>
+          <tr>
+            <td i18n
+                class="bold col-sm-1">Username</td>
+            <td class="col-sm-3">{{ user.user_id }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold col-sm-1">Full name</td>
+            <td class="col-sm-3">{{ user.display_name }}</td>
+          </tr>
+          <tr *ngIf="user.email.length">
+            <td i18n
+                class="bold col-sm-1">Email address</td>
+            <td class="col-sm-3">{{ user.email }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold col-sm-1">Suspended</td>
+            <td class="col-sm-3">{{ user.suspended ? "Yes" : "No" }}</td>
+          </tr>
+          <tr>
+            <td i18n
+                class="bold col-sm-1">Maximum buckets</td>
+            <td class="col-sm-3">{{ user.max_buckets }}</td>
+          </tr>
+          <tr *ngIf="user.subusers && user.subusers.length">
+            <td i18n
+                class="bold col-sm-1">Subusers</td>
+            <td class="col-sm-3">
+              <div *ngFor="let subuser of user.subusers">
+                {{ subuser.id }} ({{ subuser.permissions }})
+              </div>
+            </td>
+          </tr>
+          <tr *ngIf="user.caps && user.caps.length">
+            <td i18n
+                class="bold col-sm-1">Capabilities</td>
+            <td class="col-sm-3">
+              <div *ngFor="let cap of user.caps">
+                {{ cap.type }} ({{ cap.perm }})
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- User quota -->
+      <div *ngIf="user.user_quota">
+        <legend i18n>User quota</legend>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr>
+              <td i18n
+                  class="bold col-sm-1">Enabled</td>
+              <td class="col-sm-3">{{ user.user_quota.enabled ? "Yes" : "No" }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold col-sm-1">Maximum size</td>
+              <td *ngIf="user.user_quota.max_size <= -1"
+                  i18n
+                  class="col-sm-3">Unlimited</td>
+              <td *ngIf="user.user_quota.max_size > -1"
+                  class="col-sm-3">
+                {{ user.user_quota.max_size | dimlessBinary }}
+              </td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold col-sm-1">Maximum objects</td>
+              <td *ngIf="user.user_quota.max_objects <= -1"
+                  i18n
+                  class="col-sm-3">Unlimited</td>
+              <td *ngIf="user.user_quota.max_objects > -1"
+                  class="col-sm-3">
+                {{ user.user_quota.max_objects }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Bucket quota -->
+      <div *ngIf="user.bucket_quota">
+        <legend i18n>Bucket quota</legend>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr>
+              <td i18n
+                  class="bold col-sm-1">Enabled</td>
+              <td class="col-sm-3">{{ user.bucket_quota.enabled ? "Yes" : "No" }}</td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold col-sm-1">Maximum size</td>
+              <td *ngIf="user.bucket_quota.max_size <= -1"
+                  i18n
+                  class="col-sm-3">Unlimited</td>
+              <td *ngIf="user.bucket_quota.max_size > -1"
+                  class="col-sm-3">
+                {{ user.bucket_quota.max_size | dimlessBinary }}
+              </td>
+            </tr>
+            <tr>
+              <td i18n
+                  class="bold col-sm-1">Maximum objects</td>
+              <td *ngIf="user.bucket_quota.max_objects <= -1"
+                  i18n
+                  class="col-sm-3">Unlimited</td>
+              <td *ngIf="user.bucket_quota.max_objects > -1"
+                  class="col-sm-3">
+                {{ user.bucket_quota.max_objects }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </tab>
+
+  <tab i18n-heading heading="Keys">
+    <form class="form-horizontal">
+      <cd-table [data]="keys"
+                [columns]="keysColumns"
+                columnMode="flex"
+                selectionType="multi"
+                forceIdentifier="true"
+                (updateSelection)="updateKeysSelection($event)">
+        <div class="table-actions">
+          <div class="btn-group" dropdown>
+            <button type="button"
+                    class="btn btn-sm btn-primary"
+                    [disabled]="!keysSelection.hasSingleSelection"
+                    (click)="showKeyModal()">
+              <i class="fa fa-eye"></i>
+              <ng-container i18n>Show</ng-container>
+            </button>
+          </div>
+        </div>
+      </cd-table>
+    </form>
+  </tab>
+</tabset>

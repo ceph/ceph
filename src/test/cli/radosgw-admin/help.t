@@ -131,9 +131,6 @@
     opstate set                set state on an entry (use client_id, op_id, object, state)
     opstate renew              renew state on an entry (use client_id, op_id, object)
     opstate rm                 remove entry (use client_id, op_id, object)
-    replicalog get             get replica metadata log entry
-    replicalog update          update replica metadata log entry
-    replicalog rm              remove replica metadata log entry
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
     orphans list-jobs          list the current job-ids for orphans search
@@ -178,11 +175,12 @@
      --start-date=<date>       start date in the format yyyy-mm-dd
      --end-date=<date>         end date in the format yyyy-mm-dd
      --bucket-id=<bucket-id>   bucket id
-     --shard-id=<shard-id>     optional for mdlog list
+     --shard-id=<shard-id>     optional for: 
+                                 mdlog list
+                                 data sync status
                                required for: 
                                  mdlog trim
-                                 replica mdlog get/delete
-                                 replica datalog get/delete
+     --max-entries=<entries>   max entries for listing operations
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
      --period=<id>             period id
@@ -239,15 +237,13 @@
                                (NOTE: required to delete a non-empty bucket)
      --sync-stats              option to 'user stats', update user stats with current
                                stats reported by user's buckets indexes
+     --reset-stats             option to 'user stats', reset stats in accordance with user buckets
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --infile=<file>           specify a file to read in when setting data
      --state=<state>           specify a state for the opstate set command
-     --replica-log-type=<logtypestr>
-                               replica log type (metadata, data, bucket), required for
-                               replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations

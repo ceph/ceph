@@ -23,7 +23,7 @@ TEST(HTTPManager, SignalThread)
   auto cct = g_ceph_context;
   RGWHTTPManager http(cct);
 
-  ASSERT_EQ(0, http.set_threaded());
+  ASSERT_EQ(0, http.start());
 
   // default pipe buffer size according to man pipe
   constexpr size_t max_pipe_buffer_size = 65536;
@@ -38,8 +38,8 @@ TEST(HTTPManager, SignalThread)
   constexpr size_t num_requests = max_requests + 1;
 
   for (size_t i = 0; i < num_requests; i++) {
-    RGWHTTPClient client{cct};
-    http.add_request(&client, "PUT", "http://127.0.0.1:80");
+    RGWHTTPClient client{cct, "PUT", "http://127.0.0.1:80"};
+    http.add_request(&client);
   }
 }
 
@@ -53,9 +53,11 @@ int main(int argc, char** argv)
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
-  curl_global_init(CURL_GLOBAL_ALL);
+  rgw_http_client_init(cct->get());
+  rgw_setup_saved_curl_handles();
   ::testing::InitGoogleTest(&argc, argv);
   int r = RUN_ALL_TESTS();
-  curl_global_cleanup();
+  rgw_release_all_curl_handles();
+  rgw_http_client_cleanup();
   return r;
 }

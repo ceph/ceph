@@ -5,10 +5,11 @@ from collections import defaultdict
 
 import cherrypy
 
-from ..services.ceph_service import CephService
-
+from ..exceptions import DashboardException
+from . import ApiController, AuthRequired, BaseController
 from .. import mgr
-from ..tools import ApiController, AuthRequired, BaseController, ViewCache
+from ..services.ceph_service import CephService
+from ..tools import ViewCache
 
 
 @ApiController('cephfs')
@@ -80,7 +81,9 @@ class CephFS(BaseController):
         try:
             return int(fs_id)
         except ValueError:
-            raise cherrypy.HTTPError(400, "Invalid cephfs id {}".format(fs_id))
+            raise DashboardException(code='invalid_cephfs_id',
+                                     msg="Invalid cephfs id {}".format(fs_id),
+                                     component='cephfs')
 
     def _get_mds_names(self, filesystem_id=None):
         names = []
@@ -97,15 +100,7 @@ class CephFS(BaseController):
 
         return names
 
-    def get_rate(self, daemon_type, daemon_name, stat):
-        data = mgr.get_counter(daemon_type, daemon_name, stat)[stat]
-
-        if data and len(data) > 1:
-            return (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
-
-        return 0
-
-    # pylint: disable=too-many-locals,too-many-statements,too-many-branches
+    # pylint: disable=too-many-statements,too-many-branches
     def fs_status(self, fs_id):
         mds_versions = defaultdict(list)
 
@@ -131,17 +126,17 @@ class CephFS(BaseController):
             if up:
                 gid = mdsmap['up']["mds_{0}".format(rank)]
                 info = mdsmap['info']['gid_{0}'.format(gid)]
-                dns = self.get_latest("mds", info['name'], "mds.inodes")
-                inos = self.get_latest("mds", info['name'], "mds_mem.ino")
+                dns = mgr.get_latest("mds", info['name'], "mds.inodes")
+                inos = mgr.get_latest("mds", info['name'], "mds_mem.ino")
 
                 if rank == 0:
-                    client_count = self.get_latest("mds", info['name'],
-                                                   "mds_sessions.session_count")
+                    client_count = mgr.get_latest("mds", info['name'],
+                                                  "mds_sessions.session_count")
                 elif client_count == 0:
                     # In case rank 0 was down, look at another rank's
                     # sessionmap to get an indication of clients.
-                    client_count = self.get_latest("mds", info['name'],
-                                                   "mds_sessions.session_count")
+                    client_count = mgr.get_latest("mds", info['name'],
+                                                  "mds_sessions.session_count")
 
                 laggy = "laggy_since" in info
 
@@ -149,20 +144,15 @@ class CephFS(BaseController):
                 if laggy:
                     state += "(laggy)"
 
-                # if state == "active" and not laggy:
-                #     c_state = self.colorize(state, self.GREEN)
-                # else:
-                #     c_state = self.colorize(state, self.YELLOW)
-
                 # Populate based on context of state, e.g. client
                 # ops for an active daemon, replay progress, reconnect
                 # progress
-                activity = ""
-
                 if state == "active":
-                    activity = self.get_rate("mds",
-                                             info['name'],
-                                             "mds_server.handle_client_request")
+                    activity = CephService.get_rate("mds",
+                                                    info['name'],
+                                                    "mds_server.handle_client_request")
+                else:
+                    activity = 0.0
 
                 metadata = mgr.get_metadata('mds', info['name'])
                 mds_versions[metadata.get('ceph_version', 'unknown')].append(
@@ -184,7 +174,7 @@ class CephFS(BaseController):
                         "rank": rank,
                         "state": "failed",
                         "mds": "",
-                        "activity": "",
+                        "activity": 0.0,
                         "dns": 0,
                         "inos": 0
                     }
@@ -196,10 +186,10 @@ class CephFS(BaseController):
             if daemon_info['state'] != "up:standby-replay":
                 continue
 
-            inos = self.get_latest("mds", daemon_info['name'], "mds_mem.ino")
-            dns = self.get_latest("mds", daemon_info['name'], "mds.inodes")
+            inos = mgr.get_latest("mds", daemon_info['name'], "mds_mem.ino")
+            dns = mgr.get_latest("mds", daemon_info['name'], "mds.inodes")
 
-            activity = self.get_rate(
+            activity = CephService.get_rate(
                 "mds", daemon_info['name'], "mds_log.replay")
 
             rank_table.append(
@@ -291,20 +281,12 @@ class CephFS(BaseController):
             'data': clients
         }
 
-    def get_latest(self, daemon_type, daemon_name, stat):
-        data = mgr.get_counter(daemon_type, daemon_name, stat)[stat]
-        if data:
-            return data[-1][1]
-        return 0
-
 
 class CephFSClients(object):
     def __init__(self, module_inst, fscid):
         self._module = module_inst
         self.fscid = fscid
 
-    # pylint: disable=unused-variable
     @ViewCache()
     def get(self):
-        # TODO handle nonzero returns, e.g. when rank isn't active
         return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))

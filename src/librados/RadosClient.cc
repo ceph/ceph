@@ -188,11 +188,12 @@ int librados::RadosClient::pool_get_auid(uint64_t pool_id,
   return r;
 }
 
-int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
+int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s, bool wait_latest_map)
 {
   int r = wait_for_osdmap();
   if (r < 0)
     return r;
+  retry:
   objecter->with_osdmap([&](const OSDMap& o) {
       if (!o.have_pg_pool(pool_id)) {
 	r = -ENOENT;
@@ -201,6 +202,14 @@ int librados::RadosClient::pool_get_name(uint64_t pool_id, std::string *s)
 	*s = o.get_pool_name(pool_id);
       }
     });
+  if (r == -ENOENT && wait_latest_map) {
+    r = wait_for_latest_osdmap();
+    if (r < 0)
+      return r;
+    wait_latest_map = false;
+    goto retry;
+  }
+
   return r;
 }
 
@@ -310,6 +319,11 @@ int librados::RadosClient::connect()
     goto out;
   }
   messenger->set_myname(entity_name_t::CLIENT(monclient.get_global_id()));
+
+  // Detect older cluster, put mgrclient into compatible mode
+  mgrclient.set_mgr_optional(
+      !get_required_monitor_features().contains_all(
+        ceph::features::mon::FEATURE_LUMINOUS));
 
   // MgrClient needs this (it doesn't have MonClient reference itself)
   monclient.sub_want("mgrmap", 0, 0);
@@ -486,6 +500,10 @@ int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
 
 int librados::RadosClient::create_ioctx(int64_t pool_id, IoCtxImpl **io)
 {
+  std::string pool_name;
+  int r = pool_get_name(pool_id, &pool_name, true);
+  if (r < 0)
+    return r;
   *io = new librados::IoCtxImpl(this, objecter, pool_id, CEPH_NOSNAP);
   return 0;
 }
@@ -689,6 +707,9 @@ bool librados::RadosClient::put() {
 int librados::RadosClient::pool_create(string& name, unsigned long long auid,
 				       int16_t crush_rule)
 {
+  if (!name.length())
+    return -EINVAL;
+
   int r = wait_for_osdmap();
   if (r < 0) {
     return r;
@@ -858,7 +879,11 @@ int librados::RadosClient::mgr_command(const vector<string>& cmd,
     return r;
 
   lock.Unlock();
-  r = cond.wait();
+  if (conf->rados_mon_op_timeout) {
+    r = cond.wait_for(conf->rados_mon_op_timeout);
+  } else {
+    r = cond.wait();
+  }
   lock.Lock();
 
   return r;
@@ -1093,5 +1118,6 @@ int librados::RadosClient::service_daemon_update_status(
 
 mon_feature_t librados::RadosClient::get_required_monitor_features() const
 {
-  return monclient.monmap.get_required_features();
+  return monclient.with_monmap([](const MonMap &monmap) {
+      return monmap.get_required_features(); } );
 }

@@ -2255,6 +2255,10 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
 
     } while (is_truncated);
   }
+
+  if (op_state.mfa_ids_specified) {
+    user_info.mfa_ids = op_state.mfa_ids;
+  }
   op_state.set_user_info(user_info);
 
   // if we're supposed to modify keys, do so
@@ -2348,7 +2352,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
     int ret = store->get_user_stats(info.user_id, stats);
-    if (ret < 0) {
+    if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
 
@@ -2789,7 +2793,7 @@ public:
     if (ret == -ENOENT) {
       if (truncated)
         *truncated = false;
-      return -ENOENT;
+      return 0;
     }
 
     // now filter out the buckets entries
@@ -2810,7 +2814,7 @@ public:
     delete info;
   }
 
-  string get_marker(void *handle) {
+  string get_marker(void *handle) override {
     list_keys_info *info = static_cast<list_keys_info *>(handle);
     return info->store->list_raw_objs_get_cursor(info->ctx);
   }

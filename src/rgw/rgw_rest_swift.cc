@@ -80,7 +80,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 
 static void dump_account_metadata(struct req_state * const s,
                                   const RGWUsageStats& global_stats,
-                                  const std::map<std::string, RGWUsageStats> policies_stats,
+                                  const std::map<std::string, RGWUsageStats> &policies_stats,
                                   /* const */map<string, bufferlist>& attrs,
                                   const RGWQuotaInfo& quota,
                                   const RGWAccessControlPolicy_SWIFTAcct &policy)
@@ -294,14 +294,18 @@ int RGWListBucket_ObjStore_SWIFT::get_params()
   marker = s->info.args.get("marker");
   end_marker = s->info.args.get("end_marker");
   max_keys = s->info.args.get("limit");
+
+  // non-standard
+  s->info.args.get_bool("allow_unordered", &allow_unordered, false);
+
+  delimiter = s->info.args.get("delimiter");
+
   op_ret = parse_max_keys();
   if (op_ret < 0) {
     return op_ret;
   }
   if (max > default_max)
     return -ERR_PRECONDITION_FAILED;
-
-  delimiter = s->info.args.get("delimiter");
 
   string path_args;
   if (s->info.args.exists("path")) { // should handle empty path
@@ -342,7 +346,10 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   dump_container_metadata(s, bucket, bucket_quota,
                           s->bucket_info.website_conf);
 
-  s->formatter->open_array_section_with_attrs("container", FormatterAttrs("name", s->bucket.name.c_str(), NULL));
+  s->formatter->open_array_section_with_attrs("container",
+					      FormatterAttrs("name",
+							     s->bucket.name.c_str(),
+							     NULL));
 
   while (iter != objs.end() || pref_iter != common_prefixes.end()) {
     bool do_pref = false;
@@ -363,7 +370,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
     else
       do_pref = true;
 
-    if (do_objs && (marker.empty() || marker < key)) {
+    if (do_objs && (allow_unordered || marker.empty() || marker < key)) {
       if (key.name.compare(path) == 0)
         goto next;
 
@@ -433,7 +440,7 @@ next:
   }
 
   rgw_flush_formatter_and_reset(s, s->formatter);
-}
+} // RGWListBucket_ObjStore_SWIFT::send_response
 
 static void dump_container_metadata(struct req_state *s,
                                     const RGWBucketEnt& bucket,
@@ -1436,7 +1443,7 @@ int RGWGetObj_ObjStore_SWIFT::send_response_data(bufferlist& bl,
     } else {
       auto iter = attrs.find(RGW_ATTR_ETAG);
       if (iter != attrs.end()) {
-        dump_etag(s, iter->second);
+        dump_etag(s, iter->second.to_str());
       }
     }
 
@@ -2310,7 +2317,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
   class RGWMovedPermanently: public RGWOp {
     const std::string location;
   public:
-    RGWMovedPermanently(const std::string& location)
+    explicit RGWMovedPermanently(const std::string& location)
       : location(location) {
     }
 
@@ -2411,7 +2418,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
   public:
     /* Taking prefix_override by value to leverage std::string r-value ref
      * ctor and thus avoid extra memory copying/increasing ref counter. */
-    RGWWebsiteListing(std::string prefix_override)
+    explicit RGWWebsiteListing(std::string prefix_override)
       : prefix_override(std::move(prefix_override)) {
     }
   };

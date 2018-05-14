@@ -273,6 +273,31 @@ uint64_t StupidAllocator::get_free()
   return num_free;
 }
 
+double StupidAllocator::get_fragmentation(uint64_t alloc_unit)
+{
+  assert(alloc_unit);
+  double res;
+  uint64_t max_intervals = 0;
+  uint64_t intervals = 0;
+  {
+    std::lock_guard<std::mutex> l(lock);
+    max_intervals = num_free / alloc_unit;
+    for (unsigned bin = 0; bin < free.size(); ++bin) {
+      intervals += free[bin].num_intervals();
+    }
+  }
+  ldout(cct, 30) << __func__ << " " << intervals << "/" << max_intervals 
+                 << dendl;
+  assert(intervals <= max_intervals);
+  if (!intervals || max_intervals <= 1) {
+    return 0.0;
+  }
+  intervals--;
+  max_intervals--;
+  res = (double)intervals / max_intervals;
+  return res;
+}
+
 void StupidAllocator::dump()
 {
   std::lock_guard<std::mutex> l(lock);

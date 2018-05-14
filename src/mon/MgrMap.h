@@ -179,6 +179,37 @@ public:
     return false;
   }
 
+  bool can_run_module(const std::string &module_name, std::string *error) const
+  {
+    for (const auto &i : available_modules) {
+      if (i.name == module_name) {
+        *error = i.error_string;
+        return i.can_run;
+      }
+    }
+
+    std::ostringstream oss;
+    oss << "Module '" << module_name << "' does not exist";
+    throw std::logic_error(oss.str());
+  }
+
+  bool module_enabled(const std::string& module_name) const
+  {
+    return modules.find(module_name) != modules.end();
+  }
+
+  bool any_supports_module(const std::string& module) const {
+    if (have_module(module)) {
+      return true;
+    }
+    for (auto& p : standbys) {
+      if (p.second.have_module(module)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   bool have_name(const string& name) const {
     if (active_name == name) {
       return true;

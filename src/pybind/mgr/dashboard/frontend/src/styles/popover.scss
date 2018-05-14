@@ -1,0 +1,44 @@
+::ng-deep .popover-content {
+  padding: 0px 0px;
+  height: auto;
+  max-height: 70vh;
+  overflow-x: hidden;
+}
+
+::ng-deep .popover {
+  min-width: 276px !important;
+}
+
+.separator {
+  padding: 5px 12px;
+  color: #90949c;
+  background-color: #f6f7f9;
+  font-size: 12px;
+}
+
+.message {
+  padding: 10px 16px;
+  color: #474544;
+  font-size: 12px;
+}
+
+table {
+  width: 252px;
+  margin: 5px 12px 5px 5px;
+  font-size: 12px;
+  color: #474544;
+}
+
+.icon-col {
+  width: 50px;
+  font-size: 10px;
+}
+
+.date {
+  color: #777777;
+}
+
+hr {
+  margin-top: 0px;
+  margin-bottom: 0px;
+}

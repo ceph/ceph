@@ -260,10 +260,87 @@ class TestNormalizeFlags(object):
 
     @pytest.mark.parametrize("flags", ceph_conf_mount_values)
     def test_normalize_lists(self, flags):
-        result = prepare._normalize_mount_flags(flags)
-        assert result == 'rw,auto,exec'
+        result = sorted(prepare._normalize_mount_flags(flags).split(','))
+        assert ','.join(result) == 'auto,exec,rw'
 
     @pytest.mark.parametrize("flags", string_mount_values)
     def test_normalize_strings(self, flags):
-        result = prepare._normalize_mount_flags(flags)
-        assert result == 'rw,auto,exec'
+        result = sorted(prepare._normalize_mount_flags(flags).split(','))
+        assert ','.join(result) == 'auto,exec,rw'
+
+    @pytest.mark.parametrize("flags", ceph_conf_mount_values)
+    def test_normalize_extra_flags(self, flags):
+        result = prepare._normalize_mount_flags(flags, extras=['discard'])
+        assert sorted(result.split(',')) == ['auto', 'discard', 'exec', 'rw']
+
+    @pytest.mark.parametrize("flags", ceph_conf_mount_values)
+    def test_normalize_duplicate_extra_flags(self, flags):
+        result = prepare._normalize_mount_flags(flags, extras=['rw', 'discard'])
+        assert sorted(result.split(',')) == ['auto', 'discard', 'exec', 'rw']
+
+    @pytest.mark.parametrize("flags", string_mount_values)
+    def test_normalize_strings_flags(self, flags):
+        result = sorted(prepare._normalize_mount_flags(flags, extras=['discard']).split(','))
+        assert ','.join(result) == 'auto,discard,exec,rw'
+
+    @pytest.mark.parametrize("flags", string_mount_values)
+    def test_normalize_strings_duplicate_flags(self, flags):
+        result = sorted(prepare._normalize_mount_flags(flags, extras=['discard','rw']).split(','))
+        assert ','.join(result) == 'auto,discard,exec,rw'
+
+
+class TestMkfsFilestore(object):
+
+    def test_non_zero_exit_status(self, stub_call, monkeypatch):
+        conf.cluster = 'ceph'
+        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
+        stub_call(([], [], 1))
+        with pytest.raises(RuntimeError) as error:
+            prepare.osd_mkfs_filestore('1', 'asdf-1234', 'keyring')
+        assert "Command failed with exit code 1" in str(error)
+
+    def test_non_zero_exit_formats_command_correctly(self, stub_call, monkeypatch):
+        conf.cluster = 'ceph'
+        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
+        stub_call(([], [], 1))
+        with pytest.raises(RuntimeError) as error:
+            prepare.osd_mkfs_filestore('1', 'asdf-1234', 'keyring')
+        expected = ' '.join([
+            'ceph-osd',
+            '--cluster',
+            'ceph',
+            '--osd-objectstore', 'filestore', '--mkfs',
+            '-i', '1', '--monmap', '/var/lib/ceph/osd/ceph-1/activate.monmap',
+            '--keyfile', '-', '--osd-data', '/var/lib/ceph/osd/ceph-1/',
+            '--osd-journal', '/var/lib/ceph/osd/ceph-1/journal',
+            '--osd-uuid', 'asdf-1234',
+            '--setuser', 'ceph', '--setgroup', 'ceph'])
+        assert expected in str(error)
+
+
+class TestMkfsBluestore(object):
+
+    def test_non_zero_exit_status(self, stub_call, monkeypatch):
+        conf.cluster = 'ceph'
+        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
+        stub_call(([], [], 1))
+        with pytest.raises(RuntimeError) as error:
+            prepare.osd_mkfs_bluestore('1', 'asdf-1234', keyring='keyring')
+        assert "Command failed with exit code 1" in str(error)
+
+    def test_non_zero_exit_formats_command_correctly(self, stub_call, monkeypatch):
+        conf.cluster = 'ceph'
+        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
+        stub_call(([], [], 1))
+        with pytest.raises(RuntimeError) as error:
+            prepare.osd_mkfs_bluestore('1', 'asdf-1234', keyring='keyring')
+        expected = ' '.join([
+            'ceph-osd',
+            '--cluster',
+            'ceph',
+            '--osd-objectstore', 'bluestore', '--mkfs',
+            '-i', '1', '--monmap', '/var/lib/ceph/osd/ceph-1/activate.monmap',
+            '--keyfile', '-', '--osd-data', '/var/lib/ceph/osd/ceph-1/',
+            '--osd-uuid', 'asdf-1234',
+            '--setuser', 'ceph', '--setgroup', 'ceph'])
+        assert expected in str(error)

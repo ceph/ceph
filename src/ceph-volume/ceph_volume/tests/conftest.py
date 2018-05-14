@@ -10,9 +10,15 @@ class Capture(object):
         self.a = a
         self.kw = kw
         self.calls = []
+        self.return_values = kw.get('return_values', False)
+        self.always_returns = kw.get('always_returns', False)
 
     def __call__(self, *a, **kw):
         self.calls.append({'args': a, 'kwargs': kw})
+        if self.always_returns:
+            return self.always_returns
+        if self.return_values:
+            return self.return_values.pop()
 
 
 class Factory(object):
@@ -41,7 +47,7 @@ def fake_run(monkeypatch):
 
 @pytest.fixture
 def fake_call(monkeypatch):
-    fake_call = Capture()
+    fake_call = Capture(always_returns=([], [], 0))
     monkeypatch.setattr('ceph_volume.process.call', fake_call)
     return fake_call
 
@@ -51,10 +57,12 @@ def stub_call(monkeypatch):
     """
     Monkeypatches process.call, so that a caller can add behavior to the response
     """
-    def apply(return_value):
-        monkeypatch.setattr(
-            'ceph_volume.process.call',
-            lambda *a, **kw: return_value)
+    def apply(return_values):
+        if isinstance(return_values, tuple):
+            return_values = [return_values]
+        stubbed_call = Capture(return_values=return_values)
+        monkeypatch.setattr('ceph_volume.process.call', stubbed_call)
+        return stubbed_call
 
     return apply
 
@@ -124,8 +132,9 @@ def tmpfile(tmpdir):
     Create a temporary file, optionally filling it with contents, returns an
     absolute path to the file when called
     """
-    def generate_file(name='file', contents=''):
-        path = os.path.join(str(tmpdir), name)
+    def generate_file(name='file', contents='', directory=None):
+        directory = directory or str(tmpdir)
+        path = os.path.join(directory, name)
         with open(path, 'w') as fp:
             fp.write(contents)
         return path

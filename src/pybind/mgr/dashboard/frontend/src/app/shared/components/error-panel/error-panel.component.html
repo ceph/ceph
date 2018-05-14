@@ -1,0 +1,29 @@
+<alert type="danger">
+  <table>
+    <tr>
+      <td rowspan="2" class="error-panel-alert-icon">
+        <i class="fa fa-3x fa-exclamation-triangle alert-danger"
+           aria-hidden="true"></i>
+      </td>
+      <td class="error-panel-alert-title">
+        {{ title }}
+      </td>
+    </tr>
+    <tr>
+      <td class="error-panel-alert-text">
+        <ng-content></ng-content>
+      </td>
+    </tr>
+  </table>
+</alert>
+
+<div class="button-group text-right"
+     *ngIf="backAction.observers.length > 0">
+  <button class="btn btn-sm btn-default tc_backButton"
+          type="button"
+          (click)="backAction.emit()"
+          autofocus
+          i18n>
+    Back
+  </button>
+</div>

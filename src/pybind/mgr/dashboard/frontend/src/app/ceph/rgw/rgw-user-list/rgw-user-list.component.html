@@ -1,0 +1,83 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li i18n
+        class="breadcrumb-item">Object Gateway</li>
+    <li i18n
+        class="breadcrumb-item active"
+        aria-current="page">Users</li>
+  </ol>
+</nav>
+<cd-table #table
+          [autoReload]="false"
+          [data]="users"
+          [columns]="columns"
+          columnMode="flex"
+          selectionType="multi"
+          (updateSelection)="updateSelection($event)"
+          identifier="user_id"
+          (fetchData)="getUserList()">
+  <div class="table-actions">
+    <div class="btn-group" dropdown>
+      <button type="button"
+              class="btn btn-sm btn-primary"
+              *ngIf="!selection.hasSelection"
+              routerLink="/rgw/user/add">
+        <i class="fa fa-fw fa-plus"></i>
+        <ng-container i18n>Add</ng-container>
+      </button>
+      <button type="button"
+              class="btn btn-sm btn-primary"
+              *ngIf="selection.hasSingleSelection"
+              routerLink="/rgw/user/edit/{{ selection.first()?.user_id }}">
+        <i class="fa fa-fw fa-pencil"></i>
+        <ng-container i18n>Edit</ng-container>
+      </button>
+      <button type="button"
+              class="btn btn-sm btn-primary"
+              *ngIf="selection.hasMultiSelection"
+              (click)="deleteAction()">
+        <i class="fa fa-fw fa-trash-o"></i>
+        <ng-container i18n>Delete</ng-container>
+      </button>
+      <button type="button"
+              class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split"
+              dropdownToggle>
+        <span class="caret"></span>
+        <span class="sr-only"></span>
+      </button>
+      <ul class="dropdown-menu"
+          *dropdownMenu
+          role="menu">
+        <li role="menuitem">
+          <a class="dropdown-item"
+             routerLink="/rgw/user/add"
+             i18n>
+            <i class="fa fa-fw fa-plus"></i>
+            Add
+          </a>
+        </li>
+        <li role="menuitem"
+            [ngClass]="{'disabled': !selection.hasSingleSelection}">
+          <a class="dropdown-item"
+             routerLink="/rgw/user/edit/{{ selection.first()?.user_id }}"
+             i18n>
+            <i class="fa fa-fw fa-pencil"></i>
+            Edit
+          </a>
+        </li>
+        <li role="menuitem"
+            [ngClass]="{'disabled': !selection.hasSelection}">
+          <a class="dropdown-item"
+             (click)="deleteAction()"
+             i18n>
+            <i class="fa fa-fw fa-trash-o"></i>
+            Delete
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+  <cd-rgw-user-details cdTableDetail
+                       [selection]="selection">
+  </cd-rgw-user-details>
+</cd-table>

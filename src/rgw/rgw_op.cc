@@ -1135,7 +1135,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 {
   ldout(s->cct, 20) << "user manifest obj=" << ent.key.name << "[" << ent.key.instance << "]" << dendl;
   RGWGetObj_CB cb(this);
-  RGWGetDataCB* filter = &cb;
+  RGWGetObj_Filter* filter = &cb;
   boost::optional<RGWGetObj_Decompress> decompress;
 
   int64_t cur_ofs = start_ofs;
@@ -1710,7 +1710,6 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
 
 void RGWGetObj::execute()
 {
-  utime_t start_time = s->time;
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now();
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
@@ -1719,9 +1718,9 @@ void RGWGetObj::execute()
   int64_t ofs_x, end_x;
 
   RGWGetObj_CB cb(this);
-  RGWGetDataCB* filter = (RGWGetDataCB*)&cb;
+  RGWGetObj_Filter* filter = (RGWGetObj_Filter *)&cb;
   boost::optional<RGWGetObj_Decompress> decompress;
-  std::unique_ptr<RGWGetDataCB> decrypt;
+  std::unique_ptr<RGWGetObj_Filter> decrypt;
   map<string, bufferlist>::iterator attr_iter;
 
   perfcounter->inc(l_rgw_get);
@@ -1763,7 +1762,9 @@ void RGWGetObj::execute()
   {
     attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
     if (attr_iter != attrs.end() && attr_iter->second.to_str() == "SSE-C-AES256") {
-      op_ret = -ERR_INVALID_REQUEST;
+      ldout(s->cct, 0) << "ERROR: torrents are not supported for objects "
+          "encrypted with SSE-C" << dendl;
+      op_ret = -EINVAL;
       goto done_err;
     }
     torrent.init(s, store);
@@ -1865,8 +1866,7 @@ void RGWGetObj::execute()
   if (op_ret >= 0)
     op_ret = filter->flush();
 
-  perfcounter->tinc(l_rgw_get_lat,
-		    (ceph_clock_now() - start_time));
+  perfcounter->tinc(l_rgw_get_lat, s->time_elapsed());
   if (op_ret < 0) {
     goto done_err;
   }
@@ -2152,6 +2152,7 @@ void RGWGetBucketVersioning::execute()
 {
   versioned = s->bucket_info.versioned();
   versioning_enabled = s->bucket_info.versioning_enabled();
+  mfa_enabled = s->bucket_info.mfa_enabled();
 }
 
 int RGWSetBucketVersioning::verify_permission()
@@ -2170,27 +2171,52 @@ void RGWSetBucketVersioning::execute()
   if (op_ret < 0)
     return;
 
+  bool cur_mfa_status = (s->bucket_info.flags & BUCKET_MFA_ENABLED) != 0;
+
+  mfa_set_status &= (mfa_status != cur_mfa_status);
+
+  if (mfa_set_status &&
+      !s->mfa_verified) {
+    op_ret = -ERR_MFA_REQUIRED;
+    return;
+  }
+
   if (!store->is_meta_master()) {
     op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
     if (op_ret < 0) {
-      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      ldout(s->cct, 20) << __func__ << " forward_request_to_master returned ret=" << op_ret << dendl;
       return;
     }
   }
 
-  op_ret = retry_raced_bucket_write(store, s, [this] {
+  bool modified = mfa_set_status;
+
+  op_ret = retry_raced_bucket_write(store, s, [&] {
+      if (mfa_set_status) {
+        if (mfa_status) {
+          s->bucket_info.flags |= BUCKET_MFA_ENABLED;
+        } else {
+          s->bucket_info.flags &= ~BUCKET_MFA_ENABLED;
+        }
+      }
+
       if (versioning_status == VersioningEnabled) {
 	s->bucket_info.flags |= BUCKET_VERSIONED;
 	s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
+        modified = true;
       } else if (versioning_status == VersioningSuspended) {
 	s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+        modified = true;
       } else {
 	return op_ret;
       }
-      op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-					       &s->bucket_attrs);
-      return op_ret;
+      return store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+                                             &s->bucket_attrs);
     });
+
+  if (!modified) {
+    return;
+  }
 
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
@@ -2350,6 +2376,7 @@ int RGWListBucket::parse_max_keys()
     char *endptr;
     max = strtol(max_keys.c_str(), &endptr, 10);
     if (endptr) {
+      if (endptr == max_keys.c_str()) return -EINVAL;
       while (*endptr && isspace(*endptr)) // ignore white space
         endptr++;
       if (*endptr) {
@@ -2375,6 +2402,13 @@ void RGWListBucket::execute()
     return;
   }
 
+  if (allow_unordered && !delimiter.empty()) {
+    ldout(s->cct, 0) <<
+      "ERROR: unordered bucket listing requested with a delimiter" << dendl;
+    op_ret = -EINVAL;
+    return;
+  }
+
   if (need_container_stats()) {
     map<string, RGWBucketEnt> m;
     m[s->bucket.name] = RGWBucketEnt();
@@ -2396,6 +2430,7 @@ void RGWListBucket::execute()
   list_op.params.marker = marker;
   list_op.params.end_marker = end_marker;
   list_op.params.list_versions = list_versions;
+  list_op.params.allow_unordered = allow_unordered;
 
   op_ret = list_op.list_objects(max, &objs, &common_prefixes, &is_truncated);
   if (op_ret >= 0) {
@@ -3283,11 +3318,11 @@ void RGWPutObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-class RGWPutObj_CB : public RGWGetDataCB
+class RGWPutObj_CB : public RGWGetObj_Filter
 {
   RGWPutObj *op;
 public:
-  RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
+  explicit RGWPutObj_CB(RGWPutObj *_op) : op(_op) {}
   ~RGWPutObj_CB() override {}
 
   int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override {
@@ -3308,9 +3343,9 @@ int RGWPutObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 {
   RGWPutObj_CB cb(this);
-  RGWGetDataCB* filter = &cb;
+  RGWGetObj_Filter* filter = &cb;
   boost::optional<RGWGetObj_Decompress> decompress;
-  std::unique_ptr<RGWGetDataCB> decrypt;
+  std::unique_ptr<RGWGetObj_Filter> decrypt;
   RGWCompressionInfo cs_info;
   map<string, bufferlist> attrs;
   map<string, bufferlist>::iterator attr_iter;
@@ -3721,7 +3756,7 @@ void RGWPutObj::execute()
     op_ret = -ERR_UNPROCESSABLE_ENTITY;
     goto done;
   }
-  bl.append(etag.c_str(), etag.size() + 1);
+  bl.append(etag.c_str(), etag.size());
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   populate_with_generic_attrs(s, attrs);
@@ -3766,8 +3801,7 @@ void RGWPutObj::execute()
 
 done:
   dispose_processor(processor);
-  perfcounter->tinc(l_rgw_put_lat,
-		    (ceph_clock_now() - s->time));
+  perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
 }
 
 int RGWPostObj::verify_permission()
@@ -3949,7 +3983,7 @@ void RGWPostObj::execute()
       return;
     }
 
-    bl.append(etag.c_str(), etag.size() + 1);
+    bl.append(etag.c_str(), etag.size());
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
     policy.encode(aclbl);
@@ -4273,7 +4307,7 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
   try {
     deleter = std::unique_ptr<RGWBulkDelete::Deleter>(\
           new RGWBulkDelete::Deleter(store, s));
-  } catch (std::bad_alloc) {
+  } catch (const std::bad_alloc&) {
     return -ENOMEM;
   }
 
@@ -4324,6 +4358,13 @@ int RGWDeleteObj::verify_permission()
 
   if (!verify_bucket_permission_no_policy(s, RGW_PERM_WRITE)) {
     return -EACCES;
+  }
+
+  if (s->bucket_info.mfa_enabled() &&
+      !s->object.instance.empty() &&
+      !s->mfa_verified) {
+    ldout(s->cct, 5) << "NOTICE: object delete request with a versioned object, mfa auth not provided" << dendl;
+    return -ERR_MFA_REQUIRED;
   }
 
   return 0;
@@ -4417,6 +4458,9 @@ void RGWDeleteObj::execute()
       }
     }
 
+    if (op_ret == -ECANCELED) {
+      op_ret = 0;
+    }
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
       op_ret = 0;
     }
@@ -4915,7 +4959,7 @@ void RGWPutACLs::execute()
     }
     op_ret = forward_request_to_master(s, NULL, store, in_data, NULL);
     if (op_ret < 0) {
-      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      ldout(s->cct, 20) << __func__ << " forward_request_to_master returned ret=" << op_ret << dendl;
       return;
     }
   }
@@ -5152,7 +5196,7 @@ void RGWPutCORS::execute()
   if (!store->is_meta_master()) {
     op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
     if (op_ret < 0) {
-      ldout(s->cct, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
+      ldout(s->cct, 20) << __func__ << " forward_request_to_master returned ret=" << op_ret << dendl;
       return;
     }
   }
@@ -5656,7 +5700,7 @@ void RGWCompleteMultipart::execute()
   etag = final_etag_str;
   ldout(s->cct, 10) << "calculated etag: " << final_etag_str << dendl;
 
-  etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
+  etag_bl.append(final_etag_str, strlen(final_etag_str));
 
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
@@ -5822,7 +5866,7 @@ void RGWListMultipart::execute()
 int RGWListBucketMultiparts::verify_permission()
 {
   if (!verify_bucket_permission(s,
-				rgw::IAM::s3ListBucketMultiPartUploads))
+				rgw::IAM::s3ListBucketMultipartUploads))
     return -EACCES;
 
   return 0;
@@ -5937,6 +5981,21 @@ void RGWDeleteMultiObj::execute()
 
   if (multi_delete->is_quiet())
     quiet = true;
+
+  if (s->bucket_info.mfa_enabled()) {
+    bool has_versioned = false;
+    for (auto i : multi_delete->objects) {
+      if (!i.instance.empty()) {
+        has_versioned = true;
+        break;
+      }
+    }
+    if (has_versioned && !s->mfa_verified) {
+      ldout(s->cct, 5) << "NOTICE: multi-object delete request with a versioned object, mfa auth not provided" << dendl;
+      op_ret = -ERR_MFA_REQUIRED;
+      goto error;
+    }
+  }
 
   begin_response();
   if (multi_delete->objects.empty()) {
@@ -6487,7 +6546,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   RGWPutObjDataProcessor *filter = nullptr;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  if (size > static_cast<const size_t>(s->cct->_conf->rgw_max_put_size)) {
+  if (size > static_cast<size_t>(s->cct->_conf->rgw_max_put_size)) {
     op_ret = -ERR_TOO_LARGE;
     return op_ret;
   }

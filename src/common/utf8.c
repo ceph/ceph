@@ -33,13 +33,13 @@ static int high_bits_set(int c)
  */
 int encode_utf8(unsigned long u, unsigned char *buf)
 {
-	int i;
-	unsigned long max_val[MAX_UTF8_SZ] = {
+	static const unsigned long max_val[MAX_UTF8_SZ] = {
 		0x0000007ful, 0x000007fful, 0x0000fffful,
 		0x001ffffful, 0x03fffffful, 0x7ffffffful
 	};
-	static const int MAX_VAL_SZ = sizeof(max_val) / sizeof(max_val[0]);
+	static const int MAX_VAL_SZ = sizeof(max_val)/sizeof(max_val[0]);
 
+	int i;
 	for (i = 0; i < MAX_VAL_SZ; ++i) {
 		if (u <= max_val[i])
 			break;

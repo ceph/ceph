@@ -623,7 +623,10 @@ TEST(ErasureCodeLrc, encode_decode)
   for (unsigned int i = 0; i < lrc.get_chunk_count(); ++i) {
     want_to_encode.insert(i);
     bufferptr ptr(buffer::create_page_aligned(chunk_size));
-    encoded[i].push_front(ptr);
+    bufferlist tmp;
+    tmp.push_back(ptr);
+    tmp.claim_append(encoded[i]);
+    encoded[i].swap(tmp);
   }
   const vector<int> &mapping = lrc.get_chunk_mapping();
   char c = 'A';
@@ -753,7 +756,10 @@ TEST(ErasureCodeLrc, encode_decode_2)
   for (unsigned int i = 0; i < lrc.get_chunk_count(); ++i) {
     want_to_encode.insert(i);
     bufferptr ptr(buffer::create_page_aligned(chunk_size));
-    encoded[i].push_front(ptr);
+    bufferlist tmp;
+    tmp.push_back(ptr);
+    tmp.claim_append(encoded[i]);
+    encoded[i].swap(tmp);
   }
   const vector<int> &mapping = lrc.get_chunk_mapping();
   char c = 'A';

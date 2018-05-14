@@ -12,6 +12,7 @@
  *
  */
 
+#include "acconfig.h"
 #include "mds/CInode.h"
 #include "mds/CDir.h"
 #include "mds/MDSRank.h"
@@ -342,8 +343,15 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0,
 			  gather.new_sub());
 
+#ifdef HAVE_STDLIB_MAP_SPLICING
     ctl.journaled_update.merge(ctl.to_update);
     ctl.journaled_remove.merge(ctl.to_remove);
+#else
+    ctl.journaled_update.insert(make_move_iterator(begin(ctl.to_update)),
+				make_move_iterator(end(ctl.to_update)));
+    ctl.journaled_remove.insert(make_move_iterator(begin(ctl.to_remove)),
+				make_move_iterator(end(ctl.to_remove)));
+#endif
     ctl.to_update.clear();
     ctl.to_remove.clear();
   };

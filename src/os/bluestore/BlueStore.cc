@@ -806,14 +806,14 @@ void BlueStore::Cache::trim(
 
   if (current <= target_bytes) {
     dout(30) << __func__
-	     << " shard target " << pretty_si_t(target_bytes)
+	     << " shard target " << byte_u_t(target_bytes)
 	     << " meta/data ratios " << target_meta_ratio
 	     << " + " << target_data_ratio << " ("
-	     << pretty_si_t(target_meta) << " + "
-	     << pretty_si_t(target_buffer) << "), "
-	     << " current " << pretty_si_t(current) << " ("
-	     << pretty_si_t(current_meta) << " + "
-	     << pretty_si_t(current_buffer) << ")"
+	     << byte_u_t(target_meta) << " + "
+	     << byte_u_t(target_buffer) << "), "
+	     << " current " << byte_u_t(current) << " ("
+	     << byte_u_t(current_meta) << " + "
+	     << byte_u_t(current_buffer) << ")"
 	     << dendl;
     return;
   }
@@ -835,16 +835,16 @@ void BlueStore::Cache::trim(
   uint64_t max_onodes = max_meta / bytes_per_onode;
 
   dout(20) << __func__
-	   << " shard target " << pretty_si_t(target_bytes)
+	   << " shard target " << byte_u_t(target_bytes)
 	   << " ratio " << target_meta_ratio << " ("
-	   << pretty_si_t(target_meta) << " + "
-	   << pretty_si_t(target_buffer) << "), "
-	   << " current " << pretty_si_t(current) << " ("
-	   << pretty_si_t(current_meta) << " + "
-	   << pretty_si_t(current_buffer) << "),"
-	   << " need_to_free " << pretty_si_t(need_to_free) << " ("
-	   << pretty_si_t(free_meta) << " + "
-	   << pretty_si_t(free_buffer) << ")"
+	   << byte_u_t(target_meta) << " + "
+	   << byte_u_t(target_buffer) << "), "
+	   << " current " << byte_u_t(current) << " ("
+	   << byte_u_t(current_meta) << " + "
+	   << byte_u_t(current_buffer) << "),"
+	   << " need_to_free " << byte_u_t(need_to_free) << " ("
+	   << byte_u_t(free_meta) << " + "
+	   << byte_u_t(free_buffer) << ")"
 	   << " -> max " << max_onodes << " onodes + "
 	   << max_buffer << " buffer"
 	   << dendl;
@@ -1140,7 +1140,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
 
     if (evicted > 0) {
-      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+      dout(20) << __func__ << " evicted " << byte_u_t(evicted)
                << " from warm_in list, done evicting warm_in buffers"
                << dendl;
     }
@@ -1166,7 +1166,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
 
     if (evicted > 0) {
-      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+      dout(20) << __func__ << " evicted " << byte_u_t(evicted)
                << " from hot list, done evicting hot buffers"
                << dendl;
     }
@@ -2819,8 +2819,9 @@ void BlueStore::ExtentMap::dirty_range(
     assert((size_t)start < shards.size());
     auto p = &shards[start];
     if (!p->loaded) {
-      dout(20) << __func__ << " shard 0x" << std::hex << p->shard_info->offset
-	       << std::dec << " is not loaded, can't mark dirty" << dendl;
+      derr << __func__ << "on write 0x" << std::hex << offset
+	   << "~" << length << " shard 0x" << p->shard_info->offset
+	   << std::dec << " is not loaded, can't mark dirty" << dendl;
       assert(0 == "can't mark unloaded shard dirty");
     }
     if (!p->dirty) {
@@ -3825,6 +3826,8 @@ void BlueStore::_set_compression()
  
   dout(10) << __func__ << " mode " << Compressor::get_comp_mode_name(comp_mode)
 	   << " alg " << (compressor ? compressor->get_type_name() : "(none)")
+	   << " min_blob " << comp_min_blob_size
+	   << " max_blob " << comp_max_blob_size
 	   << dendl;
 }
 
@@ -4106,6 +4109,8 @@ void BlueStore::_init_logger()
 		    "collection");
   b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
                     "Read EIO errors propagated to high level callers");
+  b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
+            "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -4345,7 +4350,7 @@ int BlueStore::_open_bdev(bool create)
     goto fail_close;
   }
   if (dev_size < cct->_conf->bluestore_bluefs_min) {
-    dout(1) << __func__ << " main device size " << si_t(dev_size)
+    dout(1) << __func__ << " main device size " << byte_u_t(dev_size)
             << " is too small, disable bluestore_bluefs_min for now"
             << dendl;
     int r = cct->_conf->set_val("bluestore_bluefs_min", "0");
@@ -4498,7 +4503,7 @@ int BlueStore::_open_alloc()
     bytes += length;
   }
   fm->enumerate_reset();
-  dout(1) << __func__ << " loaded " << pretty_si_t(bytes)
+  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
 	  << " in " << num << " extents"
 	  << dendl;
 
@@ -5077,9 +5082,9 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   float bluefs_ratio = (float)bluefs_free / (float)total_free;
 
   dout(10) << __func__
-	   << " bluefs " << pretty_si_t(bluefs_free)
+	   << " bluefs " << byte_u_t(bluefs_free)
 	   << " free (" << bluefs_free_ratio
-	   << ") bluestore " << pretty_si_t(my_free)
+	   << ") bluestore " << byte_u_t(my_free)
 	   << " free (" << my_free_ratio
 	   << "), bluefs_ratio " << bluefs_ratio
 	   << dendl;
@@ -5090,14 +5095,14 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     gift = cct->_conf->bluestore_bluefs_gift_ratio * total_free;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " < min_ratio " << cct->_conf->bluestore_bluefs_min_ratio
-	     << ", should gift " << pretty_si_t(gift) << dendl;
+	     << ", should gift " << byte_u_t(gift) << dendl;
   } else if (bluefs_ratio > cct->_conf->bluestore_bluefs_max_ratio) {
     reclaim = cct->_conf->bluestore_bluefs_reclaim_ratio * total_free;
     if (bluefs_total - reclaim < cct->_conf->bluestore_bluefs_min)
       reclaim = bluefs_total - cct->_conf->bluestore_bluefs_min;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " > max_ratio " << cct->_conf->bluestore_bluefs_max_ratio
-	     << ", should reclaim " << pretty_si_t(reclaim) << dendl;
+	     << ", should reclaim " << byte_u_t(reclaim) << dendl;
   }
 
   // don't take over too much of the freespace
@@ -5107,7 +5112,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     uint64_t g = cct->_conf->bluestore_bluefs_min - bluefs_total;
     dout(10) << __func__ << " bluefs_total " << bluefs_total
 	     << " < min " << cct->_conf->bluestore_bluefs_min
-	     << ", should gift " << pretty_si_t(g) << dendl;
+	     << ", should gift " << byte_u_t(g) << dendl;
     if (g > gift)
       gift = g;
     reclaim = 0;
@@ -5118,7 +5123,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     uint64_t g = min_free - bluefs_free;
     dout(10) << __func__ << " bluefs_free " << bluefs_free
 	     << " < min " << min_free
-	     << ", should gift " << pretty_si_t(g) << dendl;
+	     << ", should gift " << byte_u_t(g) << dendl;
     if (g > gift)
       gift = g;
     reclaim = 0;
@@ -5131,7 +5136,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     // hard cap to fit into 32 bits
     gift = std::min<uint64_t>(gift, 1ull << 31);
     dout(10) << __func__ << " gifting " << gift
-	     << " (" << pretty_si_t(gift) << ")" << dendl;
+	     << " (" << byte_u_t(gift) << ")" << dendl;
 
     // fixme: just do one allocation to start...
     int r = alloc->reserve(gift);
@@ -5168,7 +5173,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     // hard cap to fit into 32 bits
     reclaim = std::min<uint64_t>(reclaim, 1ull << 31);
     dout(10) << __func__ << " reclaiming " << reclaim
-	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
+	     << " (" << byte_u_t(reclaim) << ")" << dendl;
 
     while (reclaim > 0) {
       // NOTE: this will block and do IO.
@@ -5309,33 +5314,16 @@ int BlueStore::_setup_block_symlink_or_file(
 	}
 
 	if (cct->_conf->bluestore_block_preallocate_file) {
-#ifdef HAVE_POSIX_FALLOCATE
-	  r = ::posix_fallocate(fd, 0, size);
-	  if (r) {
+          r = ::ceph_posix_fallocate(fd, 0, size);
+          if (r > 0) {
 	    derr << __func__ << " failed to prefallocate " << name << " file to "
 	      << size << ": " << cpp_strerror(r) << dendl;
 	    VOID_TEMP_FAILURE_RETRY(::close(fd));
 	    return -r;
 	  }
-#else
-	  char data[1024*128];
-	  for (uint64_t off = 0; off < size; off += sizeof(data)) {
-	    if (off + sizeof(data) > size)
-	      r = ::write(fd, data, size - off);
-	    else
-	      r = ::write(fd, data, sizeof(data));
-	    if (r < 0) {
-	      r = -errno;
-	      derr << __func__ << " failed to prefallocate w/ write " << name << " file to "
-		<< size << ": " << cpp_strerror(r) << dendl;
-	      VOID_TEMP_FAILURE_RETRY(::close(fd));
-	      return r;
-	    }
-	  }
-#endif
 	}
 	dout(1) << __func__ << " resized " << name << " file to "
-		<< pretty_si_t(size) << "B" << dendl;
+		<< byte_u_t(size) << dendl;
       }
       VOID_TEMP_FAILURE_RETRY(::close(fd));
     } else {
@@ -6874,9 +6862,8 @@ int BlueStore::get_devices(set<string> *ls)
 int BlueStore::statfs(struct store_statfs_t *buf)
 {
   buf->reset();
-  buf->total = bdev->get_size();
-  buf->available = alloc->get_free();
 
+  uint64_t bfree = alloc->get_free();
   if (bluefs) {
     // part of our shared device is "free" according to BlueFS, but we
     // can't touch bluestore_bluefs_min of it.
@@ -6884,13 +6871,31 @@ int BlueStore::statfs(struct store_statfs_t *buf)
       bluefs->get_free(bluefs_shared_bdev),
       bluefs->get_total(bluefs_shared_bdev) - cct->_conf->bluestore_bluefs_min);
     if (shared_available > 0) {
-      buf->available += shared_available;
+      bfree += shared_available;
+    }
+  }
+
+  uint64_t thin_total, thin_avail;
+  if (bdev->get_thin_utilization(&thin_total, &thin_avail)) {
+    buf->total += thin_total;
+
+    // we are limited by both the size of the virtual device and the
+    // underlying physical device.
+    bfree = std::min(bfree, thin_avail);
+  } else {
+    buf->total = bdev->get_size();
+  }
+  buf->available += bfree;
+
+  if (bluefs) {
+    // include dedicated db, too, if that isn't the shared device.
+    if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
+      buf->total += bluefs->get_total(BlueFS::BDEV_DB);
     }
   }
 
   {
     std::lock_guard<std::mutex> l(vstatfs_lock);
-    
     buf->allocated = vstatfs.allocated();
     buf->stored = vstatfs.stored();
     buf->compressed = vstatfs.compressed();
@@ -6898,7 +6903,7 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     buf->compressed_allocated = vstatfs.compressed_allocated();
   }
 
-  dout(20) << __func__ << *buf << dendl;
+  dout(20) << __func__ << " " << *buf << dendl;
   return 0;
 }
 
@@ -8722,6 +8727,8 @@ void BlueStore::_txc_finish(TransContext *txc)
       dout(10) << __func__ << " empty zombie osr " << osr << " already reaped" << dendl;
     }
   }
+  logger->set(l_bluestore_fragmentation,
+    (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
 }
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
@@ -9837,7 +9844,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     default:
-      derr << __func__ << "bad op " << op->op << dendl;
+      derr << __func__ << " bad op " << op->op << dendl;
       ceph_abort();
     }
 
@@ -10201,7 +10208,8 @@ void BlueStore::_do_write_small(
 	      head_bl.append_zero(zlen);
 	      logger->inc(l_bluestore_write_pad_bytes, zlen);
 	    }
-	    bl.claim_prepend(head_bl);
+	    head_bl.claim_append(bl);
+	    bl.swap(head_bl);
 	    logger->inc(l_bluestore_write_penalty_read_ops);
 	  }
 	  if (tail_read) {
@@ -11386,7 +11394,7 @@ void BlueStore::_do_omap_clear(TransContext *txc, const string& omap_prefix,
   get_omap_header(id, &prefix);
   get_omap_tail(id, &tail);
   txc->t->rm_range_keys(omap_prefix, prefix, tail);
-  dout(20) << __func__ << "remove range start: "
+  dout(20) << __func__ << " remove range start: "
            << pretty_binary_string(prefix) << " end: "
            << pretty_binary_string(tail) << dendl;
 }
@@ -11530,7 +11538,7 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
     get_omap_key(o->onode.nid, first, &key_first);
     get_omap_key(o->onode.nid, last, &key_last);
     txc->t->rm_range_keys(prefix, key_first, key_last);
-    dout(20) << __func__ << "remove range start: "
+    dout(20) << __func__ << " remove range start: "
              << pretty_binary_string(key_first) << " end: "
              << pretty_binary_string(key_last) << dendl;
   }
@@ -12113,7 +12121,7 @@ void BlueStore::_flush_cache()
   }
   for (auto& p : coll_map) {
     if (!p.second->onode_map.empty()) {
-      derr << __func__ << "stray onodes on " << p.first << dendl;
+      derr << __func__ << " stray onodes on " << p.first << dendl;
       p.second->onode_map.dump<0>(cct);
     }
     if (!p.second->shared_blob_set.empty()) {

@@ -223,6 +223,9 @@ cdef extern from "rados/librados.h" nogil:
     int rados_nobjects_list_next(rados_list_ctx_t ctx, const char **entry, const char **key, const char **nspace)
     void rados_nobjects_list_close(rados_list_ctx_t ctx)
 
+    int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io, int * requires)
+    int rados_ioctx_pool_required_alignment2(rados_ioctx_t io, uint64_t * alignment)
+
     int rados_ioctx_snap_rollback(rados_ioctx_t io, const char * oid, const char * snapname)
     int rados_ioctx_snap_create(rados_ioctx_t io, const char * snapname)
     int rados_ioctx_snap_remove(rados_ioctx_t io, const char * snapname)
@@ -323,27 +326,25 @@ ADMIN_AUID = 0
 
 class Error(Exception):
     """ `Error` class, derived from `Exception` """
-    pass
-
-
-class InvalidArgumentError(Error):
-    pass
-
-
-class OSError(Error):
-    """ `OSError` class, derived from `Error` """
     def __init__(self, message, errno=None):
-        super(OSError, self).__init__(message)
+        super(Exception, self).__init__(message)
         self.errno = errno
 
     def __str__(self):
-        msg = super(OSError, self).__str__()
+        msg = super(Exception, self).__str__()
         if self.errno is None:
             return msg
         return '[errno {0}] {1}'.format(self.errno, msg)
 
     def __reduce__(self):
         return (self.__class__, (self.message, self.errno))
+
+class InvalidArgumentError(Error):
+    pass
+
+class OSError(Error):
+    """ `OSError` class, derived from `Error` """
+    pass
 
 class InterruptedOrTimeoutError(OSError):
     """ `InterruptedOrTimeoutError` class, derived from `OSError` """
@@ -3790,6 +3791,32 @@ returned %d, but should return zero on success." % (self.name, ret))
         finally:
             free(c_keys)
             free(c_vals)
+
+    def alignment(self):
+        """
+        Returns pool alignment
+
+        :returns:
+            Number of alignment bytes required by the current pool, or None if
+            alignment is not required.
+        """
+        cdef:
+            int requires = 0
+            uint64_t _alignment
+
+        with nogil:
+            ret = rados_ioctx_pool_requires_alignment2(self.io, &requires)
+        if ret != 0:
+            raise make_ex(ret, "error checking alignment")
+
+        alignment = None
+        if requires:
+            with nogil:
+                ret = rados_ioctx_pool_required_alignment2(self.io, &_alignment)
+            if ret != 0:
+                raise make_ex(ret, "error querying alignment")
+            alignment = _alignment
+        return alignment
 
 
 def set_object_locator(func):

@@ -47,7 +47,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
   aplptr_t create_apl_remote(CephContext* const cct,
                              const req_state* const s,
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
-                             const rgw::auth::RemoteApplier::AuthInfo info
+                             const rgw::auth::RemoteApplier::AuthInfo &info
                             ) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
@@ -177,7 +177,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
         signature(signature.to_string()) {
     }
 
-    ChunkMeta(const boost::string_view& signature)
+    explicit ChunkMeta(const boost::string_view& signature)
       : signature(signature.to_string()) {
     }
 
@@ -281,7 +281,7 @@ public:
   /* Defined in rgw_auth_s3.cc because of get_v4_exp_payload_hash(). We need
    * the constructor to be public because of the std::make_shared employed by
    * the create() method. */
-  AWSv4ComplSingle(const req_state* const s);
+  explicit AWSv4ComplSingle(const req_state* const s);
 
   ~AWSv4ComplSingle() {
     if (sha256_hash) {

@@ -31,5 +31,5 @@ The *localpool* module understands the following options:
 These options are set via the config-key interface.  For example, to
 change the replication level to 2x with only 64 PGs, ::
 
-  ceph config-key set mgr/localpool/num_rep 2
-  ceph config-key set mgr/localpool/pg_num 64
+  ceph config set mgr mgr/localpool/num_rep 2
+  ceph config set mgr mgr/localpool/pg_num 64

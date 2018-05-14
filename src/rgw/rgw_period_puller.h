@@ -12,7 +12,7 @@ class RGWPeriod;
 class RGWPeriodPuller : public RGWPeriodHistory::Puller {
   RGWRados *const store;
  public:
-  RGWPeriodPuller(RGWRados* store) : store(store) {}
+  explicit RGWPeriodPuller(RGWRados* store) : store(store) {}
 
   int pull(const std::string& period_id, RGWPeriod& period) override;
 };

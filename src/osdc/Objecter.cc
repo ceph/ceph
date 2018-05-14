@@ -151,7 +151,6 @@ enum {
 
 static const char *config_keys[] = {
   "crush_location",
-  "objecter_mclock_service_tracker",
   NULL
 };
 
@@ -223,26 +222,12 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("crush_location")) {
     update_crush_location();
   }
-  if (changed.count("objecter_mclock_service_tracker")) {
-    update_mclock_service_tracker();
-  }
 }
 
 void Objecter::update_crush_location()
 {
   unique_lock wl(rwlock);
   crush_location = cct->crush_location.get_location();
-}
-
-void Objecter::update_mclock_service_tracker()
-{
-  unique_lock wl(rwlock);
-  if (cct->_conf->objecter_mclock_service_tracker && (!mclock_service_tracker)) {
-    qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
-  } else if (!cct->_conf->objecter_mclock_service_tracker) {
-    qos_trk.reset();
-  }
-  mclock_service_tracker = cct->_conf->objecter_mclock_service_tracker;
 }
 
 // messages ------------------------------
@@ -606,6 +591,10 @@ void Objecter::_linger_commit(LingerOp *info, int r, bufferlist& outbl)
   if (info->on_reg_commit) {
     info->on_reg_commit->complete(r);
     info->on_reg_commit = NULL;
+  }
+  if (r < 0 && info->on_notify_finish) {
+    info->on_notify_finish->complete(r);
+    info->on_notify_finish = nullptr;
   }
 
   // only tell the user the first time we do this
@@ -1097,9 +1086,7 @@ void Objecter::_scan_requests(
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
-      if (op->session) {
-	_session_op_remove(op->session, op);
-      }
+      _session_op_remove(op->session, op);
       need_resend[op->tid] = op;
       _op_cancel_map_check(op);
       break;
@@ -1128,9 +1115,7 @@ void Objecter::_scan_requests(
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
       need_resend_command[c->tid] = c;
-      if (c->session) {
-	_session_command_op_remove(c->session, c);
-      }
+      _session_command_op_remove(c->session, c);
       _command_cancel_map_check(c);
       break;
     case RECALC_OP_TARGET_POOL_DNE:
@@ -1568,6 +1553,7 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 		     << " concluding pool " << op->target.base_pgid.pool()
 		     << " dne" << dendl;
       if (op->onfinish) {
+	num_in_flight--;
 	op->onfinish->complete(-ENOENT);
       }
 
@@ -1668,8 +1654,14 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
   }
   if (op->map_dne_bound > 0) {
     if (osdmap->get_epoch() >= op->map_dne_bound) {
+      LingerOp::unique_lock wl{op->watch_lock};
       if (op->on_reg_commit) {
 	op->on_reg_commit->complete(-ENOENT);
+	op->on_reg_commit = nullptr;
+      }
+      if (op->on_notify_finish) {
+        op->on_notify_finish->complete(-ENOENT);
+        op->on_notify_finish = nullptr;
       }
       *need_unregister = true;
     }
@@ -1725,7 +1717,9 @@ void Objecter::C_Command_Map_Latest::finish(int r)
   if (c->map_dne_bound == 0)
     c->map_dne_bound = latest;
 
+  OSDSession::unique_lock sul(c->session->lock);
   objecter->_check_command_map_dne(c);
+  sul.unlock();
 
   c->put();
 }
@@ -1733,6 +1727,7 @@ void Objecter::C_Command_Map_Latest::finish(int r)
 void Objecter::_check_command_map_dne(CommandOp *c)
 {
   // rwlock is locked unique
+  // session is locked unique
 
   ldout(cct, 10) << "_check_command_map_dne tid " << c->tid
 		 << " current " << osdmap->get_epoch()
@@ -1750,6 +1745,7 @@ void Objecter::_check_command_map_dne(CommandOp *c)
 void Objecter::_send_command_map_check(CommandOp *c)
 {
   // rwlock is locked unique
+  // session is locked unique
 
   // ask the monitor
   if (check_latest_map_commands.count(c->tid) == 0) {
@@ -3139,8 +3135,10 @@ void Objecter::_finish_op(Op *op, int r)
 
   // op->session->lock is locked unique or op->session is null
 
-  if (!op->ctx_budgeted && op->budgeted)
-    put_op_budget(op);
+  if (!op->ctx_budgeted && op->budget >= 0) {
+    put_op_budget_bytes(op->budget);
+    op->budget = -1;
+  }
 
   if (op->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(op->ontimeout);
@@ -3216,11 +3214,6 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   if (op->reqid != osd_reqid_t()) {
     m->set_reqid(op->reqid);
-  }
-
-  if (mclock_service_tracker) {
-    dmc::ReqParams rp = qos_trk->get_req_params(op->target.osd);
-    m->set_qos_params(rp);
   }
 
   logger->inc(l_osdc_op_send);
@@ -3454,7 +3447,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->tid = 0;
     m->get_redirect().combine_with_locator(op->target.target_oloc,
 					   op->target.target_oid.name);
-    op->target.flags |= CEPH_OSD_FLAG_REDIRECTED;
+    op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED | CEPH_OSD_FLAG_IGNORE_OVERLAY);
     _op_submit(op, sul, NULL);
     m->put();
     return;
@@ -3540,9 +3533,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
-  if (mclock_service_tracker) {
-    qos_trk->track_resp(op->target.osd, m->get_qos_resp());
-  }
   ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
   _finish_op(op, 0);
 
@@ -3674,7 +3664,7 @@ uint32_t Objecter::list_nobjects_seek(NListContext *list_context,
   shared_lock rl(rwlock);
   list_context->pos = hobject_t(object_t(), string(), CEPH_NOSNAP,
 				pos, list_context->pool_id, string());
-  ldout(cct, 10) << __func__ << list_context
+  ldout(cct, 10) << __func__ << " " << list_context
 		 << " pos " << pos << " -> " << list_context->pos << dendl;
   pg_t actual = osdmap->raw_pg_to_pg(pg_t(pos, list_context->pool_id));
   list_context->current_pg = actual.ps();
@@ -3884,8 +3874,12 @@ struct C_SelfmanagedSnap : public Context {
   C_SelfmanagedSnap(snapid_t *ps, Context *f) : psnapid(ps), fin(f) {}
   void finish(int r) override {
     if (r == 0) {
-      bufferlist::iterator p = bl.begin();
-      decode(*psnapid, p);
+      try {
+        bufferlist::iterator p = bl.begin();
+        decode(*psnapid, p);
+      } catch (buffer::error&) {
+        r = -EIO;
+      }
     }
     fin->complete(r);
   }
@@ -4784,8 +4778,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << " not found" << dendl;
     m->put();
     sl.unlock();
-    if (s)
-      s->put();
+    s->put();
     return;
   }
 
@@ -4798,8 +4791,7 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << dendl;
     m->put();
     sl.unlock();
-    if (s)
-      s->put();
+    s->put();
     return;
   }
   if (c->poutbl) {
@@ -4808,11 +4800,12 @@ void Objecter::handle_command_reply(MCommandReply *m)
 
   sl.unlock();
 
-
+  OSDSession::unique_lock sul(s->lock);
   _finish_command(c, m->r, m->rs);
+  sul.unlock();
+
   m->put();
-  if (s)
-    s->put();
+  s->put();
 }
 
 void Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
@@ -4956,13 +4949,16 @@ int Objecter::command_op_cancel(OSDSession *s, ceph_tid_t tid, int r)
 
   CommandOp *op = it->second;
   _command_cancel_map_check(op);
+  OSDSession::unique_lock sl(op->session->lock);
   _finish_command(op, r, "");
+  sl.unlock();
   return 0;
 }
 
 void Objecter::_finish_command(CommandOp *c, int r, string rs)
 {
   // rwlock is locked unique
+  // session lock is locked
 
   ldout(cct, 10) << "_finish_command " << c->tid << " = " << r << " "
 		 << rs << dendl;
@@ -4974,10 +4970,7 @@ void Objecter::_finish_command(CommandOp *c, int r, string rs)
   if (c->ontimeout && r != -ETIMEDOUT)
     timer.cancel_event(c->ontimeout);
 
-  OSDSession *s = c->session;
-  OSDSession::unique_lock sl(s->lock);
   _session_command_op_remove(c->session, c);
-  sl.unlock();
 
   c->put();
 

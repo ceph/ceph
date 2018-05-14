@@ -202,7 +202,7 @@ protected:
   }
 
 public:
-  DecoratedRestfulClient(DecorateeT&& decoratee)
+  explicit DecoratedRestfulClient(DecorateeT&& decoratee)
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
@@ -308,7 +308,7 @@ class StaticOutputBufferer : public std::streambuf {
   std::streambuf::char_type buffer[BufferSizeV];
 
 public:
-  StaticOutputBufferer(BuffererSink& sink)
+  explicit StaticOutputBufferer(BuffererSink& sink)
     : sink(sink) {
     constexpr size_t len = sizeof(buffer) - sizeof(std::streambuf::char_type);
     std::streambuf::setp(buffer, buffer + len);

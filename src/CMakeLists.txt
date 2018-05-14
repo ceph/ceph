@@ -31,7 +31,7 @@ endif()
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wtype-limits -Wignored-qualifiers -Winit-self")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno-strict-aliasing -fsigned-char")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth-1024 -Wno-invalid-offsetof")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth-1024")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
@@ -109,7 +109,7 @@ if(no_yasm)
 else(no_yasm)
   message(STATUS " we have a modern and working yasm")
   if(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
-    message(STATUS " we are x84_64")
+    message(STATUS " we are x86_64")
     set(save_quiet ${CMAKE_REQUIRED_QUIET})
     set(CMAKE_REQUIRED_QUIET true)
     include(CheckCXXSourceCompiles)
@@ -167,6 +167,15 @@ else()
   set(C_STANDARD_REQUIRED ON)
 endif()
 
+include(CheckCXXSourceCompiles)
+CHECK_CXX_SOURCE_COMPILES("
+#include <map>
+using Map = std::map<int, int>;
+int main() {
+  Map m;
+  m.merge(Map{});
+}
+" HAVE_STDLIB_MAP_SPLICING)
 
 if(CMAKE_COMPILER_IS_GNUCXX AND
     CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.1)
@@ -483,6 +492,7 @@ set(libcommon_files
   osd/OSDMapMapping.cc
   common/histogram.cc
   osd/osd_types.cc
+  osd/PGPeeringEvent.cc
   osd/OpRequest.cc
   common/blkdev.cc
   common/common_init.cc
@@ -522,10 +532,9 @@ set(libcommon_files
   common/Cycles.cc
   common/scrub_types.cc
   common/bit_str.cc
-  dmclock/src/dmclock_util.cc
-  dmclock/support/src/run_every.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  common/compat.cc
   common/Graylog.cc
   common/fs_types.cc
   common/dns_resolve.cc
@@ -638,6 +647,9 @@ if(HAVE_RDMA)
 endif()
 if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
+endif()
+if(HAVE_QATZIP)
+  list(APPEND ceph_common_deps ${QATZIP_LIBRARIES})
 endif()
 
 set_source_files_properties(${CMAKE_SOURCE_DIR}/src/ceph_ver.c
@@ -820,7 +832,6 @@ target_link_libraries(ceph-dencoder
   cls_log_client
   cls_statelog_client
   cls_version_client
-  cls_replica_log_client
   cls_user_client
   cls_journal_client
   cls_timeindex_client
@@ -908,9 +919,7 @@ if(WITH_TESTS AND WITH_DMCLOCK_TESTS)
   add_subdirectory(dmclock/support/test)
 endif(WITH_TESTS AND WITH_DMCLOCK_TESTS)
 
-if(HAVE_INTEL AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
-  add_subdirectory(crypto/isa-l)
-endif()
+add_subdirectory(crypto)
 
 if(WITH_TESTS)
   configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
@@ -1068,6 +1077,15 @@ if(WITH_RADOSGW)
       APPEND PROPERTY COMPILE_DEFINITIONS CRYPTO_LIB="${LIBCRYPTO_SONAME}")
   endif()
 
+  if (OPENSSL_FOUND)
+    # Use cmake to determine openssl version, a TODO is to make
+    # civetweb itself do this based on openssl_api_compat strings
+    if (NOT (OPENSSL_VERSION VERSION_LESS "1.1"))
+      message(STATUS "Setting civetweb to use OPENSSL >= 1.1")
+      set_property(TARGET civetweb_common_objs
+        APPEND PROPERTY COMPILE_DEFINITIONS OPENSSL_API_1_1=1)
+    endif()
+  endif(OPENSSL_FOUND)
   add_subdirectory(rgw)
 
 endif(WITH_RADOSGW)
@@ -1108,6 +1126,10 @@ if(WITH_LTTNG)
   add_dependencies(vstart tracepoint_libraries)
 endif(WITH_LTTNG)
 
+if(WITH_MGR_DASHBOARD_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
+  add_dependencies(vstart mgr-dashboard-frontend-build)
+endif()
+
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
     vstart
@@ -1130,7 +1152,3 @@ if (IS_DIRECTORY "${PROJECT_SOURCE_DIR}/.git")
 endif()
 
 add_subdirectory(script)
-
-if(WITH_EMBEDDED)
-  add_subdirectory(libcephd)
-endif()

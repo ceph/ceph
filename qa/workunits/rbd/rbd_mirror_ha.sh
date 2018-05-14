@@ -1,9 +1,13 @@
-#!/bin/sh
+#!/bin/sh -ex
 #
 # rbd_mirror_ha.sh - test rbd-mirror daemons in HA mode
 #
 
+RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-7}
+
 . $(dirname $0)/rbd_mirror_helpers.sh
+
+setup
 
 is_leader()
 {
@@ -23,7 +27,7 @@ wait_for_leader()
 
     for s in 1 1 2 4 4 4 4 4 8 8 8 8 16 16 32 64; do
 	sleep $s
-	for instance in `seq 0 9`; do
+	for instance in `seq 0 ${LAST_MIRROR_INSTANCE}`; do
 	    is_leader ${instance} || continue
 	    LEADER=${instance}
 	    return 0
@@ -203,5 +207,3 @@ for i in 0 1 2 3 4 5; do
 done
 
 stop_mirror ${CLUSTER1}:${LEADER}
-
-echo OK

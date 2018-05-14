@@ -5,7 +5,6 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { BsDropdownModule } from 'ngx-bootstrap';
 
 import { SharedModule } from '../../../shared/shared.module';
-import { TablePerformanceCounterService } from '../services/table-performance-counter.service';
 import { TablePerformanceCounterComponent } from './table-performance-counter.component';
 
 describe('TablePerformanceCounterComponent', () => {
@@ -20,8 +19,7 @@ describe('TablePerformanceCounterComponent', () => {
         HttpClientModule,
         BsDropdownModule.forRoot(),
         SharedModule
-      ],
-      providers: [ TablePerformanceCounterService ]
+      ]
     })
     .compileComponents();
   }));

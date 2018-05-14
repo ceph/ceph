@@ -14,12 +14,6 @@
 
 struct obj_list_watch_response_t;
 
-#if __GNUC__ >= 4
-  #define CEPH_CLS_API    __attribute__ ((visibility ("default")))
-#else
-  #define CEPH_CLS_API
-#endif
-
 extern "C" {
 #endif
 

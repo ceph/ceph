@@ -400,7 +400,7 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   inode = front.inode;
 
   if (inode.is_backtrace_updated())
-    _mark_dirty_parent(ls, old_pool != inode.layout.pool_id);
+    mark_dirty_parent(ls, old_pool != inode.layout.pool_id);
 
   if (front.xattrs) {
     --num_projected_xattrs;
@@ -435,6 +435,8 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
       new_srnode->seq = snaprealm->get_newest_seq();
       new_srnode->past_parents.clear();
     }
+    if (snaprealm)
+      snaprealm->past_parents_dirty = false;
   } else {
     if (snapid == 0)
       snapid = mdcache->get_global_snaprealm()->get_newest_seq();
@@ -552,11 +554,10 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm, bool early)
     bool invalidate_cached_snaps = false;
     if (!snaprealm) {
       open_snaprealm();
-    } else if (next_snaprealm->past_parents.size() !=
-	       snaprealm->srnode.past_parents.size()) {
+    } else if (!snaprealm->srnode.past_parents.empty()) {
       invalidate_cached_snaps = true;
       // re-open past parents
-      snaprealm->_close_parents();
+      snaprealm->close_parents();
 
       dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
 	       << " -> " << next_snaprealm->past_parents << dendl;
@@ -1350,7 +1351,7 @@ void CInode::fetch_backtrace(Context *fin, bufferlist *backtrace)
   mdcache->fetch_backtrace(inode.ino, get_backtrace_pool(), *backtrace, fin);
 }
 
-void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
+void CInode::mark_dirty_parent(LogSegment *ls, bool dirty_pool)
 {
   if (!state_test(STATE_DIRTYPARENT)) {
     dout(10) << __func__ << dendl;
@@ -1398,7 +1399,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
     mds->clog->error() << "bad backtrace on directory inode " << ino();
     assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
 
-    _mark_dirty_parent(mds->mdlog->get_current_segment(), false);
+    mark_dirty_parent(mds->mdlog->get_current_segment(), false);
     mds->mdlog->flush();
   }
 }
@@ -3635,6 +3636,8 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->ctime = i->ctime;
   m->change_attr = i->change_attr;
   m->time_warp_seq = i->time_warp_seq;
+  m->nfiles = i->dirstat.nfiles;
+  m->nsubdirs = i->dirstat.nsubdirs;
 
   if (cap->client_inline_version < i->inline_data.version) {
     m->inline_version = cap->client_inline_version = i->inline_data.version;
@@ -3881,7 +3884,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   }
   if (is_dirty_parent()) {
     get(PIN_DIRTYPARENT);
-    _mark_dirty_parent(ls);
+    mark_dirty_parent(ls);
   }
 
   decode(pop, ceph_clock_now(), p);
@@ -3994,7 +3997,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       START = 0,
       BACKTRACE,
       INODE,
-      DIRFRAGS
+      DIRFRAGS,
+      SNAPREALM,
     };
 
     ValidationContinuation(CInode *i,
@@ -4009,6 +4013,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       set_callback(BACKTRACE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_backtrace));
       set_callback(INODE, static_cast<Continuation::stagePtr>(&ValidationContinuation::_inode_disk));
       set_callback(DIRFRAGS, static_cast<Continuation::stagePtr>(&ValidationContinuation::_dirfrags));
+      set_callback(SNAPREALM, static_cast<Continuation::stagePtr>(&ValidationContinuation::_snaprealm));
     }
 
     ~ValidationContinuation() override {
@@ -4046,35 +4051,28 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
     bool _start(int rval) {
       if (in->is_dirty()) {
-        MDCache *mdcache = in->mdcache;
-        mempool_inode& inode = in->inode;
-        dout(20) << "validating a dirty CInode; results will be inconclusive"
-                 << dendl;
+	MDCache *mdcache = in->mdcache;
+	mempool_inode& inode = in->inode;
+	dout(20) << "validating a dirty CInode; results will be inconclusive"
+		 << dendl;
       }
       if (in->is_symlink()) {
-        // there's nothing to do for symlinks!
-        return true;
+	// there's nothing to do for symlinks!
+	return true;
       }
+
+      // prefetch snaprealm's past parents
+      if (in->snaprealm && !in->snaprealm->have_past_parents_open())
+	in->snaprealm->open_parents(nullptr);
 
       C_OnFinisher *conf = new C_OnFinisher(get_io_callback(BACKTRACE),
-                                            in->mdcache->mds->finisher);
+					    in->mdcache->mds->finisher);
 
-      // Whether we have a tag to apply depends on ScrubHeader (if one is
-      // present)
-      if (in->scrub_infop) {
-        // I'm a non-orphan, so look up my ScrubHeader via my linkage
-        std::string_view tag = in->scrub_infop->header->get_tag();
-        // Rather than using the usual CInode::fetch_backtrace,
-        // use a special variant that optionally writes a tag in the same
-        // operation.
-        fetch_backtrace_and_tag(in, tag, conf,
-                                &results->backtrace.ondisk_read_retval, &bl);
-      } else {
-        // When we're invoked outside of ScrubStack we might be called
-        // on an orphaned inode like /
-        fetch_backtrace_and_tag(in, {}, conf,
-                                &results->backtrace.ondisk_read_retval, &bl);
-      }
+      std::string_view tag = in->scrub_infop->header->get_tag();
+      // Rather than using the usual CInode::fetch_backtrace,
+      // use a special variant that optionally writes a tag in the same
+      // operation.
+      fetch_backtrace_and_tag(in, tag, conf, &results->backtrace.ondisk_read_retval, &bl);
       return false;
     }
 
@@ -4135,14 +4133,10 @@ next:
         in->make_path_string(path);
         in->mdcache->mds->clog->warn() << "bad backtrace on inode " << in->ino()
                                        << "(" << path << "), rewriting it";
-        in->_mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
+        in->mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
                            false);
         // Flag that we repaired this BT so that it won't go into damagetable
         results->backtrace.repaired = true;
-
-        // Flag that we did some repair work so that our repair operation
-        // can be flushed at end of scrub
-        in->scrub_infop->header->set_repaired();
       }
 
       // If the inode's number was free in the InoTable, fix that
@@ -4172,13 +4166,13 @@ next:
         }
       }
 
-      // quit if we're a file, or kick off directory checks otherwise
-      // TODO: validate on-disk inode for non-base directories
-      if (!in->is_dir()) {
-        return true;
-      }
 
-      return validate_directory_data();
+      if (in->is_dir()) {
+	return validate_directory_data();
+      } else {
+	// TODO: validate on-disk inode for normal files
+	return check_inode_snaprealm();
+      }
     }
 
     bool validate_directory_data() {
@@ -4193,8 +4187,9 @@ next:
         shadow_in->fetch(get_internal_callback(INODE));
         return false;
       } else {
+	// TODO: validate on-disk inode for non-base directories
 	results->inode.passed = true;
-        return check_dirfrag_rstats();
+	return check_dirfrag_rstats();
       }
     }
 
@@ -4208,7 +4203,7 @@ next:
       mempool_inode& i = in->inode;
       if (si.version > i.version) {
         // uh, what?
-        results->inode.error_str << "On-disk inode is newer than in-memory one!";
+        results->inode.error_str << "On-disk inode is newer than in-memory one; ";
 	goto next;
       } else {
         bool divergent = false;
@@ -4216,7 +4211,7 @@ next:
         results->inode.passed = !divergent && r >= 0;
         if (!results->inode.passed) {
           results->inode.error_str <<
-              "On-disk inode is divergent or newer than in-memory one!";
+              "On-disk inode is divergent or newer than in-memory one; ";
 	  goto next;
         }
       }
@@ -4273,8 +4268,7 @@ next:
 	assert(dir->get_version() > 0);
 	nest_info.add(dir->fnode.accounted_rstat);
 	dir_info.add(dir->fnode.accounted_fragstat);
-	if (dir->scrub_infop &&
-	    dir->scrub_infop->pending_scrub_error) {
+	if (dir->scrub_infop->pending_scrub_error) {
 	  dir->scrub_infop->pending_scrub_error = false;
 	  if (dir->scrub_infop->header->get_repair()) {
             results->raw_stats.repaired = true;
@@ -4291,8 +4285,7 @@ next:
       // ...and that their sum matches our inode settings
       if (!dir_info.same_sums(in->inode.dirstat) ||
 	  !nest_info.same_sums(in->inode.rstat)) {
-	if (in->scrub_infop &&
-	    in->scrub_infop->header->get_repair()) {
+	if (in->scrub_infop->header->get_repair()) {
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
@@ -4308,6 +4301,37 @@ next:
 
       results->raw_stats.passed = true;
 next:
+      // snaprealm
+      return check_inode_snaprealm();
+    }
+
+    bool check_inode_snaprealm() {
+      if (!in->snaprealm)
+	return true;
+
+      if (!in->snaprealm->have_past_parents_open()) {
+	in->snaprealm->open_parents(get_internal_callback(SNAPREALM));
+	return false;
+      } else {
+	return immediate(SNAPREALM, 0);
+      }
+    }
+
+    bool _snaprealm(int rval) {
+
+      if (in->snaprealm->past_parents_dirty ||
+	  !in->get_projected_srnode()->past_parents.empty()) {
+	// temporarily store error in field of on-disk inode validation temporarily
+	results->inode.checked = true;
+	results->inode.passed = false;
+	if (in->scrub_infop->header->get_repair()) {
+	  results->inode.error_str << "Inode has old format snaprealm (will upgrade)";
+	  results->inode.repaired = true;
+	  in->mdcache->upgrade_inode_snaprealm(in);
+	} else {
+	  results->inode.error_str << "Inode has old format snaprealm";
+	}
+      }
       return true;
     }
 
@@ -4315,10 +4339,16 @@ next:
       if ((!results->raw_stats.checked || results->raw_stats.passed) &&
 	  (!results->backtrace.checked || results->backtrace.passed) &&
 	  (!results->inode.checked || results->inode.passed))
-        results->passed_validation = true;
-      if (fin) {
-        fin->complete(get_rval());
-      }
+	results->passed_validation = true;
+
+      // Flag that we did some repair work so that our repair operation
+      // can be flushed at end of scrub
+      if (results->backtrace.repaired ||
+	  results->inode.repaired ||
+	  results->raw_stats.repaired)
+	in->scrub_infop->header->set_repaired();
+      if (fin)
+	fin->complete(get_rval());
     }
   };
 

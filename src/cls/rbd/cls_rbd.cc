@@ -5191,7 +5191,7 @@ int dir_remove(cls_method_context_t hctx,
 
 static const string RBD_GROUP_SNAP_KEY_PREFIX = "snapshot_";
 
-std::string snap_key(std::string snap_id) {
+std::string snap_key(const std::string &snap_id) {
   ostringstream oss;
   oss << RBD_GROUP_SNAP_KEY_PREFIX << snap_id;
   return oss.str();
@@ -5238,8 +5238,8 @@ int snap_list(cls_method_context_t hctx, cls::rbd::GroupSnapshot start_after,
 }
 
 static int check_duplicate_snap_name(cls_method_context_t hctx,
-				     std::string snap_name,
-				     std::string snap_id)
+				     const std::string &snap_name,
+				     const std::string &snap_id)
 {
   const int max_read = 1024;
   cls::rbd::GroupSnapshot snap_last;

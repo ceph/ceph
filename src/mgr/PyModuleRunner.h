@@ -40,7 +40,7 @@ protected:
     PyModuleRunner *mod;
 
   public:
-    PyModuleRunnerThread(PyModuleRunner *mod_)
+    explicit PyModuleRunnerThread(PyModuleRunner *mod_)
       : mod(mod_) {}
 
     void *entry() override;
@@ -53,7 +53,7 @@ public:
   void log(int level, const std::string &record);
 
   PyModuleRunner(
-      PyModuleRef py_module_,
+      const PyModuleRef &py_module_,
       LogChannelRef clog_)
     : 
       py_module(py_module_),

@@ -28,11 +28,11 @@ void DecayCounter::decode(const utime_t &t, bufferlist::iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
   if (struct_v < 2) {
-    double half_life;
+    double half_life = 0.0;
     decode(half_life, p);
   }
   if (struct_v < 3) {
-    double k;
+    double k = 0.0;
     decode(k, p);
   }
   decode(val, p);
@@ -62,21 +62,23 @@ void DecayCounter::generate_test_instances(list<DecayCounter*>& ls)
 
 void DecayCounter::decay(utime_t now, const DecayRate &rate)
 {
-  utime_t el = now;
-  el -= last_decay;
+  if (now >= last_decay) {
+    double el = (double)(now - last_decay);
+    if (el >= 1.0) {
+      // calculate new value
+      double newval = (val+delta) * exp(el * rate.k);
+      if (newval < .01)
+	newval = 0.0;
 
-  if (el.sec() >= 1) {
-    // calculate new value
-    double newval = (val+delta) * exp((double)el * rate.k);
-    if (newval < .01)
-      newval = 0.0;
+      // calculate velocity approx
+      vel += (newval - val) * el;
+      vel *= exp(el * rate.k);
 
-    // calculate velocity approx
-    vel += (newval - val) * (double)el;
-    vel *= exp((double)el * rate.k);
-
-    val = newval;
-    delta = 0;
-    last_decay = now;
+      val = newval;
+      delta = 0;
+      last_decay = now;
+    }
+  } else {
+      last_decay = now;
   }
 }

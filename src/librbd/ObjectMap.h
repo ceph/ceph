@@ -69,6 +69,11 @@ public:
                   const ZTracer::Trace &parent_trace, T *callback_object) {
     assert(start_object_no < end_object_no);
     if (snap_id == CEPH_NOSNAP) {
+      end_object_no = std::min(end_object_no, m_object_map.size());
+      if (start_object_no >= end_object_no) {
+        return false;
+      }
+
       auto it = m_object_map.begin() + start_object_no;
       auto end_it = m_object_map.begin() + end_object_no;
       for (; it != end_it; ++it) {

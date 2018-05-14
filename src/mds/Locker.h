@@ -256,7 +256,7 @@ public:
 protected:
   void handle_inode_file_caps(class MInodeFileCaps *m);
 
-  void file_update_finish(CInode *in, MutationRef& mut, bool share_max, bool issue_client_cap,
+  void file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 			  client_t client, MClientCaps *ack);
 private:
   uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);

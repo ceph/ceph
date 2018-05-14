@@ -48,13 +48,13 @@ class MgrCluster(CephCluster):
         return [s['name'] for s in self.get_mgr_map()["standbys"]]
 
     def set_module_conf(self, module, key, val):
-        self.mon_manager.raw_cluster_cmd("config-key", "set",
+        self.mon_manager.raw_cluster_cmd("config", "set", "mgr",
                                          "mgr/{0}/{1}".format(
                                              module, key
                                          ), val)
 
     def set_module_localized_conf(self, module, mgr_id, key, val):
-        self.mon_manager.raw_cluster_cmd("config-key", "set",
+        self.mon_manager.raw_cluster_cmd("config", "set", "mgr",
                                          "mgr/{0}/{1}/{2}".format(
                                              module, mgr_id, key
                                          ), val)
@@ -118,7 +118,7 @@ class MgrTestCase(CephTestCase):
 
         initial_gid = cls.mgr_cluster.get_mgr_map()['active_gid']
         cls.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable",
-                                         module_name)
+                                                    module_name, "--force")
 
         # Wait for the module to load
         def has_restarted():

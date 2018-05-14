@@ -147,6 +147,13 @@ Parameters
 :Type: String
 :Required: No
 
+``allow_unordered``
+
+:Description: Allows the results to be returned unordered to reduce computation overhead. Cannot be used with ``delimiter``.
+:Type: Boolean
+:Required: No
+:Non-Standard Extension: Yes
+
 
 Response Entities
 ~~~~~~~~~~~~~~~~~

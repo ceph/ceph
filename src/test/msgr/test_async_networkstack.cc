@@ -125,7 +125,7 @@ class C_poll : public EventCallback {
   static const int sleepus = 500;
 
  public:
-  C_poll(EventCenter *c): center(c), woken(false) {}
+  explicit C_poll(EventCenter *c): center(c), woken(false) {}
   void do_request(uint64_t r) override {
     woken = true;
   }
@@ -573,7 +573,7 @@ class StressFactory {
     std::random_device rd;
     std::default_random_engine rng;
 
-    RandomString(size_t s): slen(s), rng(rd()) {}
+    explicit RandomString(size_t s): slen(s), rng(rd()) {}
     void prepare(size_t n) {
       static const char alphabet[] =
           "abcdefghijklmnopqrstuvwxyz"
@@ -631,7 +631,7 @@ class StressFactory {
   class C_delete : public EventCallback {
     T *ctxt;
    public:
-    C_delete(T *c): ctxt(c) {}
+    explicit C_delete(T *c): ctxt(c) {}
     void do_request(uint64_t id) override {
       delete ctxt;
       delete this;
@@ -656,7 +656,7 @@ class StressFactory {
     class Client_read_handle : public EventCallback {
       Client *c;
      public:
-      Client_read_handle(Client *_c): c(_c) {}
+      explicit Client_read_handle(Client *_c): c(_c) {}
       void do_request(uint64_t id) override {
         c->do_read_request();
       }
@@ -665,7 +665,7 @@ class StressFactory {
     class Client_write_handle : public EventCallback {
       Client *c;
      public:
-      Client_write_handle(Client *_c): c(_c) {}
+      explicit Client_write_handle(Client *_c): c(_c) {}
       void do_request(uint64_t id) override {
         c->do_write_request();
       }
@@ -795,7 +795,7 @@ class StressFactory {
     class Server_read_handle : public EventCallback {
       Server *s;
      public:
-      Server_read_handle(Server *_s): s(_s) {}
+      explicit Server_read_handle(Server *_s): s(_s) {}
       void do_request(uint64_t id) override {
         s->do_read_request();
       }
@@ -804,7 +804,7 @@ class StressFactory {
     class Server_write_handle : public EventCallback {
       Server *s;
      public:
-      Server_write_handle(Server *_s): s(_s) {}
+      explicit Server_write_handle(Server *_s): s(_s) {}
       void do_request(uint64_t id) override {
         s->do_write_request();
       }
@@ -940,7 +940,7 @@ class StressFactory {
   bool zero_copy_read;
   SocketOptions options;
 
-  explicit StressFactory(std::shared_ptr<NetworkStack> s, const string &addr,
+  explicit StressFactory(const std::shared_ptr<NetworkStack> &s, const string &addr,
                          size_t cli, size_t qd, size_t mc, size_t l, bool zero_copy)
       : stack(s), rs(128), client_num(cli), queue_depth(qd),
         max_message_length(l), message_count(mc), message_left(mc),

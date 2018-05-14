@@ -138,6 +138,11 @@ public:
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
 
+  /// hook to provide utilization of thinly-provisioned device
+  virtual bool get_thin_utilization(uint64_t *total, uint64_t *avail) const {
+    return false;
+  }
+
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;
 
   virtual int get_devname(std::string *out) {

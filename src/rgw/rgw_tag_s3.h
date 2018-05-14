@@ -28,7 +28,7 @@ class RGWObjTagEntry_S3: public XMLObj
   std::string val;
 public:
   RGWObjTagEntry_S3() {}
-  RGWObjTagEntry_S3(std::string k,std::string v):key(k),val(v) {};
+  RGWObjTagEntry_S3(const std::string &k, const std::string &v):key(k),val(v) {};
   ~RGWObjTagEntry_S3() {}
 
   bool xml_end(const char*) override;
@@ -53,7 +53,7 @@ public:
 
 class RGWObjTagsXMLParser : public RGWXMLParser
 {
-  XMLObj *alloc_obj(const char *el);
+  XMLObj *alloc_obj(const char *el) override;
 public:
   RGWObjTagsXMLParser() {}
   ~RGWObjTagsXMLParser() {}

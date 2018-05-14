@@ -18,6 +18,7 @@
 #include <map>
 #include <set>
 
+#include "global/global_init.h"
 #include "include/ceph_features.h"
 #include "include/types.h"
 #include "mon/PaxosService.h"
@@ -115,6 +116,9 @@ private:
   uint64_t max_global_id;
   uint64_t last_allocated_id;
 
+  bool _upgrade_format_to_dumpling();
+  bool _upgrade_format_to_luminous();
+  bool _upgrade_format_to_mimic();
   void upgrade_format() override;
 
   void export_keyring(KeyRing& keyring);
@@ -128,22 +132,14 @@ private:
     pending_auth.push_back(inc);
   }
 
-  /* validate mon caps ; don't care about caps for other services as
-   * we don't know how to validate them */
-  bool valid_caps(const vector<string>& caps, ostream *out) {
-    for (vector<string>::const_iterator p = caps.begin();
-         p != caps.end(); p += 2) {
-      if (!p->empty() && *p != "mon")
-        continue;
-      MonCap tmp;
-      if (!tmp.parse(*(p+1), out))
-        return false;
-    }
-    return true;
-  }
+  /* validate mon/osd/mds caps; fail on unrecognized service/type */
+  bool valid_caps(const string& type, const string& caps, ostream *out);
+  bool valid_caps(const vector<string>& caps, ostream *out);
 
   void on_active() override;
   bool should_propose(double& delay) override;
+  void get_initial_keyring(KeyRing *keyring);
+  void create_initial_keys(KeyRing *keyring);
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending

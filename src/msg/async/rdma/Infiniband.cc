@@ -584,7 +584,7 @@ int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
   end = base + bytes;
   assert(base);
   chunk_base = static_cast<Chunk*>(::malloc(sizeof(Chunk) * num));
-  memset(chunk_base, 0, sizeof(Chunk) * num);
+  memset(static_cast<void*>(chunk_base), 0, sizeof(Chunk) * num);
   free_chunks.reserve(num);
   ibv_mr* m = ibv_reg_mr(manager.pd->pd, base, bytes, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
   assert(m);
@@ -705,14 +705,14 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type bytes)
 
   m = static_cast<mem_info *>(manager->malloc(bytes + sizeof(*m)));
   if (!m) {
-    lderr(cct) << __func__ << "failed to allocate " <<
+    lderr(cct) << __func__ << " failed to allocate " <<
         bytes << " + " << sizeof(*m) << " bytes of memory for " << nbufs << dendl;
     return NULL;
   }
 
   m->mr = ibv_reg_mr(manager->pd->pd, m->chunks, bytes, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
   if (m->mr == NULL) {
-    lderr(cct) << __func__ << "failed to register " <<
+    lderr(cct) << __func__ << " failed to register " <<
         bytes << " + " << sizeof(*m) << " bytes of memory for " << nbufs << dendl;
     manager->free(m);
     return NULL;

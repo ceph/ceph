@@ -19,7 +19,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public librbd::MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+  explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
 };
@@ -221,6 +221,14 @@ TEST_F(TestMockDeepCopyImageCopyRequest, SimpleImage) {
 }
 
 TEST_F(TestMockDeepCopyImageCopyRequest, OutOfOrder) {
+  std::string max_ops_str;
+  ASSERT_EQ(0, _rados.conf_get("rbd_concurrent_management_ops", max_ops_str));
+  ASSERT_EQ(0, _rados.conf_set("rbd_concurrent_management_ops", "10"));
+  BOOST_SCOPE_EXIT( (max_ops_str) ) {
+    ASSERT_EQ(0, _rados.conf_set("rbd_concurrent_management_ops",
+                                 max_ops_str.c_str()));
+  } BOOST_SCOPE_EXIT_END;
+
   librados::snap_t snap_id_end;
   ASSERT_EQ(0, create_snap("copy", &snap_id_end));
 

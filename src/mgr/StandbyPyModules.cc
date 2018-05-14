@@ -31,9 +31,13 @@
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
 
-StandbyPyModules::StandbyPyModules(MonClient *monc_, const MgrMap &mgr_map_,
-    LogChannelRef clog_)
-    : monc(monc_), load_config_thread(monc, &state), clog(clog_)
+StandbyPyModules::StandbyPyModules(
+    const MgrMap &mgr_map_,
+    PyModuleConfig &module_config,
+    LogChannelRef clog_,
+    MonClient &monc_)
+    : state(module_config, monc_),
+      clog(clog_)
 {
   state.set_mgr_map(mgr_map_);
 }
@@ -42,13 +46,6 @@ StandbyPyModules::StandbyPyModules(MonClient *monc_, const MgrMap &mgr_map_,
 void StandbyPyModules::shutdown()
 {
   Mutex::Locker locker(lock);
-
-  if (!state.is_config_loaded && load_config_thread.is_started()) {
-    // FIXME: handle cases where initial load races with shutdown
-    // this is actually not super rare because 
-    assert(0);
-    //load_config_thread.kill(SIGKILL);
-  }
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto &i : modules) {
@@ -84,10 +81,6 @@ int StandbyPyModules::start_one(PyModuleRef py_module)
   modules[module_name].reset(new StandbyPyModule(
       state,
       py_module, clog));
-
-  if (modules.size() == 1) {
-    load_config_thread.create("LoadConfig");
-  }
 
   int r = modules[module_name]->load();
   if (r != 0) {
@@ -129,57 +122,68 @@ int StandbyPyModule::load()
   }
 }
 
-void *StandbyPyModules::LoadConfigThread::entry()
-{
-  dout(10) << "listing keys" << dendl;
-  JSONCommand cmd;
-  cmd.run(monc, "{\"prefix\": \"config-key ls\"}");
-  cmd.wait();
-  assert(cmd.r == 0);
-
-  std::map<std::string, std::string> loaded;
-  
-  for (auto &key_str : cmd.json_result.get_array()) {
-    std::string const key = key_str.get_str();
-    dout(20) << "saw key '" << key << "'" << dendl;
-
-    const std::string config_prefix = PyModuleRegistry::config_prefix;
-
-    if (key.substr(0, config_prefix.size()) == config_prefix) {
-      dout(20) << "fetching '" << key << "'" << dendl;
-      Command get_cmd;
-      std::ostringstream cmd_json;
-      cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
-      get_cmd.run(monc, cmd_json.str());
-      get_cmd.wait();
-      assert(get_cmd.r == 0);
-      loaded[key] = get_cmd.outbl.to_str();
-    }
-  }
-  state->loaded_config(loaded);
-
-  return nullptr;
-}
-
 bool StandbyPyModule::get_config(const std::string &key,
                                  std::string *value) const
 {
-  PyThreadState *tstate = PyEval_SaveThread();
-  PyEval_RestoreThread(tstate);
-
-  const std::string global_key = PyModuleRegistry::config_prefix
+  const std::string global_key = PyModule::config_prefix
     + get_name() + "/" + key;
 
-  dout(4) << __func__ << "key: " << global_key << dendl;
-
+  dout(4) << __func__ << " key: " << global_key << dendl;
+ 
   return state.with_config([global_key, value](const PyModuleConfig &config){
-    if (config.count(global_key)) {
-      *value = config.at(global_key);
+    if (config.config.count(global_key)) {
+      *value = config.config.at(global_key);
       return true;
     } else {
       return false;
     }
   });
+}
+
+bool StandbyPyModule::get_store(const std::string &key,
+                                std::string *value) const
+{
+
+  const std::string global_key = PyModule::config_prefix
+    + get_name() + "/" + key;
+
+  dout(4) << __func__ << " key: " << global_key << dendl;
+
+  // Active modules use a cache of store values (kept up to date
+  // as writes pass through the active mgr), but standbys
+  // fetch values synchronously to get an up to date value.
+  // It's an acceptable cost because standby modules should not be
+  // doing a lot.
+  
+  MonClient &monc = state.get_monc();
+
+  std::ostringstream cmd_json;
+  cmd_json << "{\"prefix\": \"config-key get\", \"key\": \""
+           << global_key << "\"}";
+
+  bufferlist outbl;
+  std::string outs;
+  C_SaferCond c;
+  monc.start_mon_command(
+      {cmd_json.str()},
+      {},
+      &outbl,
+      &outs,
+      &c);
+
+  int r = c.wait();
+  if (r == -ENOENT) {
+    return false;
+  } else if (r != 0) {
+    // This is some internal error, not meaningful to python modules,
+    // so let them just see no value.
+    derr << __func__ << " error fetching store key '" << global_key << "': "
+         << cpp_strerror(r) << " " << outs << dendl;
+    return false;
+  } else {
+    *value = outbl.to_str();
+    return true;
+  }
 }
 
 std::string StandbyPyModule::get_active_uri() const

@@ -116,9 +116,8 @@ public:
   void _session_logged(Session *session, uint64_t state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
-					map<client_t,uint64_t>& sseqmap);
-  void finish_force_open_sessions(map<client_t,entity_inst_t> &cm,
-				  map<client_t,uint64_t>& sseqmap,
+					map<client_t,pair<Session*,uint64_t> >& smap);
+  void finish_force_open_sessions(const map<client_t,pair<Session*,uint64_t> >& smap,
 				  bool dec_import=true);
   void flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather);
   void finish_flush_session(Session *session, version_t seq);
@@ -204,9 +203,10 @@ public:
   void handle_client_setlayout(MDRequestRef& mdr);
   void handle_client_setdirlayout(MDRequestRef& mdr);
 
+  int parse_quota_vxattr(string name, string value, quota_info_t *quota);
+  void create_quota_realm(CInode *in);
   int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);
-  int parse_quota_vxattr(string name, string value, quota_info_t *quota);
   int check_layout_vxattr(MDRequestRef& mdr,
                           string name,
                           string value,

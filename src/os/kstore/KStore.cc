@@ -18,6 +18,10 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <unistd.h>
+#if defined(__FreeBSD__)
+#include <sys/param.h>
+#include <sys/mount.h>
+#endif
 
 #include "KStore.h"
 #include "osd/osd_types.h"
@@ -640,6 +644,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
 KStore::KStore(CephContext *cct, const string& path)
   : ObjectStore(cct, path),
     db(NULL),
+    basedir(path),
     path_fd(-1),
     fsid_fd(-1),
     mounted(false),
@@ -1078,9 +1083,20 @@ void KStore::_sync()
   dout(10) << __func__ << " done" << dendl;
 }
 
-int KStore::statfs(struct store_statfs_t* buf)
+int KStore::statfs(struct store_statfs_t* buf0)
 {
-  return db->get_statfs(buf);
+  struct statfs buf;
+  buf0->reset();
+  if (::statfs(basedir.c_str(), &buf) < 0) {
+    int r = -errno;
+    assert(r != -ENOENT);
+    return r;
+  }
+
+  buf0->total = buf.f_blocks * buf.f_bsize;
+  buf0->available = buf.f_bavail * buf.f_bsize;
+
+  return 0;
 }
 
 

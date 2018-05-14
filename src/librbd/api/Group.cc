@@ -100,8 +100,8 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 }
 
 std::string calc_ind_image_snap_name(uint64_t pool_id,
-				     std::string group_id,
-				     std::string snap_id)
+				     const std::string &group_id,
+				     const std::string &snap_id)
 {
   std::stringstream ind_snap_name_stream;
   ind_snap_name_stream << ".group." << std::hex << pool_id << "_"

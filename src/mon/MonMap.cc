@@ -343,7 +343,7 @@ void MonMap::dump(Formatter *f) const
 }
 
 
-int MonMap::build_from_host_list(std::string hostlist, std::string prefix)
+int MonMap::build_from_host_list(std::string hostlist, const std::string &prefix)
 {
   vector<entity_addr_t> addrs;
   if (parse_ip_port_vec(hostlist.c_str(), addrs)) {

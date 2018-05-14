@@ -47,7 +47,7 @@ struct byte_units {
 
 bool byte_units::parse(const std::string &val, std::string *err)
 {
-  v = strict_sistrtoll(val.c_str(), err);
+  v = strict_iecstrtoll(val.c_str(), err);
   return err->empty();
 }
 
@@ -152,6 +152,15 @@ int main(int argc, const char *argv[])
   // command-line arguments
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
 			 CODE_ENVIRONMENT_UTILITY,

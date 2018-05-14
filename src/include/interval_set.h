@@ -680,48 +680,6 @@ class interval_set {
     return true;
   }  
 
- /*
-   * build a subset of @other for given rage [@start, @end)
-   * E.g.:
-   * subset_of([5~10,20~5], 0, 100) -> [5~10,20~5]
-   * subset_of([5~10,20~5], 5, 25)  -> [5~10,20~5]
-   * subset_of([5~10,20~5], 1, 10)  -> [5~5]
-   * subset_of([5~10,20~5], 8, 24)  -> [8~7, 20~4]
-   */
-  void subset_of(const interval_set &other, T start, T end) {
-    assert(end >= start);
-    clear();
-    if (end == start) {
-      return;
-    }
-    typename Map::const_iterator p = other.find_inc(start);
-    if (p == other.m.end())
-      return;
-    if (p->first < start) {
-      if (p->first + p->second >= end) {
-        insert(start, end - start);
-        return;
-      } else {
-        insert(start, p->first + p->second - start);
-        ++p;
-      }
-    }
-    while (p != other.m.end()) {
-      assert(p->first >= start);
-      if (p->first >= end) {
-        return;
-      }
-      if (p->first + p->second >= end) {
-        insert(p->first, end - p->first);
-        return;
-      } else {
-        // whole
-        insert(p->first, p->second);
-        ++p;
-      }
-    }
-  }
-
   /*
    * build a subset of @other, starting at or after @start, and including
    * @len worth of values, skipping holes.  e.g.,

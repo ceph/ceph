@@ -2,8 +2,7 @@ set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
 
 add_custom_target(mgr-dashboard-test-venv
   COMMAND
-  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=python2.7 ${MGR_DASHBOARD_VIRTUALENV} &&
-  ${MGR_DASHBOARD_VIRTUALENV}/bin/pip install --no-index --find-links=file:${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/wheelhouse -r requirements.txt
+  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${MGR_DASHBOARD_VIRTUALENV}
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard
   COMMENT "dashboard tests virtualenv is being created")
 add_dependencies(tests mgr-dashboard-test-venv)
@@ -14,7 +13,7 @@ set(mgr-dashboard-nodeenv ${CMAKE_CURRENT_BINARY_DIR}/node-env)
 
 add_custom_command(
   OUTPUT "${mgr-dashboard-nodeenv}/bin/npm"
-  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=python2.7 ${mgr-dashboard-nodeenv}
+  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv}
   COMMAND ${mgr-dashboard-nodeenv}/bin/pip install nodeenv
   COMMAND ${mgr-dashboard-nodeenv}/bin/nodeenv -p -n 8.10.0
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
@@ -71,8 +70,8 @@ add_custom_command(
   COMMENT "dashboard frontend is being created"
 )
 add_custom_target(mgr-dashboard-frontend-build
+  ALL
   DEPENDS frontend/dist mgr-dashboard-frontend-deps
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
-)
-add_dependencies(ceph-mgr mgr-dashboard-frontend-build)
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend)
+add_dependencies(tests mgr-dashboard-frontend-build)
 endif(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")

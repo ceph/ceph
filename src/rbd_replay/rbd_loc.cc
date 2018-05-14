@@ -23,7 +23,7 @@ using namespace rbd_replay;
 rbd_loc::rbd_loc() {
 }
 
-rbd_loc::rbd_loc(string pool, string image, string snap)
+rbd_loc::rbd_loc(const string &pool, const string &image, const string &snap)
   : pool(pool),
     image(image),
     snap(snap) {

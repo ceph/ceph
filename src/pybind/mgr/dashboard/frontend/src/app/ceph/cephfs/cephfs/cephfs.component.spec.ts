@@ -5,9 +5,9 @@ import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { BsDropdownModule, ProgressbarModule } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 
+import { CephfsService } from '../../../shared/api/cephfs.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { CephfsChartComponent } from '../cephfs-chart/cephfs-chart.component';
-import { CephfsService } from '../cephfs.service';
 import { CephfsComponent } from './cephfs.component';
 
 describe('CephfsComponent', () => {
