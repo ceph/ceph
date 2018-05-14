@@ -3,7 +3,6 @@
 
 #include "Allocator.h"
 #include "StupidAllocator.h"
-#include "BitMapAllocator.h"
 #include "BitmapFastAllocator.h"
 #include "common/debug.h"
 
