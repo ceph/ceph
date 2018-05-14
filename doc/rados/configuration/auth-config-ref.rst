@@ -291,24 +291,26 @@ You can override these locations, but it is not recommended.
 Signatures
 ----------
 
-In Ceph Bobtail and subsequent versions, we prefer that Ceph authenticate all
-ongoing messages between the entities using the session key set up for that
-initial authentication. However, Argonaut and earlier Ceph daemons do not know
-how to perform ongoing message authentication. To maintain backward
-compatibility (e.g., running both Botbail and Argonaut daemons in the same
-cluster), message signing is **off** by default. If you are running Bobtail or
-later daemons exclusively, configure Ceph to require signatures.
+Ceph performs a signature check that provides some limited protection
+against messages being tampered with in flight (e.g., by a "man in the
+middle" attack).
 
 Like other parts of Ceph authentication, Ceph provides fine-grained control so
 you can enable/disable signatures for service messages between the client and
 Ceph, and you can enable/disable signatures for messages between Ceph daemons.
 
+Note that even with signatures enabled data is not encrypted in
+flight.
 
 ``cephx require signatures``
 
 :Description: If set to ``true``, Ceph requires signatures on all message 
               traffic between the Ceph Client and the Ceph Storage Cluster, and 
               between daemons comprising the Ceph Storage Cluster. 
+
+	      Ceph Argonaut and Linux kernel versions prior to 3.19 do
+	      not support signatures; if such clients are in use this
+	      option can be turned off to allow them to connect.
 
 :Type: Boolean
 :Required: No
@@ -338,7 +340,7 @@ Ceph, and you can enable/disable signatures for messages between Ceph daemons.
 ``cephx sign messages``
 
 :Description: If the Ceph version supports message signing, Ceph will sign
-              all messages so they cannot be spoofed.
+              all messages so they are more difficult to spoof.
 
 :Type: Boolean
 :Default: ``true``
