@@ -6,6 +6,8 @@ roles:
   - osd.0
   - osd.1
   - osd.2
+  - mds.a
+  - client.0
 openstack:
   - volumes: # attached to each instance
       count: 3
@@ -15,14 +17,19 @@ tasks:
 - ceph:
     log-whitelist:
       - but it is still running
+      - had wrong client addr
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
       - \(OBJECT_DEGRADED\)
-      - \(SLOW_OPS\)
     conf:
-      osd:
-        osd min pg log entries: 5
-        osd_fast_fail_on_connection_refused: false
-- osd_recovery:
+      client.rest0:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+- rest-api: [client.0]
+- workunit:
+    clients:
+      all:
+        - rest/test.py

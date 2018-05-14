@@ -12,18 +12,17 @@ openstack:
 
 overrides:
   ceph:
+    conf:
+      osd:
+        debug osd: 5
     log-whitelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
+      - \(SMALLER_PGP_NUM\)
       - \(OBJECT_
-      - \(POOL_APP_NOT_ENABLED\)
-    conf:
-      osd:
-        debug osd: 5
-
 tasks:
 - install:
 - ceph:
-- divergent_priors:
+- reg11184:

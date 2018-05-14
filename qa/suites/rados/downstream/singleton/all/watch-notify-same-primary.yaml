@@ -6,6 +6,7 @@ roles:
   - osd.0
   - osd.1
   - osd.2
+  - client.0
 openstack:
   - volumes: # attached to each instance
       count: 3
@@ -13,16 +14,19 @@ openstack:
 tasks:
 - install:
 - ceph:
+    config:
+      global:
+        osd pool default min size : 1
+      client:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
     log-whitelist:
-      - but it is still running
+      - objects unfound and apparently lost
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
       - \(OBJECT_DEGRADED\)
-      - \(SLOW_OPS\)
-    conf:
-      osd:
-        osd min pg log entries: 5
-        osd_fast_fail_on_connection_refused: false
-- osd_recovery:
+- watch_notify_same_primary:
+    clients: [client.0]
