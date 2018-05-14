@@ -373,6 +373,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
     "mds_max_purge_files",
+    "mds_inject_migrator_session_race",
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
@@ -1357,6 +1358,9 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
       dout(10) << " new session " << s << " for " << s->info.inst << " con " << con << dendl;
       con->set_priv(s);
       s->connection = con;
+      if (mds_rank) {
+        mds_rank->kick_waiters_for_any_client_connection();
+      }
     } else {
       dout(10) << " existing session " << s << " for " << s->info.inst << " existing con " << s->connection
 	       << ", new/authorizing con " << con << dendl;

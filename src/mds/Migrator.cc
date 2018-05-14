@@ -27,6 +27,7 @@
 #include "Mutation.h"
 
 #include "include/filepath.h"
+#include "common/likely.h"
 
 #include "events/EExport.h"
 #include "events/EImportStart.h"
@@ -118,7 +119,12 @@ void Migrator::dispatch(Message *m)
     handle_export_prep(static_cast<MExportDirPrep*>(m));
     break;
   case MSG_MDS_EXPORTDIR:
-    handle_export_dir(static_cast<MExportDir*>(m));
+    if (unlikely(inject_session_race)) {
+      dout(0) << "waiting for inject_session_race" << dendl;
+      mds->wait_for_any_client_connection(new C_MDS_RetryMessage(mds, m));
+    } else {
+      handle_export_dir(static_cast<MExportDir*>(m));
+    }
     break;
   case MSG_MDS_EXPORTDIRFINISH:
     handle_export_finish(static_cast<MExportDirFinish*>(m));
@@ -3386,4 +3392,14 @@ void Migrator::logged_import_caps(CInode *in,
   finish_import_inode_caps(in, from, false, imported_session_map, it->second, imported_caps);
   mds->locker->eval(in, CEPH_CAP_LOCKS, true);
   in->auth_unpin(this);
+}
+
+void Migrator::handle_conf_change(const struct md_config_t *conf,
+                                  const std::set <std::string> &changed,
+                                  const MDSMap &mds_map)
+{
+  if (changed.count("mds_inject_migrator_session_race")) {
+    inject_session_race = conf->get_val<bool>("mds_inject_migrator_session_race");
+    dout(0) << "mds_inject_migrator_session_race is " << inject_session_race << dendl;
+  }
 }
