@@ -329,16 +329,18 @@ wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_
 compare_images ${POOL} ${image}
 
 testlog "TEST: image resync while replayer is stopped"
-admin_daemons ${CLUSTER1} rbd mirror stop ${POOL}/${image}
-wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
-admin_daemons ${CLUSTER1} rbd mirror start ${POOL}/${image}
-wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
-admin_daemons ${CLUSTER1} rbd mirror start ${POOL}/${image}
-wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
-wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
-compare_images ${POOL} ${image}
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  admin_daemons ${CLUSTER1} rbd mirror stop ${POOL}/${image}
+  wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+  request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
+  admin_daemons ${CLUSTER1} rbd mirror start ${POOL}/${image}
+  wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
+  admin_daemons ${CLUSTER1} rbd mirror start ${POOL}/${image}
+  wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
+  wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
+  compare_images ${POOL} ${image}
+fi
 
 testlog "TEST: request image resync while daemon is offline"
 stop_mirrors ${CLUSTER1}
@@ -374,21 +376,23 @@ test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
 compare_images ${POOL} ${image}
 
 testlog " - disconnected after max_concurrent_object_sets reached"
-admin_daemons ${CLUSTER1} rbd mirror stop ${POOL}/${image}
-wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
-set_image_meta ${CLUSTER2} ${POOL} ${image} \
-	       conf_rbd_journal_max_concurrent_object_sets 1
-write_image ${CLUSTER2} ${POOL} ${image} 20 16384
-write_image ${CLUSTER2} ${POOL} ${image} 20 16384
-test -z "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
-set_image_meta ${CLUSTER2} ${POOL} ${image} \
-	       conf_rbd_journal_max_concurrent_object_sets 0
+if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
+  admin_daemons ${CLUSTER1} rbd mirror stop ${POOL}/${image}
+  wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+  test -n "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+  set_image_meta ${CLUSTER2} ${POOL} ${image} \
+	         conf_rbd_journal_max_concurrent_object_sets 1
+  write_image ${CLUSTER2} ${POOL} ${image} 20 16384
+  write_image ${CLUSTER2} ${POOL} ${image} 20 16384
+  test -z "$(get_mirror_position ${CLUSTER2} ${POOL} ${image})"
+  set_image_meta ${CLUSTER2} ${POOL} ${image} \
+	         conf_rbd_journal_max_concurrent_object_sets 0
 
-testlog " - replay is still stopped (disconnected) after restart"
-admin_daemons ${CLUSTER1} rbd mirror start ${POOL}/${image}
-wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnected'
+  testlog " - replay is still stopped (disconnected) after restart"
+  admin_daemons ${CLUSTER1} rbd mirror start ${POOL}/${image}
+  wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+  wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'disconnected'
+fi
 
 testlog " - replay started after resync requested"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
