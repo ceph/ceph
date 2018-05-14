@@ -12,6 +12,7 @@ LGPL2.1.  See file COPYING.
 from __future__ import print_function
 import copy
 import errno
+import math
 import json
 import os
 import pprint
@@ -1031,18 +1032,20 @@ def validate_command(sigdict, args, verbose=False):
         for cmdtag, cmd in sigdict.items():
             sig = cmd['sig']
             matched = matchnum(args, sig, partial=True)
+            if (matched >= math.floor(best_match_cnt) and
+                matched == matchnum(args, sig, partial=False)):
+                # prefer those fully matched over partial patch
+                matched += 0.5
+            if matched < best_match_cnt:
+                continue
+            if verbose:
+                print("better match: {0} > {1}: {2}:{3} ".format(
+                    matched, best_match_cnt, cmdtag, concise_sig(sig)
+                ), file=sys.stderr)
             if matched > best_match_cnt:
-                if verbose:
-                    print("better match: {0} > {1}: {2}:{3} ".format(
-                        matched, best_match_cnt, cmdtag, concise_sig(sig)
-                    ), file=sys.stderr)
                 best_match_cnt = matched
                 bestcmds = [{cmdtag: cmd}]
-            elif matched == best_match_cnt:
-                if verbose:
-                    print("equal match: {0} > {1}: {2}:{3} ".format(
-                        matched, best_match_cnt, cmdtag, concise_sig(sig)
-                    ), file=sys.stderr)
+            else:
                 bestcmds.append({cmdtag: cmd})
 
         # Sort bestcmds by number of args so we can try shortest first
