@@ -11,6 +11,7 @@ protected:
   string policy_name;
   string perm_policy;
   string path_prefix;
+  string max_session_duration;
 
 public:
   void send_response() override;
