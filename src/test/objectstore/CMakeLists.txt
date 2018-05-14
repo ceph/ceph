@@ -95,14 +95,6 @@ add_ceph_unittest(unittest_rocksdb_option)
 target_link_libraries(unittest_rocksdb_option global os ${BLKID_LIBRARIES})
 
 if(WITH_BLUESTORE)
-  # unittest_bit_alloc
-  add_executable(unittest_bit_alloc
-    BitAllocator_test.cc
-    $<TARGET_OBJECTS:unit-main>
-    )
-  add_ceph_unittest(unittest_bit_alloc)
-  target_link_libraries(unittest_bit_alloc os global)
-
 
   add_executable(unittest_alloc
     Allocator_test.cc
