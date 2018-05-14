@@ -430,7 +430,7 @@ bool RGWCoroutinesStack::collect(int *ret, RGWCoroutinesStack *skip_stack) /* re
 
 static void _aio_completion_notifier_cb(librados::completion_t cb, void *arg)
 {
-  ((RGWAioCompletionNotifier *)arg)->cb();
+  (static_cast<RGWAioCompletionNotifier *>(arg))->cb();
 }
 
 RGWAioCompletionNotifier::RGWAioCompletionNotifier(RGWCompletionManager *_mgr, const rgw_io_id& _io_id, void *_user_data) : completion_mgr(_mgr),
@@ -531,7 +531,7 @@ void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& con
                                                   RGWCompletionManager::io_completion& io, int *blocked_count)
 {
   assert(lock.is_wlocked());
-  RGWCoroutinesStack *stack = (RGWCoroutinesStack *)io.user_info;
+  RGWCoroutinesStack *stack = static_cast<RGWCoroutinesStack *>(io.user_info);
   if (context_stacks.find(stack) == context_stacks.end()) {
     return;
   }

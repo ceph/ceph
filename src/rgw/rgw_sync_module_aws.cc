@@ -949,7 +949,7 @@ public:
   }
 
   void send_ready(const rgw_rest_obj& rest_obj) override {
-    RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
+    RGWRESTStreamS3PutObj *r = static_cast<RGWRESTStreamS3PutObj *>(req);
 
     map<string, string> new_attrs;
     if (!multipart.is_multipart) {
@@ -1088,7 +1088,7 @@ public:
         return set_cr_error(retcode);
       }
 
-      if (!((RGWAWSStreamPutCRF *)out_crf.get())->get_etag(petag)) {
+      if (!(static_cast<RGWAWSStreamPutCRF *>(out_crf.get()))->get_etag(petag)) {
         ldout(sync_env->cct, 0) << "ERROR: failed to get etag from PUT request" << dendl;
         return set_cr_error(-EIO);
       }
