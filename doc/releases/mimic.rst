@@ -9,10 +9,13 @@ bugs to the tracker.
 Major Changes from Luminous
 ---------------------------
 
-- *Dashbaord*:
+- *Dashboard*:
 
-  * The dashboard has been reimplemented by and/or ported from
-    openATTIC with significantly expanded functionality.
+  * The (read-only) Ceph manager dashboard introduced in Ceph Luminous has been
+    replaced with a new implementation inspired by and derived from the
+    `openATTIC <https://openattic.org>`_ Ceph management tool, providing a
+    drop-in replacement offering a :ref:`number of additional management
+    features <mgr-dashboard-overview>`.
 
 - *RADOS*:
 
@@ -367,9 +370,9 @@ Notable Changes
   - The (read-only) Ceph manager dashboard introduced in Ceph Luminous has been
     replaced with a new implementation, providing a drop-in replacement offering
     a number of additional management features. To access the new dashboard, you
-    first need to define a username and password. See the documentation for a
-    feature overview and installation instructions:
-    http://docs.ceph.com/docs/master/mgr/dashboard/
+    first need to define a username and password and create an SSL certificate.
+    See the :ref:`dashboard documentation <mgr-dashboard-overview>` for a feature
+    overview and installation instructions.
 
   - The ceph-rest-api command-line tool (obsoleted by the MGR "restful" module and
     deprecated since v12.2.5) has been dropped.
