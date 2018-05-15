@@ -370,9 +370,7 @@ class BaseControllerMeta(type):
         new_cls = type.__new__(mcs, name, bases, dct)
 
         for a_name, thing in new_cls.__dict__.items():
-            if isinstance(thing, (types.FunctionType, types.MethodType))\
-                    and getattr(thing, 'exposed', False):
-
+            if callable(thing) and getattr(thing, 'exposed', False):
                 setattr(new_cls, a_name, browsable_api_view(thing))
         return new_cls
 
@@ -413,17 +411,15 @@ class BaseController(object):
     def endpoints(cls):
         result = []
 
-        def isfunction(m):
-            return inspect.isfunction(m) or inspect.ismethod(m)
-
-        for attr, val in inspect.getmembers(cls, predicate=isfunction):
-            if (hasattr(val, 'exposed') and val.exposed):
-                args = cls._parse_function_args(val)
-                suffix = attr
-                action = attr
-                if attr == '__call__':
-                    suffix = None
-                result.append(([], suffix, action, args))
+        for name, func in inspect.getmembers(cls, predicate=callable):
+            if hasattr(func, 'exposed') and func.exposed:
+                args = cls._parse_function_args(func)
+                methods = []
+                url_suffix = name
+                action = name
+                if name == '__call__':
+                    url_suffix = None
+                result.append((methods, url_suffix, action, args))
         return result
 
 
@@ -474,11 +470,8 @@ class RESTController(BaseController):
     def endpoints(cls):
         # pylint: disable=too-many-branches
 
-        def isfunction(m):
-            return inspect.isfunction(m) or inspect.ismethod(m)
-
         result = []
-        for attr, val in inspect.getmembers(cls, predicate=isfunction):
+        for attr, val in inspect.getmembers(cls, predicate=callable):
             if hasattr(val, 'exposed') and val.exposed and \
                     attr != '_collection' and attr != '_element':
                 result.append(([], attr, attr, cls._parse_function_args(val)))
@@ -502,12 +495,12 @@ class RESTController(BaseController):
         if methods:
             result.append((methods, None, '_element', args))
 
-        for attr, val in inspect.getmembers(cls, predicate=isfunction):
+        for attr, val in inspect.getmembers(cls, predicate=callable):
             if hasattr(val, '_collection_method_'):
                 result.append(
                     (val._collection_method_, attr, '_handle_detail_method', []))
 
-        for attr, val in inspect.getmembers(cls, predicate=isfunction):
+        for attr, val in inspect.getmembers(cls, predicate=callable):
             if hasattr(val, '_resource_method_'):
                 res_params = [":{}".format(arg) for arg in args]
                 url_suffix = "{}/{}".format("/".join(res_params), attr)
