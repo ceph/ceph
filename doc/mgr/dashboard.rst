@@ -1,6 +1,8 @@
 Dashboard Plugin
 ================
 
+.. _mgr-dashboard-overview:
+
 Overview
 --------
 
