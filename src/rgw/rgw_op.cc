@@ -5732,7 +5732,7 @@ void RGWListMultipart::execute()
 int RGWListBucketMultiparts::verify_permission()
 {
   if (!verify_bucket_permission(s,
-				rgw::IAM::s3ListBucketMultiPartUploads))
+				rgw::IAM::s3ListBucketMultipartUploads))
     return -EACCES;
 
   return 0;

@@ -71,7 +71,7 @@ using rgw::IAM::s3GetReplicationConfiguration;
 using rgw::IAM::s3ListAllMyBuckets;
 using rgw::IAM::s3ListBucket;
 using rgw::IAM::s3ListBucket;
-using rgw::IAM::s3ListBucketMultiPartUploads;
+using rgw::IAM::s3ListBucketMultipartUploads;
 using rgw::IAM::s3ListBucketVersions;
 using rgw::IAM::s3ListMultipartUploadParts;
 using rgw::IAM::s3None;
@@ -315,7 +315,7 @@ TEST_F(PolicyTest, Parse3) {
   EXPECT_EQ(p->statements[2].action, (s3ListMultipartUploadParts |
 				      s3ListBucket | s3ListBucketVersions |
 				      s3ListAllMyBuckets |
-				      s3ListBucketMultiPartUploads |
+				      s3ListBucketMultipartUploads |
 				      s3GetObject | s3GetObjectVersion |
 				      s3GetObjectAcl | s3GetObjectVersionAcl |
 				      s3GetObjectTorrent |
@@ -370,7 +370,7 @@ TEST_F(PolicyTest, Eval3) {
 
   auto s3allow = (s3ListMultipartUploadParts | s3ListBucket |
 		  s3ListBucketVersions | s3ListAllMyBuckets |
-		  s3ListBucketMultiPartUploads | s3GetObject |
+		  s3ListBucketMultipartUploads | s3GetObject |
 		  s3GetObjectVersion | s3GetObjectAcl | s3GetObjectVersionAcl |
 		  s3GetObjectTorrent | s3GetObjectVersionTorrent |
 		  s3GetAccelerateConfiguration | s3GetBucketAcl |
