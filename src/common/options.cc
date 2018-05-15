@@ -5468,7 +5468,9 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_torrent_flag", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description("Produce torrent function flag"),
+    .set_description("When true, uploaded objects will calculate and store "
+                     "a SHA256 hash of object data so the object can be "
+                     "retrieved as a torrent file"),
 
     Option("rgw_torrent_tracker", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
