@@ -131,6 +131,7 @@ void usage(ostream& out)
 "   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset> [--with-reference]\n"
 "                                    convert an object to chunked object\n"
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
+"   unset-manifest <obj-name>	     unset redirect or chunked object\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   export [filename]\n"
@@ -3693,6 +3694,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = io_ctx.operate(oid, &op);
     if (ret < 0) {
       cerr << "error tier-promote " << pool_name << "/" << oid << " : " 
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "unset-manifest") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+
+    ObjectWriteOperation op;
+    op.unset_manifest();
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0) {
+      cerr << "error unset-manifest " << pool_name << "/" << oid << " : " 
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }

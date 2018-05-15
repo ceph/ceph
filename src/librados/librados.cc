@@ -633,6 +633,12 @@ void librados::ObjectWriteOperation::tier_promote()
   o->tier_promote();
 }
 
+void librados::ObjectWriteOperation::unset_manifest()
+{
+  ::ObjectOperation *o = &impl->o;
+  o->unset_manifest();
+}
+
 void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
 {
   ::ObjectOperation *o = &impl->o;

@@ -2420,7 +2420,8 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     ceph_osd_op& op = osd_op.op;
     if (op.op == CEPH_OSD_OP_SET_REDIRECT ||
 	op.op == CEPH_OSD_OP_SET_CHUNK || 
-	op.op == CEPH_OSD_OP_TIER_PROMOTE) {
+	op.op == CEPH_OSD_OP_TIER_PROMOTE ||
+	op.op == CEPH_OSD_OP_UNSET_MANIFEST) {
       return cache_result_t::NOOP;
     }
   }
@@ -6973,6 +6974,59 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  assert(result == 0);
 	  ctx->op_finishers.erase(ctx->current_osd_subop_num);
 	}
+      }
+
+      break;
+
+    case CEPH_OSD_OP_UNSET_MANIFEST:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (!oi.has_manifest()) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+
+	if (oi.manifest.is_redirect()) {
+	  if ((oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE)) {
+	    ctx->register_on_commit(
+	      [oi, ctx, this](){
+	      object_locator_t target_oloc(oi.manifest.redirect_target);
+	      refcount_manifest(ctx->obc, target_oloc, oi.manifest.redirect_target, 
+				SnapContext(), false, NULL, 0);
+	    });
+	  }
+	} else if (oi.manifest.is_chunked()) {
+	    ctx->register_on_commit(
+	      [oi, ctx, this](){
+	      for (auto p : oi.manifest.chunk_map) {
+		if (p.second.flags & chunk_info_t::FLAG_HAS_REFERENCE) {
+		  object_locator_t target_oloc(p.second.oid);
+		  refcount_manifest(ctx->obc, target_oloc, p.second.oid, 
+				    SnapContext(), false, NULL, p.first);
+		}
+	      }
+	    });
+	} else {
+	  assert(0 == "unrecognized manifest type");
+	}
+
+	oi.clear_flag(object_info_t::FLAG_MANIFEST);
+	oi.manifest = object_manifest_t();
+	ctx->delta_stats.num_objects_manifest--;
+	ctx->delta_stats.num_wr++;
+	ctx->modify = true;
       }
 
       break;
