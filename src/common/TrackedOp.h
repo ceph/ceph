@@ -15,6 +15,7 @@
 #define TRACKEDREQUEST_H_
 
 #include <atomic>
+#include <boost/container/small_vector.hpp>
 #include "common/histogram.h"
 #include "common/containers.h"
 #include "msg/Message.h"
@@ -171,7 +172,9 @@ protected:
     }
   };
 
-  vector<Event> events;    ///< list of events and their times
+  /// list of events and their times
+  boost::container::small_vector<Event, OPTRACKER_PREALLOC_EVENTS> events;
+
   mutable Mutex lock = {"TrackedOp::lock"}; ///< to protect the events list
   const char *current = 0; ///< the current state the event is in
   uint64_t seq = 0;        ///< a unique value set by the OpTracker
@@ -191,9 +194,7 @@ protected:
 
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),
-    initiated_at(initiated)
-  {
-    events.reserve(OPTRACKER_PREALLOC_EVENTS);
+    initiated_at(initiated) {
   }
 
   /// output any type-specific data you want to get when dump() is called
