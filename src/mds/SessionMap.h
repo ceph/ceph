@@ -330,7 +330,11 @@ public:
     num_trim_flushes_warnings(0),
     num_trim_requests_warnings(0) { }
   ~Session() override {
-    assert(!item_session_list.is_on_list());
+    if (state == STATE_CLOSED) {
+      item_session_list.remove_myself();
+    } else {
+      assert(!item_session_list.is_on_list());
+    }
     while (!preopen_out_queue.empty()) {
       preopen_out_queue.front()->put();
       preopen_out_queue.pop_front();
