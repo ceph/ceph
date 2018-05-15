@@ -545,7 +545,7 @@ void Inode::dump(Formatter *f) const
 void Cap::dump(Formatter *f) const
 {
   f->dump_int("mds", session->mds_num);
-  f->dump_stream("ino") << inode->ino;
+  f->dump_stream("ino") << inode.ino;
   f->dump_unsigned("cap_id", cap_id);
   f->dump_stream("issued") << ccap_string(issued);
   if (implemented != issued)

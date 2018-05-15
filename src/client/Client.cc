@@ -3672,10 +3672,8 @@ void Client::signal_context_list(list<Context*>& ls)
 
 void Client::wake_inode_waiters(MetaSession *s)
 {
-  xlist<Cap*>::iterator iter = s->caps.begin();
-  while (!iter.end()){
-    signal_cond_list((*iter)->inode->waitfor_caps);
-    ++iter;
+  for (const auto &cap : s->caps) {
+    signal_cond_list(cap->inode.waitfor_caps);
   }
 }
 
@@ -3854,7 +3852,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   }
 
   mds_rank_t mds = mds_session->mds_num;
-  const auto &capem = in->caps.emplace(std::piecewise_construct, std::forward_as_tuple(mds), std::forward_as_tuple(in, mds_session));
+  const auto &capem = in->caps.emplace(std::piecewise_construct, std::forward_as_tuple(mds), std::forward_as_tuple(*in, mds_session));
   Cap &cap = capem.first->second;
   if (!capem.second) {
     /*
@@ -3922,37 +3920,37 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
 void Client::remove_cap(Cap *cap, bool queue_release)
 {
-  Inode *in = cap->inode;
+  auto &in = cap->inode;
   MetaSession *session = cap->session;
   mds_rank_t mds = cap->session->mds_num;
 
-  ldout(cct, 10) << __func__ << " mds." << mds << " on " << *in << dendl;
+  ldout(cct, 10) << __func__ << " mds." << mds << " on " << in << dendl;
   
   if (queue_release) {
     session->enqueue_cap_release(
-      in->ino,
+      in.ino,
       cap->cap_id,
       cap->issue_seq,
       cap->mseq,
       cap_epoch_barrier);
   }
 
-  if (in->auth_cap == cap) {
-    if (in->flushing_cap_item.is_on_list()) {
+  if (in.auth_cap == cap) {
+    if (in.flushing_cap_item.is_on_list()) {
       ldout(cct, 10) << " removing myself from flushing_cap list" << dendl;
-      in->flushing_cap_item.remove_myself();
+      in.flushing_cap_item.remove_myself();
     }
-    in->auth_cap = NULL;
+    in.auth_cap = NULL;
   }
-  size_t n = in->caps.erase(mds);
+  size_t n = in.caps.erase(mds);
   assert(n == 1);
   cap = nullptr;
 
-  if (!in->is_any_caps()) {
-    ldout(cct, 15) << __func__ << " last one, closing snaprealm " << in->snaprealm << dendl;
-    in->snaprealm_item.remove_myself();
-    put_snap_realm(in->snaprealm);
-    in->snaprealm = 0;
+  if (!in.is_any_caps()) {
+    ldout(cct, 15) << __func__ << " last one, closing snaprealm " << in.snaprealm << dendl;
+    in.snaprealm_item.remove_myself();
+    put_snap_realm(in.snaprealm);
+    in.snaprealm = 0;
   }
 }
 
@@ -3968,7 +3966,7 @@ void Client::remove_session_caps(MetaSession *s)
 
   while (s->caps.size()) {
     Cap *cap = *s->caps.begin();
-    Inode *in = cap->inode;
+    InodeRef in(&cap->inode);
     bool dirty_caps = false, cap_snaps = false;
     if (in->auth_cap == cap) {
       cap_snaps = !in->cap_snaps.empty();
@@ -3980,7 +3978,6 @@ void Client::remove_session_caps(MetaSession *s)
     remove_cap(cap, false);
     signal_cond_list(in->waitfor_caps);
     if (cap_snaps) {
-      InodeRef tmp_ref(in);
       in->cap_snaps.clear();
     }
     if (dirty_caps) {
@@ -3991,7 +3988,7 @@ void Client::remove_session_caps(MetaSession *s)
       }
       in->flushing_caps = 0;
       in->mark_caps_clean();
-      put_inode(in);
+      put_inode(in.get());
     }
   }
   s->flushing_caps_tids.clear();
@@ -4092,7 +4089,7 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
   std::set<InodeRef> anchor; /* prevent put_inode from deleting all caps during traversal */
   while ((caps_size - trimmed) > max && !p.end()) {
     Cap *cap = *p;
-    InodeRef in(cap->inode);
+    InodeRef in(&cap->inode);
 
     // Increment p early because it will be invalidated if cap
     // is deleted inside remove_cap
@@ -4150,9 +4147,9 @@ void Client::force_session_readonly(MetaSession *s)
 {
   s->readonly = true;
   for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
-    Inode *in = (*p)->inode;
-    if (in->caps_wanted() & CEPH_CAP_FILE_WR)
-      signal_cond_list(in->waitfor_caps);
+    auto &in = (*p)->inode;
+    if (in.caps_wanted() & CEPH_CAP_FILE_WR)
+      signal_cond_list(in.waitfor_caps);
   }
 }
 
@@ -4338,12 +4335,11 @@ void Client::early_kick_flushing_caps(MetaSession *session)
 
 void Client::kick_maxsize_requests(MetaSession *session)
 {
-  xlist<Cap*>::iterator iter = session->caps.begin();
-  while (!iter.end()){
-    (*iter)->inode->requested_max_size = 0;
-    (*iter)->inode->wanted_max_size = 0;
-    signal_cond_list((*iter)->inode->waitfor_caps);
-    ++iter;
+  for (const auto &cap : session->caps) {
+    auto &in = cap->inode;
+    in.requested_max_size = 0;
+    in.wanted_max_size = 0;
+    signal_cond_list(in.waitfor_caps);
   }
 }
 
