@@ -129,7 +129,7 @@ namespace rgw {
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       DECODE_START(2, bl);
       decode(fh_hk.bucket, bl);
       decode(fh_hk.object, bl);
@@ -633,7 +633,7 @@ namespace rgw {
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       DECODE_START(2, bl);
       uint32_t fh_type;
       decode(fh_type, bl);

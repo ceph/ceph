@@ -941,7 +941,7 @@ struct rgw_slo_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(path, bl);
      decode(etag, bl);
@@ -973,7 +973,7 @@ struct RGWSLOInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(entries, bl);
      decode(total_size, bl);

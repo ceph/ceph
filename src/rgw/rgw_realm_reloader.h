@@ -37,7 +37,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   ~RGWRealmReloader() override;
 
   /// respond to realm notifications by scheduling a reload()
-  void handle_notify(RGWRealmNotify type, bufferlist::iterator& p) override;
+  void handle_notify(RGWRealmNotify type, bufferlist::const_iterator& p) override;
 
  private:
   /// pause frontends and replace the RGWRados instance

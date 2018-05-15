@@ -531,7 +531,7 @@ struct RGWAccessKey {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      decode(id, bl);
      decode(key, bl);
@@ -560,7 +560,7 @@ struct RGWSubUser {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      decode(name, bl);
      decode(perm_mask, bl);
@@ -591,7 +591,7 @@ public:
      encode(caps, bl);
      ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(caps, bl);
      DECODE_FINISH(bl);
@@ -703,7 +703,7 @@ struct RGWUserInfo
      encode(mfa_ids, bl);
      ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(20, 9, 9, bl);
      if (struct_v >= 2) decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
@@ -827,9 +827,9 @@ struct rgw_pool {
     ENCODE_FINISH(bl);
   }
 
-  void decode_from_bucket(bufferlist::iterator& bl);
+  void decode_from_bucket(bufferlist::const_iterator& bl);
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
 
     decode(name, bl);
@@ -947,9 +947,9 @@ struct rgw_raw_obj {
     ENCODE_FINISH(bl);
   }
 
-  void decode_from_rgw_obj(bufferlist::iterator& bl);
+  void decode_from_rgw_obj(bufferlist::const_iterator& bl);
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     unsigned ofs = bl.get_off();
     DECODE_START(6, bl);
     if (struct_v < 6) {
@@ -1040,7 +1040,7 @@ struct rgw_bucket {
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
     decode(name, bl);
     if (struct_v < 10) {
@@ -1282,7 +1282,7 @@ struct RGWBucketInfo {
      encode(new_bucket_instance_id, bl);
      ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(19, 4, 4, bl);
      decode(bucket, bl);
      if (struct_v >= 2) {
@@ -1393,8 +1393,8 @@ struct RGWBucketEntryPoint
     encode(creation_time, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
-    bufferlist::iterator orig_iter = bl;
+  void decode(bufferlist::const_iterator& bl) {
+    auto orig_iter = bl;
     DECODE_START_LEGACY_COMPAT_LEN_32(10, 4, 4, bl);
     if (struct_v < 8) {
       /* ouch, old entry, contains the bucket info itself */
@@ -1733,7 +1733,7 @@ struct rgw_obj_key {
     encode(ns, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(name, bl);
     decode(instance, bl);
@@ -1963,7 +1963,7 @@ struct RGWBucketEnt {
     encode(placement_rule, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
     __u32 mt;
     uint64_t s;
@@ -2055,7 +2055,7 @@ struct rgw_obj {
 //    encode(placement_id, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
     if (struct_v < 6) {
       string s;

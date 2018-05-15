@@ -279,7 +279,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
 
   rgw_cache_entry_info cache_info;
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     decode(uid, iter);
     int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker, NULL, &cache_info);
@@ -324,7 +324,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
     return ret;
   }
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     decode(user_id, iter);
     if (user_id.user_id.compare(uid) != 0) {

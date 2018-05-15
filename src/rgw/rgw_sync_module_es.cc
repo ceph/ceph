@@ -285,7 +285,7 @@ struct es_obj_metadata {
 
       if (name == "acl") {
         try {
-          auto i = val.begin();
+          auto i = val.cbegin();
           decode(policy, i);
         } catch (buffer::error& err) {
           ldout(cct, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
@@ -305,11 +305,11 @@ struct es_obj_metadata {
           }
         }
       } else if (name == "x-amz-tagging") {
-        auto tags_bl = val.begin();
+        auto tags_bl = val.cbegin();
         decode(obj_tags, tags_bl);
       } else if (name == "compression") {
         RGWCompressionInfo cs_info;
-        auto vals_bl = val.begin();
+        auto vals_bl = val.cbegin();
         decode(cs_info, vals_bl);
         out_attrs[name] = cs_info.compression_type;
       } else {

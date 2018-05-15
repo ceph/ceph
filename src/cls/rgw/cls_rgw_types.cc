@@ -154,7 +154,7 @@ void rgw_bucket_dir_entry::decode_json(JSONObj *obj) {
 
 static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *formatter)
 {
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   switch (index_type) {
     case PlainIdx:
     case InstanceIdx:
@@ -243,7 +243,7 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
 bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats)
 {
   bool account = false;
-  bufferlist::iterator iter = data.begin();
+  auto iter = data.cbegin();
   using ceph::decode;
   switch (type) {
     case PlainIdx:

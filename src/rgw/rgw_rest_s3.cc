@@ -158,7 +158,7 @@ int decode_attr_bl_single_value(map<string, bufferlist>& attrs, const char *attr
     *result = def_val;
     return 0;
   }
-  bufferlist::iterator bliter = bl.begin();
+  auto bliter = bl.cbegin();
   try {
     decode(*result, bliter);
   } catch (buffer::error& err) {
@@ -299,7 +299,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       } else if (iter->first.compare(RGW_ATTR_TAGS) == 0) {
         RGWObjTags obj_tags;
         try{
-          bufferlist::iterator it = iter->second.begin();
+          auto it = iter->second.cbegin();
           obj_tags.decode(it);
         } catch (buffer::error &err) {
           ldout(s->cct,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
@@ -375,7 +375,7 @@ void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
   s->formatter->open_object_section("TagSet");
   if (has_tags){
     RGWObjTagSet_S3 tagset;
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     try {
       tagset.decode(iter);
     } catch (buffer::error& err) {
@@ -2263,7 +2263,7 @@ void RGWGetLC_ObjStore_S3::execute()
     return;
   }
 
-  bufferlist::iterator iter(&aiter->second);
+  bufferlist::const_iterator iter{&aiter->second};
   try {
       config.decode(iter);
     } catch (const buffer::error& e) {

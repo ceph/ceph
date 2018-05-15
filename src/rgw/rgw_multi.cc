@@ -119,7 +119,7 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 
   for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
     bufferlist& bl = iter->second;
-    bufferlist::iterator bli = bl.begin();
+    auto bli = bl.cbegin();
     RGWUploadPartInfo info;
     try {
       decode(info, bli);

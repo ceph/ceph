@@ -18,7 +18,7 @@ struct rgw_sync_aws_multipart_part_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(part_num, bl);
     decode(ofs, bl);
@@ -46,7 +46,7 @@ struct rgw_sync_aws_src_obj_properties {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(mtime, bl);
     decode(etag, bl);
@@ -83,7 +83,7 @@ struct rgw_sync_aws_multipart_upload_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(upload_id, bl);
     decode(obj_size, bl);
