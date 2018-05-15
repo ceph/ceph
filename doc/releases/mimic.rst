@@ -162,13 +162,15 @@ Upgrading from pre-Luminous releases (like Jewel)
 
 You *must* first upgrade to Luminous (12.2.z) before attempting an
 upgrade to Mimic.
-     
-Notable Changes
----------------
+
+Upgrade compatibility notes
+---------------------------
+
+These changes occurred between the Luminous and Mimic releases.
 
 * *core*:
 
-  - The `pg force-recovery` command will not work for erasure-coded PGs when a
+  - The ``pg force-recovery`` command will not work for erasure-coded PGs when a
     Luminous monitor is running along with a Mimic OSD. Please use the
     recommended upgrade order of monitors before OSDs to avoid this issue.
 
@@ -176,16 +178,17 @@ Notable Changes
     equivalent to the built-in default behavior, so it has been replaced with an
     example in the CRUSH documentation.
 
-  - The -f option of the rados tool now means "--format" instead of "--force",
-    for consistency with the ceph tool.
+  - The ``-f`` option of the rados tool now means ``--format`` instead
+    of ``--force``, for consistency with the ceph tool.
 
-  - The format of the 'config diff' output via the admin socket has changed. It
+  - The format of the ``config diff`` output via the admin socket has changed. It
     now reflects the source of each config option (e.g., default, config file,
     command line) as well as the final (active) value.
 
-  - Commands variously marked as "del", "delete", "remove" etc. should now all be
-    normalized as "rm". Commands already supporting alternatives to "rm" remain
-    backward-compatible. This changeset applies to radosgw-admin cli as well.
+  - Commands variously marked as `del`, `delete`, `remove`
+    etc. should now all be normalized as `rm`. Commands already
+    supporting alternatives to `rm` remain backward-compatible. This
+    changeset applies to the ``radosgw-admin`` tool as well.
 
   - Monitors will now prune on-disk full maps if the number of maps grows above
     a certain number (mon_osdmap_full_prune_min, default: 10000), thus
@@ -195,15 +198,16 @@ Notable Changes
 
   - *rados list-inconsistent-obj format changes:*
 
-    + Various error strings have been improved.  For example, the "oi" or "oi_attr"
-      in errors which stands for object info is now "info" (e.g. oi_attr_missing is
-      now info_missing).
+    + Various error strings have been improved.  For example, the "oi"
+      or "oi_attr" in errors which stands for object info is now
+      "info" (e.g. oi_attr_missing is now info_missing).
 
-    + The object's "selected_object_info" is now in json format instead of string.
+    + The object's "selected_object_info" is now in json format
+      instead of string.
 
-    + The attribute errors (attr_value_mismatch, attr_name_mismatch) only apply to user
-      attributes.  Only user attributes are output and have the internal leading underscore
-      stripped.
+    + The attribute errors (attr_value_mismatch, attr_name_mismatch)
+      only apply to user attributes.  Only user attributes are output
+      and have the internal leading underscore stripped.
 
     + If there are hash information errors (hinfo_missing, hinfo_corrupted,
       hinfo_inconsistency) then "hashinfo" is added with the json format of the
@@ -233,21 +237,21 @@ Notable Changes
       output when any shard has an error. This head object is there to show the
       snapset that was used in determining errors.
 
-  - The ``osd_mon_report_interval_min`` option has been renamed to
-    ``osd_mon_report_interval``, and the ``osd_mon_report_interval_max``
+  - The `osd_mon_report_interval_min` option has been renamed to
+    `osd_mon_report_interval`, and the `osd_mon_report_interval_max`
     (unused) has been eliminated. If this value has been customized on your
     cluster then your configuration should be adjusted in order to avoid
     reverting to the default value.
 
   - The config-key interface can store arbitrary binary blobs but JSON can only
     express printable strings. If binary blobs are present, the 'ceph config-key
-    dump' command will show them as something like ``<<< binary blob of length N
-    >>>``.
+    dump' command will show them as something like `<<< binary blob of length N
+    >>>`.
 
   - Bootstrap auth keys will now be generated automatically on a fresh
     deployment; these keys will also be generated, if missing, during upgrade.
 
-  - The 'osd force-create-pg' command now requires a force option to proceed
+  - The ``osd force-create-pg`` command now requires a force option to proceed
     because the command is dangerous: it declares that data loss is permanent
     and instructs the cluster to proceed with an empty PG in its place, without
     making any further efforts to find the missing data.
@@ -266,34 +270,35 @@ Notable Changes
 
     See also: https://tracker.ceph.com/issues/23172
 
-  - Several "ceph mds" commands have been obsoleted and replaced
-    by equivalent "ceph fs" commands:
-    - mds dump -> fs dump
-    - mds getmap -> fs dump
-    - mds stop -> mds deactivate
-    - mds set_max_mds -> fs set max_mds
-    - mds set -> fs set
-    - mds cluster_down -> fs set cluster_down true
-    - mds cluster_up -> fs set cluster_down false
-    - mds add_data_pool -> fs add_data_pool
-    - mds remove_data_pool -> fs rm_data_pool
-    - mds rm_data_pool -> fs rm_data_pool
+  - Several ``ceph mds ...`` commands have been obsoleted and replaced by
+    equivalent ``ceph fs ...`` commands:
 
-  - New CephFS file system attributes session_timeout and session_autoclose
-    are configurable via `ceph fs set`. The MDS config options
-    mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
-    obsolete.
+    + ``mds dump`` -> ``fs dump``
+    + ``mds getmap`` -> ``fs dump``
+    + ``mds stop`` -> ``mds deactivate``
+    + ``mds set_max_mds`` -> ``fs set max_mds``
+    + ``mds set`` -> ``fs set``
+    + ``mds cluster_down`` -> ``fs set cluster_down true``
+    + ``mds cluster_up`` -> ``fs set cluster_down false``
+    + ``mds add_data_pool`` -> ``fs add_data_pool``
+    + ``mds remove_data_pool`` -> ``fs rm_data_pool``
+    + ``mds rm_data_pool`` -> ``fs rm_data_pool``
+
+  - New CephFS file system attributes session_timeout and
+    session_autoclose are configurable via ``ceph fs set``. The MDS
+    config options `mds_session_timeout`, `mds_session_autoclose`, and
+    `mds_max_file_size` are now obsolete.
 
   - As the multiple MDS feature is now standard, it is now enabled by
-    default. ceph fs set allow_multimds is now deprecated and will be
+    default. ``ceph fs set allow_multimds`` is now deprecated and will be
     removed in a future release.
 
   - As the directory fragmentation feature is now standard, it is now
-    enabled by default. ceph fs set allow_dirfrags is now deprecated and
+    enabled by default. ``ceph fs set allow_dirfrags`` is now deprecated and
     will be removed in a future release.
 
   - MDS daemons now activate and deactivate based on the value of
-    max_mds. Accordingly, ceph mds deactivate has been deprecated as it
+    `max_mds`. Accordingly, ``ceph mds deactivate`` has been deprecated as it
     is now redundant.
 
   - Taking a CephFS cluster down is now done by setting the down flag which
@@ -315,7 +320,7 @@ Notable Changes
     creates the table automatically if it does not exist.
 
   - CephFS snapshot is now stable and enabled by default on new filesystems.
-    To enable snapshot on existing filesystems, use command::
+    To enable snapshot on existing filesystems, use the command::
 
       ceph fs set <fs_name> allow_new_snaps
 
@@ -326,23 +331,23 @@ Notable Changes
 
     See http://docs.ceph.com/docs/master/cephfs/upgrading/
 
-    For filesystems that have ever enabled snapshot, the multiple-active MDS
-    feature is disabled by the new version MON. This will cause the "restore
+    For filesystems that have ever enabled snapshots, the multiple-active MDS
+    feature is disabled by the mimic monitor daemon. This will cause the "restore
     previous max_mds" step in above URL to fail. To re-enable the feature,
     either delete all old snapshots or scrub the whole filesystem:
 
-      - ceph daemon <mds of rank 0> scrub_path / force recursive repair
-      - ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair
+      - ``ceph daemon <mds of rank 0> scrub_path /``
+      - ``ceph daemon <mds of rank 0> scrub_path '~mdsdir'``
 
 * *RBD*
 
-  - The RBD C API's rbd_discard method now enforces a maximum length of
-    2GB to match the C++ API's Image::discard method. This restriction
+  - The RBD C API's `rbd_discard` method now enforces a maximum length of
+    2GB to match the C++ API's `Image::discard` method. This restriction
     prevents overflow of the result code.
 
-  - The rbd CLI's "lock list" JSON and XML output has changed.
+  - The rbd CLI's ``lock list`` JSON and XML output has changed.
 
-  - The rbd CLI's "showmapped" JSON and XML output has changed.
+  - The rbd CLI's ``showmapped`` JSON and XML output has changed.
 
   - RBD now optionally supports simplified image clone semantics where
     non-protected snapshots can be cloned; and snapshots with linked clones
@@ -351,19 +356,19 @@ Notable Changes
     the OSD "require-min-compat-client" flag is set to mimic or later; or can be
     overridden via the "rbd_default_clone_format" configuration option.
 
-  - RBD now supports deep copy of images
+  - RBD now supports deep copy of images that preserves snapshot history.
 
 * *RGW*
 
-  - The rgw beast frontend is now declared stable and ready for production use.
+  - The RGW Beast frontend is now declared stable and ready for production use.
     :ref:`rgw_frontends` for details.
 
-  - Civetweb frontend has been updated to the latest 1.10 release
+  - Civetweb frontend has been updated to the latest 1.10 release.
 
-  - S3 api now has support for Multi factor authentication. Refer to
+  - The S3 API now has support for multi-factor authentication. Refer to
     :ref:`rgw_mfa` for details.
 
-  - RGW now has a sync plugin to sync to AWS and clouds with s3 like apis.
+  - RGW now has a sync plugin to sync to AWS and clouds with S3-like APIs.
 
 * *MGR*
 
@@ -374,21 +379,21 @@ Notable Changes
     See the :ref:`dashboard documentation <mgr-dashboard-overview>` for a feature
     overview and installation instructions.
 
-  - The ceph-rest-api command-line tool (obsoleted by the MGR "restful" module and
-    deprecated since v12.2.5) has been dropped.
+  - The ``ceph-rest-api`` command-line tool (obsoleted by the MGR
+    `restful` module and deprecated since v12.2.5) has been dropped.
 
-    There is a MGR module called "restful" which provides similar functionality
+    There is a MGR module called `restful` which provides similar functionality
     via a "pass through" method. See http://docs.ceph.com/docs/master/mgr/restful
     for details.
 
 * *build/packaging*
 
-  - The "rcceph" script (systemd/ceph in the source code tree, shipped as
-    /usr/sbin/rcceph in the ceph-base package for CentOS and SUSE) has been
+  - The ``rcceph`` script (``systemd/ceph`` in the source code tree, shipped as
+    ``/usr/sbin/rcceph`` in the ceph-base package for CentOS and SUSE) has been
     dropped. This script was used to perform admin operations (start, stop,
     restart, etc.) on all OSD and/or MON daemons running on a given machine. This
-    functionality is provided by the systemd target units (ceph-osd.target,
-    ceph-mon.target, etc.).
+    functionality is provided by the systemd target units (``ceph-osd.target``,
+    ``ceph-mon.target``, etc.).
 
   - The python-ceph-compat package is declared deprecated, and will be dropped
     when all supported distros have completed the move to Python 3. It has
