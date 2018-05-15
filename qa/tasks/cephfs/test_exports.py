@@ -115,8 +115,9 @@ class TestExports(CephFSTestCase):
         """
 
         self.fs.set_max_mds(2)
-        status = self.fs.wait_for_daemons()
+        self.fs.wait_for_daemons()
 
+        status = self.fs.status()
         rank1 = self.fs.get_rank(rank=1, status=status)
         name1 = 'mds.'+rank1['name']
 
