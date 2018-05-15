@@ -409,6 +409,21 @@ class BaseController(object):
 
     @classmethod
     def endpoints(cls):
+        """
+        The endpoints method returns a list of endpoints. Each endpoint
+        consists of a tuple with methods, URL suffix, an action and its
+        arguments.
+
+        By default, endpoints will be methods of the BaseController class,
+        which have been decorated by the @cherrpy.expose decorator. A method
+        will also be considered an endpoint if the `exposed` attribute has been
+        set on the method to a value which evaluates to True, which is
+        basically what @cherrpy.expose does, too.
+
+        :return: A tuple of methods, url_suffix, action and arguments of the
+                 function
+        :rtype: list[tuple]
+        """
         result = []
 
         for name, func in inspect.getmembers(cls, predicate=callable):
