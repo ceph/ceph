@@ -32,7 +32,7 @@ void SnapInfo::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void SnapInfo::decode(bufferlist::iterator& bl)
+void SnapInfo::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(snapid, bl);
@@ -92,7 +92,7 @@ void snaplink_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void snaplink_t::decode(bufferlist::iterator& bl)
+void snaplink_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(ino, bl);
@@ -138,7 +138,7 @@ void sr_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void sr_t::decode(bufferlist::iterator& p)
+void sr_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(6, 4, 4, p);
   if (struct_v == 2) {

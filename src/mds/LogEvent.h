@@ -58,7 +58,7 @@ public:
 private:
   EventType _type;
   uint64_t _start_off;
-  static LogEvent *decode_event(bufferlist& bl, bufferlist::iterator& p, EventType type);
+  static LogEvent *decode_event(bufferlist& bl, bufferlist::const_iterator& p, EventType type);
 
 protected:
   utime_t stamp;
@@ -85,7 +85,7 @@ public:
 
   // encoding
   virtual void encode(bufferlist& bl, uint64_t features) const = 0;
-  virtual void decode(bufferlist::iterator &bl) = 0;
+  virtual void decode(bufferlist::const_iterator &bl) = 0;
   static LogEvent *decode(bufferlist &bl);
   virtual void dump(Formatter *f) const = 0;
 

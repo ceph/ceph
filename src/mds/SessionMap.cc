@@ -109,7 +109,7 @@ public:
 void SessionMapStore::decode_header(
       bufferlist &header_bl)
 {
-  bufferlist::iterator q = header_bl.begin();
+  auto q = header_bl.cbegin();
   DECODE_START(1, q)
   decode(version, q);
   DECODE_FINISH(q);
@@ -143,7 +143,7 @@ void SessionMapStore::decode_values(std::map<std::string, bufferlist> &session_v
     Session *s = get_or_add_session(inst);
     if (s->is_closed())
       s->set_state(Session::STATE_OPEN);
-    bufferlist::iterator q = i->second.begin();
+    auto q = i->second.cbegin();
     s->decode(q);
   }
 }
@@ -303,7 +303,7 @@ void SessionMap::load_legacy()
 
 void SessionMap::_load_legacy_finish(int r, bufferlist &bl)
 { 
-  bufferlist::iterator blp = bl.begin();
+  auto blp = bl.cbegin();
   if (r < 0) {
     derr << "_load_finish got " << cpp_strerror(r) << dendl;
     assert(0 == "failed to load sessionmap");
@@ -450,7 +450,7 @@ void SessionMap::_save_finish(version_t v)
 /**
  * Deserialize sessions, and update by_state index
  */
-void SessionMap::decode_legacy(bufferlist::iterator &p)
+void SessionMap::decode_legacy(bufferlist::const_iterator &p)
 {
   // Populate `sessions`
   SessionMapStore::decode_legacy(p);
@@ -478,7 +478,7 @@ uint64_t SessionMap::set_state(Session *session, int s) {
   return session->get_state_seq();
 }
 
-void SessionMapStore::decode_legacy(bufferlist::iterator& p)
+void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
 {
   utime_t now = ceph_clock_now();
   uint64_t pre;
@@ -508,7 +508,7 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
     decode(n, p);
     
     while (n-- && !p.end()) {
-      bufferlist::iterator p2 = p;
+      auto p2 = p;
       Session *s = new Session;
       s->info.decode(p);
       if (session_map.count(s->info.inst.name)) {
@@ -882,7 +882,7 @@ void Session::_update_human_name()
   }
 }
 
-void Session::decode(bufferlist::iterator &p)
+void Session::decode(bufferlist::const_iterator &p)
 {
   info.decode(p);
 

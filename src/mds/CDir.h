@@ -573,7 +573,7 @@ private:
     encode(dir_rep, bl);
     encode(dir_rep_by, bl);
   }
-  void _decode_base(bufferlist::iterator& p) {
+  void _decode_base(bufferlist::const_iterator& p) {
     decode(first, p);
     decode(fnode, p);
     decode(dir_rep, p);
@@ -584,7 +584,7 @@ private:
     encode(nonce, bl);
     _encode_base(bl);
   }
-  void decode_replica(bufferlist::iterator& p) {
+  void decode_replica(bufferlist::const_iterator& p) {
     __u32 nonce;
     decode(nonce, p);
     replica_nonce = nonce;
@@ -704,7 +704,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls);
+  void decode_import(bufferlist::const_iterator& blp, utime_t now, LogSegment *ls);
   void abort_import(utime_t now);
 
   // -- auth pins --
