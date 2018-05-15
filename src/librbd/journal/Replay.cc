@@ -350,9 +350,12 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
     return;
   }
 
-  io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
-                                   {{event.offset, event.length}},
-                                   event.skip_partial_discard, {});
+  if (!clipped_io(event.offset, aio_comp)) {
+    io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
+                                     {{event.offset, event.length}},
+                                     event.skip_partial_discard, {});
+  }
+
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
@@ -381,9 +384,12 @@ void Replay<I>::handle_event(const journal::AioWriteEvent &event,
     return;
   }
 
-  io::ImageRequest<I>::aio_write(&m_image_ctx, aio_comp,
-                                 {{event.offset, event.length}},
-                                 std::move(data), 0, {});
+  if (!clipped_io(event.offset, aio_comp)) {
+    io::ImageRequest<I>::aio_write(&m_image_ctx, aio_comp,
+                                   {{event.offset, event.length}},
+                                   std::move(data), 0, {});
+  }
+
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
@@ -431,9 +437,12 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
     return;
   }
 
-  io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp,
-                                     {{event.offset, event.length}},
-                                     std::move(data), 0, {});
+  if (!clipped_io(event.offset, aio_comp)) {
+    io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp,
+                                       {{event.offset, event.length}},
+                                       std::move(data), 0, {});
+  }
+
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
@@ -459,11 +468,15 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
                                                io::AIO_TYPE_COMPARE_AND_WRITE,
                                                &flush_required,
                                                {-EILSEQ});
-  io::ImageRequest<I>::aio_compare_and_write(&m_image_ctx, aio_comp,
-                                             {{event.offset, event.length}},
-                                             std::move(cmp_data),
-                                             std::move(write_data),
-                                             nullptr, 0, {});
+
+  if (!clipped_io(event.offset, aio_comp)) {
+    io::ImageRequest<I>::aio_compare_and_write(&m_image_ctx, aio_comp,
+                                               {{event.offset, event.length}},
+                                               std::move(cmp_data),
+                                               std::move(write_data),
+                                               nullptr, 0, {});
+  }
+
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
@@ -1124,6 +1137,29 @@ io::AioCompletion *Replay<I>::create_aio_flush_completion(Context *on_safe) {
       util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
   m_aio_modify_unsafe_contexts.clear();
   return aio_comp;
+}
+
+template <typename I>
+bool Replay<I>::clipped_io(uint64_t image_offset, io::AioCompletion *aio_comp) {
+  CephContext *cct = m_image_ctx.cct;
+
+  m_image_ctx.snap_lock.get_read();
+  size_t image_size = m_image_ctx.size;
+  m_image_ctx.snap_lock.put_read();
+
+  if (image_offset >= image_size) {
+    // rbd-mirror image sync might race an IO event w/ associated resize between
+    // the point the peer is registered and the sync point is created, so no-op
+    // IO events beyond the current image extents since under normal conditions
+    // it wouldn't have been recorded in the journal
+    ldout(cct, 5) << ": no-op IO event beyond image size" << dendl;
+    aio_comp->get();
+    aio_comp->unblock();
+    aio_comp->put();
+    return true;
+  }
+
+  return false;
 }
 
 } // namespace journal
