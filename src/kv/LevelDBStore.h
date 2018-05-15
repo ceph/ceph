@@ -94,6 +94,11 @@ public:
   /// compact the underlying leveldb store
   void compact();
 
+  /// compact full the underlying leveldb store
+  void compact_async(){
+    compact_range_async(string(), string());
+  }
+  
   /// compact db for all keys with a given prefix
   void compact_prefix(const string& prefix) {
     compact_range(prefix, past_prefix(prefix));

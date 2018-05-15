@@ -2849,7 +2849,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (prefix == "compact" || prefix == "mon compact") {
     dout(1) << "triggering manual compaction" << dendl;
     utime_t start = ceph_clock_now(g_ceph_context);
-    store->compact();
+    store->compact_async();
     utime_t end = ceph_clock_now(g_ceph_context);
     end -= start;
     dout(1) << "finished manual compaction in " << end << " seconds" << dendl;

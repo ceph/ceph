@@ -334,7 +334,13 @@ void LevelDBStore::compact_thread_entry()
       logger->set(l_leveldb_compact_queue_len, compact_queue.size());
       compact_queue_lock.Unlock();
       logger->inc(l_leveldb_compact_range);
-      compact_range(range.first, range.second);
+      if (range.first.empty() && range.second.empty()){
+        derr << "Begin to compact leveldb store all..." << dendl;
+        compact();
+        derr << "Finished to compact leveldb store all..." << dendl;
+      }else{
+        compact_range(range.first, range.second);
+      }
       compact_queue_lock.Lock();
       continue;
     }

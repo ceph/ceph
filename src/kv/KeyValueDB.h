@@ -268,6 +268,9 @@ public:
   /// compact the underlying store
   virtual void compact() {}
 
+  /// compact async the underlying store
+  virtual void compact_async() {}
+
   /// compact db for all keys with a given prefix
   virtual void compact_prefix(const std::string& prefix) {}
   /// compact db for all keys with a given prefix, async

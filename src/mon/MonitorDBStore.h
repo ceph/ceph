@@ -613,6 +613,10 @@ class MonitorDBStore
     db->compact();
   }
 
+  void compact_async() {
+    db->compact_async();
+  }
+
   void compact_prefix(const string& prefix) {
     db->compact_prefix(prefix);
   }
