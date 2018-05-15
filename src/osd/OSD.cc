@@ -6705,7 +6705,7 @@ void OSD::dispatch_session_waiting(SessionRef session, OSDMapRef osdmap)
     } else {
       pgid = m->get_spg();
     }
-    enqueue_op(pgid, op, m->get_map_epoch());
+    enqueue_op(pgid, std::move(op), m->get_map_epoch());
   }
 
   if (session->waiting_on_map.empty()) {
@@ -6791,7 +6791,7 @@ void OSD::ms_fast_dispatch(Message *m)
     // queue it directly
     enqueue_op(
       static_cast<MOSDFastDispatchOp*>(m)->get_spg(),
-      op,
+      std::move(op),
       static_cast<MOSDFastDispatchOp*>(m)->get_map_epoch());
   } else {
     // legacy client, and this is an MOSDOp (the *only* fast dispatch
@@ -9279,27 +9279,28 @@ bool OSD::op_is_discardable(const MOSDOp *op)
   return false;
 }
 
-void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
+void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
 {
-  utime_t latency = ceph_clock_now() - op->get_req()->get_recv_stamp();
-  dout(15) << "enqueue_op " << op << " prio " << op->get_req()->get_priority()
-	   << " cost " << op->get_req()->get_cost()
+  const utime_t stamp = op->get_req()->get_recv_stamp();
+  const utime_t latency = ceph_clock_now() - stamp;
+  const unsigned priority = op->get_req()->get_priority();
+  const int cost = op->get_req()->get_cost();
+  const uint64_t owner = op->get_req()->get_source().num();
+
+  dout(15) << "enqueue_op " << op << " prio " << priority
+	   << " cost " << cost
 	   << " latency " << latency
 	   << " epoch " << epoch
 	   << " " << *(op->get_req()) << dendl;
   op->osd_trace.event("enqueue op");
-  op->osd_trace.keyval("priority", op->get_req()->get_priority());
-  op->osd_trace.keyval("cost", op->get_req()->get_cost());
+  op->osd_trace.keyval("priority", priority);
+  op->osd_trace.keyval("cost", cost);
   op->mark_queued_for_pg();
   logger->tinc(l_osd_op_before_queue_op_lat, latency);
   op_shardedwq.queue(
     OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(pg, op)),
-      op->get_req()->get_cost(),
-      op->get_req()->get_priority(),
-      op->get_req()->get_recv_stamp(),
-      op->get_req()->get_source().num(),
-      epoch));
+      unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(pg, std::move(op))),
+      cost, priority, stamp, owner, epoch));
 }
 
 void OSD::enqueue_peering_evt(spg_t pgid, PGPeeringEventRef evt)
