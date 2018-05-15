@@ -19,7 +19,7 @@ void ContDesc::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void ContDesc::decode(bufferlist::iterator &bl)
+void ContDesc::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(objnum, bl);

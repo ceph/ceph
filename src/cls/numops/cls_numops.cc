@@ -35,7 +35,7 @@ static int add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   string key, diff_str;
 
-  bufferlist::iterator iter = in->begin();
+  auto iter = in->cbegin();
   try {
     decode(key, iter);
     decode(diff_str, iter);
@@ -90,7 +90,7 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   string key, diff_str;
 
-  bufferlist::iterator iter = in->begin();
+  auto iter = in->cbegin();
   try {
     decode(key, iter);
     decode(diff_str, iter);

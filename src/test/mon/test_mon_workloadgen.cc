@@ -819,7 +819,7 @@ class OSDStub : public TestStub
 	dout(5) << __func__
 		<< " full epoch " << start_full << dendl;
 	bufferlist &bl = rit->second;
-	bufferlist::iterator p = bl.begin();
+	auto p = bl.cbegin();
 	osdmap.decode(p);
       }
     }
@@ -835,7 +835,7 @@ class OSDStub : public TestStub
 	       << " on full epoch " << start_full << dendl;
       OSDMap::Incremental inc;
       bufferlist &bl = it->second;
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       inc.decode(p);
 
       int err = osdmap.apply_incremental(inc);

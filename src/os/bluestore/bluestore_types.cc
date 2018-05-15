@@ -34,7 +34,7 @@ void bluestore_bdev_label_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void bluestore_bdev_label_t::decode(bufferlist::iterator& p)
+void bluestore_bdev_label_t::decode(bufferlist::const_iterator& p)
 {
   p.advance(60); // see above
   DECODE_START(2, p);

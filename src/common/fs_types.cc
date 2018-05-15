@@ -88,7 +88,7 @@ void file_layout_t::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void file_layout_t::decode(bufferlist::iterator& p)
+void file_layout_t::decode(bufferlist::const_iterator& p)
 {
   using ceph::decode;
   if (*p == 0) {

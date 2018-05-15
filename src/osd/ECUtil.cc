@@ -184,7 +184,7 @@ void ECUtil::HashInfo::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void ECUtil::HashInfo::decode(bufferlist::iterator &bl)
+void ECUtil::HashInfo::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(total_chunk_size, bl);

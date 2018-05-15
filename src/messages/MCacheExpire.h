@@ -51,7 +51,7 @@ public:
       encode(dirs, bl);
       encode(dentries, bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       decode(inodes, bl);
       decode(dirs, bl);
@@ -93,7 +93,7 @@ public:
 
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(from, p);
     decode(realms, p);
   }

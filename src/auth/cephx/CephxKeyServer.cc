@@ -327,7 +327,7 @@ int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
     for (; capsiter != mapiter->second.caps.end(); ++capsiter) {
       // FIXME: need a const_iterator for bufferlist, but it doesn't exist yet.
       bufferlist *bl = const_cast<bufferlist*>(&capsiter->second);
-      bufferlist::iterator dataiter = bl->begin();
+      auto dataiter = bl->cbegin();
       string caps;
       using ceph::decode;
       decode(caps, dataiter);

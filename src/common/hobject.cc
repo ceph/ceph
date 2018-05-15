@@ -115,7 +115,7 @@ void hobject_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void hobject_t::decode(bufferlist::iterator& bl)
+void hobject_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   if (struct_v >= 1)
@@ -417,7 +417,7 @@ size_t ghobject_t::encoded_size() const
   return r;
 }
 
-void ghobject_t::decode(bufferlist::iterator& bl)
+void ghobject_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
   if (struct_v >= 1)

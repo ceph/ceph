@@ -28,7 +28,7 @@ struct cls_log_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(section, bl);
     decode(name, bl);
@@ -52,7 +52,7 @@ struct cls_log_header {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(max_marker, bl);
     decode(max_time, bl);

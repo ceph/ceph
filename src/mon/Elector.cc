@@ -396,7 +396,7 @@ void Elector::handle_victory(MonOpRequestRef op)
   // stash leader's commands
   assert(m->sharing_bl.length());
   vector<MonCommand> new_cmds;
-  bufferlist::iterator bi = m->sharing_bl.begin();
+  auto bi = m->sharing_bl.cbegin();
   MonCommand::decode_vector(new_cmds, bi);
   mon->set_leader_commands(new_cmds);
 }
@@ -433,7 +433,7 @@ void Elector::handle_nak(MonOpRequestRef op)
           << dendl;
 
   CompatSet other;
-  bufferlist::iterator bi = m->sharing_bl.begin();
+  auto bi = m->sharing_bl.cbegin();
   other.decode(bi);
   CompatSet diff = Monitor::get_supported_features().unsupported(other);
 

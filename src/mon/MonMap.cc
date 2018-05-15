@@ -27,7 +27,7 @@ void mon_info_t::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void mon_info_t::decode(bufferlist::iterator& p)
+void mon_info_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(name, p);
@@ -189,7 +189,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   ENCODE_FINISH(blist);
 }
 
-void MonMap::decode(bufferlist::iterator &p)
+void MonMap::decode(bufferlist::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
   DECODE_START_LEGACY_COMPAT_LEN_16(5, 3, 3, p);

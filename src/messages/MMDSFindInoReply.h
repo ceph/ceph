@@ -36,7 +36,7 @@ struct MMDSFindInoReply : public Message {
     encode(path, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(tid, p);
     decode(path, p);
   }

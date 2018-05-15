@@ -34,7 +34,7 @@ public:
     encode(quota, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
     decode(rstat.rctime, p);
     decode(rstat.rbytes, p);

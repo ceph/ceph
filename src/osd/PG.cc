@@ -3516,7 +3516,7 @@ int PG::peek_map_epoch(ObjectStore *store,
     assert(values.size() == 2);
 
     // sanity check version
-    bufferlist::iterator bp = values[infover_key].begin();
+    auto bp = values[infover_key].cbegin();
     __u8 struct_v = 0;
     decode(struct_v, bp);
     assert(struct_v >= 8);
@@ -3702,7 +3702,7 @@ int PG::read_info(
   assert(values.size() == 3 ||
 	 values.size() == 4);
 
-  bufferlist::iterator p = values[infover_key].begin();
+  auto p = values[infover_key].cbegin();
   decode(struct_v, p);
   assert(struct_v >= 10);
 
@@ -3829,7 +3829,7 @@ void PG::update_snap_map(
 	assert(i->snaps.length() > 0);
 	vector<snapid_t> snaps;
 	bufferlist snapbl = i->snaps;
-	bufferlist::iterator p = snapbl.begin();
+	auto p = snapbl.cbegin();
 	try {
 	  decode(snaps, p);
 	} catch (...) {
@@ -4152,7 +4152,7 @@ void PG::do_replica_scrub_map(OpRequestRef op)
 
   op->mark_started();
 
-  bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
+  auto p = const_cast<bufferlist&>(m->get_data()).cbegin();
   scrubber.received_maps[m->from].decode(p, info.pgid.pool());
   dout(10) << "map version is "
 	   << scrubber.received_maps[m->from].valid_through
@@ -4388,7 +4388,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 	continue;
       }
       bl.push_back(o.attrs[SS_ATTR]);
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       try {
 	decode(snapset, p);
       } catch(...) {
@@ -4607,7 +4607,7 @@ void PG::repair_object(
   bv.push_back(po.attrs[OI_ATTR]);
   object_info_t oi;
   try {
-    bufferlist::iterator bliter = bv.begin();
+    auto bliter = bv.cbegin();
     decode(oi, bliter);
   } catch (...) {
     dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;

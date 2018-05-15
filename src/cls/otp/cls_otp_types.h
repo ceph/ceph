@@ -53,7 +53,7 @@ namespace rados {
           encode(window, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START(1, bl);
           uint8_t t;
           decode(t, bl);
@@ -92,7 +92,7 @@ namespace rados {
           encode((char)result, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START(1, bl);
           decode(token, bl);
           decode(timestamp, bl);
@@ -114,7 +114,7 @@ namespace rados {
           encode(entries, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START(1, bl);
           decode(entries, bl);
           DECODE_FINISH(bl);

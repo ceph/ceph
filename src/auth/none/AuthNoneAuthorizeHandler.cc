@@ -22,7 +22,7 @@ bool AuthNoneAuthorizeHandler::verify_authorizer(CephContext *cct, KeyStore *key
 						 EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info, CryptoKey& session_key,
 uint64_t *auid)
 {
-  bufferlist::iterator iter = authorizer_data.begin();
+  auto iter = authorizer_data.cbegin();
 
   try {
     __u8 struct_v = 1;

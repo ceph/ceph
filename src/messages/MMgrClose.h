@@ -16,7 +16,7 @@ public:
 
   void decode_payload() override
   {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(daemon_name, p);
     decode(service_name, p);
   }

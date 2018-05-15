@@ -45,7 +45,7 @@ private:
 
   hobject_t hobj;
   spg_t pgid;
-  bufferlist::iterator p;
+  bufferlist::const_iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
   // Transition from true -> false without locks being held
   // Can never see final_decode_needed == false and partial_decode_needed == true
@@ -392,7 +392,7 @@ struct ceph_osd_request_head {
 
   void decode_payload() override {
     assert(partial_decode_needed && final_decode_needed);
-    p = payload.begin();
+    p = std::cbegin(payload);
 
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION) {

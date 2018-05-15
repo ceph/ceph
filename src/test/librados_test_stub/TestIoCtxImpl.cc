@@ -287,7 +287,7 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
     if (r < 0) {
       return r;
     }
-    bufferlist::iterator iter = inbl.begin();
+    auto iter = inbl.cbegin();
     decode(tmap_header, iter);
     decode(tmap, iter);
   }
@@ -295,7 +295,7 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   __u8 c;
   std::string key;
   bufferlist value;
-  bufferlist::iterator iter = cmdbl.begin();
+  auto iter = cmdbl.cbegin();
   decode(c, iter);
   decode(key, iter);
 

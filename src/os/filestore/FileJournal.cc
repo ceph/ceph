@@ -586,7 +586,7 @@ int FileJournal::_fdump(Formatter &f, bool simple)
       f.dump_unsigned("bl.length", bl.length());
     } else {
       f.open_array_section("transactions");
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       int trans_num = 0;
       while (!p.end()) {
         ObjectStore::Transaction t(p);
@@ -693,7 +693,7 @@ int FileJournal::read_header(header_t *hdr) const
   bl.push_back(std::move(bp));
 
   try {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(*hdr, p);
   }
   catch (buffer::error& e) {

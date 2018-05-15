@@ -78,7 +78,7 @@ public:
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntryKey*>& o);
 
@@ -112,7 +112,7 @@ struct LogEntry {
   void log_to_syslog(string level, string facility);
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntry*>& o);
   static clog_type str_to_level(std::string const &str);
@@ -147,7 +147,7 @@ struct LogSummary {
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogSummary*>& o);
 };

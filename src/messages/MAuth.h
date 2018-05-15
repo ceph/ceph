@@ -37,7 +37,7 @@ public:
 
   void decode_payload() override {
     using ceph::encode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(protocol, p);
     decode(auth_payload, p);

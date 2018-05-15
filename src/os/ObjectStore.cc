@@ -25,10 +25,10 @@
 #endif
 #include "kstore/KStore.h"
 
-void decode_str_str_map_to_bl(bufferlist::iterator& p,
+void decode_str_str_map_to_bl(bufferlist::const_iterator& p,
 			      bufferlist *out)
 {
-  bufferlist::iterator start = p;
+  auto start = p;
   __u32 n;
   decode(n, p);
   unsigned len = 4;
@@ -44,10 +44,10 @@ void decode_str_str_map_to_bl(bufferlist::iterator& p,
   start.copy(len, *out);
 }
 
-void decode_str_set_to_bl(bufferlist::iterator& p,
+void decode_str_set_to_bl(bufferlist::const_iterator& p,
 			  bufferlist *out)
 {
-  bufferlist::iterator start = p;
+  auto start = p;
   __u32 n;
   decode(n, p);
   unsigned len = 4;

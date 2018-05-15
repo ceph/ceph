@@ -73,7 +73,7 @@ struct MonClientPinger : public Dispatcher {
 
     bufferlist &payload = m->get_payload();
     if (result && payload.length() > 0) {
-      bufferlist::iterator p = payload.begin();
+      auto p = std::cbegin(payload);
       decode(*result, p);
     }
     done = true;

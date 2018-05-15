@@ -46,7 +46,7 @@ inline void encode(const crush_rule_step &s, bufferlist &bl)
   encode(s.arg1, bl);
   encode(s.arg2, bl);
 }
-inline void decode(crush_rule_step &s, bufferlist::iterator &p)
+inline void decode(crush_rule_step &s, bufferlist::const_iterator &p)
 {
   using ceph::decode;
   decode(s.op, p);
@@ -1563,8 +1563,8 @@ public:
   }
 
   void encode(bufferlist &bl, uint64_t features) const;
-  void decode(bufferlist::iterator &blp);
-  void decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp);
+  void decode(bufferlist::const_iterator &blp);
+  void decode_crush_bucket(crush_bucket** bptr, bufferlist::const_iterator &blp);
   void dump(Formatter *f) const;
   void dump_rules(Formatter *f) const;
   void dump_rule(int ruleset, Formatter *f) const;

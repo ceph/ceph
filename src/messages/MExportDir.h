@@ -52,7 +52,7 @@ public:
     encode(client_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dirfrag, p);
     decode(bounds, p);
     decode(export_data, p);

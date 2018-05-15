@@ -22,7 +22,7 @@ public:
     encode(min_last_epoch_clean, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(pgs, p);
     decode(min_last_epoch_clean, p);

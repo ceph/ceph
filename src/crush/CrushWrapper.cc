@@ -2406,7 +2406,7 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   }
 }
 
-static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
+static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::const_iterator& blp)
 {
   m.clear();
   __u32 n;
@@ -2425,7 +2425,7 @@ static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::itera
   }
 }
 
-void CrushWrapper::decode(bufferlist::iterator& blp)
+void CrushWrapper::decode(bufferlist::const_iterator& blp)
 {
   using ceph::decode;
   create();
@@ -2553,7 +2553,7 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
   }
 }
 
-void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp)
+void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::const_iterator &blp)
 {
   using ceph::decode;
   __u32 alg;

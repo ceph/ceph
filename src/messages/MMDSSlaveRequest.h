@@ -183,7 +183,7 @@ public:
     encode(desti_snapbl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(reqid, p);
     decode(attempt, p);
     decode(op, p);

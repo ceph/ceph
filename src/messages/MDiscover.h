@@ -70,7 +70,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(base_ino, p);
     decode(base_dir_frag, p);
     decode(snapid, p);

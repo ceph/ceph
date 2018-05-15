@@ -33,7 +33,7 @@ public:
     encode(state, payload);
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(map_epoch, p);
     decode(state, p);

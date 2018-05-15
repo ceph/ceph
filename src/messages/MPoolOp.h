@@ -75,7 +75,7 @@ public:
     encode(crush_rule, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
     decode(pool, p);

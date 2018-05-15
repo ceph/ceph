@@ -183,7 +183,7 @@ struct osdmap_manifest_t {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl)
+  void decode(bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
     decode(pinned, bl);
@@ -191,7 +191,7 @@ struct osdmap_manifest_t {
   }
 
   void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(p);
   }
 

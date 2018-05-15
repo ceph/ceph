@@ -109,7 +109,7 @@ public:
   }
 
   string decode(bufferlist bl, uint64_t seek) override {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     p.seek(seek);
     try {
       using ceph::decode;
@@ -226,7 +226,7 @@ public:
   }
 
   string decode(bufferlist bl, uint64_t seek) override {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     p.seek(seek);
     try {
       Message *n = decode_message(g_ceph_context, 0, p);

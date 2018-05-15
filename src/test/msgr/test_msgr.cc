@@ -867,7 +867,7 @@ class SyntheticDispatcher : public Dispatcher {
     }
 
     Payload pl;
-    auto p = m->get_data().begin();
+    auto p = m->get_data().cbegin();
     decode(pl, p);
     if (pl.who == Payload::PING) {
       lderr(g_ceph_context) << __func__ << " conn=" << m->get_connection() << pl << dendl;

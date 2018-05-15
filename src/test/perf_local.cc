@@ -194,7 +194,7 @@ struct DummyBlock {
     encode(d, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(a, bl);
     decode(b, bl);
@@ -215,7 +215,7 @@ double buffer_encode_decode()
     bufferlist b;
     DummyBlock dummy_block;
     encode(dummy_block, b);
-    bufferlist::iterator iter = b.begin();
+    auto iter = b.cbegin();
     decode(dummy_block, iter);
   }
   uint64_t stop = Cycles::rdtsc();
@@ -308,7 +308,7 @@ double buffer_iterator()
   int sum = 0;
   uint64_t start = Cycles::rdtsc();
   for (int i = 0; i < count; i++) {
-    bufferlist::iterator it = b.begin();
+    auto it = b.cbegin();
     while (!it.end()) {
       sum += (static_cast<const char*>(it.get_current_ptr().c_str()))[it.get_remaining()-1];
       ++it;

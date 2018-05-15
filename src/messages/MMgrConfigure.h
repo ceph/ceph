@@ -34,7 +34,7 @@ public:
 
   void decode_payload() override
   {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(stats_period, p);
     if (header.version >= 2) {
       decode(stats_threshold, p);

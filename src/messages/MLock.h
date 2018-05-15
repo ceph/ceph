@@ -74,7 +74,7 @@ public:
   
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(asker, p);
     decode(action, p);
     decode(reqid, p);

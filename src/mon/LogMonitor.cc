@@ -91,7 +91,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     get_version_full(latest_full, latest_bl);
     assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading summary e" << latest_full << dendl;
-    bufferlist::iterator p = latest_bl.begin();
+    auto p = latest_bl.cbegin();
     decode(summary, p);
     dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
   }
@@ -103,7 +103,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     assert(err == 0);
     assert(bl.length());
 
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     __u8 v;
     decode(v, p);
     while (!p.end()) {
@@ -643,7 +643,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
     int err = get_version(sv, bl);
     assert(err == 0);
     assert(bl.length());
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     __u8 v;
     decode(v,p);
     while (!p.end()) {

@@ -53,7 +53,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     if (header.version < 2) {
       map<string, ceph_mon_subscribe_item_old> oldwhat;
       decode(oldwhat, p);

@@ -46,7 +46,7 @@ public:
   // piggybacked osd state
   eversion_t last_complete_ondisk;
 
-  bufferlist::iterator p;
+  bufferlist::const_iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
   bool final_decode_needed;
 
@@ -61,7 +61,7 @@ public:
   }
 
   void decode_payload() override {
-    p = payload.begin();
+    p = payload.cbegin();
     decode(map_epoch, p);
     if (header.version >= 2) {
       decode(min_epoch, p);

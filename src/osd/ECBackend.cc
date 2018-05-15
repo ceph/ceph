@@ -443,7 +443,7 @@ void ECBackend::handle_recovery_read_complete(
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
     if (op.obc->obs.oi.size > 0) {
       assert(op.xattrs.count(ECUtil::get_hinfo_key()));
-      bufferlist::iterator bp = op.xattrs[ECUtil::get_hinfo_key()].begin();
+      auto bp = op.xattrs[ECUtil::get_hinfo_key()].cbegin();
       decode(hinfo, bp);
     }
     op.hinfo = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
@@ -1749,7 +1749,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
 	}
       }
       if (bl.length() > 0) {
-	bufferlist::iterator bp = bl.begin();
+	auto bp = bl.cbegin();
         try {
 	  decode(hinfo, bp);
         } catch(...) {

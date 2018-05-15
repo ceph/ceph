@@ -77,7 +77,7 @@ public:
     if (r >= 0) {
       cls_statelog_list_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(ret, iter);
         if (entries)
 	  *entries = ret.entries;

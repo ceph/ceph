@@ -59,7 +59,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   bufferlist qbl;
   mon->store->get(service_name, "quorum", qbl);
   if (qbl.length()) {
-    auto p = qbl.begin();
+    auto p = qbl.cbegin();
     decode(quorum_checks, p);
   } else {
     quorum_checks.clear();
@@ -68,7 +68,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   bufferlist lbl;
   mon->store->get(service_name, "leader", lbl);
   if (lbl.length()) {
-    auto p = lbl.begin();
+    auto p = lbl.cbegin();
     decode(leader_checks, p);
   } else {
     leader_checks.clear();

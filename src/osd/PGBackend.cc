@@ -822,7 +822,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       } else {
         ss_bl.push_back(k->second);
         try {
-	  bufferlist::iterator bliter = ss_bl.begin();
+	  auto bliter = ss_bl.cbegin();
 	  decode(ss, bliter);
 	  if (first_ss_bl.length() == 0) {
 	    first_ss_bl.append(ss_bl);
@@ -847,7 +847,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       } else {
 	hk_bl.push_back(k->second);
         try {
-	  bufferlist::iterator bliter = hk_bl.begin();
+	  auto bliter = hk_bl.cbegin();
 	  decode(hi, bliter);
 	  if (first_hk_bl.length() == 0) {
 	    first_hk_bl.append(hk_bl);
@@ -872,7 +872,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     }
     bl.push_back(k->second);
     try {
-      bufferlist::iterator bliter = bl.begin();
+      auto bliter = bl.cbegin();
       decode(oi, bliter);
     } catch (...) {
       // invalid object info, probably corrupt

@@ -50,7 +50,7 @@ public:
     encode(ctimes, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(epoch, p);
     decode(mkpg, p);
     decode(ctimes, p);

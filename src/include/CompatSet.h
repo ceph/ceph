@@ -85,7 +85,7 @@ struct CompatSet {
       encode(names, bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       decode(mask, bl);
       decode(names, bl);
@@ -228,7 +228,7 @@ struct CompatSet {
     incompat.encode(bl);
   }
   
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     compat.decode(bl);
     ro_compat.decode(bl);
     incompat.decode(bl);

@@ -612,7 +612,7 @@ int DataScan::forall_objects(
         int r = ioctx.getxattr(oid, "scrub_tag", scrub_tag_bl);
         if (r >= 0) {
           std::string read_tag;
-          bufferlist::iterator q = scrub_tag_bl.begin();
+          auto q = scrub_tag_bl.cbegin();
           try {
             decode(read_tag, q);
             if (read_tag == filter_tag) {
@@ -960,7 +960,7 @@ int DataScan::scan_links()
       }
 
       for (auto& p : items) {
-	bufferlist::iterator q = p.second.begin();
+	auto q = p.second.cbegin();
 	string dname;
 	snapid_t last;
 	dentry_key_t::decode_helper(p.first, dname, last);
@@ -1172,7 +1172,7 @@ int DataScan::scan_frags()
 
     if (parent_r != -ENODATA) {
       try {
-        bufferlist::iterator q = parent_bl.begin();
+        auto q = parent_bl.cbegin();
         backtrace.decode(q);
       } catch (buffer::error &e) {
         dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
@@ -1187,7 +1187,7 @@ int DataScan::scan_frags()
 
     if (layout_r != -ENODATA) {
       try {
-        bufferlist::iterator q = layout_bl.begin();
+        auto q = layout_bl.cbegin();
         decode(loaded_layout, q);
       } catch (buffer::error &e) {
         dout(4) << "Corrupt layout on '" << oid << "': " << e << dendl;
@@ -1286,7 +1286,7 @@ int MetadataTool::read_fnode(
     return r;
   }
 
-  bufferlist::iterator old_fnode_iter = fnode_bl.begin();
+  auto old_fnode_iter = fnode_bl.cbegin();
   try {
     (*fnode).decode(old_fnode_iter);
   } catch (const buffer::error &err) {
@@ -1325,7 +1325,7 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
   }
 
   try {
-    bufferlist::iterator q = vals[key].begin();
+    auto q = vals[key].cbegin();
     snapid_t dnfirst;
     decode(dnfirst, q);
     char dentry_type;
@@ -1427,7 +1427,7 @@ int MetadataDriver::get_frag_of(
   inode_backtrace_t backtrace;
   if (parent_bl.length()) {
     try {
-      bufferlist::iterator q = parent_bl.begin();
+      auto q = parent_bl.cbegin();
       backtrace.decode(q);
       have_backtrace = true;
     } catch (buffer::error &e) {

@@ -26,7 +26,7 @@ struct chunk_obj_refcount {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(refs, bl);
     DECODE_FINISH(bl);
@@ -47,7 +47,7 @@ struct obj_refcount {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(refs, bl);
     if (struct_v >= 2) {
@@ -75,7 +75,7 @@ static int read_refcount(cls_method_context_t hctx, bool implicit_ref, obj_refco
     return ret;
 
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(*objr, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: read_refcount(): failed to decode refcount entry\n");
@@ -100,7 +100,7 @@ static int set_refcount(cls_method_context_t hctx, const struct obj_refcount& ob
 
 static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_get_op op;
   try {
@@ -128,7 +128,7 @@ static int cls_rc_refcount_get(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_put_op op;
   try {
@@ -181,7 +181,7 @@ static int cls_rc_refcount_put(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_set_op op;
   try {
@@ -210,7 +210,7 @@ static int cls_rc_refcount_set(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_rc_refcount_read(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_refcount_read_op op;
   try {
@@ -249,7 +249,7 @@ static int chunk_read_refcount(cls_method_context_t hctx, chunk_obj_refcount *ob
     return ret;
 
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(*objr, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: chunk_read_refcount(): failed to decode refcount entry\n");
@@ -274,7 +274,7 @@ static int chunk_set_refcount(cls_method_context_t hctx, const struct chunk_obj_
 
 static int cls_rc_chunk_refcount_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_chunk_refcount_get_op op;
   try {
@@ -302,7 +302,7 @@ static int cls_rc_chunk_refcount_get(cls_method_context_t hctx, bufferlist *in, 
 
 static int cls_rc_chunk_refcount_put(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_chunk_refcount_put_op op;
   try {
@@ -352,7 +352,7 @@ static int cls_rc_chunk_refcount_put(cls_method_context_t hctx, bufferlist *in, 
 
 static int cls_rc_chunk_refcount_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_chunk_refcount_set_op op;
   try {
