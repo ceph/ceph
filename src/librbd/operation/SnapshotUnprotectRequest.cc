@@ -116,7 +116,7 @@ protected:
     CephContext *cct = image_ctx.cct;
 
     if (r == 0) {
-      bufferlist::iterator it = m_children_bl.begin();
+      auto it = m_children_bl.cbegin();
       r= cls_client::get_children_finish(&it, &m_children);
     }
 

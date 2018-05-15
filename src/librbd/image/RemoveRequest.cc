@@ -346,7 +346,7 @@ void RemoveRequest<I>::handle_check_group(int r) {
 
   cls::rbd::GroupSpec s;
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = librbd::cls_client::image_group_get_finish(&it, &s);
   }
   if (r < 0 && r != -EOPNOTSUPP) {
@@ -760,7 +760,7 @@ void RemoveRequest<I>::handle_dir_get_image_id(int r) {
   }
 
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::dir_get_id_finish(&iter, &m_image_id);
     if (r < 0) {
       finish(r);
@@ -799,7 +799,7 @@ void RemoveRequest<I>::handle_dir_get_image_name(int r) {
   }
 
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::dir_get_name_finish(&iter, &m_image_name);
     if (r < 0) {
       finish(r);

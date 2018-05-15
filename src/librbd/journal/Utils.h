@@ -43,7 +43,7 @@ struct C_DecodeTag : public Context {
 
   int process(int r);
 
-  static int decode(bufferlist::iterator *it, TagData *tag_data);
+  static int decode(bufferlist::const_iterator *it, TagData *tag_data);
 
 };
 

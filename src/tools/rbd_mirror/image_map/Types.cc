@@ -41,7 +41,7 @@ private:
 
 class DecodeVisitor : public boost::static_visitor<void> {
 public:
-  DecodeVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
   }
 
@@ -51,7 +51,7 @@ public:
   }
 private:
   __u8 m_version;
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpVisitor : public boost::static_visitor<void> {
@@ -82,7 +82,7 @@ void PolicyData::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void PolicyData::decode(bufferlist::iterator& it) {
+void PolicyData::decode(bufferlist::const_iterator& it) {
   DECODE_START(1, it);
 
   uint32_t policy_meta_type;

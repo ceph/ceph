@@ -37,7 +37,7 @@ public:
       notify_message = NotifyMessage(HeaderUpdatePayload());
     } else {
       try {
-        bufferlist::iterator iter = bl.begin();
+        auto iter = bl.cbegin();
         notify_message.decode(iter);
       } catch (const buffer::error &err) {
         std::cerr << "rbd: failed to decode image notification" << std::endl;

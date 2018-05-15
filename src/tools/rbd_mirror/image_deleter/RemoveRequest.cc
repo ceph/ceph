@@ -56,7 +56,7 @@ void RemoveRequest<I>::handle_get_snap_context(int r) {
 
   ::SnapContext snapc;
   if (r == 0) {
-    auto bl_it = m_out_bl.begin();
+    auto bl_it = m_out_bl.cbegin();
     r = librbd::cls_client::get_snapcontext_finish(&bl_it, &snapc);
   }
   if (r < 0 && r != -ENOENT) {

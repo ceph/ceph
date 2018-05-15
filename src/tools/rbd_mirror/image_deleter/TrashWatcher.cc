@@ -257,7 +257,7 @@ void TrashWatcher<I>::handle_trash_list(int r) {
 
   std::map<std::string, cls::rbd::TrashImageSpec> images;
   if (r >= 0) {
-    auto bl_it = m_out_bl.begin();
+    auto bl_it = m_out_bl.cbegin();
     r = librbd::cls_client::trash_list_finish(&bl_it, &images);
   }
 

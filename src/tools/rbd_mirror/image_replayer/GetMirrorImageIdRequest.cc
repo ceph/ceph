@@ -48,7 +48,7 @@ void GetMirrorImageIdRequest<I>::get_image_id() {
 template <typename I>
 void GetMirrorImageIdRequest<I>::handle_get_image_id(int r) {
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_image_id_finish(
       &iter, m_image_id);
   }

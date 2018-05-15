@@ -299,12 +299,12 @@ public:
     bufferlist bl;
     encode(event_entry, bl);
 
-    bufferlist::iterator it = bl.begin();
+    auto it = bl.cbegin();
     when_process(mock_journal_replay, &it, on_ready, on_safe);
   }
 
   void when_process(MockJournalReplay &mock_journal_replay,
-                    bufferlist::iterator *it, Context *on_ready,
+                    bufferlist::const_iterator *it, Context *on_ready,
                     Context *on_safe) {
     EventEntry event_entry;
     int r = mock_journal_replay.decode(it, &event_entry);
@@ -1820,7 +1820,7 @@ TEST_F(TestMockJournalReplay, UnknownEvent) {
   encode(static_cast<uint32_t>(-1), bl);
   ENCODE_FINISH(bl);
 
-  bufferlist::iterator it = bl.begin();
+  auto it = bl.cbegin();
   C_SaferCond on_ready;
   C_SaferCond on_safe;
   when_process(mock_journal_replay, &it, &on_ready, &on_safe);

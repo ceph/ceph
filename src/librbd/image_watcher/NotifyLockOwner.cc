@@ -73,7 +73,7 @@ void NotifyLockOwner::handle_notify(int r) {
   }
 
   try {
-    bufferlist::iterator iter = response.begin();
+    auto iter = response.cbegin();
 
     ResponseMessage response_message;
     using ceph::decode;

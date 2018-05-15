@@ -78,7 +78,7 @@ bool SnapshotRemoveRequest::should_complete(int r) {
     }
 
     if (r == 0) {
-      bufferlist::iterator it = m_out_bl.begin();
+      auto it = m_out_bl.cbegin();
       r = cls_client::object_map_load_finish(&it, &m_snap_object_map);
     }
     if (r < 0) {

@@ -17,7 +17,7 @@ void MirrorPeer::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void MirrorPeer::decode(bufferlist::iterator &it) {
+void MirrorPeer::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(uuid, it);
   decode(cluster_name, it);
@@ -82,7 +82,7 @@ void MirrorImage::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void MirrorImage::decode(bufferlist::iterator &it) {
+void MirrorImage::decode(bufferlist::const_iterator &it) {
   uint8_t int_state;
   DECODE_START(1, it);
   decode(global_image_id, it);
@@ -142,7 +142,7 @@ void MirrorImageStatus::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void MirrorImageStatus::decode(bufferlist::iterator &it) {
+void MirrorImageStatus::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(state, it);
   decode(description, it);
@@ -219,7 +219,7 @@ void ChildImageSpec::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ChildImageSpec::decode(bufferlist::iterator &it) {
+void ChildImageSpec::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(pool_id, it);
   decode(image_id, it);
@@ -243,7 +243,7 @@ void GroupImageSpec::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void GroupImageSpec::decode(bufferlist::iterator &it) {
+void GroupImageSpec::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(image_id, it);
   decode(pool_id, it);
@@ -300,7 +300,7 @@ void GroupImageStatus::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void GroupImageStatus::decode(bufferlist::iterator &it) {
+void GroupImageStatus::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(spec, it);
   decode(state, it);
@@ -338,7 +338,7 @@ void GroupSpec::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void GroupSpec::decode(bufferlist::iterator &it) {
+void GroupSpec::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(pool_id, it);
   decode(group_id, it);
@@ -366,7 +366,7 @@ void GroupSnapshotNamespace::encode(bufferlist& bl) const {
   encode(group_snapshot_id, bl);
 }
 
-void GroupSnapshotNamespace::decode(bufferlist::iterator& it) {
+void GroupSnapshotNamespace::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(group_pool, it);
   decode(group_id, it);
@@ -385,7 +385,7 @@ void TrashSnapshotNamespace::encode(bufferlist& bl) const {
   encode(static_cast<uint32_t>(original_snapshot_namespace_type), bl);
 }
 
-void TrashSnapshotNamespace::decode(bufferlist::iterator& it) {
+void TrashSnapshotNamespace::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(original_name, it);
   uint32_t snap_type;
@@ -418,7 +418,7 @@ private:
 
 class DecodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
 public:
-  DecodeSnapshotNamespaceVisitor(bufferlist::iterator &iter)
+  DecodeSnapshotNamespaceVisitor(bufferlist::const_iterator &iter)
     : m_iter(iter) {
   }
 
@@ -427,7 +427,7 @@ public:
     t.decode(m_iter);
   }
 private:
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpSnapshotNamespaceVisitor : public boost::static_visitor<void> {
@@ -471,7 +471,7 @@ void SnapshotInfo::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void SnapshotInfo::decode(bufferlist::iterator& it) {
+void SnapshotInfo::decode(bufferlist::const_iterator& it) {
   DECODE_START(1, it);
   decode(id, it);
   decode(snapshot_namespace, it);
@@ -511,7 +511,7 @@ void SnapshotNamespace::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void SnapshotNamespace::decode(bufferlist::iterator &p)
+void SnapshotNamespace::decode(bufferlist::const_iterator &p)
 {
   DECODE_START(1, p);
   uint32_t snap_type;
@@ -601,7 +601,7 @@ void ImageSnapshotSpec::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ImageSnapshotSpec::decode(bufferlist::iterator& it) {
+void ImageSnapshotSpec::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
   DECODE_START(1, it);
   decode(pool, it);
@@ -631,7 +631,7 @@ void GroupSnapshot::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void GroupSnapshot::decode(bufferlist::iterator& it) {
+void GroupSnapshot::decode(bufferlist::const_iterator& it) {
   using ceph::decode;
   DECODE_START(1, it);
   decode(id, it);
@@ -660,7 +660,7 @@ void TrashImageSpec::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void TrashImageSpec::decode(bufferlist::iterator &it) {
+void TrashImageSpec::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(source, it);
   decode(name, it);
@@ -690,7 +690,7 @@ void MirrorImageMap::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void MirrorImageMap::decode(bufferlist::iterator &it) {
+void MirrorImageMap::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(instance_id, it);
   decode(mapped_time, it);
