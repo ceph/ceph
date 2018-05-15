@@ -6810,6 +6810,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    const string& name = iter->first;
 	    t->rmattr(soid, name);
 	  }
+	  if (!has_reference && need_reference) {
+	    oi.set_flag(object_info_t::FLAG_REDIRECT_HAS_REFERENCE);
+	  }
 	  dout(10) << "set-redirect oid:" << oi.soid << " user_version: " << oi.user_version << dendl;
 	  if (op_finisher) {
 	    ctx->op_finishers.erase(ctx->current_osd_subop_num);
@@ -6908,6 +6911,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    ctx->delta_stats.num_objects_manifest++;
 	  oi.set_flag(object_info_t::FLAG_MANIFEST);
 	  oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
+	  if (!has_reference && need_reference) {
+	    oi.manifest.chunk_map[src_offset].flags |=
+	      chunk_info_t::FLAG_HAS_REFERENCE;
+	  }
 	  ctx->modify = true;
 
 	  dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
