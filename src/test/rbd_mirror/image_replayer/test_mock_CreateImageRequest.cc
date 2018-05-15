@@ -206,21 +206,17 @@ public:
     ASSERT_EQ(0, open_image(m_remote_io_ctx, m_image_name, &m_remote_image_ctx));
   }
 
+  void snap_create(librbd::ImageCtx *image_ctx, const std::string &snap_name) {
+    ASSERT_EQ(0, image_ctx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
+					            snap_name.c_str()));
+    ASSERT_EQ(0, image_ctx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
+						     snap_name.c_str()));
+    ASSERT_EQ(0, image_ctx->state->refresh());
+  }
+
   int clone_image(librbd::ImageCtx *parent_image_ctx,
                   const std::string &snap_name, const std::string &clone_name) {
-    {
-      librbd::ImageCtx *ictx = new librbd::ImageCtx(parent_image_ctx->name,
-						    "", "", m_remote_io_ctx,
-                                                    false);
-      ictx->state->open(false);
-      EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
-						 snap_name.c_str()));
-      EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
-						  snap_name.c_str()));
-      ictx->state->close();
-    }
-
-    EXPECT_EQ(0, parent_image_ctx->state->refresh());
+    snap_create(parent_image_ctx, snap_name);
 
     int order = 0;
     return librbd::clone(m_remote_io_ctx, parent_image_ctx->name.c_str(),
@@ -292,7 +288,7 @@ public:
           RWLock::RLocker snap_locker(mock_image_ctx.snap_lock);
           auto id = mock_image_ctx.image_ctx->get_snap_id(
             cls::rbd::UserSnapshotNamespace{}, snap_name);
-          ASSERT_NE(snap_id, id);
+          ASSERT_EQ(snap_id, id);
           m_threads->work_queue->queue(on_finish, r);
         }));
   }
@@ -366,6 +362,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, Clone) {
   librbd::ImageCtx *local_image_ctx;
   ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
   ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &local_image_ctx));
+  snap_create(local_image_ctx, "snap");
 
   std::string clone_image_name = get_temp_image_name();
   ASSERT_EQ(0, clone_image(m_remote_image_ctx, "snap", clone_image_name));
@@ -533,6 +530,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneSnapSetError) {
   librbd::ImageCtx *local_image_ctx;
   ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
   ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &local_image_ctx));
+  snap_create(local_image_ctx, "snap");
 
   std::string clone_image_name = get_temp_image_name();
   ASSERT_EQ(0, clone_image(m_remote_image_ctx, "snap", clone_image_name));
@@ -576,6 +574,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneError) {
   librbd::ImageCtx *local_image_ctx;
   ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
   ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &local_image_ctx));
+  snap_create(local_image_ctx, "snap");
 
   std::string clone_image_name = get_temp_image_name();
   ASSERT_EQ(0, clone_image(m_remote_image_ctx, "snap", clone_image_name));
@@ -620,6 +619,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneLocalParentCloseError) {
   librbd::ImageCtx *local_image_ctx;
   ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
   ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &local_image_ctx));
+  snap_create(local_image_ctx, "snap");
 
   std::string clone_image_name = get_temp_image_name();
   ASSERT_EQ(0, clone_image(m_remote_image_ctx, "snap", clone_image_name));
@@ -664,6 +664,7 @@ TEST_F(TestMockImageReplayerCreateImageRequest, CloneRemoteParentCloseError) {
   librbd::ImageCtx *local_image_ctx;
   ASSERT_EQ(0, create_image(rbd, m_local_io_ctx, m_image_name, m_image_size));
   ASSERT_EQ(0, open_image(m_local_io_ctx, m_image_name, &local_image_ctx));
+  snap_create(local_image_ctx, "snap");
 
   std::string clone_image_name = get_temp_image_name();
   ASSERT_EQ(0, clone_image(m_remote_image_ctx, "snap", clone_image_name));
