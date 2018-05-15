@@ -553,7 +553,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     while (blocked_count - interval_wait_count >= ops_window) {
       ret = completion_mgr->get_next((void **)&blocked_stack);
       if (ret < 0) {
-       ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
+       ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       handle_unblocked_stack(context_stacks, scheduled_stacks, blocked_stack, &blocked_count);
     }
@@ -565,7 +565,7 @@ int RGWCoroutinesManager::run(list<RGWCoroutinesStack *>& stacks)
     while (scheduled_stacks.empty() && blocked_count > 0) {
       ret = completion_mgr->get_next((void **)&blocked_stack);
       if (ret < 0) {
-	ldout(cct, 0) << "ERROR: failed to clone shard, completion_mgr.get_next() returned ret=" << ret << dendl;
+        ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
       if (going_down) {
 	ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
