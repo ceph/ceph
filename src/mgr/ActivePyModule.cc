@@ -135,6 +135,8 @@ int ActivePyModule::handle_command(
   int r = 0;
   if (pResult != NULL) {
     if (PyTuple_Size(pResult) != 3) {
+      derr << "module '" << py_module->get_name() << "' command handler "
+              "returned wrong type!" << dendl;
       r = -EINVAL;
     } else {
       r = PyInt_AsLong(PyTuple_GetItem(pResult, 0));
@@ -144,6 +146,8 @@ int ActivePyModule::handle_command(
 
     Py_DECREF(pResult);
   } else {
+    derr << "module '" << py_module->get_name() << "' command handler "
+            "threw exception: " << peek_pyerror() << dendl;
     *ds << "";
     *ss << handle_pyerror();
     r = -EINVAL;
