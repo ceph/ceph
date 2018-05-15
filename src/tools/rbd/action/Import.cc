@@ -219,7 +219,7 @@ static int do_image_resize(ImportDiffContext *idiffctx)
 
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(end_size, p);
 
   uint64_t cur_size;
@@ -245,7 +245,7 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
 
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
 
   uint64_t image_offset, buffer_length;
   decode(image_offset, p);
@@ -363,7 +363,7 @@ static int read_tag(int fd, __u8 end_tag, int format, __u8 *tag, uint64_t *readl
 
     bufferlist bl;
     bl.append(buf, sizeof(buf));
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(*readlen, p);
   }
 
@@ -585,8 +585,7 @@ static int decode_and_set_image_option(int fd, uint64_t imageopt, librbd::ImageO
 
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  bufferlist::iterator it;
-  it = bl.begin();
+  auto it = bl.cbegin();
 
   uint64_t val;
   decode(val, it);
@@ -710,7 +709,7 @@ static int do_import_v2(librados::Rados &rados, int fd, librbd::Image &image,
   }
   bufferlist bl;
   bl.append(buf, sizeof(buf));
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   uint64_t diff_num;
   decode(diff_num, p);
   for (size_t i = 0; i < diff_num; i++) {

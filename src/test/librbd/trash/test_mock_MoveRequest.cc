@@ -67,7 +67,7 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
                              std::string id;
                              cls::rbd::TrashImageSpec trash_image_spec;
 
-                             bufferlist::iterator bl_it = in_bl.begin();
+                             auto bl_it = in_bl.cbegin();
                              decode(id, bl_it);
                              decode(trash_image_spec, bl_it);
 

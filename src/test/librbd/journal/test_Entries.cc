@@ -106,7 +106,7 @@ public:
                        librbd::journal::EventEntry *event_entry) {
     try {
       bufferlist data_bl = replay_entry.get_data();
-      bufferlist::iterator it = data_bl.begin();
+      auto it = data_bl.cbegin();
       decode(*event_entry, it);
     } catch (const buffer::error &err) {
       return false;

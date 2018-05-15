@@ -64,7 +64,7 @@ struct MockReplay {
   }
 
   MOCK_METHOD2(shut_down, void(bool cancel_ops, Context *));
-  MOCK_METHOD2(decode, int(bufferlist::iterator*, EventEntry *));
+  MOCK_METHOD2(decode, int(bufferlist::const_iterator*, EventEntry *));
   MOCK_METHOD3(process, void(const EventEntry&, Context *, Context *));
   MOCK_METHOD2(replay_op_ready, void(uint64_t, Context *));
 };
@@ -80,7 +80,7 @@ public:
     MockReplay::get_instance().shut_down(cancel_ops, on_finish);
   }
 
-  int decode(bufferlist::iterator *it, EventEntry *event_entry) {
+  int decode(bufferlist::const_iterator *it, EventEntry *event_entry) {
     return MockReplay::get_instance().decode(it, event_entry);
   }
 

@@ -29,7 +29,7 @@ private:
 
 class DecodePayloadVisitor : public boost::static_visitor<void> {
 public:
-  DecodePayloadVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodePayloadVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {}
 
   template <typename Payload>
@@ -39,7 +39,7 @@ public:
 
 private:
   __u8 m_version;
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpPayloadVisitor : public boost::static_visitor<void> {
@@ -64,7 +64,7 @@ void PayloadBase::encode(bufferlist &bl) const {
   encode(request_id, bl);
 }
 
-void PayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
+void PayloadBase::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(request_id, iter);
 }
@@ -79,7 +79,7 @@ void ImagePayloadBase::encode(bufferlist &bl) const {
   encode(global_image_id, bl);
 }
 
-void ImagePayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
+void ImagePayloadBase::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   PayloadBase::decode(version, iter);
   decode(global_image_id, iter);
@@ -97,7 +97,7 @@ void PeerImageRemovedPayload::encode(bufferlist &bl) const {
   encode(peer_mirror_uuid, bl);
 }
 
-void PeerImageRemovedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void PeerImageRemovedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   PayloadBase::decode(version, iter);
   decode(global_image_id, iter);
@@ -116,7 +116,7 @@ void SyncPayloadBase::encode(bufferlist &bl) const {
   encode(sync_id, bl);
 }
 
-void SyncPayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
+void SyncPayloadBase::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   PayloadBase::decode(version, iter);
   decode(sync_id, iter);
@@ -131,7 +131,7 @@ void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
 
-void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void UnknownPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void UnknownPayload::dump(Formatter *f) const {
@@ -143,7 +143,7 @@ void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void NotifyMessage::decode(bufferlist::iterator& iter) {
+void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   DECODE_START(2, iter);
 
   uint32_t notify_op;
@@ -227,7 +227,7 @@ void NotifyAckPayload::encode(bufferlist &bl) const {
   encode(ret_val, bl);
 }
 
-void NotifyAckPayload::decode(bufferlist::iterator &iter) {
+void NotifyAckPayload::decode(bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(instance_id, iter);
   decode(request_id, iter);

@@ -140,7 +140,7 @@ void CreateImageRequest<I>::handle_get_parent_global_image_id(int r) {
   dout(20) << ": r=" << r << dendl;
   if (r == 0) {
     cls::rbd::MirrorImage mirror_image;
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
     if (r == 0) {
       m_parent_global_image_id = mirror_image.global_image_id;
@@ -187,7 +187,7 @@ void CreateImageRequest<I>::handle_get_local_parent_image_id(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_image_id_finish(
       &iter, &m_local_parent_spec.image_id);
   }

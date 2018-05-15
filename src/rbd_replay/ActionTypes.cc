@@ -22,7 +22,7 @@ bool byte_swap_required(__u8 version) {
 #endif
 }
 
-void decode_big_endian_string(std::string &str, bufferlist::iterator &it) {
+void decode_big_endian_string(std::string &str, bufferlist::const_iterator &it) {
   using ceph::decode;
 #if defined(CEPH_LITTLE_ENDIAN)
   uint32_t length;
@@ -52,7 +52,7 @@ private:
 
 class DecodeVisitor : public boost::static_visitor<void> {
 public:
-  DecodeVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodeVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {
   }
 
@@ -62,7 +62,7 @@ public:
   }
 private:
   __u8 m_version;
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpVisitor : public boost::static_visitor<void> {
@@ -87,11 +87,11 @@ void Dependency::encode(bufferlist &bl) const {
   encode(time_delta, bl);
 }
 
-void Dependency::decode(bufferlist::iterator &it) {
+void Dependency::decode(bufferlist::const_iterator &it) {
   decode(1, it);
 }
 
-void Dependency::decode(__u8 version, bufferlist::iterator &it) {
+void Dependency::decode(__u8 version, bufferlist::const_iterator &it) {
   using ceph::decode;
   decode(id, it);
   decode(time_delta, it);
@@ -118,7 +118,7 @@ void ActionBase::encode(bufferlist &bl) const {
   encode(dependencies, bl);
 }
 
-void ActionBase::decode(__u8 version, bufferlist::iterator &it) {
+void ActionBase::decode(__u8 version, bufferlist::const_iterator &it) {
   using ceph::decode;
   decode(id, it);
   decode(thread_id, it);
@@ -164,7 +164,7 @@ void ImageActionBase::encode(bufferlist &bl) const {
   encode(imagectx_id, bl);
 }
 
-void ImageActionBase::decode(__u8 version, bufferlist::iterator &it) {
+void ImageActionBase::decode(__u8 version, bufferlist::const_iterator &it) {
   using ceph::decode;
   ActionBase::decode(version, it);
   decode(imagectx_id, it);
@@ -185,7 +185,7 @@ void IoActionBase::encode(bufferlist &bl) const {
   encode(length, bl);
 }
 
-void IoActionBase::decode(__u8 version, bufferlist::iterator &it) {
+void IoActionBase::decode(__u8 version, bufferlist::const_iterator &it) {
   using ceph::decode;
   ImageActionBase::decode(version, it);
   decode(offset, it);
@@ -210,7 +210,7 @@ void OpenImageAction::encode(bufferlist &bl) const {
   encode(read_only, bl);
 }
 
-void OpenImageAction::decode(__u8 version, bufferlist::iterator &it) {
+void OpenImageAction::decode(__u8 version, bufferlist::const_iterator &it) {
   using ceph::decode;
   ImageActionBase::decode(version, it);
   if (byte_swap_required(version)) {
@@ -238,7 +238,7 @@ void AioOpenImageAction::encode(bufferlist &bl) const {
   encode(read_only, bl);
 }
 
-void AioOpenImageAction::decode(__u8 version, bufferlist::iterator &it) {
+void AioOpenImageAction::decode(__u8 version, bufferlist::const_iterator &it) {
   using ceph::decode;
   ImageActionBase::decode(version, it);
   if (byte_swap_required(version)) {
@@ -262,7 +262,7 @@ void UnknownAction::encode(bufferlist &bl) const {
   ceph_abort();
 }
 
-void UnknownAction::decode(__u8 version, bufferlist::iterator &it) {
+void UnknownAction::decode(__u8 version, bufferlist::const_iterator &it) {
 }
 
 void UnknownAction::dump(Formatter *f) const {
@@ -274,17 +274,17 @@ void ActionEntry::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ActionEntry::decode(bufferlist::iterator &it) {
+void ActionEntry::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
   decode(struct_v, it);
   DECODE_FINISH(it);
 }
 
-void ActionEntry::decode_unversioned(bufferlist::iterator &it) {
+void ActionEntry::decode_unversioned(bufferlist::const_iterator &it) {
   decode(0, it);
 }
 
-void ActionEntry::decode(__u8 version, bufferlist::iterator &it) {
+void ActionEntry::decode(__u8 version, bufferlist::const_iterator &it) {
   using ceph::decode;
   uint8_t action_type;
   decode(action_type, it);

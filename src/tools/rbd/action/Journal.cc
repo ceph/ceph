@@ -363,7 +363,7 @@ static int inspect_entry(bufferlist& data,
 			 librbd::journal::EventEntry& event_entry,
 			 bool verbose) {
   try {
-    bufferlist::iterator it = data.begin();
+    auto it = data.cbegin();
     decode(event_entry, it);
   } catch (const buffer::error &err) {
     std::cerr << "failed to decode event entry: " << err.what() << std::endl;

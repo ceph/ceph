@@ -42,7 +42,7 @@ inline void encode(const GroupImageLinkState &state, bufferlist& bl,
   encode(static_cast<uint8_t>(state), bl);
 }
 
-inline void decode(GroupImageLinkState &state, bufferlist::iterator& it)
+inline void decode(GroupImageLinkState &state, bufferlist::const_iterator& it)
 {
   uint8_t int_state;
   using ceph::decode;
@@ -69,7 +69,7 @@ struct MirrorPeer {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<MirrorPeer*> &o);
@@ -97,7 +97,7 @@ struct MirrorImage {
   MirrorImageState state = MIRROR_IMAGE_STATE_DISABLING;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<MirrorImage*> &o);
@@ -128,7 +128,7 @@ inline void encode(const MirrorImageStatusState &state, bufferlist& bl,
   encode(static_cast<uint8_t>(state), bl);
 }
 
-inline void decode(MirrorImageStatusState &state, bufferlist::iterator& it)
+inline void decode(MirrorImageStatusState &state, bufferlist::const_iterator& it)
 {
   uint8_t int_state;
   using ceph::decode;
@@ -148,7 +148,7 @@ struct MirrorImageStatus {
   bool up = false;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   std::string state_to_string() const;
@@ -173,7 +173,7 @@ struct ChildImageSpec {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<ChildImageSpec*> &o);
@@ -205,7 +205,7 @@ struct GroupImageSpec {
   int64_t pool_id = -1;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<GroupImageSpec*> &o);
@@ -230,7 +230,7 @@ struct GroupImageStatus {
   GroupImageLinkState state = GROUP_IMAGE_LINK_STATE_INCOMPLETE;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<GroupImageStatus*> &o);
@@ -249,7 +249,7 @@ struct GroupSpec {
   int64_t pool_id = -1;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
   bool is_valid() const;
 
@@ -271,7 +271,7 @@ struct UserSnapshotNamespace {
   UserSnapshotNamespace() {}
 
   void encode(bufferlist& bl) const {}
-  void decode(bufferlist::iterator& it) {}
+  void decode(bufferlist::const_iterator& it) {}
 
   void dump(Formatter *f) const {}
 
@@ -301,7 +301,7 @@ struct GroupSnapshotNamespace {
   string group_snapshot_id;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
 
   void dump(Formatter *f) const;
 
@@ -338,7 +338,7 @@ struct TrashSnapshotNamespace {
       original_snapshot_namespace_type(original_snapshot_namespace_type) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   inline bool operator==(const TrashSnapshotNamespace& usn) const {
@@ -356,7 +356,7 @@ struct UnknownSnapshotNamespace {
   UnknownSnapshotNamespace() {}
 
   void encode(bufferlist& bl) const {}
-  void decode(bufferlist::iterator& it) {}
+  void decode(bufferlist::const_iterator& it) {}
   void dump(Formatter *f) const {}
 
   inline bool operator==(const UnknownSnapshotNamespace& gsn) const {
@@ -388,7 +388,7 @@ struct SnapshotNamespace : public SnapshotNamespaceVariant {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<SnapshotNamespace*> &o);
@@ -425,7 +425,7 @@ struct SnapshotInfo {
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<SnapshotInfo*> &o);
@@ -443,7 +443,7 @@ inline void encode(const GroupSnapshotState &state, bufferlist& bl, uint64_t fea
   encode(static_cast<uint8_t>(state), bl);
 }
 
-inline void decode(GroupSnapshotState &state, bufferlist::iterator& it)
+inline void decode(GroupSnapshotState &state, bufferlist::const_iterator& it)
 {
   using ceph::decode;
   uint8_t int_state;
@@ -464,7 +464,7 @@ struct ImageSnapshotSpec {
 					 snap_id(_snap_id) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
 
   void dump(Formatter *f) const;
 
@@ -487,7 +487,7 @@ struct GroupSnapshot {
   vector<ImageSnapshotSpec> snaps;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<GroupSnapshot *> &o);
@@ -505,7 +505,7 @@ inline void encode(const TrashImageSource &source, bufferlist& bl,
   encode(static_cast<uint8_t>(source), bl);
 }
 
-inline void decode(TrashImageSource &source, bufferlist::iterator& it)
+inline void decode(TrashImageSource &source, bufferlist::const_iterator& it)
 {
   uint8_t int_source;
   using ceph::decode;
@@ -528,7 +528,7 @@ struct TrashImageSpec {
   }
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   inline bool operator==(const TrashImageSpec& rhs) const {
@@ -556,7 +556,7 @@ struct MirrorImageMap {
   bufferlist data;
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &it);
+  void decode(bufferlist::const_iterator &it);
   void dump(Formatter *f) const;
 
   static void generate_test_instances(std::list<MirrorImageMap*> &o);

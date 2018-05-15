@@ -13,7 +13,7 @@ void ClientId::encode(bufferlist &bl) const {
   encode(handle, bl);
 }
 
-void ClientId::decode(bufferlist::iterator &iter) {
+void ClientId::decode(bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(gid, iter);
   decode(handle, iter);
@@ -30,7 +30,7 @@ void NotifyResponse::encode(bufferlist& bl) const {
   encode(timeouts, bl);
 }
 
-void NotifyResponse::decode(bufferlist::iterator& iter) {
+void NotifyResponse::decode(bufferlist::const_iterator& iter) {
   using ceph::decode;
   decode(acks, iter);
   decode(timeouts, iter);

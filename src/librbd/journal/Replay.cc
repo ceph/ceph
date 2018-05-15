@@ -187,7 +187,7 @@ Replay<I>::~Replay() {
 }
 
 template <typename I>
-int Replay<I>::decode(bufferlist::iterator *it, EventEntry *event_entry) {
+int Replay<I>::decode(bufferlist::const_iterator *it, EventEntry *event_entry) {
   try {
     using ceph::decode;
     decode(*event_entry, *it);

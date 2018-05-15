@@ -116,7 +116,7 @@ Context *RefreshRequest<I>::handle_load(int *ret_val) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *ret_val << dendl;
 
   if (*ret_val == 0) {
-    bufferlist::iterator bl_it = m_out_bl.begin();
+    auto bl_it = m_out_bl.cbegin();
     *ret_val = cls_client::object_map_load_finish(&bl_it,
                                                   &m_on_disk_object_map);
   }

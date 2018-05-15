@@ -183,7 +183,7 @@ struct GetTagsRequest {
     }
 
     librbd::journal::ClientData client_data;
-    bufferlist::iterator bl_it = client->data.begin();
+    auto bl_it = client->data.cbegin();
     try {
       decode(client_data, bl_it);
     } catch (const buffer::error &err) {
@@ -1220,7 +1220,7 @@ void Journal<I>::handle_replay_ready() {
   }
 
   bufferlist data = replay_entry.get_data();
-  bufferlist::iterator it = data.begin();
+  auto it = data.cbegin();
 
   journal::EventEntry event_entry;
   int r = m_journal_replay->decode(&it, &event_entry);
@@ -1590,7 +1590,7 @@ int Journal<I>::check_resync_requested(bool *do_resync) {
   }
 
   librbd::journal::ClientData client_data;
-  bufferlist::iterator bl_it = client.data.begin();
+  auto bl_it = client.data.cbegin();
   try {
     decode(client_data, bl_it);
   } catch (const buffer::error &err) {
