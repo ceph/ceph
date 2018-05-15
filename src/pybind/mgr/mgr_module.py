@@ -692,6 +692,13 @@ class MgrModule(ceph_module.BaseMgrModule):
         else:
             return 0
 
+    def get_latest_avg(self, daemon_type, daemon_name, counter):
+        data = self.get_counter(daemon_type, daemon_name, counter)[counter]
+        if data:
+            return (data[-1][1], data[-1][2])
+        else:
+            return (0, 0)
+
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL):
         """
         Return the perf counters currently known to this ceph-mgr
@@ -733,9 +740,24 @@ class MgrModule(ceph_module.BaseMgrModule):
                     if counter_schema['priority'] < prio_limit:
                         continue
 
-                    counter_info = counter_schema
-                    counter_info['value'] = self.get_latest(service['type'], service['id'],
-                                                            counter_path)
+                    counter_info = dict(counter_schema)
+
+                    # Also populate count for the long running avgs
+                    if counter_schema['type'] & self.PERFCOUNTER_LONGRUNAVG:
+                        v, c = self.get_latest_avg(
+                            service['type'],
+                            service['id'],
+                            counter_path
+                        )
+                        counter_info['value'], counter_info['count'] = v, c
+                        result[svc_full_name][counter_path] = counter_info
+                    else:
+                        counter_info['value'] = self.get_latest(
+                            service['type'],
+                            service['id'],
+                            counter_path
+                        )
+
                     result[svc_full_name][counter_path] = counter_info
 
         self.log.debug("returning {0} counter".format(len(result)))
