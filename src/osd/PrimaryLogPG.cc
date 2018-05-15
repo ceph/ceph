@@ -3454,10 +3454,17 @@ void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc
   }                                                     
   
   unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
+  Context *c;
+  if (cb) {
+    c = new C_OnFinisher(cb, osd->objecter_finishers[n]);
+  } else {
+    c = NULL;
+  }
+
   osd->objecter->mutate(
     soid.oid, oloc, obj_op, snapc,
     ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
-    flags, new C_OnFinisher(cb, osd->objecter_finishers[n]));
+    flags, c);
 }  
 
 void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
