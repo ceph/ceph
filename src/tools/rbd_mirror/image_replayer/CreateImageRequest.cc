@@ -262,20 +262,55 @@ void CreateImageRequest<I>::handle_open_local_parent_image(int r) {
 
 template <typename I>
 void CreateImageRequest<I>::set_local_parent_snap() {
-  dout(20) << ": parent_snap_id=" << m_remote_parent_spec.snap_id << dendl;
+  std::string snap_name;
+  cls::rbd::SnapshotNamespace snap_namespace;
+  {
+    RWLock::RLocker remote_snap_locker(m_remote_parent_image_ctx->snap_lock);
+    auto it = m_remote_parent_image_ctx->snap_info.find(
+      m_remote_parent_spec.snap_id);
+    if (it != m_remote_parent_image_ctx->snap_info.end()) {
+      snap_name = it->second.name;
+      snap_namespace = it->second.snap_namespace;
+    }
+  }
+
+  if (snap_name.empty()) {
+    dout(15) << ": failed to locate remote parent snapshot" << dendl;
+    m_ret_val = -ENOENT;
+    close_local_parent_image();
+    return;
+  }
+
+  m_local_parent_spec.snap_id = CEPH_NOSNAP;
+  {
+    RWLock::RLocker local_snap_locker(m_local_parent_image_ctx->snap_lock);
+    auto it = m_local_parent_image_ctx->snap_ids.find(
+      {snap_namespace, snap_name});
+    if (it != m_local_parent_image_ctx->snap_ids.end()) {
+      m_local_parent_spec.snap_id = it->second;
+    }
+  }
+
+  if (m_local_parent_spec.snap_id == CEPH_NOSNAP) {
+    dout(15) << ": failed to locate local parent snapshot" << dendl;
+    m_ret_val = -ENOENT;
+    close_local_parent_image();
+    return;
+  }
+
+  dout(15) << ": local_snap_id=" << m_local_parent_spec.snap_id << dendl;
 
   Context *ctx = create_context_callback<
     CreateImageRequest<I>,
     &CreateImageRequest<I>::handle_set_local_parent_snap>(this);
-  m_local_parent_image_ctx->state->snap_set(m_remote_parent_spec.snap_id,
-					    ctx);
+  m_local_parent_image_ctx->state->snap_set(m_local_parent_spec.snap_id, ctx);
 }
 
 template <typename I>
 void CreateImageRequest<I>::handle_set_local_parent_snap(int r) {
   dout(20) << ": r=" << r << dendl;
   if (r < 0) {
-    derr << ": failed to set parent snapshot " << m_remote_parent_spec.snap_id
+    derr << ": failed to set parent snapshot " << m_local_parent_spec.snap_id
          << ": " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_local_parent_image();
