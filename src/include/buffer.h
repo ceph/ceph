@@ -181,49 +181,39 @@ namespace buffer CEPH_BUFFER_API {
 
     void release();
 
-  public:
-    class iterator {
+    template<bool is_const>
+    class iterator_impl {
       const ptr *bp;     ///< parent ptr
       const char *start; ///< starting pointer into bp->c_str()
       const char *pos;   ///< pointer into bp->c_str()
       const char *end_ptr;   ///< pointer to bp->end_c_str()
-      bool deep;         ///< if true, do not allow shallow ptr copies
+      const bool deep;   ///< if true, do not allow shallow ptr copies
 
-      iterator(const ptr *p, size_t offset, bool d)
+      iterator_impl(std::conditional_t<is_const, const ptr*, ptr*> p,
+		    size_t offset, bool d)
 	: bp(p),
 	  start(p->c_str() + offset),
 	  pos(start),
 	  end_ptr(p->end_c_str()),
-	  deep(d) {}
+	  deep(d)
+      {}
 
       friend class ptr;
 
     public:
-      const char *get_pos_add(size_t n) {
-	const char *r = pos;
-	pos += n;
-	if (pos > end_ptr)
-	  throw end_of_buffer();
+      using pointer = std::conditional_t<is_const, const char*, char *>;
+      pointer get_pos_add(size_t n) {
+	auto r = pos;
+	advance(n);
 	return r;
       }
-
       ptr get_ptr(size_t len) {
 	if (deep) {
 	  return buffer::copy(get_pos_add(len), len);
 	} else {
 	  size_t off = pos - bp->c_str();
-	  pos += len;
-	  if (pos > end_ptr)
-	    throw end_of_buffer();
+	  advance(len);
 	  return ptr(*bp, off, len);
-	}
-      }
-      ptr get_preceding_ptr(size_t len) {
-	if (deep) {
-	  return buffer::copy(get_pos() - len, len);
-	} else {
-	  size_t off = pos - bp->c_str();
-	  return ptr(*bp, off - len, len);
 	}
       }
 
@@ -249,6 +239,10 @@ namespace buffer CEPH_BUFFER_API {
       }
     };
 
+  public:
+    using const_iterator = iterator_impl<true>;
+    using iterator = iterator_impl<false>;
+
     ptr() : _raw(0), _off(0), _len(0) {}
     // cppcheck-suppress noExplicitConstructor
     ptr(raw *r);
@@ -270,11 +264,17 @@ namespace buffer CEPH_BUFFER_API {
     void swap(ptr& other) noexcept;
     ptr& make_shareable();
 
-    iterator begin(size_t offset=0) const {
+    iterator begin(size_t offset=0) {
       return iterator(this, offset, false);
     }
-    iterator begin_deep(size_t offset=0) const {
-      return iterator(this, offset, true);
+    const_iterator begin(size_t offset=0) const {
+      return const_iterator(this, offset, false);
+    }
+    const_iterator cbegin() const {
+      return begin();
+    }
+    const_iterator begin_deep(size_t offset=0) const {
+      return const_iterator(this, 0, true);
     }
 
     // misc
@@ -821,6 +821,9 @@ namespace buffer CEPH_BUFFER_API {
 
     const_iterator begin() const {
       return const_iterator(this, 0);
+    }
+    const_iterator cbegin() const {
+      return begin();
     }
     const_iterator end() const {
       return const_iterator(this, _len, _buffers.end(), 0);
