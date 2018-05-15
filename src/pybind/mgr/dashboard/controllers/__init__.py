@@ -3,17 +3,12 @@
 from __future__ import absolute_import
 
 import collections
-from datetime import datetime, timedelta
-import fnmatch
 import importlib
 import inspect
 import json
 import os
 import pkgutil
 import sys
-import time
-import threading
-import types  # pylint: disable=import-error
 
 import cherrypy
 from six import add_metaclass
