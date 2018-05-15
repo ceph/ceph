@@ -24,6 +24,7 @@ class TestVolumeClient(CephFSTestCase):
         if ns_prefix:
             ns_prefix = "\"" + ns_prefix + "\""
         return client.run_python("""
+from __future__ import print_function
 from ceph_volume_client import CephFSVolumeClient, VolumePath
 import logging
 log = logging.getLogger("ceph_volume_client")
@@ -101,7 +102,7 @@ vc.disconnect()
             vp = VolumePath("{group_id}", "{volume_id}")
             auth_result = vc.authorize(vp, "{guest_entity}", readonly={readonly},
                                        tenant_id="{tenant_id}")
-            print auth_result['auth_key']
+            print(auth_result['auth_key'])
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -198,7 +199,7 @@ vc.disconnect()
         mount_path = self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*{volume_size})
-            print create_result['mount_path']
+            print(create_result['mount_path'])
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -479,7 +480,7 @@ vc.disconnect()
                 self._volume_client_python(volumeclient_mount, dedent("""
                     vp = VolumePath("{group_id}", "{volume_id}")
                     create_result = vc.create_volume(vp, 10 * 1024 * 1024)
-                    print create_result['mount_path']
+                    print(create_result['mount_path'])
                 """.format(
                     group_id=group_id,
                     volume_id=volume_ids[i]
@@ -562,7 +563,7 @@ vc.disconnect()
         mount_path = self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", u"{volume_id}")
             create_result = vc.create_volume(vp, 10)
-            print create_result['mount_path']
+            print(create_result['mount_path'])
         """.format(
             group_id=group_id,
             volume_id=volume_id
@@ -612,7 +613,7 @@ vc.disconnect()
         mount_path = self._volume_client_python(volumeclient_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*10)
-            print create_result['mount_path']
+            print(create_result['mount_path'])
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -667,14 +668,14 @@ vc.disconnect()
         guest_entity_1 = "guest1"
         guest_entity_2 = "guest2"
 
-        log.info("print group ID: {0}".format(group_id))
+        log.info("print(group ID: {0})".format(group_id))
 
         # Create a volume.
         auths = self._volume_client_python(volumeclient_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             vc.create_volume(vp, 1024*1024*10)
             auths = vc.get_authorized_ids(vp)
-            print auths
+            print(auths)
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -689,7 +690,7 @@ vc.disconnect()
             vc.authorize(vp, "{guest_entity_1}", readonly=False)
             vc.authorize(vp, "{guest_entity_2}", readonly=True)
             auths = vc.get_authorized_ids(vp)
-            print auths
+            print(auths)
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -697,7 +698,11 @@ vc.disconnect()
             guest_entity_2=guest_entity_2,
         )))
         # Check the list of authorized IDs and their access levels.
-        expected_result = [(u'guest1', u'rw'), (u'guest2', u'r')]
+        if self.py_version == 'python3':
+            expected_result = [('guest1', 'rw'), ('guest2', 'r')]
+        else:
+            expected_result = [(u'guest1', u'rw'), (u'guest2', u'r')]
+
         self.assertItemsEqual(str(expected_result), auths)
 
         # Disallow both the auth IDs' access to the volume.
@@ -706,7 +711,7 @@ vc.disconnect()
             vc.deauthorize(vp, "{guest_entity_1}")
             vc.deauthorize(vp, "{guest_entity_2}")
             auths = vc.get_authorized_ids(vp)
-            print auths
+            print(auths)
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -783,11 +788,11 @@ vc.disconnect()
             "version": 2,
             "compat_version": 1,
             "dirty": False,
-            "tenant_id": u"tenant1",
+            "tenant_id": "tenant1",
             "volumes": {
                 "groupid/volumeid": {
                     "dirty": False,
-                    "access_level": u"rw",
+                    "access_level": "rw"
                 }
             }
         }
@@ -817,7 +822,7 @@ vc.disconnect()
             "auths": {
                 "guest": {
                     "dirty": False,
-                    "access_level": u"rw"
+                    "access_level": "rw"
                 }
             }
         }
@@ -1021,7 +1026,7 @@ vc.disconnect()
         mount_path = self._volume_client_python(vc_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*10)
-            print create_result['mount_path']
+            print(create_result['mount_path'])
         """.format(
             group_id=group_id,
             volume_id=volume_id
@@ -1060,7 +1065,7 @@ vc.disconnect()
         mount_path = self._volume_client_python(vc_mount, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
             create_result = vc.create_volume(vp, 1024*1024*10, namespace_isolated=False)
-            print create_result['mount_path']
+            print(create_result['mount_path'])
         """.format(
             group_id=group_id,
             volume_id=volume_id
