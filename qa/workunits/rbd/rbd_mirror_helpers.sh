@@ -65,6 +65,15 @@
 #     ../qa/workunits/rbd/rbd_mirror.sh cleanup
 #
 
+if type xmlstarlet > /dev/null 2>&1; then
+    XMLSTARLET=xmlstarlet
+elif type xml > /dev/null 2>&1; then
+    XMLSTARLET=xml
+else
+    echo "Missing xmlstarlet binary!"
+    exit 1
+fi
+
 RBD_MIRROR_INSTANCES=${RBD_MIRROR_INSTANCES:-2}
 
 CLUSTER1=cluster1
@@ -886,7 +895,8 @@ compare_image_snapshots()
     local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
 
-    for snap_name in $(rbd --cluster ${CLUSTER1} -p ${pool} snap list ${image}); do
+    for snap_name in $(rbd --cluster ${CLUSTER1} -p ${pool} --format xml \
+                           snap list ${image} | $XMLSTARLET sel -t -v "//snapshot/name"); do
         rm -f ${rmt_export} ${loc_export}
         rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
         rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
