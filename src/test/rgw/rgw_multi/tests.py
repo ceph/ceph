@@ -251,7 +251,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
     if target_zone == source_zone:
         return None
 
-    cmd = ['bucket', 'sync', 'status'] + target_zone.zone_args()
+    cmd = ['bucket', 'sync', 'markers'] + target_zone.zone_args()
     cmd += ['--source-zone', source_zone.name]
     cmd += ['--bucket', bucket_name]
     while True:
@@ -262,7 +262,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
         assert(retcode == 2) # ENOENT
 
     bucket_sync_status_json = bucket_sync_status_json.decode('utf-8')
-    log.debug('current bucket sync status=%s', bucket_sync_status_json)
+    log.debug('current bucket sync markers=%s', bucket_sync_status_json)
     sync_status = json.loads(bucket_sync_status_json)
 
     markers={}
