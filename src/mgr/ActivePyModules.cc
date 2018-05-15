@@ -558,13 +558,24 @@ PyObject* ActivePyModules::get_counter_python(
     Mutex::Locker l2(metadata->lock);
     if (metadata->perf_counters.instances.count(path)) {
       auto counter_instance = metadata->perf_counters.instances.at(path);
-      const auto &data = counter_instance.get_data();
-      for (const auto &datapoint : data) {
-        f.open_array_section("datapoint");
-        f.dump_unsigned("t", datapoint.t.sec());
-        f.dump_unsigned("v", datapoint.v);
-        f.close_section();
-
+      auto counter_type = metadata->perf_counters.types.at(path);
+      if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
+        const auto &data = counter_instance.get_data();
+        for (const auto &datapoint : data) {
+          f.open_array_section("datapoint");
+          f.dump_unsigned("t", datapoint.t.sec());
+          f.dump_unsigned("v", datapoint.v);
+          f.close_section();
+        }
+      } else {
+        const auto &avg_data = counter_instance.get_data_avg();
+        for (const auto &datapoint : avg_data) {
+          f.open_array_section("datapoint");
+          f.dump_unsigned("t", datapoint.t.sec());
+          f.dump_unsigned("s", datapoint.s);
+          f.dump_unsigned("c", datapoint.c);
+          f.close_section();
+        }
       }
     } else {
       dout(4) << "Missing counter: '" << path << "' ("
