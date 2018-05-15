@@ -1152,6 +1152,7 @@ void RocksDBStore::compact()
 {
   logger->inc(l_rocksdb_compact);
   rocksdb::CompactRangeOptions options;
+  options.change_level = true;
   db->CompactRange(options, default_cf, nullptr, nullptr);
   for (auto cf : cf_handles) {
     db->CompactRange(
@@ -1233,6 +1234,7 @@ bool RocksDBStore::check_omap_dir(string &omap_dir)
 void RocksDBStore::compact_range(const string& start, const string& end)
 {
   rocksdb::CompactRangeOptions options;
+  options.change_level = true;
   rocksdb::Slice cstart(start);
   rocksdb::Slice cend(end);
   db->CompactRange(options, &cstart, &cend);
