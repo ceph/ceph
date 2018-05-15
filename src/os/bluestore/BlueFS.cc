@@ -2165,8 +2165,6 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
       w->iocv[i] = new IOContext(cct, NULL);
-    } else {
-      w->iocv[i] = NULL;
     }
   }
   return w;
