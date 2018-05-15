@@ -2,8 +2,7 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
-import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
-import { PopoverModule } from 'ngx-bootstrap/popover';
+import { BsDropdownModule, CollapseModule, PopoverModule } from 'ngx-bootstrap';
 
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
@@ -16,6 +15,7 @@ import { TaskManagerComponent } from './task-manager/task-manager.component';
   imports: [
     CommonModule,
     AuthModule,
+    CollapseModule.forRoot(),
     BsDropdownModule.forRoot(),
     PopoverModule.forRoot(),
     AppRoutingModule,
