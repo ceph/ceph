@@ -49,7 +49,7 @@ class RGWRealmReloader::C_Reload : public Context {
 };
 
 void RGWRealmReloader::handle_notify(RGWRealmNotify type,
-                                     bufferlist::iterator& p)
+                                     bufferlist::const_iterator& p)
 {
   if (!store) {
     /* we're in the middle of reload */

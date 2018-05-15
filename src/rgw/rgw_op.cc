@@ -146,7 +146,7 @@ static int decode_policy(CephContext *cct,
                          bufferlist& bl,
                          RGWAccessControlPolicy *policy)
 {
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     policy->decode(iter);
   } catch (buffer::error& err) {
@@ -590,7 +590,7 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string_view key, 
 static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
   RGWObjTags tagset;
   try {
-    auto bliter = bl.begin();
+    auto bliter = bl.cbegin();
     tagset.decode(bliter);
   } catch (buffer::error& err) {
     ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
@@ -1023,7 +1023,7 @@ int RGWOp::read_bucket_cors()
 
   bl = aiter->second;
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     bucket_cors.decode(iter);
   } catch (buffer::error& err) {
@@ -1513,7 +1513,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 {
   RGWSLOInfo slo_info;
-  bufferlist::iterator bliter = bl.begin();
+  auto bliter = bl.cbegin();
   try {
     decode(slo_info, bliter);
   } catch (buffer::error& err) {
@@ -4296,7 +4296,7 @@ void RGWPutMetadataObject::execute()
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
 {
   RGWSLOInfo slo_info;
-  bufferlist::iterator bliter = bl.begin();
+  auto bliter = bl.cbegin();
   try {
     decode(slo_info, bliter);
   } catch (buffer::error& err) {
@@ -5444,7 +5444,7 @@ static int get_multipart_info(RGWRados *store, struct req_state *s,
       string name = iter->first;
       if (name.compare(RGW_ATTR_ACL) == 0) {
         bufferlist& bl = iter->second;
-        bufferlist::iterator bli = bl.begin();
+        auto bli = bl.cbegin();
         try {
           decode(*policy, bli);
         } catch (buffer::error& err) {

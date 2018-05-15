@@ -116,7 +116,7 @@ public:
     using ceph::encode;
     encode(buckets, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(buckets, bl);
   }
@@ -359,7 +359,7 @@ struct rgw_data_change {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      uint8_t t;
      decode(t, bl);
@@ -387,7 +387,7 @@ struct rgw_data_change_log_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(log_id, bl);
      decode(log_timestamp, bl);

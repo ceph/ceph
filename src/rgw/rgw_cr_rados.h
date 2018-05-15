@@ -248,7 +248,7 @@ int RGWSimpleRadosReadCR<T>::request_complete()
       return ret;
     }
     try {
-      bufferlist::iterator iter = bl.begin();
+      auto iter = bl.cbegin();
       if (iter.end()) {
         // allow successful reads with empty buffers. ReadSyncStatus coroutines
         // depend on this to be able to read without locking, because the

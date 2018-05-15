@@ -40,7 +40,7 @@ struct RGWUID
     using ceph::encode;
     encode(s, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     string s;
     using ceph::decode;
     decode(s, bl);
