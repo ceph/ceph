@@ -9,7 +9,7 @@
     "test": "ng test",
     "lint": "ng lint",
     "e2e": "ng e2e",
-    "precommit": "pretty-quick --staged"
+    "makePretty": "pretty-quick --staged"
   },
   "private": true,
   "dependencies": {
@@ -46,7 +46,6 @@
     "@types/node": "~6.0.60",
     "codelyzer": "^4.0.1",
     "copy-webpack-plugin": "4.3.0",
-    "husky": "^0.14.3",
     "jasmine-core": "~2.6.2",
     "jasmine-spec-reporter": "~4.1.0",
     "karma": "~1.7.0",
