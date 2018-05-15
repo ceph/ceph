@@ -2,6 +2,8 @@
 
 from __future__ import absolute_import
 
+import json
+
 from .helper import DashboardTestCase, authenticate, JObj, JAny, JList, JLeaf, JTuple
 
 
@@ -42,3 +44,42 @@ class OsdTest(DashboardTestCase):
 
         self._post('/api/osd/0/scrub?deep=True')
         self.assertStatus(200)
+
+
+class OsdFlagsTest(DashboardTestCase):
+    def __init__(self, *args, **kwargs):
+        super(OsdFlagsTest, self).__init__(*args, **kwargs)
+        self._initial_flags = sorted(  # These flags cannot be unset
+            ['sortbitwise', 'recovery_deletes', 'purged_snapdirs'])
+
+    @classmethod
+    def _get_cluster_osd_flags(cls):
+        return sorted(
+            json.loads(cls._ceph_cmd(['osd', 'dump',
+                                      '--format=json']))['flags']).split(',')
+
+    @classmethod
+    def _put_flags(cls, flags):
+        cls._put('/api/osd/flags', data={'flags': flags})
+        return sorted(cls._resp.json())
+
+    @authenticate
+    def test_list_osd_flags(self):
+        flags = self._get('/api/osd/flags')
+        self.assertStatus(200)
+        self.assertEqual(len(flags), 3)
+        self.assertEqual(sorted(flags), self._initial_flags)
+
+    @authenticate
+    def test_add_osd_flag(self):
+        flags = self._put_flags([
+            'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',
+            'pause'
+        ])
+        self.assertEqual(flags, sorted([
+            'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',
+            'pause'
+        ]))
+
+        # Restore flags
+        self._put_flags(self._initial_flags)
