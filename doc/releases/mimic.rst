@@ -36,7 +36,9 @@ Major Changes from Luminous
 
   * Image clones no longer require explicit *protect* and *unprotect*
     steps.
-  * Image groups?
+  * Images can be deep-copied (including any clone linkage to a parent
+    image and associated snapshots) to new pools or with altered data
+    layouts.
 
 Upgrading from Luminous
 -----------------------
