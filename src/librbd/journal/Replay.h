@@ -193,6 +193,8 @@ private:
   io::AioCompletion *create_aio_flush_completion(Context *on_safe);
   void handle_aio_completion(io::AioCompletion *aio_comp);
 
+  bool clipped_io(uint64_t image_offset, io::AioCompletion *aio_comp);
+
 };
 
 } // namespace journal
