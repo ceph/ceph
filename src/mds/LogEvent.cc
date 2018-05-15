@@ -44,7 +44,7 @@
 LogEvent *LogEvent::decode(bufferlist& bl)
 {
   // parse type, length
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   EventType type;
   LogEvent *event = NULL;
   using ceph::decode;
@@ -126,7 +126,7 @@ LogEvent::EventType LogEvent::str_to_type(std::string_view str)
 }
 
 
-LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::iterator& p, LogEvent::EventType type)
+LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::const_iterator& p, LogEvent::EventType type)
 {
   int length = bl.length() - p.get_off();
   generic_dout(15) << "decode_log_event type " << type << ", size " << length << dendl;

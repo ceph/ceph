@@ -84,7 +84,7 @@ public:
       cap_id(id), wanted(w), issued(i), pending(p), client_follows(cf),
       seq(s), mseq(m), last_issue_stamp(lis) {}
     void encode(bufferlist &bl) const;
-    void decode(bufferlist::iterator &p);
+    void decode(bufferlist::const_iterator &p);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<Export*>& ls);
   };
@@ -95,7 +95,7 @@ public:
     Import() : cap_id(0), issue_seq(0), mseq(0) {}
     Import(int64_t i, ceph_seq_t s, ceph_seq_t m) : cap_id(i), issue_seq(s), mseq(m) {}
     void encode(bufferlist &bl) const;
-    void decode(bufferlist::iterator &p);
+    void decode(bufferlist::const_iterator &p);
     void dump(Formatter *f) const;
   };
   struct revoke_info {
@@ -104,7 +104,7 @@ public:
     revoke_info() : before(0), seq(0), last_issue(0) {}
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
     void encode(bufferlist& bl) const;
-    void decode(bufferlist::iterator& bl);
+    void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(list<revoke_info*>& ls);
   };
@@ -316,7 +316,7 @@ public:
 
   // serializers
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<Capability*>& ls);
   

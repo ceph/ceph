@@ -12,7 +12,7 @@ void FSMapUser::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void FSMapUser::decode(bufferlist::iterator& p)
+void FSMapUser::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(epoch, p);
@@ -33,7 +33,7 @@ void FSMapUser::fs_info_t::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void FSMapUser::fs_info_t::decode(bufferlist::iterator& p)
+void FSMapUser::fs_info_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(cid, p);

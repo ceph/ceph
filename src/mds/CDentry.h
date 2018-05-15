@@ -256,7 +256,7 @@ public:
     lock.encode_state_for_replica(bl);
     encode(need_recover, bl);
   }
-  void decode_replica(bufferlist::iterator& p, bool is_new);
+  void decode_replica(bufferlist::const_iterator& p, bool is_new);
 
   // -- exporting
   // note: this assumes the dentry already exists.  
@@ -282,7 +282,7 @@ public:
   void abort_export() {
     put(PIN_TEMPEXPORTING);
   }
-  void decode_import(bufferlist::iterator& blp, LogSegment *ls) {
+  void decode_import(bufferlist::const_iterator& blp, LogSegment *ls) {
     decode(first, blp);
     __u32 nstate;
     decode(nstate, blp);

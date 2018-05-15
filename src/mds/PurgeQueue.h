@@ -49,7 +49,7 @@ public:
   {}
 
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &p);
+  void decode(bufferlist::const_iterator &p);
 };
 WRITE_CLASS_ENCODER(PurgeItem)
 

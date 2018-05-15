@@ -424,7 +424,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
   }
 }
 
-void FSMap::decode(bufferlist::iterator& p)
+void FSMap::decode(bufferlist::const_iterator& p)
 {
   // The highest MDSMap encoding version before we changed the
   // MDSMonitor to store an FSMap instead of an MDSMap was
@@ -627,13 +627,13 @@ void Filesystem::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void Filesystem::decode(bufferlist::iterator& p)
+void Filesystem::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(fscid, p);
   bufferlist mdsmap_bl;
   decode(mdsmap_bl, p);
-  bufferlist::iterator mdsmap_bl_iter = mdsmap_bl.begin();
+  auto mdsmap_bl_iter = mdsmap_bl.cbegin();
   mds_map.decode(mdsmap_bl_iter);
   DECODE_FINISH(p);
 }

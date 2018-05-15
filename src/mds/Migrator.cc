@@ -1745,7 +1745,7 @@ void Migrator::handle_export_ack(MExportDirAck *m)
   assert(it->second.state == EXPORT_EXPORTING);
   assert(it->second.tid == m->get_tid());
 
-  bufferlist::iterator bp = m->imported_caps.begin();
+  auto bp = m->imported_caps.cbegin();
   decode(it->second.peer_imported, bp);
 
   it->second.state = EXPORT_LOGGINGFINISH;
@@ -2252,7 +2252,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     assert(it->second.peer == oldauth);
     diri = cache->get_inode(m->get_dirfrag().ino);
     assert(diri);
-    bufferlist::iterator p = m->basedir.begin();
+    auto p = m->basedir.cbegin();
     dir = cache->add_replica_dir(p, diri, oldauth, finished);
     dout(7) << "handle_export_prep on " << *dir << " (first pass)" << dendl;
   } else {
@@ -2308,7 +2308,7 @@ void Migrator::handle_export_prep(MExportDirPrep *m)
     for (list<bufferlist>::iterator p = m->traces.begin();
 	 p != m->traces.end();
 	 ++p) {
-      bufferlist::iterator q = p->begin();
+      auto q = p->cbegin();
       dirfrag_t df;
       decode(df, q);
       char start;
@@ -2495,14 +2495,14 @@ void Migrator::handle_export_dir(MExportDir *m)
 
   // new client sessions, open these after we journal
   // include imported sessions in EImportStart
-  bufferlist::iterator cmp = m->client_map.begin();
+  auto cmp = m->client_map.cbegin();
   map<client_t,entity_inst_t> client_map;
   decode(client_map, cmp);
   assert(cmp.end());
   le->cmapv = mds->server->prepare_force_open_sessions(client_map, onlogged->imported_session_map);
   encode(client_map, le->client_map, mds->mdsmap->get_up_features());
 
-  bufferlist::iterator blp = m->export_data.begin();
+  auto blp = m->export_data.cbegin();
   int num_imported_inodes = 0;
   while (!blp.end()) {
     num_imported_inodes += 
@@ -2981,7 +2981,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 }
 
 
-void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
+void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 				   mds_rank_t oldauth, LogSegment *ls,
 				   map<CInode*, map<client_t,Capability::Export> >& peer_exports,
 				   list<ScatterLock*>& updated_scatterlocks)
@@ -3050,7 +3050,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
 }
 
 void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,
-					bufferlist::iterator &blp,
+					bufferlist::const_iterator &blp,
 					map<CInode*, map<client_t,Capability::Export> >& peer_exports)
 {
   map<client_t,Capability::Export> cap_map;
@@ -3111,7 +3111,7 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
   }
 }
 
-int Migrator::decode_import_dir(bufferlist::iterator& blp,
+int Migrator::decode_import_dir(bufferlist::const_iterator& blp,
 				mds_rank_t oldauth,
 				CDir *import_root,
 				EImportStart *le,
@@ -3357,7 +3357,7 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   version_t pv = mds->server->prepare_force_open_sessions(client_map,
 							  finish->imported_session_map);
   // decode new caps
-  bufferlist::iterator blp = ex->cap_bl.begin();
+  auto blp = ex->cap_bl.cbegin();
   decode_import_inode_caps(in, false, blp, finish->peer_exports);
   assert(!finish->peer_exports.empty());   // thus, inode is pinned.
 

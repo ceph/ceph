@@ -53,7 +53,7 @@ class InoTable : public MDSTable {
     encode(free, bl);
     ENCODE_FINISH(bl);
   }
-  void decode_state(bufferlist::iterator& bl) override {
+  void decode_state(bufferlist::const_iterator& bl) override {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
     decode(free, bl);
     projected_free = free;
@@ -65,7 +65,7 @@ class InoTable : public MDSTable {
   void encode(bufferlist& bl) const {
     encode_state(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     decode_state(bl);
   }
   void dump(Formatter *f) const;

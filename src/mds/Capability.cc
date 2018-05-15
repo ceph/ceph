@@ -36,7 +36,7 @@ void Capability::Export::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void Capability::Export::decode(bufferlist::iterator &p)
+void Capability::Export::decode(bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
   decode(cap_id, p);
@@ -83,7 +83,7 @@ void Capability::Import::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void Capability::Import::decode(bufferlist::iterator &bl)
+void Capability::Import::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(cap_id, bl);
@@ -112,7 +112,7 @@ void Capability::revoke_info::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void Capability::revoke_info::decode(bufferlist::iterator& bl)
+void Capability::revoke_info::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(before, bl);
@@ -165,7 +165,7 @@ void Capability::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void Capability::decode(bufferlist::iterator &bl)
+void Capability::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl)
   decode(last_sent, bl);

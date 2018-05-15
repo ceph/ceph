@@ -41,7 +41,7 @@ void PurgeItem::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void PurgeItem::decode(bufferlist::iterator &p)
+void PurgeItem::decode(bufferlist::const_iterator &p)
 {
   DECODE_START(1, p);
   decode((uint8_t&)action, p);
@@ -383,7 +383,7 @@ bool PurgeQueue::_consume()
 
     dout(20) << " decoding entry" << dendl;
     PurgeItem item;
-    bufferlist::iterator q = bl.begin();
+    auto q = bl.cbegin();
     try {
       decode(item, q);
     } catch (const buffer::error &err) {

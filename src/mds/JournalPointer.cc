@@ -56,7 +56,7 @@ int JournalPointer::load(Objecter *objecter)
 
   // Construct JournalPointer result, null or decoded data
   if (r == 0) {
-    bufferlist::iterator q = data.begin();
+    auto q = data.cbegin();
     try {
       decode(q);
     } catch (const buffer::error &e) {
