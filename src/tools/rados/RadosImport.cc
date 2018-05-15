@@ -91,7 +91,7 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
     pool_mode = true;
     cout << "Importing pool" << std::endl;
   } else if (type == TYPE_PG_BEGIN) {
-    bufferlist::iterator ebliter = ebl.begin();
+    auto ebliter = ebl.cbegin();
     pg_begin pgb;
     pgb.decode(ebliter);
     spg_t pgid = pgb.pgid;;
@@ -168,7 +168,7 @@ int RadosImport::import(librados::IoCtx &io_ctx, bool no_overwrite)
 
 int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool no_overwrite)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   object_begin ob;
   ob.decode(ebliter);
   map<string,bufferlist>::iterator i;
@@ -281,7 +281,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
       return ret;
     }
 
-    ebliter = ebl.begin();
+    ebliter = ebl.cbegin();
     //cout << "\tdo_object: Section type " << hex << type << dec << std::endl;
     //cout << "\t\tsection size " << ebl.length() << std::endl;
     if (type >= END_OF_TYPES) {

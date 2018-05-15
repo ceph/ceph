@@ -650,7 +650,7 @@ void Paxos::begin(bufferlist& v)
   t->dump(&f);
   f.flush(*_dout);
   auto debug_tx(std::make_shared<MonitorDBStore::Transaction>());
-  bufferlist::iterator new_value_it = new_value.begin();
+  auto new_value_it = new_value.cbegin();
   debug_tx->decode(new_value_it);
   debug_tx->dump(&f);
   *_dout << "\nbl dump:\n";
@@ -1153,7 +1153,7 @@ void Paxos::handle_lease_ack(MonOpRequestRef op)
   } else if (acked_lease.count(from) == 0) {
     acked_lease.insert(from);
     if (ack->feature_map.length()) {
-      auto p = ack->feature_map.begin();
+      auto p = ack->feature_map.cbegin();
       FeatureMap& t = mon->quorum_feature_map[from];
       decode(t, p);
     }

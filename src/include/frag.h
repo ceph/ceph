@@ -164,7 +164,7 @@ inline std::ostream& operator<<(std::ostream& out, const frag_t& hb)
 }
 
 inline void encode(const frag_t &f, bufferlist& bl) { encode_raw(f._enc, bl); }
-inline void decode(frag_t &f, bufferlist::iterator& p) {
+inline void decode(frag_t &f, bufferlist::const_iterator& p) {
   __u32 v;
   decode_raw(v, p);
   f._enc = v;
@@ -460,7 +460,7 @@ public:
     using ceph::encode;
     encode(_splits, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     using ceph::decode;
     decode(_splits, p);
   }
@@ -473,7 +473,7 @@ public:
       encode(p->second, bl);
     }
   }
-  void decode_nohead(int n, bufferlist::iterator& p) {
+  void decode_nohead(int n, bufferlist::const_iterator& p) {
     using ceph::decode;
     _splits.clear();
     while (n-- > 0) {

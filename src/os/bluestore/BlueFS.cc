@@ -545,7 +545,7 @@ int BlueFS::_open_super()
   if (r < 0)
     return r;
 
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(super, p);
   {
     bufferlist t;
@@ -601,7 +601,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     uint64_t seq;
     uuid_d uuid;
     {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       __u8 a, b;
       uint32_t len;
       decode(a, p);
@@ -642,7 +642,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     }
     bluefs_transaction_t t;
     try {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       decode(t, p);
     }
     catch (buffer::error& e) {
@@ -660,7 +660,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
                 << ": " << t << std::endl;
     }
 
-    bufferlist::iterator p = t.op_bl.begin();
+    auto p = t.op_bl.cbegin();
     while (!p.end()) {
       __u8 op;
       decode(op, p);

@@ -107,7 +107,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
 
   // Load scan_ceiling
   try {
-    bufferlist::iterator scan_ceiling_bl_iter = scan_ceiling_bl.begin();
+    auto scan_ceiling_bl_iter = scan_ceiling_bl.cbegin();
     ObjCeiling ceiling;
     ceiling.decode(scan_ceiling_bl_iter);
     result->ceiling_obj_index = ceiling.id;
@@ -119,7 +119,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
 
   // Load scan_max_size
   try {
-    bufferlist::iterator scan_max_size_bl_iter = scan_max_size_bl.begin();
+    auto scan_max_size_bl_iter = scan_max_size_bl.cbegin();
     decode(result->max_obj_size, scan_max_size_bl_iter);
   } catch (const buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
@@ -128,7 +128,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
 
   // Load scan_max_mtime
   try {
-    bufferlist::iterator scan_max_mtime_bl_iter = scan_max_mtime_bl.begin();
+    auto scan_max_mtime_bl_iter = scan_max_mtime_bl.cbegin();
     decode(result->max_mtime, scan_max_mtime_bl_iter);
   } catch (const buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
@@ -138,7 +138,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   // Deserialize backtrace
   if (parent_bl.length()) {
     try {
-      bufferlist::iterator q = parent_bl.begin();
+      auto q = parent_bl.cbegin();
       backtrace->decode(q);
     } catch (buffer::error &e) {
       //dout(4) << "Corrupt backtrace on '" << oid << "': " << e << dendl;
@@ -149,7 +149,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   // Deserialize layout
   if (layout_bl.length()) {
     try {
-      bufferlist::iterator q = layout_bl.begin();
+      auto q = layout_bl.cbegin();
       decode(*layout, q);
     } catch (buffer::error &e) {
       return -EINVAL;

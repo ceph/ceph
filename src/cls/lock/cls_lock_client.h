@@ -52,7 +52,7 @@ namespace rados {
 			    list<std::string> *locks);
       extern void get_lock_info_start(librados::ObjectReadOperation *rados_op,
 				      const std::string& name);
-      extern int get_lock_info_finish(ceph::bufferlist::iterator *out,
+      extern int get_lock_info_finish(ceph::bufferlist::const_iterator *out,
 				      map<locker_id_t, locker_info_t> *lockers,
 				      ClsLockType *type, std::string *tag);
 

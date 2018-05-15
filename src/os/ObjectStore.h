@@ -58,8 +58,8 @@ static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) 
 }
 
 // this isn't the best place for these, but...
-void decode_str_str_map_to_bl(bufferlist::iterator& p, bufferlist *out);
-void decode_str_set_to_bl(bufferlist::iterator& p, bufferlist *out);
+void decode_str_str_map_to_bl(bufferlist::const_iterator& p, bufferlist *out);
+void decode_str_set_to_bl(bufferlist::const_iterator& p, bufferlist *out);
 
 // Flag bits
 typedef uint32_t osflagbits_t;
@@ -427,7 +427,7 @@ public:
       void encode(bufferlist& bl) const {
         bl.append((char*)this, sizeof(TransactionData));
       }
-      void decode(bufferlist::iterator &bl) {
+      void decode(bufferlist::const_iterator &bl) {
         bl.copy(sizeof(TransactionData), (char*)this);
       }
     } __attribute__ ((packed)) ;
@@ -453,11 +453,11 @@ public:
   public:
     Transaction() = default;
 
-    explicit Transaction(bufferlist::iterator &dp) {
+    explicit Transaction(bufferlist::const_iterator &dp) {
       decode(dp);
     }
     explicit Transaction(bufferlist &nbl) {
-      bufferlist::iterator dp = nbl.begin();
+      auto dp = nbl.cbegin();
       decode(dp);
     }
 
@@ -845,7 +845,7 @@ public:
       uint64_t ops;
       char* op_buffer_p;
 
-      bufferlist::iterator data_bl_p;
+      bufferlist::const_iterator data_bl_p;
 
     public:
       vector<coll_t> colls;
@@ -854,7 +854,7 @@ public:
     private:
       explicit iterator(Transaction *t)
         : t(t),
-	  data_bl_p(t->data_bl.begin()),
+	  data_bl_p(t->data_bl.cbegin()),
           colls(t->coll_index.size()),
           objects(t->object_index.size()) {
 
@@ -1407,7 +1407,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START(9, bl);
       DECODE_OLDEST(9);
 

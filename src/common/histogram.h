@@ -120,7 +120,7 @@ public:
 
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   static void generate_test_instances(std::list<pow2_hist_t*>& o);
 };
 WRITE_CLASS_ENCODER(pow2_hist_t)

@@ -56,7 +56,7 @@ struct uuid_d {
     ::encode_raw(uuid, bl);
   }
 
-  void decode(bufferlist::iterator& p) const {
+  void decode(bufferlist::const_iterator& p) const {
     ::decode_raw(uuid, p);
   }
 };

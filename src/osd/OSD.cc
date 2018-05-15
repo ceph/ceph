@@ -1428,7 +1428,7 @@ int OSDService::get_deleted_pool_pg_num(int64_t pool)
   bufferlist bl;
   int r = store->read(meta_ch, oid, 0, 0, bl);
   ceph_assert(r >= 0);
-  auto blp = bl.begin();
+  auto blp = bl.cbegin();
   pg_pool_t pi;
   ::decode(pi, blp);
   deleted_pool_pg_nums[pool] = pi.get_pg_num();
@@ -1723,8 +1723,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     }
     /* if we already have superblock, check content of superblock */
     dout(0) << " have superblock" << dendl;
-    bufferlist::iterator p;
-    p = sbbl.begin();
+    auto p = sbbl.cbegin();
     decode(sb, p);
     if (whoami != sb.whoami) {
       derr << "provided osd id " << whoami << " != superblock's " << sb.whoami
@@ -3584,7 +3583,7 @@ int OSD::read_superblock()
   if (r < 0)
     return r;
 
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
@@ -3723,7 +3722,7 @@ PG* OSD::_make_pg(
       return nullptr;
     }
     ceph_assert(r >= 0);
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     decode(pi, p);
     decode(name, p);
     if (p.end()) { // dev release v13.0.2 did not include ec_profile
@@ -6595,7 +6594,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
     s->auid = auid;
 
     if (caps_info.caps.length() > 0) {
-      bufferlist::iterator p = caps_info.caps.begin();
+      auto p = caps_info.caps.cbegin();
       string str;
       try {
 	decode(str, p);
@@ -7286,7 +7285,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
 
       OSDMap::Incremental inc;
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       inc.decode(p);
       if (o->apply_incremental(inc) < 0) {
 	derr << "ERROR: bad fsid?  i have " << osdmap->get_fsid() << " and inc has " << inc.fsid << dendl;

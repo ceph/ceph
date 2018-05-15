@@ -31,7 +31,7 @@ struct SnapRealmInfo {
   snapid_t created() const { return snapid_t(h.created); }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapRealmInfo*>& o);
 };
@@ -58,7 +58,7 @@ struct SnapContext {
     encode(seq, bl);
     encode(snaps, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(seq, bl);
     decode(snaps, bl);

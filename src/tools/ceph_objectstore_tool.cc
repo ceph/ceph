@@ -110,7 +110,7 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 	  cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
 	       << cpp_strerror(r) << std::endl;
         } else {
-	  bufferlist::iterator bp = attr.begin();
+	  auto bp = attr.cbegin();
 	  try {
 	    decode(oi, bp);
 	  } catch (...) {
@@ -551,7 +551,7 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
 	continue;
 
       bufferlist bl = p->value();
-      bufferlist::iterator bp = bl.begin();
+      auto bp = bl.cbegin();
       pg_log_entry_t e;
       try {
 	e.decode_with_checksum(bp);
@@ -759,7 +759,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 
 int set_inc_osdmap(ObjectStore *store, epoch_t e, bufferlist& bl, bool force) {
   OSDMap::Incremental inc;
-  bufferlist::iterator it = bl.begin();
+  auto it = bl.cbegin();
   inc.decode(it);
   if (e == 0) {
     e = inc.epoch;
@@ -915,7 +915,7 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
 
 int dump_data(Formatter *formatter, bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   data_section ds;
   ds.decode(ebliter);
 
@@ -931,7 +931,7 @@ int dump_data(Formatter *formatter, bufferlist &bl)
 int get_data(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   data_section ds;
   ds.decode(ebliter);
 
@@ -945,7 +945,7 @@ int dump_attrs(
   Formatter *formatter, ghobject_t hoid,
   bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   attr_section as;
   as.decode(ebliter);
 
@@ -956,7 +956,7 @@ int dump_attrs(
     map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
     if (mi != as.data.end()) {
       SnapSet snapset;
-      auto p = mi->second.begin();
+      auto p = mi->second.cbegin();
       snapset.decode(p);
       formatter->open_object_section("snapset");
       snapset.dump(formatter);
@@ -1003,7 +1003,7 @@ int get_attrs(
   ObjectStore::Transaction *t, bufferlist &bl,
   OSDriver &driver, SnapMapper &snap_mapper)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   attr_section as;
   as.decode(ebliter);
 
@@ -1019,7 +1019,7 @@ int get_attrs(
     map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
     if (mi != as.data.end()) {
       SnapSet snapset;
-      auto p = mi->second.begin();
+      auto p = mi->second.cbegin();
       snapset.decode(p);
       cout << "snapset " << snapset << std::endl;
       for (auto& p : snapset.clone_snaps) {
@@ -1051,7 +1051,7 @@ int get_attrs(
 
 int dump_omap_hdr(Formatter *formatter, bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   omap_hdr_section oh;
   oh.decode(ebliter);
 
@@ -1065,7 +1065,7 @@ int dump_omap_hdr(Formatter *formatter, bufferlist &bl)
 int get_omap_hdr(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   omap_hdr_section oh;
   oh.decode(ebliter);
 
@@ -1078,7 +1078,7 @@ int get_omap_hdr(ObjectStore *store, coll_t coll, ghobject_t hoid,
 
 int dump_omap(Formatter *formatter, bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   omap_section os;
   os.decode(ebliter);
 
@@ -1102,7 +1102,7 @@ int dump_omap(Formatter *formatter, bufferlist &bl)
 int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   omap_section os;
   os.decode(ebliter);
 
@@ -1115,7 +1115,7 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
 int ObjectStoreTool::dump_object(Formatter *formatter,
 				bufferlist &bl)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   object_begin ob;
   ob.decode(ebliter);
 
@@ -1188,7 +1188,7 @@ int ObjectStoreTool::get_object(ObjectStore *store,
 {
   ObjectStore::Transaction tran;
   ObjectStore::Transaction *t = &tran;
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   object_begin ob;
   ob.decode(ebliter);
 
@@ -1283,7 +1283,7 @@ int ObjectStoreTool::get_object(ObjectStore *store,
 
 int dump_pg_metadata(Formatter *formatter, bufferlist &bl, metadata_section &ms)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   ms.decode(ebliter);
 
   formatter->open_object_section("metadata_section");
@@ -1327,7 +1327,7 @@ int dump_pg_metadata(Formatter *formatter, bufferlist &bl, metadata_section &ms)
 int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     const OSDSuperblock& sb, OSDMap& curmap, spg_t pgid)
 {
-  bufferlist::iterator ebliter = bl.begin();
+  auto ebliter = bl.cbegin();
   ms.decode(ebliter);
   spg_t old_pgid = ms.info.pgid;
   ms.info.pgid = pgid;
@@ -1622,7 +1622,7 @@ int ObjectStoreTool::dump_import(Formatter *formatter)
     return -EFAULT;
   }
 
-  bufferlist::iterator ebliter = ebl.begin();
+  auto ebliter = ebl.cbegin();
   pg_begin pgb;
   pgb.decode(ebliter);
   spg_t pgid = pgb.pgid;
@@ -1724,7 +1724,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     return -EFAULT;
   }
 
-  bufferlist::iterator ebliter = ebl.begin();
+  auto ebliter = ebl.cbegin();
   pg_begin pgb;
   pgb.decode(ebliter);
   spg_t pgid = pgb.pgid;
@@ -2428,7 +2428,7 @@ int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss,
 	   << cpp_strerror(r) << std::endl;
     return r;
   }
-  bufferlist::iterator bp = attr.begin();
+  auto bp = attr.cbegin();
   try {
     decode(ss, bp);
   } catch (...) {
@@ -2457,7 +2457,7 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
        << cpp_strerror(r) << std::endl;
   } else {
     object_info_t oi;
-    bufferlist::iterator bp = attr.begin();
+    auto bp = attr.cbegin();
     try {
       decode(oi, bp);
       formatter->open_object_section("info");
@@ -2518,7 +2518,7 @@ int set_size(
     return r;
   }
   object_info_t oi;
-  bufferlist::iterator bp = attr.begin();
+  auto bp = attr.cbegin();
   try {
     decode(oi, bp);
   } catch (...) {
@@ -3454,14 +3454,14 @@ int main(int argc, char **argv)
   bufferlist bl;
   OSDSuperblock superblock;
   auto ch = fs->open_collection(coll_t::meta());
-  bufferlist::iterator p;
+  bufferlist::const_iterator p;
   ret = fs->read(ch, OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
   if (ret < 0) {
     cerr << "Failure to read OSD superblock: " << cpp_strerror(ret) << std::endl;
     goto out;
   }
 
-  p = bl.begin();
+  p = bl.cbegin();
   decode(superblock, p);
 
   if (debug) {

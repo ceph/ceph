@@ -50,7 +50,7 @@ public:
     encode(service_map_bl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(health_checks, p);
     decode(service_map_bl, p);

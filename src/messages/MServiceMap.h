@@ -29,7 +29,7 @@ public:
     encode(service_map, payload, features);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(service_map, p);
   }
 };

@@ -331,7 +331,7 @@ struct client_t {
     using ceph::encode;
     encode(v, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(v, bl);
   }
@@ -477,7 +477,7 @@ struct shard_id_t {
     using ceph::encode;
     encode(id, bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     using ceph::decode;
     decode(id, bl);
   }
@@ -515,7 +515,7 @@ struct errorcode32_t {
     __s32 newcode = hostos_to_ceph_errno(code);
     encode(newcode, bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     using ceph::decode;
     decode(code, bl);
     code = ceph_to_hostos_errno(code);

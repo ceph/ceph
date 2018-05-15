@@ -2367,7 +2367,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetRead) {
     c->release();
 
     if (hbl.length()) {
-      bufferlist::iterator p = hbl.begin();
+      auto p = hbl.cbegin();
       HitSet hs;
       decode(hs, p);
       if (hs.contains(oid)) {
@@ -2466,7 +2466,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
     c->release();
 
     try {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       decode(hitsets[i], p);
     }
     catch (buffer::error& e) {
@@ -3234,7 +3234,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
     cache_ioctx.exec("bar", "refcount", "chunk_read", in, out);
     cls_chunk_refcount_read_ret read_ret;
     try {
-      bufferlist::iterator iter = out.begin();
+      auto iter = out.cbegin();
       decode(read_ret, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
@@ -3247,7 +3247,7 @@ TEST_F(LibRadosTwoPoolsPP, ManifestRefRead) {
     cache_ioctx.exec("bar-chunk", "refcount", "chunk_read", in, out);
     cls_chunk_refcount_read_ret read_ret;
     try {
-      bufferlist::iterator iter = out.begin();
+      auto iter = out.cbegin();
       decode(read_ret, iter);
     } catch (buffer::error& err) {
       ASSERT_TRUE(0);
@@ -5399,7 +5399,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
     c->release();
 
     if (hbl.length()) {
-      bufferlist::iterator p = hbl.begin();
+      auto p = hbl.cbegin();
       HitSet hs;
       decode(hs, p);
       if (hs.contains(oid)) {
@@ -5465,7 +5465,7 @@ TEST_F(LibRadosTierECPP, HitSetWrite) {
     //bl.hexdump(std::cout);
     //std::cout << std::endl;
 
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(hitsets[i], p);
 
     // cope with racing splits by refreshing pg_num

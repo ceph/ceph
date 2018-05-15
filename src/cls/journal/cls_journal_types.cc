@@ -16,7 +16,7 @@ void ObjectPosition::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ObjectPosition::decode(bufferlist::iterator& iter) {
+void ObjectPosition::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
   decode(object_number, iter);
   decode(tag_tid, iter);
@@ -41,7 +41,7 @@ void ObjectSetPosition::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void ObjectSetPosition::decode(bufferlist::iterator& iter) {
+void ObjectSetPosition::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
   decode(object_positions, iter);
   DECODE_FINISH(iter);
@@ -72,7 +72,7 @@ void Client::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void Client::decode(bufferlist::iterator& iter) {
+void Client::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
   decode(id, iter);
   decode(data, iter);
@@ -115,7 +115,7 @@ void Tag::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void Tag::decode(bufferlist::iterator& iter) {
+void Tag::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
   decode(tid, iter);
   decode(tag_class, iter);

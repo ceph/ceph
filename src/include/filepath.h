@@ -199,7 +199,7 @@ class filepath {
     encode(ino, bl);
     encode(path, bl);
   }
-  void decode(bufferlist::iterator& blp) {
+  void decode(bufferlist::const_iterator& blp) {
     using ceph::decode;
     bits.clear();
     __u8 struct_v;

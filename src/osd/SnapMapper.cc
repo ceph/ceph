@@ -63,7 +63,7 @@ struct Mapping {
     encode(hoid, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(snap, bl);
     decode(hoid, bl);
@@ -103,7 +103,7 @@ pair<snapid_t, hobject_t> SnapMapper::from_raw(
 {
   Mapping map;
   bufferlist bl(image.second);
-  bufferlist::iterator bp(bl.begin());
+  auto bp = bl.cbegin();
   decode(map, bp);
   return make_pair(map.snap, map.hoid);
 }
@@ -126,7 +126,7 @@ void SnapMapper::object_snaps::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void SnapMapper::object_snaps::decode(bufferlist::iterator &bl)
+void SnapMapper::object_snaps::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(1, bl);
   decode(oid, bl);
@@ -163,7 +163,7 @@ int SnapMapper::get_snaps(
     return -ENOENT;
   }
   if (out) {
-    bufferlist::iterator bp = got.begin()->second.begin();
+    auto bp = got.begin()->second.cbegin();
     decode(*out, bp);
     dout(20) << __func__ << " " << oid << " " << out->snaps << dendl;
     if (out->snaps.empty()) {

@@ -44,7 +44,7 @@ public:
     encode(forced, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(map_epoch, p);
     decode(pg_temp, p);

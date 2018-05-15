@@ -88,7 +88,7 @@ public:
     encode(options, payload);
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     if (header.version == 1) {
       vector<pg_t> pgs;
       decode(fsid, p);

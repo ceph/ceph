@@ -377,7 +377,7 @@ static PyObject *osdmap_inc_set_compat_weight_set_weights(
 
   CrushWrapper crush;
   assert(self->inc->crush.length());  // see new_incremental
-  auto p = self->inc->crush.begin();
+  auto p = self->inc->crush.cbegin();
   decode(crush, p);
   crush.create_choose_args(CrushWrapper::DEFAULT_CHOOSE_ARGS, 1);
   for (auto i : wm) {

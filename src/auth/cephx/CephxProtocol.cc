@@ -142,7 +142,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
  * this ServiceTicket with the result.
  */
 bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
-						     bufferlist::iterator& indata)
+						     bufferlist::const_iterator& indata)
 {
   __u8 service_ticket_v;
   decode(service_ticket_v, indata);
@@ -169,7 +169,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   } else {
     decode(service_ticket_bl, indata);
   }
-  bufferlist::iterator iter = service_ticket_bl.begin();
+  auto iter = service_ticket_bl.cbegin();
   decode(ticket, iter);
   ldout(cct, 10) << " ticket.secret_id=" <<  ticket.secret_id << dendl;
 
@@ -261,7 +261,7 @@ void CephXTicketManager::invalidate_ticket(uint32_t service_id)
  * this ServiceTicket with the result.
  */
 bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
-						     bufferlist::iterator& indata)
+						     bufferlist::const_iterator& indata)
 {
   __u8 service_ticket_reply_v;
   decode(service_ticket_reply_v, indata);
@@ -389,7 +389,7 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys, uint32_t service_id,
  * {timestamp + 1}^session_key
  */
 bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
-			     bufferlist::iterator& indata,
+			     bufferlist::const_iterator& indata,
 			     CephXServiceTicketInfo& ticket_info, bufferlist& reply_bl)
 {
   __u8 authorizer_v;
@@ -474,7 +474,7 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
   return true;
 }
 
-bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
+bool CephXAuthorizer::verify_reply(bufferlist::const_iterator& indata)
 {
   CephXAuthorizeReply reply;
 

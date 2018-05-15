@@ -50,7 +50,7 @@ int FileStoreTracker::init()
   db->get("STATUS", to_get, &got);
   restart_seq = 0;
   if (!got.empty()) {
-    bufferlist::iterator bp = got.begin()->second.begin();
+    auto bp = got.begin()->second.cbegin();
     decode(restart_seq, bp);
   }
   ++restart_seq;
@@ -223,7 +223,7 @@ void encode(const ObjStatus &obj, bufferlist &bl) {
   encode(obj.last_committed, bl);
   encode(obj.restart_seq, bl);
 }
-void decode(ObjStatus &obj, bufferlist::iterator &bl) {
+void decode(ObjStatus &obj, bufferlist::const_iterator &bl) {
   decode(obj.last_applied, bl);
   decode(obj.last_committed, bl);
   decode(obj.restart_seq, bl);
@@ -239,7 +239,7 @@ ObjStatus get_obj_status(const pair<coll_t, string> &obj,
   db->get(obj_to_meta_prefix(obj), to_get, &got);
   ObjStatus retval;
   if (!got.empty()) {
-    bufferlist::iterator bp = got.begin()->second.begin();
+    auto bp = got.begin()->second.cbegin();
     decode(retval, bp);
   }
   return retval;
@@ -339,7 +339,7 @@ ObjectContents FileStoreTracker::get_current_content(
   iter->seek_to_last();
   if (iter->valid()) {
     bufferlist bl = iter->value();
-    bufferlist::iterator bp = bl.begin();
+    auto bp = bl.cbegin();
     pair<uint64_t, bufferlist> val;
     decode(val, bp);
     assert(seq_to_key(val.first) == iter->key());
@@ -359,7 +359,7 @@ ObjectContents FileStoreTracker::get_content(
   if (got.empty())
     return ObjectContents();
   pair<uint64_t, bufferlist> val;
-  bufferlist::iterator bp = got.begin()->second.begin();
+  auto bp = got.begin()->second.cbegin();
   decode(val, bp);
   bp = val.second.begin();
   assert(val.first == version);
@@ -376,7 +376,7 @@ pair<uint64_t, uint64_t> FileStoreTracker::get_valid_reads(
   if (iter->valid()) {
     pair<uint64_t, bufferlist> val;
     bufferlist bl = iter->value();
-    bufferlist::iterator bp = bl.begin();
+    auto bp = bl.cbegin();
     decode(val, bp);
     bounds.second = val.first + 1;
   }
@@ -436,7 +436,7 @@ uint64_t FileStoreTracker::set_content(const pair<coll_t, string> &obj,
   if (iter->valid()) {
     pair<uint64_t, bufferlist> val;
     bufferlist bl = iter->value();
-    bufferlist::iterator bp = bl.begin();
+    auto bp = bl.cbegin();
     decode(val, bp);
     most_recent = val.first;
   }

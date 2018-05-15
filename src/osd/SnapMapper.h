@@ -108,7 +108,7 @@ public:
       : oid(oid), snaps(snaps) {}
     object_snaps() {}
     void encode(bufferlist &bl) const;
-    void decode(bufferlist::iterator &bp);
+    void decode(bufferlist::const_iterator &bp);
   };
 
 private:

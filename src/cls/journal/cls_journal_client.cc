@@ -63,7 +63,7 @@ struct C_ClientList : public C_AioExec {
     }
 
     try {
-      bufferlist::iterator iter = outbl.begin();
+      auto iter = outbl.cbegin();
       std::set<cls::journal::Client> partial_clients;
       decode(partial_clients, iter);
 
@@ -120,7 +120,7 @@ struct C_ImmutableMetadata : public C_AioExec {
   void finish(int r) override {
     if (r == 0) {
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(*order, iter);
         decode(*splay_width, iter);
         decode(*pool_id, iter);
@@ -160,7 +160,7 @@ struct C_MutableMetadata : public C_AioExec {
   void finish(int r) override {
     if (r == 0) {
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(*minimum_set, iter);
         decode(*active_set, iter);
         client_list->send("");
@@ -241,7 +241,7 @@ int get_client(librados::IoCtx &ioctx, const std::string &oid,
     return r;
   }
 
-  bufferlist::iterator iter = out_bl.begin();
+  auto iter = out_bl.cbegin();
   r = get_client_finish(&iter, client);
   if (r < 0) {
     return r;
@@ -256,7 +256,7 @@ void get_client_start(librados::ObjectReadOperation *op,
   op->exec("journal", "get_client", bl);
 }
 
-int get_client_finish(bufferlist::iterator *iter,
+int get_client_finish(bufferlist::const_iterator *iter,
                       cls::journal::Client *client) {
   try {
     decode(*client, *iter);
@@ -359,7 +359,7 @@ int get_next_tag_tid(librados::IoCtx &ioctx, const std::string &oid,
     return r;
   }
 
-  bufferlist::iterator iter = out_bl.begin();
+  auto iter = out_bl.cbegin();
   r = get_next_tag_tid_finish(&iter, tag_tid);
   if (r < 0) {
     return r;
@@ -372,7 +372,7 @@ void get_next_tag_tid_start(librados::ObjectReadOperation *op) {
   op->exec("journal", "get_next_tag_tid", bl);
 }
 
-int get_next_tag_tid_finish(bufferlist::iterator *iter,
+int get_next_tag_tid_finish(bufferlist::const_iterator *iter,
                             uint64_t *tag_tid) {
   try {
     decode(*tag_tid, *iter);
@@ -393,7 +393,7 @@ int get_tag(librados::IoCtx &ioctx, const std::string &oid,
     return r;
   }
 
-  bufferlist::iterator iter = out_bl.begin();
+  auto iter = out_bl.cbegin();
   r = get_tag_finish(&iter, tag);
   if (r < 0) {
     return r;
@@ -408,7 +408,7 @@ void get_tag_start(librados::ObjectReadOperation *op,
   op->exec("journal", "get_tag", bl);
 }
 
-int get_tag_finish(bufferlist::iterator *iter, cls::journal::Tag *tag) {
+int get_tag_finish(bufferlist::const_iterator *iter, cls::journal::Tag *tag) {
   try {
     decode(*tag, *iter);
   } catch (const buffer::error &err) {
@@ -450,7 +450,7 @@ int tag_list(librados::IoCtx &ioctx, const std::string &oid,
       return r;
     }
 
-    bufferlist::iterator iter = out_bl.begin();
+    auto iter = out_bl.cbegin();
     std::set<cls::journal::Tag> decode_tags;
     r = tag_list_finish(&iter, &decode_tags);
     if (r < 0) {
@@ -477,7 +477,7 @@ void tag_list_start(librados::ObjectReadOperation *op,
   op->exec("journal", "tag_list", bl);
 }
 
-int tag_list_finish(bufferlist::iterator *iter,
+int tag_list_finish(bufferlist::const_iterator *iter,
                     std::set<cls::journal::Tag> *tags) {
   try {
     decode(*tags, *iter);

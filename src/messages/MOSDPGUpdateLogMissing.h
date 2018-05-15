@@ -100,7 +100,7 @@ public:
     encode(pg_roll_forward_to, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(map_epoch, p);
     decode(pgid, p);
     decode(from, p);

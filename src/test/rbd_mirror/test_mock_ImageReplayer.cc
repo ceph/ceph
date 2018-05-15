@@ -45,7 +45,7 @@ namespace journal {
 
 template<>
 struct Replay<MockTestImageCtx> {
-  MOCK_METHOD2(decode, int(bufferlist::iterator *, EventEntry *));
+  MOCK_METHOD2(decode, int(bufferlist::const_iterator *, EventEntry *));
   MOCK_METHOD3(process, void(const EventEntry &, Context *, Context *));
   MOCK_METHOD1(flush, void(Context*));
   MOCK_METHOD2(shut_down, void(bool, Context*));
@@ -1300,7 +1300,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   EXPECT_CALL(mock_replay_entry, get_data());
   C_SaferCond decode_ctx;
   EXPECT_CALL(mock_local_replay, decode(_, _))
-    .WillOnce(DoAll(Invoke([&decode_ctx](bufferlist::iterator* it,
+    .WillOnce(DoAll(Invoke([&decode_ctx](bufferlist::const_iterator* it,
                                          librbd::journal::EventEntry *e) {
                              decode_ctx.complete(0);
                            }),

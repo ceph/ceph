@@ -32,7 +32,7 @@ struct creating_pgs_t {
       encode(start, bl);
       encode(end, bl);
     }
-    void decode(bufferlist::iterator& p) {
+    void decode(bufferlist::const_iterator& p) {
       using ceph::decode;
       decode(created, p);
       decode(modified, p);
@@ -77,7 +77,7 @@ struct creating_pgs_t {
     encode(queue, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(last_scan_epoch, bl);
     decode(pgs, bl);

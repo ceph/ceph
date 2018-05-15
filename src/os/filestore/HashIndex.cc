@@ -99,7 +99,7 @@ int HashIndex::cleanup() {
     // No in progress operations!
     return 0;
   }
-  bufferlist::iterator i = bl.begin();
+  auto i = bl.cbegin();
   InProgressOp in_progress(i);
   subdir_info_s info;
   r = get_info(in_progress.path, &info);
@@ -403,7 +403,7 @@ int HashIndex::read_settings() {
     derr << __func__ << " error reading settings: " << cpp_strerror(r) << dendl;
     return r;
   }
-  bufferlist::iterator it = bl.begin();
+  auto it = bl.cbegin();
   settings.decode(it);
   dout(20) << __func__ << " split_rand_factor = " << settings.split_rand_factor << dendl;
   return 0;
@@ -724,7 +724,7 @@ int HashIndex::get_info(const vector<string> &path, subdir_info_s *info) {
   int r = get_attr_path(path, SUBDIR_ATTR, buf);
   if (r < 0)
     return r;
-  bufferlist::iterator bufiter = buf.begin();
+  auto bufiter = buf.cbegin();
   info->decode(bufiter);
   assert(path.size() == (unsigned)info->hash_level);
   return 0;

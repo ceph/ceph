@@ -1488,7 +1488,7 @@ int librados::IoCtxImpl::mapext(const object_t& oid,
   if (r < 0)
     return r;
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   decode(m, iter);
 
   return m.size();

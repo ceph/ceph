@@ -43,7 +43,7 @@ struct MonCommand {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode_bare(bl);
     decode(flags, bl);
@@ -61,7 +61,7 @@ struct MonCommand {
     encode(req_perms, bl);
     encode(availability, bl);
   }
-  void decode_bare(bufferlist::iterator &bl) {
+  void decode_bare(bufferlist::const_iterator &bl) {
     using ceph::decode;
     decode(cmdstring, bl);
     decode(helpstring, bl);
@@ -104,7 +104,7 @@ struct MonCommand {
     ENCODE_FINISH(bl);
   }
   static void decode_array(MonCommand **cmds, int *size,
-                           bufferlist::iterator &bl) {
+                           bufferlist::const_iterator &bl) {
     DECODE_START(2, bl);
     uint16_t s = 0;
     decode(s, bl);
@@ -138,7 +138,7 @@ struct MonCommand {
     ENCODE_FINISH(bl);
   }
   static void decode_vector(std::vector<MonCommand> &cmds,
-			    bufferlist::iterator &bl) {
+			    bufferlist::const_iterator &bl) {
     DECODE_START(2, bl);
     uint16_t s = 0;
     decode(s, bl);

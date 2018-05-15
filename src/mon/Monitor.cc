@@ -434,7 +434,7 @@ void Monitor::read_features_off_disk(MonitorDBStore *store, CompatSet *features)
     t->put(MONITOR_NAME, COMPAT_SET_LOC, featuresbl);
     store->apply_transaction(t);
   } else {
-    bufferlist::iterator it = featuresbl.begin();
+    auto it = featuresbl.cbegin();
     features->decode(it);
   }
 }
@@ -725,7 +725,7 @@ int Monitor::preinit()
       if (err == 0 && bl.length() > 0) {
         // Attempt to decode and extract keyring only if it is found.
         KeyRing keyring;
-        bufferlist::iterator p = bl.begin();
+        auto p = bl.cbegin();
         decode(keyring, p);
         extract_save_mon_key(keyring);
       }
@@ -864,7 +864,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   int r = store->get(MONITOR_NAME, "cluster_fingerprint", bl);
   if (r >= 0) {
     try {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       decode(fingerprint, p);
     }
     catch (buffer::error& e) {
@@ -3890,7 +3890,7 @@ void Monitor::resend_routed_requests()
       }
       delete rr;
     } else {
-      bufferlist::iterator q = rr->request_bl.begin();
+      auto q = rr->request_bl.cbegin();
       PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(cct, 0, q);
       rr->op->mark_event("resend forwarded message to leader");
       dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
@@ -4997,7 +4997,7 @@ int Monitor::load_metadata()
   int r = store->get(MONITOR_STORE_PREFIX, "last_metadata", bl);
   if (r)
     return r;
-  bufferlist::iterator it = bl.begin();
+  auto it = bl.cbegin();
   decode(mon_metadata, it);
 
   pending_metadata = mon_metadata;
@@ -5617,7 +5617,7 @@ int Monitor::mkfs(bufferlist& osdmapbl)
 	bufferlist bl;
 	bl.append(keyring_plaintext);
 	try {
-	  bufferlist::iterator i = bl.begin();
+	  auto i = bl.cbegin();
 	  keyring.decode_plaintext(i);
 	}
 	catch (const buffer::error& e) {
@@ -5764,7 +5764,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
   bufferlist ticket_data;
   encode(blob, ticket_data);
 
-  bufferlist::iterator iter = ticket_data.begin();
+  auto iter = ticket_data.cbegin();
   CephXTicketHandler handler(g_ceph_context, service_id);
   decode(handler.ticket, iter);
 
@@ -5792,7 +5792,7 @@ bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
     // monitor, and cephx is enabled
     isvalid = false;
     if (protocol == CEPH_AUTH_CEPHX) {
-      bufferlist::iterator iter = authorizer_data.begin();
+      auto iter = authorizer_data.cbegin();
       CephXServiceTicketInfo auth_ticket_info;
       
       if (authorizer_data.length()) {

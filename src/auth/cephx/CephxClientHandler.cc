@@ -107,7 +107,7 @@ bool CephxClientHandler::_need_tickets() const
   return need && need != CEPH_ENTITY_TYPE_MGR;
 }
 
-int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
+int CephxClientHandler::handle_response(int ret, bufferlist::const_iterator& indata)
 {
   ldout(cct, 10) << "handle_response ret = " << ret << dendl;
   RWLock::WLocker l(lock);

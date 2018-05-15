@@ -94,7 +94,7 @@ public:
   void get_crush(CrushWrapper& newcrush) {
     bufferlist bl;
     osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     newcrush.decode(p);
   }
   int crush_move(const string &name, const vector<string> &argvec) {

@@ -603,7 +603,7 @@ void Objecter::_linger_commit(LingerOp *info, int r, bufferlist& outbl)
 
   if (!info->is_watch) {
     // make note of the notify_id
-    bufferlist::iterator p = outbl.begin();
+    auto p = outbl.cbegin();
     try {
       decode(info->notify_id, p);
       ldout(cct, 10) << "_linger_commit  notify_id=" << info->notify_id
@@ -3776,7 +3776,7 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
 {
   ldout(cct, 10) << __func__ << " " << list_context << dendl;
 
-  bufferlist::iterator iter = list_context->bl.begin();
+  auto iter = list_context->bl.cbegin();
   pg_nls_response_t response;
   bufferlist extra_info;
   decode(response, iter);
@@ -3875,7 +3875,7 @@ struct C_SelfmanagedSnap : public Context {
   void finish(int r) override {
     if (r == 0) {
       try {
-        bufferlist::iterator p = bl.begin();
+        auto p = bl.cbegin();
         decode(*psnapid, p);
       } catch (buffer::error&) {
         r = -EIO;
@@ -5155,7 +5155,7 @@ void Objecter::_enumerate_reply(
   assert(next != NULL);
 
   // Decode the results
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   pg_nls_response_t response;
 
   // XXX extra_info doesn't seem used anywhere?
@@ -5227,7 +5227,7 @@ namespace {
   void do_decode(std::vector<T>& items, std::vector<bufferlist>& bls)
   {
     for (auto bl : bls) {
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       T t;
       decode(t, p);
       items.push_back(t);
@@ -5269,7 +5269,7 @@ namespace {
   private:
     void decode() {
       scrub_ls_result_t result;
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       result.decode(p);
       *interval = result.interval;
       if (objects) {

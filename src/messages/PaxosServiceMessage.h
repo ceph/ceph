@@ -33,7 +33,7 @@ class PaxosServiceMessage : public Message {
     encode(deprecated_session_mon_tid, payload);
   }
 
-  void paxos_decode( bufferlist::iterator& p ) {
+  void paxos_decode(bufferlist::const_iterator& p ) {
     decode(version, p);
     decode(deprecated_session_mon, p);
     decode(deprecated_session_mon_tid, p);
@@ -46,7 +46,7 @@ class PaxosServiceMessage : public Message {
 
   void decode_payload() override {
     ceph_abort();
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
   }
 

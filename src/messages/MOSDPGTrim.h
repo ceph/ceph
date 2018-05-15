@@ -66,7 +66,7 @@ public:
     encode(pgid.shard, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(epoch, p);
     decode(pgid.pgid, p);
     decode(trim_to, p);

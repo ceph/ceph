@@ -83,7 +83,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
     bool old_available = map.get_available();
     uint64_t old_gid = map.get_active_gid();
 
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     map.decode(p);
 
     dout(4) << "active server: " << map.active_addr
@@ -112,7 +112,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
       if (r < 0) {
         derr << "Failed to load mgr commands: " << cpp_strerror(r) << dendl;
       } else {
-        auto p = loaded_commands.begin();
+        auto p = loaded_commands.cbegin();
         decode(command_descs, p);
       }
     }
@@ -703,7 +703,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 	goto reply;
       }
       MgrMap m;
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       m.decode(p);
       f->dump_object("mgrmap", m);
     }
@@ -962,7 +962,7 @@ int MgrMonitor::load_metadata(const string& name, std::map<string, string>& m,
   if (r < 0)
     return r;
   try {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(m, p);
   }
   catch (buffer::error& e) {

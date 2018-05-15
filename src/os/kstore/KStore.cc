@@ -626,7 +626,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
     assert(r >=0);
     on = new Onode(store->cct, oid, key);
     on->exists = true;
-    bufferlist::iterator p = v.begin();
+    auto p = v.cbegin();
     decode(on->onode, p);
   }
   o.reset(on);
@@ -899,7 +899,7 @@ int KStore::_open_collections(int *errors)
     if (cid.parse(it->key())) {
       CollectionRef c(new Collection(this, cid));
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       try {
         decode(c->cnode, p);
       } catch (buffer::error& e) {
@@ -1890,7 +1890,7 @@ int KStore::_open_super_meta()
     nid_max = 0;
     bufferlist bl;
     db->get(PREFIX_SUPER, "nid_max", &bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       decode(nid_max, p);
     } catch (buffer::error& e) {
@@ -2249,7 +2249,7 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
@@ -2979,7 +2979,7 @@ int KStore::_omap_setkeys(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 num;
   if (!o->onode.omap_head) {
     o->onode.omap_head = o->onode.nid;
@@ -3024,11 +3024,11 @@ int KStore::_omap_setheader(TransContext *txc,
 int KStore::_omap_rmkeys(TransContext *txc,
 			 CollectionRef& c,
 			 OnodeRef& o,
-			 bufferlist& bl)
+			 const bufferlist& bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 num;
 
   if (!o->onode.omap_head) {

@@ -35,7 +35,7 @@ public:
 
   spg_t pgid;
 
-  bufferlist::iterator p;
+  bufferlist::const_iterator p;
   // Decoding flags. Decoding is only needed for messages catched by pipe reader.
   bool final_decode_needed;
 
@@ -78,7 +78,7 @@ public:
   }
 
   void decode_payload() override {
-    p = payload.begin();
+    p = payload.cbegin();
     // splitted to partial and final
     decode(map_epoch, p);
     if (header.version >= 2) {

@@ -49,7 +49,7 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
     decode(snap_op, p);
     decode(snap_blob, p);

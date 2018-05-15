@@ -93,7 +93,7 @@ int JournalScanner::scan_pointer()
 
     JournalPointer jp;
     try {
-      bufferlist::iterator q = pointer_bl.begin();
+      auto q = pointer_bl.cbegin();
       jp.decode(q);
     } catch(buffer::error &e) {
       derr << "Pointer " << pointer_oid << " is corrupt: " << e.what() << dendl;
@@ -122,7 +122,7 @@ int JournalScanner::scan_header()
     header_present = true;
   }
 
-  bufferlist::iterator header_bl_i = header_bl.begin();
+  auto header_bl_i = header_bl.cbegin();
   header = new Journaler::Header();
   try
   {
@@ -211,7 +211,7 @@ int JournalScanner::scan_events()
               << ", 0x" << read_buf.length() << std::dec << " bytes available" << dendl;
 
       do {
-        bufferlist::iterator p = read_buf.begin();
+        auto p = read_buf.cbegin();
         uint64_t candidate_sentinel;
         decode(candidate_sentinel, p);
 
@@ -303,7 +303,7 @@ int JournalScanner::scan_events()
         } else if (type == "purge_queue"){
            PurgeItem pi;
            try {
-             bufferlist::iterator q = le_bl.begin();
+             auto q = le_bl.cbegin();
              ::decode(pi, q);
            } catch (const buffer::error &err) {
              valid_entry = false;

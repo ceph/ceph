@@ -59,7 +59,7 @@ struct LeaseStat {
     encode(duration_ms, bl);
     encode(seq, bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     using ceph::decode;
     decode(mask, bl);
     decode(duration_ms, bl);
@@ -79,7 +79,7 @@ struct DirStat {
   set<__s32> dist;
   
   DirStat() : auth(CDIR_AUTH_PARENT) {}
-  DirStat(bufferlist::iterator& p) {
+  DirStat(bufferlist::const_iterator& p) {
     decode(p);
   }
 
@@ -89,7 +89,7 @@ struct DirStat {
     encode(auth, bl);
     encode(dist, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     using ceph::decode;
     decode(frag, p);
     decode(auth, p);
@@ -130,11 +130,11 @@ struct InodeStat {
 
  public:
   InodeStat() {}
-  InodeStat(bufferlist::iterator& p, uint64_t features) {
+  InodeStat(bufferlist::const_iterator& p, uint64_t features) {
     decode(p, features);
   }
 
-  void decode(bufferlist::iterator &p, uint64_t features) {
+  void decode(bufferlist::const_iterator &p, uint64_t features) {
     using ceph::decode;
     decode(vino.ino, p);
     decode(vino.snapid, p);
@@ -259,7 +259,7 @@ public:
 
   // serialization
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(head, p);
     decode(trace_bl, p);
     decode(extra_bl, p);

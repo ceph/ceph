@@ -60,7 +60,7 @@ public:
   }
 
   void decode_payload() override {
-    auto p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
     decode(op, p);

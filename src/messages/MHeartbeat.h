@@ -52,7 +52,7 @@ public:
     encode(import_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     utime_t now(ceph_clock_now());
     decode(load, now, p);
     decode(beat, p);

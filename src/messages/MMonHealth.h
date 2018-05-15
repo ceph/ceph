@@ -43,7 +43,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     service_decode(p);
     decode(service_type, p);
     decode(service_op, p);

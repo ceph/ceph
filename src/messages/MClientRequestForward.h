@@ -58,7 +58,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(dest_mds, p);
     decode(num_fwd, p);
     decode(client_must_resend, p);

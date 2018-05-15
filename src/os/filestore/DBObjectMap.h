@@ -281,7 +281,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START(3, bl);
       if (struct_v >= 2)
 	decode(v, bl);
@@ -328,7 +328,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       coll_t unused;
       DECODE_START(2, bl);
       decode(seq, bl);

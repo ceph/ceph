@@ -65,7 +65,7 @@ void osd_info_t::encode(bufferlist& bl) const
   encode(lost_at, bl);
 }
 
-void osd_info_t::decode(bufferlist::iterator& bl)
+void osd_info_t::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   __u8 struct_v;
@@ -125,7 +125,7 @@ void osd_xinfo_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void osd_xinfo_t::decode(bufferlist::iterator& bl)
+void osd_xinfo_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START(3, bl);
   decode(down_stamp, bl);
@@ -589,7 +589,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   have_crc = true;
 }
 
-void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
+void OSDMap::Incremental::decode_classic(bufferlist::const_iterator &p)
 {
   using ceph::decode;
   __u32 n, t;
@@ -689,7 +689,7 @@ void OSDMap::Incremental::decode_classic(bufferlist::iterator &p)
     decode(new_hb_front_up, p);
 }
 
-void OSDMap::Incremental::decode(bufferlist::iterator& bl)
+void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   /**
@@ -869,7 +869,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->open_object_section("full_map");
     OSDMap full;
     bufferlist fbl = fullmap;  // kludge around constness.
-    auto p = fbl.begin();
+    auto p = fbl.cbegin();
     full.decode(p);
     full.dump(f);
     f->close_section();
@@ -878,7 +878,7 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->open_object_section("crush");
     CrushWrapper c;
     bufferlist tbl = crush;  // kludge around constness.
-    auto p = tbl.begin();
+    auto p = tbl.cbegin();
     c.decode(p);
     c.dump(f);
     f->close_section();
@@ -1992,7 +1992,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
     bufferlist bl(inc.crush);
-    auto blp = bl.begin();
+    auto blp = bl.cbegin();
     crush.reset(new CrushWrapper);
     crush->decode(blp);
     if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
@@ -2685,11 +2685,11 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
 
 void OSDMap::decode(bufferlist& bl)
 {
-  auto p = bl.begin();
+  auto p = bl.cbegin();
   decode(p);
 }
 
-void OSDMap::decode_classic(bufferlist::iterator& p)
+void OSDMap::decode_classic(bufferlist::const_iterator& p)
 {
   using ceph::decode;
   __u32 n, t;
@@ -2767,7 +2767,7 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
   // crush
   bufferlist cbl;
   decode(cbl, p);
-  auto cblp = cbl.begin();
+  auto cblp = cbl.cbegin();
   crush->decode(cblp);
 
   // extended
@@ -2810,7 +2810,7 @@ void OSDMap::decode_classic(bufferlist::iterator& p)
   post_decode();
 }
 
-void OSDMap::decode(bufferlist::iterator& bl)
+void OSDMap::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   /**
@@ -2876,7 +2876,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
     // crush
     bufferlist cbl;
     decode(cbl, bl);
-    auto cblp = cbl.begin();
+    auto cblp = cbl.cbegin();
     crush->decode(cblp);
     if (struct_v >= 3) {
       decode(erasure_code_profiles, bl);

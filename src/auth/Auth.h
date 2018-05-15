@@ -35,7 +35,7 @@ struct EntityAuth {
     encode(key, bl);
     encode(caps, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -66,7 +66,7 @@ struct AuthCapsInfo {
     encode(a, bl);
     encode(caps, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -113,7 +113,7 @@ struct AuthTicket {
     encode(caps, bl);
     encode(flags, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -141,7 +141,7 @@ struct AuthAuthorizer {
 
   explicit AuthAuthorizer(__u32 p) : protocol(p) {}
   virtual ~AuthAuthorizer() {}
-  virtual bool verify_reply(bufferlist::iterator& reply) = 0;
+  virtual bool verify_reply(bufferlist::const_iterator& reply) = 0;
 };
 
 
@@ -161,7 +161,7 @@ struct ExpiringCryptoKey {
     encode(key, bl);
     encode(expiration, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
@@ -189,7 +189,7 @@ struct RotatingSecrets {
     encode(secrets, bl);
     encode(max_ver, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);

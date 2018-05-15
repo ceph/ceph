@@ -43,7 +43,7 @@ public:
     encode(client_map, payload, features);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(ino, p);
     decode(cap_bl, p);
     decode(client_map, p);

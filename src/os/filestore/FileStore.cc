@@ -1366,7 +1366,7 @@ int FileStore::read_superblock()
 
   bufferlist bl;
   bl.push_back(std::move(bp));
-  bufferlist::iterator i = bl.begin();
+  auto i = bl.cbegin();
   decode(superblock, i);
   return 0;
 }
@@ -1386,7 +1386,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
   }
   bufferlist bl;
   bl.push_back(std::move(bp));
-  bufferlist::iterator i = bl.begin();
+  auto i = bl.cbegin();
   decode(*version, i);
   dout(10) << __FUNC__ << ": was " << *version << " vs target "
 	   << target_version << dendl;
@@ -2492,7 +2492,7 @@ int FileStore::_check_global_replay_guard(const coll_t& cid,
   bl.append(buf, r);
 
   SequencerPosition opos;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(opos, p);
 
   VOID_TEMP_FAILURE_RETRY(::close(fd));
@@ -2664,7 +2664,7 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
   bl.append(buf, r);
 
   SequencerPosition opos;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(opos, p);
   bool in_progress = false;
   if (!p.end())   // older journals don't have this
@@ -2929,7 +2929,7 @@ void FileStore::_do_transaction(
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
@@ -6107,7 +6107,7 @@ void FSSuperblock::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void FSSuperblock::decode(bufferlist::iterator &bl)
+void FSSuperblock::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(2, bl);
   compat_features.decode(bl);

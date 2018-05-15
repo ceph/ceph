@@ -50,7 +50,7 @@ struct ceph_data_stats
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(byte_total, p);
     decode(byte_used, p);

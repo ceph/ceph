@@ -216,7 +216,7 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
 
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION) {

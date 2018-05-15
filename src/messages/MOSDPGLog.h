@@ -109,7 +109,7 @@ public:
     encode(from, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(epoch, p);
     decode(info, p);
     log.decode(p, info.pgid.pool());

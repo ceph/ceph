@@ -424,7 +424,7 @@ void MonCap::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void MonCap::decode(bufferlist::iterator& bl)
+void MonCap::decode(bufferlist::const_iterator& bl)
 {
   string s;
   DECODE_START(4, bl);

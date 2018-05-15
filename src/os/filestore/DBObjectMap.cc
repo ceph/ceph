@@ -66,7 +66,7 @@ int DBObjectMap::check(std::ostream &out, bool repair, bool force)
     _Header header;
     bufferlist bl = iter->value();
     while (true) {
-      bufferlist::iterator bliter = bl.begin();
+      auto bliter = bl.cbegin();
       header.decode(bliter);
       if (header.seq != 0)
 	parent_to_actual_num_children[header.seq] = header.num_children;
@@ -1013,7 +1013,7 @@ int DBObjectMap::upgrade_to_v2()
       // decode header to get oid
       _Header hdr;
       bufferlist bl = iter->value();
-      bufferlist::iterator bliter = bl.begin();
+      auto bliter = bl.cbegin();
       hdr.decode(bliter);
 
       string newkey(ghobject_key(hdr.oid));
@@ -1059,7 +1059,7 @@ int DBObjectMap::get_state()
   if (r < 0)
     return r;
   if (!result.empty()) {
-    bufferlist::iterator bliter = result.begin()->second.begin();
+    auto bliter = result.begin()->second.cbegin();
     state.decode(bliter);
   } else {
     // New store
@@ -1170,8 +1170,7 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
   }
 
   Header ret(header, RemoveOnDelete(this));
-  bufferlist::iterator iter = out.begin();
-
+  auto iter = out.cbegin();
   ret->decode(iter);
   {
     Mutex::Locker l(cache_lock);
@@ -1223,7 +1222,7 @@ DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
   }
 
   Header header = Header(new _Header(), RemoveOnDelete(this));
-  bufferlist::iterator iter = out.begin()->second.begin();
+  auto iter = out.begin()->second.cbegin();
   header->decode(iter);
   assert(header->seq == input->parent);
   dout(20) << "lookup_parent: parent seq is " << header->seq << " with parent "
@@ -1329,7 +1328,7 @@ int DBObjectMap::list_objects(vector<ghobject_t> *out)
   KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
     bufferlist bl = iter->value();
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     _Header header;
     header.decode(bliter);
     out->push_back(header.oid);
@@ -1343,7 +1342,7 @@ int DBObjectMap::list_object_headers(vector<_Header> *out)
   KeyValueDB::Iterator iter = db->get_iterator(HOBJECT_TO_SEQ);
   for (iter->seek_to_first(); iter->valid(); iter->next()) {
     bufferlist bl = iter->value();
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     _Header header;
     header.decode(bliter);
     out->push_back(header);
@@ -1358,7 +1357,7 @@ int DBObjectMap::list_object_headers(vector<_Header> *out)
 	break;
       } else {
 	bl = got.begin()->second;
-        bufferlist::iterator bliter = bl.begin();
+        auto bliter = bl.cbegin();
         header.decode(bliter);
         out->push_back(header);
       }

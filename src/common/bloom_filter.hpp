@@ -520,7 +520,7 @@ protected:
 
 public:
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<bloom_filter*>& ls);
 };
@@ -617,7 +617,7 @@ private:
   std::vector<std::size_t> size_list;
 public:
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<compressible_bloom_filter*>& ls);
 };

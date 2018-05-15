@@ -146,7 +146,7 @@ void SloppyCRCMap::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void SloppyCRCMap::decode(bufferlist::iterator& bl)
+void SloppyCRCMap::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START(1, bl);
   uint32_t bs;

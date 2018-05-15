@@ -77,7 +77,7 @@ class Transaction {
     t.encode(bl);
     encode_ticks.add(Cycles::rdtsc() - start_time);
 
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     start_time = Cycles::rdtsc();
     d.decode(bliter);
     decode_ticks.add(Cycles::rdtsc() - start_time);

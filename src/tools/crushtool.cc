@@ -830,7 +830,7 @@ int main(int argc, const char **argv)
         return EXIT_FAILURE;
       }
     }
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       crush.decode(p);
     } catch(...) {

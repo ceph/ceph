@@ -64,7 +64,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(epoch, p);
     decode(pg_list, p);
   }

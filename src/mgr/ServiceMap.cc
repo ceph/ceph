@@ -18,7 +18,7 @@ void ServiceMap::Daemon::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void ServiceMap::Daemon::decode(bufferlist::iterator& p)
+void ServiceMap::Daemon::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(gid, p);
@@ -60,7 +60,7 @@ void ServiceMap::Service::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void ServiceMap::Service::decode(bufferlist::iterator& p)
+void ServiceMap::Service::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(daemons, p);
@@ -97,7 +97,7 @@ void ServiceMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void ServiceMap::decode(bufferlist::iterator& p)
+void ServiceMap::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(epoch, p);

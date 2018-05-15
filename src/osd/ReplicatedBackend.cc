@@ -1021,7 +1021,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   // shipped transaction and log entries
   vector<pg_log_entry_t> log;
 
-  bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
+  auto p = const_cast<bufferlist&>(m->get_data()).cbegin();
   decode(rm->opt, p);
 
   if (m->new_temp_oid != hobject_t()) {
@@ -1838,7 +1838,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     bufferlist bv = out_op->attrset[OI_ATTR];
     object_info_t oi;
     try {
-     bufferlist::iterator bliter = bv.begin();
+     auto bliter = bv.cbegin();
      decode(oi, bliter);
     } catch (...) {
       dout(0) << __func__ << ": bad object_info_t: " << recovery_info.soid << dendl;

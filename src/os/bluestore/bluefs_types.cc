@@ -42,7 +42,7 @@ void bluefs_super_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void bluefs_super_t::decode(bufferlist::iterator& p)
+void bluefs_super_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(1, p);
   decode(uuid, p);
@@ -146,7 +146,7 @@ void bluefs_transaction_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void bluefs_transaction_t::decode(bufferlist::iterator& p)
+void bluefs_transaction_t::decode(bufferlist::const_iterator& p)
 {
   uint32_t crc;
   DECODE_START(1, p);

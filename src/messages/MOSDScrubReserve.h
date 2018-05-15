@@ -75,7 +75,7 @@ public:
   }
 
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid, p);
     decode(map_epoch, p);
     decode(type, p);

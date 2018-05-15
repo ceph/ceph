@@ -41,7 +41,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START(1, bl);
       decode(name, bl);
       decode(can_run, bl);
@@ -93,7 +93,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator& p)
+    void decode(bufferlist::const_iterator& p)
     {
       DECODE_START(3, p);
       decode(gid, p);
@@ -257,7 +257,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& p)
+  void decode(bufferlist::const_iterator& p)
   {
     DECODE_START(4, p);
     decode(epoch, p);
