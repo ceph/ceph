@@ -37,3 +37,4 @@ sensible.
     Hello plugin <hello>
     Telemetry plugin <telemetry>
     Telegraf plugin <telegraf>
+    Iostat plugin <iostat>
