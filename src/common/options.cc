@@ -4533,6 +4533,22 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("filestore_queue_max_delay_multiple_bytes", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description(""),
+
+    Option("filestore_queue_high_delay_multiple_bytes", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description(""),
+
+    Option("filestore_queue_max_delay_multiple_ops", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description(""),
+
+    Option("filestore_queue_high_delay_multiple_ops", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description(""),
+
     Option("filestore_queue_low_threshhold", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.3)
     .set_description(""),
