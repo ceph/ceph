@@ -76,7 +76,7 @@ WriteCacheDevice::WriteCacheDevice(CephContext* cct, aio_callback_t cb, void *cb
   : KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv),
     last_used_id(0),
     current(nullptr),
-    empty(nullptr),
+    other(nullptr),
     flushing(nullptr)
 {
 }
@@ -85,8 +85,8 @@ WriteCacheDevice::~WriteCacheDevice()
 {
   if (current)
     delete current;
-  if (empty)
-    delete empty;
+  if (other)
+    delete other;
   if (flushing)
     delete flushing;
 }
@@ -114,23 +114,19 @@ bool WriteCacheDevice::store_in_cache(uint64_t disk_off, bufferlist& bl)
 
   if (current->pos + (block_size + length_align_up) > current->size)
   {
-    /* must switch cache row */
-    if (flushing != nullptr) {
-      /* must flush, no space to write */
-      flush_main();
-    } else {
-      assert(flushing == nullptr);
-      assert(empty != nullptr);
-      flushing = current;
-      current = empty;
-      dout(10) << __func__ << " flush_main switched row, current=" << current <<
-              " current->disk_offset=" << current->disk_offset << dendl;
-      flushing->pos = 0;
-      empty = flushing;
-      flushing = nullptr;
-    }
-    //flushing = nullptr;
-    //KernelDevice::flush();
+    /* normally, we will initiate flushing of current,
+     * but since it is not possible we just flush and switch rows
+     */
+    flush_main();
+    assert(flushing == nullptr);
+    assert(other != nullptr);
+    flushing = current;
+    current = other;
+    dout(10) << __func__ << " flush_main switched row, current=" << current <<
+        " current->disk_offset=" << current->disk_offset << dendl;
+    flushing->pos = 0;
+    other = flushing;
+    flushing = nullptr;
   }
 
   if (current->pos + (block_size + length_align_up) > current->size)
@@ -257,7 +253,7 @@ bool WriteCacheDevice::replay(size_t row_size)
       if (r) {
         last_used_id = b_id_last;
         current = new row_t{0, row_size, 0, false};
-        empty = new row_t{row_size, row_size, 0, false};
+        other = new row_t{row_size, row_size, 0, false};
         return true;
       }
       return false;
@@ -274,7 +270,7 @@ bool WriteCacheDevice::replay(size_t row_size)
       if (r) {
         last_used_id = a_id_last;
         current = new row_t{row_size, row_size, 0, false};
-        empty = new row_t{0, row_size, 0, false};
+        other = new row_t{0, row_size, 0, false};
         return true;
       }
       return false;
@@ -289,7 +285,7 @@ bool WriteCacheDevice::replay(size_t row_size)
     }
     last_used_id = a_id_last;
     current = new row_t{row_size, row_size, 0, false};
-    empty = new row_t{0, row_size, 0, false};
+    other = new row_t{0, row_size, 0, false};
     return true;
   }
   if (b_ok) {
@@ -299,12 +295,12 @@ bool WriteCacheDevice::replay(size_t row_size)
     }
     last_used_id = b_id_last;
     current = new row_t{0, row_size, 0, false};
-    empty = new row_t{row_size, row_size, 0, false};
+    other = new row_t{row_size, row_size, 0, false};
     return true;
   }
 
   current = new row_t{0, row_size, 0, false};
-  empty = new row_t{row_size, row_size, 0, false};
+  other = new row_t{row_size, row_size, 0, false};
   dout(5) << __func__ << " done" << dendl;
   return true;
 }
@@ -403,9 +399,9 @@ int WriteCacheDevice::flush_main()
     /* wait for flushing to finish */
     flush_main_storage = true;
     flushing = current;
-    current = empty;
+    current = other;
     flushing->pos = 0;
-    empty = flushing;
+    other = flushing;
     flushing = nullptr;
     dout(10) << __func__ << " last_used_id=" << last_used_id << dendl;
     dout(10) << __func__ << " switched row, current=" << current <<

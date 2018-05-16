@@ -75,7 +75,7 @@ private:
   static constexpr size_t minimum_cache_size = 2 * 1024 * 1024;
   uint64_t last_used_id;
   row_t* current;
-  row_t* empty;
+  row_t* other;
   row_t* flushing;
 };
 
