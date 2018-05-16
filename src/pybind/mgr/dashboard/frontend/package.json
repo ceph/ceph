@@ -12,6 +12,20 @@
     "makePretty": "pretty-quick --staged"
   },
   "private": true,
+  "jest": {
+    "preset": "jest-preset-angular",
+    "setupTestFrameworkScriptFile": "<rootDir>/src/setupJest.ts",
+    "transformIgnorePatterns": ["node_modules/(?!@ngrx|ngx-bootstrap|@progress)"],
+    "transform": {
+      "^.+\\.(ts|html)$": "<rootDir>/node_modules/jest-preset-angular/preprocessor.js",
+      "^.+\\.js$": "babel-jest"
+    },
+    "setupFiles": ["jest-canvas-mock"],
+    "coverageReporters" : [
+      "text",
+      "cobertura"
+    ]
+  },
   "dependencies": {
     "@angular/animations": "^5.0.0",
     "@angular/common": "^5.0.0",
@@ -43,11 +57,16 @@
     "@angular/language-service": "^5.0.0",
     "@types/jasmine": "~2.5.53",
     "@types/jasminewd2": "~2.0.2",
+    "@types/jest": "^22.2.3",
     "@types/node": "~6.0.60",
+    "babel-preset-env": "^1.7.0",
     "codelyzer": "^4.0.1",
     "copy-webpack-plugin": "4.3.0",
     "jasmine-core": "~2.6.2",
     "jasmine-spec-reporter": "~4.1.0",
+    "jest": "^22.4.3",
+    "jest-canvas-mock": "^1.0.2",
+    "jest-preset-angular": "^5.2.2",
     "karma": "~1.7.0",
     "karma-chrome-launcher": "~2.1.1",
     "karma-cli": "~1.0.1",
