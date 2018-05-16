@@ -18,6 +18,8 @@
 #include "rgw_common.h"
 #include "rgw_tools.h"
 #include "rgw_role.h"
+#include "rgw_user.h"
+#include "rgw_iam_policy.h"
 #include "sts-assume-role.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -225,6 +227,47 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
   }
 }
 
+int STSService::_storeARNandPolicy(string& policy, string& arn)
+{
+  int ret = 0;
+  RGWUserInfo info;
+  if (ret = rgw_get_user_info_by_uid(store, user_id, info); ret < 0) {
+    return -ERR_NO_SUCH_ENTITY;
+  }
+
+  info.assumed_role_arn = arn;
+
+  map<string, bufferlist> uattrs;
+  if (ret = rgw_get_user_attrs_by_uid(store, user_id, uattrs); ret == -ENOENT) {
+    return -ERR_NO_SUCH_ENTITY;
+  }
+  if (! policy.empty()) {
+    bufferlist bl = bufferlist::static_from_string(policy);
+    ldout(cct, 20) << "bufferlist policy: " << bl.c_str() << dendl;
+    try {
+      const rgw::IAM::Policy p(cct, user_id.tenant, bl);
+      map<string, string> policies;
+      if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
+        bufferlist out_bl = uattrs[RGW_ATTR_USER_POLICY];
+        decode(policies, out_bl);
+      }
+      bufferlist in_bl;
+      policies["assumerolepolicy"] = policy;
+      encode(policies, in_bl);
+      uattrs[RGW_ATTR_USER_POLICY] = in_bl;
+    } catch (rgw::IAM::PolicyParseException& e) {
+      ldout(cct, 20) << "failed to parse policy: " << e.what() << dendl;
+      return -ERR_MALFORMED_DOC;
+    }
+  }
+  RGWObjVersionTracker objv_tracker;
+  if (rgw_store_user_info(store, info, &info, &objv_tracker, real_time(),
+          false, &uattrs); ret < 0) {
+    return -ERR_INTERNAL_ERROR;
+  }
+  return ret;
+}
+
 AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
 {
   uint64_t packedPolicySize = 0, roleMaxSessionDuration = 0;
@@ -259,6 +302,12 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
 
   //Generate Credentials
   if (ret = cred.generateCredentials(cct, req.getDuration()); ret < 0) {
+    return make_tuple(ret, user, cred, packedPolicySize);
+  }
+
+  //Save ARN and Policy with the user
+  string arn = user.getARN();
+  if (ret = _storeARNandPolicy(policy, arn); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
