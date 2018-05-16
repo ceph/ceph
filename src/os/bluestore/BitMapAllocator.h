@@ -27,9 +27,6 @@ public:
   BitMapAllocator(CephContext* cct, int64_t device_size, int64_t block_size);
   ~BitMapAllocator() override;
 
-  int reserve(uint64_t need) override;
-  void unreserve(uint64_t unused) override;
-
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
     int64_t hint, PExtentVector *extents) override;
