@@ -312,7 +312,8 @@
                        [--stripe-count <stripe-count>] [--data-pool <data-pool>] 
                        [--journal-splay-width <journal-splay-width>] 
                        [--journal-object-size <journal-object-size>] 
-                       [--journal-pool <journal-pool>] [--no-progress] 
+                       [--journal-pool <journal-pool>] [--flatten] 
+                       [--no-progress] 
                        <source-image-or-snap-spec> <dest-image-spec> 
   
   Deep copy src image to dest.
@@ -343,6 +344,7 @@
     --journal-splay-width arg    number of active journal objects
     --journal-object-size arg    size of journal objects
     --journal-pool arg           pool for journal objects
+    --flatten                    fill clone with parent data (make it independent)
     --no-progress                disable progress output
   
   Image Features:

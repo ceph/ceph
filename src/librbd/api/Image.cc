@@ -205,8 +205,15 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     return -ENOSYS;
   }
 
+  uint64_t flatten = 0;
+  if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+    opts.unset(RBD_IMAGE_OPTION_FLATTEN);
+  }
+
   ParentSpec parent_spec;
-  {
+  if (flatten > 0) {
+    parent_spec.pool_id = -1;
+  } else {
     RWLock::RLocker snap_locker(src->snap_lock);
     RWLock::RLocker parent_locker(src->parent_lock);
 
@@ -297,7 +304,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     return r;
   }
 
-  r = deep_copy(src, dest, prog_ctx);
+  r = deep_copy(src, dest, flatten > 0, prog_ctx);
 
   int close_r = dest->state->close();
   if (r == 0 && close_r < 0) {
@@ -307,7 +314,8 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
 }
 
 template <typename I>
-int Image<I>::deep_copy(I *src, I *dest, ProgressContext &prog_ctx) {
+int Image<I>::deep_copy(I *src, I *dest, bool flatten,
+                        ProgressContext &prog_ctx) {
   CephContext *cct = src->cct;
   librados::snap_t snap_id_start = 0;
   librados::snap_t snap_id_end;
@@ -323,8 +331,8 @@ int Image<I>::deep_copy(I *src, I *dest, ProgressContext &prog_ctx) {
   C_SaferCond cond;
   SnapSeqs snap_seqs;
   auto req = DeepCopyRequest<>::create(src, dest, snap_id_start, snap_id_end,
-                                       boost::none, op_work_queue, &snap_seqs,
-                                       &prog_ctx, &cond);
+                                       flatten, boost::none, op_work_queue,
+                                       &snap_seqs, &prog_ctx, &cond);
   req->send();
   int r = cond.wait();
   if (r < 0) {
