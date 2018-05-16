@@ -1238,12 +1238,18 @@ void ImageReplayer<I>::handle_process_entry_ready(int r) {
   dout(20) << dendl;
   assert(r == 0);
 
+  bool update_status = false;
   {
     RWLock::RLocker snap_locker(m_local_image_ctx->snap_lock);
-    m_local_image_name = m_local_image_ctx->name;
+    if (m_local_image_name != m_local_image_ctx->name) {
+      m_local_image_name = m_local_image_ctx->name;
+      update_status = true;
+    }
   }
 
-  reregister_admin_socket_hook();
+  if (update_status) {
+    reschedule_update_status_task(0);
+  }
 
   // attempt to process the next event
   handle_replay_ready();
@@ -1303,6 +1309,8 @@ bool ImageReplayer<I>::start_mirror_image_status_update(bool force,
 
 template <typename I>
 void ImageReplayer<I>::finish_mirror_image_status_update() {
+  reregister_admin_socket_hook();
+
   Context *on_finish = nullptr;
   {
     Mutex::Locker locker(m_lock);
