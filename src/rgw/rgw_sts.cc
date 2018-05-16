@@ -20,7 +20,7 @@
 #include "rgw_role.h"
 #include "rgw_user.h"
 #include "rgw_iam_policy.h"
-#include "sts-assume-role.h"
+#include "rgw_sts.h"
 
 #define dout_subsys ceph_subsys_rgw
 

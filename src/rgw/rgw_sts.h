@@ -1,5 +1,5 @@
-#ifndef CEPH_STS_ASSUME_ROLE_H
-#define CEPH_STS_ASSUME_ROLE_H
+#ifndef CEPH_RGW_STS_H
+#define CEPH_RGW_STS_H
 
 #include "rgw_role.h"
 
@@ -90,5 +90,5 @@ public:
   AssumeRoleResponse assumeRole(AssumeRoleRequest& req);
 };
 }
-#endif /* CEPH_STS_ASSUME_ROLE_H */
+#endif /* CEPH_RGW_STS_H */
 
