@@ -3872,8 +3872,12 @@ struct C_SelfmanagedSnap : public Context {
   C_SelfmanagedSnap(snapid_t *ps, Context *f) : psnapid(ps), fin(f) {}
   void finish(int r) override {
     if (r == 0) {
-      bufferlist::iterator p = bl.begin();
-      decode(*psnapid, p);
+      try {
+        bufferlist::iterator p = bl.begin();
+        decode(*psnapid, p);
+      } catch (buffer::error&) {
+        r = -EIO;
+      }
     }
     fin->complete(r);
   }
