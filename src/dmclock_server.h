@@ -17,13 +17,6 @@
 
 /* COMPILATION OPTIONS
  *
- * By default we include an optimization over the originally published
- * dmclock algorithm using not the values of rho and delta that were
- * sent in with a request but instead the most recent rho and delta
- * values from the requests's client. To restore the algorithm's
- * original behavior, define DO_NOT_DELAY_TAG_CALC (i.e., compiler
- * argument -DDO_NOT_DELAY_TAG_CALC).
- *
  * The prop_heap does not seem to be necessary. The only thing it
  * would help with is quickly finding the mininum proportion/prioity
  * when an idle client became active. To have the code maintain the
@@ -235,23 +228,29 @@ namespace crimson {
 	  " p:" << format_tag(tag.proportion) <<
 	  " l:" << format_tag(tag.limit) <<
 #if 0 // try to resolve this to make sure Time is operator<<'able.
-#ifndef DO_NOT_DELAY_TAG_CALC
 	  " arrival:" << tag.arrival <<
-#endif
 #endif
 	  " }";
 	return out;
       }
     }; // class RequestTag
 
-
     // C is client identifier type, R is request type,
+    // IsDelayed controls whether tag calculation is delayed until the request
+    //   reaches the front of its queue. This is an optimization over the
+    //   originally published dmclock algorithm, allowing it to use the most
+    //   recent values of rho and delta.
     // U1 determines whether to use client information function dynamically,
     // B is heap branching factor
-    template<typename C, typename R, bool U1, uint B>
+    template<typename C, typename R, bool IsDelayed, bool U1, uint B>
     class PriorityQueueBase {
       // we don't want to include gtest.h just for FRIEND_TEST
       friend class dmclock_server_client_idle_erase_Test;
+
+      // types used for tag dispatch to select between implementations
+      using TagCalc = std::integral_constant<bool, IsDelayed>;
+      using DelayedTagCalc = std::true_type;
+      using ImmediateTagCalc = std::false_type;
 
     public:
 
@@ -302,7 +301,7 @@ namespace crimson {
       // ClientRec could be "protected" with no issue. [See comments
       // associated with function submit_top_request.]
       class ClientRec {
-	friend PriorityQueueBase<C,R,U1,B>;
+	friend PriorityQueueBase<C,R,IsDelayed,U1,B>;
 
 	C                     client;
 	RequestTag            prev_tag;
@@ -432,7 +431,7 @@ namespace crimson {
 
 	friend std::ostream&
 	operator<<(std::ostream& out,
-		   const typename PriorityQueueBase<C,R,U1,B>::ClientRec& e) {
+		   const typename PriorityQueueBase::ClientRec& e) {
 	  out << "{ ClientRec::" <<
 	    " client:" << e.client <<
 	    " prev_tag:" << e.prev_tag <<
@@ -811,6 +810,37 @@ namespace crimson {
 	return client.info;
       }
 
+      // data_mtx must be held by caller
+      RequestTag initial_tag(DelayedTagCalc delayed, ClientRec& client,
+			     const ReqParams& params, Time time, Cost cost) {
+	RequestTag tag(0, 0, 0, time, cost);
+
+	// only calculate a tag if the request is going straight to the front
+	if (!client.has_request()) {
+	  const ClientInfo* client_info = get_cli_info(client);
+	  assert(client_info);
+	  tag = RequestTag(client.get_req_tag(), *client_info,
+			   params, time, cost, anticipation_timeout);
+
+	  // copy tag to previous tag for client
+	  client.update_req_tag(tag, tick);
+	}
+	return tag;
+      }
+
+      // data_mtx must be held by caller
+      RequestTag initial_tag(ImmediateTagCalc imm, ClientRec& client,
+			     const ReqParams& params, Time time, Cost cost) {
+	// calculate the tag unconditionally
+	const ClientInfo* client_info = get_cli_info(client);
+	assert(client_info);
+	RequestTag tag(client.get_req_tag(), *client_info,
+		       params, time, cost, anticipation_timeout);
+
+	// copy tag to previous tag for client
+	client.update_req_tag(tag, tick);
+	return tag;
+      }
 
       // data_mtx must be held by caller
       void do_add_request(RequestRef&& request,
@@ -894,35 +924,7 @@ namespace crimson {
 	  client.idle = false;
 	} // if this client was idle
 
-#ifndef DO_NOT_DELAY_TAG_CALC
-	RequestTag tag(0, 0, 0, time, cost);
-
-	if (!client.has_request()) {
-	  const ClientInfo* client_info = get_cli_info(client);
-	  assert(client_info);
-	  tag = RequestTag(client.get_req_tag(),
-			   *client_info,
-			   req_params,
-			   time,
-			   cost,
-                           anticipation_timeout);
-
-	  // copy tag to previous tag for client
-	  client.update_req_tag(tag, tick);
-	}
-#else
-	const ClientInfo* client_info = get_cli_info(client);
-	assert(client_info);
-	RequestTag tag(client.get_req_tag(),
-		       *client_info,
-		       req_params,
-		       time,
-		       cost,
-		       anticipation_timeout);
-
-	// copy tag to previous tag for client
-	client.update_req_tag(tag, tick);
-#endif
+	RequestTag tag = initial_tag(TagCalc{}, client, req_params, time, cost);
 
 	client.add_request(tag, client.client, std::move(request));
 	if (1 == client.requests.size()) {
@@ -948,6 +950,28 @@ namespace crimson {
 #endif
       } // add_request
 
+      // data_mtx must be held by caller
+      void update_next_tag(DelayedTagCalc delayed, ClientRec& top,
+			   const RequestTag& tag) {
+	if (top.has_request()) {
+	  // perform delayed tag calculation on the next request
+	  ClientReq& next_first = top.next_request();
+	  const ClientInfo* client_info = get_cli_info(top);
+	  assert(client_info);
+	  next_first.tag = RequestTag(tag, *client_info,
+				      top.cur_delta, top.cur_rho,
+				      next_first.tag.arrival,
+				      next_first.tag.cost,
+				      anticipation_timeout);
+	  // copy tag to previous tag for client
+	  top.update_req_tag(next_first.tag, tick);
+	}
+      }
+
+      void update_next_tag(ImmediateTagCalc imm, ClientRec& top,
+			   const RequestTag& tag) {
+	// the next tag was already calculated on insertion
+      }
 
       // data_mtx should be held when called; top of heap should have
       // a ready request
@@ -961,28 +985,12 @@ namespace crimson {
 
 	Cost request_cost = top.next_request().tag.cost;
 	RequestRef request = std::move(top.next_request().request);
-#ifndef DO_NOT_DELAY_TAG_CALC
 	RequestTag tag = top.next_request().tag;
-#endif
 
 	// pop request and adjust heaps
 	top.pop_request();
 
-#ifndef DO_NOT_DELAY_TAG_CALC
-	if (top.has_request()) {
-	  ClientReq& next_first = top.next_request();
-	  const ClientInfo* client_info = get_cli_info(top);
-	  assert(client_info);
-	  next_first.tag = RequestTag(tag, *client_info,
-				      top.cur_delta, top.cur_rho,
-				      next_first.tag.arrival,
-                                      next_first.tag.cost,
-				      anticipation_timeout);
-
-  	  // copy tag to previous tag for client
-	  top.update_req_tag(next_first.tag, tick);
-	}
-#endif
+	update_next_tag(TagCalc{}, top, tag);
 
 	resv_heap.demote(top);
 	limit_heap.adjust(top);
@@ -996,21 +1004,21 @@ namespace crimson {
       } // pop_process_request
 
 
-      // data_mtx should be held when called
-      void reduce_reservation_tags(ClientRec& client) {
-	for (auto& r : client.requests) {
+      // data_mtx must be held by caller
+      void reduce_reservation_tags(DelayedTagCalc delayed, ClientRec& client) {
+	if (!client.requests.empty()) {
+	  // only maintain a tag for the first request
+	  auto& r = client.requests.front();
 	  r.tag.reservation -= client.info->reservation_inv;
-
-#ifndef DO_NOT_DELAY_TAG_CALC
-	  // reduce only for front tag. because next tags' value are invalid
-	  break;
-#endif
 	}
-	// don't forget to update previous tag
-	client.prev_tag.reservation -= client.info->reservation_inv;
-	resv_heap.promote(client);
       }
 
+      // data_mtx should be held when called
+      void reduce_reservation_tags(ImmediateTagCalc imm, ClientRec& client) {
+	for (auto& r : client.requests) {
+	  r.tag.reservation -= client.info->reservation_inv;
+	}
+      }
 
       // data_mtx should be held when called
       void reduce_reservation_tags(const C& client_id) {
@@ -1019,7 +1027,12 @@ namespace crimson {
 	// means the client was cleaned from map; should never happen
 	// as long as cleaning times are long enough
 	assert(client_map.end() != client_it);
-	reduce_reservation_tags(*client_it->second);
+	ClientRec& client = *client_it->second;
+	reduce_reservation_tags(TagCalc{}, client);
+
+	// don't forget to update previous tag
+	client.prev_tag.reservation -= client.info->reservation_inv;
+	resv_heap.promote(client);
       }
 
 
@@ -1174,9 +1187,9 @@ namespace crimson {
     }; // class PriorityQueueBase
 
 
-    template<typename C, typename R, bool U1=false, uint B=2>
-    class PullPriorityQueue : public PriorityQueueBase<C,R,U1,B> {
-      using super = PriorityQueueBase<C,R,U1,B>;
+    template<typename C, typename R, bool IsDelayed=true, bool U1=false, uint B=2>
+    class PullPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
+      using super = PriorityQueueBase<C,R,IsDelayed,U1,B>;
 
     public:
 
@@ -1398,12 +1411,12 @@ namespace crimson {
 
 
     // PUSH version
-    template<typename C, typename R, bool U1=false, uint B=2>
-    class PushPriorityQueue : public PriorityQueueBase<C,R,U1,B> {
+    template<typename C, typename R, bool IsDelayed=true, bool U1=false, uint B=2>
+    class PushPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
 
     protected:
 
-      using super = PriorityQueueBase<C,R,U1,B>;
+      using super = PriorityQueueBase<C,R,IsDelayed,U1,B>;
 
     public:
 

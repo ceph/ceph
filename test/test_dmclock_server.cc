@@ -180,6 +180,51 @@ namespace crimson {
     } // TEST
 
 
+    TEST(dmclock_server, delayed_tag_calc) {
+      using ClientId = int;
+      constexpr ClientId client1 = 17;
+
+      using DelayedQueue = PullPriorityQueue<ClientId, Request, true>;
+      using ImmediateQueue = PullPriorityQueue<ClientId, Request, false>;
+
+      ClientInfo info(0.0, 1.0, 1.0);
+      auto client_info_f = [&] (ClientId c) -> const ClientInfo* {
+	return &info;
+      };
+
+      Time t{1};
+      {
+	DelayedQueue queue(client_info_f);
+
+	queue.add_request_time({}, client1, {0,0}, t);
+	queue.add_request_time({}, client1, {0,0}, t + 1);
+	queue.add_request_time({}, client1, {10,10}, t + 2);
+
+	auto pr1 = queue.pull_request(t);
+	ASSERT_TRUE(pr1.is_retn());
+	auto pr2 = queue.pull_request(t + 1);
+	// ReqParams{10,10} from request #3 pushes request #2 over limit by 10s
+	ASSERT_TRUE(pr2.is_future());
+	EXPECT_DOUBLE_EQ(t + 11, pr2.getTime());
+      }
+      {
+	ImmediateQueue queue(client_info_f);
+
+	queue.add_request_time({}, client1, {0,0}, t);
+	queue.add_request_time({}, client1, {0,0}, t + 1);
+	queue.add_request_time({}, client1, {10,10}, t + 2);
+
+	auto pr1 = queue.pull_request(t);
+	ASSERT_TRUE(pr1.is_retn());
+	auto pr2 = queue.pull_request(t + 1);
+	// ReqParams{10,10} from request #3 has no effect on request #2
+	ASSERT_TRUE(pr2.is_retn());
+	auto pr3 = queue.pull_request(t + 2);
+	ASSERT_TRUE(pr3.is_future());
+	EXPECT_DOUBLE_EQ(t + 12, pr3.getTime());
+      }
+    }
+
 #if 0
     TEST(dmclock_server, reservation_timing) {
       using ClientId = int;
@@ -747,7 +792,7 @@ namespace crimson {
 
     TEST(dmclock_server_pull, dynamic_cli_info_f) {
       using ClientId = int;
-      using Queue = dmc::PullPriorityQueue<ClientId,Request,true>;
+      using Queue = dmc::PullPriorityQueue<ClientId,Request,true,true>;
       using QueueRef = std::unique_ptr<Queue>;
 
       ClientId client1 = 17;

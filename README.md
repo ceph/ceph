@@ -16,11 +16,6 @@ To turn on profiling, run cmake with an additional:
 
     -DPROFILE=yes
 
-An optimization/fix to the published algorithm has been added and is
-on by default. To disable this optimization/fix run cmake with:
-
-    -DDO_NOT_DELAY_TAG_CALC=yes
-
 ## Running make
 
 ### Building the dmclock library
