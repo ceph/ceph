@@ -1652,7 +1652,6 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
     existing = NULL;
     goto open;
   }
-  ceph_abort();
 
  replace:
   ldout(async_msgr->cct, 10) << __func__ << " accept replacing " << existing << dendl;
