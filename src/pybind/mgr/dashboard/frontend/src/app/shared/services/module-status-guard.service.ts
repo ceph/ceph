@@ -9,6 +9,7 @@ import {
 } from '@angular/router';
 
 import 'rxjs/add/observable/of';
+import 'rxjs/add/operator/catch';
 import { Observable } from 'rxjs/Observable';
 
 /**
@@ -38,9 +39,7 @@ import { Observable } from 'rxjs/Observable';
  */
 @Injectable()
 export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
-
-  constructor(private http: HttpClient,
-              private router: Router) {}
+  constructor(private http: HttpClient, private router: Router) {}
 
   canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
     return this.doCheck(route);
@@ -52,7 +51,8 @@ export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
 
   private doCheck(route: ActivatedRouteSnapshot) {
     const config = route.data['moduleStatusGuardConfig'];
-    return this.http.get(`/api/${config.apiPath}/status`)
+    return this.http
+      .get(`/api/${config.apiPath}/status`)
       .map((resp: any) => {
         if (!resp.available) {
           this.router.navigate([config.redirectTo, resp.message || '']);

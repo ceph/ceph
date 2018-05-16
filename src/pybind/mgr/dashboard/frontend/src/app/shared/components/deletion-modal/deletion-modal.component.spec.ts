@@ -1,4 +1,4 @@
-import { Component, NgModule, TemplateRef, ViewChild } from '@angular/core';
+import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@angular/core';
 import { async, ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
@@ -7,7 +7,6 @@ import { Observable } from 'rxjs/Observable';
 import { Subscriber } from 'rxjs/Subscriber';
 
 import { ModalComponent } from '../modal/modal.component';
-import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { DeletionModalComponent } from './deletion-modal.component';
 
 @NgModule({
@@ -101,11 +100,10 @@ describe('DeletionModalComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ MockComponent, DeletionModalComponent, ModalComponent,
-        SubmitButtonComponent],
-      imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule],
-    })
-    .compileComponents();
+      declarations: [MockComponent, DeletionModalComponent],
+      schemas: [NO_ERRORS_SCHEMA],
+      imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
@@ -137,8 +135,13 @@ describe('DeletionModalComponent', () => {
       component.modalRef = undefined;
     };
 
-    const expectSetup = (metaType, observer: boolean, method: boolean, pattern,
-                         template: boolean) => {
+    const expectSetup = (
+      metaType,
+      observer: boolean,
+      method: boolean,
+      pattern,
+      template: boolean
+    ) => {
       expect(component.modalRef).toBeTruthy();
       expect(component.metaType).toBe(metaType);
       expect(!!component.deletionObserver).toBe(observer);
@@ -152,70 +155,74 @@ describe('DeletionModalComponent', () => {
     });
 
     it('should throw error if no modal reference is given', () => {
-      expect(() => component.setUp({
-        metaType: undefined,
-        modalRef: undefined
-      })).toThrowError('No modal reference');
+      expect(() =>
+        component.setUp({
+          metaType: undefined,
+          modalRef: undefined
+        })
+      ).toThrowError('No modal reference');
     });
 
     it('should throw error if no meta type is given', () => {
-      expect(() => component.setUp({
-        metaType: undefined,
-        modalRef: mockComponent.ctrlRef
-      })).toThrowError('No meta type');
+      expect(() =>
+        component.setUp({
+          metaType: undefined,
+          modalRef: mockComponent.ctrlRef
+        })
+      ).toThrowError('No meta type');
     });
 
     it('should throw error if no deletion method is given', () => {
-      expect(() => component.setUp({
-        metaType: 'Sth',
-        modalRef: mockComponent.ctrlRef
-      })).toThrowError('No deletion method');
+      expect(() =>
+        component.setUp({
+          metaType: 'Sth',
+          modalRef: mockComponent.ctrlRef
+        })
+      ).toThrowError('No deletion method');
     });
 
-    it('should throw no errors if metaType, modalRef and a deletion method were given',
-        () => {
-          component.setUp({
-            metaType: 'Observer',
-            modalRef: mockComponent.ctrlRef,
-            deletionObserver: mockComponent.fakeDelete()
-          });
-          expectSetup('Observer', true, false, 'yes', false);
-          clearSetup();
-          component.setUp({
-            metaType: 'Controller',
-            modalRef: mockComponent.ctrlRef,
-            deletionMethod: mockComponent.fakeDeleteController
-          });
-          expectSetup('Controller', false, true, 'yes', false);
-        });
-
-    it('should test optional parameters - pattern and description',
-      () => {
-        component.setUp({
-          metaType: 'Pattern only',
-          modalRef: mockComponent.ctrlRef,
-          deletionObserver: mockComponent.fakeDelete(),
-          pattern: '{sth/!$_8()'
-        });
-        expectSetup('Pattern only', true, false, '{sth/!$_8()', false);
-        clearSetup();
-        component.setUp({
-          metaType: 'Description only',
-          modalRef: mockComponent.ctrlRef,
-          deletionObserver: mockComponent.fakeDelete(),
-          description: mockComponent.modalDescription
-        });
-        expectSetup('Description only', true, false, 'yes', true);
-        clearSetup();
-        component.setUp({
-          metaType: 'Description and pattern',
-          modalRef: mockComponent.ctrlRef,
-          deletionObserver: mockComponent.fakeDelete(),
-          description: mockComponent.modalDescription,
-          pattern: '{sth/!$_8()'
-        });
-        expectSetup('Description and pattern', true, false, '{sth/!$_8()', true);
+    it('should throw no errors if metaType, modalRef and a deletion method were given', () => {
+      component.setUp({
+        metaType: 'Observer',
+        modalRef: mockComponent.ctrlRef,
+        deletionObserver: mockComponent.fakeDelete()
       });
+      expectSetup('Observer', true, false, 'yes', false);
+      clearSetup();
+      component.setUp({
+        metaType: 'Controller',
+        modalRef: mockComponent.ctrlRef,
+        deletionMethod: mockComponent.fakeDeleteController
+      });
+      expectSetup('Controller', false, true, 'yes', false);
+    });
+
+    it('should test optional parameters - pattern and description', () => {
+      component.setUp({
+        metaType: 'Pattern only',
+        modalRef: mockComponent.ctrlRef,
+        deletionObserver: mockComponent.fakeDelete(),
+        pattern: '{sth/!$_8()'
+      });
+      expectSetup('Pattern only', true, false, '{sth/!$_8()', false);
+      clearSetup();
+      component.setUp({
+        metaType: 'Description only',
+        modalRef: mockComponent.ctrlRef,
+        deletionObserver: mockComponent.fakeDelete(),
+        description: mockComponent.modalDescription
+      });
+      expectSetup('Description only', true, false, 'yes', true);
+      clearSetup();
+      component.setUp({
+        metaType: 'Description and pattern',
+        modalRef: mockComponent.ctrlRef,
+        deletionObserver: mockComponent.fakeDelete(),
+        description: mockComponent.modalDescription,
+        pattern: '{sth/!$_8()'
+      });
+      expectSetup('Description and pattern', true, false, '{sth/!$_8()', true);
+    });
   });
 
   it('should test if the ctrl driven mock is set correctly through mock component', () => {
@@ -338,5 +345,4 @@ describe('DeletionModalComponent', () => {
       });
     });
   });
-
 });

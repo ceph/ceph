@@ -5,11 +5,13 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 import {
   AlertModule,
-  BsDropdownModule, BsModalRef,
+  BsDropdownModule,
+  BsModalRef,
   ModalModule,
   TabsModule,
   TooltipModule
 } from 'ngx-bootstrap';
+import 'rxjs/add/observable/throw';
 import { Observable } from 'rxjs/Observable';
 
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -38,9 +40,8 @@ describe('RbdListComponent', () => {
         RouterTestingModule,
         HttpClientTestingModule
       ],
-      declarations: [ RbdListComponent, RbdDetailsComponent, RbdSnapshotListComponent ]
-    })
-    .compileComponents();
+      declarations: [RbdListComponent, RbdDetailsComponent, RbdSnapshotListComponent]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
@@ -62,22 +63,31 @@ describe('RbdListComponent', () => {
       called = false;
       rbdService = new RbdService(null);
       notificationService = new NotificationService(null, null);
-      component = new RbdListComponent(rbdService, null, null, null, null, notificationService,
-                                       null, null);
-      spyOn(rbdService, 'delete').and.returnValue(Observable.throw({status: 500}));
+      component = new RbdListComponent(
+        rbdService,
+        null,
+        null,
+        null,
+        null,
+        notificationService,
+        null,
+        null
+      );
+      spyOn(rbdService, 'delete').and.returnValue(Observable.throw({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();
       component.modalRef = new BsModalRef();
       component.modalRef.content = {
-        stopLoadingSpinner: () => called = true
+        stopLoadingSpinner: () => (called = true)
       };
     });
 
-    it('should make sure that if the deletion fails stopLoadingSpinner is called',
-        <any>fakeAsync(() => {
-          expect(called).toBe(false);
-          component.deleteRbd('sth', 'test');
-          tick(500);
-          expect(called).toBe(true);
-        }));
+    it('should make sure that if the deletion fails stopLoadingSpinner is called', <any>fakeAsync(
+      () => {
+        expect(called).toBe(false);
+        component.deleteRbd('sth', 'test');
+        tick(500);
+        expect(called).toBe(true);
+      }
+    ));
   });
 });
