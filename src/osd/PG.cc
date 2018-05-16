@@ -4566,6 +4566,8 @@ int PG::build_scrub_map_chunk(
   _repair_oinfo_oid(map);
   if (!is_primary()) {
     ScrubMap for_meta_scrub;
+    // In case we restarted smaller chunk, clear old data
+    scrubber.cleaned_meta_map.clear_from(scrubber.start);
     scrubber.cleaned_meta_map.insert(map);
     scrubber.clean_meta_map(for_meta_scrub);
     _scan_snaps(for_meta_scrub);
