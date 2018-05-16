@@ -419,7 +419,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
     return;
 
   {
-    Mutex::Locker l(lock);
+    std::unique_lock l(lock);
     events.emplace_back(stamp, event);
     current = events.back().c_str();
   }
@@ -437,7 +437,7 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
     return;
 
   {
-    Mutex::Locker l(lock);
+    std::unique_lock l(lock);
     events.emplace_back(stamp, event);
     current = event;
   }

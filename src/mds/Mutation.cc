@@ -376,7 +376,7 @@ void MDRequestImpl::_dump(Formatter *f) const
   }
   {
     f->open_array_section("events");
-    Mutex::Locker l(lock);
+    std::unique_lock l(lock);
     for (auto& i : events) {
       f->dump_object("event", i);
     }

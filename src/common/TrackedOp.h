@@ -175,7 +175,7 @@ protected:
   /// list of events and their times
   boost::container::small_vector<Event, OPTRACKER_PREALLOC_EVENTS> events;
 
-  mutable Mutex lock = {"TrackedOp::lock"}; ///< to protect the events list
+  mutable std::mutex lock; ///< to protect the events list
   const char *current = 0; ///< the current state the event is in
   uint64_t seq = 0;        ///< a unique value set by the OpTracker
 
@@ -224,7 +224,7 @@ public:
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
-      Mutex::Locker l(lock);
+      std::unique_lock l(lock);
       _gen_desc();
     }
     return desc;
@@ -247,7 +247,7 @@ public:
   }
 
   double get_duration() const {
-    Mutex::Locker l(lock);
+    std::unique_lock l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
       return events.rbegin()->stamp - get_initiated();
     else
@@ -264,7 +264,7 @@ public:
   }
 
   virtual const char *state_string() const {
-    Mutex::Locker l(lock);
+    std::unique_lock l(lock);
     return events.rbegin()->c_str();
   }
 
