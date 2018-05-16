@@ -20,7 +20,8 @@ public:
   void print(ostream& out) const override {
     out << "client_quota(";
     out << " [" << ino << "] ";
-    out << rstat;
+    out << rstat << " ";
+    out << quota;
     out << ")";
   }
 
