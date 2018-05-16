@@ -1184,6 +1184,16 @@ OPTION(filestore_queue_max_delay_multiple, OPT_DOUBLE)
 /// Filestore high delay multiple.  Defaults to 0 (disabled)
 OPTION(filestore_queue_high_delay_multiple, OPT_DOUBLE)
 
+/// Filestore max delay multiple bytes.  Defaults to 0 (disabled)
+OPTION(filestore_queue_max_delay_multiple_bytes, OPT_DOUBLE)
+/// Filestore high delay multiple bytes.  Defaults to 0 (disabled)
+OPTION(filestore_queue_high_delay_multiple_bytes, OPT_DOUBLE)
+
+/// Filestore max delay multiple ops.  Defaults to 0 (disabled)
+OPTION(filestore_queue_max_delay_multiple_ops, OPT_DOUBLE)
+/// Filestore high delay multiple ops.  Defaults to 0 (disabled)
+OPTION(filestore_queue_high_delay_multiple_ops, OPT_DOUBLE)
+
 /// Use above to inject delays intended to keep the op queue between low and high
 OPTION(filestore_queue_low_threshhold, OPT_DOUBLE)
 OPTION(filestore_queue_high_threshhold, OPT_DOUBLE)
