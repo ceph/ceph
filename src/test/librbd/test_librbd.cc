@@ -5317,13 +5317,14 @@ TEST_F(TestLibRBD, UpdateFeatures)
   ASSERT_EQ(0, image.features(&features));
   ASSERT_NE(0U, features & RBD_FEATURE_EXCLUSIVE_LOCK);
 
-  // cannot enable fast diff w/o object map
-  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_FAST_DIFF, true));
-  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+  // can enable fast diff w/o object map
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_FAST_DIFF, true));
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
   ASSERT_EQ(0, image.features(&features));
   ASSERT_NE(0U, features & RBD_FEATURE_OBJECT_MAP);
 
-  uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID;
+  uint64_t expected_flags = RBD_FLAG_OBJECT_MAP_INVALID |
+	  RBD_FLAG_FAST_DIFF_INVALID;
   uint64_t flags;
   ASSERT_EQ(0, image.get_flags(&flags));
   ASSERT_EQ(expected_flags, flags);
@@ -5332,29 +5333,23 @@ TEST_F(TestLibRBD, UpdateFeatures)
   ASSERT_EQ(0, image.features(&features));
   ASSERT_EQ(0U, features & RBD_FEATURE_OBJECT_MAP);
 
-  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP |
-                                     RBD_FEATURE_FAST_DIFF |
-                                     RBD_FEATURE_JOURNALING, true));
-
-  expected_flags = RBD_FLAG_OBJECT_MAP_INVALID | RBD_FLAG_FAST_DIFF_INVALID;
-  ASSERT_EQ(0, image.get_flags(&flags));
-  ASSERT_EQ(expected_flags, flags);
-
-  // cannot disable object map w/ fast diff
-  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
-  ASSERT_EQ(0, image.update_features(RBD_FEATURE_FAST_DIFF, false));
+  // can disable object map w/ fast diff
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
+  ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_FAST_DIFF, false));
   ASSERT_EQ(0, image.features(&features));
   ASSERT_EQ(0U, features & RBD_FEATURE_FAST_DIFF);
 
-  expected_flags = RBD_FLAG_OBJECT_MAP_INVALID;
   ASSERT_EQ(0, image.get_flags(&flags));
-  ASSERT_EQ(expected_flags, flags);
+  ASSERT_EQ(0U, flags);
 
   // cannot disable exclusive lock w/ object map
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, true));
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_OBJECT_MAP, false));
 
   // cannot disable exclusive lock w/ journaling
+  ASSERT_EQ(0, image.update_features(RBD_FEATURE_JOURNALING, true));
   ASSERT_EQ(-EINVAL, image.update_features(RBD_FEATURE_EXCLUSIVE_LOCK, false));
   ASSERT_EQ(0, image.update_features(RBD_FEATURE_JOURNALING, false));
 

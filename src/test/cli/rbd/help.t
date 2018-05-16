@@ -194,7 +194,7 @@
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
-                              fast-diff(+*), deep-flatten(+-), journaling(*)]
+                              deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -240,8 +240,7 @@
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), exclusive-lock(+*),
-                                 object-map(+*), fast-diff(+*), deep-flatten(+-),
-                                 journaling(*)]
+                                 object-map(+*), deep-flatten(+-), journaling(*)]
     --image-shared               shared image
     --stripe-unit arg            stripe unit in B/K/M
     --stripe-count arg           stripe count
@@ -286,7 +285,7 @@
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
-                              fast-diff(+*), deep-flatten(+-), journaling(*)]
+                              deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -335,8 +334,7 @@
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
                                  [layering(+), exclusive-lock(+*),
-                                 object-map(+*), fast-diff(+*), deep-flatten(+-),
-                                 journaling(*)]
+                                 object-map(+*), deep-flatten(+-), journaling(*)]
     --image-shared               shared image
     --stripe-unit arg            stripe unit in B/K/M
     --stripe-count arg           stripe count
@@ -500,7 +498,7 @@
     <image-spec>         image specification
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
-                         [exclusive-lock, object-map, fast-diff, journaling]
+                         [exclusive-lock, object-map, journaling]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -519,7 +517,7 @@
     <image-spec>              image specification
                               (example: [<pool-name>/]<image-name>)
     <features>                image features
-                              [exclusive-lock, object-map, fast-diff, journaling]
+                              [exclusive-lock, object-map, journaling]
   
   Optional arguments
     -p [ --pool ] arg         pool name
@@ -822,7 +820,7 @@
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
                               [layering(+), exclusive-lock(+*), object-map(+*),
-                              fast-diff(+*), deep-flatten(+-), journaling(*)]
+                              deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
