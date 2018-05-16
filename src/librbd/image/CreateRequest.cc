@@ -167,6 +167,10 @@ CreateRequest<I>::CreateRequest(IoCtx &ioctx, const std::string &image_name,
   m_features |= features_set;
   m_features &= ~features_clear;
 
+  if ((m_features & RBD_FEATURE_OBJECT_MAP) == RBD_FEATURE_OBJECT_MAP) {
+      m_features |= RBD_FEATURE_FAST_DIFF;
+  }
+
   if (image_options.get(RBD_IMAGE_OPTION_STRIPE_UNIT, &m_stripe_unit) != 0 ||
       m_stripe_unit == 0) {
     m_stripe_unit = m_cct->_conf->get_val<uint64_t>("rbd_default_stripe_unit");
