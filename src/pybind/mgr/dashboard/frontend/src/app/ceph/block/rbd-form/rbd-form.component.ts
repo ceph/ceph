@@ -43,7 +43,6 @@ export class RbdFormComponent implements OnInit {
   features: any;
   featuresList = [];
 
-  routeParamsSubscribe: any;
   pool: string;
 
   advancedEnabled = false;
@@ -203,7 +202,7 @@ export class RbdFormComponent implements OnInit {
     if (this.mode === this.rbdFormMode.editing ||
         this.mode === this.rbdFormMode.cloning ||
         this.mode === this.rbdFormMode.copying) {
-      this.routeParamsSubscribe = this.route.params.subscribe(
+      this.route.params.subscribe(
         (params: { pool: string, name: string, snap: string }) => {
           const poolName = params.pool;
           const rbdName = params.name;
