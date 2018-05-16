@@ -106,8 +106,9 @@ private:
    *    |                                               *   *   |
    *    | (remote image primary, no local image id)     *   *   |
    *    \----> UPDATE_CLIENT_IMAGE  * * * * * * * * * * *   *   |
-   *    |         |                                     *   *   |
-   *    |         v                                     *   *   |
+   *    |         |   ^                                 *   *   |
+   *    |         |   * (duplicate image id)            *   *   |
+   *    |         v   *                                 *   *   |
    *    \----> CREATE_LOCAL_IMAGE * * * * * * * * * * * *   *   |
    *    |         |                                     *   *   |
    *    |         v                                     *   *   |
