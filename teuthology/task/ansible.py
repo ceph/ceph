@@ -416,12 +416,13 @@ class CephLab(Ansible):
         super(CephLab, self).__init__(ctx, config)
 
     def begin(self):
-        # Emulate 'touch ~/.vault_pass.txt' to avoid ansible failing;
-        # in almost all cases we don't need the actual vault password
+        # Write foo to ~/.vault_pass.txt if it's missing.
+        # In almost all cases we don't need the actual vault password.
+        # Touching an empty file broke as of Ansible 2.4
         vault_pass_path = os.path.expanduser('~/.vault_pass.txt')
         if not os.path.exists(vault_pass_path):
-            with open(vault_pass_path, 'a'):
-                pass
+            with open(vault_pass_path, 'w') as f:
+                f.write('foo')
         super(CephLab, self).begin()
 
     def _set_status(self, status):
