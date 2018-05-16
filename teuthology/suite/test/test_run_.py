@@ -204,8 +204,10 @@ class TestScheduleSuite(object):
     @patch('teuthology.suite.util.git_ls_remote')
     @patch('teuthology.suite.util.package_version_for_hash')
     @patch('teuthology.suite.util.git_validate_sha1')
+    @patch('teuthology.suite.util.get_arch')
     def test_successful_schedule(
         self,
+        m_get_arch,
         m_git_validate_sha1,
         m_package_version_for_hash,
         m_git_ls_remote,
@@ -216,6 +218,7 @@ class TestScheduleSuite(object):
         m_has_packages_for_distro,
         m_schedule_jobs,
     ):
+        m_get_arch.return_value = 'x86_64'
         m_git_validate_sha1.return_value = self.args.ceph_sha1
         m_package_version_for_hash.return_value = 'ceph_version'
         m_git_ls_remote.return_value = 'suite_hash'
@@ -274,8 +277,10 @@ class TestScheduleSuite(object):
     @patch('teuthology.suite.util.git_ls_remote')
     @patch('teuthology.suite.util.package_version_for_hash')
     @patch('teuthology.suite.util.git_validate_sha1')
+    @patch('teuthology.suite.util.get_arch')
     def test_newest_failure(
         self,
+        m_get_arch,
         m_git_validate_sha1,
         m_package_version_for_hash,
         m_git_ls_remote,
@@ -287,6 +292,7 @@ class TestScheduleSuite(object):
         m_schedule_jobs,
         m_find_git_parent,
     ):
+        m_get_arch.return_value = 'x86_64'
         m_git_validate_sha1.return_value = self.args.ceph_sha1
         m_package_version_for_hash.return_value = 'ceph_version'
         m_git_ls_remote.return_value = 'suite_hash'
@@ -325,8 +331,10 @@ class TestScheduleSuite(object):
     @patch('teuthology.suite.util.git_ls_remote')
     @patch('teuthology.suite.util.package_version_for_hash')
     @patch('teuthology.suite.util.git_validate_sha1')
+    @patch('teuthology.suite.util.get_arch')
     def test_newest_success(
         self,
+        m_get_arch,
         m_git_validate_sha1,
         m_package_version_for_hash,
         m_git_ls_remote,
@@ -338,6 +346,7 @@ class TestScheduleSuite(object):
         m_schedule_jobs,
         m_find_git_parent,
     ):
+        m_get_arch.return_value = 'x86_64'
         # rig has_packages_for_distro to fail this many times, so
         # everything will run NUM_FAILS+1 times
         NUM_FAILS = 5
