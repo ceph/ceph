@@ -2654,8 +2654,14 @@ void Client::handle_mds_map(MMDSMap* m)
       // in its dcache/icache. Hopefully, the kernel will release some unused
       // inodes before the new MDS enters reconnect state.
       trim_cache_for_reconnect(session);
-    } else if (oldstate == newstate)
+    } else if (oldstate == newstate) {
+      if (newstate >= MDSMap::STATE_ACTIVE &&
+	  oldmap->get_mds_info(mds).export_targets !=
+	  mdsmap->get_mds_info(mds).export_targets) {
+	connect_mds_targets(mds);
+      }
       continue;  // no change
+    }
     
     session->mds_state = newstate;
     if (newstate == MDSMap::STATE_RECONNECT) {
