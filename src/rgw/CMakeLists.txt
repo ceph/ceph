@@ -126,7 +126,7 @@ set(rgw_a_srcs
   rgw_crypt.cc
   rgw_crypt_sanitize.cc
   rgw_iam_policy.cc
-  sts-assume-role.cc
+  rgw_sts.cc
   rgw_rest_sts.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf

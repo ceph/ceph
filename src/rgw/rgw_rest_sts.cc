@@ -22,7 +22,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_iam_policy_keywords.h"
 
-#include "sts-assume-role.h"
+#include "rgw_sts.h"
 
 #include <array>
 #include <sstream>
