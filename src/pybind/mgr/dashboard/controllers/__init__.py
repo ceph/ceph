@@ -282,7 +282,7 @@ def browsable_api_view(meth):
             create_form=create_form,
             delete_form=delete_form_template.format(path=self._cp_path_, sub_path='/'.join(
                 sub_path)) if sub_path else '',
-            params='<h2>Rrequest Params</h2><pre>{}</pre>'.format(
+            params='<h2>Request Params</h2><pre>{}</pre>'.format(
                 json.dumps(kwargs, indent=2)) if kwargs else '',
         )
 
