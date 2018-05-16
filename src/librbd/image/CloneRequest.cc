@@ -284,7 +284,11 @@ template <typename I>
 void CloneRequest<I>::handle_create_child(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r == -EBADF) {
+    ldout(m_cct, 5) << "image id already in-use" << dendl;
+    complete(r);
+    return;
+  } else if (r < 0) {
     lderr(m_cct) << "error creating child: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
     close_parent();
