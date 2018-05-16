@@ -551,10 +551,15 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 0) << ": init elasticsearch config zone=" << sync_env->source_zone << dendl;
-      yield call(new RGWReadRESTResourceCR<ESInfo> (sync_env->cct,
-                                                    conf->conn.get(),
-                                                    sync_env->http_manager,
-                                                    "/", nullptr, &es_info));
+      yield {
+        auto hdrs = make_param_list(&conf->default_headers);
+        call(new RGWReadRESTResourceCR<ESInfo> (sync_env->cct,
+                                                conf->conn.get(),
+                                                sync_env->http_manager,
+                                                "/", nullptr /*params*/,
+                                                &hdrs,
+                                                &es_info));
+      }
       if (retcode < 0) {
         return set_cr_error(retcode);
       }

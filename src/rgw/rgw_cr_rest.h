@@ -15,6 +15,8 @@ class RGWReadRESTResourceCR : public RGWSimpleCoroutine {
   param_vec_t params;
   T *result;
 
+  param_vec_t extra_headers;
+public:
   boost::intrusive_ptr<RGWRESTReadResource> http_op;
 
 public:
@@ -25,13 +27,24 @@ public:
       path(_path), params(make_param_list(params)), result(_result)
   {}
 
+ RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                          RGWHTTPManager *_http_manager, const string& _path,
+                          rgw_http_param_pair *params,
+                          std::map <std::string, std::string> *hdrs,
+                          T *_result)
+   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+    path(_path), params(make_param_list(params)),
+    result(_result), extra_headers(make_param_list(hdrs))
+    {}
+
+
   ~RGWReadRESTResourceCR() override {
     request_cleanup();
   }
 
   int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
-        new RGWRESTReadResource(conn, path, params, NULL, http_manager));
+        new RGWRESTReadResource(conn, path, params, &extra_headers, http_manager));
 
     op->set_user_info((void *)stack);
 
