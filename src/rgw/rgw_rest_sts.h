@@ -1,7 +1,7 @@
 #ifndef CEPH_RGW_REST_STS_H
 #define CEPH_RGW_REST_STS_H
 
-#include "sts-assume-role.h"
+#include "rgw_sts.h"
 
 class RGWREST_STS : public RGWRESTOp {
 protected:
