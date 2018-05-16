@@ -122,6 +122,7 @@ void get_arguments_deep(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_SOURCE);
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
   at::add_create_image_options(options, false);
+  at::add_flatten_option(options);
   at::add_no_progress_option(options);
 }
 

@@ -7,6 +7,9 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageRequest.h"
+#include "librbd/io/ReadResult.h"
 #include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -37,13 +40,17 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx, I *dst_image_ctx,
+ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
+                                        I *src_parent_image_ctx,
+                                        I *dst_image_ctx,
                                         const SnapMap &snap_map,
                                         uint64_t dst_object_number,
-                                        Context *on_finish)
-  : m_src_image_ctx(src_image_ctx), m_dst_image_ctx(dst_image_ctx),
-    m_cct(dst_image_ctx->cct), m_snap_map(snap_map),
-    m_dst_object_number(dst_object_number), m_on_finish(on_finish) {
+                                        bool flatten, Context *on_finish)
+  : m_src_image_ctx(src_image_ctx),
+    m_src_parent_image_ctx(src_parent_image_ctx),
+    m_dst_image_ctx(dst_image_ctx), m_cct(dst_image_ctx->cct),
+    m_snap_map(snap_map), m_dst_object_number(dst_object_number),
+    m_flatten(flatten), m_on_finish(on_finish) {
   assert(!m_snap_map.empty());
 
   m_src_io_ctx.dup(m_src_image_ctx->data_ctx);
@@ -92,11 +99,7 @@ void ObjectCopyRequest<I>::handle_list_snaps(int r) {
 
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  if (r == -ENOENT) {
-    r = 0;
-  }
-
-  if (r < 0) {
+  if (r < 0 && r != -ENOENT) {
     lderr(m_cct) << "failed to list snaps: " << cpp_strerror(r) << dendl;
     finish(r);
     return;
@@ -115,7 +118,19 @@ void ObjectCopyRequest<I>::handle_list_snaps(int r) {
     m_retry_snap_set = {};
   }
 
-  compute_read_ops();
+  if (r == -ENOENT) {
+    for (auto &it : m_src_object_extents) {
+      auto &e = it.second;
+      if (e.object_no == m_src_ono) {
+        e.noent = true;
+      }
+    }
+    m_read_ops = {};
+    m_read_snaps = {};
+    m_zero_interval = {};
+  } else {
+    compute_read_ops();
+  }
   send_read_object();
 }
 
@@ -135,16 +150,7 @@ void ObjectCopyRequest<I>::send_read_object() {
     }
 
     // all objects have been read
-
-    compute_zero_ops();
-
-    if (m_write_ops.empty()) {
-      // nothing to copy
-      finish(0);
-      return;
-    }
-
-    send_write_object();
+    send_read_from_parent();
     return;
   }
 
@@ -221,6 +227,71 @@ void ObjectCopyRequest<I>::handle_read_object(int r) {
 }
 
 template <typename I>
+void ObjectCopyRequest<I>::send_read_from_parent() {
+  io::Extents image_extents;
+  compute_read_from_parent_ops(&image_extents);
+  if (image_extents.empty()) {
+    handle_read_from_parent(0);
+    return;
+  }
+
+  ldout(m_cct, 20) << dendl;
+
+  assert(m_src_parent_image_ctx != nullptr);
+
+  auto ctx = create_context_callback<
+    ObjectCopyRequest<I>, &ObjectCopyRequest<I>::handle_read_from_parent>(this);
+  auto comp = io::AioCompletion::create_and_start(
+    ctx, util::get_image_ctx(m_src_image_ctx), io::AIO_TYPE_READ);
+  ldout(m_cct, 20) << "completion " << comp << ", extents " << image_extents
+                   << dendl;
+  io::ImageRequest<I>::aio_read(m_src_parent_image_ctx, comp,
+                                std::move(image_extents),
+                                io::ReadResult{&m_read_from_parent_data}, 0,
+                                ZTracer::Trace());
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::handle_read_from_parent(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to read from parent: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  if (!m_read_ops.empty()) {
+    assert(m_read_ops.size() == 1);
+    auto src_snap_seq = m_read_ops.begin()->first.first;
+    auto &copy_ops = m_read_ops.begin()->second;
+    uint64_t offset = 0;
+    for (auto it = copy_ops.begin(); it != copy_ops.end(); ) {
+      it->out_bl.substr_of(m_read_from_parent_data, offset, it->length);
+      offset += it->length;
+      if (it->out_bl.is_zero()) {
+        m_zero_interval[src_snap_seq].insert(it->dst_offset, it->length);
+        it = copy_ops.erase(it);
+      } else {
+        it++;
+      }
+    }
+    merge_write_ops();
+  }
+
+  compute_zero_ops();
+
+  if (m_write_ops.empty()) {
+    // nothing to copy
+    finish(0);
+    return;
+  }
+
+  send_write_object();
+  return;
+}
+
+template <typename I>
 void ObjectCopyRequest<I>::send_write_object() {
   assert(!m_write_ops.empty());
 
@@ -267,6 +338,10 @@ void ObjectCopyRequest<I>::send_write_object() {
                        << copy_op.length << dendl;
       op.zero(copy_op.dst_offset, copy_op.length);
       break;
+    case COPY_OP_TYPE_REMOVE_TRUNC:
+      ldout(m_cct, 20) << "create op" << dendl;
+      op.create(false);
+      // fall through
     case COPY_OP_TYPE_TRUNC:
       ldout(m_cct, 20) << "trunc op: " << copy_op.dst_offset << dendl;
       op.truncate(copy_op.dst_offset);
@@ -471,8 +546,9 @@ void ObjectCopyRequest<I>::compute_read_ops() {
   m_zero_interval = {};
 
   librados::snap_t src_copy_point_snap_id = m_snap_map.rbegin()->first;
-  uint64_t prev_end_size = 0;
-  bool prev_exists = false;
+  bool prev_exists = m_src_parent_image_ctx != nullptr;
+  uint64_t prev_end_size = prev_exists ?
+      m_src_image_ctx->layout.object_size : 0;
   librados::snap_t start_src_snap_id = 0;
 
   for (auto &pair : m_snap_map) {
@@ -498,6 +574,13 @@ void ObjectCopyRequest<I>::compute_read_ops() {
 
     if (!exists) {
       end_size = 0;
+      if (end_src_snap_id == m_snap_map.begin()->first &&
+          m_src_parent_image_ctx != nullptr && m_snap_set.clones.empty()) {
+        ldout(m_cct, 20) << "no clones for existing object" << dendl;
+        exists = true;
+        diff.insert(0, m_src_image_ctx->layout.object_size);
+        clone_end_snap_id = end_src_snap_id;
+      }
     }
 
     ldout(m_cct, 20) << "start_src_snap_id=" << start_src_snap_id << ", "
@@ -584,11 +667,104 @@ void ObjectCopyRequest<I>::compute_read_ops() {
 
     prev_end_size = end_size;
     prev_exists = exists;
+    if (prev_exists && prev_end_size == 0 &&
+        m_src_parent_image_ctx != nullptr) {
+      // hide parent
+      prev_end_size = m_src_image_ctx->layout.object_size;
+    }
     start_src_snap_id = end_src_snap_id;
   }
 
   for (auto &it : m_read_ops) {
     m_read_snaps.push_back(it.first);
+  }
+}
+
+template <typename I>
+void ObjectCopyRequest<I>::compute_read_from_parent_ops(
+    io::Extents *parent_image_extents) {
+  m_read_ops = {};
+  m_zero_interval = {};
+  parent_image_extents->clear();
+
+  if (m_src_parent_image_ctx == nullptr) {
+    ldout(m_cct, 20) << "no parent" << dendl;
+    return;
+  }
+
+  size_t noent_count = 0;
+  for (auto &it : m_src_object_extents) {
+    if (it.second.noent) {
+      noent_count++;
+    }
+  }
+
+  if (noent_count == 0) {
+    ldout(m_cct, 20) << "no extents need read from parent" << dendl;
+    return;
+  }
+
+  if (noent_count == m_src_object_extents.size() && !m_flatten) {
+    ldout(m_cct, 20) << "reading all extents skipped when no flatten"
+                     << dendl;
+    return;
+  }
+
+  ldout(m_cct, 20) << dendl;
+
+  auto src_snap_seq = m_snap_map.begin()->first;
+
+  RWLock::RLocker snap_locker(m_src_image_ctx->snap_lock);
+  RWLock::RLocker parent_locker(m_src_image_ctx->parent_lock);
+
+  uint64_t parent_overlap;
+  int r = m_src_image_ctx->get_parent_overlap(src_snap_seq, &parent_overlap);
+  if (r < 0) {
+    ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
+                    << src_snap_seq << ": " << cpp_strerror(r) << dendl;
+    return;
+  }
+  if (parent_overlap == 0) {
+    ldout(m_cct, 20) << "no parent overlap" << dendl;
+    return;
+  }
+
+  for (auto &it : m_src_object_extents) {
+    auto dst_object_offset = it.first;
+    auto &e = it.second;
+
+    if (!e.noent) {
+      continue;
+    }
+
+    std::vector<std::pair<uint64_t, uint64_t>> image_extents;
+    Striper::extent_to_file(m_cct, &m_src_image_ctx->layout, e.object_no,
+                            e.offset, e.length, image_extents);
+
+    uint64_t overlap = m_src_image_ctx->prune_parent_extents(image_extents,
+                                                             parent_overlap);
+    if (overlap == 0) {
+      ldout(m_cct, 20) << "no parent overlap for object_no " << e.object_no
+                       << " extent " << e.offset << "~" << e.length << dendl;
+      continue;
+    }
+
+    ldout(m_cct, 20) << "object_no " << e.object_no << " extent " << e.offset
+                     << "~" << e.length << " overlap " << parent_overlap
+                     << " parent extents " << image_extents << dendl;
+
+    assert(image_extents.size() == 1);
+
+    auto src_image_offset = image_extents.begin()->first;
+    auto length = image_extents.begin()->second;
+    m_read_ops[{src_snap_seq, 0}].emplace_back(COPY_OP_TYPE_WRITE, e.offset,
+                                               dst_object_offset, length);
+    m_read_ops[{src_snap_seq, 0}].rbegin()->src_extent_map[e.offset] = length;
+    parent_image_extents->emplace_back(src_image_offset, length);
+  }
+
+  if (!parent_image_extents->empty()) {
+    m_dst_object_state[src_snap_seq] = OBJECT_EXISTS;
   }
 }
 
@@ -640,6 +816,39 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
   bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
   uint64_t prev_end_size = 0;
+  bool hide_parent = false;
+  if (m_src_parent_image_ctx != nullptr) {
+    RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+    RWLock::RLocker parent_locker(m_dst_image_ctx->parent_lock);
+    auto dst_snap_seq = m_snap_map.begin()->second.front();
+    uint64_t parent_overlap = 0;
+    int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &parent_overlap);
+    if (r < 0) {
+      ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
+                      << dst_snap_seq << ": " << cpp_strerror(r) << dendl;
+    }
+    if (parent_overlap == 0) {
+      ldout(m_cct, 20) << "no parent overlap" << dendl;
+    } else {
+      std::vector<std::pair<uint64_t, uint64_t>> image_extents;
+      Striper::extent_to_file(m_cct, &m_dst_image_ctx->layout,
+                              m_dst_object_number, 0,
+                              m_dst_image_ctx->layout.object_size,
+                              image_extents);
+      uint64_t overlap = m_dst_image_ctx->prune_parent_extents(image_extents,
+                                                               parent_overlap);
+      if (overlap == 0) {
+        ldout(m_cct, 20) << "no parent overlap" << dendl;
+      } else {
+        for (auto e : image_extents) {
+          prev_end_size += e.second;
+        }
+        assert(prev_end_size <= m_dst_image_ctx->layout.object_size);
+        hide_parent = true;
+      }
+    }
+  }
+
   for (auto &it : m_dst_zero_interval) {
     auto src_snap_seq = it.first;
     auto &zero_interval = it.second;
@@ -659,7 +868,11 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     for (auto z = zero_interval.begin(); z != zero_interval.end(); z++) {
       if (z.get_start() + z.get_len() >= end_size) {
         // zero interval at the object end
-        if (z.get_start() < prev_end_size) {
+        if (z.get_start() == 0 && hide_parent) {
+          m_write_ops[src_snap_seq]
+            .emplace_back(COPY_OP_TYPE_REMOVE_TRUNC, 0, 0, 0);
+          ldout(m_cct, 20) << "COPY_OP_TYPE_REMOVE_TRUNC" << dendl;
+        } else if (z.get_start() < prev_end_size) {
           if (z.get_start() == 0) {
             m_write_ops[src_snap_seq]
               .emplace_back(COPY_OP_TYPE_REMOVE, 0, 0, 0);
@@ -681,7 +894,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
     }
     ldout(m_cct, 20) << "src_snap_seq=" << src_snap_seq << ", end_size="
                      << end_size << dendl;
-    if (end_size > 0) {
+    if (end_size > 0 || hide_parent) {
       m_dst_object_state[src_snap_seq] = OBJECT_EXISTS;
       if (fast_diff && end_size == prev_end_size &&
           m_write_ops[src_snap_seq].empty()) {

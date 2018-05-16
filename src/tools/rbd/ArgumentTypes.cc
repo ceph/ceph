@@ -367,6 +367,12 @@ void add_export_format_option(boost::program_options::options_description *opt) 
     ("export-format", po::value<ExportFormat>(), "format of image file");
 }
 
+void add_flatten_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    (IMAGE_FLATTEN.c_str(), po::bool_switch(),
+     "fill clone with parent data (make it independent)");
+}
+
 std::string get_short_features_help(bool append_suffix) {
   std::ostringstream oss;
   bool first_feature = true;
