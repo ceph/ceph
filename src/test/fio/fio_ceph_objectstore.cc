@@ -538,7 +538,7 @@ class UnitComplete : public Context {
   }
 };
 
-int fio_ceph_os_queue(thread_data* td, io_u* u)
+enum fio_q_status fio_ceph_os_queue(thread_data* td, io_u* u)
 {
   fio_ro_check(td, u);
 
