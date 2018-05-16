@@ -80,10 +80,12 @@ using AssumeRoleResponse = std::tuple<int, AssumedRoleUser, Credentials, uint64_
 class STSService {
   CephContext* cct;
   RGWRados *store;
+  rgw_user user_id;
   RGWRole role;
+  int _storeARNandPolicy(string& policy, string& arn);
 public:
   STSService() = default;
-  STSService(CephContext* _cct, RGWRados *_store) : cct(_cct), store(_store) {}
+  STSService(CephContext* _cct, RGWRados *_store, rgw_user _user_id) : cct(_cct), store(_store), user_id(_user_id) {}
   std::tuple<int, RGWRole> getRoleInfo(const string& arn);
   AssumeRoleResponse assumeRole(AssumeRoleRequest& req);
 };

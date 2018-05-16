@@ -108,6 +108,7 @@ using ceph::crypto::MD5;
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
 
+#define RGW_ATTR_USER_POLICY    RGW_ATTR_PREFIX "user-policy"
 
 /* RGW File Attributes */
 #define RGW_ATTR_UNIX_KEY1      RGW_ATTR_PREFIX "unix-key1"
@@ -221,6 +222,8 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_ENCRYPTION_ALGORITHM                 2214
 
 #define ERR_BUSY_RESHARDING      2300
+#define ERR_NO_SUCH_ENTITY       2301
+
 // STS Errors
 #define ERR_PACKED_POLICY_TOO_LARGE 2400
 
@@ -635,6 +638,8 @@ struct RGWUserInfo
   map<int, string> temp_url_keys;
   RGWQuotaInfo user_quota;
   uint32_t type;
+  set<string> mfa_ids; // while mfa is not backported, keep encoding
+  string assumed_role_arn;
 
   RGWUserInfo()
     : auid(0),
@@ -654,8 +659,8 @@ struct RGWUserInfo
   }
 
   void encode(bufferlist& bl) const {
-     ENCODE_START(19, 9, bl);
-     ::encode(auid, bl);
+     ENCODE_START(21, 9, bl);
+     ::encode((uint64_t)0, bl); // old auid
      string access_key;
      string secret_key;
      if (!access_keys.empty()) {
@@ -695,6 +700,8 @@ struct RGWUserInfo
      ::encode(user_id.tenant, bl);
      ::encode(admin, bl);
      ::encode(type, bl);
+     ::encode(mfa_ids, bl);
+     ::encode(assumed_role_arn, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -770,6 +777,9 @@ struct RGWUserInfo
     }
     if (struct_v >= 19) {
       ::decode(type, bl);
+    }
+    if (struct_v >= 21) {
+      ::decode(assumed_role_arn, bl);
     }
     DECODE_FINISH(bl);
   }
