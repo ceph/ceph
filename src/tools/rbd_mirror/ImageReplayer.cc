@@ -149,13 +149,7 @@ public:
   }
 
   bool call(Formatter *f, stringstream *ss) override {
-    C_SaferCond cond;
-    this->replayer->flush(&cond);
-    int r = cond.wait();
-    if (r < 0) {
-      *ss << "flush: " << cpp_strerror(r);
-      return false;
-    }
+    this->replayer->flush();
     return true;
   }
 };
