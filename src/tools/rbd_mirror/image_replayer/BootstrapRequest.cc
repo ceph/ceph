@@ -496,7 +496,12 @@ template <typename I>
 void BootstrapRequest<I>::handle_create_local_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
-  if (r < 0) {
+  if (r == -EBADF) {
+    dout(5) << ": image id " << m_local_image_id << " already in-use" << dendl;
+    m_local_image_id = "";
+    update_client_image();
+    return;
+  } else if (r < 0) {
     if (r == -ENOENT) {
       dout(10) << ": parent image does not exist" << dendl;
     } else {
