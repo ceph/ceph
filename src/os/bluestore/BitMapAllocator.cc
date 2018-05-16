@@ -80,35 +80,6 @@ void BitMapAllocator::insert_free(uint64_t off, uint64_t len)
              len / m_block_size);
 }
 
-int BitMapAllocator::reserve(uint64_t need)
-{
-  int nblks = need / m_block_size; // apply floor
-  assert(!(need % m_block_size));
-  dout(10) << __func__ << " instance " << (uint64_t) this
-           << " num_used " << m_bit_alloc->get_used_blocks()
-           << " total " << m_bit_alloc->total_blocks()
-           << dendl;
-
-  if (!m_bit_alloc->reserve_blocks(nblks)) {
-    return -ENOSPC;
-  }
-  return 0;
-}
-
-void BitMapAllocator::unreserve(uint64_t unused)
-{
-  int nblks = unused / m_block_size;
-  assert(!(unused % m_block_size));
-
-  dout(10) << __func__ << " instance " << (uint64_t) this
-           << " unused " << nblks
-           << " num used " << m_bit_alloc->get_used_blocks()
-           << " total " << m_bit_alloc->total_blocks()
-           << dendl;
-
-  m_bit_alloc->unreserve_blocks(nblks);
-}
-
 int64_t BitMapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
   int64_t hint, PExtentVector *extents)
@@ -119,14 +90,43 @@ int64_t BitMapAllocator::allocate(
 
   assert(!max_alloc_size || max_alloc_size >= alloc_unit);
 
+  {
+    int nblks = want_size / m_block_size; // apply floor
+    assert(!(want_size % m_block_size));
+    dout(10) << __func__ << " instance " << (uint64_t) this
+           << " num_used " << m_bit_alloc->get_used_blocks()
+           << " total " << m_bit_alloc->total_blocks()
+           << dendl;
+
+    if (!m_bit_alloc->reserve_blocks(nblks)) {
+      return -ENOSPC;
+    }
+  }
+
+
   dout(10) << __func__ <<" instance "<< (uint64_t) this
      << " want_size " << want_size
      << " alloc_unit " << alloc_unit
      << " hint " << hint
      << dendl;
   hint = hint % m_total_size; // make hint error-tolerant
-  return allocate_dis(want_size, alloc_unit / m_block_size,
+  auto res = allocate_dis(want_size, alloc_unit / m_block_size,
                       max_alloc_size, hint / m_block_size, extents);
+
+  if (res < want_size) {
+    auto unused = want_size - res;
+    int nblks = unused / m_block_size;
+    assert(!(unused % m_block_size));
+
+    dout(10) << __func__ << " instance " << (uint64_t) this
+	     << " unused " << nblks
+	     << " num used " << m_bit_alloc->get_used_blocks()
+	     << " total " << m_bit_alloc->total_blocks()
+	     << dendl;
+
+    m_bit_alloc->unreserve_blocks(nblks);
+  }
+  return res;
 }
 
 int64_t BitMapAllocator::allocate_dis(

@@ -20,3 +20,12 @@ Allocator *Allocator::create(CephContext* cct, string type,
 	     << type << dendl;
   return nullptr;
 }
+
+void Allocator::release(const PExtentVector& release_vec)
+{
+  interval_set<uint64_t> release_set;
+  for (auto e : release_vec) {
+    release_set.insert(e.offset, e.length);
+  }
+  release(release_set);
+}
