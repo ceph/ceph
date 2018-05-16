@@ -1877,6 +1877,67 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0U, statuses.size());
 }
 
+TEST_F(TestClsRbd, mirror_image_map)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_MIRRORING);
+
+  std::map<std::string, cls::rbd::MirrorImageMap> image_mapping;
+  ASSERT_EQ(-ENOENT, mirror_image_map_list(&ioctx, "", 0, &image_mapping));
+
+  utime_t expected_time = ceph_clock_now();
+
+  bufferlist expected_data;
+  expected_data.append("test");
+
+  std::map<std::string, cls::rbd::MirrorImageMap> expected_image_mapping;
+  while (expected_image_mapping.size() < 1024) {
+    librados::ObjectWriteOperation op;
+    for (uint32_t i = 0; i < 32; ++i) {
+      std::string global_image_id{stringify(expected_image_mapping.size())};
+      cls::rbd::MirrorImageMap mirror_image_map{
+        stringify(i), expected_time, expected_data};
+      expected_image_mapping.emplace(global_image_id, mirror_image_map);
+
+      mirror_image_map_update(&op, global_image_id, mirror_image_map);
+    }
+    ASSERT_EQ(0, ioctx.operate(RBD_MIRRORING, &op));
+  }
+
+  ASSERT_EQ(0, mirror_image_map_list(&ioctx, "", 1000, &image_mapping));
+  ASSERT_EQ(1000U, image_mapping.size());
+
+  ASSERT_EQ(0, mirror_image_map_list(&ioctx, image_mapping.rbegin()->first,
+                                     1000, &image_mapping));
+  ASSERT_EQ(24U, image_mapping.size());
+
+  const auto& image_map = *image_mapping.begin();
+  ASSERT_EQ("978", image_map.first);
+
+  cls::rbd::MirrorImageMap expected_mirror_image_map{
+    stringify(18), expected_time, expected_data};
+  ASSERT_EQ(expected_mirror_image_map, image_map.second);
+
+  expected_time = ceph_clock_now();
+  expected_mirror_image_map.mapped_time = expected_time;
+
+  expected_data.append("update");
+  expected_mirror_image_map.data = expected_data;
+
+  librados::ObjectWriteOperation op;
+  mirror_image_map_remove(&op, "1");
+  mirror_image_map_update(&op, "10", expected_mirror_image_map);
+  ASSERT_EQ(0, ioctx.operate(RBD_MIRRORING, &op));
+
+  ASSERT_EQ(0, mirror_image_map_list(&ioctx, "0", 1, &image_mapping));
+  ASSERT_EQ(1U, image_mapping.size());
+
+  const auto& updated_image_map = *image_mapping.begin();
+  ASSERT_EQ("10", updated_image_map.first);
+  ASSERT_EQ(expected_mirror_image_map, updated_image_map.second);
+}
+
 TEST_F(TestClsRbd, mirror_instances) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
