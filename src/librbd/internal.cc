@@ -311,6 +311,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     {RBD_IMAGE_OPTION_FEATURES_SET, UINT64},
     {RBD_IMAGE_OPTION_FEATURES_CLEAR, UINT64},
     {RBD_IMAGE_OPTION_DATA_POOL, STR},
+    {RBD_IMAGE_OPTION_FLATTEN, UINT64},
   };
 
   std::string image_option_name(int optname) {
@@ -337,6 +338,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return "features_clear";
     case RBD_IMAGE_OPTION_DATA_POOL:
       return "data_pool";
+    case RBD_IMAGE_OPTION_FLATTEN:
+      return "flatten";
     default:
       return "unknown (" + stringify(optname) + ")";
     }
@@ -842,6 +845,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     CephContext *cct = (CephContext *)io_ctx.cct();
+    uint64_t flatten;
+    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+      lderr(cct) << "create does not support 'flatten' image option" << dendl;
+      return -EINVAL;
+    }
+
     ldout(cct, 10) << __func__ << " name=" << image_name << ", "
 		   << "id= " << id << ", "
 		   << "size=" << size << ", opts=" << opts << dendl;
@@ -927,6 +936,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     CephContext *cct = (CephContext *)p_ioctx.cct();
     if (p_snap_name == NULL) {
       lderr(cct) << "image to be cloned must be a snapshot" << dendl;
+      return -EINVAL;
+    }
+
+    uint64_t flatten;
+    if (c_opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+      lderr(cct) << "clone does not support 'flatten' image option" << dendl;
       return -EINVAL;
     }
 
@@ -1728,6 +1743,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 	   ImageOptions& opts, ProgressContext &prog_ctx, size_t sparse_size)
   {
     CephContext *cct = (CephContext *)dest_md_ctx.cct();
+    uint64_t flatten;
+    if (opts.get(RBD_IMAGE_OPTION_FLATTEN, &flatten) == 0) {
+      lderr(cct) << "copy does not support 'flatten' image option" << dendl;
+      return -EINVAL;
+    }
+
     ldout(cct, 20) << "copy " << src->name
 		   << (src->snap_name.length() ? "@" + src->snap_name : "")
 		   << " -> " << destname << " opts = " << opts << dendl;

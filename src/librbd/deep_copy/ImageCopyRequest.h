@@ -31,20 +31,21 @@ public:
   static ImageCopyRequest* create(ImageCtxT *src_image_ctx,
                                   ImageCtxT *dst_image_ctx,
                                   librados::snap_t snap_id_start,
-                                  librados::snap_t snap_id_end,
+                                  librados::snap_t snap_id_end, bool flatten,
                                   const ObjectNumber &object_number,
                                   const SnapSeqs &snap_seqs,
                                   ProgressContext *prog_ctx,
                                   Context *on_finish) {
     return new ImageCopyRequest(src_image_ctx, dst_image_ctx, snap_id_start,
-                                snap_id_end, object_number, snap_seqs, prog_ctx,
-                                on_finish);
+                                snap_id_end, flatten, object_number, snap_seqs,
+                                prog_ctx, on_finish);
   }
 
   ImageCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
                    librados::snap_t snap_id_start, librados::snap_t snap_id_end,
-                   const ObjectNumber &object_number, const SnapSeqs &snap_seqs,
-                   ProgressContext *prog_ctx, Context *on_finish);
+                   bool flatten, const ObjectNumber &object_number,
+                   const SnapSeqs &snap_seqs, ProgressContext *prog_ctx,
+                   Context *on_finish);
 
   void send();
   void cancel();
@@ -53,10 +54,21 @@ private:
   /**
    * @verbatim
    *
-   * <start>   . . . . .
+   * <start>
+   *    |
+   *    v
+   * OPEN_PARENT (skip if not needed)
+   *    |
+   *    v
+   * SET_PARENT_SNAP (skip if not needed)
+   *    |
+   *    |      . . . . .
    *    |      .       .  (parallel execution of
    *    v      v       .   multiple objects at once)
    * COPY_OBJECT . . . .
+   *    |
+   *    v
+   * CLOSE_PARENT (skip if not needed)
    *    |
    *    v
    * <finish>
@@ -68,6 +80,7 @@ private:
   ImageCtxT *m_dst_image_ctx;
   librados::snap_t m_snap_id_start;
   librados::snap_t m_snap_id_end;
+  bool m_flatten;
   ObjectNumber m_object_number;
   SnapSeqs m_snap_seqs;
   ProgressContext *m_prog_ctx;
@@ -85,10 +98,21 @@ private:
   bool m_updating_progress = false;
   SnapMap m_snap_map;
   int m_ret_val = 0;
+  ParentSpec m_parent_spec;
+  ImageCtxT *m_src_parent_image_ctx = nullptr;
+
+  void send_open_parent();
+  void handle_open_parent(int r);
+
+  void send_set_parent_snap();
+  void handle_set_parent_snap(int r);
 
   void send_object_copies();
   void send_next_object_copy();
   void handle_object_copy(uint64_t object_no, int r);
+
+  void send_close_parent();
+  void handle_close_parent(int r);
 
   void finish(int r);
 };

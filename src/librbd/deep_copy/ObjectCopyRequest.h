@@ -10,6 +10,7 @@
 #include "common/snap_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/deep_copy/Types.h"
+#include "librbd/io/Types.h"
 #include <list>
 #include <map>
 #include <string>
@@ -24,16 +25,19 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ObjectCopyRequest {
 public:
   static ObjectCopyRequest* create(ImageCtxT *src_image_ctx,
+                                   ImageCtxT *src_parent_image_ctx,
                                    ImageCtxT *dst_image_ctx,
                                    const SnapMap &snap_map,
-                                   uint64_t object_number, Context *on_finish) {
-    return new ObjectCopyRequest(src_image_ctx, dst_image_ctx, snap_map,
-                                 object_number, on_finish);
+                                   uint64_t object_number, bool flatten,
+                                   Context *on_finish) {
+    return new ObjectCopyRequest(src_image_ctx, src_parent_image_ctx,
+                                 dst_image_ctx, snap_map, object_number,
+                                 flatten, on_finish);
   }
 
-  ObjectCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
-                    const SnapMap &snap_map, uint64_t object_number,
-                    Context *on_finish);
+  ObjectCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *src_parent_image_ctx,
+                    ImageCtxT *dst_image_ctx, const SnapMap &snap_map,
+                    uint64_t object_number, bool flatten, Context *on_finish);
 
   void send();
 
@@ -62,6 +66,8 @@ private:
    * READ_OBJECT ---------/          |
    *    |     |                      |
    *    |     \----------------------/
+   *    v
+   * READ_FROM_PARENT (skip if not needed)
    *    |
    *    |     /-----------\
    *    |     |           | (repeat for each snapshot)
@@ -83,6 +89,7 @@ private:
     uint64_t object_no = 0;
     uint64_t offset = 0;
     uint64_t length = 0;
+    bool noent = false;
 
     SrcObjectExtent() {
     }
@@ -98,6 +105,7 @@ private:
     COPY_OP_TYPE_ZERO,
     COPY_OP_TYPE_TRUNC,
     COPY_OP_TYPE_REMOVE,
+    COPY_OP_TYPE_REMOVE_TRUNC,
   };
 
   typedef std::map<uint64_t, uint64_t> ExtentMap;
@@ -125,10 +133,12 @@ private:
   typedef std::map<librados::snap_t, std::map<uint64_t, uint64_t>> SnapObjectSizes;
 
   ImageCtxT *m_src_image_ctx;
+  ImageCtxT *m_src_parent_image_ctx;
   ImageCtxT *m_dst_image_ctx;
   CephContext *m_cct;
   const SnapMap &m_snap_map;
   uint64_t m_dst_object_number;
+  bool m_flatten;
   Context *m_on_finish;
 
   decltype(m_src_image_ctx->data_ctx) m_src_io_ctx;
@@ -151,12 +161,16 @@ private:
   std::map<librados::snap_t, interval_set<uint64_t>> m_zero_interval;
   std::map<librados::snap_t, interval_set<uint64_t>> m_dst_zero_interval;
   std::map<librados::snap_t, uint8_t> m_dst_object_state;
+  bufferlist m_read_from_parent_data;
 
   void send_list_snaps();
   void handle_list_snaps(int r);
 
   void send_read_object();
   void handle_read_object(int r);
+
+  void send_read_from_parent();
+  void handle_read_from_parent(int r);
 
   void send_write_object();
   void handle_write_object(int r);
@@ -170,6 +184,7 @@ private:
 
   void compute_src_object_extents();
   void compute_read_ops();
+  void compute_read_from_parent_ops(io::Extents *image_extents);
   void merge_write_ops();
   void compute_zero_ops();
 
