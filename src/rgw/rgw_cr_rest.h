@@ -31,7 +31,8 @@ class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine {
   RGWHTTPManager *http_manager;
   string path;
   param_vec_t params;
- public:
+  param_vec_t extra_headers;
+public:
   boost::intrusive_ptr<RGWRESTReadResource> http_op;
   RGWReadRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                            RGWHTTPManager *_http_manager, const string& _path,
@@ -47,6 +48,23 @@ class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine {
     path(_path), params(make_param_list(params))
   {}
 
+  RGWReadRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                           RGWHTTPManager *_http_manager, const string& _path,
+                           rgw_http_param_pair *params, param_vec_t &hdrs)
+    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+      path(_path), params(make_param_list(params)),
+      extra_headers(hdrs)
+  {}
+
+ RGWReadRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                          RGWHTTPManager *_http_manager, const string& _path,
+                          rgw_http_param_pair *params,
+                          std::map <std::string, std::string> *hdrs)
+   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+    path(_path), params(make_param_list(params)),
+    extra_headers(make_param_list(hdrs))
+    {}
+
 
   ~RGWReadRawRESTResourceCR() override {
     request_cleanup();
@@ -54,7 +72,7 @@ class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine {
 
   int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTReadResource>(
-        new RGWRESTReadResource(conn, path, params, NULL, http_manager));
+        new RGWRESTReadResource(conn, path, params, &extra_headers, http_manager));
 
     init_new_io(op.get());
 
@@ -109,6 +127,14 @@ class RGWReadRESTResourceCR : public RGWReadRawRESTResourceCR {
                        RGWHTTPManager *_http_manager, const string& _path,
                        rgw_http_param_pair *params, T *_result)
    : RGWReadRawRESTResourceCR(_cct, _conn, _http_manager, _path, params), result(_result)
+  {}
+
+  RGWReadRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
+                        RGWHTTPManager *_http_manager, const string& _path,
+                        rgw_http_param_pair *params,
+                        std::map <std::string, std::string> *hdrs,
+                        T *_result)
+    : RGWReadRawRESTResourceCR(_cct, _conn, _http_manager, _path, params, hdrs), result(_result)
   {}
 
   int wait_result() override {
