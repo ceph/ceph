@@ -254,6 +254,7 @@ def task(ctx, config):
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
     assert ret == 200
     assert out['suspended']
+    assert out['email'] == email
 
     # TESTCASE 're-enable','user','enable','suspended user','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : 'false'})
