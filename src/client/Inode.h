@@ -279,7 +279,6 @@ struct Inode {
       _ref(0), ll_ref(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
-    memset(&quota, 0, sizeof(quota));
   }
   ~Inode();
 
