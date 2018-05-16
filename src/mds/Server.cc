@@ -4850,6 +4850,9 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     }
     mdr->no_early_reply = true;
     pip = &pi.inode;
+
+    client_t exclude_ct = mdr->get_client();
+    mdcache->broadcast_quota_to_client(cur, exclude_ct);
   } else if (name.find("ceph.dir.pin") == 0) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
