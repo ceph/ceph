@@ -1,26 +1,21 @@
-import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { SharedModule } from '../../../shared/shared.module';
+import { AuthService } from '../../../shared/api/auth.service';
 import { LogoutComponent } from './logout.component';
 
 describe('LogoutComponent', () => {
   let component: LogoutComponent;
   let fixture: ComponentFixture<LogoutComponent>;
 
+  const fakeService = {};
+
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        RouterTestingModule,
-        HttpClientTestingModule
-      ],
-      declarations: [
-        LogoutComponent
-      ]
-    })
-    .compileComponents();
+      imports: [RouterTestingModule],
+      declarations: [LogoutComponent],
+      providers: [{ provide: AuthService, useValue: fakeService }]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
