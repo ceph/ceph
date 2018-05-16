@@ -272,6 +272,11 @@ class Module(MgrModule):
             "perm": "r",
         },
         {
+            "cmd": "balancer ls",
+            "desc": "List all plans",
+            "perm": "r",
+        },
+        {
             "cmd": "balancer execute name=plan,type=CephString",
             "desc": "Execute an optimization plan",
             "perm": "r",
@@ -357,6 +362,8 @@ class Module(MgrModule):
         elif command['prefix'] == 'balancer reset':
             self.plans = {}
             return (0, '', '')
+        elif command['prefix'] == 'balancer ls':
+            return (0, json.dumps([p for p in self.plans], indent=4), '')
         elif command['prefix'] == 'balancer dump':
             plan = self.plans.get(command['plan'])
             if not plan:
