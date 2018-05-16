@@ -807,11 +807,11 @@ std::vector<Option> get_global_options() {
     Option("keyring", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(
       "/etc/ceph/$cluster.$name.keyring,/etc/ceph/$cluster.keyring,"
-      "/etc/ceph/keyring,/etc/ceph/keyring.bin," 
+      "/etc/ceph/keyring,/etc/ceph/keyring.bin,"
   #if defined(__FreeBSD)
       "/usr/local/etc/ceph/$cluster.$name.keyring,"
       "/usr/local/etc/ceph/$cluster.keyring,"
-      "/usr/local/etc/ceph/keyring,/usr/local/etc/ceph/keyring.bin," 
+      "/usr/local/etc/ceph/keyring,/usr/local/etc/ceph/keyring.bin,"
   #endif
     )
     .set_description("Path to a keyring file.")
@@ -3582,8 +3582,9 @@ std::vector<Option> get_global_options() {
 
     Option("osd_objectstore", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("filestore")
+    .set_enum_allowed({"bluestore", "filestore", "memstore", "kstore"})
     .set_flag(Option::FLAG_CREATE)
-    .set_description(""),
+    .set_description("backend type for an OSD (like filestore or bluestore)"),
 
     Option("osd_objectstore_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -6928,7 +6929,7 @@ std::vector<Option> get_mds_options() {
     Option("mds_client_writeable_range_max_inc_objs", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1024)
     .set_description("maximum number of objects in writeable range of a file for a client"),
- 
+
     Option("mds_min_caps_per_client", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
     .set_description("minimum number of capabilities a client may hold"),
