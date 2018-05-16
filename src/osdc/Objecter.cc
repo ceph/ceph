@@ -2393,7 +2393,8 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   // Try to get a session, including a retry if we need to take write lock
   int r = _get_session(op->target.osd, &s, sul);
   if (r == -EAGAIN ||
-      (check_for_latest_map && sul.owns_lock_shared())) {
+      (check_for_latest_map && sul.owns_lock_shared()) ||
+      cct->_conf->objecter_debug_inject_relock_delay) {
     epoch_t orig_epoch = osdmap->get_epoch();
     sul.unlock();
     if (cct->_conf->objecter_debug_inject_relock_delay) {
