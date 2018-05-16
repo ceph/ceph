@@ -27,7 +27,7 @@ do_map() {
 		if [ -b /dev/rbd/$DEV ]; then
 			MAP_RV="$(readlink -f /dev/rbd/$DEV)"
 		else
-			MAP_RV="$(rbd map $DEV $CMDPARAMS 2>&1)"
+			MAP_RV="$(rbd device map $DEV $CMDPARAMS 2>&1)"
 			if [ $? -eq 0 ]; then
 			    newrbd="yes"
 			else
@@ -72,7 +72,7 @@ unmount_unmap() {
 	    fi
 	done
 	## Un-mapping.
-	rbd unmap $rbd_dev >>/dev/null 2>&1
+	rbd device unmap $rbd_dev >>/dev/null 2>&1
 	if [ $? -ne 0 ]; then
 	    logger -p "daemon.warning" -t rbdmap "Failed to unmap '${mnt}'"
 	    return 1

@@ -19,6 +19,7 @@
 #include <deque>
 #include <vector>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
@@ -179,12 +180,16 @@ WRITE_INTTYPE_ENCODER(int16_t, le16)
 
 
 // string
-inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
+inline void encode(std::string_view s, bufferlist& bl, uint64_t features=0)
 {
   __u32 len = s.length();
   encode(len, bl);
   if (len)
     bl.append(s.data(), len);
+}
+inline void encode(const std::string& s, bufferlist& bl, uint64_t features=0)
+{
+  return encode(std::string_view(s), bl, features);
 }
 inline void decode(std::string& s, bufferlist::iterator& p)
 {
@@ -194,9 +199,13 @@ inline void decode(std::string& s, bufferlist::iterator& p)
   p.copy(len, s);
 }
 
-inline void encode_nohead(const std::string& s, bufferlist& bl)
+inline void encode_nohead(std::string_view s, bufferlist& bl)
 {
   bl.append(s.data(), s.length());
+}
+inline void encode_nohead(const std::string& s, bufferlist& bl)
+{
+  encode_nohead(std::string_view(s), bl);
 }
 inline void decode_nohead(int len, std::string& s, bufferlist::iterator& p)
 {
@@ -207,10 +216,7 @@ inline void decode_nohead(int len, std::string& s, bufferlist::iterator& p)
 // const char* (encode only, string compatible)
 inline void encode(const char *s, bufferlist& bl) 
 {
-  __u32 len = strlen(s);
-  encode(len, bl);
-  if (len)
-    bl.append(s, len);
+  encode(std::string_view(s, strlen(s)), bl);
 }
 
 
@@ -274,7 +280,8 @@ inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
 
 // Time, since the templates are defined in std::chrono
 
-template<typename Clock, typename Duration>
+template<typename Clock, typename Duration,
+         typename std::enable_if_t<converts_to_timespec_v<Clock>>* = nullptr>
 void encode(const std::chrono::time_point<Clock, Duration>& t,
 	    ceph::bufferlist &bl) {
   auto ts = Clock::to_timespec(t);
@@ -285,7 +292,8 @@ void encode(const std::chrono::time_point<Clock, Duration>& t,
   encode(ns, bl);
 }
 
-template<typename Clock, typename Duration>
+template<typename Clock, typename Duration,
+         typename std::enable_if_t<converts_to_timespec_v<Clock>>* = nullptr>
 void decode(std::chrono::time_point<Clock, Duration>& t,
 	    bufferlist::iterator& p) {
   uint32_t s;
@@ -297,6 +305,28 @@ void decode(std::chrono::time_point<Clock, Duration>& t,
     static_cast<long int>(ns)};
 
   t = Clock::from_timespec(ts);
+}
+
+template<typename Rep, typename Period,
+         typename std::enable_if_t<std::is_integral_v<Rep>>* = nullptr>
+void encode(const std::chrono::duration<Rep, Period>& d,
+	    ceph::bufferlist &bl) {
+  using namespace std::chrono;
+  uint32_t s = duration_cast<seconds>(d).count();
+  uint32_t ns = (duration_cast<nanoseconds>(d) % seconds(1)).count();
+  encode(s, bl);
+  encode(ns, bl);
+}
+
+template<typename Rep, typename Period,
+         typename std::enable_if_t<std::is_integral_v<Rep>>* = nullptr>
+void decode(std::chrono::duration<Rep, Period>& d,
+	    bufferlist::iterator& p) {
+  uint32_t s;
+  uint32_t ns;
+  decode(s, p);
+  decode(ns, p);
+  d = std::chrono::seconds(s) + std::chrono::nanoseconds(ns);
 }
 
 // -----------------------------

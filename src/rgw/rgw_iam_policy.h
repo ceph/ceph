@@ -60,7 +60,7 @@ static constexpr std::uint64_t s3DeleteBucket = 1ULL << 15;
 static constexpr std::uint64_t s3ListBucket = 1ULL << 16;
 static constexpr std::uint64_t s3ListBucketVersions = 1ULL << 17;
 static constexpr std::uint64_t s3ListAllMyBuckets = 1ULL << 18;
-static constexpr std::uint64_t s3ListBucketMultiPartUploads = 1ULL << 19;
+static constexpr std::uint64_t s3ListBucketMultipartUploads = 1ULL << 19;
 static constexpr std::uint64_t s3GetAccelerateConfiguration = 1ULL << 20;
 static constexpr std::uint64_t s3PutAccelerateConfiguration = 1ULL << 21;
 static constexpr std::uint64_t s3GetBucketAcl = 1ULL << 22;
@@ -109,7 +109,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectVersionTagging:
   case s3ListAllMyBuckets:
   case s3ListBucket:
-  case s3ListBucketMultiPartUploads:
+  case s3ListBucketMultipartUploads:
   case s3ListBucketVersions:
   case s3ListMultipartUploadParts:
     return RGW_PERM_READ;
@@ -363,6 +363,13 @@ struct Condition {
     }
   };
 
+  struct ci_starts_with {
+    bool operator()(const std::string& s1,
+		    const std::string& s2) const {
+      return boost::istarts_with(s1, s2);
+    }
+  };
+
   template<typename F>
   static bool orrible(F&& f, const std::string& c,
 		      const std::vector<std::string>& v) {
@@ -393,6 +400,11 @@ struct Condition {
       }
     }
     return false;
+  }
+
+  template <typename F>
+  bool has_key_p(const std::string& _key, F p) const {
+    return p(key, _key);
   }
 };
 
@@ -426,7 +438,7 @@ std::ostream& operator <<(ostream& m, const Statement& s);
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
 
-  PolicyParseException(rapidjson::ParseResult&& pr)
+  explicit PolicyParseException(rapidjson::ParseResult&& pr)
     : pr(pr) { }
   const char* what() const noexcept override {
     return rapidjson::GetParseError_En(pr.Code());
@@ -446,6 +458,24 @@ struct Policy {
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
 	      std::uint64_t action, const ARN& resource) const;
+
+  template <typename F>
+  bool has_conditional(const string& conditional, F p) const {
+    for (const auto&s: statements){
+      if (std::any_of(s.conditions.begin(), s.conditions.end(),
+		      [&](const Condition& c) { return c.has_key_p(conditional, p);}))
+	return true;
+    }
+    return false;
+  }
+
+  bool has_conditional(const string& c) const {
+    return has_conditional(c, Condition::ci_equal_to());
+  }
+
+  bool has_partial_conditional(const string& c) const {
+    return has_conditional(c, Condition::ci_starts_with());
+  }
 };
 
 std::ostream& operator <<(ostream& m, const Policy& p);

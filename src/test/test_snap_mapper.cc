@@ -606,7 +606,7 @@ protected:
   void init(uint32_t to_set) {
     pgnum = to_set;
     for (uint32_t i = 0; i < pgnum; ++i) {
-      pg_t pgid(i, 0, -1);
+      pg_t pgid(i, 0);
       mappers[pgid].reset(
 	new MapperVerifier(
 	  driver.get(),

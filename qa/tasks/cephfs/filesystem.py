@@ -9,6 +9,7 @@ import datetime
 import re
 import errno
 import random
+import traceback
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -274,6 +275,12 @@ class MDSCluster(CephCluster):
     def status(self):
         return FSStatus(self.mon_manager)
 
+    def set_down(self, down=True):
+        self.mon_manager.raw_cluster_cmd("fs", "set", str(self.name), "down", str(down).lower())
+
+    def set_joinable(self, joinable=True):
+        self.mon_manager.raw_cluster_cmd("fs", "set", str(self.name), "joinable", str(joinable).lower())
+
     def delete_all_filesystems(self):
         """
         Remove all filesystems that exist, and any pools in use by them.
@@ -286,7 +293,7 @@ class MDSCluster(CephCluster):
         # mark cluster down for each fs to prevent churn during deletion
         status = self.status()
         for fs in status.get_filesystems():
-            self.mon_manager.raw_cluster_cmd("fs", "set", fs['mdsmap']['fs_name'], "cluster_down", "true")
+            self.mon_manager.raw_cluster_cmd("fs", "set", str(fs['mdsmap']['fs_name']), "joinable", "false")
 
         # get a new copy as actives may have since changed
         status = self.status()
@@ -433,15 +440,41 @@ class Filesystem(MDSCluster):
             raise RuntimeError("cannot deactivate rank 0")
         self.mon_manager.raw_cluster_cmd("mds", "deactivate", "%d:%d" % (self.id, rank))
 
+    def reach_max_mds(self):
+        # Try to reach rank count == max_mds, up or down (UPGRADE SENSITIVE!)
+        status = self.getinfo()
+        mds_map = self.get_mds_map(status=status)
+        max_mds = mds_map['max_mds']
+
+        count = len(list(self.get_ranks(status=status)))
+        if count > max_mds:
+            try:
+                # deactivate mds in decending order
+                status = self.wait_for_daemons(status=status, skip_max_mds_check=True)
+                while count > max_mds:
+                    targets = sorted(self.get_ranks(status=status), key=lambda r: r['rank'], reverse=True)
+                    target = targets[0]
+                    log.info("deactivating rank %d" % target['rank'])
+                    self.deactivate(target['rank'])
+                    status = self.wait_for_daemons(skip_max_mds_check=True)
+                    count = len(list(self.get_ranks(status=status)))
+            except:
+                # In Mimic, deactivation is done automatically:
+                log.info("Error:\n{}".format(traceback.format_exc()))
+                status = self.wait_for_daemons()
+        else:
+            status = self.wait_for_daemons()
+
+        mds_map = self.get_mds_map(status=status)
+        assert(mds_map['max_mds'] == max_mds)
+        assert(mds_map['in'] == list(range(0, max_mds)))
+
     def set_var(self, var, *args):
         a = map(str, args)
         self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)
 
     def set_max_mds(self, max_mds):
         self.set_var("max_mds", "%d" % max_mds)
-
-    def set_allow_dirfrags(self, yes):
-        self.set_var("allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
 
     def set_allow_new_snaps(self, yes):
         self.set_var("allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
@@ -556,8 +589,10 @@ class Filesystem(MDSCluster):
     def _df(self):
         return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
 
-    def get_mds_map(self):
-        return self.status().get_fsmap(self.id)['mdsmap']
+    def get_mds_map(self, status=None):
+        if status is None:
+            status = self.status()
+        return status.get_fsmap(self.id)['mdsmap']
 
     def get_var(self, var):
         return self.status().get_fsmap(self.id)['mdsmap'][var]
@@ -633,7 +668,7 @@ class Filesystem(MDSCluster):
     def get_usage(self):
         return self._df()['stats']['total_used_bytes']
 
-    def are_daemons_healthy(self):
+    def are_daemons_healthy(self, status=None, skip_max_mds_check=False):
         """
         Return true if all daemons are in one of active, standby, standby-replay, and
         at least max_mds daemons are in 'active'.
@@ -651,7 +686,7 @@ class Filesystem(MDSCluster):
 
         active_count = 0
         try:
-            mds_map = self.get_mds_map()
+            mds_map = self.get_mds_map(status=status)
         except CommandFailedError as cfe:
             # Old version, fall back to non-multi-fs commands
             if cfe.exitstatus == errno.EINVAL:
@@ -673,37 +708,44 @@ class Filesystem(MDSCluster):
             active_count, mds_map['max_mds']
         ))
 
-        if active_count >= mds_map['max_mds']:
-            # The MDSMap says these guys are active, but let's check they really are
-            for mds_id, mds_status in mds_map['info'].items():
-                if mds_status['state'] == 'up:active':
-                    try:
-                        daemon_status = self.mds_asok(["status"], mds_id=mds_status['name'])
-                    except CommandFailedError as cfe:
-                        if cfe.exitstatus == errno.EINVAL:
-                            # Old version, can't do this check
-                            continue
-                        else:
-                            # MDS not even running
+        if not skip_max_mds_check:
+            if active_count > mds_map['max_mds']:
+                log.info("are_daemons_healthy: number of actives is greater than max_mds: {0}".format(mds_map))
+                return False
+            elif active_count == mds_map['max_mds']:
+                # The MDSMap says these guys are active, but let's check they really are
+                for mds_id, mds_status in mds_map['info'].items():
+                    if mds_status['state'] == 'up:active':
+                        try:
+                            daemon_status = self.mds_asok(["status"], mds_id=mds_status['name'])
+                        except CommandFailedError as cfe:
+                            if cfe.exitstatus == errno.EINVAL:
+                                # Old version, can't do this check
+                                continue
+                            else:
+                                # MDS not even running
+                                return False
+
+                        if daemon_status['state'] != 'up:active':
+                            # MDS hasn't taken the latest map yet
                             return False
 
-                    if daemon_status['state'] != 'up:active':
-                        # MDS hasn't taken the latest map yet
-                        return False
-
-            return True
+                return True
+            else:
+                return False
         else:
-            return False
+            log.info("are_daemons_healthy: skipping max_mds check")
+            return True
 
-    def get_daemon_names(self, state=None):
+    def get_daemon_names(self, state=None, status=None):
         """
         Return MDS daemon names of those daemons in the given state
         :param state:
         :return:
         """
-        status = self.get_mds_map()
+        mdsmap = self.get_mds_map(status)
         result = []
-        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(mdsmap['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['state'] == state or state is None:
                 result.append(mds_status['name'])
 
@@ -718,31 +760,41 @@ class Filesystem(MDSCluster):
         """
         return self.get_daemon_names("up:active")
 
-    def get_all_mds_rank(self):
-        status = self.get_mds_map()
+    def get_all_mds_rank(self, status=None):
+        mdsmap = self.get_mds_map(status)
         result = []
-        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(mdsmap['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['rank'] != -1 and mds_status['state'] != 'up:standby-replay':
                 result.append(mds_status['rank'])
 
         return result
 
-    def get_rank_names(self):
+    def get_rank(self, rank=0, status=None):
+        if status is None:
+            status = self.getinfo()
+        return status.get_rank(self.id, rank)
+
+    def get_ranks(self, status=None):
+        if status is None:
+            status = self.getinfo()
+        return status.get_ranks(self.id)
+
+    def get_rank_names(self, status=None):
         """
         Return MDS daemon names of those daemons holding a rank,
         sorted by rank.  This includes e.g. up:replay/reconnect
         as well as active, but does not include standby or
         standby-replay.
         """
-        status = self.get_mds_map()
+        mdsmap = self.get_mds_map(status)
         result = []
-        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(mdsmap['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['rank'] != -1 and mds_status['state'] != 'up:standby-replay':
                 result.append(mds_status['name'])
 
         return result
 
-    def wait_for_daemons(self, timeout=None):
+    def wait_for_daemons(self, timeout=None, skip_max_mds_check=False, status=None):
         """
         Wait until all daemons are healthy
         :return:
@@ -751,16 +803,22 @@ class Filesystem(MDSCluster):
         if timeout is None:
             timeout = DAEMON_WAIT_TIMEOUT
 
+        if status is None:
+            status = self.status()
+
         elapsed = 0
         while True:
-            if self.are_daemons_healthy():
-                return
+            if self.are_daemons_healthy(status=status, skip_max_mds_check=skip_max_mds_check):
+                return status
             else:
                 time.sleep(1)
                 elapsed += 1
 
             if elapsed > timeout:
+                log.info("status = {0}".format(status))
                 raise RuntimeError("Timed out waiting for MDS daemons to become healthy")
+
+            status = self.status()
 
     def get_lone_mds_id(self):
         """
@@ -850,6 +908,10 @@ class Filesystem(MDSCluster):
             mds_id = self.get_lone_mds_id()
 
         return self.json_asok(command, 'mds', mds_id)
+
+    def rank_asok(self, command, rank=0):
+        info = self.get_rank(rank=rank)
+        return self.json_asok(command, 'mds', info['name'])
 
     def read_cache(self, path, depth=None):
         cmd = ["dump", "tree", path]
@@ -1064,7 +1126,8 @@ class Filesystem(MDSCluster):
         else:
             return True
 
-    def rados(self, args, pool=None, namespace=None, stdin_data=None):
+    def rados(self, args, pool=None, namespace=None, stdin_data=None,
+              stdin_file=None):
         """
         Call into the `rados` CLI from an MDS
         """
@@ -1082,6 +1145,10 @@ class Filesystem(MDSCluster):
         args = ([os.path.join(self._prefix, "rados"), "-p", pool] +
                 (["--namespace", namespace] if namespace else []) +
                 args)
+
+        if stdin_file is not None:
+            args = ["bash", "-c", "cat " + stdin_file + " | " + " ".join(args)]
+
         p = remote.run(
             args=args,
             stdin=stdin_data,

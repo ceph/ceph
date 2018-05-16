@@ -3,12 +3,12 @@ last_epoch_started
 ======================
 
 info.last_epoch_started records an activation epoch e for interval i
-such that all writes commited in i or earlier are reflected in the
+such that all writes committed in i or earlier are reflected in the
 local info/log and no writes after i are reflected in the local
 info/log.  Since no committed write is ever divergent, even if we
 get an authoritative log/info with an older info.last_epoch_started,
 we can leave our info.last_epoch_started alone since no writes could
-have commited in any intervening interval (See PG::proc_master_log).
+have committed in any intervening interval (See PG::proc_master_log).
 
 info.history.last_epoch_started records a lower bound on the most
 recent interval in which the pg as a whole went active and accepted

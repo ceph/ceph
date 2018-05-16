@@ -554,19 +554,19 @@ for (unsigned i = 0; i < 4; ++i) {
 
 TEST(pg_t, get_ancestor)
 {
-  ASSERT_EQ(pg_t(0, 0, -1), pg_t(16, 0, -1).get_ancestor(16));
-  ASSERT_EQ(pg_t(1, 0, -1), pg_t(17, 0, -1).get_ancestor(16));
-  ASSERT_EQ(pg_t(0, 0, -1), pg_t(16, 0, -1).get_ancestor(8));
-  ASSERT_EQ(pg_t(16, 0, -1), pg_t(16, 0, -1).get_ancestor(80));
-  ASSERT_EQ(pg_t(16, 0, -1), pg_t(16, 0, -1).get_ancestor(83));
-  ASSERT_EQ(pg_t(1, 0, -1), pg_t(1321, 0, -1).get_ancestor(123).get_ancestor(8));
-  ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(123).get_ancestor(8));
-  ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(8));
+  ASSERT_EQ(pg_t(0, 0), pg_t(16, 0).get_ancestor(16));
+  ASSERT_EQ(pg_t(1, 0), pg_t(17, 0).get_ancestor(16));
+  ASSERT_EQ(pg_t(0, 0), pg_t(16, 0).get_ancestor(8));
+  ASSERT_EQ(pg_t(16, 0), pg_t(16, 0).get_ancestor(80));
+  ASSERT_EQ(pg_t(16, 0), pg_t(16, 0).get_ancestor(83));
+  ASSERT_EQ(pg_t(1, 0), pg_t(1321, 0).get_ancestor(123).get_ancestor(8));
+  ASSERT_EQ(pg_t(3, 0), pg_t(1323, 0).get_ancestor(123).get_ancestor(8));
+  ASSERT_EQ(pg_t(3, 0), pg_t(1323, 0).get_ancestor(8));
 }
 
 TEST(pg_t, split)
 {
-  pg_t pgid(0, 0, -1);
+  pg_t pgid(0, 0);
   set<pg_t> s;
   bool b;
 
@@ -580,21 +580,21 @@ TEST(pg_t, split)
   b = pgid.is_split(2, 4, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(2, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(2, 0)));
 
   s.clear();
   b = pgid.is_split(2, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(2, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(4, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(6, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(2, 0)));
+  ASSERT_TRUE(s.count(pg_t(4, 0)));
+  ASSERT_TRUE(s.count(pg_t(6, 0)));
 
   s.clear();
   b = pgid.is_split(3, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(4, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(4, 0)));
 
   s.clear();
   b = pgid.is_split(6, 8, NULL);
@@ -603,68 +603,68 @@ TEST(pg_t, split)
   ASSERT_TRUE(!b);
   ASSERT_EQ(0u, s.size());
 
-  pgid = pg_t(1, 0, -1);
+  pgid = pg_t(1, 0);
 
   s.clear();
   b = pgid.is_split(2, 4, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
 
   s.clear();
   b = pgid.is_split(2, 6, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(2u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
 
   s.clear();
   b = pgid.is_split(2, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(4, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
 
   s.clear();
   b = pgid.is_split(3, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(6, 8, &s);
   ASSERT_TRUE(!b);
   ASSERT_EQ(0u, s.size());
 
-  pgid = pg_t(3, 0, -1);
+  pgid = pg_t(3, 0);
 
   s.clear();
   b = pgid.is_split(7, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(7, 12, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(2u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(11, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
+  ASSERT_TRUE(s.count(pg_t(11, 0)));
 
   s.clear();
   b = pgid.is_split(7, 11, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
 }
 
@@ -827,20 +827,6 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
-  }
-
-  // obsolete (BACKLOG)
-  {
-    pg_missing_t missing;
-    pg_log_entry_t e = sample_e;
-
-    e.op = pg_log_entry_t::BACKLOG;
-    EXPECT_TRUE(e.is_backlog());
-    EXPECT_TRUE(e.object_is_indexed());
-    EXPECT_FALSE(e.reqid_is_indexed());
-    EXPECT_FALSE(missing.is_missing(oid));
-    PrCtl unset_dumpable;
-    EXPECT_DEATH(missing.add_next_event(e), "");
   }
 
   // adding a DELETE matching an existing event
@@ -1037,197 +1023,6 @@ TEST(pg_missing_t, split_into)
   EXPECT_FALSE(child.is_missing(oid2));
   EXPECT_FALSE(missing.is_missing(oid1));
   EXPECT_TRUE(missing.is_missing(oid2));
-}
-
-class ObjectContextTest : public ::testing::Test {
-protected:
-
-  static const useconds_t DELAY_MAX = 20 * 1000 * 1000;
-
-  class Thread_read_lock : public Thread {
-  public:
-    ObjectContext &obc;
-
-    explicit Thread_read_lock(ObjectContext& _obc) :
-      obc(_obc)
-    {
-    }
-
-    void *entry() override {
-      obc.ondisk_read_lock();
-      return NULL;
-    }
-  };
-
-  class Thread_write_lock : public Thread {
-  public:
-    ObjectContext &obc;
-
-    explicit Thread_write_lock(ObjectContext& _obc) :
-      obc(_obc)
-    {
-    }
-
-    void *entry() override {
-      obc.ondisk_write_lock();
-      return NULL;
-    }
-  };
-
-};
-
-TEST_F(ObjectContextTest, read_write_lock)
-{
-  {
-    ObjectContext obc;
-
-    //
-    // write_lock
-    // write_lock
-    // write_unlock
-    // write_unlock
-    //
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_write_lock();
-
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    obc.ondisk_write_lock();
-
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(2, obc.unstable_writes);
-
-    obc.ondisk_write_unlock();
-
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    obc.ondisk_write_unlock();
-
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-  }
-
-  useconds_t delay = 0;
-
-  {
-    ObjectContext obc;
-
-    //
-    // write_lock
-    // read_lock => wait
-    // write_unlock => signal
-    // read_unlock
-    //
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_write_lock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    Thread_read_lock t(obc);
-    t.create("obc_read");
-
-    do {
-      cout << "Trying (1) with delay " << delay << "us\n";
-      usleep(delay);
-    } while (obc.readers_waiting == 0 &&
-	     ( delay = delay * 2 + 1) < DELAY_MAX);
-
-    EXPECT_EQ(1, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    obc.ondisk_write_unlock();
-
-    do {
-      cout << "Trying (2) with delay " << delay << "us\n";
-      usleep(delay);
-    } while ((obc.readers == 0 || obc.readers_waiting == 1) &&
-	     ( delay = delay * 2 + 1) < DELAY_MAX);
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(1, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_read_unlock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    t.join();
-  }
-
-  {
-    ObjectContext obc;
-
-    //
-    // read_lock
-    // write_lock => wait
-    // read_unlock => signal
-    // write_unlock
-    //
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_read_lock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(1, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    Thread_write_lock t(obc);
-    t.create("obc_write");
-
-    do {
-      cout << "Trying (3) with delay " << delay << "us\n";
-      usleep(delay);
-    } while ((obc.writers_waiting == 0) &&
-	     ( delay = delay * 2 + 1) < DELAY_MAX);
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(1, obc.readers);
-    EXPECT_EQ(1, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_read_unlock();
-
-    do {
-      cout << "Trying (4) with delay " << delay << "us\n";
-      usleep(delay);
-    } while ((obc.unstable_writes == 0 || obc.writers_waiting == 1) &&
-	     ( delay = delay * 2 + 1) < DELAY_MAX);
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    obc.ondisk_write_unlock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    t.join();
-  }
-
 }
 
 TEST(pg_pool_t_test, get_pg_num_divisor) {
@@ -1513,7 +1308,7 @@ TEST(pool_opts_t, deep_scrub_interval) {
 
 struct RequiredPredicate : IsPGRecoverablePredicate {
   unsigned required_size;
-  RequiredPredicate(unsigned required_size) : required_size(required_size) {}
+  explicit RequiredPredicate(unsigned required_size) : required_size(required_size) {}
   bool operator()(const set<pg_shard_t> &have) const override {
     return have.size() >= required_size;
   }
@@ -1522,8 +1317,8 @@ struct RequiredPredicate : IsPGRecoverablePredicate {
 using namespace std;
 struct MapPredicate {
   map<int, pair<PastIntervals::osd_state_t, epoch_t>> states;
-  MapPredicate(
-    vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> _states)
+  explicit MapPredicate(
+    const vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> &_states)
    : states(_states.begin(), _states.end()) {}
   PastIntervals::osd_state_t operator()(epoch_t start, int osd, epoch_t *lost_at) {
     auto val = states.at(osd);

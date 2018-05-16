@@ -19,7 +19,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public librbd::MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+  explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
 };
@@ -168,14 +168,6 @@ public:
   void expect_get_snap_id(librbd::MockTestImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, get_snap_id(_, _))
       .WillOnce(Return(123));
-  }
-
-  void expect_snap_set(librbd::MockTestImageCtx &mock_image_ctx,
-                       const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, snap_set(_, StrEq(snap_name), _))
-      .WillOnce(WithArg<2>(Invoke([this, r](Context *on_finish) {
-          m_threads->work_queue->queue(on_finish, r);
-        })));
   }
 
   void expect_notify_sync_request(MockInstanceWatcher &mock_instance_watcher,

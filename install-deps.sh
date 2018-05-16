@@ -21,9 +21,16 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
+ARCH=`uname -m`
+
 function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
+    if type python2 > /dev/null 2>&1 ; then
+        sed -i -e 's/%bcond_with python2/%bcond_without python2/g' $OUTFILE
+    else
+        sed -i -e 's/%bcond_without python2/%bcond_with python2/g' $OUTFILE
+    fi
 }
 
 function ensure_decent_gcc_on_deb {
@@ -121,6 +128,7 @@ if [ x`uname`x = xFreeBSDx ]; then
         net/openldap-client \
         security/nss \
         archivers/snappy \
+        archivers/liblz4 \
         ftp/curl \
         misc/e2fsprogs-libuuid \
         misc/getopt \
@@ -139,8 +147,10 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
+	www/py-routes \
         www/py-flask \
         www/fcgi \
+	security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
 
@@ -241,16 +251,17 @@ else
         esac
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
-	if [ -n dts_ver ]; then
+	if [ -n "$dts_ver" ]; then
             ensure_decent_gcc_on_rh $dts_ver
 	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
-    opensuse|suse|sles)
+    opensuse|suse|sles|opensuse-tumbleweed)
         echo "Using zypper to install dependencies"
-        $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
+        zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
+        $SUDO $zypp_install lsb-release systemd-rpm-macros
         munge_ceph_spec_in $DIR/ceph.spec
-        $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
+        $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     alpine)
         # for now we need the testing repo for leveldb

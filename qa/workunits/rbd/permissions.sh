@@ -3,6 +3,11 @@ set -ex
 
 IMAGE_FEATURES="layering,exclusive-lock,object-map,fast-diff"
 
+clone_v2_enabled() {
+    image_spec=$1
+    rbd info $image_spec | grep "clone-parent"
+}
+
 create_pools() {
     ceph osd pool create images 32
     rbd pool init images
@@ -27,8 +32,8 @@ delete_users() {
 }
 
 create_users() {
-    ceph auth get-or-create client.volumes mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow r class-read pool images, allow rwx pool volumes' >> $KEYRING
-    ceph auth get-or-create client.images mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool images' >> $KEYRING
+    ceph auth get-or-create client.volumes mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd-read-only pool=images' >> $KEYRING
+    ceph auth get-or-create client.images mon 'profile rbd' osd 'profile rbd pool=images' >> $KEYRING
 }
 
 expect() {
@@ -64,7 +69,11 @@ test_images_access() {
     expect 16 rbd -k $KEYRING --id images snap rm images/foo@snap
 
     rbd -k $KEYRING --id volumes clone --image-feature $IMAGE_FEATURES images/foo@snap volumes/child
-    expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
+
+    if ! clone_v2_enabled images/foo; then
+        expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
+    fi
+
     expect 1 rbd -k $KEYRING --id volumes snap unprotect images/foo@snap
     expect 1 rbd -k $KEYRING --id images flatten volumes/child
     rbd -k $KEYRING --id volumes flatten volumes/child
@@ -110,14 +119,20 @@ test_volumes_access() {
     rbd -k $KEYRING --id volumes snap create volumes/child@snap2
 
     # make sure original snapshot stays protected
-    expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
-    rbd -k $KEYRING --id volumes flatten volumes/child
-    expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
-    rbd -k $KEYRING --id volumes snap rm volumes/child@snap2
-    expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
-    expect 2 rbd -k $KEYRING --id volumes snap rm volumes/child@snap2
-    rbd -k $KEYRING --id volumes snap unprotect volumes/child@snap1
-    expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
+    if clone_v2_enabled images/foo; then
+        rbd -k $KEYRING --id volumes flatten volumes/child
+        rbd -k $KEYRING --id volumes snap rm volumes/child@snap2
+        rbd -k $KEYRING --id volumes snap unprotect volumes/child@snap1
+    else
+        expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
+        rbd -k $KEYRING --id volumes flatten volumes/child
+        expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
+        rbd -k $KEYRING --id volumes snap rm volumes/child@snap2
+        expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
+        expect 2 rbd -k $KEYRING --id volumes snap rm volumes/child@snap2
+        rbd -k $KEYRING --id volumes snap unprotect volumes/child@snap1
+        expect 16 rbd -k $KEYRING --id images snap unprotect images/foo@snap
+    fi
 
     # clean up
     rbd -k $KEYRING --id volumes snap rm volumes/child@snap1

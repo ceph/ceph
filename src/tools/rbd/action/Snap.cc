@@ -22,17 +22,6 @@ static const std::string ALL_NAME("all");
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-static bool is_not_user_snap_namespace(librbd::Image* image,
-				       const librbd::snap_info_t &snap_info)
-{
-  librbd::snap_namespace_type_t namespace_type;
-  int r = image->snap_get_namespace_type(snap_info.id, &namespace_type);
-  if (r < 0) {
-    return false;
-  }
-  return namespace_type != RBD_SNAP_NAMESPACE_TYPE_USER;
-}
-
 int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::Rados& rados)
 {
   std::vector<librbd::snap_info_t> snaps;
@@ -40,14 +29,16 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
   int r;
 
   r = image.snap_list(snaps);
-  if (r < 0)
+  if (r < 0) {
+    std::cerr << "rbd: unable to list snapshots" << std::endl;
     return r;
+  }
 
   if (!all_snaps) {
     snaps.erase(remove_if(snaps.begin(),
-			  snaps.end(),
-			  boost::bind(is_not_user_snap_namespace, &image, _1)),
-		snaps.end());
+                          snaps.end(),
+                          boost::bind(utils::is_not_user_snap_namespace, &image, _1)),
+                snaps.end());
   }
 
   if (f) {
@@ -76,9 +67,33 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       tt_str = ctime(&tt);
       tt_str = tt_str.substr(0, tt_str.length() - 1);
     }
+
+    librbd::snap_namespace_type_t snap_namespace;
+    r = image.snap_get_namespace_type(s->id, &snap_namespace);
+    if (r < 0) {
+      std::cerr << "rbd: unable to retrieve snap namespace" << std::endl;
+      return r;
+    }
+
+    std::string snap_namespace_name = "Unknown";
+    switch (snap_namespace) {
+    case RBD_SNAP_NAMESPACE_TYPE_USER:
+      snap_namespace_name = "user";
+      break;
+    case RBD_SNAP_NAMESPACE_TYPE_GROUP:
+      snap_namespace_name = "group";
+      break;
+    case RBD_SNAP_NAMESPACE_TYPE_TRASH:
+      snap_namespace_name = "trash";
+      break;
+    }
+
+    int get_group_res = -ENOENT;
     librbd::snap_group_namespace_t group_snap;
-    int get_group_res = image.snap_get_group_namespace(s->id, &group_snap,
-                                                       sizeof(group_snap));
+    if (snap_namespace == RBD_SNAP_NAMESPACE_TYPE_GROUP) {
+      get_group_res = image.snap_get_group_namespace(s->id, &group_snap,
+                                                     sizeof(group_snap));
+    }
 
     if (f) {
       f->open_object_section("snapshot");
@@ -88,6 +103,7 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       f->dump_string("timestamp", tt_str);
       if (all_snaps) {
 	f->open_object_section("namespace");
+        f->dump_string("type", snap_namespace_name);
 	if (get_group_res == 0) {
 	  std::string pool_name = pool_map[group_snap.group_pool];
 	  f->dump_string("pool", pool_name);
@@ -98,19 +114,20 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       }
       f->close_section();
     } else {
-      std::string namespace_string;
-      if (all_snaps && (get_group_res == 0)) {
-	ostringstream oss;
-	std::string pool_name = pool_map[group_snap.group_pool];
-	oss << "group snapshot (" << pool_name << "/" <<
-					     group_snap.group_name << "@" <<
-					     group_snap.group_snap_name << ")";
+      t << s->id << s->name << stringify(byte_u_t(s->size)) << tt_str;
 
-	namespace_string = oss.str();
-      }
-      t << s->id << s->name << stringify(prettybyte_t(s->size)) << tt_str;
       if (all_snaps) {
-	t << namespace_string;
+	ostringstream oss;
+        oss << snap_namespace_name;
+
+        if (get_group_res == 0) {
+	  std::string pool_name = pool_map[group_snap.group_pool];
+	  oss << " (" << pool_name << "/"
+		      << group_snap.group_name << "@"
+		      << group_snap.group_snap_name << ")";
+        }
+
+	t << oss.str();
       }
       t << TextTable::endrow;
     }
@@ -177,17 +194,26 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
   } else if (0 == snaps.size()) {
     return 0;
   } else {
-    for (size_t i = 0; i < snaps.size(); ++i) {
-      r = image.snap_is_protected(snaps[i].name.c_str(), &is_protected);
+    list<std::string> protect;
+    for (auto it = snaps.begin(); it != snaps.end();) {
+      r = image.snap_is_protected(it->name.c_str(), &is_protected);
       if (r < 0) {
         pc.fail();
         return r;
       } else if (is_protected == true) {
-        pc.fail();
-        std::cerr << "\r" << "rbd: snapshot '" << snaps[i].name.c_str()
-                  << "' is protected from removal." << std::endl;
-        return -EBUSY;
+        protect.push_back(it->name.c_str());
+        snaps.erase(it);
+      } else {
+        ++it;
       }
+    }
+
+    if (!protect.empty()) {
+      std::cout << "rbd: error removing snapshot(s) '" << protect << "', which "
+                << (1 == protect.size() ? "is" : "are")
+                << " protected - these must be unprotected with "
+                << "`rbd snap unprotect`."
+                << std::endl;
     }
     for (size_t i = 0; i < snaps.size(); ++i) {
       r = image.snap_remove(snaps[i].name.c_str());
@@ -195,10 +221,15 @@ int do_purge_snaps(librbd::Image& image, bool no_progress)
         pc.fail();
         return r;
       }
-      pc.update_progress(i + 1, snaps.size());
+      pc.update_progress(i + 1, snaps.size() + protect.size());
     }
 
-    pc.finish();
+    if (!protect.empty()) {
+      pc.fail();
+    } else if (snaps.size() > 0) {
+      pc.finish();
+    }
+
     return 0;
   }
 }
@@ -815,7 +846,7 @@ Shell::Action action_remove(
   {"snap", "remove"}, {"snap", "rm"}, "Delete a snapshot.", "",
   &get_remove_arguments, &execute_remove);
 Shell::Action action_purge(
-  {"snap", "purge"}, {}, "Delete all snapshots.", "",
+  {"snap", "purge"}, {}, "Delete all unprotected snapshots.", "",
   &get_purge_arguments, &execute_purge);
 Shell::Action action_rollback(
   {"snap", "rollback"}, {"snap", "revert"}, "Rollback image to snapshot.", "",

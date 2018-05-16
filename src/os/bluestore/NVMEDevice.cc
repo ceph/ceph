@@ -188,13 +188,13 @@ class SharedDriverQueueData {
     logger = b.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
     bdev->queue_number++;
-    if(bdev->queue_number.load() == 1)
+    if (bdev->queue_number.load() == 1)
       reap_io = true;
   }
 
   ~SharedDriverQueueData() {
     g_ceph_context->get_perfcounters_collection()->remove(logger);
-    if (!qpair) {
+    if (qpair) {
       spdk_nvme_ctrlr_free_io_qpair(qpair);
       bdev->queue_number--;
     }
@@ -459,7 +459,7 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
     start = ceph::coarse_real_clock::now();
   }
 
-  if(reap_io)
+  if (reap_io)
     bdev->reap_ioc();
   dout(20) << __func__ << " end" << dendl;
 }
@@ -509,7 +509,7 @@ class NVMEManager {
 
     // only support one device per osd now!
     assert(shared_driver_datas.empty());
-    // index 0 is occured by master thread
+    // index 0 is occurred by master thread
     shared_driver_datas.push_back(new SharedDriverData(shared_driver_datas.size()+1, sn_tag, c, ns));
     *driver = shared_driver_datas.back();
   }
@@ -702,7 +702,7 @@ void io_complete(void *t, const struct spdk_nvme_cpl *completion)
     task->fill_cb();
     task->release_segs(queue);
     // read submitted by AIO
-    if(!task->return_code) {
+    if (!task->return_code) {
       if (ctx->priv) {
 	if (!--ctx->num_running) {
           task->device->aio_callback(task->device->aio_callback_priv, ctx->priv);
@@ -783,9 +783,9 @@ int NVMEDevice::open(const string& p)
   // round size down to an even block
   size &= ~(block_size - 1);
 
-  dout(1) << __func__ << " size " << size << " (" << pretty_si_t(size) << "B)"
-          << " block_size " << block_size << " (" << pretty_si_t(block_size)
-          << "B)" << dendl;
+  dout(1) << __func__ << " size " << size << " (" << byte_u_t(size) << ")"
+          << " block_size " << block_size << " (" << byte_u_t(block_size)
+          << ")" << dendl;
 
 
   return 0;
@@ -832,7 +832,7 @@ void NVMEDevice::aio_submit(IOContext *ioc)
     assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
     // Only need to push the first entry
     ioc->nvme_task_first = ioc->nvme_task_last = nullptr;
-    if(!queue_t)
+    if (!queue_t)
 	queue_t = new SharedDriverQueueData(this, driver);
     queue_t->_aio_handle(t, ioc);
   }

@@ -4,6 +4,7 @@
 #include "librbd/operation/ObjectMapIterate.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "osdc/Striper.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -200,12 +201,17 @@ template <typename I>
 bool ObjectMapIterateRequest<I>::should_complete(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " should_complete: " << " r=" << r << dendl;
+  if (r < 0) {
+    lderr(cct) << "object map operation encountered an error: "
+	       << cpp_strerror(r) << dendl;
+  }
 
   RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
   switch (m_state) {
   case STATE_VERIFY_OBJECTS:
     if (m_invalidate.test_and_set()) {
       send_invalidate_object_map();
+      return false;
     } else if (r == 0) {
       return true;
     }
@@ -223,9 +229,6 @@ bool ObjectMapIterateRequest<I>::should_complete(int r) {
   }
 
   if (r < 0) {
-    lderr(cct) << "object map operation encountered an error: "
-	       << cpp_strerror(r)
-               << dendl;
     return true;
   }
 

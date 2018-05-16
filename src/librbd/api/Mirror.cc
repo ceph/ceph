@@ -408,13 +408,9 @@ int Mirror<I>::image_resync(I *ictx) {
 
 template <typename I>
 void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
-                               size_t info_size, Context *on_finish) {
+                               Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
-  if (info_size < sizeof(mirror_image_info_t)) {
-    on_finish->complete(-ERANGE);
-    return;
-  }
 
   auto ctx = new C_ImageGetInfo(mirror_image_info, on_finish);
   auto req = mirror::GetInfoRequest<I>::create(*ictx, &ctx->mirror_image,
@@ -424,10 +420,9 @@ void Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
 }
 
 template <typename I>
-int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
-                              size_t info_size) {
+int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info) {
   C_SaferCond ctx;
-  image_get_info(ictx, mirror_image_info, info_size, &ctx);
+  image_get_info(ictx, mirror_image_info, &ctx);
 
   int r = ctx.wait();
   if (r < 0) {
@@ -438,13 +433,9 @@ int Mirror<I>::image_get_info(I *ictx, mirror_image_info_t *mirror_image_info,
 
 template <typename I>
 void Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
-                                 size_t status_size, Context *on_finish) {
+                                 Context *on_finish) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
-  if (status_size < sizeof(mirror_image_status_t)) {
-    on_finish->complete(-ERANGE);
-    return;
-  }
 
   auto ctx = new C_ImageGetStatus(ictx->name, status, on_finish);
   auto req = mirror::GetStatusRequest<I>::create(
@@ -454,10 +445,9 @@ void Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
 }
 
 template <typename I>
-int Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status,
-      		                size_t status_size) {
+int Mirror<I>::image_get_status(I *ictx, mirror_image_status_t *status) {
   C_SaferCond ctx;
-  image_get_status(ictx, status, status_size, &ctx);
+  image_get_status(ictx, status, &ctx);
 
   int r = ctx.wait();
   if (r < 0) {

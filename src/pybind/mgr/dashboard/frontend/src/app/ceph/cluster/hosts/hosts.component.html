@@ -1,0 +1,19 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li i18n
+        class="breadcrumb-item">Cluster</li>
+    <li i18n
+        class="breadcrumb-item active"
+        aria-current="page">Hosts</li>
+  </ol>
+</nav>
+<cd-table [data]="hosts"
+          [columns]="columns"
+          columnMode="flex"
+          (fetchData)="getHosts()">
+  <ng-template #servicesTpl let-value="value">
+    <span *ngFor="let service of value; last as isLast">
+      <a [routerLink]="[service.cdLink]">{{ service.type }}.{{ service.id }}</a>{{ !isLast ? ", " : "" }}
+    </span>
+  </ng-template>
+</cd-table>

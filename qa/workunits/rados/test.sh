@@ -27,7 +27,8 @@ for f in \
 do
     if [ $parallel -eq 1 ]; then
 	r=`printf '%25s' $f`
-	bash -o pipefail -exc "ceph_test_rados_$f $color 2>&1 | tee ceph_test_rados_$f.log | sed \"s/^/$r: /\"" &
+	ff=`echo $f | awk '{print $1}'`
+	bash -o pipefail -exc "ceph_test_rados_$f $color 2>&1 | tee ceph_test_rados_$ff.log | sed \"s/^/$r: /\"" &
 	pid=$!
 	echo "test $f on pid $pid"
 	pids[$f]=$pid

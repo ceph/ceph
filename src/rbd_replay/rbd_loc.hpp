@@ -49,7 +49,7 @@ struct rbd_loc {
   /**
      Constructs an rbd_loc with the given pool, image, and snap.
    */
-  rbd_loc(std::string pool, std::string image, std::string snap);
+  rbd_loc(const std::string &pool, const std::string &image, const std::string &snap);
 
   /**
      Parses an rbd_loc from the given string.

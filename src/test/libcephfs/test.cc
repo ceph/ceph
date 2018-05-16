@@ -614,6 +614,68 @@ TEST(LibCephFS, LstatSlashdot) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, StatDirNlink) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_dir1[256];
+  sprintf(test_dir1, "dir1_symlinks_%d", getpid());
+  ASSERT_EQ(ceph_mkdir(cmount, test_dir1, 0700), 0);
+
+  int fd = ceph_open(cmount, test_dir1, O_DIRECTORY|O_RDONLY, 0);
+  ASSERT_GT(fd, 0);
+  struct ceph_statx stx;
+  ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+  ASSERT_EQ(stx.stx_nlink, 2);
+
+  {
+    char test_dir2[296];
+    sprintf(test_dir2, "%s/.", test_dir1);
+    ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+    ASSERT_EQ(stx.stx_nlink, 2);
+  }
+
+  {
+    char test_dir2[296];
+    sprintf(test_dir2, "%s/1", test_dir1);
+    ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
+    ASSERT_EQ(ceph_statx(cmount, test_dir2, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+    ASSERT_EQ(stx.stx_nlink, 2);
+      ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+      ASSERT_EQ(stx.stx_nlink, 3);
+    sprintf(test_dir2, "%s/2", test_dir1);
+    ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
+      ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+      ASSERT_EQ(stx.stx_nlink, 4);
+    sprintf(test_dir2, "%s/1/1", test_dir1);
+    ASSERT_EQ(ceph_mkdir(cmount, test_dir2, 0700), 0);
+      ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+      ASSERT_EQ(stx.stx_nlink, 4);
+    ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
+      ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+      ASSERT_EQ(stx.stx_nlink, 4);
+    sprintf(test_dir2, "%s/1", test_dir1);
+    ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
+      ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+      ASSERT_EQ(stx.stx_nlink, 3);
+    sprintf(test_dir2, "%s/2", test_dir1);
+    ASSERT_EQ(ceph_rmdir(cmount, test_dir2), 0);
+      ASSERT_EQ(ceph_statx(cmount, test_dir1, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+      ASSERT_EQ(stx.stx_nlink, 2);
+  }
+
+  ASSERT_EQ(ceph_rmdir(cmount, test_dir1), 0);
+  ASSERT_EQ(ceph_fstatx(cmount, fd, &stx, CEPH_STATX_NLINK, AT_SYMLINK_NOFOLLOW), 0);
+  ASSERT_EQ(stx.stx_nlink, 0);
+
+  ceph_close(cmount, fd);
+
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, DoubleChmod) {
 
   struct ceph_mount_info *cmount;
@@ -906,7 +968,7 @@ TEST(LibCephFS, LoopSyms) {
   ASSERT_EQ(fd, -ELOOP);
 
   // loop: /a -> /b, /b -> /c, /c -> /a
-  char a[256], b[256], c[256];
+  char a[264], b[264], c[264];
   sprintf(a, "/%s/a", test_dir1);
   sprintf(b, "/%s/b", test_dir1);
   sprintf(c, "/%s/c", test_dir1);
@@ -1078,6 +1140,53 @@ TEST(LibCephFS, PreadvPwritev) {
   ASSERT_EQ(0, strncmp((const char*)iov_in[1].iov_base, (const char*)iov_out[1].iov_base, iov_out[1].iov_len));
 
   ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, LlreadvLlwritev) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  int mypid = getpid();
+  char filename[256];
+
+  sprintf(filename, "test_llreadvllwritevfile%u", mypid);
+
+  Inode *root, *file;
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &root), 0);
+
+  Fh *fh;
+  struct ceph_statx stx;
+  UserPerm *perms = ceph_mount_perms(cmount);
+
+  ASSERT_EQ(ceph_ll_create(cmount, root, filename, 0666,
+		    O_RDWR|O_CREAT|O_TRUNC, &file, &fh, &stx, 0, 0, perms), 0);
+
+  /* Reopen read-only */
+  char out0[] = "hello ";
+  char out1[] = "world\n";
+  struct iovec iov_out[2] = {
+	{out0, sizeof(out0)},
+	{out1, sizeof(out1)},
+  };
+  char in0[sizeof(out0)];
+  char in1[sizeof(out1)];
+  struct iovec iov_in[2] = {
+	{in0, sizeof(in0)},
+	{in1, sizeof(in1)},
+  };
+  ssize_t nwritten = iov_out[0].iov_len + iov_out[1].iov_len;
+  ssize_t nread = iov_in[0].iov_len + iov_in[1].iov_len;
+
+  ASSERT_EQ(ceph_ll_writev(cmount, fh, iov_out, 2, 0), nwritten);
+  ASSERT_EQ(ceph_ll_readv(cmount, fh, iov_in, 2, 0), nread);
+  ASSERT_EQ(0, strncmp((const char*)iov_in[0].iov_base, (const char*)iov_out[0].iov_base, iov_out[0].iov_len));
+  ASSERT_EQ(0, strncmp((const char*)iov_in[1].iov_base, (const char*)iov_out[1].iov_base, iov_out[1].iov_len));
+
+  ceph_ll_close(cmount, fh);
   ceph_shutdown(cmount);
 }
 
@@ -1456,7 +1565,7 @@ TEST(LibCephFS, SlashDotDot) {
   ASSERT_EQ(ino, stx.stx_ino);
 
   /* Test accessing the parent of an unlinked directory */
-  char dir1[32], dir2[32];
+  char dir1[32], dir2[56];
   sprintf(dir1, "/sldotdot%x", getpid());
   sprintf(dir2, "%s/sub%x", dir1, getpid());
 
@@ -1672,7 +1781,7 @@ TEST(LibCephFS, DirChangeAttr) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, "/"), 0);
 
-  char dirname[32], filename[32];
+  char dirname[32], filename[56];
   sprintf(dirname, "/dirchange%x", getpid());
   sprintf(filename, "%s/foo", dirname);
 

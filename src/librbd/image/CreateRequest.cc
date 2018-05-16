@@ -8,6 +8,7 @@
 #include "include/assert.h"
 #include "librbd/Utils.h"
 #include "common/ceph_context.h"
+#include "osdc/Striper.h"
 #include "librbd/Journal.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/journal/CreateRequest.h"

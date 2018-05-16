@@ -216,6 +216,8 @@ public:
   int group_create(IoCtx& io_ctx, const char *group_name);
   int group_remove(IoCtx& io_ctx, const char *group_name);
   int group_list(IoCtx& io_ctx, std::vector<std::string> *names);
+  int group_rename(IoCtx& io_ctx, const char *src_group_name,
+                   const char *dest_group_name);
 
   int group_image_add(IoCtx& io_ctx, const char *group_name,
 		      IoCtx& image_io_ctx, const char *image_name);
@@ -288,6 +290,7 @@ public:
   int resize2(uint64_t size, bool allow_shrink, ProgressContext& pctx);
   int resize_with_progress(uint64_t size, ProgressContext& pctx);
   int stat(image_info_t &info, size_t infosize);
+  int get_name(std::string *name);
   int get_id(std::string *id);
   std::string get_block_name_prefix();
   int64_t get_data_pool_id();
@@ -378,6 +381,7 @@ public:
   int snap_unprotect(const char *snap_name);
   int snap_is_protected(const char *snap_name, bool *is_protected);
   int snap_set(const char *snap_name);
+  int snap_set_by_id(uint64_t snap_id);
   int snap_rename(const char *srcname, const char *dstname);
   int snap_get_limit(uint64_t *limit);
   int snap_set_limit(uint64_t limit);

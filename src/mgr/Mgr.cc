@@ -30,7 +30,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MLog.h"
 #include "messages/MServiceMap.h"
-
+#include "PyModule.h"
 #include "Mgr.h"
 
 #define dout_context g_ceph_context
@@ -72,7 +72,7 @@ void MetadataUpdate::finish(int r)
 {
   daemon_state.clear_updating(key);
   if (r == 0) {
-    if (key.first == "mds" || key.first == "osd") {
+    if (key.first == "mds" || key.first == "osd" || key.first == "mgr") {
       json_spirit::mValue json_result;
       bool read_ok = json_spirit::read(
           outbl.to_str(), json_result);
@@ -97,7 +97,7 @@ void MetadataUpdate::finish(int r)
       if (daemon_state.exists(key)) {
         state = daemon_state.get(key);
 	Mutex::Locker l(state->lock);
-        if (key.first == "mds") {
+        if (key.first == "mds" || key.first == "mgr") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
           daemon_meta.erase("id");
@@ -112,7 +112,7 @@ void MetadataUpdate::finish(int r)
         state->key = key;
         state->hostname = daemon_meta.at("hostname").get_str();
 
-        if (key.first == "mds") {
+        if (key.first == "mds" || key.first == "mgr") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
           daemon_meta.erase("id");
@@ -150,6 +150,44 @@ void Mgr::background_init(Context *completion)
   }));
 }
 
+std::map<std::string, std::string> Mgr::load_store()
+{
+  assert(lock.is_locked_by_me());
+
+  dout(10) << "listing keys" << dendl;
+  JSONCommand cmd;
+  cmd.run(monc, "{\"prefix\": \"config-key ls\"}");
+  lock.Unlock();
+  cmd.wait();
+  lock.Lock();
+  assert(cmd.r == 0);
+
+  std::map<std::string, std::string> loaded;
+  
+  for (auto &key_str : cmd.json_result.get_array()) {
+    std::string const key = key_str.get_str();
+    
+    dout(20) << "saw key '" << key << "'" << dendl;
+
+    const std::string config_prefix = PyModule::config_prefix;
+
+    if (key.substr(0, config_prefix.size()) == config_prefix) {
+      dout(20) << "fetching '" << key << "'" << dendl;
+      Command get_cmd;
+      std::ostringstream cmd_json;
+      cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
+      get_cmd.run(monc, cmd_json.str());
+      lock.Unlock();
+      get_cmd.wait();
+      lock.Lock();
+      assert(get_cmd.r == 0);
+      loaded[key] = get_cmd.outbl.to_str();
+    }
+  }
+
+  return loaded;
+}
+
 void Mgr::init()
 {
   Mutex::Locker l(lock);
@@ -159,8 +197,10 @@ void Mgr::init()
   // Start communicating with daemons to learn statistics etc
   int r = server.init(monc->get_global_id(), client_messenger->get_myaddr());
   if (r < 0) {
-    derr << "Initialize server fail"<< dendl;
-    return;
+    derr << "Initialize server fail: " << cpp_strerror(r) << dendl;
+    // This is typically due to a bind() failure, so let's let
+    // systemd restart us.
+    exit(1);
   }
   dout(4) << "Initialized server at " << server.get_myaddr() << dendl;
 
@@ -203,21 +243,25 @@ void Mgr::init()
 
   dout(4) << "waiting for config-keys..." << dendl;
 
-  // Preload config keys (`get` for plugins is to be a fast local
-  // operation, we we don't have to synchronize these later because
-  // all sets will come via mgr)
-  auto loaded_config = load_config();
-
   // Wait for MgrDigest...
   dout(4) << "waiting for MgrDigest..." << dendl;
   while (!digest_received) {
     digest_cond.Wait(lock);
   }
 
+  // Load module KV store
+  auto kv_store = load_store();
+
+  // Migrate config from KV store on luminous->mimic
+  // drop lock because we do blocking config sets to mon
+  lock.Unlock();
+  py_module_registry->upgrade_config(monc, kv_store);
+  lock.Lock();
+
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
-  py_module_registry->active_start(loaded_config, daemon_state, cluster_state,
-      *monc, clog, *objecter, *client, finisher);
+  py_module_registry->active_start(daemon_state, cluster_state,
+      kv_store, *monc, clog, *objecter, *client, finisher);
 
   dout(4) << "Complete." << dendl;
   initializing = false;
@@ -313,42 +357,6 @@ void Mgr::load_all_metadata()
   }
 }
 
-std::map<std::string, std::string> Mgr::load_config()
-{
-  assert(lock.is_locked_by_me());
-
-  dout(10) << "listing keys" << dendl;
-  JSONCommand cmd;
-  cmd.run(monc, "{\"prefix\": \"config-key ls\"}");
-  lock.Unlock();
-  cmd.wait();
-  lock.Lock();
-  assert(cmd.r == 0);
-
-  std::map<std::string, std::string> loaded;
-  
-  for (auto &key_str : cmd.json_result.get_array()) {
-    std::string const key = key_str.get_str();
-    dout(20) << "saw key '" << key << "'" << dendl;
-
-    const std::string config_prefix = PyModuleRegistry::config_prefix;
-
-    if (key.substr(0, config_prefix.size()) == config_prefix) {
-      dout(20) << "fetching '" << key << "'" << dendl;
-      Command get_cmd;
-      std::ostringstream cmd_json;
-      cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
-      get_cmd.run(monc, cmd_json.str());
-      lock.Unlock();
-      get_cmd.wait();
-      lock.Lock();
-      assert(get_cmd.r == 0);
-      loaded[key] = get_cmd.outbl.to_str();
-    }
-  }
-
-  return loaded;
-}
 
 void Mgr::shutdown()
 {
@@ -425,7 +433,6 @@ void Mgr::handle_osd_map()
       }
 
       if (update_meta) {
-        daemon_state.notify_updating(k);
         auto c = new MetadataUpdate(daemon_state, k);
         std::ostringstream cmd;
         cmd << "{\"prefix\": \"osd metadata\", \"id\": "
@@ -557,7 +564,6 @@ void Mgr::handle_fs_map(MFSMap* m)
     }
 
     if (update) {
-      daemon_state.notify_updating(k);
       auto c = new MetadataUpdate(daemon_state, k);
 
       // Older MDS daemons don't have addr in the metadata, so
@@ -591,6 +597,7 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   }
 
   cluster_state.set_mgr_map(m);
+  server.got_mgr_map();
 
   return false;
 }

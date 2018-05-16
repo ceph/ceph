@@ -173,6 +173,7 @@ void ObjectCopyRequest<I>::send_read_object() {
   if (!read_required) {
     // nothing written to this object for this snapshot (must be trunc/remove)
     handle_read_object(0);
+    return;
   }
 
   auto ctx = create_context_callback<
@@ -189,6 +190,12 @@ void ObjectCopyRequest<I>::send_read_object() {
 template <typename I>
 void ObjectCopyRequest<I>::handle_read_object(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r == -ENOENT && m_read_whole_object) {
+    ldout(m_cct, 5) << "object missing when forced to read whole object"
+                    << dendl;
+    r = 0;
+  }
 
   if (r == -ENOENT) {
     m_retry_snap_set = m_snap_set;
@@ -367,15 +374,16 @@ void ObjectCopyRequest<I>::send_update_object_map() {
       finish_op_ctx->complete(0);
     });
 
-  RWLock::WLocker object_map_locker(m_dst_image_ctx->object_map_lock);
+  m_dst_image_ctx->object_map_lock.get_write();
   bool sent = m_dst_image_ctx->object_map->template aio_update<
     Context, &Context::complete>(dst_snap_id, m_dst_object_number, object_state,
                                  {}, {}, ctx);
+  m_dst_image_ctx->object_map_lock.put_write();
   m_dst_image_ctx->snap_lock.put_read();
   m_dst_image_ctx->owner_lock.put_read();
   if (!sent) {
     assert(dst_snap_id == CEPH_NOSNAP);
-    handle_update_object_map(0);
+    ctx->complete(0);
   }
 }
 
@@ -478,7 +486,16 @@ void ObjectCopyRequest<I>::compute_read_ops() {
     librados::snap_t clone_end_snap_id;
     calc_snap_set_diff(m_cct, m_snap_set, start_src_snap_id,
                        end_src_snap_id, &diff, &end_size, &exists,
-                       &clone_end_snap_id);
+                       &clone_end_snap_id, &m_read_whole_object);
+
+    if (m_read_whole_object) {
+      ldout(m_cct, 1) << "need to read full object" << dendl;
+      diff.insert(0, m_src_image_ctx->layout.object_size);
+      exists = true;
+      end_size = m_src_image_ctx->layout.object_size;
+      clone_end_snap_id = end_src_snap_id;
+    }
+
     if (!exists) {
       end_size = 0;
     }

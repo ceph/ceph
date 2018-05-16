@@ -26,7 +26,7 @@
 
 static ostream& _prefix(std::ostream *_dout, const PGLog *pglog)
 {
-  return *_dout << pglog->gen_prefix();
+  return pglog->gen_prefix(*_dout);
 }
 
 //////////////////// PGLog::IndexedLog ////////////////////
@@ -52,9 +52,10 @@ void PGLog::IndexedLog::trim(
 {
   if (complete_to != log.end() &&
       complete_to->version <= s) {
-    generic_dout(0) << " bad trim to " << s << " when complete_to is "
-		    << complete_to->version
-		    << " on " << *this << dendl;
+    generic_derr << " bad trim to " << s << " when complete_to is "
+		 << complete_to->version
+		 << " on " << *this << dendl;
+    assert(0 == "out of order trim");
   }
 
   assert(s <= can_rollback_to);
@@ -192,7 +193,6 @@ void PGLog::proc_replica_log(
 	     << "for divergent objects" << dendl;
     return;
   }
-  assert(olog.head >= log.tail);
 
   /*
     basically what we're doing here is rewinding the remote log,
@@ -915,9 +915,10 @@ void PGLog::_write_log_and_missing(
     t.omap_rmkeys(coll, log_oid, to_remove);
 }
 
-void PGLog::rebuild_missing_set_with_deletes(ObjectStore *store,
-					     coll_t pg_coll,
-					     const pg_info_t &info)
+void PGLog::rebuild_missing_set_with_deletes(
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  const pg_info_t &info)
 {
   // save entries not generated from the current log (e.g. added due
   // to repair, EIO handling, or divergent_priors).
@@ -949,7 +950,7 @@ void PGLog::rebuild_missing_set_with_deletes(ObjectStore *store,
 
     bufferlist bv;
     int r = store->getattr(
-	pg_coll,
+      ch,
 	ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
 	OI_ATTR,
 	bv);

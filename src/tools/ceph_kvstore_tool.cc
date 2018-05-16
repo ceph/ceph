@@ -257,7 +257,7 @@ class StoreTool
 
       auto cur_duration = std::chrono::duration<double>(coarse_mono_clock::now() - started_at);
       std::cout << "ts = " << cur_duration.count() << "s, copied " << total_keys
-                << " keys so far (" << stringify(si_t(total_size)) << ")"
+                << " keys so far (" << stringify(byte_u_t(total_size)) << ")"
                 << std::endl;
 
     } while (it->valid());
@@ -267,7 +267,7 @@ class StoreTool
     std::cout << "summary:" << std::endl;
     std::cout << "  copied " << total_keys << " keys" << std::endl;
     std::cout << "  used " << total_txs << " transactions" << std::endl;
-    std::cout << "  total size " << stringify(si_t(total_size)) << std::endl;
+    std::cout << "  total size " << stringify(byte_u_t(total_size)) << std::endl;
     std::cout << "  from '" << store_path << "' to '" << other_path << "'"
               << std::endl;
     std::cout << "  duration " << time_taken.count() << " seconds" << std::endl;
@@ -292,7 +292,7 @@ class StoreTool
 
 void usage(const char *pname)
 {
-  std::cerr << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
+  std::cout << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
@@ -317,11 +317,23 @@ int main(int argc, const char *argv[])
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage(argv[0]);
+    exit(0);
+  }
+
+  map<string,string> defaults = {
+    { "debug_rocksdb", "2" }
+  };
 
   auto cct = global_init(
-      NULL, args,
-      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+    &defaults, args,
+    CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
 
@@ -464,7 +476,7 @@ int main(int argc, const char *argv[])
       return 1;
     }
     std::cout << "(" << url_escape(prefix) << "," << url_escape(key)
-              << ") size " << si_t(bl.length()) << std::endl;
+              << ") size " << byte_u_t(bl.length()) << std::endl;
 
   } else if (cmd == "set") {
     if (argc < 8) {

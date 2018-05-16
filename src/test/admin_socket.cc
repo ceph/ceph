@@ -115,7 +115,8 @@ TEST(AdminSocket, SendTooLongRequest) {
 }
 
 class MyTest : public AdminSocketHook {
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -147,7 +148,8 @@ TEST(AdminSocket, RegisterCommand) {
 }
 
 class MyTest2 : public AdminSocketHook {
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -200,7 +202,8 @@ public:
 
   BlockingHook() : _lock("BlockingHook::_lock") {}
 
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& result) override {
     Mutex::Locker l(_lock);
     _cond.Wait(_lock);
     return true;

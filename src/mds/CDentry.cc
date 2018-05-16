@@ -86,7 +86,15 @@ ostream& operator<<(ostream& out, const CDentry& dn)
   if (dn.is_auth_pinned())
     out << " ap=" << dn.get_num_auth_pins() << "+" << dn.get_num_nested_auth_pins();
 
-  out << " inode=" << dn.get_linkage()->get_inode();
+  {
+    const CInode *inode = dn.get_linkage()->get_inode();
+    out << " ino=";
+     if (inode) {
+       out << inode->ino();
+     } else {
+       out << "(nil)";
+     }
+  }
 
   out << " state=" << dn.get_state();
   if (dn.is_new()) out << "|new";
@@ -220,7 +228,7 @@ void CDentry::make_path(filepath& fp, bool projected) const
 {
   assert(dir);
   dir->inode->make_path(fp, projected);
-  fp.push_dentry(name);
+  fp.push_dentry(get_name());
 }
 
 /*

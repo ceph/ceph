@@ -46,6 +46,8 @@ static const std::string RBD_DIFF_BANNER_V2 ("rbd diff v2\n");
 #define RBD_DIFF_ZERO		'z'
 #define RBD_DIFF_END		'e'
 
+#define RBD_SNAP_PROTECTION_STATUS     'p'
+
 #define RBD_EXPORT_IMAGE_ORDER		'O'
 #define RBD_EXPORT_IMAGE_FEATURES	'T'
 #define RBD_EXPORT_IMAGE_STRIPE_UNIT	'U'
@@ -176,6 +178,8 @@ int init(const std::string &pool_name, librados::Rados *rados,
 int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
                 librados::IoCtx *io_ctx);
 
+void disable_cache();
+
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image);
 
@@ -201,6 +205,9 @@ void calc_sparse_extent(const bufferptr &bp,
 bool check_if_image_spec_present(const boost::program_options::variables_map &vm,
                                  argument_types::ArgumentModifier mod,
                                  size_t spec_arg_index);
+
+bool is_not_user_snap_namespace(librbd::Image* image,
+                                const librbd::snap_info_t &snap_info);
 
 std::string image_id(librbd::Image& image);
 

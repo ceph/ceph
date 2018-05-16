@@ -4,6 +4,7 @@ overrides:
       - Scrub error on inode
       - Behind on trimming
       - Metadata damage detected
+      - bad backtrace on inode
       - overall HEALTH_
       - (MDS_TRIM)
     conf:
@@ -14,3 +15,4 @@ tasks:
 - cephfs_test_runner:
     modules:
       - tasks.cephfs.test_scrub_checks
+      - tasks.cephfs.test_scrub

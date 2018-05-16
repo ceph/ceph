@@ -198,32 +198,13 @@ int FileJournal::_open_file(int64_t oldsize, blksize_t blksize,
 	   << newsize << " bytes: " << cpp_strerror(err) << dendl;
       return -err;
     }
-#ifdef HAVE_POSIX_FALLOCATE
-    ret = ::posix_fallocate(fd, 0, newsize);
+    ret = ceph_posix_fallocate(fd, 0, newsize);
     if (ret) {
       derr << "FileJournal::_open_file : unable to preallocation journal to "
 	   << newsize << " bytes: " << cpp_strerror(ret) << dendl;
       return -ret;
     }
     max_size = newsize;
-#elif defined(__APPLE__)
-    fstore_t store;
-    store.fst_flags = F_ALLOCATECONTIG;
-    store.fst_posmode = F_PEOFPOSMODE;
-    store.fst_offset = 0;
-    store.fst_length = newsize;
-
-    ret = ::fcntl(fd, F_PREALLOCATE, &store);
-    if (ret == -1) {
-      ret = -errno;
-      derr << "FileJournal::_open_file : unable to preallocation journal to "
-	   << newsize << " bytes: " << cpp_strerror(ret) << dendl;
-      return ret;
-    }
-    max_size = newsize;
-#else
-# error "Journal pre-allocation not supported on platform."
-#endif
   }
   else {
     max_size = oldsize;
@@ -1079,7 +1060,10 @@ void FileJournal::do_write(bufferlist& bl)
     // header too?
     if (hbp.length()) {
       // be sneaky: include the header in the second fragment
-      second.push_front(hbp);
+      bufferlist tmp;
+      tmp.push_back(hbp);
+      tmp.claim_append(second);
+      second.swap(tmp);
       pos = 0;          // we included the header
     }
     // Write the second portion first possible with the header, so
@@ -1335,7 +1319,10 @@ void FileJournal::do_aio_write(bufferlist& bl)
     assert(pos == header.max_size);
     if (hbp.length()) {
       // be sneaky: include the header in the second fragment
-      second.push_front(hbp);
+      bufferlist tmp;
+      tmp.push_back(hbp);
+      tmp.claim_append(second);
+      second.swap(tmp);
       pos = 0;          // we included the header
     } else
       pos = get_top();  // no header, start after that
@@ -1609,8 +1596,6 @@ void FileJournal::submit_entry(uint64_t seq, bufferlist& e, uint32_t orig_len,
   assert(e.length() > 0);
   assert(e.length() < header.max_size);
 
-  if (osd_op)
-    osd_op->mark_event("commit_queued_for_journal_write");
   if (logger) {
     logger->inc(l_filestore_journal_queue_bytes, orig_len);
     logger->inc(l_filestore_journal_queue_ops, 1);
@@ -1743,7 +1728,7 @@ void FileJournal::commit_start(uint64_t seq)
  */
 void FileJournal::do_discard(int64_t offset, int64_t end)
 {
-  dout(10) << __func__ << "trim(" << offset << ", " << end << dendl;
+  dout(10) << __func__ << " trim(" << offset << ", " << end << dendl;
 
   offset = round_up_to(offset, block_size);
   if (offset >= end)
@@ -1752,7 +1737,7 @@ void FileJournal::do_discard(int64_t offset, int64_t end)
   assert(end >= offset);
   if (offset < end)
     if (block_device_discard(fd, offset, end - offset) < 0)
-	dout(1) << __func__ << "ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
+	dout(1) << __func__ << " ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
 }
 
 void FileJournal::committed_thru(uint64_t seq)

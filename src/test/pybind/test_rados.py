@@ -370,7 +370,7 @@ class TestIoctx(object):
                 ('ns1', 'ns1-c'), ('ns1', 'ns1-d')])
 
     def test_xattrs(self):
-        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0', f='')
         self.ioctx.write('abc', b'')
         for key, value in xattrs.items():
             self.ioctx.set_xattr('abc', key, value)
@@ -381,7 +381,7 @@ class TestIoctx(object):
         eq(stored_xattrs, xattrs)
 
     def test_obj_xattrs(self):
-        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0', f='')
         self.ioctx.write('abc', b'')
         obj = list(self.ioctx.list_objects())[0]
         for key, value in xattrs.items():
@@ -898,6 +898,41 @@ class TestIoctx(object):
         self.rados.service_daemon_register("laundry", name, metadata)
         status = {'result': 'unknown', 'test': 'running'}
         self.rados.service_daemon_update(status)
+
+    def test_alignment(self):
+        eq(self.ioctx.alignment(), None)
+
+
+class TestIoctxEc(object):
+
+    def setUp(self):
+        self.rados = Rados(conffile='')
+        self.rados.connect()
+        self.pool = 'test-ec'
+        self.profile = 'testprofile-%s' % self.pool
+        cmd = {"prefix": "osd erasure-code-profile set", 
+               "name": self.profile, "profile": ["k=2", "m=1", "crush-failure-domain=osd"]}
+        ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
+        eq(ret, 0, msg=out)
+        # create ec pool with profile created above
+        cmd = {'prefix': 'osd pool create', 'pg_num': 8, 'pgp_num': 8,
+               'pool': self.pool, 'pool_type': 'erasure', 
+               'erasure_code_profile': self.profile}
+        ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
+        eq(ret, 0, msg=out)
+        assert self.rados.pool_exists(self.pool)
+        self.ioctx = self.rados.open_ioctx(self.pool)
+
+    def tearDown(self):
+        cmd = {"prefix": "osd unset", "key": "noup"}
+        self.rados.mon_command(json.dumps(cmd), b'')
+        self.ioctx.close()
+        self.rados.delete_pool(self.pool)
+        self.rados.shutdown()
+
+    def test_alignment(self):
+        eq(self.ioctx.alignment(), 8192)
+
 
 class TestIoctx2(object):
 

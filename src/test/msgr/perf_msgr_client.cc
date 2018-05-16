@@ -119,7 +119,7 @@ class MessengerClient {
   vector<ClientThread*> clients;
 
  public:
-  MessengerClient(string t, string addr, int delay):
+  MessengerClient(const string &t, const string &addr, int delay):
       type(t), serveraddr(addr), think_time_us(delay) {
   }
   ~MessengerClient() {
@@ -179,7 +179,8 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 

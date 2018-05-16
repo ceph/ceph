@@ -1,0 +1,147 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item"
+        i18n>Object Gateway</li>
+    <li class="breadcrumb-item">
+      <a routerLink="/rgw/bucket"
+         i18n>Buckets</a>
+    </li>
+    <li class="breadcrumb-item active"
+        aria-current="page"
+        i18n>
+      {editing, select, 1 {Edit} other {Add}}
+    </li>
+  </ol>
+</nav>
+
+<cd-loading-panel *ngIf="editing && loading && !error"
+                  i18n>
+  Loading bucket data...
+</cd-loading-panel>
+<cd-error-panel *ngIf="editing && error"
+                (backAction)="goToListView()"
+                i18n>
+  The bucket data could not be loaded.
+</cd-error-panel>
+
+<div class="col-sm-12 col-lg-6"
+     *ngIf="!loading && !error">
+  <form name="bucketForm"
+        class="form-horizontal"
+        #frm="ngForm"
+        [formGroup]="bucketForm"
+        novalidate>
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title"
+            i18n>
+          {editing, select, 1 {Edit} other {Add}} bucket
+        </h3>
+      </div>
+      <div class="panel-body">
+
+        <!-- Id -->
+        <div class="form-group"
+             *ngIf="editing">
+          <label i18n
+                 class="col-sm-3 control-label"
+                 for="id">Id</label>
+          <div class="col-sm-9">
+            <input id="id"
+                   name="id"
+                   class="form-control"
+                   type="text"
+                   formControlName="id"
+                   readonly>
+          </div>
+        </div>
+
+        <!-- Name -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.invalid}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="bucket">Name
+            <span class="required"
+                  *ngIf="!editing"></span>
+          </label>
+          <div class="col-sm-9">
+            <input id="bucket"
+                   name="bucket"
+                   class="form-control"
+                   type="text"
+                   i18n-placeholder
+                   placeholder="Name..."
+                   formControlName="bucket"
+                   [readonly]="editing"
+                   autofocus>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('required')">
+              This field is required.
+            </span>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('bucketNameInvalid')">
+              The value is not valid.
+            </span>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('bucketNameExists')">
+              The chosen name is already in use.
+            </span>
+          </div>
+        </div>
+
+        <!-- Owner -->
+        <div class="form-group"
+             [ngClass]="{'has-error': (frm.submitted || bucketForm.controls.owner.dirty) && bucketForm.controls.owner.invalid}">
+          <label i18n
+                 class="control-label col-sm-3"
+                 for="owner">Owner
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+            <select id="owner"
+                    name="owner"
+                    class="form-control"
+                    formControlName="owner">
+              <option i18n
+                      *ngIf="owners === null"
+                      [ngValue]="null">Loading...
+              </option>
+              <option i18n
+                      *ngIf="owners !== null"
+                      [ngValue]="null">-- Select a user --
+              </option>
+              <option *ngFor="let owner of owners"
+                      [value]="owner">{{ owner }}</option>
+            </select>
+            <span i18n
+                  class="help-block"
+                  *ngIf="(frm.submitted || bucketForm.controls.owner.dirty) && bucketForm.controls.owner.hasError('required')">
+              This field is required.
+            </span>
+          </div>
+        </div>
+
+      </div>
+      <div class="panel-footer">
+        <div class="button-group text-right">
+          <cd-submit-button type="button"
+                            (submitAction)="submit()"
+                            [form]="bucketForm"
+                            i18n>
+            {editing, select, 1 {Update} other {Add}}
+          </cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  routerLink="/rgw/bucket">
+            Back
+          </button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

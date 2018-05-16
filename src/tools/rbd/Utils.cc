@@ -907,6 +907,10 @@ int init_io_ctx(librados::Rados &rados, const std::string &pool_name,
   return 0;
 }
 
+void disable_cache() {
+  g_conf->set_val_or_die("rbd_cache", "false");
+}
+
 int open_image(librados::IoCtx &io_ctx, const std::string &image_name,
                bool read_only, librbd::Image *image) {
   int r;
@@ -1097,6 +1101,17 @@ bool check_if_image_spec_present(const po::variables_map &vm,
   }
 
   return false;
+}
+
+bool is_not_user_snap_namespace(librbd::Image* image,
+                                const librbd::snap_info_t &snap_info)
+{
+  librbd::snap_namespace_type_t namespace_type;
+  int r = image->snap_get_namespace_type(snap_info.id, &namespace_type);
+  if (r < 0) {
+    return false;
+  }
+  return namespace_type != RBD_SNAP_NAMESPACE_TYPE_USER;
 }
 
 } // namespace utils

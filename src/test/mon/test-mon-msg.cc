@@ -330,7 +330,7 @@ int main(int argc, char *argv[])
 
   auto cct = global_init(nullptr, args,
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-			 0);
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
   ::testing::InitGoogleTest(&argc, argv);

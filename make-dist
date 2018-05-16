@@ -23,7 +23,7 @@ fi
 download_boost() {
     boost_version=$1
     shift
-    boost_md5=$1
+    boost_sha256=$1
     shift
     boost_version_underscore=$(echo $boost_version | sed 's/\./_/g')
     boost_fname=boost_${boost_version_underscore}.tar.bz2
@@ -39,8 +39,8 @@ download_boost() {
         wget -c --no-verbose -O $boost_fname $url
         if [ $? != 0 -o ! -e $boost_fname ]; then
             echo "Download of $url failed"
-        elif [ $(md5sum $boost_fname | awk '{print $1}') != $boost_md5 ]; then
-            echo "Error: failed to download boost: MD5 mismatch."
+        elif [ $(sha256sum $boost_fname | awk '{print $1}') != $boost_sha256 ]; then
+            echo "Error: failed to download boost: SHA256 mismatch."
         else
             break
         fi
@@ -59,6 +59,36 @@ download_boost() {
     mv src/boost_${boost_version_underscore} src/boost
     tar cf ${outfile}.boost.tar ${outfile}/src/boost
     rm -rf src/boost
+}
+
+_python_autoselect() {
+  python_command=
+  for interpreter in python2.7 python3 ; do
+    type $interpreter > /dev/null 2>&1 || continue
+    python_command=$interpreter
+    break
+  done
+  if [ -z "$python_command" ] ; then
+    echo "Could not find a suitable python interpreter! Bailing out."
+    exit 1
+  fi
+  echo $python_command
+}
+
+build_dashboard_frontend() {
+  CURR_DIR=`pwd`
+  TEMP_DIR=`mktemp -d`
+  $CURR_DIR/src/tools/setup-virtualenv.sh --python=$(_python_autoselect) $TEMP_DIR
+  $TEMP_DIR/bin/pip install nodeenv
+  $TEMP_DIR/bin/nodeenv -p -n 8.10.0
+  cd src/pybind/mgr/dashboard/frontend
+  . $TEMP_DIR/bin/activate
+  npm install
+  npm run build -- --prod
+  deactivate
+  cd $CURR_DIR
+  rm -rf $TEMP_DIR
+  tar cf dashboard_frontend.tar $outfile/src/pybind/mgr/dashboard/frontend/dist
 }
 
 # clean out old cruft...
@@ -96,26 +126,20 @@ for spec in ceph.spec.in alpine/APKBUILD.in; do
         sed "s/@RPM_RELEASE@/$rpm_release/g" |
         sed "s/@TARBALL_BASENAME@/ceph-$version/g" > `echo $spec | sed 's/.in$//'`
 done
-
-. /etc/os-release
-case $ID in
-    opensuse|suse|sles)
-        sed -i -e "s/^Release:.*/&.<B_CNT>/" ceph.spec
-        ;;
-esac
-
 ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfile/alpine/APKBUILD
 # NOTE: If you change this version number make sure the package is available
 # at the three URLs referenced below (may involve uploading to download.ceph.com)
-boost_version=1.66.0
-download_boost $boost_version b2dfbd6c717be4a7bb2d88018eaccf75 \
+boost_version=1.67.0
+download_boost $boost_version 2684c972994ee57fc5632e03bf044746f6eb45d4920c343937a465fd67a5adba \
                https://dl.bintray.com/boostorg/release/$boost_version/source \
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa
+build_dashboard_frontend
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
 tar --concatenate -f $outfile.all.tar $outfile.boost.tar
 tar --concatenate -f $outfile.all.tar $outfile.tar
+tar --concatenate -f $outfile.all.tar dashboard_frontend.tar
 mv $outfile.all.tar $outfile.tar
 rm $outfile
 rm -f $outfile.version.tar

@@ -165,6 +165,20 @@ void ceph_userperm_destroy(UserPerm *perm);
 struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount);
 
 /**
+ * Set cmount's default permissions
+ *
+ * @param cmount the mount info handle
+ * @param perm permissions to set to default for mount
+ *
+ * Every cmount has a default set of credentials. This does a deep copy of
+ * the given permissions to the ones in the cmount. Must be done after
+ * ceph_init but before ceph_mount.
+ *
+ * Returns 0 on success, and -EISCONN if the cmount is already mounted.
+ */
+int ceph_mount_perms_set(struct ceph_mount_info *cmount, UserPerm *perm);
+
+/**
  * @defgroup libcephfs_h_init Setup and Teardown
  * These are the first and last functions that should be called
  * when using libcephfs.
@@ -1472,6 +1486,8 @@ off_t ceph_ll_lseek(struct ceph_mount_info *cmount, struct Fh* filehandle,
 int ceph_ll_read(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		 int64_t off, uint64_t len, char* buf);
 int ceph_ll_fsync(struct ceph_mount_info *cmount, struct Fh *fh,
+		  int syncdataonly);
+int ceph_ll_sync_inode(struct ceph_mount_info *cmount, struct Inode *in,
 		  int syncdataonly);
 int ceph_ll_write(struct ceph_mount_info *cmount, struct Fh* filehandle,
 		  int64_t off, uint64_t len, const char *data);

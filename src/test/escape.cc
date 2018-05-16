@@ -66,18 +66,21 @@ TEST(EscapeXml, Utf8) {
   ASSERT_EQ(escape_xml_stream("<\xe6\xb1\x89\xe5\xad\x97>\n"), "&lt;\xe6\xb1\x89\xe5\xad\x97&gt;\n");
 }
 
-static std::string escape_json_attrs(const char *str)
+static std::string escape_json_attrs(const char *str, size_t src_len = 0)
 {
-  int src_len = strlen(str);
+  if (!src_len)
+    src_len = strlen(str);
   int len = escape_json_attr_len(str, src_len);
   char out[len];
   escape_json_attr(str, src_len, out);
   return out;
 }
-static std::string escape_json_stream(const char *str)
+static std::string escape_json_stream(const char *str, size_t src_len = 0)
 {
+  if (!src_len)
+    src_len = strlen(str);
   std::stringstream ss;
-  ss << json_stream_escaper(str);
+  ss << json_stream_escaper(std::string_view(str, src_len));
   return ss.str();
 }
 
@@ -110,6 +113,10 @@ TEST(EscapeJson, Escapes1) {
 TEST(EscapeJson, ControlChars) {
   ASSERT_EQ(escape_json_attrs("\x01\x02\x03"), "\\u0001\\u0002\\u0003");
   ASSERT_EQ(escape_json_stream("\x01\x02\x03"), "\\u0001\\u0002\\u0003");
+  ASSERT_EQ(escape_json_stream("\x00\x02\x03", 3), "\\u0000\\u0002\\u0003");
+
+  // json can't print binary data!
+  ASSERT_EQ(escape_json_stream("\x00\x7f\xff", 3), "\\u0000\\u007f\xff");
 
   ASSERT_EQ(escape_json_attrs("abc\x7f"), "abc\\u007f");
   ASSERT_EQ(escape_json_stream("abc\x7f"), "abc\\u007f");

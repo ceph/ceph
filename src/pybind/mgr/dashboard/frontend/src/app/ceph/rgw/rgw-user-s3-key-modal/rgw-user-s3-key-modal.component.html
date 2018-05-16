@@ -1,0 +1,157 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left"
+      i18n>S3 key
+  </h4>
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="bsModalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+<form class="form-horizontal"
+      #frm="ngForm"
+      [formGroup]="formGroup"
+      novalidate>
+  <div class="modal-body">
+
+    <!-- Username -->
+    <div class="form-group"
+         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.user.dirty) && formGroup.controls.user.invalid}">
+      <label class="control-label col-sm-3"
+             for="user"
+             i18n>Username
+        <span class="required"
+              *ngIf="!viewing">
+        </span>
+      </label>
+      <div class="col-sm-9">
+        <input id="user"
+               class="form-control"
+               type="text"
+               *ngIf="viewing"
+               [readonly]="true"
+               formControlName="user">
+        <select id="user"
+                class="form-control"
+                formControlName="user"
+                *ngIf="!viewing"
+                autofocus>
+          <option i18n
+                  *ngIf="userCandidates !== null"
+                  [ngValue]="null">-- Select a username --
+          </option>
+          <option *ngFor="let userCandidate of userCandidates"
+                  [value]="userCandidate">{{ userCandidate }}</option>
+        </select>
+        <span class="help-block"
+              *ngIf="(frm.submitted || formGroup.controls.user.dirty) && formGroup.controls.user.hasError('required')"
+              i18n>
+          This field is required.
+        </span>
+      </div>
+    </div>
+
+    <!-- Auto-generate key -->
+    <div class="form-group"
+         *ngIf="!viewing">
+      <div class="col-sm-offset-3 col-sm-9">
+        <div class="checkbox checkbox-primary">
+          <input id="generate_key"
+                 type="checkbox"
+                 formControlName="generate_key">
+          <label for="generate_key"
+                 i18n>Auto-generate key
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Access key -->
+    <div class="form-group"
+         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.access_key.dirty) && formGroup.controls.access_key.invalid}"
+         *ngIf="!formGroup.controls.generate_key.value">
+      <label class="control-label col-sm-3"
+             for="access_key"
+             i18n>Access key
+        <span class="required"
+              *ngIf="!viewing">
+        </span>
+      </label>
+      <div class="col-sm-9">
+        <div class="input-group">
+          <input id="access_key"
+                 class="form-control"
+                 type="password"
+                 [readonly]="viewing"
+                 formControlName="access_key">
+          <span class="input-group-btn">
+            <button type="button"
+                    class="btn btn-default"
+                    cdPasswordButton="access_key">
+            </button>
+            <button type="button"
+                    class="btn btn-default"
+                    cdCopy2ClipboardButton="access_key">
+            </button>
+          </span>
+        </div>
+        <span class="help-block"
+              *ngIf="(frm.submitted || formGroup.controls.access_key.dirty) && formGroup.controls.access_key.hasError('required')"
+              i18n>
+          This field is required.
+        </span>
+      </div>
+    </div>
+
+    <!-- Secret key -->
+    <div class="form-group"
+         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.secret_key.dirty) && formGroup.controls.secret_key.invalid}"
+         *ngIf="!formGroup.controls.generate_key.value">
+      <label class="control-label col-sm-3"
+             for="secret_key"
+             i18n>Secret key
+        <span class="required"
+              *ngIf="!viewing">
+        </span>
+      </label>
+      <div class="col-sm-9">
+        <div class="input-group">
+          <input id="secret_key"
+                 class="form-control"
+                 type="password"
+                 [readonly]="viewing"
+                 formControlName="secret_key">
+          <span class="input-group-btn">
+            <button type="button"
+                    class="btn btn-default"
+                    cdPasswordButton="secret_key">
+            </button>
+            <button type="button"
+                    class="btn btn-default"
+                    cdCopy2ClipboardButton="secret_key">
+            </button>
+          </span>
+        </div>
+        <span class="help-block"
+              *ngIf="(frm.submitted || formGroup.controls.secret_key.dirty) && formGroup.controls.secret_key.hasError('required')"
+              i18n>
+          This field is required.
+        </span>
+      </div>
+    </div>
+
+  </div>
+  <div class="modal-footer">
+    <cd-submit-button *ngIf="!viewing"
+                      (submitAction)="onSubmit()"
+                      [form]="formGroup"
+                      i18n>Add
+    </cd-submit-button>
+    <button class="btn btn-sm btn-default"
+            type="button"
+            (click)="bsModalRef.hide()"
+            i18n>Close
+    </button>
+  </div>
+</form>

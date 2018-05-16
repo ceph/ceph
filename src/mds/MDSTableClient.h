@@ -80,11 +80,20 @@ public:
     ack_waiters[tid].push_back(c);
   }
 
+  set<version_t> get_journaled_tids() const {
+    set<version_t> tids;
+    for (auto p : pending_commit)
+      tids.insert(p.first);
+    return tids;
+  }
+
   void handle_mds_failure(mds_rank_t mds);
 
   // child must implement
   virtual void resend_queries() = 0;
   virtual void handle_query_result(MMDSTableRequest *m) = 0;
+  virtual void handle_notify_prep(MMDSTableRequest *m) = 0;
+  virtual void notify_commit(version_t tid) = 0;
 
   // and friendly front-end for _prepare.
 

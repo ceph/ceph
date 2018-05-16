@@ -34,6 +34,8 @@
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
+#include "messages/MConfig.h"
+#include "messages/MGetConfig.h"
 
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
@@ -76,8 +78,10 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDScrub2.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
@@ -95,6 +99,7 @@
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
+#include "messages/MMonHealth.h"
 #include "messages/MMonHealthChecks.h"
 #include "messages/MMonMetadata.h"
 #include "messages/MDataPing.h"
@@ -128,6 +133,7 @@
 #include "messages/MMDSFindInoReply.h"
 #include "messages/MMDSOpenIno.h"
 #include "messages/MMDSOpenInoReply.h"
+#include "messages/MMDSSnapUpdate.h"
 
 #include "messages/MDirUpdate.h"
 #include "messages/MDiscover.h"
@@ -167,6 +173,7 @@
 #include "messages/MMgrDigest.h"
 #include "messages/MMgrReport.h"
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
 #include "messages/MServiceMap.h"
@@ -360,6 +367,12 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_MON_PAXOS:
     m = new MMonPaxos;
     break;
+  case MSG_CONFIG:
+    m = new MConfig;
+    break;
+  case MSG_GET_CONFIG:
+    m = new MGetConfig;
+    break;
 
   case MSG_MON_PROBE:
     m = new MMonProbe;
@@ -504,12 +517,18 @@ Message *decode_message(CephContext *cct, int crcflags,
   case MSG_OSD_PG_CREATE:
     m = new MOSDPGCreate;
     break;
+  case MSG_OSD_PG_CREATE2:
+    m = new MOSDPGCreate2;
+    break;
   case MSG_OSD_PG_TRIM:
     m = new MOSDPGTrim;
     break;
 
   case MSG_OSD_SCRUB:
     m = new MOSDScrub;
+    break;
+  case MSG_OSD_SCRUB2:
+    m = new MOSDScrub2;
     break;
   case MSG_OSD_SCRUB_RESERVE:
     m = new MOSDScrubReserve;
@@ -664,6 +683,10 @@ Message *decode_message(CephContext *cct, int crcflags,
     m = new MMDSOpenInoReply;
     break;
 
+  case MSG_MDS_SNAPUPDATE:
+    m = new MMDSSnapUpdate();
+    break;
+
   case MSG_MDS_FRAGMENTNOTIFY:
     m = new MMDSFragmentNotify;
     break;
@@ -771,6 +794,10 @@ Message *decode_message(CephContext *cct, int crcflags,
     m = new MMgrOpen();
     break;
 
+  case MSG_MGR_CLOSE:
+    m = new MMgrClose();
+    break;
+
   case MSG_MGR_REPORT:
     m = new MMgrReport();
     break;
@@ -781,6 +808,10 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   case MSG_TIMECHECK:
     m = new MTimeCheck();
+    break;
+
+  case MSG_MON_HEALTH:
+    m = new MMonHealth();
     break;
 
   case MSG_MON_HEALTH_CHECKS:
@@ -841,7 +872,8 @@ Message *decode_message(CephContext *cct, int crcflags,
       lderr(cct) << "failed to decode message of type " << type
 		 << " v" << header.version
 		 << ": " << e.what() << dendl;
-      ldout(cct, cct->_conf->ms_dump_corrupt_message_level) << "dump: \n";
+      ldout(cct, ceph::dout::need_dynamic(
+	cct->_conf->ms_dump_corrupt_message_level)) << "dump: \n";
       m->get_payload().hexdump(*_dout);
       *_dout << dendl;
       if (cct->_conf->ms_die_on_bad_msg)

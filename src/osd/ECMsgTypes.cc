@@ -30,7 +30,7 @@ void ECSubWrite::encode(bufferlist &bl) const
   encode(temp_removed, bl);
   encode(updated_hit_set_history, bl);
   encode(roll_forward_to, bl);
-  encode(backfill, bl);
+  encode(backfill_or_async_recovery, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -57,10 +57,10 @@ void ECSubWrite::decode(bufferlist::iterator &bl)
     roll_forward_to = trim_to;
   }
   if (struct_v >= 4) {
-    decode(backfill, bl);
+    decode(backfill_or_async_recovery, bl);
   } else {
-    // The old protocol used an empty transaction to indicate backfill
-    backfill = t.empty();
+    // The old protocol used an empty transaction to indicate backfill or async_recovery
+    backfill_or_async_recovery = t.empty();
   }
   DECODE_FINISH(bl);
 }
@@ -75,8 +75,8 @@ std::ostream &operator<<(
       << ", roll_forward_to=" << rhs.roll_forward_to;
   if (rhs.updated_hit_set_history)
     lhs << ", has_updated_hit_set_history";
-  if (rhs.backfill)
-    lhs << ", backfill";
+  if (rhs.backfill_or_async_recovery)
+    lhs << ", backfill_or_async_recovery";
   return lhs <<  ")";
 }
 
@@ -89,7 +89,7 @@ void ECSubWrite::dump(Formatter *f) const
   f->dump_stream("roll_forward_to") << roll_forward_to;
   f->dump_bool("has_updated_hit_set_history",
       static_cast<bool>(updated_hit_set_history));
-  f->dump_bool("backfill", backfill);
+  f->dump_bool("backfill_or_async_recovery", backfill_or_async_recovery);
 }
 
 void ECSubWrite::generate_test_instances(list<ECSubWrite*> &o)
@@ -219,8 +219,8 @@ void ECSubRead::decode(bufferlist::iterator &bl)
   if (struct_v > 2 && struct_v > struct_compat) {
     decode(subchunks, bl);
   } else {
-    for (auto &&i : attrs_to_read) {
-      subchunks[i].push_back(make_pair(0, 1));
+    for (auto &i : to_read) {
+      subchunks[i.first].push_back(make_pair(0, 1));
     }
   }
   DECODE_FINISH(bl);
@@ -232,6 +232,7 @@ std::ostream &operator<<(
   return lhs
     << "ECSubRead(tid=" << rhs.tid
     << ", to_read=" << rhs.to_read
+    << ", subchunks=" << rhs.subchunks
     << ", attrs_to_read=" << rhs.attrs_to_read << ")";
 }
 

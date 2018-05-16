@@ -11,7 +11,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous or later storage cluster
 
--  RHEL/CentOS 7.5; Linux kernel v4.17 or newer; or the `Ceph iSCSI client test kernel <https://shaman.ceph.com/repos/kernel/ceph-iscsi-test>`_
+-  RHEL/CentOS 7.5; Linux kernel v4.16 or newer; or the `Ceph iSCSI client test kernel <https://shaman.ceph.com/repos/kernel/ceph-iscsi-test>`_
 
 -  The following packages must be installed from your Linux distribution's software repository:
 
@@ -179,7 +179,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    ::
 
-       > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:ceph-igw/gateways
+       > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways
        > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21
        > /iscsi-target...-igw/gateways>  create ceph-gw-2 10.172.19.22
 
@@ -189,7 +189,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    ::
 
-       > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:ceph-igw/gateways
+       > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/gateways
        > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21 skipchecks=true
        > /iscsi-target...-igw/gateways>  create ceph-gw-2 10.172.19.22 skipchecks=true
 
@@ -207,7 +207,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    ::
 
-       > /disks> cd /iscsi-target/iqn.2003-01.com.redhat.iscsi-gw:ceph-igw/hosts
+       > /disks> cd /iscsi-target/iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw/hosts
        > /iscsi-target...eph-igw/hosts>  create iqn.1994-05.com.redhat:rh7-client
 
 #. Set the client's CHAP username to myiscsiusername and password to

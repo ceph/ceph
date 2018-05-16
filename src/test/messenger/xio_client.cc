@@ -73,11 +73,11 @@ int main(int argc, const char **argv)
 	ts.tv_nsec = 0;
 
 	argv_to_vec(argc, argv, args);
-	env_to_vec(args);
 
 	auto cct = global_init(NULL, args,
 			       CEPH_ENTITY_TYPE_ANY,
-			       CODE_ENVIRONMENT_UTILITY, 0);
+			       CODE_ENVIRONMENT_UTILITY,
+			       CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
 	for (arg_iter = args.begin(); arg_iter != args.end();) {
 	  if (ceph_argparse_witharg(args, arg_iter, &val, "--addr",

@@ -6,7 +6,7 @@
  * primarily intended to describe data structures that pass over the
  * wire or that are stored on disk.
  *
- * LGPL2
+ * LGPL2.1
  */
 
 #ifndef CEPH_FS_H
@@ -231,15 +231,16 @@ struct ceph_mon_subscribe_ack {
 /*
  * mdsmap flags
  */
-#define CEPH_MDSMAP_DOWN    (1<<0)  /* cluster deliberately down */
-#define CEPH_MDSMAP_ALLOW_SNAPS   (1<<1)  /* cluster allowed to create snapshots */
-#define CEPH_MDSMAP_ALLOW_MULTIMDS (1<<2) /* cluster allowed to have >1 active MDS */
-#define CEPH_MDSMAP_ALLOW_DIRFRAGS (1<<3) /* cluster allowed to fragment directories */
+#define CEPH_MDSMAP_NOT_JOINABLE                 (1<<0)  /* standbys cannot join */
+#define CEPH_MDSMAP_DOWN                         (CEPH_MDSMAP_NOT_JOINABLE) /* backwards compat */
+#define CEPH_MDSMAP_ALLOW_SNAPS                  (1<<1)  /* cluster allowed to create snapshots */
+/* deprecated #define CEPH_MDSMAP_ALLOW_MULTIMDS (1<<2) cluster allowed to have >1 active MDS */
+/* deprecated #define CEPH_MDSMAP_ALLOW_DIRFRAGS (1<<3) cluster allowed to fragment directories */
+#define CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS	 (1<<4)  /* cluster alllowed to enable MULTIMDS
+							    and SNAPS at the same time */
 
-#define CEPH_MDSMAP_ALLOW_CLASSICS (CEPH_MDSMAP_ALLOW_SNAPS | CEPH_MDSMAP_ALLOW_MULTIMDS | \
-				    CEPH_MDSMAP_ALLOW_DIRFRAGS)
-
-#define CEPH_MDSMAP_DEFAULTS CEPH_MDSMAP_ALLOW_DIRFRAGS | CEPH_MDSMAP_ALLOW_MULTIMDS
+#define CEPH_MDSMAP_DEFAULTS (CEPH_MDSMAP_ALLOW_SNAPS | \
+			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS)
 
 /*
  * mds states
@@ -278,8 +279,8 @@ extern const char *ceph_mds_state_name(int s);
  */
 #define CEPH_LOCK_DVERSION    1
 #define CEPH_LOCK_DN          2
-#define CEPH_LOCK_ISNAP       16
-#define CEPH_LOCK_IVERSION    32    /* mds internal */
+#define CEPH_LOCK_IVERSION    16    /* mds internal */
+#define CEPH_LOCK_ISNAP       32
 #define CEPH_LOCK_IFILE       64
 #define CEPH_LOCK_IAUTH       128
 #define CEPH_LOCK_ILINK       256
@@ -366,7 +367,8 @@ enum {
 	CEPH_MDS_OP_FLUSH      = 0x01502,
 	CEPH_MDS_OP_ENQUEUE_SCRUB  = 0x01503,
 	CEPH_MDS_OP_REPAIR_FRAGSTATS = 0x01504,
-	CEPH_MDS_OP_REPAIR_INODESTATS = 0x01505
+	CEPH_MDS_OP_REPAIR_INODESTATS = 0x01505,
+	CEPH_MDS_OP_UPGRADE_SNAPREALM = 0x01506
 };
 
 extern const char *ceph_mds_op_name(int op);
@@ -739,6 +741,7 @@ int ceph_flags_to_mode(int flags);
 				 CEPH_CAP_XATTR_SHARED)
 #define CEPH_STAT_CAP_INLINE_DATA (CEPH_CAP_FILE_SHARED | \
 				   CEPH_CAP_FILE_RD)
+#define CEPH_STAT_RSTAT        CEPH_CAP_FILE_WREXTEND
 
 #define CEPH_CAP_ANY_SHARED (CEPH_CAP_AUTH_SHARED |			\
 			      CEPH_CAP_LINK_SHARED |			\

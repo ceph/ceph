@@ -50,15 +50,13 @@ struct Mirror {
   static void image_demote(ImageCtxT *ictx, Context *on_finish);
   static int image_resync(ImageCtxT *ictx);
   static int image_get_info(ImageCtxT *ictx,
-                            mirror_image_info_t *mirror_image_info,
-                            size_t info_size);
+                            mirror_image_info_t *mirror_image_info);
   static void image_get_info(ImageCtxT *ictx,
                              mirror_image_info_t *mirror_image_info,
-                             size_t info_size, Context *on_finish);
-  static int image_get_status(ImageCtxT *ictx, mirror_image_status_t *status,
-                              size_t status_size);
+                             Context *on_finish);
+  static int image_get_status(ImageCtxT *ictx, mirror_image_status_t *status);
   static void image_get_status(ImageCtxT *ictx, mirror_image_status_t *status,
-                               size_t status_size, Context *on_finish);
+                               Context *on_finish);
 
 };
 

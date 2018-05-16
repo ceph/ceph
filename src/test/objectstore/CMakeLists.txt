@@ -48,19 +48,6 @@ target_link_libraries(ceph_test_keyvaluedb
 install(TARGETS ceph_test_keyvaluedb
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-# ceph_test_objectstore_workloadgen
-add_executable(ceph_test_objectstore_workloadgen
-  workload_generator.cc
-  TestObjectStoreState.cc
-  )
-target_link_libraries(ceph_test_objectstore_workloadgen
-  os
-  global
-  ${EXTRALIBS}
-  ${BLKID_LIBRARIES}
-  ${CMAKE_DL_LIBS}
-  )
-
 # ceph_test_filestore_idempotent
 add_executable(ceph_test_filestore_idempotent
   test_idempotent.cc

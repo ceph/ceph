@@ -112,7 +112,7 @@ bool ReplayStatusFormatter<I>::calculate_behind_master_or_send_update() {
   cls::journal::ObjectPosition master = m_master_position;
   uint64_t mirror_tag_tid = m_mirror_position.tag_tid;
 
-  while (master.tag_tid != mirror_tag_tid) {
+  while (master.tag_tid > mirror_tag_tid) {
     auto tag_it = m_tag_cache.find(master.tag_tid);
     if (tag_it == m_tag_cache.end()) {
       send_update_tag_cache(master.tag_tid, mirror_tag_tid);
@@ -120,10 +120,12 @@ bool ReplayStatusFormatter<I>::calculate_behind_master_or_send_update() {
     }
     librbd::journal::TagData &tag_data = tag_it->second;
     m_entries_behind_master += master.entry_tid;
-    master = cls::journal::ObjectPosition(0, tag_data.predecessor.tag_tid,
-					  tag_data.predecessor.entry_tid);
+    master = {0, tag_data.predecessor.tag_tid, tag_data.predecessor.entry_tid};
   }
-  m_entries_behind_master += master.entry_tid - m_mirror_position.entry_tid;
+  if (master.tag_tid == mirror_tag_tid &&
+      master.entry_tid > m_mirror_position.entry_tid) {
+    m_entries_behind_master += master.entry_tid - m_mirror_position.entry_tid;
+  }
 
   dout(20) << "clearing tags not needed any more (below mirror position)"
 	   << dendl;
@@ -152,11 +154,8 @@ bool ReplayStatusFormatter<I>::calculate_behind_master_or_send_update() {
 template <typename I>
 void ReplayStatusFormatter<I>::send_update_tag_cache(uint64_t master_tag_tid,
 						     uint64_t mirror_tag_tid) {
-
-  dout(20) << "master_tag_tid=" << master_tag_tid << ", mirror_tag_tid="
-	   << mirror_tag_tid << dendl;
-
-  if (master_tag_tid == mirror_tag_tid) {
+  if (master_tag_tid <= mirror_tag_tid ||
+      m_tag_cache.find(master_tag_tid) != m_tag_cache.end()) {
     Context *on_finish = nullptr;
     {
       Mutex::Locker locker(m_lock);
@@ -167,6 +166,9 @@ void ReplayStatusFormatter<I>::send_update_tag_cache(uint64_t master_tag_tid,
     on_finish->complete(0);
     return;
   }
+
+  dout(20) << "master_tag_tid=" << master_tag_tid << ", mirror_tag_tid="
+	   << mirror_tag_tid << dendl;
 
   FunctionContext *ctx = new FunctionContext(
     [this, master_tag_tid, mirror_tag_tid](int r) {
@@ -201,16 +203,12 @@ void ReplayStatusFormatter<I>::handle_update_tag_cache(uint64_t master_tag_tid,
       tag_data.predecessor.mirror_uuid !=
         librbd::Journal<>::ORPHAN_MIRROR_UUID) {
     dout(20) << "hit remote image non-primary epoch" << dendl;
-    tag_data.predecessor.tag_tid = mirror_tag_tid;
-  } else if (tag_data.predecessor.tag_tid == 0) {
-    // We failed. Don't consider this fatal, just terminate retrieving.
-    dout(20) << "making fake tag" << dendl;
-    tag_data.predecessor.tag_tid = mirror_tag_tid;
+    tag_data.predecessor = {};
   }
 
   dout(20) << "decoded tag " << master_tag_tid << ": " << tag_data << dendl;
 
-  m_tag_cache.insert(std::make_pair(master_tag_tid, tag_data));
+  m_tag_cache[master_tag_tid] = tag_data;
   send_update_tag_cache(tag_data.predecessor.tag_tid, mirror_tag_tid);
 }
 

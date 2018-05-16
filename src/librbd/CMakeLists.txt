@@ -30,6 +30,7 @@ set(librbd_internal_srcs
   api/Mirror.cc
   api/Snapshot.cc
   cache/ImageWriteback.cc
+  cache/ObjectCacherObjectDispatch.cc
   cache/PassthroughImageCache.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
@@ -46,6 +47,7 @@ set(librbd_internal_srcs
   image/CloneRequest.cc
   image/CloseRequest.cc
   image/CreateRequest.cc
+  image/DetachChildRequest.cc
   image/OpenRequest.cc
   image/RefreshParentRequest.cc
   image/RefreshRequest.cc
@@ -56,12 +58,18 @@ set(librbd_internal_srcs
   io/AioCompletion.cc
   io/AsyncOperation.cc
   io/CopyupRequest.cc
+  io/ImageDispatchSpec.cc
   io/ImageRequest.cc
   io/ImageRequestWQ.cc
+  io/ObjectDispatch.cc
+  io/ObjectDispatchSpec.cc
+  io/ObjectDispatcher.cc
   io/ObjectRequest.cc
   io/ReadResult.cc
+  io/Utils.cc
   journal/CreateRequest.cc
   journal/DemoteRequest.cc
+  journal/ObjectDispatch.cc
   journal/OpenRequest.cc
   journal/PromoteRequest.cc
   journal/RemoveRequest.cc
@@ -165,8 +173,3 @@ if(ENABLE_SHARED)
     endif()
 endif(ENABLE_SHARED)
 install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
-
-if(WITH_EMBEDDED)
-  add_library(cephd_rbd_base STATIC librbd.cc ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
-  merge_static_libraries(cephd_rbd cephd_rbd_base rbd_internal rbd_types journal)
-endif()

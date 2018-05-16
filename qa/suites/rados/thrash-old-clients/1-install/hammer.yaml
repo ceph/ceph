@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    crush_tunables: hammer
+    conf:
+      mon:
+        mon osd initial require min compat client: hammer
+      client:
+        ms type: simple
+tasks:
+- install:
+    branch: hammer
+    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
+- install.upgrade:
+    mon.a:
+    mon.b:

@@ -57,34 +57,29 @@ void AioCompletion::complete() {
   CephContext *cct = ictx->cct;
 
   tracepoint(librbd, aio_complete_enter, this, rval);
-  utime_t elapsed;
-  elapsed = ceph_clock_now() - start_time;
-  switch (aio_type) {
-  case AIO_TYPE_GENERIC:
-  case AIO_TYPE_OPEN:
-  case AIO_TYPE_CLOSE:
-    break;
-  case AIO_TYPE_READ:
-    ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
-  case AIO_TYPE_WRITE:
-    ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed); break;
-  case AIO_TYPE_DISCARD:
-    ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
-  case AIO_TYPE_FLUSH:
-    ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
-  case AIO_TYPE_WRITESAME:
-    ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
-  case AIO_TYPE_COMPARE_AND_WRITE:
-    ictx->perfcounter->tinc(l_librbd_cmp_latency, elapsed); break;
-  default:
-    lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
-    break;
-  }
-
-  // inform the journal that the op has successfully committed
-  if (journal_tid != 0) {
-    assert(ictx->journal != NULL);
-    ictx->journal->commit_io_event(journal_tid, rval);
+  if (ictx->perfcounter != nullptr) {
+    ceph::timespan elapsed = coarse_mono_clock::now() - start_time;
+    switch (aio_type) {
+    case AIO_TYPE_GENERIC:
+    case AIO_TYPE_OPEN:
+    case AIO_TYPE_CLOSE:
+      break;
+    case AIO_TYPE_READ:
+      ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
+    case AIO_TYPE_WRITE:
+      ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed); break;
+    case AIO_TYPE_DISCARD:
+      ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
+    case AIO_TYPE_FLUSH:
+      ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
+    case AIO_TYPE_WRITESAME:
+      ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
+    case AIO_TYPE_COMPARE_AND_WRITE:
+      ictx->perfcounter->tinc(l_librbd_cmp_latency, elapsed); break;
+    default:
+      lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
+      break;
+    }
   }
 
   state = AIO_STATE_CALLBACK;
@@ -116,7 +111,7 @@ void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
   if (ictx == nullptr) {
     ictx = i;
     aio_type = t;
-    start_time = ceph_clock_now();
+    start_time = coarse_mono_clock::now();
   }
 }
 
@@ -179,12 +174,6 @@ void AioCompletion::complete_request(ssize_t r)
     complete();
   }
   put_unlock();
-}
-
-void AioCompletion::associate_journal_event(uint64_t tid) {
-  Mutex::Locker l(lock);
-  assert(state == AIO_STATE_PENDING);
-  journal_tid = tid;
 }
 
 bool AioCompletion::is_complete() {

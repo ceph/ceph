@@ -20,8 +20,8 @@
 
 TEST(inode_t, compare_equal)
 {
-  inode_t foo;
-  inode_t bar;
+  inode_t foo{};
+  inode_t bar{};
   int compare_r;
   bool divergent;
   compare_r = foo.compare(bar, &divergent);
@@ -51,8 +51,8 @@ TEST(inode_t, compare_equal)
 
 TEST(inode_t, compare_aged)
 {
-  inode_t foo;
-  inode_t bar;
+  inode_t foo{};
+  inode_t bar{};
 
   foo.ino = 1234;
   foo.ctime.set_from_double(10.0);
@@ -78,8 +78,8 @@ TEST(inode_t, compare_aged)
 
 TEST(inode_t, compare_divergent)
 {
-  inode_t foo;
-  inode_t bar;
+  inode_t foo{};
+  inode_t bar{};
 
   foo.ino = 1234;
   foo.ctime.set_from_double(10.0);

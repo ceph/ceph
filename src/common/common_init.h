@@ -26,7 +26,7 @@ enum common_init_flags_t {
   // Set up defaults that make sense for an unprivileged daemon
   CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS = 0x1,
 
-  // By default, don't read a configuration file
+  // By default, don't read a configuration file OR contact mons
   CINIT_FLAG_NO_DEFAULT_CONFIG_FILE = 0x2,
 
   // Don't close stderr (in daemonize)
@@ -37,6 +37,9 @@ enum common_init_flags_t {
 
   // don't drop privileges
   CINIT_FLAG_DEFER_DROP_PRIVILEGES = 0x10,
+
+  // do'nt contact mons for config
+  CINIT_FLAG_NO_MON_CONFIG = 0x20,
 };
 
 /*

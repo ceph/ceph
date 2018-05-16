@@ -142,7 +142,7 @@ int ErasureCodeLrc::layers_description(const ErasureCodeProfile &profile,
   return 0;
 }
 
-int ErasureCodeLrc::layers_parse(string description_string,
+int ErasureCodeLrc::layers_parse(const string &description_string,
 				 json_spirit::mArray description,
 				 ostream *ss)
 {
@@ -251,7 +251,7 @@ int ErasureCodeLrc::layers_init(ostream *ss)
   return 0;
 }
 
-int ErasureCodeLrc::layers_sanity_checks(string description_string,
+int ErasureCodeLrc::layers_sanity_checks(const string &description_string,
 					 ostream *ss) const
 {
   int position = 0;
@@ -452,7 +452,7 @@ int ErasureCodeLrc::parse_rule(ErasureCodeProfile &profile,
   return 0;
 }
 
-int ErasureCodeLrc::parse_rule_step(string description_string,
+int ErasureCodeLrc::parse_rule_step(const string &description_string,
 				       json_spirit::mArray description,
 				       ostream *ss)
 {

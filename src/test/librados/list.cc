@@ -142,7 +142,7 @@ TEST_F(LibRadosListPP, ListObjectsEndIter) {
 static void check_list(
   std::set<std::string>& myset,
   rados_list_ctx_t& ctx,
-  std::string check_nspace)
+  const std::string &check_nspace)
 {
   const char *entry, *nspace;
   cout << "myset " << myset << std::endl;
@@ -227,7 +227,7 @@ TEST_F(LibRadosList, ListObjectsNS) {
   rados_nobjects_list_close(ctx);
 }
 
-static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx, std::string check_nspace)
+static void check_listpp(std::set<std::string>& myset, IoCtx& ioctx, const std::string &check_nspace)
 {
   NObjectIterator iter(ioctx.nobjects_begin());
   std::set<std::string> orig_set(myset);
@@ -1002,8 +1002,8 @@ TEST_F(LibRadosList, EnumerateObjects) {
 
   // Ensure a non-power-of-two PG count to avoid only
   // touching the easy path.
-  std::string err_str = set_pg_num(&s_cluster, pool_name, 11);
-  ASSERT_TRUE(err_str.empty());
+  ASSERT_TRUE(set_pg_num(&s_cluster, pool_name, 11).empty());
+  ASSERT_TRUE(set_pgp_num(&s_cluster, pool_name, 11).empty());
 
   std::set<std::string> saw_obj;
   rados_object_list_cursor c = rados_object_list_begin(ioctx);
@@ -1050,8 +1050,8 @@ TEST_F(LibRadosList, EnumerateObjectsSplit) {
 
   // Ensure a non-power-of-two PG count to avoid only
   // touching the easy path.
-  std::string err_str = set_pg_num(&s_cluster, pool_name, 11);
-  ASSERT_TRUE(err_str.empty());
+  ASSERT_TRUE(set_pg_num(&s_cluster, pool_name, 11).empty());
+  ASSERT_TRUE(set_pgp_num(&s_cluster, pool_name, 11).empty());
 
   rados_object_list_cursor begin = rados_object_list_begin(ioctx);
   rados_object_list_cursor end = rados_object_list_end(ioctx);

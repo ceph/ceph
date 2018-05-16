@@ -2,6 +2,7 @@
 
 from mgr_test_case import MgrTestCase
 
+import json
 import logging
 import requests
 
@@ -11,6 +12,20 @@ log = logging.getLogger(__name__)
 
 class TestPrometheus(MgrTestCase):
     MGRS_REQUIRED = 3
+
+    def setUp(self):
+        self.setup_mgrs()
+
+    def test_file_sd_command(self):
+        self._assign_ports("prometheus", "server_port")
+        self._load_module("prometheus")
+
+        result = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "prometheus", "file_sd_config"))
+        mgr_map = self.mgr_cluster.get_mgr_map()
+        self.assertEqual(len(result[0]['targets']), len(mgr_map['standbys']) + 1)
+
+
 
     def test_standby(self):
         self._assign_ports("prometheus", "server_port")

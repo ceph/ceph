@@ -150,17 +150,36 @@ class ObjectCache {
   bool enabled;
   ceph::timespan expiry;
 
-  void touch_lru(string& name, ObjectCacheEntry& entry,
+  void touch_lru(const string& name, ObjectCacheEntry& entry,
 		 std::list<string>::iterator& lru_iter);
-  void remove_lru(string& name, std::list<string>::iterator& lru_iter);
+  void remove_lru(const string& name, std::list<string>::iterator& lru_iter);
   void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();
 public:
   ObjectCache() : lru_size(0), lru_counter(0), lru_window(0), lock("ObjectCache"), cct(NULL), enabled(false) { }
-  int get(std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
-  void put(std::string& name, ObjectCacheInfo& bl, rgw_cache_entry_info *cache_info);
-  void remove(std::string& name);
+  int get(const std::string& name, ObjectCacheInfo& bl, uint32_t mask, rgw_cache_entry_info *cache_info);
+  std::optional<ObjectCacheInfo> get(const std::string& name) {
+    std::optional<ObjectCacheInfo> info{std::in_place};
+    auto r = get(name, *info, 0, nullptr);
+    return r < 0 ? std::nullopt : info;
+  }
+
+  template<typename F>
+  void for_each(const F& f) {
+    RWLock::RLocker l(lock);
+    if (enabled) {
+      auto now  = ceph::coarse_mono_clock::now();
+      for (const auto& [name, entry] : cache_map) {
+        if (expiry.count() && (now - entry.info.time_added) < expiry) {
+          f(name, entry);
+        }
+      }
+    }
+  }
+
+  void put(const std::string& name, ObjectCacheInfo& bl, rgw_cache_entry_info *cache_info);
+  bool remove(const std::string& name);
   void set_ctx(CephContext *_cct) {
     cct = _cct;
     lru_window = cct->_conf->rgw_cache_lru_size / 2;
@@ -254,6 +273,11 @@ public:
   bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info *> cache_info_entries, RGWChainedCache::Entry *chained_entry) override {
     return cache.chain_cache_entry(cache_info_entries, chained_entry);
   }
+  void call_list(const std::optional<std::string>& filter,
+		 Formatter* format) override;
+  bool call_inspect(const std::string& target, Formatter* format) override;
+  bool call_erase(const std::string& target) override;
+  void call_zap() override;
 };
 
 template <class T>
@@ -589,4 +613,42 @@ int RGWCache<T>::watch_cb(uint64_t notify_id,
   return 0;
 }
 
+template<typename T>
+void RGWCache<T>::call_list(const std::optional<std::string>& filter,
+			    Formatter* f)
+{
+  cache.for_each(
+    [this, &filter, f] (const string& name, const ObjectCacheEntry& entry) {
+      if (!filter || name.find(*filter) != name.npos) {
+	T::cache_list_dump_helper(f, name, entry.info.meta.mtime,
+				  entry.info.meta.size);
+      }
+    });
+}
+
+template<typename T>
+bool RGWCache<T>::call_inspect(const std::string& target, Formatter* f)
+{
+  if (const auto entry = cache.get(target)) {
+    f->open_object_section("cache_entry");
+    f->dump_string("name", target.c_str());
+    entry->dump(f);
+    f->close_section();
+    return true;
+  } else {
+    return false;
+  }
+}
+
+template<typename T>
+bool RGWCache<T>::call_erase(const std::string& target)
+{
+  return cache.remove(target);
+}
+
+template<typename T>
+void RGWCache<T>::call_zap()
+{
+  cache.invalidate_all();
+}
 #endif

@@ -14,6 +14,8 @@
 
 #include <random>
 #include <sstream>
+#include <iterator>
+#include <algorithm>
 
 #include "CompressionPlugin.h"
 #include "Compressor.h"
@@ -22,41 +24,25 @@
 #include "common/debug.h"
 #include "common/dout.h"
 
-const char * Compressor::get_comp_alg_name(int a) {
-  switch (a) {
-  case COMP_ALG_NONE: return "none";
-  case COMP_ALG_SNAPPY: return "snappy";
-  case COMP_ALG_ZLIB: return "zlib";
-  case COMP_ALG_ZSTD: return "zstd";
-#ifdef HAVE_LZ4
-  case COMP_ALG_LZ4: return "lz4";
-#endif
-#ifdef HAVE_BROTLI
-  case COMP_ALG_BROTLI: return "brotli";
-#endif
-  default: return "???";
-  }
+const char* Compressor::get_comp_alg_name(int a) {
+
+  auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
+		   [a](const auto& kv) { return kv.second == a; });
+
+  if (std::cend(compression_algorithms) == p)
+   return "???"; // It would be nice to revise this...
+
+  return p->first;
 }
 
 boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(const std::string &s) {
-  if (s == "snappy")
-    return COMP_ALG_SNAPPY;
-  if (s == "zlib")
-    return COMP_ALG_ZLIB;
-  if (s == "zstd")
-    return COMP_ALG_ZSTD;
-#ifdef HAVE_LZ4
-  if (s == "lz4")
-    return COMP_ALG_LZ4;
-#endif
-#ifdef HAVE_BROTLI
-  if (s == "brotli")
-    return COMP_ALG_BROTLI;
-#endif
-  if (s == "" || s == "none")
-    return COMP_ALG_NONE;
 
-  return boost::optional<CompressionAlgorithm>();
+  auto p = std::find_if(std::cbegin(compression_algorithms), std::cend(compression_algorithms),
+		   [&s](const auto& kv) { return kv.first == s; });
+  if (std::cend(compression_algorithms) == p)
+    return {};
+
+  return p->second;
 }
 
 const char *Compressor::get_comp_mode_name(int m) {

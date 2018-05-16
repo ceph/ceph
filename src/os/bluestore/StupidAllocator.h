@@ -43,7 +43,7 @@ public:
 
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
-    int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents) override;
+    int64_t hint, PExtentVector *extents) override;
 
   int64_t allocate_int(
     uint64_t want_size, uint64_t alloc_unit, int64_t hint,
@@ -53,6 +53,7 @@ public:
     const interval_set<uint64_t>& release_set) override;
 
   uint64_t get_free() override;
+  double get_fragmentation(uint64_t alloc_unit) override;
 
   void dump() override;
 

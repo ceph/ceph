@@ -327,7 +327,7 @@ settings:
 :Description: The maximum number of recent events to include in a log file.
 :Type: Integer
 :Required:  No
-:Default: ``1000000``
+:Default: ``10000``
 
 
 ``log to stderr``

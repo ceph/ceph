@@ -265,7 +265,7 @@ static void handle_error(JNIEnv *env, int rc)
 /*
  * Cast a jlong to ceph_mount_info. Each JNI function is expected to pass in
  * the class instance variable instance_ptr. Passing a parameter is faster
- * than reaching back into Java via an upcall to retreive this pointer.
+ * than reaching back into Java via an upcall to retrieve this pointer.
  */
 static inline struct ceph_mount_info *get_ceph_mount(jlong j_mntp)
 {

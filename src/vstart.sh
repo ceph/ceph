@@ -14,14 +14,30 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_CONF_PATH=$VSTART_DEST
   CEPH_DEV_DIR=$VSTART_DEST/dev
   CEPH_OUT_DIR=$VSTART_DEST/out
+  CEPH_ASOK_DIR=$VSTART_DEST/out
 fi
+
+get_cmake_variable() {
+    local variable=$1
+    grep "$variable" CMakeCache.txt | cut -d "=" -f 2
+}
 
 # for running out of the CMake build directory
 if [ -e CMakeCache.txt ]; then
   # Out of tree build, learn source location from CMakeCache.txt
-  CEPH_ROOT=`grep ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
+  CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
   CEPH_BUILD_DIR=`pwd`
   [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
+  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
+  if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
+      CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
+  else
+      if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
+          CEPH_PY_VERSION_MAJOR=2
+      else
+          CEPH_PY_VERSION_MAJOR=3
+      fi
+  fi
 fi
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install' 
@@ -30,6 +46,7 @@ if [ -n "$CEPH_BUILD_ROOT" ]; then
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB/erasure-code
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
+        # make install should install python extensions into PYTHONPATH
 elif [ -n "$CEPH_ROOT" ]; then
         [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
@@ -46,7 +63,7 @@ fi
 
 [ -z "$PYBIND" ] && PYBIND=./pybind
 
-export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.2:$PYTHONPATH
+export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:$PYTHONPATH
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 # Suppress logging for regular use that indicated that we are using a
@@ -114,7 +131,14 @@ rgw_frontend="civetweb"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
 
+with_mgr_dashboard=true
+if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]]; then
+  echo "ceph-mgr dashboard not built - disabling."
+  with_mgr_dashboard=false
+fi
+
 filestore_path=
+kstore_path=
 
 VSTART_SEC="client.vstart.sh"
 
@@ -150,11 +174,13 @@ usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
 usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
 usage=$usage"\t-b, --bluestore use bluestore as the osd objectstore backend (default)\n"
 usage=$usage"\t-f, --filestore use filestore as the osd objectstore backend\n"
+usage=$usage"\t-K, --kstore use kstore as the osd objectstore backend\n"
 usage=$usage"\t--memstore use memstore as the osd objectstore backend\n"
 usage=$usage"\t--cache <pool>: enable cache tiering on pool\n"
 usage=$usage"\t--short: short object names only; necessary for ext4 dev\n"
 usage=$usage"\t--nolockdep disable lockdep\n"
 usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
+usage=$usage"\t--without-dashboard: do not run using mgr dashboard\n"
 
 usage_exit() {
 	printf "$usage"
@@ -241,6 +267,10 @@ case $1 in
             rgw_compression=$2
             shift
             ;;
+    --kstore_path )
+	kstore_path=$2
+	shift
+	;;
     --filestore_path )
 	filestore_path=$2
 	shift
@@ -272,6 +302,9 @@ case $1 in
     -f | --filestore )
 	    objectstore="filestore"
 	    ;;
+    -K | --kstore )
+            objectstore="kstore"
+            ;;
     --hitset )
 	    hitset="$hitset $2 $3"
 	    shift
@@ -297,6 +330,9 @@ case $1 in
         CEPH_MAX_MDS="$2"
         shift
         ;;
+    --without-dashboard)
+        with_mgr_dashboard=false
+        ;;
     * )
 	    usage_exit
 esac
@@ -308,7 +344,7 @@ if [ $kill_all -eq 1 ]; then
 fi
 
 if [ "$overwrite_conf" -eq 0 ]; then
-    CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+    CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
     mkdir -p $CEPH_ASOK_DIR
     MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
@@ -323,16 +359,20 @@ if [ "$overwrite_conf" -eq 0 ]; then
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
-        asok_dir=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
-        if [ $asok_dir != /var/run/ceph ]; then
+	if [ -e "$conf_fn" ]; then
+	  asok_dir=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
+	  rm -- "$conf_fn"
+	  if [ $asok_dir != /var/run/ceph ]; then
             [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
-        fi
-        if [ -z "$CEPH_ASOK_DIR" ]; then
+	  fi
+	fi
+	if [ -z "$CEPH_ASOK_DIR" ]; then
             CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
         fi
-        [ -e "$conf_fn" ] && rm -- "$conf_fn"
     else
-        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+	if [ -z "$CEPH_ASOK_DIR" ]; then
+            CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
+        fi
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
@@ -394,6 +434,11 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
+    local mgr_modules="restful status balancer"
+    if $with_mgr_dashboard; then
+      mgr_modules="dashboard $mgr_modules"
+    fi
+
     wconf <<EOF
 ; generated by vstart.sh on `date`
 [$VSTART_SEC]
@@ -405,24 +450,16 @@ prepare_conf() {
 
 [global]
         fsid = $(uuidgen)
-        osd pg bits = 3
-        osd pgp bits = 5  ; (invalid, but ceph should cope!)
-        osd pool default size = $OSD_POOL_DEFAULT_SIZE
-        osd crush chooseleaf type = 0
-        osd pool default min size = 1
         osd failsafe full ratio = .99
+        mon osd full ratio = .99
         mon osd nearfull ratio = .99
         mon osd backfillfull ratio = .99
-        mon osd reporter subtree level = osd
-        mon osd full ratio = .99
-        mon data avail warn = 2
-        mon data avail crit = 1
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
-        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+	osd_crush_chooseleaf_type = 0
 $extra_conf
 EOF
 	if [ "$lockdep" -eq 1 ] ; then
@@ -430,13 +467,7 @@ EOF
         lockdep = true
 EOF
 	fi
-	if [ "$cephx" -eq 1 ] ; then
-		wconf <<EOF
-        auth cluster required = cephx
-        auth service required = cephx
-        auth client required = cephx
-EOF
-	else
+	if [ "$cephx" -ne 1 ] ; then
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none
@@ -462,10 +493,6 @@ $extra_conf
 
 [mds]
 $DAEMONOPTS
-$CMDSDEBUG
-        mds debug frag = true
-        mds debug auth pins = true
-        mds debug subtrees = true
         mds data = $CEPH_DEV_DIR/mds.\$id
         mds root ino uid = `id -u`
         mds root ino gid = `id -g`
@@ -473,10 +500,7 @@ $extra_conf
 [mgr]
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
-        mon reweight min pgs per osd = 4
-        mon pg warn min per osd = 3
 $DAEMONOPTS
-$CMGRDEBUG
 $extra_conf
 [osd]
 $DAEMONOPTS
@@ -488,16 +512,13 @@ $DAEMONOPTS
         osd class dir = $OBJCLASS_PATH
         osd class load list = *
         osd class default list = *
-        osd scrub load threshold = 2000.0
-        osd debug op order = true
-        osd debug misdirected ops = true
+
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20
         filestore wbthrottle xfs inodes hard limit = 30
         filestore wbthrottle btrfs ios start flusher = 10
         filestore wbthrottle btrfs ios hard limit = 20
         filestore wbthrottle btrfs inodes hard limit = 30
-        osd copyfrom max chunk = 524288
         bluestore fsck on mount = true
         bluestore block create = true
 	bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
@@ -506,22 +527,19 @@ $DAEMONOPTS
 	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true
-$COSDDEBUG
+
+        ; kstore
+        kstore fsck on mount = true
         osd objectstore = $objectstore
 $COSDSHORT
 $extra_conf
 [mon]
-        mgr initial modules = restful status dashboard balancer
-        mon pg warn min per osd = 3
-        mon osd allow primary affinity = true
-        mon reweight min pgs per osd = 4
-        mon osd prime pg temp = true
-        crushtool = $CEPH_BIN/crushtool
-        mon allow pool delete = true
+        mgr initial modules = $mgr_modules
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
         mon cluster log file = $CEPH_OUT_DIR/cluster.mon.\$id.log
+        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
 EOF
 }
 
@@ -618,15 +636,18 @@ EOF
             fi
 	    if [ -n "$filestore_path" ]; then
 		ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
+	    elif [ -n "$kstore_path" ]; then
+		ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
 	    else
 		mkdir -p $CEPH_DEV_DIR/osd$osd
 	    fi
 
             local uuid=`uuidgen`
             echo "add osd$osd $uuid"
-            ceph_adm osd create $uuid
-            ceph_adm osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
 	    OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
+	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
+            ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
+	    rm $CEPH_DEV_DIR/osd$osd/new.json
             $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
@@ -662,13 +683,22 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
-	ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
-	DASH_URLS+="http://$IP:$MGR_PORT/"
+        if $with_mgr_dashboard ; then
+            ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT
+            if [ $mgr -eq 1 ]; then
+                DASH_URLS="https://$IP:$MGR_PORT"
+            else
+                DASH_URLS+=", https://$IP:$MGR_PORT"
+            fi
+        fi
 	MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
-
-	RESTFUL_URLS+="https://$IP:$MGR_PORT"
+	ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT
+        if [ $mgr -eq 1 ]; then
+            RESTFUL_URLS="https://$IP:$MGR_PORT"
+        else
+            RESTFUL_URLS+=", https://$IP:$MGR_PORT"
+        fi
 	MGR_PORT=$(($MGR_PORT + 1000))
 
         echo "Starting mgr.${name}"
@@ -677,6 +707,15 @@ EOF
 
     # use tell mgr here because the first mgr might not have activated yet
     # to register the python module commands.
+
+    # setting login credentials for dashboard
+    if $with_mgr_dashboard; then
+        ceph_adm tell mgr dashboard set-login-credentials admin admin
+        if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+            echo dashboard module not working correctly!
+        fi
+    fi
+
     if ceph_adm tell mgr restful create-self-signed-cert; then
         SF=`mktemp`
         ceph_adm restful create-key admin -o $SF
@@ -732,6 +771,7 @@ EOF
 
     if [ $new -eq 1 ]; then
         if [ "$CEPH_NUM_FS" -gt "0" ] ; then
+            sleep 5 # time for MDS to come up as standby to avoid health warnings on fs creation
             if [ "$CEPH_NUM_FS" -gt "1" ] ; then
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
@@ -755,12 +795,6 @@ if [ "$debug" -eq 0 ]; then
     CMONDEBUG='
         debug mon = 10
         debug ms = 1'
-    COSDDEBUG='
-        debug ms = 1'
-    CMDSDEBUG='
-        debug ms = 1'
-    CMGRDEBUG='
-        debug ms = 1'
 else
     echo "** going verbose **"
     CMONDEBUG='
@@ -769,34 +803,6 @@ else
         debug auth = 20
 	debug mgrc = 20
         debug ms = 1'
-    COSDDEBUG='
-        debug ms = 1
-        debug osd = 25
-        debug objecter = 20
-        debug monc = 20
-        debug mgrc = 20
-        debug journal = 20
-        debug filestore = 20
-        debug bluestore = 30
-        debug bluefs = 20
-        debug rocksdb = 10
-        debug bdev = 20
-        debug reserver = 10
-        debug objclass = 20'
-    CMDSDEBUG='
-        debug ms = 1
-        debug mds = 20
-        debug auth = 20
-        debug monc = 20
-        debug mgrc = 20
-        mds debug scatterstat = true
-        mds verify scatter = true
-        mds log max segments = 2'
-    CMGRDEBUG='
-        debug ms = 1
-        debug monc = 20
-	debug mon = 20
-        debug mgr = 20'
 fi
 
 if [ -n "$MON_ADDR" ]; then
@@ -866,6 +872,66 @@ fi
 
 if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
+
+    echo Populating config ...
+    cat <<EOF | $CEPH_BIN/ceph -c $conf_fn config assimilate-conf -i -
+[global]
+osd_pool_default_size = $OSD_POOL_DEFAULT_SIZE
+osd_pool_default_min_size = 1
+mon_pg_warn_min_per_osd = 3
+
+[mon]
+mon_osd_reporter_subtree_level = osd
+mon_data_avail_warn = 2
+mon_data_avail_crit = 1
+mon_allow_pool_delete = true
+
+[osd]
+osd_scrub_load_threshold = 2000
+osd_debug_op_order = true
+osd_debug_misdirected_ops = true
+osd_copyfrom_max_chunk = 524288
+
+[mds]
+mds_debug_frag = true
+mds_debug_auth_pins = true
+mds_debug_subtrees = true
+
+EOF
+
+    if [ "$debug" -ne 0 ]; then
+	echo Setting debug configs ...
+	cat <<EOF | $CEPH_BIN/ceph -c $conf_fn config assimilate-conf -i -
+[mgr]
+debug_ms = 1
+debug_mgr = 20
+debug_monc = 20
+debug_mon = 20
+
+[osd]
+debug_ms = 1
+debug_osd = 25
+debug_objecter = 20
+debug_monc = 20
+debug_mgrc = 20
+debug_journal = 20
+debug_filestore = 20
+debug_bluestore = 20
+debug_bluefs = 20
+debug_rocksdb = 20
+debug_bdev = 20
+debug_reserver = 10
+debug_objclass = 20
+
+[mds]
+debug_ms = 1
+debug_mds = 20
+debug_monc = 20
+debug_mgrc = 20
+mds_debug_scatterstat = true
+mds_verify_scatter = true
+EOF
+    fi
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then
@@ -901,7 +967,6 @@ do
     [ $fs -eq $CEPH_NUM_FS ] && break
     fs=$(($fs + 1))
     if [ "$CEPH_MAX_MDS" -gt 1 ]; then
-        ceph_adm fs set "cephfs_${name}" allow_multimds true --yes-i-really-mean-it
         ceph_adm fs set "cephfs_${name}" max_mds "$CEPH_MAX_MDS"
     fi
 done
@@ -1034,9 +1099,13 @@ fi
 echo "started.  stop.sh to stop.  see out/* (e.g. 'tail -f out/????') for debug output."
 
 echo ""
-echo "dashboard urls: $DASH_URLS"
-echo "  restful urls: $RESTFUL_URLS"
+if $with_mgr_dashboard; then
+    echo "dashboard urls: $DASH_URLS"
+    echo "  w/ user/pass: admin / admin"
+fi
+echo "restful urls: $RESTFUL_URLS"
 echo "  w/ user/pass: admin / $RESTFUL_SECRET"
+echo ""
 echo ""
 echo "export PYTHONPATH=./pybind:$PYTHONPATH"
 echo "export LD_LIBRARY_PATH=$CEPH_LIB"

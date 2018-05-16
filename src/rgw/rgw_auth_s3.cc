@@ -17,6 +17,7 @@
 
 #include <boost/container/small_vector.hpp>
 #include <boost/utility/string_view.hpp>
+#include <boost/algorithm/string/trim_all.hpp>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -223,8 +224,20 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-/* FIXME(rzarzynski): duplicated from rgw_rest_s3.h. */
-#define RGW_AUTH_GRACE_MINS 15
+bool is_time_skew_ok(time_t t)
+{
+  auto req_tp = ceph::coarse_real_clock::from_time_t(t);
+  auto cur_tp = ceph::coarse_real_clock::now();
+
+  if (std::chrono::abs(cur_tp - req_tp) > RGW_AUTH_GRACE) {
+    dout(10) << "NOTICE: request time skew too big." << dendl;
+    using ceph::operator<<;
+    dout(10) << "req_tp=" << req_tp << ", cur_tp=" << cur_tp << dendl;
+    return false;
+  }
+
+  return true;
+}
 
 static inline int parse_v4_query_string(const req_info& info,              /* in */
                                         boost::string_view& credential,    /* out */
@@ -391,13 +404,7 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   }
   date = d;
 
-  auto req_tp = ceph::coarse_real_clock::from_time_t(internal_timegm(&t));
-  auto cur_tp = ceph::coarse_real_clock::now();
-  constexpr auto grace = std::chrono::minutes{RGW_AUTH_GRACE_MINS};
-  if (std::chrono::abs(cur_tp - req_tp) > grace) {
-    dout(10) << "NOTICE: request time skew too big." << dendl;
-    using ceph::operator<<;
-    dout(10) << "req_tp=" << req_tp << ", cur_tp=" << cur_tp << dendl;
+  if (!is_time_skew_ok(internal_timegm(&t))) {
     return -ERR_REQUEST_TIME_SKEWED;
   }
 
@@ -610,7 +617,8 @@ get_v4_canonical_headers(const req_info& info,
   std::string canonical_hdrs;
   for (const auto& header : canonical_hdrs_map) {
     const boost::string_view& name = header.first;
-    const std::string& value = header.second;
+    std::string value = header.second;
+    boost::trim_all<std::string>(value);
 
     canonical_hdrs.append(name.data(), name.length())
                   .append(":", std::strlen(":"))

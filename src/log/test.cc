@@ -16,10 +16,17 @@ using namespace ceph::logging;
 TEST(Log, Simple)
 {
   SubsystemMap subs;
-  subs.add(0, "none", 10, 10);
-  subs.add(1, "foosys", 20, 1);
-  subs.add(2, "bar", 20, 2);
-  subs.add(3, "baz", 10, 3);
+  subs.set_log_level(0, 10);
+  subs.set_gather_level(0, 10);
+
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 1);
+
+  subs.set_log_level(2, 20);
+  subs.set_gather_level(2, 2);
+
+  subs.set_log_level(3, 10);
+  subs.set_gather_level(3, 3);
 
   Log log(&subs);
   log.start();
@@ -46,12 +53,43 @@ TEST(Log, Simple)
   log.stop();
 }
 
+TEST(Log, ReuseBad)
+{
+  SubsystemMap subs;
+  subs.set_log_level(1, 1);
+  subs.set_gather_level(1, 1);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/foo");
+  log.reopen_log_file();
+
+  const int l = 0;
+  {
+    auto e = log.create_entry(l, 1);
+    auto& out = e->get_ostream();
+    out << (std::streambuf*)nullptr;
+    EXPECT_TRUE(out.bad()); // writing nullptr to a stream sets its badbit
+    log.submit_entry(e);
+  }
+  {
+    auto e = log.create_entry(l, 1);
+    auto& out = e->get_ostream();
+    EXPECT_FALSE(out.bad()); // should not see failures from previous log entry
+    out << "hello world";
+    log.submit_entry(e);
+  }
+
+  log.flush();
+  log.stop();
+}
+
 int many = 10000;
 
 TEST(Log, ManyNoGather)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 1, 1);
+  subs.set_log_level(1, 1);
+  subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -69,7 +107,8 @@ TEST(Log, ManyNoGather)
 TEST(Log, ManyGatherLog)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 10);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -87,7 +126,8 @@ TEST(Log, ManyGatherLog)
 TEST(Log, ManyGatherLogStringAssign)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 10);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -108,7 +148,8 @@ TEST(Log, ManyGatherLogStringAssign)
 TEST(Log, ManyGatherLogStringAssignWithReserve)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 10);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -131,7 +172,8 @@ TEST(Log, ManyGatherLogStringAssignWithReserve)
 TEST(Log, ManyGatherLogPrebuf)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 10);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -154,7 +196,8 @@ TEST(Log, ManyGatherLogPrebuf)
 TEST(Log, ManyGatherLogPrebufOverflow)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 10);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -178,7 +221,8 @@ TEST(Log, ManyGatherLogPrebufOverflow)
 TEST(Log, ManyGather)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 1);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -195,7 +239,8 @@ TEST(Log, ManyGather)
 void do_segv()
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 1);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -220,7 +265,8 @@ TEST(Log, InternalSegv)
 TEST(Log, LargeLog)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 10);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/big");
@@ -240,7 +286,8 @@ TEST(Log, LargeLog)
 TEST(Log, TimeSwitch)
 {
   SubsystemMap subs;
-  subs.add(1, "foo", 20, 10);
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
   log.set_log_file("/tmp/time_switch_log");
@@ -348,7 +395,8 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-                         CODE_ENVIRONMENT_UTILITY, 0);
+                         CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);

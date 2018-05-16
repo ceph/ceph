@@ -26,8 +26,6 @@
  */
 struct EntityName
 {
-  EntityName();
-
   void encode(bufferlist& bl) const {
     using ceph::encode;
     encode(type, bl);
@@ -66,6 +64,7 @@ struct EntityName
   bool has_default_id() const;
 
   static std::string get_valid_types_as_str();
+  static uint32_t str_to_ceph_entity_type(std::string_view);
 
   friend bool operator<(const EntityName& a, const EntityName& b);
   friend std::ostream& operator<<(std::ostream& out, const EntityName& n);
@@ -73,12 +72,16 @@ struct EntityName
   friend bool operator!=(const EntityName& a, const EntityName& b);
 
 private:
-  uint32_t type;
+  struct str_to_entity_type_t {
+    uint32_t type;
+    const char *str;
+  };
+  static const std::array<str_to_entity_type_t, 6> STR_TO_ENTITY_TYPE;
+
+  uint32_t type = 0;
   std::string id;
   std::string type_id;
 };
-
-uint32_t str_to_ceph_entity_type(const char * str);
 
 WRITE_CLASS_ENCODER(EntityName)
 

@@ -21,6 +21,7 @@
 #include <string.h>
 #include <string>
 #include <sys/stat.h>
+#include <sys/sysmacros.h>
 #include <sys/types.h>
 #include <unistd.h>
 
@@ -545,7 +546,7 @@ static int do_unmap(struct udev *udev, dev_t devno, const string& buf)
          * libudev does not provide the "wait until the queue is empty"
          * API or the sufficient amount of primitives to build it from.
          */
-        string err = run_cmd("udevadm", "settle", "--timeout", "10", NULL);
+        string err = run_cmd("udevadm", "settle", "--timeout", "10", (char*)NULL);
         if (!err.empty())
           cerr << "rbd: " << err << std::endl;
       }
@@ -656,7 +657,7 @@ static bool dump_one_image(Formatter *f, TextTable *tbl,
 static int do_dump(struct udev *udev, Formatter *f, TextTable *tbl)
 {
   struct udev_enumerate *enm;
-  struct udev_list_entry *l;
+  struct udev_list_entry *l = NULL;
   bool have_output = false;
   int r;
 

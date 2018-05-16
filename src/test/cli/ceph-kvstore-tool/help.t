@@ -18,4 +18,3 @@
     compact-range <prefix> <start> <end>
     repair
   
-  [1]

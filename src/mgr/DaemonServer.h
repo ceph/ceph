@@ -33,6 +33,7 @@
 
 class MMgrReport;
 class MMgrOpen;
+class MMgrClose;
 class MMonMgrReport;
 class MCommand;
 struct MonCommand;
@@ -80,13 +81,13 @@ protected:
 
   Mutex lock;
 
-  static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
+  static void _generate_command_map(cmdmap_t& cmdmap,
                                     map<string,string> &param_str_map);
   static const MonCommand *_get_mgrcommand(const string &cmd_prefix,
                                            const std::vector<MonCommand> &commands);
   bool _allowed_command(
     MgrSession *s, const string &module, const string &prefix,
-    const map<string,cmd_vartype>& cmdmap,
+    const cmdmap_t& cmdmap,
     const map<string,string>& param_str_map,
     const MonCommand *this_cmd);
 
@@ -132,10 +133,12 @@ public:
       CryptoKey& session_key) override;
 
   bool handle_open(MMgrOpen *m);
+  bool handle_close(MMgrClose *m);
   bool handle_report(MMgrReport *m);
   bool handle_command(MCommand *m);
   void send_report();
   void got_service_map();
+  void got_mgr_map();
 
   void _send_configure(ConnectionRef c);
 

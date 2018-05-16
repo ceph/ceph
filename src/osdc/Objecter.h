@@ -25,8 +25,6 @@
 
 #include <boost/thread/shared_mutex.hpp>
 
-#include "dmclock/src/dmclock_client.h"
-
 #include "include/assert.h"
 #include "include/buffer.h"
 #include "include/types.h"
@@ -286,7 +284,7 @@ struct ObjectOperation {
   // object cmpext
   struct C_ObjectOperation_cmpext : public Context {
     int *prval;
-    C_ObjectOperation_cmpext(int *prval)
+    explicit C_ObjectOperation_cmpext(int *prval)
       : prval(prval) {}
 
     void finish(int r) {
@@ -1134,22 +1132,24 @@ struct ObjectOperation {
    * Extensible tier
    */
   void set_redirect(object_t tgt, snapid_t snapid, object_locator_t tgt_oloc, 
-		    version_t tgt_version) {
+		    version_t tgt_version, int flag) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_REDIRECT);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = tgt_version;
     encode(tgt, osd_op.indata);
     encode(tgt_oloc, osd_op.indata);
+    set_last_op_flags(flag);
   }
 
   void set_chunk(uint64_t src_offset, uint64_t src_length, object_locator_t tgt_oloc,
-		 object_t tgt_oid, uint64_t tgt_offset) {
+		 object_t tgt_oid, uint64_t tgt_offset, int flag) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_CHUNK);
     encode(src_offset, osd_op.indata);
     encode(src_length, osd_op.indata);
     encode(tgt_oloc, osd_op.indata);
     encode(tgt_oid, osd_op.indata);
     encode(tgt_offset, osd_op.indata);
+    set_last_op_flags(flag);
   }
 
   void tier_promote() {
@@ -1208,8 +1208,6 @@ public:
   MonClient *monc;
   Finisher *finisher;
   ZTracer::Endpoint trace_endpoint;
-  std::unique_ptr<dmc::ServiceTracker<int>> qos_trk;
-  std::atomic<bool> mclock_service_tracker;
 private:
   OSDMap    *osdmap;
 public:
@@ -1245,7 +1243,7 @@ private:
   version_t last_seen_osdmap_version;
   version_t last_seen_pgmap_version;
 
-  mutable boost::shared_mutex rwlock;
+  mutable std::shared_mutex rwlock;
   using lock_guard = std::lock_guard<decltype(rwlock)>;
   using unique_lock = std::unique_lock<decltype(rwlock)>;
   using shared_lock = boost::shared_lock<decltype(rwlock)>;
@@ -1259,7 +1257,6 @@ private:
   void start_tick();
   void tick();
   void update_crush_location();
-  void update_mclock_service_tracker();
 
   class RequestStateHook;
 
@@ -1316,7 +1313,7 @@ public:
 	base_oloc(oloc)
       {}
 
-    op_target_t(pg_t pgid)
+    explicit op_target_t(pg_t pgid)
       : base_oloc(pgid.pool(), pgid.ps()),
 	precalc_pgid(true),
 	base_pgid(pgid)
@@ -1376,7 +1373,7 @@ public:
 
     epoch_t map_dne_bound;
 
-    bool budgeted;
+    int budget;
 
     /// true if we should resend this message on failure
     bool should_resend;
@@ -1409,7 +1406,7 @@ public:
       objver(ov),
       reply_epoch(NULL),
       map_dne_bound(0),
-      budgeted(false),
+      budget(-1),
       should_resend(true),
       ctx_budgeted(false),
       data_offset(offset) {
@@ -1695,7 +1692,7 @@ public:
     bool is_watch;
     ceph::coarse_mono_time watch_valid_thru; ///< send time for last acked ping
     int last_error;  ///< error from last failed ping|reconnect, if any
-    boost::shared_mutex watch_lock;
+    std::shared_mutex watch_lock;
     using lock_guard = std::unique_lock<decltype(watch_lock)>;
     using unique_lock = std::unique_lock<decltype(watch_lock)>;
     using shared_lock = boost::shared_lock<decltype(watch_lock)>;
@@ -1719,6 +1716,8 @@ public:
 
     OSDSession *session;
 
+    Objecter *objecter;
+    int ctx_budget;
     ceph_tid_t register_tid;
     ceph_tid_t ping_tid;
     epoch_t map_dne_bound;
@@ -1733,22 +1732,24 @@ public:
       watch_pending_async.pop_front();
     }
 
-    LingerOp() : linger_id(0),
-		 target(object_t(), object_locator_t(), 0),
-		 snap(CEPH_NOSNAP), poutbl(NULL), pobjver(NULL),
-		 is_watch(false), last_error(0),
-		 register_gen(0),
-		 registered(false),
-		 canceled(false),
-		 on_reg_commit(NULL),
-		 on_notify_finish(NULL),
-		 notify_result_bl(NULL),
-		 notify_id(0),
-		 watch_context(NULL),
-		 session(NULL),
-		 register_tid(0),
-		 ping_tid(0),
-		 map_dne_bound(0) {}
+    explicit LingerOp(Objecter *o) : linger_id(0),
+			    target(object_t(), object_locator_t(), 0),
+			    snap(CEPH_NOSNAP), poutbl(NULL), pobjver(NULL),
+			    is_watch(false), last_error(0),
+			    register_gen(0),
+			    registered(false),
+			    canceled(false),
+			    on_reg_commit(NULL),
+			    on_notify_finish(NULL),
+			    notify_result_bl(NULL),
+			    notify_id(0),
+			    watch_context(NULL),
+			    session(NULL),
+			    objecter(o),
+			    ctx_budget(-1),
+			    register_tid(0),
+			    ping_tid(0),
+			    map_dne_bound(0) {}
 
     const LingerOp &operator=(const LingerOp& r) = delete;
     LingerOp(const LingerOp& o) = delete;
@@ -1826,7 +1827,7 @@ public:
   };
 
   struct OSDSession : public RefCountedObject {
-    boost::shared_mutex lock;
+    std::shared_mutex lock;
     using lock_guard = std::lock_guard<decltype(lock)>;
     using unique_lock = std::unique_lock<decltype(lock)>;
     using shared_lock = boost::shared_lock<decltype(lock)>;
@@ -1989,29 +1990,26 @@ private:
    * and returned whenever an op is removed from the map
    * If throttle_op needs to throttle it will unlock client_lock.
    */
-  int calc_op_budget(Op *op);
+  int calc_op_budget(const vector<OSDOp>& ops);
   void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
   int _take_op_budget(Op *op, shunique_lock& sul) {
     assert(sul && sul.mutex() == &rwlock);
-    int op_budget = calc_op_budget(op);
+    int op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
       _throttle_op(op, sul, op_budget);
-    } else {
+    } else { // update take_linger_budget to match this!
       op_throttle_bytes.take(op_budget);
       op_throttle_ops.take(1);
     }
-    op->budgeted = true;
+    op->budget = op_budget;
     return op_budget;
   }
+  int take_linger_budget(LingerOp *info);
+  friend class WatchContext; // to invoke put_up_budget_bytes
   void put_op_budget_bytes(int op_budget) {
     assert(op_budget >= 0);
     op_throttle_bytes.put(op_budget);
     op_throttle_ops.put(1);
-  }
-  void put_op_budget(Op *op) {
-    assert(op->budgeted);
-    int op_budget = calc_op_budget(op);
-    put_op_budget_bytes(op_budget);
   }
   void put_nlist_context_budget(NListContext *list_context);
   Throttle op_throttle_bytes, op_throttle_ops;
@@ -2023,7 +2021,6 @@ private:
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     trace_endpoint("0.0.0.0", 0, "Objecter"),
-    mclock_service_tracker(cct->_conf->objecter_mclock_service_tracker),
     osdmap(new OSDMap),
     max_linger_id(0),
     keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
@@ -2038,11 +2035,7 @@ private:
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
     epoch_barrier(0),
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-  {
-    if (cct->_conf->objecter_mclock_service_tracker) {
-      qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
-    }
-  }
+  { }
   ~Objecter() override;
 
   void init();
@@ -2156,8 +2149,6 @@ private:
   void _op_submit_with_budget(Op *op, shunique_lock& lc,
 			      ceph_tid_t *ptid,
 			      int *ctx_budget = NULL);
-  inline void unregister_op(Op *op);
-
   // public interface
 public:
   void op_submit(Op *op, ceph_tid_t *ptid = NULL, int *ctx_budget = NULL);
@@ -2212,6 +2203,7 @@ private:
   int _op_cancel(ceph_tid_t tid, int r);
 public:
   int op_cancel(ceph_tid_t tid, int r);
+  int op_cancel(const vector<ceph_tid_t>& tidls, int r);
 
   /**
    * Any write op which is in progress at the start of this call shall no

@@ -334,8 +334,9 @@ The procedure is as follows:
 
    You should see output like this::
 
-	0 data,1 metadata,2 rbd,
-
+	0 data
+	1 metadata
+	2 rbd
 
 #. Verify that the monitor is running. :: 
 

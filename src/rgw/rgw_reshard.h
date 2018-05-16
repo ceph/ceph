@@ -31,7 +31,7 @@ class RGWBucketReshard {
 
   int create_new_bucket_instance(int new_num_shards, RGWBucketInfo& new_bucket_info);
   int do_reshard(int num_shards,
-		 const RGWBucketInfo& new_bucket_info,
+		 RGWBucketInfo& new_bucket_info,
 		 int max_entries,
                  bool verbose,
                  ostream *os,
@@ -46,6 +46,7 @@ public:
 	      RGWReshard *reshard_log = nullptr);
   int abort();
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
+  int cancel();
 };
 
 class RGWReshard {
@@ -111,7 +112,7 @@ class RGWReshardWait {
 
   int do_wait();
 public:
-  RGWReshardWait(RGWRados *_store) : store(_store) {}
+  explicit RGWReshardWait(RGWRados *_store) : store(_store) {}
   ~RGWReshardWait() {
     assert(going_down);
   }

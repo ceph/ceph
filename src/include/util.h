@@ -17,8 +17,6 @@
 #include "common/Formatter.h"
 #include "include/types.h"
 
-int64_t unit_to_bytesize(string val, ostream *pss);
-
 std::string bytes2str(uint64_t count);
 
 struct ceph_data_stats
@@ -83,7 +81,23 @@ void collect_sys_info(map<string, string> *m, CephContext *cct);
 /// @param services a map from hostname to a list of service id hosted by this host
 /// @param type the service type of given @p services, for example @p osd or @p mon.
 void dump_services(Formatter* f, const map<string, list<int> >& services, const char* type);
+/// dump service names grouped by their host to the specified formatter
+/// @param f formatter for the output
+/// @param services a map from hostname to a list of service name hosted by this host
+/// @param type the service type of given @p services, for example @p osd or @p mon.
+void dump_services(Formatter* f, const map<string, list<string> >& services, const char* type);
 
 string cleanbin(bufferlist &bl, bool &b64);
 string cleanbin(string &str);
+
+namespace ceph::util {
+
+// Returns true if s matches any parameters:
+template <typename ...XS>
+bool match_str(const std::string& s, const XS& ...xs)
+{
+ return ((s == xs) || ...);
+}
+
+} // namespace ceph::util
 #endif /* CEPH_UTIL_H */

@@ -34,7 +34,7 @@ else
 	ETCDIR=.
 	ASSUME_DEV=1
 	CEPH_LIB=$CEPH_ROOT/build/lib
-	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_LIB/cython_modules/lib.2:$PYTHONPATH
+	echo "$PYTHONPATH" | grep -q $CEPH_LIB || export PYTHONPATH=$CEPH_LIB/cython_modules/lib.@MGR_PYTHON_VERSION_MAJOR@:$PYTHONPATH
 	echo "$LD_LIBRARY_PATH" | grep -q $CEPH_LIB || export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 	echo "$DYLD_LIBRARY_PATH" | grep -q $CEPH_LIB || export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
     else

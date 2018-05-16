@@ -566,6 +566,17 @@ void MDLog::_journal_segment_subtree_map(MDSInternalContextBase *onsync)
   _submit_entry(sle, new C_MDL_Flushed(this, onsync));
 }
 
+class C_OFT_Committed : public MDSInternalContext {
+  MDLog *mdlog;
+  uint64_t seq;
+public:
+  C_OFT_Committed(MDLog *l, uint64_t s) :
+    MDSInternalContext(l->mds), mdlog(l), seq(s) {}
+  void finish(int ret) override {
+    mdlog->trim_expired_segments();
+  }
+};
+
 void MDLog::trim(int m)
 {
   unsigned max_segments = g_conf->mds_log_max_segments;
@@ -636,6 +647,7 @@ void MDLog::trim(int m)
 	      << journaler->get_write_safe_pos() << " < end " << ls->end << dendl;
       break;
     }
+
     if (expiring_segments.count(ls)) {
       dout(5) << "trim already expiring segment " << ls->seq << "/" << ls->offset
 	      << ", " << ls->num_events << " events" << dendl;
@@ -654,6 +666,18 @@ void MDLog::trim(int m)
 
       submit_mutex.Lock();
       p = segments.lower_bound(last_seq + 1);
+    }
+  }
+
+  if (!capped &&
+      !mds->mdcache->open_file_table.is_any_committing()) {
+    uint64_t last_seq = get_last_segment_seq();
+    if (mds->mdcache->open_file_table.is_any_dirty() ||
+	last_seq > mds->mdcache->open_file_table.get_committed_log_seq()) {
+      submit_mutex.Unlock();
+      mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
+					   last_seq, CEPH_MSG_PRIO_HIGH);
+      submit_mutex.Lock();
     }
   }
 
@@ -689,8 +713,16 @@ int MDLog::trim_all()
            << "/" << expired_segments.size() << dendl;
 
   uint64_t last_seq = 0;
-  if (!segments.empty())
+  if (!segments.empty()) {
     last_seq = get_last_segment_seq();
+    if (!mds->mdcache->open_file_table.is_any_committing() &&
+	last_seq > mds->mdcache->open_file_table.get_committing_log_seq()) {
+      submit_mutex.Unlock();
+      mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
+					   last_seq, CEPH_MSG_PRIO_DEFAULT);
+      submit_mutex.Lock();
+    }
+  }
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
   while (p != segments.end() &&
@@ -770,6 +802,8 @@ void MDLog::_trim_expired_segments()
 {
   assert(submit_mutex.is_locked_by_me());
 
+  uint64_t oft_committed_seq = mds->mdcache->open_file_table.get_committed_log_seq();
+
   // trim expired segments?
   bool trimmed = false;
   while (!segments.empty()) {
@@ -777,6 +811,12 @@ void MDLog::_trim_expired_segments()
     if (!expired_segments.count(ls)) {
       dout(10) << "_trim_expired_segments waiting for " << ls->seq << "/" << ls->offset
 	       << " to expire" << dendl;
+      break;
+    }
+
+    if (!capped && ls->seq >= oft_committed_seq) {
+      dout(10) << "_trim_expired_segments open file table committedseq " << oft_committed_seq
+	       << " <= " << ls->seq << "/" << ls->offset << dendl;
       break;
     }
     
@@ -1429,6 +1469,9 @@ void MDLog::standby_trim_segments()
   dout(10) << "standby_trim_segments" << dendl;
   uint64_t expire_pos = journaler->get_expire_pos();
   dout(10) << " expire_pos=" << expire_pos << dendl;
+
+  mds->mdcache->open_file_table.trim_destroyed_inos(expire_pos);
+
   bool removed_segment = false;
   while (have_any_segments()) {
     LogSegment *seg = get_oldest_segment();

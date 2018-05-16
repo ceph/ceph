@@ -36,6 +36,11 @@ bool test_dump_pgstate_history(std::string &output) {
   }
 
   JSONObjIter iter = parser.find_first();
+  if (iter.end()) { //Empty
+    std::cerr << "test_dump_pgstate_history: command output empty, failing"
+              << std::endl;
+    return false;
+  }
   for (; !iter.end(); ++iter) {
     if ((*iter)->get_name() == "pg") {
       ret = !(*iter)->get_data().empty();

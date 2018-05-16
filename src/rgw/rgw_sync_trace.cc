@@ -41,9 +41,11 @@ void RGWSyncTraceNode::log(int level, const string& s)
   history.push_back(status);
   /* dump output on either rgw_sync, or rgw -- but only once */
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw_sync, level)) {
-    lsubdout(cct, rgw_sync, level) << "RGW-SYNC:" << to_str() << dendl;
+    lsubdout(cct, rgw_sync,
+      ceph::dout::need_dynamic(level)) << "RGW-SYNC:" << to_str() << dendl;
   } else {
-    lsubdout(cct, rgw, level) << "RGW-SYNC:" << to_str() << dendl;
+    lsubdout(cct, rgw,
+      ceph::dout::need_dynamic(level)) << "RGW-SYNC:" << to_str() << dendl;
   }
 }
 
@@ -169,6 +171,8 @@ static void dump_node(RGWSyncTraceNode *entry, bool show_history, JSONFormatter&
 
 string RGWSyncTraceManager::get_active_names()
 {
+  shunique_lock rl(lock, ceph::acquire_shared);
+
   stringstream ss;
   JSONFormatter f;
 
@@ -191,8 +195,8 @@ string RGWSyncTraceManager::get_active_names()
   return ss.str();
 }
 
-bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) {
+bool RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
+                               std::string_view format, bufferlist& out) {
 
   bool show_history = (command == "sync trace history");
   bool show_short = (command == "sync trace active_short");
@@ -255,18 +259,30 @@ bool RGWSyncTraceManager::call(std::string command, cmdmap_t& cmdmap, std::strin
 
 void RGWSyncTraceManager::finish_node(RGWSyncTraceNode *node)
 {
-  shunique_lock wl(lock, ceph::acquire_unique);
-  if (!node) {
-    return;
-  }
-  auto iter = nodes.find(node->handle);
-  if (iter == nodes.end()) {
-    /* not found, already finished */
-    return;
-  }
+  RGWSyncTraceNodeRef old_node;
 
-  complete_nodes.push_back(iter->second);
-  nodes.erase(iter);
+  {
+    shunique_lock wl(lock, ceph::acquire_unique);
+    if (!node) {
+      return;
+    }
+    auto iter = nodes.find(node->handle);
+    if (iter == nodes.end()) {
+      /* not found, already finished */
+      return;
+    }
+
+    if (complete_nodes.full()) {
+      /* take a reference to the entry that is going to be evicted,
+       * can't let it get evicted under lock held, otherwise
+       * it's a deadlock as it will call finish_node()
+       */
+      old_node = complete_nodes.front();
+    }
+
+    complete_nodes.push_back(iter->second);
+    nodes.erase(iter);
+  }
 };
 
 #endif

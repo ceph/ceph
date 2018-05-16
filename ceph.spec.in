@@ -48,9 +48,11 @@
 %endif
 %if 0%{?suse_version} >= 1500
 %bcond_with python2
-%global _defined_if_python2_absent 1
 %else
 %bcond_without python2
+%endif
+%if 0%{without python2}
+%global _defined_if_python2_absent 1
 %endif
 
 %if %{with selinux}
@@ -86,7 +88,7 @@ Epoch:		2
 %global _epoch_prefix %{?epoch:%{epoch}:}
 
 Summary:	User space components of the Ceph file system
-License:	LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and BSD-3-Clause and MIT
+License:	LGPL-2.1 and CC-BY-SA-3.0 and GPL-2.0 and BSL-1.0 and BSD-3-Clause and MIT
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
@@ -138,6 +140,7 @@ BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
+BuildRequires:	liboath-devel
 BuildRequires:	libtool
 BuildRequires:	libxml2-devel
 BuildRequires:	libuuid-devel
@@ -187,6 +190,7 @@ BuildRequires:	python%{_python_buildid}-Cython
 BuildRequires:	python%{_python_buildid}-PrettyTable
 BuildRequires:	python%{_python_buildid}-Sphinx
 BuildRequires:  rdma-core-devel
+BuildRequires:	liblz4-devel >= 1.7
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
@@ -202,6 +206,7 @@ BuildRequires:  redhat-lsb-core
 BuildRequires:	Cython%{_python_buildid}
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
+BuildRequires:	lz4-devel >= 1.7
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
 %if 0%{?rhel}
@@ -217,14 +222,27 @@ BuildRequires:	python3-Cython
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	python%{_python_buildid}-cherrypy
+BuildRequires:	python%{_python_buildid}-routes
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-werkzeug
+BuildRequires:	python%{_python_buildid}-tox
+BuildRequires:	python%{_python_buildid}-coverage
+%if 0%{?fedora}
+BuildRequires:	python%{_python_buildid}-bcrypt
+%endif
+%if 0%{?rhel}
+BuildRequires:	py-bcrypt
+%endif
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python%{_python_buildid}-CherryPy
+BuildRequires:	python%{_python_buildid}-Routes
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-numpy-devel
+BuildRequires:	python%{_python_buildid}-bcrypt
+BuildRequires:	python%{_python_buildid}-tox
+BuildRequires:	python%{_python_buildid}-coverage
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
@@ -271,17 +289,23 @@ Requires:      librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:      ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
 Requires:      cryptsetup
+Requires:      e2fsprogs
 Requires:      findutils
 Requires:      grep
 Requires:      logrotate
+Requires:      parted
 Requires:      psmisc
 Requires:      python%{_python_buildid}-requests
 Requires:      python%{_python_buildid}-setuptools
 Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
+%if 0%{?fedora} || 0%{?rhel}
+Requires:      gdisk
+%endif
 %if 0%{?suse_version}
-Recommends:    ntp-daemon
+Recommends:    chrony
+Requires:      gptfdisk
 %endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
@@ -331,13 +355,6 @@ Summary:	Ceph Monitor Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-# For ceph-rest-api
-%if 0%{?fedora} || 0%{?rhel}
-Requires:      python%{_python_buildid}-flask
-%endif
-%if 0%{?suse_version}
-Requires:      python%{_python_buildid}-Flask
-%endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -352,17 +369,26 @@ Group:          System/Filesystems
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
+Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-jinja2
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-werkzeug
 Requires:       pyOpenSSL%{_python_buildid}
+%if 0%{?fedora}
+Requires:	python%{_python_buildid}-bcrypt
+%endif
+%if 0%{?rhel}
+Requires:	py-bcrypt
+%endif
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
+Requires:       python%{_python_buildid}-Routes
 Requires:       python%{_python_buildid}-Jinja2
 Requires:       python%{_python_buildid}-Werkzeug
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-pyOpenSSL
+Requires:       python%{_python_buildid}-bcrypt
 Recommends:     python%{_python_buildid}-influxdb
 %endif
 %description mgr
@@ -451,14 +477,6 @@ Summary:	Ceph Object Storage Daemon
 Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
-# for sgdisk, used by ceph-disk
-%if 0%{?fedora} || 0%{?rhel}
-Requires:	gdisk
-%endif
-%if 0%{?suse_version}
-Requires:	gptfdisk
-%endif
-Requires:	parted
 Requires:	lvm2
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
@@ -842,7 +860,6 @@ done
 # the following setting fixed an OOM condition we once encountered in the OBS
 RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %endif
-export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
 
 export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
@@ -883,16 +900,15 @@ cmake .. \
     -DCMAKE_INSTALL_MANDIR=%{_mandir} \
     -DCMAKE_INSTALL_DOCDIR=%{_docdir}/ceph \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
-    -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=ON \
+    -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
 %if %{with python2}
     -DWITH_PYTHON2=ON \
 %else
     -DWITH_PYTHON2=OFF \
     -DMGR_PYTHON_VERSION=3 \
 %endif
-    -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
 %endif
@@ -1035,11 +1051,22 @@ rm -rf %{buildroot}
 %endif
 %{_unitdir}/ceph-disk@.service
 %{_unitdir}/ceph.target
+%if 0%{with python2}
 %{python_sitelib}/ceph_detect_init*
 %{python_sitelib}/ceph_disk*
+%else
+%{python3_sitelib}/ceph_detect_init*
+%{python3_sitelib}/ceph_disk*
+%endif
+%if 0%{with python2}
 %dir %{python_sitelib}/ceph_volume
 %{python_sitelib}/ceph_volume/*
 %{python_sitelib}/ceph_volume-*
+%else
+%dir %{python3_sitelib}/ceph_volume
+%{python3_sitelib}/ceph_volume/*
+%{python3_sitelib}/ceph_volume-*
+%endif
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-detect-init.8*
 %{_mandir}/man8/ceph-create-keys.8*
@@ -1307,16 +1334,8 @@ fi
 
 %files mon
 %{_bindir}/ceph-mon
-%{_bindir}/ceph-rest-api
 %{_bindir}/ceph-monstore-tool
 %{_mandir}/man8/ceph-mon.8*
-%{_mandir}/man8/ceph-rest-api.8*
-%if 0%{with python2}
-%{python_sitelib}/ceph_rest_api.py*
-%else
-%{python3_sitelib}/ceph_rest_api.py
-%{python3_sitelib}/__pycache__/ceph_rest_api.cpython*.py*
-%endif
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mon.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
@@ -1637,6 +1656,10 @@ fi
 
 %files -n librgw2
 %{_libdir}/librgw.so.*
+%if %{with lttng}
+%{_libdir}/librgw_op_tp.so*
+%{_libdir}/librgw_rados_tp.so*
+%endif
 
 %post -n librgw2 -p /sbin/ldconfig
 
@@ -1722,13 +1745,7 @@ fi
 %{_bindir}/ceph_rgw_multiparser
 %{_bindir}/ceph_scratchtool
 %{_bindir}/ceph_scratchtoolpp
-%{_bindir}/ceph_smalliobench
-%{_bindir}/ceph_smalliobenchdumb
-%{_bindir}/ceph_smalliobenchfs
-%{_bindir}/ceph_smalliobenchrbd
 %{_bindir}/ceph_test_*
-%{_bindir}/ceph_tpbench
-%{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph-debugpack
 %{_mandir}/man8/ceph-debugpack.8*

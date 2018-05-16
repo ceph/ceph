@@ -10,6 +10,9 @@ on the given lv or partition will be removed and all data will be purged.
 
 .. note:: The lv or partition will be kept intact.
 
+.. note:: If the logical volume, raw device or partition is being used for any ceph related
+          mount points they will be unmounted.
+
 Zapping a logical volume::
 
       ceph-volume lvm zap {vg name/lv name}

@@ -267,6 +267,7 @@ namespace librados
     //mainly for delete
     OPERATION_FULL_FORCE	 = LIBRADOS_OPERATION_FULL_FORCE,
     OPERATION_IGNORE_REDIRECT	 = LIBRADOS_OPERATION_IGNORE_REDIRECT,
+    OPERATION_ORDERSNAP          = LIBRADOS_OPERATION_ORDERSNAP,
   };
 
   /*
@@ -469,9 +470,9 @@ namespace librados
      * Set redirect target
      */
     void set_redirect(const std::string& tgt_obj, const IoCtx& tgt_ioctx,
-		      uint64_t tgt_version);
+		      uint64_t tgt_version, int flag = 0);
     void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
-                   std::string tgt_oid, uint64_t tgt_offset);
+                   std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
 
 
@@ -1110,6 +1111,10 @@ namespace librados
         std::vector<snap_t>& snaps,
         const blkin_trace_info *trace_info);
     int aio_operate(const std::string& oid, AioCompletion *c,
+        ObjectWriteOperation *op, snap_t seq,
+        std::vector<snap_t>& snaps, int flags,
+        const blkin_trace_info *trace_info);
+    int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
 
     int aio_operate(const std::string& oid, AioCompletion *c,
@@ -1336,6 +1341,9 @@ namespace librados
     int pool_reverse_lookup(int64_t id, std::string *name);
 
     uint64_t get_instance_id();
+
+    int get_min_compatible_client(int8_t* min_compat_client,
+                                  int8_t* require_min_compat_client);
 
     int mon_command(std::string cmd, const bufferlist& inbl,
 		    bufferlist *outbl, std::string *outs);

@@ -152,13 +152,9 @@ extern "C" int rados_conf_parse_env(rados_t cluster, const char *var) {
   librados::TestRadosClient *client =
     reinterpret_cast<librados::TestRadosClient*>(cluster);
   md_config_t *conf = client->cct()->_conf;
-  std::vector<const char*> args;
-  env_to_vec(args, var);
-  int ret = conf->parse_argv(args);
-  if (ret == 0) {
-    conf->apply_changes(NULL);
-  }
-  return ret;
+  conf->parse_env(var);
+  conf->apply_changes(NULL);
+  return 0;
 }
 
 extern "C" int rados_conf_read_file(rados_t cluster, const char *path) {
@@ -425,7 +421,8 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
-                       std::vector<snap_t>& snaps) {
+                       std::vector<snap_t>& snaps, int flags,
+                       const blkin_trace_info *trace_info) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
 
@@ -435,14 +432,20 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(seq, snv);
 
-  return ctx->aio_operate(oid, *ops, c->pc, &snapc, 0);
+  return ctx->aio_operate(oid, *ops, c->pc, &snapc, flags);
+}
+
+int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
+                       ObjectWriteOperation *op, snap_t seq,
+                       std::vector<snap_t>& snaps) {
+  return aio_operate(oid, c, op, seq, snaps, 0, nullptr);
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op, snap_t seq,
                        std::vector<snap_t>& snaps,
 		       const blkin_trace_info *trace_info) {
-  return aio_operate(oid, c, op, seq, snaps);
+  return aio_operate(oid, c, op, seq, snaps, 0, trace_info);
 }
 
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
@@ -1007,6 +1010,13 @@ uint64_t Rados::get_instance_id() {
   return impl->get_instance_id();
 }
 
+int Rados::get_min_compatible_client(int8_t* min_compat_client,
+                                     int8_t* require_min_compat_client) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->get_min_compatible_client(min_compat_client,
+                                         require_min_compat_client);
+}
+
 int Rados::init(const char * const id) {
   return rados_create(reinterpret_cast<rados_t *>(&client), id);
 }
@@ -1344,7 +1354,7 @@ int cls_log(int level, const char *format, ...) {
     int n = vsnprintf(buf, size, format, ap);
     va_end(ap);
     if ((n > -1 && n < size) || size > 8196) {
-      dout(level) << buf << dendl;
+      dout(ceph::dout::need_dynamic(level)) << buf << dendl;
       return n;
     }
     size *= 2;

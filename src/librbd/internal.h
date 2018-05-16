@@ -15,6 +15,7 @@
 #include "include/rbd_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "common/WorkQueue.h"
+#include "common/ceph_time.h"
 #include "librbd/Types.h"
 
 namespace librbd {
@@ -58,9 +59,6 @@ namespace librbd {
   int image_options_unset(rbd_image_options_t opts, int optname);
   void image_options_clear(rbd_image_options_t opts);
   bool image_options_is_empty(rbd_image_options_t opts);
-
-  int snap_set(ImageCtx *ictx, const cls::rbd::SnapshotNamespace &snap_namespace,
-	       const char *snap_name);
 
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,

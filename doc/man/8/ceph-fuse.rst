@@ -9,16 +9,17 @@
 Synopsis
 ========
 
-| **ceph-fuse** [ -m *monaddr*:*port* ] *mountpoint* [ *fuse options* ]
+| **ceph-fuse** [-n *client.username*] [ -m *monaddr*:*port* ] *mountpoint* [ *fuse options* ]
 
 
 Description
 ===========
 
 **ceph-fuse** is a FUSE (File system in USErspace) client for Ceph
-distributed file system. It will mount a ceph file system (specified
-via the -m option for described by ceph.conf (see below) at the
-specific mount point.
+distributed file system. It will mount a ceph file system specified
+via the -m option or described by ceph.conf (see below) at the
+specific mount point. See `Mount Ceph FS using FUSE`_ for detailed
+information.
 
 The file system can be unmounted with::
 
@@ -32,9 +33,13 @@ Options
 
 Any options not recognized by ceph-fuse will be passed on to libfuse.
 
+.. option:: -o opt,[opt...]
+
+   Mount options.
+
 .. option:: -d
 
-   Detach from console and daemonize after startup.
+   Run in foreground, send all log otuput to stderr and enable FUSE debugging (-o debug).
 
 .. option:: -c ceph.conf, --conf=ceph.conf
 
@@ -45,10 +50,17 @@ Any options not recognized by ceph-fuse will be passed on to libfuse.
 
    Connect to specified monitor (instead of looking through ceph.conf).
 
-.. option:: -r root_directory
+.. option:: --client_mountpoint/-r root_directory
 
    Use root_directory as the mounted root, rather than the full Ceph tree.
 
+.. option:: -f
+
+   Foreground: do not daemonize after startup (run in foreground). Do not generate a pid file.
+
+.. option:: -s
+
+   Disable multi-threaded operation.
 
 Availability
 ============
@@ -62,3 +74,5 @@ See also
 
 fusermount(8),
 :doc:`ceph <ceph>`\(8)
+
+.. _Mount Ceph FS using FUSE: ../../../cephfs/fuse/

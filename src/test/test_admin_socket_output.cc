@@ -58,7 +58,8 @@ int main(int argc, char** argv) {
     ("mgr", "Test mgr admin socket output")
     ("mds", "Test mds admin socket output")
     ("client", "Test client (includes rgw) admin socket output")
-    ("vstart", "Modify to run in vstart environment")
+    ("vstart", po::value<std::string>()->implicit_value("./out"),
+     "Modify to run in vstart environment")
     ;
   auto parsed =
     po::command_line_parser(argc, argv).options(desc).allow_unregistered().run();
@@ -80,7 +81,7 @@ int main(int argc, char** argv) {
   std::unique_ptr<AdminSocketOutput> asockout(new AdminSocketOutput);
 
   if (vm.count("vstart")) {
-    asockout->mod_for_vstart();
+    asockout->mod_for_vstart(vm["vstart"].as<std::string>());
   }
 
   if(vm.count("all")) {

@@ -7,4 +7,4 @@ set(ocf_dir ${CMAKE_INSTALL_PREFIX}/lib/ocf)
 set(ra_dir ${ocf_dir}/resource.d/${PROJECT_NAME})
 
 configure_file(rbd.in rbd @ONLY)
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/rbd DESTINATION ${ra_dir})
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/rbd DESTINATION ${ra_dir})

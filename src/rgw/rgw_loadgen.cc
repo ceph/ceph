@@ -71,7 +71,7 @@ size_t RGWLoadGenIO::complete_request()
   return 0;
 }
 
-void RGWLoadGenIO::init_env(CephContext *cct)
+int RGWLoadGenIO::init_env(CephContext *cct)
 {
   env.init(cct);
 
@@ -96,6 +96,7 @@ void RGWLoadGenIO::init_env(CephContext *cct)
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", req->port);
   env.set("SERVER_PORT", port_buf);
+  return 0;
 }
 
 size_t RGWLoadGenIO::send_status(const int status,

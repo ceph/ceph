@@ -10,7 +10,7 @@ git clone https://github.com/ceph/ceph
 ### Build
 
 ```
-./run-make-check.sh -DWITH_EMBEDDED=OFF -DWITH_SYSTEM_BOOST=ON -DWITH_LTTNG=OFF -DWITH_REENTRANT_STRSIGNAL=ON -DWITH_THREAD_SAFE_RES_QUERY=ON
+./run-make-check.sh -DWITH_SYSTEM_BOOST=ON -DWITH_LTTNG=OFF -DWITH_REENTRANT_STRSIGNAL=ON -DWITH_THREAD_SAFE_RES_QUERY=ON
 ```
 
 ### Packaging
@@ -28,7 +28,7 @@ cd ceph/src
 
 or
 
-./test/docker-test.sh --os-type alpine --os-version edge -- ./run-make-check.sh -DWITH_EMBEDDED=OFF -DWITH_SYSTEM_BOOST=ON -DWITH_LTTNG=OFF -DWITH_REENTRANT_STRSIGNAL=ON -DWITH_THREAD_SAFE_RES_QUERY=ON
+./test/docker-test.sh --os-type alpine --os-version edge -- ./run-make-check.sh -DWITH_SYSTEM_BOOST=ON -DWITH_LTTNG=OFF -DWITH_REENTRANT_STRSIGNAL=ON -DWITH_THREAD_SAFE_RES_QUERY=ON
 
 ```
 

@@ -107,11 +107,8 @@ public:
 
   int signal_exit(int r) {
     if (forked) {
-      // tell parent.  this shouldn't fail, but if it does, pass the
-      // error back to the parent.
-      int ret = safe_write(fd[1], &r, sizeof(r));
-      if (ret <= 0)
-	return ret;
+      /* If we get an error here, it's too late to do anything reasonable about it. */
+      [[maybe_unused]] auto n = safe_write(fd[1], &r, sizeof(r));
     }
     return r;
   }

@@ -178,8 +178,8 @@ public:
     }
   }
 
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);
@@ -191,7 +191,7 @@ public:
   }
 
 private:
-  typedef std::map<std::string, MirrorAdminSocketCommand*> Commands;
+  typedef std::map<std::string, MirrorAdminSocketCommand*, std::less<>> Commands;
 
   AdminSocket *admin_socket;
   Commands commands;
@@ -204,8 +204,9 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_local(new librados::Rados()),
   m_asok_hook(new MirrorAdminSocketHook(cct, this))
 {
-  cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx> >(
-    m_threads, "rbd_mirror::threads");
+  m_threads =
+    &(cct->lookup_or_create_singleton_object<Threads<librbd::ImageCtx>>(
+	"rbd_mirror::threads", false, cct));
   m_service_daemon.reset(new ServiceDaemon<>(m_cct, m_local, m_threads));
 }
 
@@ -410,7 +411,7 @@ void Mirror::update_pool_replayers(const PoolPeers &pool_peers)
         }
       } else {
         dout(20) << "starting pool replayer for " << peer << dendl;
-        unique_ptr<PoolReplayer> pool_replayer(new PoolReplayer(
+        unique_ptr<PoolReplayer<>> pool_replayer(new PoolReplayer<>(
 	  m_threads, m_service_daemon.get(), kv.first, peer, m_args));
 
         // TODO: make async

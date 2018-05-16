@@ -267,6 +267,7 @@ public:
 bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 {
   MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
+  mon->no_reply(op); // we never reply to beacons
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
   if (!check_caps(op, m->get_fsid())) {
@@ -509,13 +510,13 @@ void MgrMonitor::tick()
 
   const auto now = ceph::coarse_mono_clock::now();
 
-  const auto mgr_beacon_grace = std::chrono::seconds(
-      g_conf->get_val<int64_t>("mon_mgr_beacon_grace"));
+  const auto mgr_beacon_grace =
+      g_conf->get_val<std::chrono::seconds>("mon_mgr_beacon_grace");
 
   // Note that this is the mgr daemon's tick period, not ours (the
   // beacon is sent with this period).
-  const auto mgr_tick_period = std::chrono::seconds(
-      g_conf->get_val<int64_t>("mgr_tick_period"));
+  const auto mgr_tick_period =
+      g_conf->get_val<std::chrono::seconds>("mgr_tick_period");
 
   if (last_tick != ceph::coarse_mono_clock::time_point::min()
       && (now - last_tick > (mgr_beacon_grace - mgr_tick_period))) {
@@ -666,7 +667,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   std::stringstream ss;
   bufferlist rdata;
 
-  std::map<std::string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
@@ -738,7 +739,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "mgr metadata") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "id", name);
+    cmd_getval(g_ceph_context, cmdmap, "who", name);
     if (name.size() > 0 && !map.have_name(name)) {
       ss << "mgr." << name << " does not exist";
       r = -ENOENT;
@@ -749,7 +750,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (name.size()) {
       f->open_object_section("mgr_metadata");
-      f->dump_string("id", name);
+      f->dump_string("name", name);
       r = dump_metadata(name, f.get(), &ss);
       if (r < 0)
         goto reply;
@@ -759,7 +760,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       f->open_array_section("mgr_metadata");
       for (auto& i : map.get_all_names()) {
 	f->open_object_section("mgr");
-	f->dump_string("id", i);
+	f->dump_string("name", i);
 	r = dump_metadata(i, f.get(), NULL);
 	if (r == -EINVAL || r == -ENOENT) {
 	  // Drop error, continue to get other daemons' metadata
@@ -806,7 +807,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
   std::stringstream ss;
   bufferlist rdata;
 
-  std::map<std::string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
@@ -886,6 +887,21 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       r = -ENOENT;
       goto out;
     }
+
+    std::string can_run_error;
+    if (force != "--force" && !pending_map.can_run_module(module, &can_run_error)) {
+      ss << "module '" << module << "' reports that it cannot run on the active "
+            "manager daemon: " << can_run_error << " (pass --force to force "
+            "enablement)";
+      r = -ENOENT;
+      goto out;
+    }
+
+    if (pending_map.module_enabled(module)) {
+      ss << "module '" << module << "' is already enabled";
+      r = 0;
+      goto out;
+    }
     pending_map.modules.insert(module);
   } else if (prefix == "mgr module disable") {
     string module;
@@ -893,6 +909,14 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     if (module.empty()) {
       r = -EINVAL;
       goto out;
+    }
+    if (!pending_map.module_enabled(module)) {
+      ss << "module '" << module << "' is already disabled";
+      r = 0;
+      goto out;
+    }
+    if (!pending_map.any_supports_module(module)) {
+      ss << "module '" << module << "' does not exist";
     }
     pending_map.modules.erase(module);
   } else {
@@ -931,7 +955,7 @@ void MgrMonitor::on_shutdown()
 }
 
 int MgrMonitor::load_metadata(const string& name, std::map<string, string>& m,
-			      ostream *err)
+			      ostream *err) const
 {
   bufferlist bl;
   int r = mon->store->get(MGR_METADATA_PREFIX, name, bl);
@@ -984,6 +1008,28 @@ int MgrMonitor::dump_metadata(const string& name, Formatter *f, ostream *err)
     f->dump_string(p.first.c_str(), p.second);
   }
   return 0;
+}
+
+void MgrMonitor::print_nodes(Formatter *f) const
+{
+  assert(f);
+
+  std::map<string, list<string> > mgrs; // hostname => mgr
+  auto ls = map.get_all_names();
+  for (auto& name : ls) {
+    std::map<string,string> meta;
+    if (load_metadata(name, meta, nullptr)) {
+      continue;
+    }
+    auto hostname = meta.find("hostname");
+    if (hostname == meta.end()) {
+      // not likely though
+      continue;
+    }
+    mgrs[hostname->second].push_back(name);
+  }
+
+  dump_services(f, mgrs, "mgr");
 }
 
 const std::vector<MonCommand> &MgrMonitor::get_command_descs() const

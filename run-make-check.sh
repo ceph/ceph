@@ -30,8 +30,8 @@ function get_processors() {
 function run() {
     local install_cmd
     local which_pkg="which"
+    source /etc/os-release
     if test -f /etc/redhat-release ; then
-        source /etc/os-release
         if ! type bc > /dev/null 2>&1 ; then
             echo "Please install bc and re-run." 
             exit 1
@@ -41,12 +41,12 @@ function run() {
         else
             install_cmd="yum install -y"
         fi
-    else
+    elif type zypper > /dev/null 2>&1 ; then
+        install_cmd="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
+    elif type apt-get > /dev/null 2>&1 ; then
+        install_cmd="apt-get install -y"
         which_pkg="debianutils"
     fi
-
-    type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
-    type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
 
     if ! type sudo > /dev/null 2>&1 ; then
         echo "Please install sudo and re-run. This script assumes it is running"
@@ -57,6 +57,7 @@ function run() {
         $DRY_RUN sudo $install_cmd ccache jq $which_pkg
     else
         echo "WARNING: Don't know how to install packages" >&2
+        echo "This probably means distribution $ID is not supported by run-make-check.sh" >&2
     fi
 
     if test -f ./install-deps.sh ; then
@@ -68,7 +69,12 @@ function run() {
     BUILD_MAKEOPTS=${BUILD_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
 
-    $DRY_RUN ./do_cmake.sh $@ || return 1
+    CMAKE_PYTHON_OPTS=
+    if ! type python2 > /dev/null 2>&1 ; then
+        CMAKE_PYTHON_OPTS="-DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
+    fi
+
+    $DRY_RUN ./do_cmake.sh -DWITH_FIO=ON $CMAKE_PYTHON_OPTS $@ || return 1
     $DRY_RUN cd build
     $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
     # prevent OSD EMFILE death on tests, make sure large than 1024
@@ -79,7 +85,7 @@ function run() {
     fi
  
     if ! $DRY_RUN ctest $CHECK_MAKEOPTS --output-on-failure; then
-        rm -f ${TMPDIR:-/tmp}/ceph-asok.*
+        rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
         return 1
     fi
 }

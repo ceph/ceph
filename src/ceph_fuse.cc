@@ -75,26 +75,42 @@ int main(int argc, const char **argv, const char *envp[]) {
   std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
   if (args.empty()) {
-    usage();
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
   }
-  env_to_vec(args);
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
-  std::vector<const char*> def_args{"--pid-file="};
+  std::map<std::string,std::string> defaults = {
+    { "pid_file", "" },
+    { "chdir", "/" }  // FUSE will chdir("/"); be ready.
+  };
 
-  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
-  auto i = args.begin();
-  auto end = args.end();
-  for (; i != end;) {
+  for (auto i = args.begin(); i != args.end();) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_flag(args, i, "--localize-reads", (char*)nullptr)) {
       cerr << "setting CEPH_OSD_FLAG_LOCALIZE_READS" << std::endl;
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)nullptr)) {
-      usage();
+    } else if (ceph_argparse_flag(args, i, "-V", (char*)nullptr)) {
+      const char* tmpargv[] = {
+	"ceph-fuse",
+	"-V"
+      };
+
+      struct fuse_args fargs = FUSE_ARGS_INIT(2, (char**)tmpargv);
+      if (fuse_parse_cmdline(&fargs, nullptr, nullptr, nullptr) == -1) {
+       derr << "fuse_parse_cmdline failed." << dendl;
+      }
+      assert(fargs.allocated);
+      fuse_opt_free_args(&fargs);
+      exit(0);
     } else {
       ++i;
     }
@@ -104,10 +120,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   const char **newargv;
   int newargc;
   vec_to_argv(argv[0], args, &newargc, &newargv);
-
-  // FUSE will chdir("/"); be ready.
-  g_ceph_context->_conf->set_val("chdir", "/");
-  g_ceph_context->_conf->apply_changes(nullptr);
 
   // check for 32-bit arch
 #ifndef __LP64__
@@ -145,6 +157,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   {
     common_init_finish(g_ceph_context);
+   
+    init_async_signal_handler();
+    register_async_signal_handler(SIGHUP, sighup_handler);
 
     //cout << "child, mounting" << std::endl;
     class RemountTest : public Thread {
@@ -209,8 +224,10 @@ int main(int argc, const char **argv, const char *envp[]) {
 
     MonClient *mc = new MonClient(g_ceph_context);
     int r = mc->build_initial_monmap();
-    if (r == -EINVAL)
-      usage();
+    if (r == -EINVAL) {
+      cerr << "failed to generate initial mon list" << std::endl;
+      exit(1);
+    }
     if (r < 0)
       goto out_mc_start_failed;
 
@@ -240,9 +257,6 @@ int main(int argc, const char **argv, const char *envp[]) {
       goto out_messenger_start_failed;
     }
 
-    init_async_signal_handler();
-    register_async_signal_handler(SIGHUP, sighup_handler);
-
     // start client
     r = client->init();
     if (r < 0) {
@@ -262,9 +276,11 @@ int main(int argc, const char **argv, const char *envp[]) {
         "fuse_require_active_mds");
       r = client->mount(mountpoint, perms, fuse_require_active_mds);
       if (r < 0) {
-        if (r == CEPH_FUSE_NO_MDS_UP)
+        if (r == CEPH_FUSE_NO_MDS_UP) {
           cerr << "ceph-fuse[" << getpid() << "]: probably no MDS server is up?" << std::endl;
+        }
         cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+        r = EXIT_FAILURE;
         goto out_shutdown;
       }
     }

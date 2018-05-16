@@ -32,15 +32,20 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
-KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
+KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd_direct(-1),
     fd_buffered(-1),
-    fs(NULL), aio(false), dio(false),
+    aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
     aio_queue(cct->_conf->bdev_aio_max_queue_depth),
+    discard_callback(d_cb),
+    discard_callback_priv(d_cbpriv),
     aio_stop(false),
+    discard_started(false),
+    discard_stop(false),
     aio_thread(this),
+    discard_thread(this),
     injecting_crash(0)
 {
 }
@@ -138,6 +143,8 @@ int KernelDevice::open(const string& p)
       dout(20) << __func__ << " devname " << devname << dendl;
       rotational = block_device_is_rotational(devname);
       this->devname = devname;
+
+      _detect_vdo();
     }
   }
 
@@ -145,9 +152,7 @@ int KernelDevice::open(const string& p)
   if (r < 0) {
     goto out_fail;
   }
-
-  fs = FS::create_by_fd(fd_direct);
-  assert(fs);
+  _discard_start();
 
   // round size down to an even block
   size &= ~(block_size - 1);
@@ -155,9 +160,9 @@ int KernelDevice::open(const string& p)
   dout(1) << __func__
 	  << " size " << size
 	  << " (0x" << std::hex << size << std::dec << ", "
-	  << pretty_si_t(size) << "B)"
+	  << byte_u_t(size) << ")"
 	  << " block_size " << block_size
-	  << " (" << pretty_si_t(block_size) << "B)"
+	  << " (" << byte_u_t(block_size) << ")"
 	  << " " << (rotational ? "rotational" : "non-rotational")
 	  << dendl;
   return 0;
@@ -187,10 +192,12 @@ void KernelDevice::close()
 {
   dout(1) << __func__ << dendl;
   _aio_stop();
+  _discard_stop();
 
-  assert(fs);
-  delete fs;
-  fs = NULL;
+  if (vdo_fd >= 0) {
+    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
+    vdo_fd = -1;
+  }
 
   assert(fd_direct >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
@@ -220,6 +227,12 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
     (*pm)[prefix + "type"] = "hdd";
   } else {
     (*pm)[prefix + "type"] = "ssd";
+  }
+  if (vdo_fd >= 0) {
+    (*pm)[prefix + "vdo"] = "true";
+    uint64_t total, avail;
+    get_vdo_utilization(vdo_fd, &total, &avail);
+    (*pm)[prefix + "vdo_physical_size"] = stringify(total);
   }
 
   struct stat st;
@@ -267,6 +280,26 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
     (*pm)[prefix + "path"] = path;
   }
   return 0;
+}
+
+void KernelDevice::_detect_vdo()
+{
+  vdo_fd = get_vdo_stats_handle(devname.c_str(), &vdo_name);
+  if (vdo_fd >= 0) {
+    dout(1) << __func__ << " VDO volume " << vdo_name
+	    << " maps to " << devname << dendl;
+  } else {
+    dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
+  }
+  return;
+}
+
+bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
+{
+  if (vdo_fd < 0) {
+    return false;
+  }
+  return get_vdo_utilization(vdo_fd, total, avail);
 }
 
 int KernelDevice::flush()
@@ -342,6 +375,49 @@ void KernelDevice::_aio_stop()
   }
 }
 
+int KernelDevice::_discard_start()
+{
+    discard_thread.create("bstore_discard");
+    return 0;
+}
+
+void KernelDevice::_discard_stop()
+{
+  dout(10) << __func__ << dendl;
+  {
+    std::unique_lock<std::mutex> l(discard_lock);
+    while (!discard_started) {
+      discard_cond.wait(l);
+    }
+    discard_stop = true;
+    discard_cond.notify_all();
+  }
+  discard_thread.join();
+  {
+    std::lock_guard<std::mutex> l(discard_lock);
+    discard_stop = false;
+  }
+  dout(10) << __func__ << " stopped" << dendl;
+}
+
+void KernelDevice::discard_drain()
+{
+  dout(10) << __func__ << dendl;
+  std::unique_lock<std::mutex> l(discard_lock);
+  while (!discard_queued.empty() || discard_running) {
+    discard_cond.wait(l);
+  }
+}
+
+static bool is_expected_ioerr(const int r)
+{
+  // https://lxr.missinglinkelectronics.com/linux+v4.15/block/blk-core.c#L135
+  return (r == -EOPNOTSUPP || r == -ETIMEDOUT || r == -ENOSPC ||
+	  r == -ENOLINK || r == -EREMOTEIO || r == -EBADE ||
+	  r == -ENODATA || r == -EILSEQ || r == -ENOMEM ||
+	  r == -EAGAIN || r == -EREMCHG || r == -EIO);
+}
+
 void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -374,13 +450,17 @@ void KernelDevice::_aio_thread()
 	// later flush() occurs.
 	io_since_flush.store(true);
 
-	int r = aio[i]->get_return_value();
+	long r = aio[i]->get_return_value();
         if (r < 0) {
-          derr << __func__ << " got " << cpp_strerror(r) << dendl;
-          if (ioc->allow_eio && r == -EIO) {
-            ioc->set_return_value(r);
+          derr << __func__ << " got r=" << r << " (" << cpp_strerror(r) << ")"
+	       << dendl;
+          if (ioc->allow_eio && is_expected_ioerr(r)) {
+            derr << __func__ << " translating the error to EIO for upper layer"
+		 << dendl;
+            ioc->set_return_value(-EIO);
           } else {
-            assert(0 == "got unexpected error from io_getevents");
+            assert(0 == "got unexpected error from aio_t::get_return_value. "
+			"This may suggest HW issue. Please check your dmesg!");
           }
         } else if (aio[i]->length != (uint64_t)r) {
           derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
@@ -438,6 +518,54 @@ void KernelDevice::_aio_thread()
   }
   reap_ioc();
   dout(10) << __func__ << " end" << dendl;
+}
+
+void KernelDevice::_discard_thread()
+{
+  std::unique_lock<std::mutex> l(discard_lock);
+  assert(!discard_started);
+  discard_started = true;
+  discard_cond.notify_all();
+  while (true) {
+    assert(discard_finishing.empty());
+    if (discard_queued.empty()) {
+      if (discard_stop)
+	break;
+      dout(20) << __func__ << " sleep" << dendl;
+      discard_cond.notify_all(); // for the thread trying to drain...
+      discard_cond.wait(l);
+      dout(20) << __func__ << " wake" << dendl;
+    } else {
+      discard_finishing.swap(discard_queued);
+      discard_running = true;
+      l.unlock();
+      dout(20) << __func__ << " finishing" << dendl;
+      for (auto p = discard_finishing.begin();p != discard_finishing.end(); ++p) {
+	discard(p.get_start(), p.get_len());
+      }
+
+      discard_callback(discard_callback_priv, static_cast<void*>(&discard_finishing));
+      discard_finishing.clear();
+      l.lock();
+      discard_running = false;
+    }
+  }
+  dout(10) << __func__ << " finish" << dendl;
+  discard_started = false;
+}
+
+int KernelDevice::queue_discard(interval_set<uint64_t> &to_release)
+{
+  if (rotational)
+    return -1;
+
+  if (to_release.empty())
+    return 0;
+
+  std::lock_guard<std::mutex> l(discard_lock);
+  discard_queued.insert(to_release);
+  discard_cond.notify_all();
+  return 0;
 }
 
 void KernelDevice::_aio_log_start(
@@ -657,6 +785,19 @@ int KernelDevice::aio_write(
       return r;
   }
   return 0;
+}
+
+int KernelDevice::discard(uint64_t offset, uint64_t len)
+{
+  int r = 0;
+  if (!rotational) {
+      dout(10) << __func__
+	       << " 0x" << std::hex << offset << "~" << len << std::dec
+	       << dendl;
+
+    r = block_device_discard(fd_direct, (int64_t)offset, (int64_t)len);
+  }
+  return r;
 }
 
 int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,

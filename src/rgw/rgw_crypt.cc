@@ -37,7 +37,7 @@ private:
   CephContext* cct;
   uint8_t key[AES_256_KEYSIZE];
 public:
-  AES_256_CTR(CephContext* cct): cct(cct) {
+  explicit AES_256_CTR(CephContext* cct): cct(cct) {
   }
   ~AES_256_CTR() {
     memset(key, 0, AES_256_KEYSIZE);
@@ -200,7 +200,7 @@ private:
   CephContext* cct;
   uint8_t key[AES_256_KEYSIZE];
 public:
-  AES_256_CBC(CephContext* cct): cct(cct) {
+  explicit AES_256_CBC(CephContext* cct): cct(cct) {
   }
   ~AES_256_CBC() {
     memset(key, 0, AES_256_KEYSIZE);
@@ -516,7 +516,7 @@ bool AES_256_ECB_encrypt(CephContext* cct,
 
 
 RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(CephContext* cct,
-                                               RGWGetDataCB* next,
+                                               RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt):
     RGWGetObj_Filter(next),
     cct(cct),
@@ -550,7 +550,7 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
       }
       parts_len.back() += mi.get_stripe_size();
     }
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (size_t i = 0; i<parts_len.size(); i++) {
         ldout(cct, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
       }
@@ -761,11 +761,11 @@ static int request_key_from_barbican(CephContext *cct,
   secret_url += "v1/secrets/" + std::string(key_id);
 
   bufferlist secret_bl;
-  RGWHTTPTransceiver secret_req(cct, &secret_bl);
+  RGWHTTPTransceiver secret_req(cct, "GET", secret_url, &secret_bl);
   secret_req.append_header("Accept", "application/octet-stream");
   secret_req.append_header("X-Auth-Token", barbican_token);
 
-  res = secret_req.process("GET", secret_url.c_str());
+  res = secret_req.process();
   if (res < 0) {
     return res;
   }

@@ -139,6 +139,9 @@ namespace librbd {
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			snapid_t src_snap_id,
 			const std::string &dst_name);
+    void snapshot_trash_add(librados::ObjectWriteOperation *op,
+                            snapid_t snap_id);
+
     void get_snapcontext_start(librados::ObjectReadOperation *op);
     int get_snapcontext_finish(bufferlist::iterator *it,
                                ::SnapContext *snapc);
@@ -231,13 +234,31 @@ namespace librbd {
     int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
                      const std::string &key, string *v);
 
+    void child_attach(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                      const cls::rbd::ChildImageSpec& child_image);
+    int child_attach(librados::IoCtx *ioctx, const std::string &oid,
+                     snapid_t snap_id,
+                     const cls::rbd::ChildImageSpec& child_image);
+    void child_detach(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                      const cls::rbd::ChildImageSpec& child_image);
+    int child_detach(librados::IoCtx *ioctx, const std::string &oid,
+                     snapid_t snap_id,
+                     const cls::rbd::ChildImageSpec& child_image);
+    void children_list_start(librados::ObjectReadOperation *op,
+                             snapid_t snap_id);
+    int children_list_finish(bufferlist::iterator *it,
+                             cls::rbd::ChildImageSpecs *child_images);
+    int children_list(librados::IoCtx *ioctx, const std::string &oid,
+                      snapid_t snap_id,
+                      cls::rbd::ChildImageSpecs *child_images);
+
     // operations on rbd_id objects
     void get_id_start(librados::ObjectReadOperation *op);
     int get_id_finish(bufferlist::iterator *it, std::string *id);
     int get_id(librados::IoCtx *ioctx, const std::string &oid, std::string *id);
 
-    void set_id(librados::ObjectWriteOperation *op, std::string id);
-    int set_id(librados::IoCtx *ioctx, const std::string &oid, std::string id);
+    void set_id(librados::ObjectWriteOperation *op, const std::string &id);
+    int set_id(librados::IoCtx *ioctx, const std::string &oid, const std::string &id);
 
     // operations on rbd_directory objects
     int dir_get_id(librados::IoCtx *ioctx, const std::string &oid,
@@ -425,12 +446,15 @@ namespace librbd {
 
     // Consistency groups functions
     int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
-		    const std::string &start, uint64_t max_return,
-		    map<string, string> *groups);
+                       const std::string &start, uint64_t max_return,
+                       map<string, string> *groups);
     int group_dir_add(librados::IoCtx *ioctx, const std::string &oid,
-	           const std::string &name, const std::string &id);
+                      const std::string &name, const std::string &id);
+    int group_dir_rename(librados::IoCtx *ioctx, const std::string &oid,
+                         const std::string &src, const std::string &dest,
+                         const std::string &id);
     int group_dir_remove(librados::IoCtx *ioctx, const std::string &oid,
-		      const std::string &name, const std::string &id);
+                         const std::string &name, const std::string &id);
     int group_image_remove(librados::IoCtx *ioctx, const std::string &oid,
 			   const cls::rbd::GroupImageSpec &spec);
     int group_image_list(librados::IoCtx *ioctx, const std::string &oid,

@@ -23,7 +23,7 @@ typedef boost::variant<std::string,
 		       std::vector<std::string>,
 		       std::vector<int64_t>,
 		       std::vector<double>>  cmd_vartype;
-typedef std::map<std::string, cmd_vartype> cmdmap_t;
+typedef std::map<std::string, cmd_vartype, std::less<>> cmdmap_t;
 
 std::string cmddesc_get_prefix(const std::string &cmddesc);
 void dump_cmd_to_json(ceph::Formatter *f, const std::string& cmd);
@@ -54,7 +54,7 @@ cmd_getval(CephContext *cct, const cmdmap_t& cmdmap, const std::string& k, T& va
     try {
       val = boost::get<T>(cmdmap.find(k)->second);
       return true;
-    } catch (boost::bad_get) {
+    } catch (boost::bad_get&) {
       handle_bad_get(cct, k, typeid(T).name());
     }
   }
@@ -78,6 +78,10 @@ cmd_putval(CephContext *cct, cmdmap_t& cmdmap, const std::string& k, const T& va
   cmdmap[k] = val;
 }
 
+bool validate_cmd(CephContext* cct,
+		  const std::string& desc,
+		  const cmdmap_t& cmdmap,
+		  std::ostream& os);
 extern int parse_osd_id(const char *s, std::ostream *pss);
 extern long parse_pos_long(const char *s, std::ostream *pss = NULL);
 

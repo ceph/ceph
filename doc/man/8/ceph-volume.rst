@@ -15,6 +15,9 @@ Synopsis
 | **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
 | *zap* | *list*]
 
+| **ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
+
+
 Description
 ===========
 
@@ -47,13 +50,18 @@ enabled and needs to be mounted.
 
 Usage::
 
-    ceph-volume lvm activate --filestore <osd id> <osd fsid>
+    ceph-volume lvm activate --bluestore <osd id> <osd fsid>
 
 Optional Arguments:
 
 * [-h, --help]  show the help message and exit
+* [--auto-detect-objectstore] Automatically detect the objecstore by inspecting
+  the OSD
 * [--bluestore] bluestore objectstore (default)
 * [--filestore] filestore objectstore
+* [--all] Activate all OSDs found in the system
+* [--no-systemd] Skip creating and enabling systemd units and starting of OSD
+  services
 
 
 **prepare**
@@ -69,12 +77,14 @@ Optional arguments:
 
 * [-h, --help]          show the help message and exit
 * [--journal JOURNAL]   A logical group name, path to a logical volume, or path to a device
-* [--journal-size GB]   Size (in GB) A logical group name or a path to a logical volume
 * [--bluestore]         Use the bluestore objectstore (default)
+* [--block.wal]         Path to a bluestore block.wal logical volume or partition
+* [--block.db]          Path to a bluestore block.db logical volume or partition
 * [--filestore]         Use the filestore objectstore
 * [--dmcrypt]           Enable encryption for the underlying OSD devices
 * [--osd-id OSD_ID]     Reuse an existing OSD id
 * [--osd-fsid OSD_FSID] Reuse an existing OSD fsid
+* [--crush-device-class] Define a CRUSH device class to assign the OSD to
 
 Required arguments:
 
@@ -88,7 +98,7 @@ avoiding large amounts of data being rebalanced.
 
 The single-call process unifies exactly what ``prepare`` and ``activate`` do,
 with the convenience of doing it all at once. Flags and general usage are
-equivalent to those of the ``prepare`` subcommand.
+equivalent to those of the ``prepare`` and ``activate`` subcommand.
 
 **trigger**
 This subcommand is not meant to be used directly, and it is used by systemd so
@@ -133,8 +143,8 @@ group, and lv the logical volume name)::
 
 Positional arguments:
 
-* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
-  ``/path/to/sda1`` for regular devices.
+* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes,
+  ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
 
 
 **zap**
@@ -154,8 +164,86 @@ Usage, for logical partitions::
 
 Positional arguments:
 
-* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
-  ``/path/to/sda1`` for regular devices.
+* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes,
+  ``/path/to/sda1`` or ``/path/to/sda`` for regular devices.
+
+
+simple
+------
+
+Scan legacy OSD directories or data devices that may have been created by
+ceph-disk, or manually.
+
+Subcommands:
+
+**activate**
+Enables a systemd unit that persists the OSD ID and its UUID (also called
+``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
+enabled and needs to be mounted, while reading information that was previously
+created and persisted at ``/etc/ceph/osd/`` in JSON format.
+
+Usage::
+
+    ceph-volume simple activate --bluestore <osd id> <osd fsid>
+
+Optional Arguments:
+
+* [-h, --help]  show the help message and exit
+* [--bluestore] bluestore objectstore (default)
+* [--filestore] filestore objectstore
+
+Note: It requires a matching JSON file with the following format::
+
+    /etc/ceph/osd/<osd id>-<osd fsid>.json
+
+
+**scan**
+Scan a running OSD or data device for an OSD for metadata that can later be
+used to activate and manage the OSD with ceph-volume. The scan method will
+create a JSON file with the required information plus anything found in the OSD
+directory as well.
+
+Optionally, the JSON blob can be sent to stdout for further inspection.
+
+Usage on data devices::
+
+    ceph-volume simple scan <data device>
+
+Running OSD directories::
+
+    ceph-volume simple scan <path to osd dir>
+
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+* [--stdout]            Send the JSON blob to stdout
+* [--force]             If the JSON file exists at destination, overwrite it
+
+Required Positional arguments:
+
+* <DATA DEVICE or OSD DIR>  Actual data partition or a path to the running OSD
+
+**trigger**
+This subcommand is not meant to be used directly, and it is used by systemd so
+that it proxies input to ``ceph-volume simple activate`` by parsing the
+input from systemd, detecting the UUID and ID associated with an OSD.
+
+Usage::
+
+    ceph-volume simple trigger <SYSTEMD-DATA>
+
+The systemd "data" is expected to be in the format of::
+
+    <OSD ID>-<OSD UUID>
+
+The JSON file associated with the OSD need to have been persisted previously by
+a scan (or manually), so that all needed metadata can be used.
+
+Positional arguments:
+
+* <SYSTEMD_DATA>  Data from a systemd unit containing ID and UUID of the OSD.
+
 
 Availability
 ============

@@ -8,13 +8,16 @@
 #include "include/encoding.h"
 #include "include/denc.h"
 
-class bluefs_extent_t : public AllocExtent{
+class bluefs_extent_t {
 public:
+  uint64_t offset = 0;
+  uint32_t length = 0;
   uint8_t bdev;
 
   bluefs_extent_t(uint8_t b = 0, uint64_t o = 0, uint32_t l = 0)
-    : AllocExtent(o, l), bdev(b) {}
+    : offset(o), length(l), bdev(b) {}
 
+  uint64_t end() const { return  offset + length; }
   DENC(bluefs_extent_t, v, p) {
     DENC_START(1, 1, p);
     denc_lba(v.offset, p);
@@ -51,7 +54,22 @@ struct bluefs_fnode_t {
       allocated += p.length;
   }
 
-  DENC(bluefs_fnode_t, v, p) {
+  DENC_HELPERS
+  void bound_encode(size_t& p) const {
+    _denc_friend(*this, p);
+  }
+  void encode(bufferlist::contiguous_appender& p) const {
+    DENC_DUMP_PRE(bluefs_fnode_t);
+    _denc_friend(*this, p);
+    DENC_DUMP_POST(bluefs_fnode_t);
+  }
+  void decode(buffer::ptr::iterator& p) {
+    _denc_friend(*this, p);
+    recalc_allocated();
+  }
+  template<typename T, typename P>
+  friend std::enable_if_t<std::is_same_v<bluefs_fnode_t, std::remove_const_t<T>>>
+  _denc_friend(T& v, P& p) {
     DENC_START(1, 1, p);
     denc_varint(v.ino, p);
     denc_varint(v.size, p);
@@ -110,7 +128,7 @@ struct bluefs_super_t {
       block_size(4096) { }
 
   uint64_t block_mask() const {
-    return ~(block_size - 1);
+    return ~((uint64_t)block_size - 1);
   }
 
   void encode(bufferlist& bl) const;

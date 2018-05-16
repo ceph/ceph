@@ -31,7 +31,7 @@
     if ((dout_context)->_conf->subsys.should_gather(ceph_subsys_mds_balancer, lvl)) {\
       subsys = ceph_subsys_mds_balancer;\
     }\
-    dout_impl(dout_context, subsys, lvl) dout_prefix
+    dout_impl(dout_context, ceph::dout::need_dynamic(subsys), lvl) dout_prefix
 
 #define mantle_dendl dendl; } while (0)
 
@@ -40,11 +40,12 @@ static int dout_wrapper(lua_State *L)
 {
   int level = luaL_checkinteger(L, 1);
   lua_concat(L, lua_gettop(L)-1);
-  mantle_dout(level) << lua_tostring(L, 2) << mantle_dendl;
+  mantle_dout(ceph::dout::need_dynamic(level)) << lua_tostring(L, 2)
+					       << mantle_dendl;
   return 0;
 }
 
-int Mantle::balance(const std::string &script,
+int Mantle::balance(std::string_view script,
                     mds_rank_t whoami,
                     const std::vector<std::map<std::string, double>> &metrics,
                     std::map<mds_rank_t, double> &my_targets)
@@ -52,7 +53,7 @@ int Mantle::balance(const std::string &script,
   lua_settop(L, 0); /* clear the stack */
 
   /* load the balancer */
-  if (luaL_loadstring(L, script.c_str())) {
+  if (luaL_loadstring(L, script.data())) {
     mantle_dout(0) << "WARNING: mantle could not load balancer: "
             << lua_tostring(L, -1) << mantle_dendl;
     return -EINVAL;

@@ -11,9 +11,9 @@
 namespace ceph {
 
 /// Split a string using the given delimiters, passing each piece as a
-/// (non-null-terminated) boost::string_view to the callback.
-template <typename Func> // where Func(boost::string_view) is a valid call
-void for_each_substr(boost::string_view s, const char *delims, Func&& f)
+/// (non-null-terminated) std::string_view to the callback.
+template <typename Func> // where Func(std::string_view) is a valid call
+void for_each_substr(std::string_view s, const char *delims, Func&& f)
 {
   auto pos = s.find_first_not_of(delims);
   while (pos != s.npos) {

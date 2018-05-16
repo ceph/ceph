@@ -17,27 +17,21 @@ install(TARGETS ceph_erasure_code
 add_library(ec_example SHARED 
   ErasureCodePluginExample.cc
   $<TARGET_OBJECTS:erasure_code_objs>)
-add_dependencies(ec_example ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_example pthread ${EXTRALIBS})
 
 add_library(ec_missing_entry_point SHARED ErasureCodePluginMissingEntryPoint.cc)
-add_dependencies(ec_missing_entry_point ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_missing_entry_point pthread ${EXTRALIBS})
 
 add_library(ec_missing_version SHARED ErasureCodePluginMissingVersion.cc)
-add_dependencies(ec_missing_version ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_missing_version pthread ${EXTRALIBS})
 
 add_library(ec_hangs SHARED ErasureCodePluginHangs.cc)
-add_dependencies(ec_hangs ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_hangs pthread ${EXTRALIBS})
 
 add_library(ec_fail_to_initialize SHARED ErasureCodePluginFailToInitialize.cc)
-add_dependencies(ec_fail_to_initialize ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_fail_to_initialize pthread ${EXTRALIBS})
 
 add_library(ec_fail_to_register SHARED ErasureCodePluginFailToRegister.cc)
-add_dependencies(ec_fail_to_register ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ec_fail_to_register pthread ${EXTRALIBS})
 
 # unittest_erasure_code_plugin

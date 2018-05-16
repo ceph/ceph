@@ -123,7 +123,7 @@ if(WITH_PMEM)
   ExternalProject_Add(nvml_ext
     DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
     GIT_REPOSITORY "https://github.com/ceph/nvml.git"
-    GIT_TAG "dd5b62dbc2cbbe048087dea"
+    GIT_TAG "dd622819dd4ee97d3920f913c70be"
     SOURCE_DIR ${CMAKE_BINARY_DIR}/src/nvml
     CONFIGURE_COMMAND ""
     BUILD_COMMAND $(MAKE)
@@ -138,7 +138,8 @@ if(WITH_PMEM)
   add_library(pmem STATIC IMPORTED GLOBAL)
   add_dependencies(pmem nvml_ext)
   set_target_properties(pmem PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a")
+    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a"
+    INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
   target_link_libraries(os pmem)
   target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
 endif(WITH_PMEM)

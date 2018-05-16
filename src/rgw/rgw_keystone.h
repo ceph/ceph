@@ -109,8 +109,10 @@ public:
   class RGWKeystoneHTTPTransceiver : public RGWHTTPTransceiver {
   public:
     RGWKeystoneHTTPTransceiver(CephContext * const cct,
+                               const string& method,
+                               const string& url,
                                bufferlist * const token_body_bl)
-      : RGWHTTPTransceiver(cct, token_body_bl,
+      : RGWHTTPTransceiver(cct, method, url, token_body_bl,
                            cct->_conf->rgw_keystone_verify_ssl,
                            { "X-Subject-Token" }) {
     }
@@ -257,7 +259,7 @@ class TokenCache {
 
   const size_t max;
 
-  TokenCache(const rgw::keystone::Config& config)
+  explicit TokenCache(const rgw::keystone::Config& config)
     : revocator(g_ceph_context, this, config),
       cct(g_ceph_context),
       lock("rgw::keystone::TokenCache"),
@@ -330,7 +332,7 @@ class AdminTokenRequestVer2 : public AdminTokenRequest {
   const Config& conf;
 
 public:
-  AdminTokenRequestVer2(const Config& conf)
+  explicit AdminTokenRequestVer2(const Config& conf)
     : conf(conf) {
   }
   void dump(Formatter *f) const override;
@@ -340,7 +342,7 @@ class AdminTokenRequestVer3 : public AdminTokenRequest {
   const Config& conf;
 
 public:
-  AdminTokenRequestVer3(const Config& conf)
+  explicit AdminTokenRequestVer3(const Config& conf)
     : conf(conf) {
   }
   void dump(Formatter *f) const override;
@@ -350,20 +352,20 @@ class BarbicanTokenRequestVer2 : public AdminTokenRequest {
   CephContext *cct;
 
 public:
-  BarbicanTokenRequestVer2(CephContext * const _cct)
+  explicit BarbicanTokenRequestVer2(CephContext * const _cct)
     : cct(_cct) {
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const override;
 };
 
 class BarbicanTokenRequestVer3 : public AdminTokenRequest {
   CephContext *cct;
 
 public:
-  BarbicanTokenRequestVer3(CephContext * const _cct)
+  explicit BarbicanTokenRequestVer3(CephContext * const _cct)
     : cct(_cct) {
   }
-  void dump(Formatter *f) const;
+  void dump(Formatter *f) const override;
 };
 
 

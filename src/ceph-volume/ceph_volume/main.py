@@ -27,7 +27,12 @@ Ceph Conf: {ceph_path}
     """
 
     def __init__(self, argv=None, parse=True):
-        self.mapper = {'lvm': devices.lvm.LVM, 'simple': devices.simple.Simple}
+        self.mapper = {
+            'lvm': devices.lvm.LVM,
+            'simple': devices.simple.Simple,
+            # XXX Disabled for now - comment out when fully functional
+            #'auto': devices.auto.Auto,
+        }
         self.plugin_help = "No plugins found/loaded"
         if argv is None:
             self.argv = sys.argv
@@ -137,6 +142,7 @@ Ceph Conf: {ceph_path}
             conf.log_path = os.path.join(args.log_path, 'ceph-volume.log')
         log.setup()
         logger = logging.getLogger(__name__)
+        logger.info("Running command: ceph-volume %s %s", " ".join(main_args), " ".join(subcommand_args))
         # set all variables from args and load everything needed according to
         # them
         self.load_ceph_conf_path(cluster_name=args.cluster)

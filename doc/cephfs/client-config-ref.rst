@@ -177,6 +177,12 @@
 :Type: Boolean
 :Default: ``true``
 
+``fuse max write``
+
+:Description: Set the maximum number of bytes in a single write operation.  Because the FUSE default is 128kbytes, SO fuse_max_write default set to 0(The default does not take effect)
+:Type: Integer
+:Default: ``0``
+
 Developer Options
 #################
 

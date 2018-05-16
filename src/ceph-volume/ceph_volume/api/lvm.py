@@ -3,8 +3,12 @@ API for CRUD lvm tag operations. Follows the Ceph LVM tag naming convention
 that prefixes tags with ``ceph.`` and uses ``=`` for assignment, and provides
 set of utilities for interacting with LVM.
 """
+import logging
+import os
 from ceph_volume import process
 from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError, MultiplePVsError
+
+logger = logging.getLogger(__name__)
 
 
 def _output_parser(output, fields):
@@ -42,6 +46,35 @@ def _output_parser(output, fields):
     return report
 
 
+def _splitname_parser(line):
+    """
+    Parses the output from ``dmsetup splitname``, that should contain prefixes
+    (--nameprefixes) and set the separator to ";"
+
+    Output for /dev/mapper/vg-lv will usually look like::
+
+        DM_VG_NAME='/dev/mapper/vg';DM_LV_NAME='lv';DM_LV_LAYER=''
+
+
+    The ``VG_NAME`` will usually not be what other callers need (e.g. just 'vg'
+    in the example), so this utility will split ``/dev/mapper/`` out, so that
+    the actual volume group name is kept
+
+    :returns: dictionary with stripped prefixes
+    """
+    parts = line[0].split(';')
+    parsed = {}
+    for part in parts:
+        part = part.replace("'", '')
+        key, value = part.split('=')
+        if 'DM_VG_NAME' in key:
+            value = value.split('/dev/mapper/')[-1]
+        key = key.split('DM_')[-1]
+        parsed[key] = value
+
+    return parsed
+
+
 def parse_tags(lv_tags):
     """
     Return a dictionary mapping of all the tags associated with
@@ -71,14 +104,136 @@ def parse_tags(lv_tags):
     return tag_mapping
 
 
+def _vdo_parents(devices):
+    """
+    It is possible we didn't get a logical volume, or a mapper path, but
+    a device like /dev/sda2, to resolve this, we must look at all the slaves of
+    every single device in /sys/block and if any of those devices is related to
+    VDO devices, then we can add the parent
+    """
+    parent_devices = []
+    for parent in os.listdir('/sys/block'):
+        for slave in os.listdir('/sys/block/%s/slaves' % parent):
+            if slave in devices:
+                parent_devices.append('/dev/%s' % parent)
+                parent_devices.append(parent)
+    return parent_devices
+
+
+def _vdo_slaves(vdo_names):
+    """
+    find all the slaves associated with each vdo name (from realpath) by going
+    into /sys/block/<realpath>/slaves
+    """
+    devices = []
+    for vdo_name in vdo_names:
+        mapper_path = '/dev/mapper/%s' % vdo_name
+        if not os.path.exists(mapper_path):
+            continue
+        # resolve the realpath and realname of the vdo mapper
+        vdo_realpath = os.path.realpath(mapper_path)
+        vdo_realname = vdo_realpath.split('/')[-1]
+        slaves_path = '/sys/block/%s/slaves' % vdo_realname
+        if not os.path.exists(slaves_path):
+            continue
+        devices.append(vdo_realpath)
+        devices.append(mapper_path)
+        devices.append(vdo_realname)
+        for slave in os.listdir(slaves_path):
+            devices.append('/dev/%s' % slave)
+            devices.append(slave)
+    return devices
+
+
+def _is_vdo(path):
+    """
+    A VDO device can be composed from many different devices, go through each
+    one of those devices and its slaves (if any) and correlate them back to
+    /dev/mapper and their realpaths, and then check if they appear as part of
+    /sys/kvdo/<name>/statistics
+
+    From the realpath of a logical volume, determine if it is a VDO device or
+    not, by correlating it to the presence of the name in
+    /sys/kvdo/<name>/statistics and all the previously captured devices
+    """
+    if not os.path.isdir('/sys/kvdo'):
+        return False
+    realpath = os.path.realpath(path)
+    realpath_name = realpath.split('/')[-1]
+    devices = []
+    vdo_names = set()
+    # get all the vdo names
+    for dirname in os.listdir('/sys/kvdo/'):
+        if os.path.isdir('/sys/kvdo/%s/statistics' % dirname):
+            vdo_names.add(dirname)
+
+    # find all the slaves associated with each vdo name (from realpath) by
+    # going into /sys/block/<realpath>/slaves
+    devices.extend(_vdo_slaves(vdo_names))
+
+    # Find all possible parents, looking into slaves that are related to VDO
+    devices.extend(_vdo_parents(devices))
+
+    return any([
+        path in devices,
+        realpath in devices,
+        realpath_name in devices])
+
+
+def is_vdo(path):
+    """
+    Detect if a path is backed by VDO, proxying the actual call to _is_vdo so
+    that we can prevent an exception breaking OSD creation. If an exception is
+    raised, it will get captured and logged to file, while returning
+    a ``False``.
+    """
+    try:
+        if _is_vdo(path):
+            return '1'
+        return '0'
+    except Exception:
+        logger.exception('Unable to properly detect device as VDO: %s', path)
+        return '0'
+
+
+def dmsetup_splitname(dev):
+    """
+    Run ``dmsetup splitname`` and parse the results.
+
+    .. warning:: This call does not ensure that the device is correct or that
+    it exists. ``dmsetup`` will happily take a non existing path and still
+    return a 0 exit status.
+    """
+    command = [
+        'dmsetup', 'splitname', '--noheadings',
+        "--separator=';'", '--nameprefixes', dev
+    ]
+    out, err, rc = process.call(command)
+    return _splitname_parser(out)
+
+
+def is_lv(dev, lvs=None):
+    """
+    Boolean to detect if a device is an LV or not.
+    """
+    splitname = dmsetup_splitname(dev)
+    # Allowing to optionally pass `lvs` can help reduce repetitive checks for
+    # multiple devices at once.
+    lvs = lvs if lvs is not None else Volumes()
+    if splitname.get('LV_NAME'):
+        lvs.filter(lv_name=splitname['LV_NAME'], vg_name=splitname['VG_NAME'])
+        return len(lvs) > 0
+    return False
+
+
 def get_api_vgs():
     """
     Return the list of group volumes available in the system using flags to
     include common metadata associated with them
 
-    Command and sample delimeted output, should look like::
+    Command and sample delimited output should look like::
 
-        $ vgs --noheadings --separator=';' \
+        $ vgs --noheadings --readonly --separator=';' \
           -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
           ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
           osd_vg;3;1;0;wz--n-;29.21g;9.21g
@@ -86,7 +241,7 @@ def get_api_vgs():
     """
     fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--separator=";"', '-o', fields]
+        ['vgs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
@@ -96,16 +251,16 @@ def get_api_lvs():
     Return the list of logical volumes available in the system using flags to include common
     metadata associated with them
 
-    Command and delimeted output, should look like::
+    Command and delimited output should look like::
 
-        $ lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
+        $ lvs --noheadings --readonly --separator=';' -o lv_tags,lv_path,lv_name,vg_name
           ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
     fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid'
     stdout, stderr, returncode = process.call(
-        ['lvs', '--noheadings', '--separator=";"', '-o', fields]
+        ['lvs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
@@ -117,17 +272,17 @@ def get_api_pvs():
 
     This will only return physical volumes set up to work with LVM.
 
-    Command and delimeted output, should look like::
+    Command and delimited output should look like::
 
-        $ pvs --noheadings --separator=';' -o pv_name,pv_tags,pv_uuid
+        $ pvs --noheadings --readonly --separator=';' -o pv_name,pv_tags,pv_uuid
           /dev/sda1;;
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
     """
-    fields = 'pv_name,pv_tags,pv_uuid,vg_name'
+    fields = 'pv_name,pv_tags,pv_uuid,vg_name,lv_uuid'
 
     stdout, stderr, returncode = process.call(
-        ['pvs', '--no-heading', '--separator=";"', '-o', fields]
+        ['pvs', '--no-heading', '--readonly', '--separator=";"', '-o', fields]
     )
 
     return _output_parser(stdout, fields)
@@ -217,7 +372,7 @@ def remove_vg(vg_name):
     """
     Removes a volume group.
     """
-    fail_msg = "Unable to remove vg %s".format(vg_name)
+    fail_msg = "Unable to remove vg %s" % vg_name
     process.run(
         [
             'vgremove',
@@ -233,7 +388,7 @@ def remove_pv(pv_name):
     """
     Removes a physical volume.
     """
-    fail_msg = "Unable to remove vg %s".format(pv_name)
+    fail_msg = "Unable to remove vg %s" % pv_name
     process.run(
         [
             'pvremove',
@@ -263,7 +418,7 @@ def remove_lv(path):
         terminal_verbose=True,
     )
     if returncode != 0:
-        raise RuntimeError("Unable to remove %s".format(path))
+        raise RuntimeError("Unable to remove %s" % path)
     return True
 
 
@@ -446,7 +601,7 @@ class Volumes(list):
 
     def _purge(self):
         """
-        Deplete all the items in the list, used internally only so that we can
+        Delete all the items in the list, used internally only so that we can
         dynamically allocate the items when filtering without the concern of
         messing up the contents
         """
@@ -665,6 +820,7 @@ class Volume(object):
         self.lv_api = kw
         self.name = kw['lv_name']
         self.tags = parse_tags(kw['lv_tags'])
+        self.encrypted = self.tags.get('ceph.encrypted', '0') == '1'
 
     def __str__(self):
         return '<%s>' % self.lv_api['lv_path']

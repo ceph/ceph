@@ -20,10 +20,23 @@ Synopsis
 Description
 ===========
 
-**ceph-conf** is a utility for getting information about a ceph
+**ceph-conf** is a utility for getting information from a ceph
 configuration file. As with most Ceph programs, you can specify which
 Ceph configuration file to use with the ``-c`` flag.
 
+Note that unlike other ceph tools, **ceph-conf** will *only* read from
+config files (or return compiled-in default values)--it will *not*
+fetch config values from the monitor cluster.  For this reason it is
+recommended that **ceph-conf** only be used in legacy environments
+that are strictly config-file based.  New deployments and tools should
+instead rely on either querying the monitor explicitly for
+configuration (e.g., ``ceph config get <daemon> <option>``) or use
+daemons themselves to fetch effective config options (e.g.,
+``ceph-osd -i 123 --show-config-value osd_data``).  The latter option
+has the advantages of drawing from compiled-in defaults (which
+occasionally vary between daemons), config files, and the monitor's
+config database, providing the exact value that that daemon would be
+using if it were started.
 
 Actions
 =======

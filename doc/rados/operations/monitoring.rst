@@ -57,14 +57,14 @@ cluster with one of each service may print the following:
     health: HEALTH_OK
    
   services:
-    mon: 1 daemons, quorum a
+    mon: 3 daemons, quorum a,b,c
     mgr: x(active)
-    mds: 1/1/1 up {0=a=up:active}
-    osd: 1 osds: 1 up, 1 in
+    mds: cephfs_a-1/1/1 up  {0=a=up:active}, 2 up:standby
+    osd: 3 osds: 3 up, 3 in
   
   data:
     pools:   2 pools, 16 pgs
-    objects: 21 objects, 2246 bytes
+    objects: 21 objects, 2.19K
     usage:   546 GB used, 384 GB / 931 GB avail
     pgs:     16 active+clean
 
@@ -104,14 +104,14 @@ is emitted.  For example:
     health: HEALTH_OK
   
   services:
-    mon: 1 daemons, quorum a
+    mon: 3 daemons, quorum a,b,c
     mgr: x(active)
-    mds: 1/1/1 up {0=a=up:active}
-    osd: 1 osds: 1 up, 1 in
+    mds: cephfs_a-1/1/1 up  {0=a=up:active}, 2 up:standby
+    osd: 3 osds: 3 up, 3 in
   
   data:
     pools:   2 pools, 16 pgs
-    objects: 21 objects, 2246 bytes
+    objects: 21 objects, 2.19K
     usage:   546 GB used, 384 GB / 931 GB avail
     pgs:     16 active+clean
   
@@ -203,7 +203,7 @@ on the number of replicas, clones and snapshots.
 - **%USED:** The notional percentage of storage used per pool.
 - **MAX AVAIL:** An estimate of the notional amount of data that can be written
   to this pool.
-- **Objects:** The notional number of objects stored per pool.
+- **OBJECTS:** The notional number of objects stored per pool.
 
 .. note:: The numbers in the **POOLS** section are notional. They are not 
    inclusive of the number of replicas, shapshots or clones. As a result, 
@@ -236,13 +236,13 @@ You can also check view OSDs according to their position in the CRUSH map. ::
 Ceph will print out a CRUSH tree with a host, its OSDs, whether they are up
 and their weight. ::  
 
-	# id	weight	type name	up/down	reweight
-	-1	3	pool default
-	-3	3		rack mainrack
-	-2	3			host osd-host
-	0	1				osd.0	up	1	
-	1	1				osd.1	up	1	
-	2	1				osd.2	up	1
+	#ID CLASS WEIGHT  TYPE NAME             STATUS REWEIGHT PRI-AFF
+	 -1       3.00000 pool default
+	 -3       3.00000 rack mainrack
+	 -2       3.00000 host osd-host
+	  0   ssd 1.00000         osd.0             up  1.00000 1.00000
+	  1   ssd 1.00000         osd.1             up  1.00000 1.00000
+	  2   ssd 1.00000         osd.2             up  1.00000 1.00000
 
 For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
 
@@ -250,7 +250,7 @@ Checking Monitor Status
 =======================
 
 If your cluster has multiple monitors (likely), you should check the monitor
-quorum status after you start the cluster before reading and/or writing data. A
+quorum status after you start the cluster and before reading and/or writing data. A
 quorum must be present when multiple monitors are running. You should also check
 monitor status periodically to ensure that they are running.
 
@@ -276,22 +276,36 @@ three monitors may return the following:
 	        0,
 	        1,
 	        2],
+	  "quorum_names": [
+		"a",
+		"b",
+		"c"],
+	  "quorum_leader_name": "a",
 	  "monmap": { "epoch": 1,
 	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
 	      "modified": "2011-12-12 13:28:27.505520",
 	      "created": "2011-12-12 13:28:27.505520",
+	      "features": {"persistent": [
+				"kraken",
+				"luminous",
+				"mimic"],
+		"optional": []
+	      },
 	      "mons": [
 	            { "rank": 0,
 	              "name": "a",
-	              "addr": "127.0.0.1:6789\/0"},
+	              "addr": "127.0.0.1:6789/0",
+		      "public_addr": "127.0.0.1:6789/0"},
 	            { "rank": 1,
 	              "name": "b",
-	              "addr": "127.0.0.1:6790\/0"},
+	              "addr": "127.0.0.1:6790/0",
+		      "public_addr": "127.0.0.1:6790/0"},
 	            { "rank": 2,
 	              "name": "c",
-	              "addr": "127.0.0.1:6791\/0"}
+	              "addr": "127.0.0.1:6791/0",
+		      "public_addr": "127.0.0.1:6791/0"}
 	           ]
-	    }
+	  }
 	}
 
 Checking MDS Status
@@ -346,6 +360,6 @@ admin socket bypasses the monitor, unlike ``ceph tell {daemon-type}.{id}
 config set``, which relies on the monitor but doesn't require you to login
 directly to the host in question ).
 
-.. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#ceph-runtime-config
+.. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
 .. _ceph-medic: http://docs.ceph.com/ceph-medic/master/

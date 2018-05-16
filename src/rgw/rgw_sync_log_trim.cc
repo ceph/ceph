@@ -101,7 +101,7 @@ struct TrimCounters {
   class Handler : public TrimNotifyHandler {
     Server *const server;
    public:
-    Handler(Server *server) : server(server) {}
+    explicit Handler(Server *server) : server(server) {}
 
     void handle(bufferlist::iterator& input, bufferlist& output) override;
   };
@@ -185,7 +185,7 @@ struct TrimComplete {
   class Handler : public TrimNotifyHandler {
     Server *const server;
    public:
-    Handler(Server *server) : server(server) {}
+    explicit Handler(Server *server) : server(server) {}
 
     void handle(bufferlist::iterator& input, bufferlist& output) override;
   };
@@ -732,7 +732,7 @@ class BucketTrimCR : public RGWCoroutine {
       observer(observer), obj(obj), counter(config.counter_size)
   {}
 
-  int operate();
+  int operate() override;
 };
 
 const std::string BucketTrimCR::section{"bucket.instance"};
@@ -889,7 +889,7 @@ class BucketTrimPollCR : public RGWCoroutine {
       cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct))
   {}
 
-  int operate();
+  int operate() override;
 };
 
 int BucketTrimPollCR::operate()
@@ -897,7 +897,7 @@ int BucketTrimPollCR::operate()
   reenter(this) {
     for (;;) {
       set_status("sleeping");
-      wait(utime_t{config.trim_interval_sec, 0});
+      wait(utime_t{static_cast<time_t>(config.trim_interval_sec), 0});
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");

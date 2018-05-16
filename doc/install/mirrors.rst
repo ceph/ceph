@@ -16,7 +16,6 @@ These mirrors are available on the following locations:
 
 - **EU: Netherlands**: http://eu.ceph.com/
 - **AU: Australia**: http://au.ceph.com/
-- **CZ: Czech Republic**: http://cz.ceph.com/
 - **SE: Sweden**: http://se.ceph.com/
 - **DE: Germany**: http://de.ceph.com/
 - **HK: Hong Kong**: http://hk.ceph.com/

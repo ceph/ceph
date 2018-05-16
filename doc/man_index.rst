@@ -22,7 +22,6 @@
    man/8/ceph-osd
    man/8/ceph-post-file
    man/8/ceph-rbdnamer
-   man/8/ceph-rest-api
    man/8/ceph-run
    man/8/ceph-syn
    man/8/ceph

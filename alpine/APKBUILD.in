@@ -142,7 +142,6 @@ build() {
 		-DWITH_PYTHON3=OFF \
 		-DWITH_LTTNG=OFF \
 		-DWITH_SYSTEM_BOOST=ON \
-		-DWITH_EMBEDDED=OFF \
 		-DWITH_TESTS=${_with_tests:-OFF} \
 		|| return 1
 	make -j${JOBS:-2} || return 1
@@ -437,13 +436,7 @@ ceph_test() {
 		ceph_rgw_multiparser \
 		ceph_scratchtool \
 		ceph_scratchtoolpp \
-		ceph_smalliobench \
-		ceph_smalliobenchdumb \
-		ceph_smalliobenchfs \
-		ceph_smalliobenchrbd \
 		ceph_test_* \
-		ceph_tpbench \
-		ceph_xattr_bench \
 		ceph-coverage \
 		ceph-monstore-tool \
 		ceph-osdomap-tool \

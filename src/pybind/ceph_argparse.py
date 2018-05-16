@@ -7,7 +7,7 @@ daemon.
 
 Copyright (C) 2013 Inktank Storage, Inc.
 
-LGPL2.  See file COPYING.
+LGPL2.1.  See file COPYING.
 """
 from __future__ import print_function
 import copy
@@ -23,8 +23,9 @@ import threading
 import uuid
 
 
+# Flags are from MonCommand.h
 FLAG_MGR = 8   # command is intended for mgr
-
+FLAG_POLL = 16 # command is intended to be ran continuously by the client
 
 try:
     basestring
@@ -618,7 +619,7 @@ class argdesc(object):
         else:
             self.t = t
             self.typeargs = kwargs
-            self.req = bool(req == True or req == 'True')
+            self.req = req in (True, 'True', 'true')
 
         self.name = name
         self.N = (n in ['n', 'N'])
@@ -999,6 +1000,9 @@ def validate(args, signature, flags=0, partial=False):
     if flags & FLAG_MGR:
         d['target'] = ('mgr','')
 
+    if flags & FLAG_POLL:
+        d['poll'] = True
+
     # Finally, success
     return d
 
@@ -1049,7 +1053,7 @@ def validate_command(sigdict, args, verbose=False):
             print("bestcmds_sorted: ", file=sys.stderr)
             pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)
 
-        e = None
+        ex = None
         # for everything in bestcmds, look for a true match
         for cmdsig in bestcmds_sorted:
             for cmd in cmdsig.values():
@@ -1063,6 +1067,7 @@ def validate_command(sigdict, args, verbose=False):
                     # the right command yet
                     pass
                 except ArgumentMissing as e:
+                    ex = e
                     if len(bestcmds) == 1:
                         found = cmd
                     break
@@ -1075,17 +1080,18 @@ def validate_command(sigdict, args, verbose=False):
                         print('Not enough args supplied for ',
                               concise_sig(sig), file=sys.stderr)
                 except ArgumentError as e:
+                    ex = e
                     # Solid mismatch on an arg (type, range, etc.)
                     # Stop now, because we have the right command but
                     # some other input is invalid
                     found = cmd
                     break
-            if found or e:
+            if found or ex:
                 break
 
         if found:
             if not valid_dict:
-                print("Invalid command:", e, file=sys.stderr)
+                print("Invalid command:", ex, file=sys.stderr)
                 print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
         else:
             bestcmds = bestcmds[:10]
@@ -1166,16 +1172,16 @@ def find_cmd_target(childargs):
 
 
 class RadosThread(threading.Thread):
-    def __init__(self, target, *args, **kwargs):
+    def __init__(self, func, *args, **kwargs):
         self.args = args
         self.kwargs = kwargs
-        self.target = target
+        self.func = func
         self.exception = None
         threading.Thread.__init__(self)
 
     def run(self):
         try:
-            self.retval = self.target(*self.args, **self.kwargs)
+            self.retval = self.func(*self.args, **self.kwargs)
         except Exception as e:
             self.exception = e
 
@@ -1184,11 +1190,11 @@ class RadosThread(threading.Thread):
 POLL_TIME_INCR = 0.5
 
 
-def run_in_thread(target, *args, **kwargs):
+def run_in_thread(func, *args, **kwargs):
     interrupt = False
     timeout = kwargs.pop('timeout', 0)
     countdown = timeout
-    t = RadosThread(target, *args, **kwargs)
+    t = RadosThread(func, *args, **kwargs)
 
     # allow the main thread to exit (presumably, avoid a join() on this
     # subthread) before this thread terminates.  This allows SIGINT
@@ -1237,7 +1243,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                  verbose=False):
     """
     Send a command to a daemon using librados's
-    mon_command, osd_command, or pg_command.  Any bulk input data
+    mon_command, osd_command, mgr_command, or pg_command.  Any bulk input data
     comes in inbuf.
 
     Returns (ret, outbuf, outs); ret is the return code, outbuf is
@@ -1255,11 +1261,11 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 print('submit {0} to osd.{1}'.format(cmd, osdid),
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
-                cluster.osd_command, osdid, cmd, inbuf, timeout)
+                cluster.osd_command, osdid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mgr':
             ret, outbuf, outs = run_in_thread(
-                cluster.mgr_command, cmd, inbuf, timeout)
+                cluster.mgr_command, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'pg':
             pgid = target[1]
@@ -1275,7 +1281,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 print('submit {0} for pgid {1}'.format(cmd, pgid),
                       file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
-                cluster.pg_command, pgid, cmd, inbuf, timeout)
+                cluster.pg_command, pgid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mon':
             if verbose:
@@ -1283,10 +1289,10 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                       file=sys.stderr)
             if len(target) < 2 or target[1] == '':
                 ret, outbuf, outs = run_in_thread(
-                    cluster.mon_command, cmd, inbuf, timeout)
+                    cluster.mon_command, cmd, inbuf, timeout=timeout)
             else:
                 ret, outbuf, outs = run_in_thread(
-                    cluster.mon_command, cmd, inbuf, timeout, target[1])
+                    cluster.mon_command, cmd, inbuf, timeout=timeout, target=target[1])
         elif target[0] == 'mds':
             mds_spec = target[1]
 
@@ -1349,7 +1355,6 @@ def json_command(cluster, target=('mon', ''), prefix=None, argdict=None,
             except:
                 # use the target we were originally given
                 pass
-
         ret, outbuf, outs = send_command_retry(cluster,
                                                target, [json.dumps(cmddict)],
                                                inbuf, timeout, verbose)

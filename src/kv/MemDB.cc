@@ -318,7 +318,7 @@ int MemDB::_rmkey(ms_op_t &op)
   return m_map.erase(key);
 }
 
-std::shared_ptr<KeyValueDB::MergeOperator> MemDB::_find_merge_op(std::string prefix)
+std::shared_ptr<KeyValueDB::MergeOperator> MemDB::_find_merge_op(const std::string &prefix)
 {
   for (const auto& i : merge_ops) {
     if (i.first == prefix) {

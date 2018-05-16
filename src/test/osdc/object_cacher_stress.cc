@@ -26,7 +26,7 @@
 
 // XXX: Only tests default namespace
 struct op_data {
-  op_data(std::string oid, uint64_t offset, uint64_t len, bool read)
+  op_data(const std::string &oid, uint64_t offset, uint64_t len, bool read)
     : extent(oid, 0, offset, len, 0), is_read(read)
   {
     extent.oloc.pool = 0;
@@ -355,9 +355,9 @@ int main(int argc, const char **argv)
 {
   std::vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
 
   long long delay_ns = 0;
   long long num_ops = 1000;

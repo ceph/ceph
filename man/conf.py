@@ -1,7 +1,7 @@
 import os
 
 project = u'Ceph'
-copyright = u'2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons BY-SA'
+copyright = u'2010-2014, Inktank Storage, Inc. and contributors. Licensed under Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)'
 version = 'dev'
 release = 'dev'
 

@@ -11,7 +11,8 @@
 #include "common/RWLock.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "include/rados/librados.hpp"
-#include "Action.h"
+#include "tools/rbd_mirror/image_map/StateTransition.h"
+#include "tools/rbd_mirror/image_map/Types.h"
 
 class Context;
 
@@ -27,150 +28,92 @@ public:
   }
 
   // init -- called during initialization
-  void init(const std::map<std::string, cls::rbd::MirrorImageMap> &image_mapping);
+  void init(
+      const std::map<std::string, cls::rbd::MirrorImageMap> &image_mapping);
 
   // lookup an image from the map
-  struct LookupInfo {
-    std::string instance_id = UNMAPPED_INSTANCE_ID;
-    utime_t mapped_time;
-  };
   LookupInfo lookup(const std::string &global_image_id);
 
-  // add, remove, shuffle
-  bool add_image(const std::string &global_image_id,
-                 Context *on_update, Context *on_acquire, Context *on_finish);
-  bool remove_image(const std::string &global_image_id,
-                    Context *on_release, Context *on_remove, Context *on_finish);
-  bool shuffle_image(const std::string &global_image_id,
-                     Context *on_release, Context *on_update,
-                     Context *on_acquire, Context *on_finish);
+  // add, remove
+  bool add_image(const std::string &global_image_id);
+  bool remove_image(const std::string &global_image_id);
 
   // shuffle images when instances are added/removed
-  void add_instances(const std::vector<std::string> &instance_ids,
-                     std::set<std::string> *remap_global_image_ids);
-  void remove_instances(const std::vector<std::string> &instance_ids,
-                        std::set<std::string> *remap_global_image_ids);
+  void add_instances(const InstanceIds &instance_ids,
+                     GlobalImageIds* global_image_ids);
+  void remove_instances(const InstanceIds &instance_ids,
+                        GlobalImageIds* global_image_ids);
 
-  void start_next_action(const std::string &global_image_id);
+  ActionType start_action(const std::string &global_image_id);
   bool finish_action(const std::string &global_image_id, int r);
-
-  static const std::string UNMAPPED_INSTANCE_ID;
-
-private:
-  typedef std::list<Action> Actions;
-
-  struct ActionState {
-    Actions actions;                                                          // list of pending actions
-
-    StateTransition::State current_state = StateTransition::STATE_UNASSIGNED; // current state
-    boost::optional<StateTransition::State> last_idle_state;                  // last successfull idle
-                                                                              // state transition
-
-    StateTransition::Transition transition;                                   // (cached) next transition
-
-    utime_t map_time;                                                         // (re)mapped time
-  };
-
-  // for the lack of a better function name
-  bool is_state_retriable(StateTransition::State state) {
-    return state == StateTransition::STATE_UPDATE_MAPPING ||
-           state == StateTransition::STATE_REMOVE_MAPPING ||
-           state == StateTransition::STATE_ASSOCIATED;
-  }
-  // can the state machine transit advance (on success) or rollback
-  // (on failure).
-  bool can_transit(const ActionState &action_state, int r) {
-    assert(m_map_lock.is_locked());
-    return r == 0 || action_state.transition.error_state;
-  }
-
-  void set_image_mapped_timestamp(const std::string &global_image_id, utime_t time) {
-    assert(m_map_lock.is_wlocked());
-
-    auto it = m_actions.find(global_image_id);
-    assert(it != m_actions.end());
-    it->second.map_time = time;
-  }
-  utime_t get_image_mapped_timestamp(const std::string &global_image_id) {
-    assert(m_map_lock.is_locked());
-
-    auto it = m_actions.find(global_image_id);
-    assert(it != m_actions.end());
-    return it->second.map_time;
-  }
-
-  librados::IoCtx &m_ioctx;
-  std::map<std::string, ActionState> m_actions;
-  std::set<std::string> m_dead_instances;
-
-  bool is_idle_state(StateTransition::State state) {
-    if (state == StateTransition::STATE_UNASSIGNED ||
-        state == StateTransition::STATE_ASSOCIATED ||
-        state == StateTransition::STATE_DISASSOCIATED) {
-      return true;
-    }
-
-    return false;
-  }
-
-  // generate image map time based on action type
-  utime_t generate_image_map_timestamp(StateTransition::ActionType action_type) {
-    // for a shuffle action (image remap) use current time as
-    // map time, historical time otherwise.
-    utime_t time;
-    if (action_type == StateTransition::ACTION_TYPE_SHUFFLE) {
-      time = ceph_clock_now();
-    } else {
-      time = utime_t(0, 0);
-    }
-
-    return time;
-  }
-
-  bool queue_action(const std::string &global_image_id, const Action &action);
-  bool actions_pending(const std::string &global_image_id, const RWLock &lock);
-
-  LookupInfo lookup(const std::string &global_image_id, const RWLock &lock);
-  void map(const std::string &global_image_id,
-           const std::string &instance_id, utime_t map_time, const RWLock &lock);
-  void unmap(const std::string &global_image_id, const std::string &instance_id, const RWLock &lock);
-
-  // map an image
-  void map(const std::string &global_image_id, utime_t map_time);
-  // unmap (remove) an image from the map
-  void unmap(const std::string &global_image_id);
-
-  // state transition related..
-  void pre_execute_state_callback(const std::string &global_image_id,
-                                  StateTransition::ActionType action_type, StateTransition::State state);
-  void post_execute_state_callback(const std::string &global_image_id, StateTransition::State state);
-
-  void rollback(ActionState *action_state);
-  bool advance(const std::string &global_image_id, ActionState *action_state, Action *action);
-
-  bool perform_transition(const std::string &global_image_id, ActionState *action_state,
-                          Action *action, bool transition_error);
-  bool abort_or_retry(ActionState *action_state, Action *action);
 
 protected:
   typedef std::map<std::string, std::set<std::string> > InstanceToImageMap;
-
-  RWLock m_map_lock;        // protects m_map, m_shuffled_timestamp
-  InstanceToImageMap m_map; // instance_id -> global_id map
 
   bool is_dead_instance(const std::string instance_id) {
     assert(m_map_lock.is_locked());
     return m_dead_instances.find(instance_id) != m_dead_instances.end();
   }
 
+  bool is_image_shuffling(const std::string &global_image_id);
   bool can_shuffle_image(const std::string &global_image_id);
 
   // map an image (global image id) to an instance
-  virtual std::string do_map(const std::string &global_image_id) = 0;
+  virtual std::string do_map(const InstanceToImageMap& map,
+                             const std::string &global_image_id) = 0;
 
   // shuffle images when instances are added/removed
-  virtual void do_shuffle_add_instances(const std::vector<std::string> &instance_ids,
-                                        std::set<std::string> *remap_global_image_ids) = 0;
+  virtual void do_shuffle_add_instances(
+      const InstanceToImageMap& map, size_t image_count,
+      const std::vector<std::string> &instance_ids,
+      std::set<std::string> *remap_global_image_ids) = 0;
+
+private:
+  struct ImageState {
+    std::string instance_id = UNMAPPED_INSTANCE_ID;
+    utime_t mapped_time;
+
+    ImageState() {}
+    ImageState(const std::string& instance_id, const utime_t& mapped_time)
+      : instance_id(instance_id), mapped_time(mapped_time) {
+    }
+
+    // active state and action
+    StateTransition::State state = StateTransition::STATE_UNASSOCIATED;
+    StateTransition::Transition transition;
+
+    // next scheduled state
+    boost::optional<StateTransition::State> next_state = boost::none;
+  };
+
+  typedef std::map<std::string, ImageState> ImageStates;
+
+  librados::IoCtx &m_ioctx;
+
+  RWLock m_map_lock;        // protects m_map
+  InstanceToImageMap m_map; // instance_id -> global_id map
+
+  ImageStates m_image_states;
+  std::set<std::string> m_dead_instances;
+
+  bool m_initial_update = true;
+
+  void remove_instances(const RWLock& lock, const InstanceIds &instance_ids,
+                        GlobalImageIds* global_image_ids);
+
+  bool set_state(ImageState* image_state, StateTransition::State state,
+                 bool ignore_current_state);
+
+  void execute_policy_action(const std::string& global_image_id,
+                             ImageState* image_state,
+                             StateTransition::PolicyAction policy_action);
+
+  void map(const std::string& global_image_id, ImageState* image_state);
+  void unmap(const std::string &global_image_id, ImageState* image_state);
+
+  bool is_state_scheduled(const ImageState& image_state,
+                          StateTransition::State state) const;
+
 };
 
 } // namespace image_map

@@ -60,7 +60,7 @@ int main(int argc, char **argv) {
     return 1;
   }
 
-  vector<const char *> ceph_options, def_args;
+  vector<const char *> ceph_options;
   ceph_options.reserve(ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();
@@ -70,8 +70,13 @@ int main(int argc, char **argv) {
 
   if (vm.count("debug")) debug = true;
 
+  if (vm.count("help")) {
+    std::cerr << desc << std::endl;
+    return 1;
+  }
+
   auto cct = global_init(
-    &def_args, ceph_options, CEPH_ENTITY_TYPE_OSD,
+    NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
@@ -81,11 +86,6 @@ int main(int argc, char **argv) {
     g_conf->set_val_or_die("err_to_stderr", "true");
   }
   g_conf->apply_changes(NULL);
-
-  if (vm.count("help")) {
-    std::cerr << desc << std::endl;
-    return 1;
-  }
 
   if (vm.count("omap-path") == 0) {
     std::cerr << "Required argument --omap-path" << std::endl;

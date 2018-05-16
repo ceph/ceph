@@ -69,7 +69,9 @@ int TestMemIoCtxImpl::append(const std::string& oid, const bufferlist &bl,
   }
 
   RWLock::WLocker l(file->lock);
-  file->data.append(bl);
+  auto off = file->data.length();
+  ensure_minimum_length(off + bl.length(), &file->data);
+  file->data.copy_in(off, bl.length(), bl);
   return 0;
 }
 
@@ -323,11 +325,24 @@ int TestMemIoCtxImpl::remove(const std::string& oid, const SnapContext &snapc) {
   }
   file = get_file(oid, true, snapc);
 
-  RWLock::WLocker l2(file->lock);
-  file->exists = false;
+  {
+    RWLock::WLocker l2(file->lock);
+    file->exists = false;
+  }
 
   TestMemCluster::Files::iterator it = m_pool->files.find(oid);
   assert(it != m_pool->files.end());
+
+  if (*it->second.rbegin() == file) {
+    TestMemCluster::ObjectHandlers object_handlers;
+    std::swap(object_handlers, m_pool->file_handlers[oid]);
+    m_pool->file_handlers.erase(oid);
+
+    for (auto object_handler : object_handlers) {
+      object_handler->handle_removed(m_client);
+    }
+  }
+
   if (it->second.size() == 1) {
     m_pool->files.erase(it);
     m_pool->file_omaps.erase(oid);
@@ -579,7 +594,8 @@ int TestMemIoCtxImpl::write_full(const std::string& oid, bufferlist& bl,
   }
 
   file->data.clear();
-  file->data.append(bl);
+  ensure_minimum_length(bl.length(), &file->data);
+  file->data.copy_in(0, bl.length(), bl);
   return 0;
 }
 

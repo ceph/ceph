@@ -206,32 +206,35 @@ function ceph_watch_wait()
 
 function test_mon_injectargs()
 {
-  CEPH_ARGS='--mon_debug_dump_location the.dump' ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'false'"
-  ! grep "the.dump" $TMPFILE || return 1
-  ceph tell osd.0 injectargs '--osd_enable_op_tracker --osd_op_history_duration 500' >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '500'"
-  ceph tell osd.0 injectargs --no-osd_enable_op_tracker >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'false'"
-  ceph tell osd.0 injectargs -- --osd_enable_op_tracker >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'true'"
-  ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600' >& $TMPFILE || return 1
-  check_response "osd_enable_op_tracker = 'true' osd_op_history_duration = '600'"
-  expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
-                 ceph tell osd.0 injectargs -- '--osd_op_history_duration'
+  ceph tell osd.0 injectargs --no-osd_enable_op_tracker
+  ceph tell osd.0 config get osd_enable_op_tracker | grep false
+  ceph tell osd.0 injectargs '--osd_enable_op_tracker --osd_op_history_duration 500'
+  ceph tell osd.0 config get osd_enable_op_tracker | grep true
+  ceph tell osd.0 config get osd_op_history_duration | grep 500
+  ceph tell osd.0 injectargs --no-osd_enable_op_tracker
+  ceph tell osd.0 config get osd_enable_op_tracker | grep false
+  ceph tell osd.0 injectargs -- --osd_enable_op_tracker
+  ceph tell osd.0 config get osd_enable_op_tracker | grep true
+  ceph tell osd.0 injectargs -- '--osd_enable_op_tracker --osd_op_history_duration 600'
+  ceph tell osd.0 config get osd_enable_op_tracker | grep true
+  ceph tell osd.0 config get osd_op_history_duration | grep 600
 
-  ceph tell osd.0 injectargs -- '--osd_deep_scrub_interval 2419200' >& $TMPFILE || return 1
-  check_response "osd_deep_scrub_interval = '2419200.000000' (not observed, change may require restart)"
+  ceph tell osd.0 injectargs -- '--osd_deep_scrub_interval 2419200'
+  ceph tell osd.0 config get osd_deep_scrub_interval | grep 2419200
 
-  ceph tell osd.0 injectargs -- '--mon_probe_timeout 2' >& $TMPFILE || return 1
-  check_response "mon_probe_timeout = '2.000000' (not observed, change may require restart)"
+  ceph tell osd.0 injectargs -- '--mon_probe_timeout 2'
+  ceph tell osd.0 config get mon_probe_timeout | grep 2
 
-  ceph tell osd.0 injectargs -- '--mon-lease 6' >& $TMPFILE || return 1
-  check_response "mon_lease = '6.000000' (not observed, change may require restart)"
+  ceph tell osd.0 injectargs -- '--mon-lease 6'
+  ceph tell osd.0 config get mon_lease | grep 6
 
   # osd-scrub-auto-repair-num-errors is an OPT_U32, so -1 is not a valid setting
   expect_false ceph tell osd.0 injectargs --osd-scrub-auto-repair-num-errors -1 >& $TMPFILE || return 1
   check_response "Error EINVAL: Parse error setting osd_scrub_auto_repair_num_errors to '-1' using injectargs"
+
+  expect_failure $TEMP_DIR "Option --osd_op_history_duration requires an argument" \
+                 ceph tell osd.0 injectargs -- '--osd_op_history_duration'
+
 }
 
 function test_mon_injectargs_SI()
@@ -240,27 +243,58 @@ function test_mon_injectargs_SI()
   # We only aim at testing the units are parsed accordingly
   # and don't intend to test whether the options being set
   # actually expect SI units to be passed.
-  # Keep in mind that all integer based options (i.e., INT,
-  # LONG, U32, U64) will accept SI unit modifiers.
+  # Keep in mind that all integer based options that are not based on bytes
+  # (i.e., INT, LONG, U32, U64) will accept SI unit modifiers and be parsed to
+  # base 10.
   initial_value=$(get_config_value_or_die "mon.a" "mon_pg_warn_min_objects")
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10K
-  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10000
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 1G
-  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1000000000
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects 10F > $TMPFILE || true
   check_response "'10F': (22) Invalid argument"
   # now test with injectargs
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10'
   expect_config_value "mon.a" "mon_pg_warn_min_objects" 10
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10K'
-  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10240
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 10000
   ceph tell mon.a injectargs '--mon_pg_warn_min_objects 1G'
-  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1073741824
+  expect_config_value "mon.a" "mon_pg_warn_min_objects" 1000000000
   expect_false ceph tell mon.a injectargs '--mon_pg_warn_min_objects 10F'
   expect_false ceph tell mon.a injectargs '--mon_globalid_prealloc -1'
   $SUDO ceph daemon mon.a config set mon_pg_warn_min_objects $initial_value
+}
+
+function test_mon_injectargs_IEC()
+{
+  # Test IEC units during injectargs and 'config set'
+  # We only aim at testing the units are parsed accordingly
+  # and don't intend to test whether the options being set
+  # actually expect IEC units to be passed.
+  # Keep in mind that all integer based options that are based on bytes
+  # (i.e., INT, LONG, U32, U64) will accept IEC unit modifiers, as well as SI
+  # unit modifiers (for backwards compatibility and convinience) and be parsed
+  # to base 2.
+  initial_value=$(get_config_value_or_die "mon.a" "mon_data_size_warn")
+  $SUDO ceph daemon mon.a config set mon_data_size_warn 15000000000
+  expect_config_value "mon.a" "mon_data_size_warn" 15000000000
+  $SUDO ceph daemon mon.a config set mon_data_size_warn 15G
+  expect_config_value "mon.a" "mon_data_size_warn" 16106127360
+  $SUDO ceph daemon mon.a config set mon_data_size_warn 16Gi
+  expect_config_value "mon.a" "mon_data_size_warn" 17179869184
+  $SUDO ceph daemon mon.a config set mon_data_size_warn 10F > $TMPFILE || true
+  check_response "'10F': (22) Invalid argument"
+  # now test with injectargs
+  ceph tell mon.a injectargs '--mon_data_size_warn 15000000000'
+  expect_config_value "mon.a" "mon_data_size_warn" 15000000000
+  ceph tell mon.a injectargs '--mon_data_size_warn 15G'
+  expect_config_value "mon.a" "mon_data_size_warn" 16106127360
+  ceph tell mon.a injectargs '--mon_data_size_warn 16Gi'
+  expect_config_value "mon.a" "mon_data_size_warn" 17179869184
+  expect_false ceph tell mon.a injectargs '--mon_data_size_warn 10F'
+  $SUDO ceph daemon mon.a config set mon_data_size_warn $initial_value
 }
 
 function test_tiering_agent()
@@ -548,7 +582,9 @@ function test_tiering_9()
 
 function test_auth()
 {
-  ceph auth add client.xx mon allow osd "allow *"
+  expect_false ceph auth add client.xx mon 'invalid' osd "allow *"
+  expect_false ceph auth add client.xx mon 'allow *' osd "allow *" invalid "allow *"
+  ceph auth add client.xx mon 'allow *' osd "allow *"
   ceph auth export client.xx >client.xx.keyring
   ceph auth add client.xx -i client.xx.keyring
   rm -f client.xx.keyring
@@ -572,7 +608,7 @@ function test_auth()
   expect_false ceph auth get client.xx
 
   # (almost) interactive mode
-  echo -e 'auth add client.xx mon allow osd "allow *"\n' | ceph
+  echo -e 'auth add client.xx mon "allow *" osd "allow *"\n' | ceph
   ceph auth get client.xx
   # script mode
   echo 'auth del client.xx' | ceph
@@ -679,7 +715,9 @@ function test_mon_caps()
   ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
   ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
 
-  rados lspools --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  # pass --no-mon-config since we are looking for the permission denied error
+  rados lspools --no-mon-config --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  cat $TMPFILE
   check_response "Permission denied"
 
   rm -rf $TEMP_DIR/ceph.client.bug.keyring
@@ -689,7 +727,7 @@ function test_mon_caps()
   ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
   ceph-authtool -n client.bug --cap mon '' $TEMP_DIR/ceph.client.bug.keyring
   ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
-  rados lspools --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  rados lspools --no-mon-config --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
   check_response "Permission denied"  
 }
 
@@ -725,7 +763,7 @@ function test_mon_misc()
   ceph time-sync-status
 
   ceph node ls
-  for t in mon osd mds ; do
+  for t in mon osd mds mgr ; do
       ceph node ls $t
   done
 
@@ -929,9 +967,6 @@ function test_mon_mds()
   ceph fs rm_data_pool cephfs $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
   ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
-  ceph fs set cephfs allow_multimds false
-  expect_false ceph fs set cephfs max_mds 4
-  ceph fs set cephfs allow_multimds true
   ceph fs set cephfs max_mds 4
   ceph fs set cephfs max_mds 3
   ceph fs set cephfs max_mds 256
@@ -953,8 +988,7 @@ function test_mon_mds()
   expect_false ceph fs set cephfs max_file_size 123asdf
 
   expect_false ceph fs set cephfs allow_new_snaps
-  expect_false ceph fs set cephfs allow_new_snaps true
-  ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
+  ceph fs set cephfs allow_new_snaps true
   ceph fs set cephfs allow_new_snaps 0
   ceph fs set cephfs allow_new_snaps false
   ceph fs set cephfs allow_new_snaps no
@@ -1266,7 +1300,6 @@ function test_mon_osd_create_destroy()
   ceph osd rm $id2
   ceph osd setmaxosd $old_maxosd
 
-  ceph osd new $uuid -i $bad_json 2>&1 | grep 'EINVAL'
   ceph osd new $uuid -i $no_cephx 2>&1 | grep 'EINVAL'
   ceph osd new $uuid -i $no_lockbox 2>&1 | grep 'EINVAL'
 
@@ -1411,6 +1444,7 @@ function test_mon_osd()
   # require-min-compat-client
   expect_false ceph osd set-require-min-compat-client dumpling  # firefly tunables
   ceph osd set-require-min-compat-client luminous
+  ceph osd get-require-min-compat-client | grep luminous
   ceph osd dump | grep 'require_min_compat_client luminous'
 
   #
@@ -1742,17 +1776,34 @@ function test_mon_osd_pool_quota()
   ceph osd pool set-quota tmp-quota-pool max_bytes 10
   ceph osd pool set-quota tmp-quota-pool max_objects 10M
   #
+  # get quotas in json-pretty format
+  #
+  ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
+    grep '"quota_max_objects":.*10000000'
+  ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
+    grep '"quota_max_bytes":.*10'
+  #
   # get quotas
   #
   ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
   ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10M objects'
   #
-  # get quotas in json-pretty format
+  # set valid quotas with unit prefix
   #
-  ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
-    grep '"quota_max_objects":.*10485760'
-  ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
-    grep '"quota_max_bytes":.*10'
+  ceph osd pool set-quota tmp-quota-pool max_bytes 10K
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10Ki'
+  #
+  # set valid quotas with unit prefix
+  #
+  ceph osd pool set-quota tmp-quota-pool max_bytes 10Ki
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10Ki'
+  #
   #
   # reset pool quotas
   #

@@ -5,12 +5,14 @@ export DESTDIR=$(CURDIR)/debian/tmp
 
 export DEB_HOST_ARCH      ?= $(shell dpkg-architecture -qDEB_HOST_ARCH)
 
-extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_EMBEDDED=OFF
+extraopts += -DUSE_CRYPTOPP=OFF -DWITH_OCF=ON -DWITH_LTTNG=ON -DWITH_PYTHON3=ON -DWITH_MGR_DASHBOARD_FRONTEND=OFF
 extraopts += -DWITH_CEPHFS_JAVA=ON
+extraopts += -DWITH_SYSTEMD=ON -DCEPH_SYSTEMD_ENV_DIR=/etc/default
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_SYSCONFDIR=/etc
+extraopts += -DCMAKE_INSTALL_SYSTEMD_SERVICEDIR=/lib/systemd/system
 ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
   extraopts += -DBOOST_J=$(NUMJOBS)
@@ -77,52 +79,10 @@ override_dh_installinit:
 	install -d -m0755 debian/rbd-mirror/etc/init
 	install -m0644 src/upstart/ceph-rbd-mirror*.conf debian/rbd-mirror/etc/init
 	# install the systemd stuff manually since we have funny service names
-	install -d -m0755 debian/ceph-common/lib/systemd/system
-	install -m0644 systemd/ceph.target debian/ceph-common/lib/systemd/system
 	install -d -m0755 debian/ceph-common/etc/default
 	install -m0644 etc/default/ceph debian/ceph-common/etc/default/
 	install -d -m0755 debian/ceph-common/usr/lib/tmpfiles.d
 	install -m 0644 -D systemd/ceph.tmpfiles.d debian/ceph-common/usr/lib/tmpfiles.d/ceph.conf
-
-	install -d -m0755 debian/ceph-base/lib/systemd/system
-	install -d -m0755 debian/ceph-mon/lib/systemd/system
-	install -d -m0755 debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/ceph-mon@.service debian/ceph-mon/lib/systemd/system
-	install -m0644 systemd/ceph-osd@.service debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/ceph-disk@.service debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/ceph-volume@.service debian/ceph-osd/lib/systemd/system
-	install -m0644 systemd/rbdmap.service debian/ceph-common/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mon/lib/systemd/system/ceph-mon@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-osd@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-disk@.service
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-osd/lib/systemd/system/ceph-volume@.service
-	install -m0644 systemd/ceph-mon.target debian/ceph-mon/lib/systemd/system
-	install -m0644 systemd/ceph-osd.target debian/ceph-osd/lib/systemd/system
-
-	install -d -m0755 debian/ceph-mds/lib/systemd/system
-	install -m0644 systemd/ceph-mds@.service debian/ceph-mds/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mds/lib/systemd/system/ceph-mds@.service
-	install -m0644 systemd/ceph-mds.target debian/ceph-mds/lib/systemd/system
-
-	install -d -m0755 debian/ceph-fuse/lib/systemd/system
-	install -m0644 systemd/ceph-fuse@.service debian/ceph-fuse/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-fuse/lib/systemd/system/ceph-fuse@.service
-	install -m0644 systemd/ceph-fuse.target debian/ceph-fuse/lib/systemd/system
-
-	install -d -m0755 debian/ceph-mgr/lib/systemd/system
-	install -m0644 systemd/ceph-mgr@.service debian/ceph-mgr/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/ceph-mgr/lib/systemd/system/ceph-mgr@.service
-	install -m0644 systemd/ceph-mgr.target debian/ceph-mgr/lib/systemd/system
-
-	install -d -m0755 debian/radosgw/lib/systemd/system
-	install -m0644 systemd/ceph-radosgw@.service debian/radosgw/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/radosgw/lib/systemd/system/ceph-radosgw@.service
-	install -m0644 systemd/ceph-radosgw.target debian/radosgw/lib/systemd/system
-
-	install -d -m0755 debian/rbd-mirror/lib/systemd/system
-	install -m0644 systemd/ceph-rbd-mirror@.service debian/rbd-mirror/lib/systemd/system
-	sed -i s./etc/sysconfig/./etc/default/.g debian/rbd-mirror/lib/systemd/system/ceph-rbd-mirror@.service
-	install -m0644 systemd/ceph-rbd-mirror.target debian/rbd-mirror/lib/systemd/system
 
 	dh_installinit -p ceph-base --name ceph --no-start
 	dh_installinit -p radosgw --no-start

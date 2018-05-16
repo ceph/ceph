@@ -1,0 +1,31 @@
+# see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
+os_type: centos
+
+tasks:
+- install:
+    flavor: notcmalloc
+- ceph:
+- openssl_keys:
+- rgw:
+    client.0:
+      valgrind: [--tool=memcheck]
+- s3tests:
+    client.0:
+      force-branch: ceph-master
+      rgw_server: client.0
+- swift:
+    client.0:
+      rgw_server: client.0
+- ragweed:
+    client.0:
+      force-branch: ceph-master
+      rgw_server: client.0
+      stages: prepare,check
+overrides:
+  ceph:
+    conf:
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
+      client:
+        rgw lc debug interval: 10

@@ -27,7 +27,7 @@ using namespace std;
 std::unique_ptr<BlockCrypt> AES_256_CBC_create(CephContext* cct, const uint8_t* key, size_t len);
 
 
-class ut_get_sink : public RGWGetDataCB {
+class ut_get_sink : public RGWGetObj_Filter {
   std::stringstream sink;
 public:
   ut_get_sink() {}
@@ -651,7 +651,9 @@ int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);

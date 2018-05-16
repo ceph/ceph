@@ -29,10 +29,6 @@
 #include "mon/health_check.h"
 #include <sstream>
 
-// FIXME: don't like including this here to get OSDMap::Incremental, maybe
-// PGMapUpdater needs its own header.
-#include "osd/OSDMap.h"
-
 namespace ceph { class Formatter; }
 
 class PGMapDigest {
@@ -156,6 +152,10 @@ public:
    */
   int64_t get_pool_free_space(const OSDMap &osd_map, int64_t poolid) const;
 
+
+  /**
+   * Dump pool usage and io ops/bytes, used by "ceph df" command
+   */
   virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
 				    Formatter *f, bool verbose) const;
   void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
@@ -409,6 +409,13 @@ public:
     PGMapDigest::dump_pool_stats_full(osd_map, ss, f, verbose);
   }
 
+  /*
+  * Dump client io rate, recovery io rate, cache io rate and recovery information.
+  * this function is used by "ceph osd pool stats" command
+  */
+  void dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map, Formatter *f,
+                              stringstream *ss) const;
+
   void dump_pg_stats_plain(
     ostream& ss,
     const mempool::pgmap::unordered_map<pg_t, pg_stat_t>& pg_stats,
@@ -457,7 +464,7 @@ inline ostream& operator<<(ostream& out, const PGMapDigest& m) {
 
 int process_pg_map_command(
   const string& prefix,
-  const map<string,cmd_vartype>& cmdmap,
+  const cmdmap_t& cmdmap,
   const PGMap& pg_map,
   const OSDMap& osdmap,
   Formatter *f,

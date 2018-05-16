@@ -16,6 +16,7 @@
 #include <atomic>
 #include <vector>
 #include "include/intarith.h"
+#include "os/bluestore/Allocator.h"
 #include "os/bluestore/bluestore_types.h"
 
 #define alloc_assert assert
@@ -26,6 +27,49 @@
 #define alloc_dbg_assert(x) (static_cast<void> (0))
 #endif
 
+class AllocatorExtentList {
+  PExtentVector *m_extents;
+  int64_t m_block_size;
+  int64_t m_max_blocks;
+
+public:
+  void init(PExtentVector *extents, int64_t block_size,
+	    uint64_t max_alloc_size) {
+    m_extents = extents;
+    m_block_size = block_size;
+    m_max_blocks = max_alloc_size / block_size;
+    assert(m_extents->empty());
+  }
+
+  AllocatorExtentList(PExtentVector *extents, int64_t block_size) {
+    init(extents, block_size, 0);
+  }
+
+  AllocatorExtentList(PExtentVector *extents, int64_t block_size,
+	     uint64_t max_alloc_size) {
+    init(extents, block_size, max_alloc_size);
+  }
+
+  void reset() {
+    m_extents->clear();
+  }
+
+  void add_extents(int64_t start, int64_t count);
+
+  PExtentVector *get_extents() {
+    return m_extents;
+  }
+
+  std::pair<int64_t, int64_t> get_nth_extent(int index) {
+      return std::make_pair
+            ((*m_extents)[index].offset / m_block_size,
+             (*m_extents)[index].length / m_block_size);
+  }
+
+  int64_t get_extent_count() {
+    return m_extents->size();
+  }
+};
 
 class BitAllocatorStats {
 public:
@@ -233,7 +277,7 @@ public:
   virtual void shutdown() = 0;
 
   virtual int64_t alloc_blocks_dis(int64_t num_blocks, int64_t min_alloc,
-             int64_t hint, int64_t blk_off, ExtentList *block_list) {
+             int64_t hint, int64_t blk_off, AllocatorExtentList *block_list) {
     ceph_abort();
     return 0;
   }
@@ -375,7 +419,7 @@ public:
   ~BitMapZone() override;
   void shutdown() override;
   int64_t alloc_blocks_dis(int64_t num_blocks, int64_t min_alloc, int64_t hint,
-        int64_t blk_off, ExtentList *block_list) override;  
+        int64_t blk_off, AllocatorExtentList *block_list) override;  
   void set_blocks_used(int64_t start_block, int64_t num_blocks) override;
 
   void free_blocks(int64_t start_block, int64_t num_blocks) override;
@@ -421,7 +465,7 @@ protected:
                    int64_t zone_size_block,
                    bool def);
   int64_t alloc_blocks_dis_int_work(bool wrap, int64_t num_blocks, int64_t min_alloc, int64_t hint,
-        int64_t blk_off, ExtentList *block_list);  
+        int64_t blk_off, AllocatorExtentList *block_list);  
 
   int64_t alloc_blocks_int_work(bool wait, bool wrap,
                          int64_t num_blocks, int64_t hint, int64_t *start_block);
@@ -448,9 +492,9 @@ public:
   using BitMapArea::alloc_blocks_dis; //non-wait version
 
   virtual int64_t alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, int64_t hint,
-                                       int64_t blk_off, ExtentList *block_list);  
+                                       int64_t blk_off, AllocatorExtentList *block_list);  
   int64_t alloc_blocks_dis(int64_t num_blocks, int64_t min_alloc, int64_t hint,
-                           int64_t blk_off, ExtentList *block_list) override;  
+                           int64_t blk_off, AllocatorExtentList *block_list) override;  
   virtual void set_blocks_used_int(int64_t start_block, int64_t num_blocks);
   void set_blocks_used(int64_t start_block, int64_t num_blocks) override;
 
@@ -484,7 +528,7 @@ public:
 
   int64_t alloc_blocks_int(int64_t num_blocks, int64_t hint, int64_t *start_block);
   int64_t alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, int64_t hint,
-        int64_t blk_off, ExtentList *block_list) override;  
+        int64_t blk_off, AllocatorExtentList *block_list) override;  
   void free_blocks_int(int64_t start_block, int64_t num_blocks) override;
 
   ~BitMapAreaLeaf() override;
@@ -526,10 +570,10 @@ private:
   bool check_input_dis(int64_t num_blocks);
   void init_check(int64_t total_blocks, int64_t zone_size_block,
                  bmap_alloc_mode_t mode, bool def, bool stats_on);
-  int64_t alloc_blocks_dis_work(int64_t num_blocks, int64_t min_alloc, int64_t hint, ExtentList *block_list, bool reserved);
+  int64_t alloc_blocks_dis_work(int64_t num_blocks, int64_t min_alloc, int64_t hint, AllocatorExtentList *block_list, bool reserved);
 
   int64_t alloc_blocks_dis_int(int64_t num_blocks, int64_t min_alloc, 
-           int64_t hint, int64_t area_blk_off, ExtentList *block_list) override;
+           int64_t hint, int64_t area_blk_off, AllocatorExtentList *block_list) override;
 
 public:
   MEMPOOL_CLASS_HELPERS();
@@ -548,10 +592,10 @@ public:
   void set_blocks_used(int64_t start_block, int64_t num_blocks) override;
   void unreserve_blocks(int64_t blocks);
 
-  int64_t alloc_blocks_dis_res(int64_t num_blocks, int64_t min_alloc, int64_t hint, ExtentList *block_list);
+  int64_t alloc_blocks_dis_res(int64_t num_blocks, int64_t min_alloc, int64_t hint, AllocatorExtentList *block_list);
 
-  void free_blocks_dis(int64_t num_blocks, ExtentList *block_list);
-  bool is_allocated_dis(ExtentList *blocks, int64_t num_blocks);
+  void free_blocks_dis(int64_t num_blocks, AllocatorExtentList *block_list);
+  bool is_allocated_dis(AllocatorExtentList *blocks, int64_t num_blocks);
 
   int64_t total_blocks() const {
     return m_total_blocks - m_extra_blocks;

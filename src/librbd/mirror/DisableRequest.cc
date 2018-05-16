@@ -72,7 +72,7 @@ Context *DisableRequest<I>::handle_get_mirror_image(int *result) {
       ldout(cct, 5) << this << " " << __func__
                     << ": mirroring is not supported by OSD" << dendl;
     } else {
-      lderr(cct) << "failed to retreive mirror image: " << cpp_strerror(*result)
+      lderr(cct) << "failed to retrieve mirror image: " << cpp_strerror(*result)
                  << dendl;
     }
     return m_on_finish;

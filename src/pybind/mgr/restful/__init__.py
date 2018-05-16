@@ -1,1 +1,1 @@
-from module import *  # NOQA
+from .module import Module

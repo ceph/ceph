@@ -27,7 +27,7 @@ public:
       txbuf(*this) {
   }
 
-  void init_env(CephContext* cct) override;
+  int init_env(CephContext* cct) override;
   size_t send_status(int status, const char* status_name) override;
   size_t send_100_continue() override;
   size_t send_header(const boost::string_ref& name,

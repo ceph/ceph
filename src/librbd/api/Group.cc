@@ -100,8 +100,8 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 }
 
 std::string calc_ind_image_snap_name(uint64_t pool_id,
-				     std::string group_id,
-				     std::string snap_id)
+				     const std::string &group_id,
+				     const std::string &snap_id)
 {
   std::stringstream ind_snap_name_stream;
   ind_snap_name_stream << ".group." << std::hex << pool_id << "_"
@@ -398,6 +398,10 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
 
   std::vector<cls::rbd::GroupSnapshot> snaps;
   r = group_snap_list(io_ctx, group_name, &snaps);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "error listing group snapshots" << dendl;
+    return r;
+  }
 
   for (auto &snap : snaps) {
     r = group_snap_remove_by_record(io_ctx, snap, group_id, group_header_oid);
@@ -632,6 +636,34 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
 }
 
 template <typename I>
+int Group<I>::rename(librados::IoCtx& io_ctx, const char *src_name,
+                     const char *dest_name)
+{
+  CephContext *cct((CephContext *)io_ctx.cct());
+  ldout(cct, 20) << "group_rename " << &io_ctx << " " << src_name
+                 << " -> " << dest_name << dendl;
+
+  std::string group_id;
+  int r = cls_client::dir_get_id(&io_ctx, RBD_GROUP_DIRECTORY,
+                                 std::string(src_name), &group_id);
+  if (r < 0) {
+    if (r != -ENOENT)
+      lderr(cct) << "error getting id of group" << dendl;
+    return r;
+  }
+
+  r = cls_client::group_dir_rename(&io_ctx, RBD_GROUP_DIRECTORY,
+                                   src_name, dest_name, group_id);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "error renaming group from directory" << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+
+template <typename I>
 int Group<I>::image_get_group(I *ictx, group_info_t *group_info)
 {
   int r = ictx->state->refresh_if_required();
@@ -731,7 +763,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
     }
 
-    ldout(cct, 20) << "Openning image with id" << image.spec.image_id << dendl;
+    ldout(cct, 20) << "Opening image with id " << image.spec.image_id << dendl;
 
     librbd::ImageCtx* image_ctx = new ImageCtx("", image.spec.image_id.c_str(),
 					       nullptr, image_io_ctx, false);
@@ -938,6 +970,8 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
                           const char *old_snap_name,
                           const char *new_snap_name) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
+  if (0 == strcmp(old_snap_name, new_snap_name))
+    return -EEXIST;
 
   std::string group_id;
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,

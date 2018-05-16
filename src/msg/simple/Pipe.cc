@@ -1411,8 +1411,10 @@ void Pipe::requeue_sent()
 void Pipe::discard_requeued_up_to(uint64_t seq)
 {
   ldout(msgr->cct, 10) << "discard_requeued_up_to " << seq << dendl;
-  if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0)
+  if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
+    out_seq = seq;
     return;
+  }
   list<Message*>& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   while (!rq.empty()) {
     Message *m = rq.front();

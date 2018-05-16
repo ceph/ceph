@@ -569,13 +569,14 @@ the accompanying lockbox cephx key.
 
 Usage::
 
-    ceph osd new {<uuid>} {<id>} -i {<secrets.json>}
+    ceph osd new {<uuid>} {<id>} -i {<params.json>}
 
-The secrets JSON file is optional but if provided, is expected to maintain
+The parameters JSON file is optional but if provided, is expected to maintain
 a form of the following format::
 
     {
-        "cephx_secret": "AQBWtwhZdBO5ExAAIDyjK2Bh16ZXylmzgYYEjg=="
+        "cephx_secret": "AQBWtwhZdBO5ExAAIDyjK2Bh16ZXylmzgYYEjg==",
+	"crush_device_class": "myclass"
     }
 
 Or::
@@ -583,9 +584,19 @@ Or::
     {
         "cephx_secret": "AQBWtwhZdBO5ExAAIDyjK2Bh16ZXylmzgYYEjg==",
         "cephx_lockbox_secret": "AQDNCglZuaeVCRAAYr76PzR1Anh7A0jswkODIQ==",
-        "dmcrypt_key": "<dm-crypt key>"
+        "dmcrypt_key": "<dm-crypt key>",
+	"crush_device_class": "myclass"
     }
-        
+
+Or::
+
+    {
+	"crush_device_class": "myclass"
+    }
+
+The "crush_device_class" property is optional. If specified, it will set the
+initial CRUSH device class for the new OSD.
+
 
 Subcommand ``crush`` is used for CRUSH management. It uses some additional
 subcommands.

@@ -13,8 +13,10 @@
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
+#include "librbd/api/Image.h"
 #include "librbd/image/RefreshRequest.h"
 #include "librbd/image/RefreshParentRequest.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <arpa/inet.h>
@@ -65,6 +67,39 @@ struct RefreshParentRequest<MockRefreshImageCtx> {
 RefreshParentRequest<MockRefreshImageCtx>* RefreshParentRequest<MockRefreshImageCtx>::s_instance = nullptr;
 
 } // namespace image
+
+namespace io {
+
+template <>
+struct ImageDispatchSpec<librbd::MockRefreshImageCtx> {
+  static ImageDispatchSpec* s_instance;
+  AioCompletion *aio_comp = nullptr;
+
+  static ImageDispatchSpec* create_flush_request(
+      librbd::MockRefreshImageCtx &image_ctx, AioCompletion *aio_comp,
+      FlushSource flush_source, const ZTracer::Trace &parent_trace) {
+    assert(s_instance != nullptr);
+    s_instance->aio_comp = aio_comp;
+    return s_instance;
+  }
+
+  MOCK_CONST_METHOD0(send, void());
+
+  ImageDispatchSpec() {
+    s_instance = this;
+  }
+};
+
+ImageDispatchSpec<librbd::MockRefreshImageCtx>* ImageDispatchSpec<librbd::MockRefreshImageCtx>::s_instance = nullptr;
+
+} // namespace io
+namespace util {
+
+inline ImageCtx *get_image_ctx(librbd::MockRefreshImageCtx *image_ctx) {
+  return image_ctx->image_ctx;
+}
+
+} // namespace util
 } // namespace librbd
 
 // template definitions
@@ -97,6 +132,7 @@ class TestMockImageRefreshRequest : public TestMockFixture {
 public:
   typedef RefreshRequest<MockRefreshImageCtx> MockRefreshRequest;
   typedef RefreshParentRequest<MockRefreshImageCtx> MockRefreshParentRequest;
+  typedef io::ImageDispatchSpec<librbd::MockRefreshImageCtx> MockIoImageDispatchSpec;
 
   void expect_set_require_lock(MockRefreshImageCtx &mock_image_ctx,
                                librbd::io::Direction direction, bool enabled) {
@@ -378,6 +414,15 @@ public:
                   .Times(1);
   }
 
+  void expect_image_flush(MockIoImageDispatchSpec &mock_image_request, int r) {
+    EXPECT_CALL(mock_image_request, send())
+      .WillOnce(Invoke([&mock_image_request, r]() {
+                  mock_image_request.aio_comp->set_request_count(1);
+                  mock_image_request.aio_comp->add_request();
+                  mock_image_request.aio_comp->complete_request(r);
+                }));
+  }
+
 };
 
 TEST_F(TestMockImageRefreshRequest, SuccessV1) {
@@ -534,7 +579,9 @@ TEST_F(TestMockImageRefreshRequest, SuccessSetSnapshotV2) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
-  ASSERT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(), "snap"));
+  ASSERT_EQ(0, librbd::api::Image<>::snap_set(ictx,
+                                              cls::rbd::UserSnapshotNamespace(),
+                                              "snap"));
 
   MockRefreshImageCtx mock_image_ctx(*ictx);
   MockRefreshParentRequest mock_refresh_parent_request;
@@ -597,10 +644,11 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
   expect_test_features(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mutable_metadata(mock_image_ctx, ictx->features, 0);
+  expect_get_mutable_metadata(mock_image_ctx, ictx2->features, 0);
   expect_get_metadata(mock_image_ctx, 0);
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
+  expect_get_op_features(mock_image_ctx, RBD_OPERATION_FEATURE_CLONE_CHILD, 0);
   expect_get_group(mock_image_ctx, 0);
   expect_refresh_parent_is_required(*mock_refresh_parent_request, true);
   expect_refresh_parent_send(mock_image_ctx, *mock_refresh_parent_request, 0);
@@ -649,10 +697,11 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
   expect_test_features(mock_image_ctx);
 
   InSequence seq;
-  expect_get_mutable_metadata(mock_image_ctx, ictx->features, 0);
+  expect_get_mutable_metadata(mock_image_ctx, ictx2->features, 0);
   expect_get_metadata(mock_image_ctx, 0);
   expect_apply_metadata(mock_image_ctx, 0);
   expect_get_flags(mock_image_ctx, 0);
+  expect_get_op_features(mock_image_ctx, RBD_OPERATION_FEATURE_CLONE_CHILD, 0);
   expect_get_group(mock_image_ctx, 0);
   if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
     expect_init_exclusive_lock(mock_image_ctx, mock_exclusive_lock, 0);

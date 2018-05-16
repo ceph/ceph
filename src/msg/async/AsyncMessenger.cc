@@ -218,7 +218,7 @@ struct StackSingleton {
   CephContext *cct;
   std::shared_ptr<NetworkStack> stack;
 
-  StackSingleton(CephContext *c): cct(c) {}
+  explicit StackSingleton(CephContext *c): cct(c) {}
   void ready(std::string &type) {
     if (!stack)
       stack = NetworkStack::create(cct, type);
@@ -259,8 +259,8 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   else if (type.find("dpdk") != std::string::npos)
     transport_type = "dpdk";
 
-  StackSingleton *single;
-  cct->lookup_or_create_singleton_object<StackSingleton>(single, "AsyncMessenger::NetworkStack::"+transport_type);
+  auto single = &cct->lookup_or_create_singleton_object<StackSingleton>(
+    "AsyncMessenger::NetworkStack::" + transport_type, true, cct);
   single->ready(transport_type);
   stack = single->stack.get();
   stack->start();
@@ -583,7 +583,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
 {
   if (cct->_conf->ms_dump_on_send) {
     m->encode(-1, MSG_CRC_ALL);
-    ldout(cct, 0) << __func__ << "submit_message " << *m << "\n";
+    ldout(cct, 0) << __func__ << " submit_message " << *m << "\n";
     m->get_payload().hexdump(*_dout);
     if (m->get_data().length() > 0) {
       *_dout << " data:\n";

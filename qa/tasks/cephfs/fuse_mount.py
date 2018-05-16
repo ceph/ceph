@@ -261,7 +261,7 @@ class FuseMount(CephFSMount):
         assert not self.is_mounted()
         self._fuse_conn = None
 
-    def umount_wait(self, force=False, require_clean=False):
+    def umount_wait(self, force=False, require_clean=False, timeout=900):
         """
         :param force: Complete cleanly even if the MDS is offline
         """
@@ -282,10 +282,10 @@ class FuseMount(CephFSMount):
         try:
             if self.fuse_daemon:
                 # Permit a timeout, so that we do not block forever
-                run.wait([self.fuse_daemon], 900)
+                run.wait([self.fuse_daemon], timeout)
         except MaxWhileTries:
-            log.error("process failed to terminate after unmount.  This probably"
-                      "indicates a bug within ceph-fuse.")
+            log.error("process failed to terminate after unmount. This probably"
+                      " indicates a bug within ceph-fuse.")
             raise
         except CommandFailedError:
             if require_clean:
@@ -409,8 +409,14 @@ print find_socket("{client_name}")
         """
         Look up the CephFS client ID for this mount
         """
-
         return self.admin_socket(['mds_sessions'])['id']
+
+    def get_client_pid(self):
+        """
+        return pid of ceph-fuse process
+        """
+        status = self.admin_socket(['status'])
+        return status['metadata']['pid']
 
     def get_osd_epoch(self):
         """

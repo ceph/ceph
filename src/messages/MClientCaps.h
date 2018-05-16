@@ -19,7 +19,7 @@
 #include "include/ceph_features.h"
 
 class MClientCaps : public Message {
-  static const int HEAD_VERSION = 10;
+  static const int HEAD_VERSION = 11;
   static const int COMPAT_VERSION = 1;
 
  public:
@@ -29,27 +29,32 @@ class MClientCaps : public Message {
 
   struct ceph_mds_caps_head head;
 
-  uint64_t size, max_size, truncate_size, change_attr;
-  uint32_t truncate_seq;
+  uint64_t size = 0;
+  uint64_t max_size = 0;
+  uint64_t truncate_size = 0;
+  uint64_t change_attr = 0;
+  uint32_t truncate_seq = 0;
   utime_t mtime, atime, ctime, btime;
-  uint32_t time_warp_seq;
+  uint32_t time_warp_seq = 0;
+  int64_t nfiles = -1;		// files in dir
+  int64_t nsubdirs = -1;	// subdirs in dir
 
   struct ceph_mds_cap_peer peer;
 
   bufferlist snapbl;
   bufferlist xattrbl;
   bufferlist flockbl;
-  version_t  inline_version;
+  version_t  inline_version = 0;
   bufferlist inline_data;
 
   // Receivers may not use their new caps until they have this OSD map
-  epoch_t osd_epoch_barrier;
-  ceph_tid_t oldest_flush_tid;
-  uint32_t caller_uid;
-  uint32_t caller_gid;
+  epoch_t osd_epoch_barrier = 0;
+  ceph_tid_t oldest_flush_tid = 0;
+  uint32_t caller_uid = 0;
+  uint32_t caller_gid = 0;
 
   /* advisory CLIENT_CAPS_* flags to send to mds */
-  unsigned flags;
+  unsigned flags = 0;
 
   int      get_caps() { return head.caps; }
   int      get_wanted() { return head.wanted; }
@@ -72,6 +77,9 @@ class MClientCaps : public Message {
   utime_t get_atime() { return atime; }
   __u64 get_change_attr() { return change_attr; }
   __u32 get_time_warp_seq() { return time_warp_seq; }
+  uint64_t get_nfiles() { return nfiles; }
+  uint64_t get_nsubdirs() { return nsubdirs; }
+  bool dirstat_is_valid() const { return nfiles != -1 || nsubdirs != -1; }
 
   const file_layout_t& get_layout() {
     return layout;
@@ -117,19 +125,7 @@ class MClientCaps : public Message {
   void clear_dirty() { head.dirty = 0; }
 
   MClientCaps()
-    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      size(0),
-      max_size(0),
-      truncate_size(0),
-      change_attr(0),
-      truncate_seq(0),
-      time_warp_seq(0),
-      osd_epoch_barrier(0),
-      oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0),
-      flags(0) {
-    inline_version = 0;
-  }
+    : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION) {}
   MClientCaps(int op,
 	      inodeno_t ino,
 	      inodeno_t realm,
@@ -141,16 +137,7 @@ class MClientCaps : public Message {
 	      int mseq,
               epoch_t oeb)
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      size(0),
-      max_size(0),
-      truncate_size(0),
-      change_attr(0),
-      truncate_seq(0),
-      time_warp_seq(0),
-      osd_epoch_barrier(oeb),
-      oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0),
-      flags(0) {
+      osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -162,22 +149,12 @@ class MClientCaps : public Message {
     head.dirty = dirty;
     head.migrate_seq = mseq;
     memset(&peer, 0, sizeof(peer));
-    inline_version = 0;
   }
   MClientCaps(int op,
 	      inodeno_t ino, inodeno_t realm,
 	      uint64_t id, int mseq, epoch_t oeb)
     : Message(CEPH_MSG_CLIENT_CAPS, HEAD_VERSION, COMPAT_VERSION),
-      size(0),
-      max_size(0),
-      truncate_size(0),
-      change_attr(0),
-      truncate_seq(0),
-      time_warp_seq(0),
-      osd_epoch_barrier(oeb),
-      oldest_flush_tid(0),
-      caller_uid(0), caller_gid(0),
-      flags(0) {
+      osd_epoch_barrier(oeb) {
     memset(&head, 0, sizeof(head));
     head.op = op;
     head.ino = ino;
@@ -185,7 +162,6 @@ class MClientCaps : public Message {
     head.cap_id = id;
     head.migrate_seq = mseq;
     memset(&peer, 0, sizeof(peer));
-    inline_version = 0;
   }
 private:
   file_layout_t layout;
@@ -281,6 +257,10 @@ public:
     if (header.version >= 10) {
       decode(flags, p);
     }
+    if (header.version >= 11) {
+      decode(nfiles, p);
+      decode(nsubdirs, p);
+    }
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -342,6 +322,8 @@ public:
     encode(btime, payload);
     encode(change_attr, payload);
     encode(flags, payload);
+    encode(nfiles, payload);
+    encode(nsubdirs, payload);
   }
 };
 

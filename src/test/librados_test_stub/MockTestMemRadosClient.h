@@ -35,6 +35,13 @@ public:
     return TestMemRadosClient::blacklist_add(client_address, expire_seconds);
   }
 
+  MOCK_METHOD2(get_min_compatible_client, int(int8_t*, int8_t*));
+  int do_get_min_compatible_client(int8_t* min_compat_client,
+                                   int8_t* require_min_compat_client) {
+    return TestMemRadosClient::get_min_compatible_client(
+      min_compat_client, require_min_compat_client);
+  }
+
   MOCK_METHOD3(service_daemon_register,
                int(const std::string&,
                    const std::string&,
@@ -58,6 +65,7 @@ public:
 
     ON_CALL(*this, create_ioctx(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_create_ioctx));
     ON_CALL(*this, blacklist_add(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_blacklist_add));
+    ON_CALL(*this, get_min_compatible_client(_, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_get_min_compatible_client));
     ON_CALL(*this, service_daemon_register(_, _, _)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_service_daemon_register));
     ON_CALL(*this, service_daemon_update_status_r(_)).WillByDefault(Invoke(this, &MockTestMemRadosClient::do_service_daemon_update_status_r));
   }

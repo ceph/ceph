@@ -62,12 +62,6 @@ function create_erasure_coded_pool() {
     wait_for_clean || return 1
 }
 
-function delete_pool() {
-    local poolname=$1
-
-    ceph osd pool delete $poolname $poolname --yes-i-really-really-mean-it
-}
-
 function rados_put_get() {
     local dir=$1
     local poolname=$2

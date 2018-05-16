@@ -99,12 +99,10 @@ class Notify {
   void unregister_cb();
 public:
 
-  string gen_dbg_prefix() {
-    stringstream ss;
-    ss << "Notify(" << make_pair(cookie, notify_id) << " "
-       << " watchers=" << watchers.size()
-       << ") ";
-    return ss.str();
+  std::ostream& gen_dbg_prefix(std::ostream& out) {
+    return out << "Notify(" << make_pair(cookie, notify_id) << " "
+        << " watchers=" << watchers.size()
+        << ") ";
   }
   void set_self(NotifyRef _self) {
     self = _self;
@@ -210,7 +208,7 @@ public:
     return entity.num();
   }
 
-  string gen_dbg_prefix();
+  std::ostream& gen_dbg_prefix(std::ostream& out);
   static WatchRef makeWatchRef(
     PrimaryLogPG *pg, OSDService *osd,
     ceph::shared_ptr<ObjectContext> obc, uint32_t timeout, uint64_t cookie, entity_name_t entity, const entity_addr_t &addr);
@@ -278,7 +276,7 @@ class WatchConState {
   std::set<WatchRef> watches;
 public:
   CephContext* cct;
-  WatchConState(CephContext* cct) : lock("WatchConState"), cct(cct) {}
+  explicit WatchConState(CephContext* cct) : lock("WatchConState"), cct(cct) {}
 
   /// Add a watch
   void addWatch(

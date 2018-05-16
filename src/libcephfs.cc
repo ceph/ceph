@@ -77,6 +77,13 @@ public:
 
     int ret;
 
+    {
+      MonClient mc_bootstrap(cct);
+      ret = mc_bootstrap.get_monmap_and_config();
+      if (ret < 0)
+	return ret;
+    }
+
     //monmap
     monclient = new MonClient(cct);
     ret = -CEPHFS_ERROR_MON_MAP_BUILD; //defined in libcephfs.h;
@@ -202,11 +209,7 @@ public:
   int conf_parse_env(const char *name)
   {
     md_config_t *conf = cct->_conf;
-    vector<const char*> args;
-    env_to_vec(args, name);
-    int ret = conf->parse_argv(args);
-    if (ret)
-      return ret;
+    conf->parse_env(name);
     conf->apply_changes(nullptr);
     return 0;
   }
@@ -460,6 +463,15 @@ extern "C" int ceph_is_mounted(struct ceph_mount_info *cmount)
 extern "C" struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 {
   return &cmount->default_perms;
+}
+
+extern "C" int ceph_mount_perms_set(struct ceph_mount_info *cmount,
+				    struct UserPerm *perms)
+{
+  if (cmount->is_mounted())
+    return -EISCONN;
+  cmount->default_perms = *perms;
+  return 0;
 }
 
 extern "C" int ceph_statfs(struct ceph_mount_info *cmount, const char *path,
@@ -1396,41 +1408,7 @@ extern "C" int ceph_ll_lookup_inode(
     struct inodeno_t ino,
     Inode **inode)
 {
-  int r = (cmount->get_client())->lookup_ino(ino, cmount->default_perms, inode);
-  if (r) {
-    return r;
-  }
-
-  assert(inode);
-  assert(*inode);
-
-  // Request the parent inode, so that we can look up the name
-  Inode *parent;
-  r = (cmount->get_client())->lookup_parent(*inode, cmount->default_perms, &parent);
-  if (r && r != -EINVAL) {
-    // Unexpected error
-    (cmount->get_client())->ll_forget(*inode, 1);
-    return r;
-  } else if (r == -EINVAL) {
-    // EINVAL indicates node without parents (root), drop out now
-    // and don't try to look up the non-existent dentry.
-    return 0;
-  }
-  // FIXME: I don't think this works; lookup_parent() returns 0 if the parent
-  // is already in cache
-  assert(parent);
-
-  // Finally, get the name (dentry) of the requested inode
-  r = (cmount->get_client())->lookup_name(*inode, parent, cmount->default_perms);
-  if (r) {
-    // Unexpected error
-    (cmount->get_client())->ll_forget(parent, 1);
-    (cmount->get_client())->ll_forget(*inode, 1);
-    return r;
-  }
-
-  (cmount->get_client())->ll_forget(parent, 1);
-  return 0;
+  return (cmount->get_client())->ll_lookup_inode(ino, cmount->default_perms, inode);
 }
 
 extern "C" int ceph_ll_lookup(struct ceph_mount_info *cmount,
@@ -1542,6 +1520,12 @@ extern "C" int ceph_ll_fsync(class ceph_mount_info *cmount,
   return (cmount->get_client()->ll_fsync(fh, syncdataonly));
 }
 
+extern "C" int ceph_ll_sync_inode(class ceph_mount_info *cmount,
+			     Inode *in, int syncdataonly)
+{
+  return (cmount->get_client()->ll_sync_inode(in, syncdataonly));
+}
+
 extern "C" off_t ceph_ll_lseek(class ceph_mount_info *cmount,
 				Fh *fh, off_t offset, int whence)
 {
@@ -1559,14 +1543,14 @@ extern "C" int64_t ceph_ll_readv(class ceph_mount_info *cmount,
 				 struct Fh *fh, const struct iovec *iov,
 				 int iovcnt, int64_t off)
 {
-  return -1; // TODO:  implement
+  return (cmount->get_client()->ll_readv(fh, iov, iovcnt, off));
 }
 
 extern "C" int64_t ceph_ll_writev(class ceph_mount_info *cmount,
 				  struct Fh *fh, const struct iovec *iov,
 				  int iovcnt, int64_t off)
 {
-  return -1; // TODO:  implement
+  return (cmount->get_client()->ll_writev(fh, iov, iovcnt, off));
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)

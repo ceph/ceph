@@ -1,80 +1,63 @@
+Dashboard and Administration Module for Ceph Manager
+====================================================
 
-=========================
-ceph-mgr dashboard module
-=========================
+Overview
+--------
 
-Dependencies
-============
+The original Ceph manager dashboard that was shipped with Ceph "Luminous"
+started out as a simple read-only view into various run-time information and
+performance data of a Ceph cluster. It used a very simple architecture to
+achieve the original goal.
 
-On Ubuntu Xenial:
+However, there was a growing demand for adding more web-based management
+capabilities, to make it easier to administer Ceph for users that prefer a WebUI
+over using the command line.
 
-::
+This new dashboard module is a replacement of the previous one and an
+ongoing project to add a native web based monitoring and administration
+application to Ceph Manager.
 
-    apt-get install python-cherrypy3
+The architecture and functionality of this module are derived from and inspired
+by the `openATTIC Ceph management and monitoring tool
+<https://openattic.org/>`_. The development is actively driven by the team
+behind openATTIC at SUSE.
 
-On Fedora:
+The intention is to reuse as much of the existing openATTIC functionality as
+possible, while adapting it to the different environment. The Dashboard module's
+backend code uses the CherryPy framework and a custom REST API implementation
+instead of Django and the Django REST Framework.
 
-::
+The WebUI implementation is based on Angular/TypeScript, merging both
+functionality from the original dashboard as well as adding new functionality
+originally developed for the standalone version of openATTIC.
 
-    dnf install -y python-cherrypy
+Enabling and Starting the Dashboard
+-----------------------------------
 
-    
-If you had already enabled the module, restart ceph-mgr after installing dependencies to reload the module.
+If you have installed Ceph from distribution packages, the package management
+system should have taken care of installing all the required dependencies.
 
-Enabling
-========
+If you want to start the dashboard from within a development environment, you
+need to have built Ceph (see the toplevel ``README.md`` file and the `developer
+documentation <http://docs.ceph.com/docs/master/dev/>`_ for details on how to
+accomplish this.
 
-Enable the module with::
+Finally, you need to build the dashboard frontend code. See the file
+``HACKING.rst`` in this directory for instructions on setting up the necessary
+development environment.
 
-  ceph mgr module enable dashboard
+If you use the ``vstart.sh`` script to start up your development cluster, it
+will configure and enable the dashboard automatically. The URL and login
+credentials are displayed when the script finishes.
 
-You can see currently enabled modules with::
+See the `Ceph Dashboard plugin documentation
+<http://docs.ceph.com/docs/master/mgr/dashboard/>`_ for details on how to enable
+and configure the dashboard manually and how to configure other settings, e.g.
+access to the Ceph object gateway.
 
-  ceph mgr module ls
+Working on the Dashboard Code
+-----------------------------
 
-If you use any other ceph-mgr modules, make sure they're in the list too.
-
-An address where the dashboard will listen on needs to be configured as well, set this to ``::`` to listen on all
-IPv4 and IPv6 addresses.
-
-::
-
-    ceph config-key set mgr/dashboard/server_addr ::
-
-Restart the ceph-mgr daemon after modifying the setting to load the module.
-
-Accessing
-=========
-
-Point your browser at port 7000 on the server where ceph-mgr is running.
-
-FAQs
-====
-
-Q: Aargh there's no authentication!  Are you crazy?
-A: At present this module only serves read-only status information, and it is disabled by default.  Administrators can make a decision
-   at the point of enabling the module whether they want to limit access to the port, and/or put it behind an authenticating HTTP proxy
-   such as Apache+digest auth.
-   A motivated person could totally build in some authentication stuff though: that would probably only be worth the effort at the point
-   that non-readonly features were added.
-
-Q: Aargh there's no SSL!  Are you crazy?
-A: See the authentication question.  You can always configure your own SSL gateway on top of this if you need it.
-
-Q: Why CherryPy?
-A: ceph-mgr is a pure CPython environment, which means that anything gevent based doesn't work (gevent relies on C-level hacks).  CherryPy
-   includes a web server based on standard python threads, making it a convenient choice.  There are other web frameworks of course.
-
-Q: Does this use the `restful` module?
-A: No.  This module loads everything it needs directly via the interfaces available to ceph-mgr modules, and sends it straight to your browser.
-
-Q: My browser says "connection refused"
-A: Check that you have a running ceph-mgr daemon.  Look in the ceph-mgr log (/var/log/ceph/ceph-mgr...) for errors loading modules.  Check
-   that you have enabled the module (see "Enabling" above)
-
-Q: My log contains an error like "ImportError: No module named cherrypy"
-A: See "Dependencies" above.  Make sure you installed a 3.x version of cherrypy, many distros have multiple cherrypy packages.
-
-Q: I want to add something to the UI, how do I do it?
-A: See HACKING.rst
-
+If you're interested in helping with the development of the dashboard, please
+see the file ``HACKING.rst`` for details on how to set up a development
+environment and some other development-related topics.

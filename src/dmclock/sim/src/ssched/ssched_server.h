@@ -3,7 +3,15 @@
 
 /*
  * Copyright (C) 2016 Red Hat Inc.
+ *
+ * Author: J. Eric Ivancich <ivancich@redhat.com>
+ *
+ * This is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU Lesser General Public License version
+ * 2.1, as published by the Free Software Foundation.  See file
+ * COPYING.
  */
+
 
 #pragma once
 
@@ -104,10 +112,11 @@ namespace crimson {
       void add_request(R&& request,
 		       const C& client_id,
 		       const ReqParams& req_params) {
-	add_request(std::move(request), client_id, req_params);
+	add_request(RequestRef(new R(std::move(request))),
+		    client_id, req_params);
       }
 
-      void add_request(R&& request,
+      void add_request(RequestRef&& request,
 		       const C& client_id,
 		       const ReqParams& req_params) {
 	DataGuard g(queue_mtx);

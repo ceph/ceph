@@ -713,13 +713,26 @@ static inline void dump_header_if_nonempty(struct req_state* s,
   }
 }
 
+static inline std::string compute_domain_uri(const struct req_state *s) {
+  std::string uri = (!s->info.domain.empty()) ? s->info.domain :
+    [&s]() -> std::string {
+    auto env = *(s->info.env);
+    std::string uri =
+    env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
+    if (env.exists("SERVER_NAME")) {
+      uri.append(env.get("SERVER_NAME", "<SERVER_NAME>"));
+    } else {
+      uri.append(env.get("HTTP_HOST", "<HTTP_HOST>"));
+    }
+    return uri;
+  }();
+  return uri;
+}
+
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern int64_t parse_content_length(const char *content_length);
 extern void dump_etag(struct req_state *s,
                       const boost::string_ref& etag,
-                      bool quoted = false);
-extern void dump_etag(struct req_state *s,
-                      ceph::buffer::list& bl_etag,
                       bool quoted = false);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
 extern void dump_time_header(struct req_state *s, const char *name, real_time t);
@@ -744,7 +757,6 @@ extern void dump_access_control(req_state *s, RGWOp *op);
 extern int dump_body(struct req_state* s, const char* buf, size_t len);
 extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);
 extern int dump_body(struct req_state* s, const std::string& str);
-
 extern int recv_body(struct req_state* s, char* buf, size_t max);
 
 #endif /* CEPH_RGW_REST_H */

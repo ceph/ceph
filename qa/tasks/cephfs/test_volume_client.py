@@ -283,21 +283,21 @@ vc.disconnect()
             # it has lost network, because there is nothing to tell it that is messages
             # are being dropped because it's identity is gone)
             background = self.mounts[2].write_n_mb("rogue.bin", 1, wait=False)
-            time.sleep(10)  # Approximate check for 'stuck' as 'still running after 10s'
-            self.assertFalse(background.finished)
+            try:
+                background.wait()
+            except CommandFailedError:
+                # command failed with EBLACKLISTED?
+                if "transport endpoint shutdown" in background.stderr.getvalue():
+                    pass
+                else:
+                    raise
 
             # After deauthorisation, the client ID should be gone (this was the only
             # volume it was authorised for)
             self.assertNotIn("client.{0}".format(guest_entity), [e['entity'] for e in self.auth_list()])
 
             # Clean up the dead mount (ceph-fuse's behaviour here is a bit undefined)
-            self.mounts[2].kill()
-            self.mounts[2].kill_cleanup()
-            try:
-                background.wait()
-            except CommandFailedError:
-                # We killed the mount out from under you
-                pass
+            self.mounts[2].umount_wait()
 
         self._volume_client_python(self.mount_b, dedent("""
             vp = VolumePath("{group_id}", "{volume_id}")
@@ -343,6 +343,19 @@ vc.disconnect()
             vc.delete_volume(vp, data_isolated=True)
             vc.purge_volume(vp, data_isolated=True)
             vc.purge_volume(vp, data_isolated=True)
+
+            vc.create_volume(vp, 10, namespace_isolated=False)
+            vc.create_volume(vp, 10, namespace_isolated=False)
+            vc.authorize(vp, "{guest_entity}")
+            vc.authorize(vp, "{guest_entity}")
+            vc.deauthorize(vp, "{guest_entity}")
+            vc.deauthorize(vp, "{guest_entity}")
+            vc.evict("{guest_entity}")
+            vc.evict("{guest_entity}")
+            vc.delete_volume(vp)
+            vc.delete_volume(vp)
+            vc.purge_volume(vp)
+            vc.purge_volume(vp)
         """.format(
             group_id=group_id,
             volume_id=volume_id,
@@ -764,52 +777,63 @@ vc.disconnect()
         # auth ID belongs to, the auth ID's authorized access levels
         # for different volumes, versioning details, etc.
         expected_auth_metadata = {
-            u"version": 2,
-            u"compat_version": 1,
-            u"dirty": False,
-            u"tenant_id": u"tenant1",
-            u"volumes": {
-                u"groupid/volumeid": {
-                    u"dirty": False,
-                    u"access_level": u"rw",
+            "version": 2,
+            "compat_version": 1,
+            "dirty": False,
+            "tenant_id": u"tenant1",
+            "volumes": {
+                "groupid/volumeid": {
+                    "dirty": False,
+                    "access_level": u"rw",
                 }
             }
         }
 
         auth_metadata = self._volume_client_python(volumeclient_mount, dedent("""
+            import json
             vp = VolumePath("{group_id}", "{volume_id}")
             auth_metadata = vc._auth_metadata_get("{auth_id}")
-            print auth_metadata
+            print(json.dumps(auth_metadata))
         """.format(
             group_id=group_id,
             volume_id=volume_id,
             auth_id=guestclient_1["auth_id"],
         )))
+        auth_metadata = json.loads(auth_metadata)
 
-        self.assertItemsEqual(str(expected_auth_metadata), auth_metadata)
+        self.assertGreaterEqual(auth_metadata["version"], expected_auth_metadata["version"])
+        del expected_auth_metadata["version"]
+        del auth_metadata["version"]
+        self.assertEqual(expected_auth_metadata, auth_metadata)
 
         # Verify that the volume metadata file stores info about auth IDs
         # and their access levels to the volume, versioning details, etc.
         expected_vol_metadata = {
-            u"version": 2,
-            u"compat_version": 1,
-            u"auths": {
-                u"guest": {
-                    u"dirty": False,
-                    u"access_level": u"rw"
+            "version": 2,
+            "compat_version": 1,
+            "auths": {
+                "guest": {
+                    "dirty": False,
+                    "access_level": u"rw"
                 }
             }
         }
 
         vol_metadata = self._volume_client_python(volumeclient_mount, dedent("""
+            import json
             vp = VolumePath("{group_id}", "{volume_id}")
             volume_metadata = vc._volume_metadata_get(vp)
-            print volume_metadata
+            print(json.dumps(volume_metadata))
         """.format(
             group_id=group_id,
             volume_id=volume_id,
         )))
-        self.assertItemsEqual(str(expected_vol_metadata), vol_metadata)
+        vol_metadata = json.loads(vol_metadata)
+
+        self.assertGreaterEqual(vol_metadata["version"], expected_vol_metadata["version"])
+        del expected_vol_metadata["version"]
+        del vol_metadata["version"]
+        self.assertEqual(expected_vol_metadata, vol_metadata)
 
         # Cannot authorize 'guestclient_2' to access the volume.
         # It uses auth ID 'guest', which has already been used by a
@@ -1014,3 +1038,43 @@ vc.disconnect()
         # Mount the volume in the guest using the auth ID to assert that the
         # auth caps are valid
         guest_mount.mount(mount_path=mount_path)
+
+    def test_volume_without_namespace_isolation(self):
+        """
+        That volume client can create volumes that do not have separate RADOS
+        namespace layouts.
+        """
+        vc_mount = self.mounts[1]
+        vc_mount.umount_wait()
+
+        # Configure vc_mount as the handle for driving volumeclient
+        self._configure_vc_auth(vc_mount, "manila")
+
+        # Create a volume
+        volume_prefix = "/myprefix"
+        group_id = "grpid"
+        volume_id = "volid"
+        mount_path = self._volume_client_python(vc_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            create_result = vc.create_volume(vp, 1024*1024*10, namespace_isolated=False)
+            print create_result['mount_path']
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id
+        )), volume_prefix)
+
+        # The CephFS volume should be created
+        self.mounts[0].stat(os.path.join("myprefix", group_id, volume_id))
+        vol_namespace = self.mounts[0].getfattr(
+            os.path.join("myprefix", group_id, volume_id),
+            "ceph.dir.layout.pool_namespace")
+        assert not vol_namespace
+
+        self._volume_client_python(vc_mount, dedent("""
+            vp = VolumePath("{group_id}", "{volume_id}")
+            vc.delete_volume(vp)
+            vc.purge_volume(vp)
+        """.format(
+            group_id=group_id,
+            volume_id=volume_id,
+        )), volume_prefix)

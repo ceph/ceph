@@ -124,6 +124,57 @@ int execute_remove(const po::variables_map &vm,
   return 0;
 }
 
+int execute_rename(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  size_t arg_index = 0;
+
+  std::string group_name;
+  std::string pool_name;
+
+  int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                      &arg_index, &pool_name, &group_name,
+                                      nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  std::string dest_group_name;
+  std::string dest_pool_name;
+
+  r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
+                                  &arg_index, &dest_pool_name,
+                                  &dest_group_name, nullptr);
+  if (r < 0) {
+    return r;
+  }
+
+  if (pool_name != dest_pool_name) {
+    std::cerr << "rbd: group rename across pools not supported" << std::endl
+              << "source pool: " << pool_name<< ", dest pool: " << dest_pool_name
+              << std::endl;
+    return -EINVAL;
+  }
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  r = rbd.group_rename(io_ctx, group_name.c_str(),
+                       dest_group_name.c_str());
+
+  if (r < 0) {
+    std::cerr << "rbd: failed to rename group: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
 int execute_add(const po::variables_map &vm,
                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
@@ -318,9 +369,11 @@ int execute_list_images(const po::variables_map &vm,
     }
 
     if (f) {
-      f->dump_string("image name", image_name);
+      f->open_object_section("image");
+      f->dump_string("image", image_name);
       f->dump_string("pool", pool_name);
       f->dump_int("state", state);
+      f->close_section();
     } else
       std::cout << pool_name << "/" << image_name << " " << state_string << std::endl;
   }
@@ -390,8 +443,13 @@ int execute_group_snap_create(const po::variables_map &vm,
 
   librbd::RBD rbd;
   r = rbd.group_snap_remove(io_ctx, group_name.c_str(), snap_name.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: failed to remove group snapshot: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
 
-  return r;
+  return 0;
 }
 
 int execute_group_snap_rename(const po::variables_map &vm,
@@ -424,6 +482,12 @@ int execute_group_snap_rename(const po::variables_map &vm,
     return -EINVAL;
   }
 
+  r = utils::validate_snapshot_name(at::ARGUMENT_MODIFIER_DEST, dest_snap_name,
+                                    utils::SNAPSHOT_PRESENCE_REQUIRED,
+                                    utils::SPEC_VALIDATION_SNAP);
+  if (r < 0) {
+    return r;
+  }
   librados::Rados rados;
   librados::IoCtx io_ctx;
   r = utils::init(pool_name, &rados, &io_ctx);
@@ -436,7 +500,8 @@ int execute_group_snap_rename(const po::variables_map &vm,
                             source_snap_name.c_str(), dest_snap_name.c_str());
 
   if (r < 0) {
-    std::cerr << "rbd: failed to rename snapshot" << std::endl;
+    std::cerr << "rbd: failed to rename group snapshot: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
 
@@ -511,7 +576,7 @@ int execute_group_snap_list(const po::variables_map &vm,
     }
     if (f) {
       f->open_object_section("group_snap");
-      f->dump_string("snap name", snap_name);
+      f->dump_string("snapshot", snap_name);
       f->dump_string("state", state_string);
       f->close_section();
     } else {
@@ -522,7 +587,7 @@ int execute_group_snap_list(const po::variables_map &vm,
   if (f) {
     f->close_section();
     f->flush(std::cout);
-  } else {
+  } else if (snaps.size()) {
     std::cout << t;
   }
   return 0;
@@ -544,6 +609,14 @@ void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_format_options(options);
+}
+
+void get_rename_arguments(po::options_description *positional,
+                          po::options_description *options) {
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_SOURCE,
+                             false);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST,
+                             false);
 }
 
 void get_add_arguments(po::options_description *positional,
@@ -637,6 +710,9 @@ Shell::Action action_remove(
 Shell::Action action_list(
   {"group", "list"}, {"group", "ls"}, "List rbd groups.",
   "", &get_list_arguments, &execute_list);
+Shell::Action action_rename(
+  {"group", "rename"}, {}, "Rename a group within pool.",
+  "", &get_rename_arguments, &execute_rename);
 Shell::Action action_add(
   {"group", "image", "add"}, {}, "Add an image to a group.",
   "", &get_add_arguments, &execute_add);

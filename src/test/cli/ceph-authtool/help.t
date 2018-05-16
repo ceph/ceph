@@ -1,6 +1,5 @@
 # TODO synchronize with man page
   $ ceph-authtool --help
-  no command specified
   usage: ceph-authtool keyringfile [OPTIONS]...
   where the options are:
     -l, --list                    will list all keys and capabilities present in
@@ -23,4 +22,6 @@
     --cap SUBSYSTEM CAPABILITY    will set the capability for given subsystem
     --caps CAPSFILE               will set all of capabilities associated with a
                                   given key, for all subsystems
+    --mode MODE                   will set the desired file mode to the keyring
+                                  e.g: '0644', defaults to '0600'
   [1]

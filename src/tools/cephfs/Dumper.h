@@ -36,7 +36,7 @@ public:
   Dumper() : ino(-1)
   {}
 
-  int init(mds_role_t role_);
+  int init(mds_role_t role_, const std::string &type);
   int recover_journal(Journaler *journaler);
   int dump(const char *dumpfile);
   int undump(const char *dumpfile);

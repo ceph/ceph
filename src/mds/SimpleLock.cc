@@ -24,9 +24,8 @@ void SimpleLock::dump(Formatter *f) const {
 
   f->open_array_section("gather_set");
   if (have_more()) {
-    for(std::set<int32_t>::iterator i = more()->gather_set.begin();
-        i != more()->gather_set.end(); ++i) {
-      f->dump_int("rank", *i);
+    for(const auto &i : more()->gather_set) {
+      f->dump_int("rank", i);
     }
   }
   f->close_section();

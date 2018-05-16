@@ -258,7 +258,7 @@ def assign_devs(roles, devs):
 def valgrind_post(ctx, config):
     """
     After the tests run, look throught all the valgrind logs.  Exceptions are raised
-    if textual errors occured in the logs, or if valgrind exceptions were detected in
+    if textual errors occurred in the logs, or if valgrind exceptions were detected in
     the logs.
 
     :param ctx: Context
@@ -376,8 +376,7 @@ def cephfs_setup(ctx, config):
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
         num_active = len([r for r in all_roles if is_active_mds(r)])
 
-        fs.set_max_mds(num_active)
-        fs.set_allow_dirfrags(True)
+        fs.set_max_mds(config.get('max_mds', num_active))
 
     yield
 
@@ -399,7 +398,7 @@ def cluster(ctx, config):
         Mkfs mon nodes.
 
     On exit:
-        If errors occured, extract a failure message and store in ctx.summary.
+        If errors occurred, extract a failure message and store in ctx.summary.
         Unmount all test files and temporary journaling files.
         Save the monitor information and archive all ceph logs.
         Cleanup the keyring setup, and remove all monitor map and data files left over.
@@ -778,22 +777,42 @@ def cluster(ctx, config):
 
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
             _, _, id_ = teuthology.split_role(role)
-            remote.run(
-                args=[
-                    'sudo',
-                    'MALLOC_CHECK_=3',
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    coverage_dir,
-                    'ceph-osd',
-                    '--cluster',
-                    cluster_name,
-                    '--mkfs',
-                    '--mkkey',
-                    '-i', id_,
+            try:
+                remote.run(
+                    args=[
+                        'sudo',
+                        'MALLOC_CHECK_=3',
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        coverage_dir,
+                        'ceph-osd',
+                        '--no-mon-config',
+                        '--cluster',
+                        cluster_name,
+                        '--mkfs',
+                        '--mkkey',
+                        '-i', id_,
                     '--monmap', monmap_path,
-                ],
-            )
+                    ],
+                )
+            except run.CommandFailedError:
+                # try without --no-mon-config.. this may be an upgrade test
+                remote.run(
+                    args=[
+                        'sudo',
+                        'MALLOC_CHECK_=3',
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        coverage_dir,
+                        'ceph-osd',
+                        '--cluster',
+                        cluster_name,
+                        '--mkfs',
+                        '--mkkey',
+                        '-i', id_,
+                    '--monmap', monmap_path,
+                    ],
+                )
             mnt_point = DATA_PATH.format(
                 type_='osd', cluster=cluster_name, id_=id_)
             remote.run(args=[

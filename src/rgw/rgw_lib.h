@@ -60,10 +60,13 @@ namespace rgw {
     RGWLibIO() {
       get_env().set("HTTP_HOST", "");
     }
-    RGWLibIO(const RGWUserInfo &_user_info)
+    explicit RGWLibIO(const RGWUserInfo &_user_info)
       : user_info(_user_info) {}
 
-    void init_env(CephContext *cct) override {}
+    int init_env(CephContext *cct) override {
+      env.init(cct);
+      return 0;
+    }
 
     const RGWUserInfo& get_user() {
       return user_info;

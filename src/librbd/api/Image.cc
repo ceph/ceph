@@ -10,7 +10,10 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/Utils.h"
+#include "librbd/image/CloneRequest.h"
 #include "librbd/internal.h"
+#include "librbd/Utils.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -79,8 +82,10 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
   }
 
   pool_image_ids->clear();
-  // search all pools for children depending on this snapshot
+
   librados::Rados rados(ictx->md_ctx);
+
+  // search all pools for clone v1 children depending on this snapshot
   std::list<std::pair<int64_t, std::string> > pools;
   int r = rados.pool_list2(pools);
   if (r < 0) {
@@ -120,10 +125,37 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                                  image_ids);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error reading list of children from pool " << it->second
-      	   << dendl;
+                 << dendl;
       return r;
     }
     pool_image_ids->insert({*it, image_ids});
+  }
+
+  // retrieve clone v2 children attached to this snapshot
+  IoCtx parent_io_ctx;
+  r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
+  assert(r == 0);
+
+  cls::rbd::ChildImageSpecs child_images;
+  r = cls_client::children_list(&parent_io_ctx,
+                                util::header_name(parent_spec.image_id),
+                                parent_spec.snap_id, &child_images);
+  if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
+    lderr(cct) << "error retrieving children: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  for (auto& child_image : child_images) {
+    IoCtx io_ctx;
+    r = rados.ioctx_create2(child_image.pool_id, io_ctx);
+    if (r == -ENOENT) {
+      ldout(cct, 1) << "pool " << child_image.pool_id << " no longer exists"
+                    << dendl;
+      continue;
+    }
+
+    PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name()};
+    (*pool_image_ids)[pool_spec].insert(child_image.image_id);
   }
 
   return 0;
@@ -145,7 +177,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     features = src->features;
     src_size = src->get_image_size(src->snap_id);
   }
-  uint64_t format = src->old_format ? 1 : 2;
+  uint64_t format = 2;
   if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0) {
     opts.set(RBD_IMAGE_OPTION_FORMAT, format);
   }
@@ -173,7 +205,64 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     return -ENOSYS;
   }
 
-  int r = create(dest_md_ctx, destname, "", src_size, opts, "", "", false);
+  ParentSpec parent_spec;
+  {
+    RWLock::RLocker snap_locker(src->snap_lock);
+    RWLock::RLocker parent_locker(src->parent_lock);
+
+    // use oldest snapshot or HEAD for parent spec
+    if (!src->snap_info.empty()) {
+      parent_spec = src->snap_info.begin()->second.parent.spec;
+    } else {
+      parent_spec = src->parent_md.spec;
+    }
+  }
+
+  int r;
+  if (parent_spec.pool_id == -1) {
+    r = create(dest_md_ctx, destname, "", src_size, opts, "", "", false);
+  } else {
+    librados::Rados rados(src->md_ctx);
+    librados::IoCtx parent_io_ctx;
+    r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
+    if (r < 0) {
+      lderr(cct) << "failed to open source parent pool: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+    ImageCtx *src_parent_image_ctx =
+      new ImageCtx("", parent_spec.image_id, nullptr, parent_io_ctx, false);
+    r = src_parent_image_ctx->state->open(true);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        lderr(cct) << "failed to open source parent image: "
+                   << cpp_strerror(r) << dendl;
+      }
+      return r;
+    }
+
+    C_SaferCond cond;
+    src_parent_image_ctx->state->snap_set(parent_spec.snap_id, &cond);
+    r = cond.wait();
+    if (r < 0) {
+      if (r != -ENOENT) {
+        lderr(cct) << "failed to set snapshot: " << cpp_strerror(r) << dendl;
+      }
+      return r;
+    }
+
+    C_SaferCond ctx;
+    std::string dest_id = util::generate_image_id(dest_md_ctx);
+    auto *req = image::CloneRequest<I>::create(
+      src_parent_image_ctx, dest_md_ctx, destname, dest_id, opts,
+      "", "", src->op_work_queue, &ctx);
+    req->send();
+    r = ctx.wait();
+    int close_r = src_parent_image_ctx->state->close();
+    if (r == 0 && close_r < 0) {
+      r = close_r;
+    }
+  }
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
     return r;
@@ -239,6 +328,54 @@ int Image<I>::deep_copy(I *src, I *dest, ProgressContext &prog_ctx) {
   req->send();
   int r = cond.wait();
   if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+int Image<I>::snap_set(I *ictx,
+                       const cls::rbd::SnapshotNamespace &snap_namespace,
+                       const char *snap_name) {
+  ldout(ictx->cct, 20) << "snap_set " << ictx << " snap = "
+                       << (snap_name ? snap_name : "NULL") << dendl;
+
+  // ignore return value, since we may be set to a non-existent
+  // snapshot and the user is trying to fix that
+  ictx->state->refresh_if_required();
+
+  uint64_t snap_id = CEPH_NOSNAP;
+  std::string name(snap_name == nullptr ? "" : snap_name);
+  if (!name.empty()) {
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace{},
+                                snap_name);
+    if (snap_id == CEPH_NOSNAP) {
+      return -ENOENT;
+    }
+  }
+
+  return snap_set(ictx, snap_id);
+}
+
+template <typename I>
+int Image<I>::snap_set(I *ictx, uint64_t snap_id) {
+  ldout(ictx->cct, 20) << "snap_set " << ictx << " "
+                       << "snap_id=" << snap_id << dendl;
+
+  // ignore return value, since we may be set to a non-existent
+  // snapshot and the user is trying to fix that
+  ictx->state->refresh_if_required();
+
+  C_SaferCond ctx;
+  ictx->state->snap_set(snap_id, &ctx);
+  int r = ctx.wait();
+  if (r < 0) {
+    if (r != -ENOENT) {
+      lderr(ictx->cct) << "failed to " << (snap_id == CEPH_NOSNAP ? "un" : "")
+                       << "set snapshot: " << cpp_strerror(r) << dendl;
+    }
     return r;
   }
 

@@ -121,19 +121,25 @@ WRITE_CLASS_ENCODER_FEATURES(LogEntry)
 
 struct LogSummary {
   version_t version;
-  list<LogEntry> tail;
+  // channel -> [(seq#, entry), ...]
+  map<string,list<pair<uint64_t,LogEntry>>> tail_by_channel;
+  uint64_t seq = 0;
   ceph::unordered_set<LogEntryKey> keys;
 
   LogSummary() : version(0) {}
 
+  void build_ordered_tail(list<LogEntry> *tail) const;
+
   void add(const LogEntry& e) {
-    tail.push_back(e);
-    keys.insert(tail.back().key());
+    keys.insert(e.key());
+    tail_by_channel[e.channel].push_back(make_pair(++seq, e));
   }
   void prune(size_t max) {
-    while (tail.size() > max) {
-      keys.erase(tail.front().key());
-      tail.pop_front();
+    for (auto& i : tail_by_channel) {
+      while (i.second.size() > max) {
+	keys.erase(i.second.front().second.key());
+	i.second.pop_front();
+      }
     }
   }
   bool contains(const LogEntryKey& k) const {

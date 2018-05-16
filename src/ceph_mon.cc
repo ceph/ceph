@@ -180,12 +180,7 @@ static void usage()
   generic_server_usage();
 }
 
-#ifdef BUILDING_FOR_EMBEDDED
-void cephd_preload_embedded_plugins();
-extern "C" int cephd_mon(int argc, const char **argv)
-#else
 int main(int argc, const char **argv)
-#endif
 {
   int err;
 
@@ -197,7 +192,14 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   // We need to specify some default values that may be overridden by the
   // user, that are specific to the monitor.  The options we are overriding
@@ -214,12 +216,13 @@ int main(int argc, const char **argv)
   //  leveldb_block_size        = 64*1024       = 65536     // 64KB
   //  leveldb_compression       = false
   //  leveldb_log               = ""
-  vector<const char*> def_args;
-  def_args.push_back("--leveldb-write-buffer-size=33554432");
-  def_args.push_back("--leveldb-cache-size=536870912");
-  def_args.push_back("--leveldb-block-size=65536");
-  def_args.push_back("--leveldb-compression=false");
-  def_args.push_back("--leveldb-log=");
+  map<string,string> defaults = {
+    { "leveldb_write_buffer_size", "33554432" },
+    { "leveldb_cache_size", "536870912" },
+    { "leveldb_block_size", "65536" },
+    { "leveldb_compression", "false"},
+    { "leveldb_log", "" }
+  };
 
   int flags = 0;
   {
@@ -241,7 +244,10 @@ int main(int argc, const char **argv)
     }
   }
 
-  auto cct = global_init(&def_args, args,
+  // don't try to get config from mon cluster during startup
+  flags |= CINIT_FLAG_NO_MON_CONFIG;
+
+  auto cct = global_init(&defaults, args,
 			 CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON,
 			 flags, "mon_data");
   ceph_heap_profiler_init();
@@ -250,8 +256,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
     } else if (ceph_argparse_flag(args, i, "--mkfs", (char*)NULL)) {
       mkfs = true;
     } else if (ceph_argparse_flag(args, i, "--compact", (char*)NULL)) {
@@ -271,24 +275,24 @@ int main(int argc, const char **argv)
     }
   }
   if (!args.empty()) {
-    derr << "too many arguments: " << args << dendl;
-    usage();
+    cerr << "too many arguments: " << args << std::endl;
+    exit(1);
   }
 
   if (force_sync && !yes_really) {
-    derr << "are you SURE you want to force a sync?  this will erase local data and may\n"
-	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do." << dendl;
+    cerr << "are you SURE you want to force a sync?  this will erase local data and may\n"
+	 << "break your mon cluster.  pass --yes-i-really-mean-it if you do." << std::endl;
     exit(1);
   }
 
   if (g_conf->mon_data.empty()) {
-    derr << "must specify '--mon-data=foo' data path" << dendl;
-    usage();
+    cerr << "must specify '--mon-data=foo' data path" << std::endl;
+    exit(1);
   }
 
   if (g_conf->name.get_id().empty()) {
-    derr << "must specify id (--id <id> or --name mon.<id>)" << dendl;
-    usage();
+    cerr << "must specify id (--id <id> or --name mon.<id>)" << std::endl;
+    exit(1);
   }
 
   // -- mkfs --
@@ -474,7 +478,7 @@ int main(int argc, const char **argv)
     if (stats.avail_percent <= g_conf->mon_data_avail_crit) {
       derr << "error: monitor data filesystem reached concerning levels of"
            << " available storage space (available: "
-           << stats.avail_percent << "% " << prettybyte_t(stats.byte_avail)
+           << stats.avail_percent << "% " << byte_u_t(stats.byte_avail)
            << ")\nyou may adjust 'mon data avail crit' to a lower value"
            << " to make this go away (default: " << g_conf->mon_data_avail_crit
            << "%)\n" << dendl;
@@ -504,13 +508,13 @@ int main(int argc, const char **argv)
     }
     common_init_finish(g_ceph_context);
     global_init_chdir(g_ceph_context);
-#ifndef BUILDING_FOR_EMBEDDED
     if (global_init_preload_erasure_code(g_ceph_context) < 0)
       prefork.exit(1);
-#else
-    cephd_preload_embedded_plugins();
-#endif
   }
+
+  // set up signal handlers, now that we've daemonized/forked.
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
 
   MonitorDBStore *store = new MonitorDBStore(g_conf->mon_data);
   {
@@ -657,7 +661,6 @@ int main(int argc, const char **argv)
       if (err < 0) {
 	derr << argv[0] << ": error generating initial monmap: "
              << cpp_strerror(err) << dendl;
-	usage();
 	prefork.exit(1);
       }
       if (tmpmap.contains(g_conf->name.get_id())) {
@@ -789,9 +792,6 @@ int main(int argc, const char **argv)
 
   mon->init();
 
-  // set up signal handlers, now that we've daemonized/forked.
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_mon_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mon_signal);
 

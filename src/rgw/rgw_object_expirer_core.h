@@ -36,7 +36,6 @@
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
-#include "rgw_replica_log.h"
 
 class RGWObjectExpirer {
 protected:

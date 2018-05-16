@@ -17,7 +17,7 @@
 #include "msg/Connection.h"
 #include "msg/Dispatcher.h"
 #include "mon/MgrMap.h"
-#include "osd/OSDHealthMetric.h"
+#include "mgr/DaemonHealthMetric.h"
 
 #include "common/perf_counters.h"
 #include "common/Timer.h"
@@ -25,6 +25,7 @@
 
 class MMgrMap;
 class MMgrConfigure;
+class MMgrClose;
 class Messenger;
 class MCommandReply;
 class MPGStats;
@@ -43,7 +44,7 @@ class MgrCommand : public CommandOp
 {
   public:
 
-  MgrCommand(ceph_tid_t t) : CommandOp(t) {}
+  explicit MgrCommand(ceph_tid_t t) : CommandOp(t) {}
   MgrCommand() : CommandOp() {}
 };
 
@@ -57,6 +58,7 @@ protected:
   unique_ptr<MgrSessionState> session;
 
   Mutex lock = {"MgrClient::lock"};
+  Cond shutdown_cond;
 
   uint32_t stats_period = 0;
   uint32_t stats_threshold = 0;
@@ -65,6 +67,8 @@ protected:
   CommandTable<MgrCommand> command_table;
 
   utime_t last_connect_attempt;
+
+  uint64_t last_config_bl_version = 0;
 
   Context *report_callback = nullptr;
   Context *connect_retry_callback = nullptr;
@@ -79,10 +83,14 @@ protected:
   std::string service_name, daemon_name;
   std::map<std::string,std::string> daemon_metadata;
   std::map<std::string,std::string> daemon_status;
-  std::vector<OSDHealthMetric> osd_health_metrics;
+  std::vector<DaemonHealthMetric> daemon_health_metrics;
 
   void reconnect();
   void _send_open();
+
+  // In pre-luminous clusters, the ceph-mgr service is absent or optional,
+  // so we must not block in start_command waiting for it.
+  bool mgr_optional = false;
 
 public:
   MgrClient(CephContext *cct_, Messenger *msgr_);
@@ -92,6 +100,8 @@ public:
   void init();
   void shutdown();
 
+  void set_mgr_optional(bool optional_) {mgr_optional = optional_;}
+
   bool ms_dispatch(Message *m) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
@@ -99,13 +109,14 @@ public:
 
   bool handle_mgr_map(MMgrMap *m);
   bool handle_mgr_configure(MMgrConfigure *m);
+  bool handle_mgr_close(MMgrClose *m);
   bool handle_command_reply(MCommandReply *m);
 
   void send_pgstats();
-  void set_pgstats_cb(std::function<MPGStats*()> cb_)
+  void set_pgstats_cb(std::function<MPGStats*()>&& cb_)
   {
     Mutex::Locker l(lock);
-    pgstats_cb = cb_;
+    pgstats_cb = std::move(cb_);
   }
 
   int start_command(const vector<string>& cmd, const bufferlist& inbl,
@@ -118,11 +129,12 @@ public:
     const std::map<std::string,std::string>& metadata);
   int service_daemon_update_status(
     std::map<std::string,std::string>&& status);
-  void update_osd_health(std::vector<OSDHealthMetric>&& metrics);
+  void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
 private:
-  void send_stats();
-  void send_report();
+  void _send_stats();
+  void _send_pgstats();
+  void _send_report();
 };
 
 #endif

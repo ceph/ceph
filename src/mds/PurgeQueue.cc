@@ -252,7 +252,7 @@ void PurgeQueue::create(Context *fin)
  */
 void PurgeQueue::push(const PurgeItem &pi, Context *completion)
 {
-  dout(4) << "pushing inode 0x" << std::hex << pi.ino << std::dec << dendl;
+  dout(4) << "pushing inode " << pi.ino << dendl;
   Mutex::Locker l(lock);
 
   // Callers should have waited for open() before using us
@@ -350,7 +350,6 @@ bool PurgeQueue::_consume()
 
   bool could_consume = false;
   while(can_consume()) {
-    could_consume = true;
 
     if (delayed_flush) {
       // We are now going to read from the journal, so any proactive
@@ -376,6 +375,7 @@ bool PurgeQueue::_consume()
       return could_consume;
     }
 
+    could_consume = true;
     // The journaler is readable: consume an entry
     bufferlist bl;
     bool readable = journaler.try_read_entry(bl);
@@ -391,8 +391,7 @@ bool PurgeQueue::_consume()
            << journaler.get_read_pos() << dendl;
       on_error->complete(0);
     }
-    dout(20) << " executing item (0x" << std::hex << item.ino
-             << std::dec << ")" << dendl;
+    dout(20) << " executing item (" << item.ino << ")" << dendl;
     _execute_item(item, journaler.get_read_pos());
   }
 
@@ -514,21 +513,36 @@ void PurgeQueue::_execute_item_complete(
   auto iter = in_flight.find(expire_to);
   assert(iter != in_flight.end());
   if (iter == in_flight.begin()) {
-    // This was the lowest journal position in flight, so we can now
-    // safely expire the journal up to here.
-    dout(10) << "expiring to 0x" << std::hex << expire_to << std::dec << dendl;
-    journaler.set_expire_pos(expire_to);
+    uint64_t pos = expire_to;
+    if (!pending_expire.empty()) {
+      auto n = iter;
+      ++n;
+      if (n == in_flight.end()) {
+	pos = *pending_expire.rbegin();
+	pending_expire.clear();
+      } else {
+	auto p = pending_expire.begin();
+	do {
+	  if (*p >= n->first)
+	    break;
+	  pos = *p;
+	  pending_expire.erase(p++);
+	} while (p != pending_expire.end());
+      }
+    }
+    dout(10) << "expiring to 0x" << std::hex << pos << std::dec << dendl;
+    journaler.set_expire_pos(pos);
   } else {
     // This is completely fine, we're not supposed to purge files in
     // order when doing them in parallel.
     dout(10) << "non-sequential completion, not expiring anything" << dendl;
+    pending_expire.insert(expire_to);
   }
 
   ops_in_flight -= _calculate_ops(iter->second);
   logger->set(l_pq_executing_ops, ops_in_flight);
 
-  dout(10) << "completed item for ino 0x" << std::hex << iter->second.ino
-           << std::dec << dendl;
+  dout(10) << "completed item for ino " << iter->second.ino << dendl;
 
   in_flight.erase(iter);
   logger->set(l_pq_executing, in_flight.size());

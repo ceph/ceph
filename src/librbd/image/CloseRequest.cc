@@ -10,7 +10,10 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ObjectDispatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -160,9 +163,14 @@ void CloseRequest<I>::send_flush() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-  m_image_ctx->flush(create_async_context_callback(
-    *m_image_ctx, create_context_callback<
-      CloseRequest<I>, &CloseRequest<I>::handle_flush>(this)));
+  auto ctx = create_context_callback<
+    CloseRequest<I>, &CloseRequest<I>::handle_flush>(this);
+  auto aio_comp = io::AioCompletion::create(ctx, m_image_ctx,
+                                            io::AIO_TYPE_FLUSH);
+  auto req = io::ImageDispatchSpec<I>::create_flush_request(
+    *m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+  req->send();
+  delete req;
 }
 
 template <typename I>
@@ -219,26 +227,28 @@ void CloseRequest<I>::handle_flush_readahead(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  send_shut_down_cache();
+  send_shut_down_object_dispatcher();
 }
 
 template <typename I>
-void CloseRequest<I>::send_shut_down_cache() {
+void CloseRequest<I>::send_shut_down_object_dispatcher() {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
-  m_image_ctx->shut_down_cache(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_shut_down_cache>(this));
+  m_image_ctx->io_object_dispatcher->shut_down(create_context_callback<
+    CloseRequest<I>,
+    &CloseRequest<I>::handle_shut_down_object_dispatcher>(this));
 }
 
 template <typename I>
-void CloseRequest<I>::handle_shut_down_cache(int r) {
+void CloseRequest<I>::handle_shut_down_object_dispatcher(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
   save_result(r);
   if (r < 0) {
-    lderr(cct) << "failed to shut down cache: " << cpp_strerror(r) << dendl;
+    lderr(cct) << "failed to shut down object dispatcher: "
+               << cpp_strerror(r) << dendl;
   }
   send_flush_op_work_queue();
 }

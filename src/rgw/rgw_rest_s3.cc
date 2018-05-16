@@ -14,6 +14,8 @@
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
 
+#include <liboath/oath.h>
+
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
@@ -256,7 +258,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
     } else {
       auto iter = attrs.find(RGW_ATTR_ETAG);
       if (iter != attrs.end()) {
-        dump_etag(s, iter->second);
+        dump_etag(s, iter->second.to_str());
       }
     }
 
@@ -337,7 +339,7 @@ send_data:
   return 0;
 }
 
-int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetDataCB> *filter, RGWGetDataCB* cb, bufferlist* manifest_bl)
+int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
   if (skip_decrypt) { // bypass decryption for multisite sync requests
     return 0;
@@ -645,12 +647,18 @@ int RGWListBucket_ObjStore_S3::get_params()
     marker.name = s->info.args.get("key-marker");
     marker.instance = s->info.args.get("version-id-marker");
   }
+
+  // non-standard
+  s->info.args.get_bool("allow-unordered", &allow_unordered, false);
+
+  delimiter = s->info.args.get("delimiter");
+
   max_keys = s->info.args.get("max-keys");
   op_ret = parse_max_keys();
   if (op_ret < 0) {
     return op_ret;
   }
-  delimiter = s->info.args.get("delimiter");
+
   encoding_type = s->info.args.get("encoding-type");
   if (s->system_request) {
     s->info.args.get_bool("objs-container", &objs_container, false);
@@ -666,6 +674,7 @@ int RGWListBucket_ObjStore_S3::get_params()
       shard_id = s->bucket_instance_shard_id;
     }
   }
+
   return 0;
 }
 
@@ -874,42 +883,43 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
   if (versioned) {
     const char *status = (versioning_enabled ? "Enabled" : "Suspended");
     s->formatter->dump_string("Status", status);
+    const char *mfa_status = (mfa_enabled ? "Enabled" : "Disabled");
+    s->formatter->dump_string("MfaDelete", mfa_status);
   }
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-class RGWSetBucketVersioningParser : public RGWXMLParser
-{
-  XMLObj *alloc_obj(const char *el) override {
-    return new XMLObj;
-  }
+struct ver_config_status {
+  int status{VersioningSuspended};
 
-public:
-  RGWSetBucketVersioningParser() {}
-  ~RGWSetBucketVersioningParser() override {}
+  enum MFAStatus {
+    MFA_UNKNOWN,
+    MFA_DISABLED,
+    MFA_ENABLED,
+  } mfa_status{MFA_UNKNOWN};
+  int retcode{0};
 
-  int get_versioning_status(int *status) {
-    XMLObj *config = find_first("VersioningConfiguration");
-    if (!config)
-      return -EINVAL;
-
-    *status = VersioningNotChanged;
-
-    XMLObj *field = config->find_first("Status");
-    if (!field)
-      return 0;
-
-    *status = VersioningSuspended;
-    string& s = field->get_data();
-
-    if (stringcasecmp(s, "Enabled") == 0) {
-      *status = VersioningEnabled;
-    } else if (stringcasecmp(s, "Suspended") != 0) {
-      return -EINVAL;
+  void decode_xml(XMLObj *obj) {
+    string status_str;
+    string mfa_str;
+    RGWXMLDecoder::decode_xml("Status", status_str, obj);
+    if (status_str == "Enabled") {
+      status = VersioningEnabled;
+    } else if (status_str != "Suspended") {
+      status = VersioningStatusInvalid;
     }
 
-    return 0;
+
+    if (RGWXMLDecoder::decode_xml("MfaDelete", mfa_str, obj)) {
+      if (mfa_str == "Enabled") {
+        mfa_status = MFA_ENABLED;
+      } else if (mfa_str == "Disabled") {
+        mfa_status = MFA_DISABLED;
+      } else {
+        retcode = -EINVAL;
+      }
+    }
   }
 };
 
@@ -930,18 +940,23 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     return r;
   }
 
-  RGWSetBucketVersioningParser parser;
-
+  RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
     ldout(s->cct, 0) << "ERROR: failed to initialize parser" << dendl;
-    r = -EIO;
-    return r;
+    return -EIO;
   }
 
   if (!parser.parse(data, len, 1)) {
-    ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
+    ldout(s->cct, 10) << "NOTICE: failed to parse data: " << data << dendl;
     r = -EINVAL;
     return r;
+  }
+
+  ver_config_status status_conf;
+
+  if (!RGWXMLDecoder::decode_xml("VersioningConfiguration", status_conf, &parser)) {
+    ldout(s->cct, 10) << "NOTICE: bad versioning config input" << dendl;
+    return -EINVAL;
   }
 
   if (!store->is_meta_master()) {
@@ -949,8 +964,27 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     in_data.append(data, len);
   }
 
-  r = parser.get_versioning_status(&versioning_status);
-  
+  versioning_status = status_conf.status;
+  if (versioning_status == VersioningStatusInvalid) {
+    r = -EINVAL;
+  }
+
+  if (status_conf.mfa_status != ver_config_status::MFA_UNKNOWN) {
+    mfa_set_status = true;
+    switch (status_conf.mfa_status) {
+      case ver_config_status::MFA_DISABLED:
+        mfa_status = false;
+        break;
+      case ver_config_status::MFA_ENABLED:
+        mfa_status = true;
+        break;
+      default:
+        ldout(s->cct, 0) << "ERROR: RGWSetBucketVersioning_ObjStore_S3::get_params(): unexpected switch case mfa_status=" << status_conf.mfa_status << dendl;
+        r = -EIO;
+    }
+  } else if (status_conf.retcode < 0) {
+    r = status_conf.retcode;
+  }
   return r;
 }
 
@@ -1439,8 +1473,8 @@ static inline void set_attr(map<string, bufferlist>& attrs, const char* key, con
 }
 
 int RGWPutObj_ObjStore_S3::get_decrypt_filter(
-    std::unique_ptr<RGWGetDataCB>* filter,
-    RGWGetDataCB* cb,
+    std::unique_ptr<RGWGetObj_Filter>* filter,
+    RGWGetObj_Filter* cb,
     map<string, bufferlist>& attrs,
     bufferlist* manifest_bl)
 {
@@ -1550,7 +1584,7 @@ int RGWPostObj_ObjStore_S3::get_params()
     if (r < 0)
       return r;
 
-    if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       ldout(s->cct, 20) << "read part header -- part.name="
                         << part.name << dendl;
 
@@ -2097,7 +2131,8 @@ int RGWCopyObj_ObjStore_S3::get_params()
     }
   }
 
-  const char *md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
+  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (md_directive) {
     if (strcasecmp(md_directive, "COPY") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_NONE;
@@ -2157,9 +2192,8 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
   if (op_ret == 0) {
     dump_time(s, "LastModified", &mtime);
-    std::string etag_str = etag.to_str();
-    if (! etag_str.empty()) {
-      s->formatter->dump_string("ETag", std::move(etag_str));
+    if (! etag.empty()) {
+      s->formatter->dump_string("ETag", std::move(etag));
     }
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
@@ -2344,7 +2378,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
     in_data.append(data, len);
   }
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15)) {
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldout(s->cct, 15) << "CORSConfiguration";
     cors_config->to_xml(*_dout);
     *_dout << dendl;
@@ -2542,23 +2576,24 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
   dump_errno(s);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   end_header(s, this, "application/xml");
-  if (op_ret == 0) { 
+  if (op_ret == 0) {
     dump_start(s);
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult", XMLNS_AWS_S3);
+    std::string base_uri = compute_domain_uri(s);
     if (!s->bucket_tenant.empty()) {
-      if (s->info.domain.length()) {
-        s->formatter->dump_format("Location", "%s.%s.%s",
-          s->bucket_name.c_str(),
-          s->bucket_tenant.c_str(),
-          s->info.domain.c_str());
-      }
+      s->formatter->dump_format("Location", "%s/%s:%s/%s",
+	  base_uri.c_str(),
+	  s->bucket_tenant.c_str(),
+	  s->bucket_name.c_str(),
+	  s->object.name.c_str()
+          );
       s->formatter->dump_string("Tenant", s->bucket_tenant);
     } else {
-      if (s->info.domain.length()) {
-        s->formatter->dump_format("Location", "%s.%s",
-          s->bucket_name.c_str(),
-          s->info.domain.c_str());
-      }
+      s->formatter->dump_format("Location", "%s/%s/%s",
+	  base_uri.c_str(),
+	  s->bucket_name.c_str(),
+	  s->object.name.c_str()
+          );
     }
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object.name);
@@ -3214,6 +3249,36 @@ int RGWHandler_REST_S3::init_from_header(struct req_state* s,
   return 0;
 }
 
+static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str, bool *verified)
+{
+  vector<string> params;
+  get_str_vec(mfa_str, " ", params);
+
+  if (params.size() != 2) {
+    ldout(store->ctx(), 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;
+    return -EINVAL;
+  }
+
+  string& serial = params[0];
+  string& pin = params[1];
+
+  auto i = user->mfa_ids.find(serial);
+  if (i == user->mfa_ids.end()) {
+    ldout(store->ctx(), 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  int ret = store->check_mfa(user->user_id, serial, pin);
+  if (ret < 0) {
+    ldout(store->ctx(), 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
+    return -EACCES;
+  }
+
+  *verified = true;
+
+  return 0;
+}
+
 int RGWHandler_REST_S3::postauth_init()
 {
   struct req_init_state *t = &s->init_state;
@@ -3248,6 +3313,12 @@ int RGWHandler_REST_S3::postauth_init()
     if (ret)
       return ret;
   }
+
+  const char *mfa = s->info.env->get("HTTP_X_AMZ_MFA");
+  if (mfa) {
+    ret = verify_mfa(store, s->user, string(mfa), &s->mfa_verified);
+  }
+
   return 0;
 }
 
@@ -3279,10 +3350,12 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 
   const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
   if (copy_source &&
-      (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE"))) {
-	ret = RGWCopyObj::parse_copy_location(url_decode(copy_source),
-					    s->init_state.src_bucket,
-					    s->src_object);
+      (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) &&
+      (! s->info.args.exists("uploadId"))) {
+
+    ret = RGWCopyObj::parse_copy_location(url_decode(copy_source),
+                                          s->init_state.src_bucket,
+                                          s->src_object);
     if (!ret) {
       ldout(s->cct, 0) << "failed to parse copy location" << dendl;
       return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
@@ -3441,9 +3514,20 @@ bool RGWHandler_REST_S3Website::web_dir() const {
   return state->exists;
 }
 
+int RGWHandler_REST_S3Website::init(RGWRados *store, req_state *s,
+                                    rgw::io::BasicClient* cio)
+{
+  // save the original object name before retarget() replaces it with the
+  // result of get_effective_key(). the error_handler() needs the original
+  // object name for redirect handling
+  original_object_name = s->object.name;
+
+  return RGWHandler_REST_S3::init(store, s, cio);
+}
+
 int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   *new_op = op;
-  ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
+  ldout(s->cct, 10) << __func__ << " Starting retarget" << dendl;
 
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;
@@ -3590,16 +3674,16 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
 
   RGWBWRoutingRule rrule;
   bool should_redirect =
-    s->bucket_info.website_conf.should_redirect(s->object.name, http_error_code,
-						&rrule);
+    s->bucket_info.website_conf.should_redirect(original_object_name,
+                                                http_error_code, &rrule);
 
   if (should_redirect) {
     const string& hostname = s->info.env->get("HTTP_HOST", "");
     const string& protocol =
       (s->info.env->get("SERVER_PORT_SECURE") ? "https" : "http");
     int redirect_code = 0;
-    rrule.apply_rule(protocol, hostname, s->object.name, &s->redirect,
-		    &redirect_code);
+    rrule.apply_rule(protocol, hostname, original_object_name,
+                     &s->redirect, &redirect_code);
     // Apply a custom HTTP response code
     if (redirect_code > 0)
       s->err.http_ret = redirect_code; // Apply a custom HTTP response code
@@ -3663,33 +3747,6 @@ RGWOp* RGWHandler_REST_Service_S3Website::get_obj_op(bool get_data)
 namespace rgw {
 namespace auth {
 namespace s3 {
-
-bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time) const
-{
-  /* Check for time skew first. */
-  const time_t req_sec = header_time.sec();
-  time_t now;
-  time(&now);
-
-  if (req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-      req_sec > now + RGW_AUTH_GRACE_MINS * 60) {
-    ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
-                   << "; now - RGW_AUTH_GRACE_MINS="
-                   << now - RGW_AUTH_GRACE_MINS * 60
-                   << "; now + RGW_AUTH_GRACE_MINS="
-                   << now + RGW_AUTH_GRACE_MINS * 60
-                   << dendl;
-
-    ldout(cct, 0)  << "NOTICE: request time skew too big now="
-                   << utime_t(now, 0)
-                   << " req_time=" << header_time
-                   << dendl;
-    return false;
-  }
-
-  return true;
-}
-
 
 static rgw::auth::Completer::cmplptr_t
 null_completer_factory(const boost::optional<std::string>& secret_key)
@@ -3835,6 +3892,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_BUCKET_POLICY:
         case RGW_OP_PUT_OBJ_TAGGING:
         case RGW_OP_PUT_LC:
+        case RGW_OP_SET_REQUEST_PAYMENT:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
@@ -4141,8 +4199,14 @@ rgw::auth::s3::LDAPEngine::authenticate(
   auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(base64_token));
   return result_t::grant(std::move(apl), completer_factory(boost::none));
-}
+} /* rgw::auth::s3::LDAPEngine::authenticate */
 
+void rgw::auth::s3::LDAPEngine::shutdown() {
+  if (ldh) {
+    delete ldh;
+    ldh = nullptr;
+  }
+}
 
 /* LocalEndgine */
 rgw::auth::Engine::result_t

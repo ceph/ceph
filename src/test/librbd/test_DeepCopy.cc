@@ -20,7 +20,7 @@ struct TestDeepCopy : public TestFixture {
     int order = 22;
     uint64_t size = (1 << order) * 20;
     uint64_t features = 0;
-    bool old_format = get_features(&features);
+    bool old_format = !get_features(&features);
     EXPECT_EQ(0, create_image_full_pp(m_rbd, m_ioctx, image_name, size,
                                       features, old_format, &order));
     ASSERT_EQ(0, open_image(image_name, &m_src_ictx));
@@ -70,10 +70,12 @@ struct TestDeepCopy : public TestFixture {
         src_snap_name = src_snaps[i].name.c_str();
         dst_snap_name = dst_snaps[i].name.c_str();
       }
-      EXPECT_EQ(0, librbd::snap_set(m_src_ictx, cls::rbd::UserSnapshotNamespace(),
-                                    src_snap_name));
-      EXPECT_EQ(0, librbd::snap_set(m_dst_ictx, cls::rbd::UserSnapshotNamespace(),
-                                    dst_snap_name));
+      EXPECT_EQ(0, librbd::api::Image<>::snap_set(
+                     m_src_ictx, cls::rbd::UserSnapshotNamespace(),
+                     src_snap_name));
+      EXPECT_EQ(0, librbd::api::Image<>::snap_set(
+                     m_dst_ictx, cls::rbd::UserSnapshotNamespace(),
+                     dst_snap_name));
       uint64_t src_size, dst_size;
       {
         RWLock::RLocker src_locker(m_src_ictx->snap_lock);

@@ -384,13 +384,11 @@ class Thrasher:
             skip_admin_check=skip_admin_check)
         self.dead_osds.remove(osd)
         self.live_osds.append(osd)
-        if self.random_eio > 0 and osd is self.rerrosd:
-            self.ceph_manager.inject_args('osd', self.rerrosd,
-                                          'filestore_debug_random_read_err',
-                                          self.random_eio)
-            self.ceph_manager.inject_args('osd', self.rerrosd,
-                                          'bluestore_debug_random_read_err',
-                                          self.random_eio)
+        if self.random_eio > 0 and osd == self.rerrosd:
+            self.ceph_manager.set_config(self.rerrosd,
+                                         filestore_debug_random_read_err = self.random_eio)
+            self.ceph_manager.set_config(self.rerrosd,
+                                         bluestore_debug_random_read_err = self.random_eio)
 
 
     def out_osd(self, osd=None):
@@ -1386,7 +1384,7 @@ class CephManager:
         assert False
 
     def wait_for_pg_stats(func):
-        # both osd_mon_report_interval_min and mgr_stats_period are 5 seconds
+        # both osd_mon_report_interval and mgr_stats_period are 5 seconds
         # by default, and take the faulty injection in ms into consideration,
         # 12 seconds are more than enough
         delays = [1, 1, 2, 3, 5, 8, 13]
@@ -1957,6 +1955,14 @@ class CephManager:
         """
         return self.get_osd_dump_json()['osds']
 
+    def get_osd_metadata(self):
+        """
+        osd metadata --format=json converted to a python object
+        :returns: the python object containing osd metadata information
+        """
+        out = self.raw_cluster_cmd('osd', 'metadata', '--format=json')
+        return json.loads('\n'.join(out.split('\n')[1:]))
+
     def get_mgr_dump(self):
         out = self.raw_cluster_cmd('mgr', 'dump', '--format=json')
         return json.loads(out)
@@ -2085,7 +2091,7 @@ class CephManager:
         """
         return self.get_num_active_down() == self.get_num_pgs()
 
-    def wait_for_clean(self, timeout=None):
+    def wait_for_clean(self, timeout=1200):
         """
         Returns true when all pgs are clean.
         """

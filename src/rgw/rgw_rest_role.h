@@ -3,7 +3,7 @@
 #ifndef CEPH_RGW_REST_ROLE_H
 #define CEPH_RGW_REST_ROLE_H
 
-class RGWRestRole : public RGWOp {
+class RGWRestRole : public RGWRESTOp {
 protected:
   string role_name;
   string role_path;
@@ -13,21 +13,20 @@ protected:
   string path_prefix;
 
 public:
+  int verify_permission() override;
   void send_response() override;
 };
 
 class RGWRoleRead : public RGWRestRole {
 public:
   RGWRoleRead() = default;
-  int verify_permission() override;
-  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+  int check_caps(RGWUserCaps& caps) override;
 };
 
 class RGWRoleWrite : public RGWRestRole {
 public:
   RGWRoleWrite() = default;
-  int verify_permission() override;
-  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+  int check_caps(RGWUserCaps& caps) override;
 };
 
 class RGWCreateRole : public RGWRoleWrite {

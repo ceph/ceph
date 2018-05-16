@@ -61,7 +61,7 @@ std::string get_description_prefix(ArgumentModifier modifier) {
 }
 
 void add_special_pool_option(po::options_description *opt,
-			     std::string prefix) {
+			     const std::string &prefix) {
   std::string name = prefix + "-" + POOL_NAME;
   std::string description = prefix + " pool name";
 
@@ -171,6 +171,11 @@ void add_snap_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_snap_id_option(po::options_description *opt) {
+  opt->add_options()
+    (SNAPSHOT_ID.c_str(), po::value<uint64_t>(), "snapshot id");
+}
+
 void add_journal_option(po::options_description *opt,
                       ArgumentModifier modifier,
                       const std::string &desc_suffix) {
@@ -227,7 +232,7 @@ void add_group_spec_options(po::options_description *pos,
   } else {
     add_snap_option(opt, modifier);
     pos->add_options()
-      ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
+      ((get_name_prefix(modifier) + GROUP_SNAP_SPEC).c_str(),
        (get_description_prefix(modifier) + "group specification\n" +
          "(example: [<pool-name>/]<group-name>@<snap-name>)").c_str());
   }
@@ -416,7 +421,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t size = strict_sistrtoll(s.c_str(), &parse_error);
+  uint64_t size = strict_iecstrtoll(s.c_str(), &parse_error);
   if (!parse_error.empty()) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -450,7 +455,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
   
   std::string parse_error;
-  uint64_t objectsize = strict_sistrtoll(s.c_str(), &parse_error);
+  uint64_t objectsize = strict_iecstrtoll(s.c_str(), &parse_error);
   if (!parse_error.empty()) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }
@@ -523,7 +528,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t size = strict_sistrtoll(s.c_str(), &parse_error);
+  uint64_t size = strict_iecstrtoll(s.c_str(), &parse_error);
   if (parse_error.empty() && (size >= (1 << 12))) {
     v = boost::any(size);
     return;
@@ -537,7 +542,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   const std::string &s = po::validators::get_single_string(values);
 
   std::string parse_error;
-  uint64_t format = strict_sistrtoll(s.c_str(), &parse_error);
+  uint64_t format = strict_iecstrtoll(s.c_str(), &parse_error);
   if (!parse_error.empty() || (format != 1 && format != 2)) {
     throw po::validation_error(po::validation_error::invalid_option_value);
   }

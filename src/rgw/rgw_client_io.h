@@ -28,13 +28,13 @@ using Exception = std::system_error;
  * interacted with. */
 class BasicClient {
 protected:
-  virtual void init_env(CephContext *cct) = 0;
+  virtual int init_env(CephContext *cct) = 0;
 
 public:
   virtual ~BasicClient() = default;
 
   /* Initialize the BasicClient and inject CephContext. */
-  void init(CephContext *cct);
+  int init(CephContext *cct);
 
   /* Return the RGWEnv describing the environment that a given request lives in.
    * The method does not throw exceptions. */
@@ -197,12 +197,12 @@ protected:
     decoratee = &new_dec;
   }
 
-  void init_env(CephContext *cct) override {
+  int init_env(CephContext *cct) override {
     return get_decoratee().init_env(cct);
   }
 
 public:
-  DecoratedRestfulClient(DecorateeT&& decoratee)
+  explicit DecoratedRestfulClient(DecorateeT&& decoratee)
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
@@ -308,7 +308,7 @@ class StaticOutputBufferer : public std::streambuf {
   std::streambuf::char_type buffer[BufferSizeV];
 
 public:
-  StaticOutputBufferer(BuffererSink& sink)
+  explicit StaticOutputBufferer(BuffererSink& sink)
     : sink(sink) {
     constexpr size_t len = sizeof(buffer) - sizeof(std::streambuf::char_type);
     std::streambuf::setp(buffer, buffer + len);

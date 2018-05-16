@@ -16,13 +16,15 @@
 #ifndef CEPH_CAPABILITY_H
 #define CEPH_CAPABILITY_H
 
-#include "include/counter.h"
 #include "include/buffer_fwd.h"
+#include "include/counter.h"
+#include "include/mempool.h"
 #include "include/xlist.h"
 
 #include "common/config.h"
 
 #include "mdstypes.h"
+
 
 /*
 
@@ -66,6 +68,8 @@ namespace ceph {
 
 class Capability : public Counter<Capability> {
 public:
+  MEMPOOL_CLASS_HELPERS();
+
   struct Export {
     int64_t cap_id;
     int32_t wanted;
@@ -138,7 +142,7 @@ public:
   ceph_seq_t issue(unsigned c) {
     if (_pending & ~c) {
       // revoking (and maybe adding) bits.  note caps prior to this revocation
-      _revokes.push_back(revoke_info(_pending, last_sent, last_issue));
+      _revokes.emplace_back(_pending, last_sent, last_issue);
       _pending = c;
       _issued |= c;
     } else if (~_pending & c) {
@@ -166,8 +170,9 @@ public:
   }
   void _calc_issued() {
     _issued = _pending;
-    for (list<revoke_info>::iterator p = _revokes.begin(); p != _revokes.end(); ++p)
-      _issued |= p->before;
+    for (const auto &r : _revokes) {
+      _issued |= r.before;
+    }
   }
   void confirm_receipt(ceph_seq_t seq, unsigned caps) {
     if (seq == last_sent) {
@@ -252,10 +257,7 @@ public:
 
   // caps this client wants to hold
   int wanted() { return _wanted; }
-  void set_wanted(int w) {
-    _wanted = w;
-    //check_rdcaps_list();
-  }
+  void set_wanted(int w);
 
   void inc_last_seq() { last_sent++; }
   ceph_seq_t get_last_seq() { return last_sent; }
@@ -270,7 +272,7 @@ public:
   Export make_export() {
     return Export(cap_id, _wanted, issued(), pending(), client_follows, last_sent, mseq+1, last_issue_stamp);
   }
-  void merge(Export& other, bool auth_cap) {
+  void merge(const Export& other, bool auth_cap) {
     if (!is_stale()) {
       // issued + pending
       int newpending = other.pending | pending();
@@ -286,7 +288,7 @@ public:
     client_follows = other.client_follows;
 
     // wanted
-    _wanted = _wanted | other.wanted;
+    set_wanted(wanted() | other.wanted);
     if (auth_cap)
       mseq = other.mseq;
   }
@@ -303,7 +305,7 @@ public:
     }
 
     // wanted
-    _wanted = _wanted | otherwanted;
+    set_wanted(wanted() | otherwanted);
   }
 
   void revoke() {
@@ -345,7 +347,7 @@ private:
   //  - add new caps to _pending
   //  - track revocations in _revokes list
   __u32 _pending, _issued;
-  list<revoke_info> _revokes;
+  mempool::mds_co::list<revoke_info> _revokes;
 
   ceph_seq_t last_sent;
   ceph_seq_t last_issue;

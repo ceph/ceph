@@ -18,7 +18,7 @@ object data is complete, this tool does flush osd journal on each osd node befor
 
 before you run this tool, you should make sure that:
 1). all processes (ceph-osd, ceph-mon, ceph-mds) are shutdown
-2). ssh deamon is running & network is ok (ssh to each node without password)
+2). ssh daemon is running & network is ok (ssh to each node without password)
 3). ceph-kvstore-tool is installed(for ubuntu: apt-get install ceph-test)
 4). osd disk is not crashed and data can be accessed on local filesystem
 

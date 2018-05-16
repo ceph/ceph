@@ -35,6 +35,7 @@ class Session;
 class ScatterLock;
 class MClientRequest;
 class MMDSSlaveRequest;
+struct sr_t;
 
 struct MutationImpl : public TrackedOp {
   metareqid_t reqid;
@@ -88,7 +89,7 @@ public:
   // keep our default values synced with MDRequestParam's
   MutationImpl() : TrackedOp(nullptr, utime_t()) {}
   MutationImpl(OpTracker *tracker, utime_t initiated,
-	       metareqid_t ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
+	       const metareqid_t &ri, __u32 att=0, mds_rank_t slave_to=MDS_RANK_NONE)
     : TrackedOp(tracker, initiated),
       reqid(ri), attempt(att),
       slave_to_mds(slave_to) { }
@@ -244,8 +245,7 @@ struct MDRequestImpl : public MutationImpl {
     bool is_remote_frozen_authpin;
     bool is_inode_exporter;
 
-    map<client_t,entity_inst_t> imported_client_map;
-    map<client_t,uint64_t> sseq_map;
+    map<client_t, pair<Session*, uint64_t> > imported_session_map;
     map<CInode*, map<client_t,Capability::Export> > cap_imports;
     
     // for lock/flock
@@ -254,6 +254,9 @@ struct MDRequestImpl : public MutationImpl {
     // for snaps
     version_t stid;
     bufferlist snapidbl;
+
+    sr_t *srci_srnode;
+    sr_t *desti_srnode;
 
     // called when slave commits or aborts
     Context *slave_commit;
@@ -276,7 +279,9 @@ struct MDRequestImpl : public MutationImpl {
       srcdn_auth_mds(-1), inode_import_v(0), rename_inode(0),
       is_freeze_authpin(false), is_ambiguous_auth(false),
       is_remote_frozen_authpin(false), is_inode_exporter(false),
-      flock_was_waiting(false), stid(0), slave_commit(0), export_dir(NULL)  { }
+      flock_was_waiting(false),
+      stid(0), srci_srnode(NULL), desti_srnode(NULL),
+      slave_commit(0), export_dir(NULL)  { }
   } *_more;
 
 

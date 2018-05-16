@@ -89,7 +89,6 @@ static int do_map(int argc, const char *argv[])
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON,
@@ -397,6 +396,14 @@ int main(int argc, const char *argv[]) {
   vector<const char*> args;
 
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   std::string conf_file_list;
   std::string cluster;

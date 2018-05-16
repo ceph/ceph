@@ -61,6 +61,11 @@ function TEST_osd_pool_get_set() {
 
     local size=$(ceph osd pool get $TEST_POOL size|awk '{print $2}')
     local min_size=$(ceph osd pool get $TEST_POOL min_size|awk '{print $2}')
+    local expected_min_size=$(expr $size - $size / 2)
+    if [ $min_size -ne $expected_min_size ]; then
+	echo "default min_size is wrong: expected $expected_min_size, got $min_size"
+	return 1
+    fi
 
     ceph osd pool set $TEST_POOL scrub_min_interval 123456 || return 1
     ceph osd dump | grep 'pool ' | grep 'scrub_min_interval 123456' || return 1
@@ -225,7 +230,7 @@ function TEST_mon_features() {
 
     # monmap must have not all k l m persistent
     # features set.
-    jqfilter='.monmap.features.persistent | length == 3'
+    jqfilter='.monmap.features.persistent | length == 4'
     jq_success "$jqinput" "$jqfilter" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
@@ -233,6 +238,8 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "luminous" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "mimic")'
     jq_success "$jqinput" "$jqfilter" "mimic" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "osdmap-prune")'
+    jq_success "$jqinput" "$jqfilter" "osdmap-prune" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig
     # that's all folks. thank you for tuning in.

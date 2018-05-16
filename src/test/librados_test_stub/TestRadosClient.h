@@ -64,6 +64,9 @@ public:
   virtual uint32_t get_nonce() = 0;
   virtual uint64_t get_instance_id() = 0;
 
+  virtual int get_min_compatible_client(int8_t* min_compat_client,
+                                        int8_t* require_min_compat_client) = 0;
+
   virtual int connect();
   virtual void shutdown();
   virtual int wait_for_latest_osdmap();

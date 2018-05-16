@@ -29,6 +29,8 @@
 
 #include <common/Formatter.h>
 #include "include/assert.h"
+#include "include/compact_map.h"
+#include "include/compact_set.h"
 
 
 /*
@@ -398,6 +400,13 @@ public:
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using map = std::map<k, v, cmp,					\
 			 pool_allocator<std::pair<const k,v>>>;		\
+                                                                        \
+    template<typename k,typename v, typename cmp = std::less<k> >       \
+    using compact_map = compact_map<k, v, cmp,                          \
+			 pool_allocator<std::pair<const k,v>>>;         \
+                                                                        \
+    template<typename k, typename cmp = std::less<k> >                  \
+    using compact_set = compact_set<k, cmp, pool_allocator<k>>;         \
                                                                         \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using multimap = std::multimap<k,v,cmp,				\

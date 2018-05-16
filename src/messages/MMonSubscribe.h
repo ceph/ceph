@@ -31,11 +31,13 @@ WRITE_RAW_ENCODER(ceph_mon_subscribe_item_old)
 
 struct MMonSubscribe : public Message {
 
-  static const int HEAD_VERSION = 2;
+  static const int HEAD_VERSION = 3;
+  static const int COMPAT_VERSION = 1;
 
+  string hostname;
   map<string, ceph_mon_subscribe_item> what;
   
-  MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION) { }
+  MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION) { }
 private:
   ~MMonSubscribe() override {}
 
@@ -67,16 +69,16 @@ public:
 	if (q->second.onetime)
 	  what[q->first].flags |= CEPH_SUBSCRIBE_ONETIME;
       }
-    } else {
-      decode(what, p);
+      return;
+    }
+    decode(what, p);
+    if (header.version >= 3) {
+      decode(hostname, p);
     }
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
-    if (features & CEPH_FEATURE_SUBSCRIBE2) {
-      encode(what, payload);
-      header.version = HEAD_VERSION;
-    } else {
+    if ((features & CEPH_FEATURE_SUBSCRIBE2) == 0) {
       header.version = 0;
       map<string, ceph_mon_subscribe_item_old> oldwhat;
       for (map<string, ceph_mon_subscribe_item>::iterator q = what.begin();
@@ -90,7 +92,11 @@ public:
 	oldwhat[q->first].onetime = q->second.flags & CEPH_SUBSCRIBE_ONETIME;
       }
       encode(oldwhat, payload);
+      return;
     }
+    header.version = HEAD_VERSION;
+    encode(what, payload);
+    encode(hostname, payload);
   }
 };
 

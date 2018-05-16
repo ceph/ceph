@@ -261,7 +261,7 @@ namespace rgw {
     friend class RGWLibFS;
 
   private:
-    RGWFileHandle(RGWLibFS* _fs)
+    explicit RGWFileHandle(RGWLibFS* _fs)
       : fs(_fs), bucket(nullptr), parent(nullptr), variant_type{directory()},
 	depth(0), flags(FLAG_NONE)
       {
@@ -819,7 +819,7 @@ namespace rgw {
     {
       RGWFileHandle& rgw_fh;
 
-      WriteCompletion(RGWFileHandle& _fh) : rgw_fh(_fh) {
+      explicit WriteCompletion(RGWFileHandle& _fh) : rgw_fh(_fh) {
 	rgw_fh.get_fs()->ref(&rgw_fh);
       }
 
@@ -1337,9 +1337,15 @@ public:
   }
 
   bool eof() {
-    lsubdout(cct, rgw, 15) << "READDIR offset: " << offset
-			   << " is_truncated: " << is_truncated
-			   << dendl;
+    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
+      bool is_offset =
+	unlikely(! get<const char*>(&offset)) ||
+	!! get<const char*>(offset);
+      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
+	((is_offset) ? offset : "(nil)")
+			     << " is_truncated: " << is_truncated
+			     << dendl;
+    }
     return !is_truncated;
   }
 
@@ -1526,10 +1532,16 @@ public:
   }
 
   bool eof() {
-    lsubdout(cct, rgw, 15) << "READDIR offset: " << offset
-			   << " next marker: " << next_marker
-			   << " is_truncated: " << is_truncated
-			   << dendl;
+    if (unlikely(cct->_conf->subsys.should_gather(ceph_subsys_rgw, 15))) {
+      bool is_offset =
+	unlikely(! get<const char*>(&offset)) ||
+	!! get<const char*>(offset);
+      lsubdout(cct, rgw, 15) << "READDIR offset: " <<
+	((is_offset) ? offset : "(nil)")
+			     << " next marker: " << next_marker
+			     << " is_truncated: " << is_truncated
+			     << dendl;
+    }
     return !is_truncated;
   }
 
@@ -2531,6 +2543,49 @@ public:
   void send_response() override {}
 
 }; /* RGWSetAttrsRequest */
+
+/*
+ * Send request to get the rados cluster stats
+ */
+class RGWGetClusterStatReq : public RGWLibRequest,
+        public RGWGetClusterStat {
+public:
+  struct rados_cluster_stat_t& stats_req;
+  RGWGetClusterStatReq(CephContext* _cct,RGWUserInfo *_user,
+                       rados_cluster_stat_t& _stats):
+  RGWLibRequest(_cct, _user), stats_req(_stats){
+    op = this;
+  }
+
+  int op_init() override {
+    // assign store, s, and dialect_handler
+    RGWObjectCtx* rados_ctx
+      = static_cast<RGWObjectCtx*>(get_state()->obj_ctx);
+    // framework promises to call op_init after parent init
+    assert(rados_ctx);
+    RGWOp::init(rados_ctx->store, get_state(), this);
+    op = this; // assign self as op: REQUIRED
+    return 0;
+  }
+
+  int header_init() override {
+    struct req_state* s = get_state();
+    s->info.method = "GET";
+    s->op = OP_GET;
+    s->user = user;
+    return 0;
+  }
+
+  int get_params() override { return 0; }
+  bool only_bucket() override { return false; }
+  void send_response() override {
+    stats_req.kb = stats_op.kb;
+    stats_req.kb_avail = stats_op.kb_avail;
+    stats_req.kb_used = stats_op.kb_used;
+    stats_req.num_objects = stats_op.num_objects;
+  }
+}; /* RGWGetClusterStatReq */
+
 
 } /* namespace rgw */
 

@@ -61,10 +61,6 @@ foreach(python_version ${py_vers})
     DESTINATION ${PYTHON${PYTHON_VERSION}_INSTDIR})
 endforeach()
 
-install(FILES
-  ${CMAKE_CURRENT_SOURCE_DIR}/ceph_rest_api.py
-  DESTINATION ${PYTHON${PYTHON_VERSION}_INSTDIR})
-
 if(WITH_MGR)
   if(NOT WITH_PYTHON2 AND MGR_PYTHON_VERSION_MAJOR EQUAL 2)
     message(FATAL_ERROR "mgr plugins require python2 binding")
@@ -76,5 +72,7 @@ if(WITH_MGR)
   install(DIRECTORY
     ${CMAKE_CURRENT_SOURCE_DIR}/mgr
     DESTINATION ${CMAKE_INSTALL_PKGLIBDIR}
-    REGEX ".*/\\.gitignore" EXCLUDE)
+    REGEX ".*/\\.gitignore" EXCLUDE
+    REGEX ".*/hello/.*" EXCLUDE)
+  add_subdirectory(mgr)
 endif(WITH_MGR)

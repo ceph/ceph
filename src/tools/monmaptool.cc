@@ -157,7 +157,7 @@ bool handle_features(list<feature_op_t>& lst, MonMap &m)
         target.unset_feature(f.feature);
       }
     } else {
-      cerr << "unknow feature operation type '" << f.op << "'" << std::endl; 
+      cerr << "unknown feature operation type '" << f.op << "'" << std::endl;
     }
   }
   return modified;
@@ -167,6 +167,14 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   const char *me = argv[0];
 
@@ -190,8 +198,6 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
-      usage();
     } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
       print = true;
     } else if (ceph_argparse_flag(args, i, "--create", (char*)NULL)) {

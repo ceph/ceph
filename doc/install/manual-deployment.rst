@@ -349,7 +349,7 @@ activate):
    For example::
 
 	ssh node1
-	sudo ceph-volume prepare --data /dev/hdd1
+	sudo ceph-volume lvm prepare --data /dev/hdd1
 
    Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
    activation. These can be obtained by listing OSDs in the current server::
@@ -388,7 +388,7 @@ activate):
    For example::
 
 	ssh node1
-	sudo ceph-volume prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
+	sudo ceph-volume lvm prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
 
    Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
    activation. These can be obtained by listing OSDs in the current server::
@@ -437,6 +437,10 @@ OSDs with the long form procedure, execute the following steps for each OSD.
      ID=$(echo "{\"cephx_secret\": \"$OSD_SECRET\"}" | \
 	ceph osd new $UUID -i - \
 	-n client.bootstrap-osd -k /var/lib/ceph/bootstrap-osd/ceph.keyring)
+
+   It is also possible to include a ``crush_device_class`` property in the JSON
+   to set an initial class other than the default (``ssd`` or ``hdd`` based on
+   the auto-detected device type).
 
 #. Create the default directory on your new OSD. ::
 

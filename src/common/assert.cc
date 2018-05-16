@@ -66,6 +66,11 @@ namespace ceph {
     abort();
   }
 
+  void __ceph_assert_fail(const assert_data &ctx)
+  {
+    __ceph_assert_fail(ctx.assertion, ctx.file, ctx.line, ctx.function);
+  }
+
   void __ceph_assertf_fail(const char *assertion, const char *file, int line,
 			   const char *func, const char* msg, ...)
   {

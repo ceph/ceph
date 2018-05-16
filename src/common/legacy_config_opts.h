@@ -94,11 +94,7 @@ OPTION(xio_max_send_inline, OPT_INT) // xio maximum threshold to send inline
 OPTION(compressor_zlib_isal, OPT_BOOL)
 OPTION(compressor_zlib_level, OPT_INT) //regular zlib compression level, not applicable to isa-l optimized version
 
-OPTION(async_compressor_enabled, OPT_BOOL)
-OPTION(async_compressor_type, OPT_STR)
-OPTION(async_compressor_threads, OPT_INT)
-OPTION(async_compressor_thread_timeout, OPT_INT)
-OPTION(async_compressor_thread_suicide_timeout, OPT_INT)
+OPTION(qat_compressor_enabled, OPT_BOOL)
 
 OPTION(plugin_crypto_accelerator, OPT_STR)
 
@@ -119,7 +115,7 @@ OPTION(ms_public_type, OPT_STR)   // messenger backend
 OPTION(ms_cluster_type, OPT_STR)   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL)
 OPTION(ms_tcp_rcvbuf, OPT_INT)
-OPTION(ms_tcp_prefetch_max_size, OPT_INT) // max prefetch size, we limit this to avoid extra memcpy
+OPTION(ms_tcp_prefetch_max_size, OPT_U32) // max prefetch size, we limit this to avoid extra memcpy
 OPTION(ms_initial_backoff, OPT_DOUBLE)
 OPTION(ms_max_backoff, OPT_DOUBLE)
 OPTION(ms_crc_data, OPT_BOOL)
@@ -391,7 +387,6 @@ OPTION(objecter_completion_locks_per_session, OPT_U64) // num of completion lock
 OPTION(objecter_inject_no_watch_ping, OPT_BOOL)   // suppress watch pings
 OPTION(objecter_retry_writes_after_first_reply, OPT_BOOL)   // ignore the first reply for each write, and resend the osd op instead
 OPTION(objecter_debug_inject_relock_delay, OPT_BOOL)
-OPTION(objecter_mclock_service_tracker, OPT_BOOL)
 
 // Max number of deletes at once in a single Filer::purge call
 OPTION(filer_max_purge_ops, OPT_U32)
@@ -568,8 +563,6 @@ OPTION(osd_max_write_size, OPT_INT)
 OPTION(osd_max_pgls, OPT_U64) // max number of pgls entries to return
 OPTION(osd_client_message_size_cap, OPT_U64) // client data allowed in-memory (in bytes)
 OPTION(osd_client_message_cap, OPT_U64)              // num client messages allowed in-memory
-OPTION(osd_pg_bits, OPT_INT)  // bits per osd
-OPTION(osd_pgp_bits, OPT_INT)  // bits per osd
 OPTION(osd_crush_update_weight_set, OPT_BOOL) // update weight set while updating weights
 OPTION(osd_crush_chooseleaf_type, OPT_INT) // 1 = host
 OPTION(osd_pool_use_gmt_hitset, OPT_BOOL) // try to use gmt for hitset archive names if all osds in cluster support it.
@@ -615,9 +608,6 @@ OPTION(osd_max_markdown_count, OPT_INT)
 
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64)
 OPTION(osd_op_pq_min_cost, OPT_U64)
-OPTION(osd_disk_threads, OPT_INT)
-OPTION(osd_disk_thread_ioprio_class, OPT_STR) // rt realtime be best effort idle
-OPTION(osd_disk_thread_ioprio_priority, OPT_INT) // 0-7
 OPTION(osd_recover_clone_overlap, OPT_BOOL)   // preserve clone_overlap during recovery/migration
 OPTION(osd_op_num_threads_per_shard, OPT_INT)
 OPTION(osd_op_num_threads_per_shard_hdd, OPT_INT)
@@ -676,8 +666,6 @@ OPTION(osd_backfill_scan_min, OPT_INT)
 OPTION(osd_backfill_scan_max, OPT_INT)
 OPTION(osd_op_thread_timeout, OPT_INT)
 OPTION(osd_op_thread_suicide_timeout, OPT_INT)
-OPTION(osd_recovery_thread_timeout, OPT_INT)
-OPTION(osd_recovery_thread_suicide_timeout, OPT_INT)
 OPTION(osd_recovery_sleep, OPT_FLOAT)         // seconds to sleep between recovery ops
 OPTION(osd_recovery_sleep_hdd, OPT_FLOAT)
 OPTION(osd_recovery_sleep_ssd, OPT_FLOAT)
@@ -707,8 +695,7 @@ OPTION(osd_max_trimming_pgs, OPT_U64)
 OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT)
 
 OPTION(osd_mon_heartbeat_interval, OPT_INT)  // (seconds) how often to ping monitor if no peers
-OPTION(osd_mon_report_interval_max, OPT_INT)
-OPTION(osd_mon_report_interval_min, OPT_INT)  // pg stats, failures, up_thru, boot.
+OPTION(osd_mon_report_interval, OPT_INT)  // failures, up_thru, boot.
 OPTION(osd_mon_report_max_in_flight, OPT_INT)  // max updates in flight
 OPTION(osd_beacon_report_interval, OPT_INT)       // (second) how often to send beacon message to monitor
 OPTION(osd_pg_stat_report_interval_max, OPT_INT)  // report pg stats for any given pg at least this often
@@ -749,6 +736,8 @@ OPTION(osd_deep_scrub_stride, OPT_INT)
 OPTION(osd_deep_scrub_keys, OPT_INT)
 OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT)   // objects must be this old (seconds) before we update the whole-object digest on scrub
 OPTION(osd_skip_data_digest, OPT_BOOL)
+OPTION(osd_deep_scrub_large_omap_object_key_threshold, OPT_U64)
+OPTION(osd_deep_scrub_large_omap_object_value_sum_threshold, OPT_U64)
 OPTION(osd_class_dir, OPT_STR) // where rados plugins are stored
 OPTION(osd_open_classes_on_start, OPT_BOOL)
 OPTION(osd_class_load_list, OPT_STR) // list of object classes allowed to be loaded (allow all: *)
@@ -767,6 +756,7 @@ OPTION(osd_max_pg_log_entries, OPT_U32) // max entries, say when degraded, befor
 OPTION(osd_pg_log_dups_tracked, OPT_U32) // how many versions back to track combined in both pglog's regular + dup logs
 OPTION(osd_force_recovery_pg_log_entries_factor, OPT_FLOAT) // max entries factor before force recovery
 OPTION(osd_pg_log_trim_min, OPT_U32)
+OPTION(osd_pg_log_trim_max, OPT_U32)
 OPTION(osd_op_complaint_time, OPT_FLOAT) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT)
 OPTION(osd_max_pg_blocked_by, OPT_U32)    // max peer osds to report that are blocking our progress
@@ -783,7 +773,7 @@ OPTION(osd_debug_drop_ping_duration, OPT_INT)
 OPTION(osd_debug_op_order, OPT_BOOL)
 OPTION(osd_debug_verify_missing_on_start, OPT_BOOL)
 OPTION(osd_debug_scrub_chance_rewrite_digest, OPT_U64)
-OPTION(osd_debug_verify_snaps_on_info, OPT_BOOL)
+OPTION(osd_debug_verify_snaps, OPT_BOOL)
 OPTION(osd_debug_verify_stray_on_activate, OPT_BOOL)
 OPTION(osd_debug_skip_full_check_in_backfill_reservation, OPT_BOOL)
 OPTION(osd_debug_reject_backfill_probability, OPT_DOUBLE)
@@ -812,6 +802,8 @@ OPTION(osd_fast_info, OPT_BOOL) // use fast info attr, if we can
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL)
 OPTION(osd_loop_before_reset_tphandle, OPT_U32) // Max number of loop before we reset thread-pool's handle
+OPTION(osd_max_snap_prune_intervals_per_epoch, OPT_U64) // Max number of snap intervals to report to mgr in pg_stat_t
+
 // default timeout while caling WaitInterval on an empty queue
 OPTION(threadpool_default_timeout, OPT_INT)
 // default wait time for an empty queue before pinging the hb timeout
@@ -835,8 +827,6 @@ OPTION(kinetic_hmac_key, OPT_STR) // kinetic key to authenticate with
 OPTION(kinetic_use_ssl, OPT_BOOL) // whether to secure kinetic traffic with TLS
 
 
-OPTION(rocksdb_separate_wal_dir, OPT_BOOL) // use $path.wal for wal
-SAFE_OPTION(rocksdb_db_paths, OPT_STR)   // path,size( path,size)*
 OPTION(rocksdb_log_to_ceph_log, OPT_BOOL)  // log to ceph log
 OPTION(rocksdb_cache_size, OPT_U64)  // rocksdb cache size (unless set by bluestore/etc)
 OPTION(rocksdb_cache_row_ratio, OPT_FLOAT)   // ratio of cache for row (vs block)
@@ -936,6 +926,8 @@ OPTION(bdev_debug_aio_suicide_timeout, OPT_FLOAT)
 // NVMe driver is loaded while osd is running.
 OPTION(bdev_nvme_unbind_from_kernel, OPT_BOOL)
 OPTION(bdev_nvme_retry_count, OPT_INT) // -1 means by default which is 4
+OPTION(bdev_enable_discard, OPT_BOOL)
+OPTION(bdev_async_discard, OPT_BOOL)
 
 OPTION(objectstore_blackhole, OPT_BOOL)
 
@@ -960,6 +952,9 @@ OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT) // how much to reclaim at a time
 OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT) // how often (sec) to balance free space between bluefs and bluestore
+// how often (sec) to dump allocation failure happened during bluefs rebalance
+OPTION(bluestore_bluefs_balance_failure_dump_interval, OPT_FLOAT)
+
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
@@ -1029,7 +1024,7 @@ OPTION(bluestore_cache_size_hdd, OPT_U64)
 OPTION(bluestore_cache_size_ssd, OPT_U64)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE)
 OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE)
-OPTION(bluestore_cache_kv_max, OPT_U64) // limit the maximum amount of cache for the kv store
+OPTION(bluestore_cache_kv_min, OPT_INT)
 OPTION(bluestore_kvbackend, OPT_STR)
 OPTION(bluestore_allocator, OPT_STR)     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT)
@@ -1071,6 +1066,7 @@ OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL)
 OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL)
 OPTION(bluestore_shard_finishers, OPT_BOOL)
 OPTION(bluestore_debug_random_read_err, OPT_DOUBLE)
+OPTION(bluestore_debug_inject_bug21040, OPT_BOOL)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
@@ -1407,6 +1403,8 @@ OPTION(rgw_gc_max_objs, OPT_INT)
 OPTION(rgw_gc_obj_min_wait, OPT_INT)    // wait time before object may be handled by gc
 OPTION(rgw_gc_processor_max_time, OPT_INT)  // total run time for a single gc processor work
 OPTION(rgw_gc_processor_period, OPT_INT)  // gc processor cycle time
+OPTION(rgw_gc_max_concurrent_io, OPT_INT)  // gc processor cycle time
+OPTION(rgw_gc_max_trim_chunk, OPT_INT)  // gc trim chunk size
 OPTION(rgw_s3_success_create_obj_status, OPT_INT) // alternative success status response for create-obj (0 - default)
 OPTION(rgw_resolve_cname, OPT_BOOL)  // should rgw try to resolve hostname as a dns cname record
 OPTION(rgw_obj_stripe_size, OPT_INT)
@@ -1430,7 +1428,6 @@ OPTION(rgw_data_log_window, OPT_INT) // data log entries window (in seconds)
 OPTION(rgw_data_log_changes_size, OPT_INT) // number of in-memory entries to hold for data changes log
 OPTION(rgw_data_log_num_shards, OPT_INT) // number of objects to keep data changes log on
 OPTION(rgw_data_log_obj_prefix, OPT_STR) //
-OPTION(rgw_replica_log_obj_prefix, OPT_STR) //
 
 OPTION(rgw_bucket_quota_ttl, OPT_INT) // time for cached bucket stats to be cached within rgw instance
 OPTION(rgw_bucket_quota_soft_threshold, OPT_DOUBLE) // threshold from which we don't rely on cached info for quota decisions
@@ -1500,7 +1497,7 @@ OPTION(throttler_perf_counter, OPT_BOOL) // enable/disable throttler perf counte
 
 /* The following are tunables for torrent data */
 OPTION(rgw_torrent_flag, OPT_BOOL)    // produce torrent function flag
-OPTION(rgw_torrent_tracker, OPT_STR)    // torrent field annouce and annouce list
+OPTION(rgw_torrent_tracker, OPT_STR)    // torrent field announce and announce list
 OPTION(rgw_torrent_createby, OPT_STR)    // torrent field created by
 OPTION(rgw_torrent_comment, OPT_STR)    // torrent field comment
 OPTION(rgw_torrent_encoding, OPT_STR)    // torrent field encoding

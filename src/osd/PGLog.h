@@ -34,13 +34,11 @@ constexpr auto PGLOG_INDEXED_ALL              = PGLOG_INDEXED_OBJECTS
 class CephContext;
 
 struct PGLog : DoutPrefixProvider {
-  DoutPrefixProvider *prefix_provider;
-  string gen_prefix() const override {
-    return prefix_provider ? prefix_provider->gen_prefix() : "";
+  std::ostream& gen_prefix(std::ostream& out) const override {
+    return out;
   }
   unsigned get_subsys() const override {
-    return prefix_provider ? prefix_provider->get_subsys() :
-      (unsigned)ceph_subsys_osd;
+    return static_cast<unsigned>(ceph_subsys_osd);
   }
   CephContext *get_cct() const override {
     return cct;
@@ -138,7 +136,7 @@ public:
     { }
 
     template <typename... Args>
-    IndexedLog(Args&&... args) :
+    explicit IndexedLog(Args&&... args) :
       pg_log_t(std::forward<Args>(args)...),
       complete_to(log.end()),
       last_requested(0),
@@ -646,8 +644,7 @@ protected:
 public:
 
   // cppcheck-suppress noExplicitConstructor
-  PGLog(CephContext *cct, DoutPrefixProvider *dpp = nullptr) :
-    prefix_provider(dpp),
+  PGLog(CephContext *cct) :
     dirty_from(eversion_t::max()),
     writeout_from(eversion_t::max()),
     dirty_from_dups(eversion_t::max()),
@@ -666,8 +663,12 @@ public:
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
 
-  void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing.add(oid, need, have, false);
+  void missing_add(const hobject_t& oid, eversion_t need, eversion_t have, bool is_delete=false) {
+    missing.add(oid, need, have, is_delete);
+  }
+
+  void missing_add_next_entry(const pg_log_entry_t& e) {
+    missing.add_next_event(e);
   }
 
   //////////////////// get or set log ////////////////////
@@ -771,21 +772,21 @@ public:
 
   void reset_complete_to(pg_info_t *info) {
     log.complete_to = log.log.begin();
+    assert(log.complete_to != log.log.end());
     auto oldest_need = missing.get_oldest_need();
     if (oldest_need != eversion_t()) {
       while (log.complete_to->version < oldest_need) {
-        assert(log.complete_to != log.log.end());
         ++log.complete_to;
+        assert(log.complete_to != log.log.end());
       }
     }
-    assert(log.complete_to != log.log.end());
+    if (!info)
+      return;
     if (log.complete_to == log.log.begin()) {
-      if (info)
-	info->last_complete = eversion_t();
+      info->last_complete = eversion_t();
     } else {
       --log.complete_to;
-      if (info)
-	info->last_complete = log.complete_to->version;
+      info->last_complete = log.complete_to->version;
       ++log.complete_to;
     }
   }
@@ -800,7 +801,7 @@ public:
 			pg_missing_t& omissing, pg_shard_t from) const;
 
   void rebuild_missing_set_with_deletes(ObjectStore *store,
-					coll_t pg_coll,
+					ObjectStore::CollectionHandle& ch,
 					const pg_info_t &info);
 
 protected:
@@ -1251,7 +1252,7 @@ public:
 
   void read_log_and_missing(
     ObjectStore *store,
-    coll_t pg_coll,
+    ObjectStore::CollectionHandle& ch,
     ghobject_t pgmeta_oid,
     const pg_info_t &info,
     ostringstream &oss,
@@ -1259,7 +1260,7 @@ public:
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
-      store, pg_coll, pgmeta_oid, info,
+      store, ch, pgmeta_oid, info,
       log, missing, oss,
       tolerate_divergent_missing_log,
       &clear_divergent_priors,
@@ -1271,7 +1272,7 @@ public:
   template <typename missing_type>
   static void read_log_and_missing(
     ObjectStore *store,
-    coll_t pg_coll,
+    ObjectStore::CollectionHandle &ch,
     ghobject_t pgmeta_oid,
     const pg_info_t &info,
     IndexedLog &log,
@@ -1283,19 +1284,19 @@ public:
     set<string> *log_keys_debug = nullptr,
     bool debug_verify_stored_missing = false
     ) {
-    ldpp_dout(dpp, 20) << "read_log_and_missing coll " << pg_coll
+    ldpp_dout(dpp, 20) << "read_log_and_missing coll " << ch->cid
 		       << " " << pgmeta_oid << dendl;
 
     // legacy?
     struct stat st;
-    int r = store->stat(pg_coll, pgmeta_oid, &st);
+    int r = store->stat(ch, pgmeta_oid, &st);
     assert(r == 0);
     assert(st.st_size == 0);
 
     // will get overridden below if it had been recorded
     eversion_t on_disk_can_rollback_to = info.last_update;
     eversion_t on_disk_rollback_info_trimmed_to = eversion_t();
-    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(pg_coll,
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch,
 							      pgmeta_oid);
     map<eversion_t, hobject_t> divergent_priors;
     bool must_rebuild = false;
@@ -1387,7 +1388,7 @@ public:
 
 	  bufferlist bv;
 	  int r = store->getattr(
-	    pg_coll,
+	    ch,
 	    ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
 	    OI_ATTR,
 	    bv);
@@ -1441,13 +1442,13 @@ public:
 	    }
 	    bufferlist bv;
 	    int r = store->getattr(
-	      pg_coll,
+	      ch,
 	      ghobject_t(i.first, ghobject_t::NO_GEN, info.pgid.shard),
 	      OI_ATTR,
 	      bv);
 	    if (r >= 0) {
 	      object_info_t oi(bv);
-	      assert(oi.version == i.second.have);
+	      assert(oi.version == i.second.have || eversion_t() == i.second.have);
 	    } else {
 	      assert(i.second.is_delete() || eversion_t() == i.second.have);
 	    }
@@ -1465,7 +1466,7 @@ public:
 	    did.insert(i->second);
 	    bufferlist bv;
 	    int r = store->getattr(
-	      pg_coll,
+	      ch,
 	      ghobject_t(i->second, ghobject_t::NO_GEN, info.pgid.shard),
 	      OI_ATTR,
 	      bv);

@@ -708,7 +708,7 @@ def main(argv):
     pid = os.getpid()
     TESTDIR = "/tmp/test.{pid}".format(pid=pid)
     DATADIR = "/tmp/data.{pid}".format(pid=pid)
-    CFSD_PREFIX = CEPH_BIN + "/ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} "
+    CFSD_PREFIX = CEPH_BIN + "/ceph-objectstore-tool --no-mon-config --data-path " + OSDDIR + "/{osd} "
     PROFNAME = "testecprofile"
 
     os.environ['CEPH_CONF'] = CEPH_CONF
@@ -989,7 +989,7 @@ def main(argv):
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
     ERRORS += test_failure(cmd, "file: {FOO}: No such file or directory".format(FOO=OTHERFILE))
 
-    cmd = "{path}/ceph-objectstore-tool --data-path BAD_DATA_PATH --op list".format(osd=ONEOSD, path=CEPH_BIN)
+    cmd = "{path}/ceph-objectstore-tool --no-mon-config --data-path BAD_DATA_PATH --op list".format(osd=ONEOSD, path=CEPH_BIN)
     ERRORS += test_failure(cmd, "data-path: BAD_DATA_PATH: No such file or directory")
 
     cmd = (CFSD_PREFIX + "--journal-path BAD_JOURNAL_PATH --op list").format(osd=ONEOSD)
@@ -1008,11 +1008,11 @@ def main(argv):
 
     # Specify a bad --type
     os.mkdir(OSDDIR + "/fakeosd")
-    cmd = ("{path}/ceph-objectstore-tool --data-path " + OSDDIR + "/{osd} --type foobar --op list --pgid {pg}").format(osd="fakeosd", pg=ONEPG, path=CEPH_BIN)
+    cmd = ("{path}/ceph-objectstore-tool --no-mon-config --data-path " + OSDDIR + "/{osd} --type foobar --op list --pgid {pg}").format(osd="fakeosd", pg=ONEPG, path=CEPH_BIN)
     ERRORS += test_failure(cmd, "Unable to create store of type foobar")
 
     # Don't specify a data-path
-    cmd = "{path}/ceph-objectstore-tool --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG, path=CEPH_BIN)
+    cmd = "{path}/ceph-objectstore-tool --no-mon-config --type memstore --op list --pgid {pg}".format(dir=OSDDIR, osd=ONEOSD, pg=ONEPG, path=CEPH_BIN)
     ERRORS += test_failure(cmd, "Must provide --data-path")
 
     cmd = (CFSD_PREFIX + "--op remove --pgid 2.0").format(osd=ONEOSD)
@@ -1027,7 +1027,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import, trim-pg-log)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)

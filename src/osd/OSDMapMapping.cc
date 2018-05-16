@@ -35,7 +35,8 @@ void OSDMapMapping::_init_mappings(const OSDMap& osdmap)
       }
     }
     pools.emplace(p.first, PoolMapping(p.second.get_size(),
-				       p.second.get_pg_num()));
+				       p.second.get_pg_num(),
+				       p.second.is_erasure()));
   }
   pools.erase(q, pools.end());
   assert(pools.size() == osdmap.get_pools().size());

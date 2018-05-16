@@ -4,6 +4,7 @@
 #include "librbd/object_map/ResizeRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "osdc/Striper.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
 #include "cls/lock/cls_lock_client.h"
@@ -19,8 +20,12 @@ void ResizeRequest::resize(ceph::BitVector<2> *object_map, uint64_t num_objs,
                            uint8_t default_state) {
   size_t orig_object_map_size = object_map->size();
   object_map->resize(num_objs);
-  for (uint64_t i = orig_object_map_size; i < object_map->size(); ++i) {
-    (*object_map)[i] = default_state;
+  if (num_objs > orig_object_map_size) {
+    auto it = object_map->begin() + orig_object_map_size;
+    auto end_it = object_map->begin() + num_objs;
+    for (;it != end_it; ++it) {
+      *it = default_state;
+    }
   }
 }
 

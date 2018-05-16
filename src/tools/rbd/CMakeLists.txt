@@ -10,11 +10,13 @@ set(rbd_srcs
   action/Clone.cc
   action/Copy.cc
   action/Create.cc
+  action/Device.cc
   action/Diff.cc
   action/DiskUsage.cc
   action/Export.cc
   action/Feature.cc
   action/Flatten.cc
+  action/Ggate.cc
   action/Group.cc
   action/ImageMeta.cc
   action/Import.cc
@@ -36,9 +38,6 @@ set(rbd_srcs
   action/Status.cc
   action/Trash.cc
   action/Watch.cc)
-if(FREEBSD)
-  list(APPEND rbd_srcs action/Ggate.cc)
-endif()
 
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)

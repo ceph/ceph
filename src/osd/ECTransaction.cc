@@ -14,7 +14,6 @@
 
 #include <iostream>
 #include <vector>
-#include <vector>
 #include <sstream>
 
 #include "ECTransaction.h"
@@ -116,10 +115,6 @@ void ECTransaction::generate_transactions(
   auto &t = *(plan.t);
 
   auto &hash_infos = plan.hash_infos;
-
-  assert(transactions);
-  assert(temp_added);
-  assert(temp_removed);
 
   map<hobject_t, pg_log_entry_t*> obj_to_log;
   for (auto &&i: entries) {

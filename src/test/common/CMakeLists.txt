@@ -55,6 +55,14 @@ add_executable(unittest_str_map
 add_ceph_unittest(unittest_str_map)
 target_link_libraries(unittest_str_map ceph-common)
 
+# unittest_json_formattable
+add_executable(unittest_json_formattable
+  test_json_formattable.cc
+  )
+add_ceph_unittest(unittest_json_formattable ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_json_formattable)
+# add_dependencies(unittest_json_formattable ceph-common)
+target_link_libraries(unittest_json_formattable ceph-common global ${BLKID_LIBRARIES})
+
 # unittest_sharedptr_registry
 add_executable(unittest_sharedptr_registry
   test_sharedptr_registry.cc
@@ -277,3 +285,12 @@ add_ceph_unittest(unittest_bounded_key_counter)
 
 add_executable(unittest_static_ptr test_static_ptr.cc)
 add_ceph_unittest(unittest_static_ptr)
+
+add_executable(unittest_hobject test_hobject.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_hobject global ceph-common)
+add_ceph_unittest(unittest_hobject)
+
+add_executable(unittest_async_completion test_async_completion.cc)
+add_ceph_unittest(unittest_async_completion)
+target_link_libraries(unittest_async_completion Boost::system)

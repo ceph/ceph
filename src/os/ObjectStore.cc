@@ -155,50 +155,7 @@ int ObjectStore::read_meta(const std::string& key,
 
 
 
-ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s)
-{
-  return out << "osr(" << s.get_name() << " " << &s << ")";
-}
-
 ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx) {
 
   return out << "Transaction(" << &tx << ")"; 
-}
-
-unsigned ObjectStore::apply_transactions(Sequencer *osr,
-					 vector<Transaction>& tls,
-					 Context *ondisk)
-{
-  // use op pool
-  Cond my_cond;
-  Mutex my_lock("ObjectStore::apply_transaction::my_lock");
-  int r = 0;
-  bool done;
-  C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
-
-  queue_transactions(osr, tls, onreadable, ondisk);
-
-  my_lock.Lock();
-  while (!done)
-    my_cond.Wait(my_lock);
-  my_lock.Unlock();
-  return r;
-}
-
-int ObjectStore::queue_transactions(
-  Sequencer *osr,
-  vector<Transaction>& tls,
-  Context *onreadable,
-  Context *oncommit,
-  Context *onreadable_sync,
-  Context *oncomplete,
-  TrackedOpRef op = TrackedOpRef())
-{
-  RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(oncomplete));
-  Context *_onreadable = new Wrapper<RunOnDeleteRef>(
-    onreadable, _complete);
-  Context *_oncommit = new Wrapper<RunOnDeleteRef>(
-    oncommit, _complete);
-  return queue_transactions(osr, tls, _onreadable, _oncommit,
-			    onreadable_sync, op);
 }

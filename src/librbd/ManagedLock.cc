@@ -513,6 +513,13 @@ void ManagedLock<I>::handle_acquire_lock(int r) {
 }
 
 template <typename I>
+void ManagedLock<I>::handle_no_op_reacquire_lock(int r) {
+  ldout(m_cct, 10) << "r=" << r << dendl;
+  assert(r >= 0);
+  complete_active_action(STATE_LOCKED, 0);
+}
+
+template <typename I>
 void ManagedLock<I>::handle_post_acquire_lock(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
@@ -564,7 +571,9 @@ void ManagedLock<I>::send_reacquire_lock() {
   if (m_cookie == m_new_cookie) {
     ldout(m_cct, 10) << "skipping reacquire since cookie still valid"
                      << dendl;
-    complete_active_action(STATE_LOCKED, 0);
+    auto ctx = create_context_callback<
+      ManagedLock, &ManagedLock<I>::handle_no_op_reacquire_lock>(this);
+    post_reacquire_lock_handler(0, ctx);
     return;
   }
 

@@ -93,10 +93,14 @@ struct CapSnap {
   bool writing, dirty_data;
   uint64_t flush_tid;
 
+  int64_t cap_dirtier_uid;
+  int64_t cap_dirtier_gid;
+
   explicit CapSnap(Inode *i)
     : in(i), issued(0), dirty(0), size(0), time_warp_seq(0), change_attr(0),
       mode(0), uid(0), gid(0), xattr_version(0), inline_version(0),
-      writing(false), dirty_data(false), flush_tid(0)
+      writing(false), dirty_data(false), flush_tid(0), cap_dirtier_uid(-1),
+      cap_dirtier_gid(-1)
   {}
 
   void dump(Formatter *f) const;
@@ -275,7 +279,6 @@ struct Inode {
       _ref(0), ll_ref(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
-    memset(&quota, 0, sizeof(quota));
   }
   ~Inode();
 
@@ -302,7 +305,7 @@ struct Inode {
   bool cap_is_valid(const Cap &cap) const;
   int caps_issued(int *implemented = 0) const;
   void try_touch_cap(mds_rank_t mds);
-  bool caps_issued_mask(unsigned mask);
+  bool caps_issued_mask(unsigned mask, bool allow_impl=false);
   int caps_used();
   int caps_file_wanted();
   int caps_wanted();

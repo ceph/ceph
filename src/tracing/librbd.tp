@@ -2353,6 +2353,28 @@ TRACEPOINT_EVENT(librbd, group_remove_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, group_rename_enter,
+    TP_ARGS(
+        const char*, pool_name,
+        int64_t, id,
+        const char*, groupname,
+        const char*, destgroupname),
+    TP_FIELDS(
+        ctf_string(pool_name, pool_name)
+        ctf_integer(int64_t, id, id)
+        ctf_string(groupname, groupname)
+        ctf_string(destgroupname, destgroupname)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, group_rename_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, group_list_enter,
     TP_ARGS(
         const char*, pool_name,

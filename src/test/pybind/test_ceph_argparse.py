@@ -71,6 +71,12 @@ class TestArgparse:
                                                     'string',
                                                     'toomany']))
 
+    def check_0_or_1_string_arg(self, prefix, command):
+        self.assert_valid_command([prefix, command, 'string'])
+        self.assert_valid_command([prefix, command])
+        assert_equal({}, validate_command(sigdict, [prefix, command, 'string',
+                                                    'toomany']))
+
     def check_1_or_more_string_args(self, prefix, command):
         assert_equal({}, validate_command(sigdict, [prefix,
                                                     command]))
@@ -89,7 +95,7 @@ class TestArgparse:
                                                     command,
                                                     'toomany']))
 
-	def capture_output(self, args, stdout=None, stderr=None):
+    def capture_output(self, args, stdout=None, stderr=None):
         if stdout:
             stdout = StringIO()
             sys.stdout = stdout
@@ -439,10 +445,16 @@ class TestFS(TestArgparse):
         self.assert_valid_command(['fs', 'set', 'default', 'max_mds', '2'])
 
     def test_fs_set_cluster_down(self):
-        self.assert_valid_command(['fs', 'set', 'default', 'cluster_down', 'true'])
+        self.assert_valid_command(['fs', 'set', 'default', 'down', 'true'])
 
     def test_fs_set_cluster_up(self):
-        self.assert_valid_command(['fs', 'set', 'default', 'cluster_down', 'false'])
+        self.assert_valid_command(['fs', 'set', 'default', 'down', 'false'])
+
+    def test_fs_set_cluster_joinable(self):
+        self.assert_valid_command(['fs', 'set', 'default', 'joinable', 'true'])
+
+    def test_fs_set_cluster_not_joinable(self):
+        self.assert_valid_command(['fs', 'set', 'default', 'joinable', 'false'])
 
     def test_fs_set(self):
         self.assert_valid_command(['fs', 'set', 'default', 'max_file_size', '2'])
@@ -1154,7 +1166,7 @@ class TestConfigKey(TestArgparse):
         self.check_1_string_arg('config-key', 'exists')
 
     def test_dump(self):
-        self.check_no_arg('config-key', 'dump')
+        self.check_0_or_1_string_arg('config-key', 'dump')
 
     def test_list(self):
         self.check_no_arg('config-key', 'list')

@@ -37,6 +37,8 @@ pool_name = None
 IMG_SIZE = 8 << 20 # 8 MiB
 IMG_ORDER = 22 # 4 MiB objects
 
+os.environ["RBD_FORCE_ALLOW_V1"] = "1"
+
 def setup_module():
     global rados
     rados = Rados(conffile='')
@@ -100,6 +102,10 @@ def create_group():
 def remove_group():
     if group_name is not None:
         RBD().group_remove(ioctx, group_name)
+
+def rename_group():
+    new_group_name = "new" + group_name
+    RBD().group_rename(ioctx, group_name, new_group_name)
 
 def require_new_format():
     def wrapper(fn):
@@ -285,6 +291,18 @@ def test_open_readonly_dne():
                       read_only=True)
         assert_raises(ImageNotFound, Image, ioctx, image_name, 'snap',
                       read_only=True)
+
+@require_new_format()
+def test_open_by_id():
+    with Rados(conffile='') as cluster:
+        with cluster.open_ioctx(pool_name) as ioctx:
+            image_name = get_temp_image_name()
+            RBD().create(ioctx, image_name, IMG_SIZE)
+            with Image(ioctx, image_name) as image:
+                image_id = image.id()
+            with Image(ioctx, image_id=image_id) as image:
+                eq(image.get_name(), image_name)
+            RBD().remove(ioctx, image_name)
 
 def test_remove_dne():
     assert_raises(ImageNotFound, remove_image)
@@ -518,6 +536,35 @@ class TestImage(object):
             copy.remove_snap('snap1')
         self.rbd.remove(ioctx, dst_name)
 
+    @require_features([RBD_FEATURE_LAYERING])
+    def test_deep_copy_clone(self):
+        global ioctx
+        global features
+        self.image.write(b'a' * 256, 0)
+        self.image.create_snap('snap1')
+        self.image.write(b'b' * 256, 0)
+        self.image.protect_snap('snap1')
+        clone_name = get_temp_image_name()
+        dst_name = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name)
+        with Image(ioctx, clone_name) as child:
+            child.create_snap('snap1')
+            child.deep_copy(ioctx, dst_name, features=features,
+                            order=self.image.stat()['order'],
+                            stripe_unit=self.image.stripe_unit(),
+                            stripe_count=self.image.stripe_count(),
+                            data_pool=None)
+            child.remove_snap('snap1')
+
+        with Image(ioctx, dst_name) as copy:
+            copy_data = copy.read(0, 256)
+            eq(b'a' * 256, copy_data)
+            copy.remove_snap('snap1')
+        self.rbd.remove(ioctx, dst_name)
+        self.rbd.remove(ioctx, clone_name)
+        self.image.unprotect_snap('snap1')
+        self.image.remove_snap('snap1')
+
     def test_create_snap(self):
         global ioctx
         self.image.create_snap('snap1')
@@ -697,6 +744,24 @@ class TestImage(object):
         read = self.image.read(0, 256)
         eq(read, b'\0' * 256)
         self.image.set_snap(None)
+        read = self.image.read(0, 256)
+        eq(read, data)
+        self.image.remove_snap('snap1')
+
+    def test_set_snap_by_id(self):
+        self.image.write(b'\0' * 256, 0)
+        self.image.create_snap('snap1')
+        read = self.image.read(0, 256)
+        eq(read, b'\0' * 256)
+        data = rand_data(256)
+        self.image.write(data, 0)
+        read = self.image.read(0, 256)
+        eq(read, data)
+        snaps = list(self.image.list_snaps())
+        self.image.set_snap_by_id(snaps[0]['id'])
+        read = self.image.read(0, 256)
+        eq(read, b'\0' * 256)
+        self.image.set_snap_by_id(None)
         read = self.image.read(0, 256)
         eq(read, data)
         self.image.remove_snap('snap1')
@@ -1012,8 +1077,10 @@ class TestClone(object):
         self.image.create_snap('snap2')
         global features
         clone_name2 = get_temp_image_name()
+        rados.conf_set("rbd_default_clone_format", "1")
         assert_raises(InvalidArgument, self.rbd.clone, ioctx, image_name,
                       'snap2', ioctx, clone_name2, features)
+        rados.conf_set("rbd_default_clone_format", "auto")
         self.image.remove_snap('snap2')
 
     def test_unprotect_with_children(self):
@@ -1036,8 +1103,10 @@ class TestClone(object):
 
         # ...with a clone of the same parent
         other_clone_name = get_temp_image_name()
+        rados.conf_set("rbd_default_clone_format", "1")
         self.rbd.clone(ioctx, image_name, 'snap1', other_ioctx,
                        other_clone_name, features)
+        rados.conf_set("rbd_default_clone_format", "auto")
         self.other_clone = Image(other_ioctx, other_clone_name)
         # validate its parent info
         (pool, image, snap) = self.other_clone.parent_info()
@@ -1685,6 +1754,15 @@ class TestTrash(object):
 def test_create_group():
     create_group()
     remove_group()
+
+def test_rename_group():
+    create_group()
+    if group_name is not None:
+        rename_group()
+        eq(["new" + group_name], RBD().group_list(ioctx))
+        RBD().group_remove(ioctx, "new" + group_name)
+    else:
+        remove_group()
 
 def test_list_groups_empty():
     eq([], RBD().group_list(ioctx))

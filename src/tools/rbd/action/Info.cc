@@ -59,7 +59,8 @@ static void format_features(Formatter *f, uint64_t features)
 static void format_op_features(Formatter *f, uint64_t op_features)
 {
   static std::map<uint64_t, std::string> mapping = {
-    {RBD_OPERATION_FEATURE_CLONE_V2, RBD_OPERATION_FEATURE_NAME_CLONE_V2},
+    {RBD_OPERATION_FEATURE_CLONE_PARENT, RBD_OPERATION_FEATURE_NAME_CLONE_PARENT},
+    {RBD_OPERATION_FEATURE_CLONE_CHILD, RBD_OPERATION_FEATURE_NAME_CLONE_CHILD},
     {RBD_OPERATION_FEATURE_GROUP, RBD_OPERATION_FEATURE_NAME_GROUP},
     {RBD_OPERATION_FEATURE_SNAP_TRASH, RBD_OPERATION_FEATURE_NAME_SNAP_TRASH}};
   format_bitmask(f, "op_feature", mapping, op_features);
@@ -74,7 +75,6 @@ static void format_flags(Formatter *f, uint64_t flags)
 }
 
 static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
-                        const std::string &imgname, const std::string &imgid,
                         const std::string &snapname, Formatter *f)
 {
   librbd::image_info_t info;
@@ -82,7 +82,17 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   uint64_t overlap, features, flags, snap_limit;
   bool snap_protected = false;
   librbd::mirror_image_info_t mirror_image;
+  std::vector<librbd::snap_info_t> snaps;
   int r;
+
+  std::string imgname;
+  r = image.get_name(&imgname);
+  if (r < 0)
+    return r;
+
+  r = image.snap_list(snaps);
+  if (r < 0)
+    return r;
 
   r = image.stat(info, sizeof(info));
   if (r < 0)
@@ -91,6 +101,13 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   r = image.old_format(&old_format);
   if (r < 0)
     return r;
+
+  std::string imgid;
+  if (!old_format) {
+    r = image.get_id(&imgid);
+    if (r < 0)
+      return r;
+  }
 
   std::string data_pool;
   if (!old_format) {
@@ -179,28 +196,31 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
 
   if (f) {
     f->open_object_section("image");
-    if (!imgname.empty()) {
-      f->dump_string("name", imgname);
-    } else {
-      f->dump_string("id", imgid);
-    }
+    f->dump_string("name", imgname);
+    f->dump_string("id", imgid);
     f->dump_unsigned("size", info.size);
     f->dump_unsigned("objects", info.num_objs);
     f->dump_int("order", info.order);
     f->dump_unsigned("object_size", info.obj_size);
+    f->dump_int("snapshot_count", snaps.size());
     if (!data_pool.empty()) {
       f->dump_string("data_pool", data_pool);
     }
     f->dump_string("block_name_prefix", prefix);
     f->dump_int("format", (old_format ? 1 : 2));
   } else {
-    std::cout << "rbd image '" << (imgname.empty() ? imgid : imgname) << "':\n"
-              << "\tsize " << prettybyte_t(info.size) << " in "
+    std::cout << "rbd image '" << imgname << "':\n"
+              << "\tsize " << byte_u_t(info.size) << " in "
               << info.num_objs << " objects"
               << std::endl
               << "\torder " << info.order
-              << " (" << prettybyte_t(info.obj_size) << " objects)"
+              << " (" << byte_u_t(info.obj_size) << " objects)"
+              << std::endl
+              << "\tsnapshot_count: " << snaps.size()
               << std::endl;
+    if (!imgid.empty()) {
+      std::cout << "\tid: " << imgid << std::endl;
+    }
     if (!data_pool.empty()) {
       std::cout << "\tdata_pool: " << data_pool << std::endl;
     }
@@ -280,7 +300,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
         std::cout << " (trash " << parent_id << ")";
       }
       std::cout << std::endl;
-      std::cout << "\toverlap: " << prettybyte_t(overlap) << std::endl;
+      std::cout << "\toverlap: " << byte_u_t(overlap) << std::endl;
     }
   }
 
@@ -290,7 +310,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       f->dump_unsigned("stripe_unit", image.get_stripe_unit());
       f->dump_unsigned("stripe_count", image.get_stripe_count());
     } else {
-      std::cout << "\tstripe unit: " << prettybyte_t(image.get_stripe_unit())
+      std::cout << "\tstripe unit: " << byte_u_t(image.get_stripe_unit())
                 << std::endl
                 << "\tstripe count: " << image.get_stripe_count() << std::endl;
     }
@@ -395,8 +415,7 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
-  r = do_show_info(io_ctx, image, image_name, image_id, snap_name,
-                   formatter.get());
+  r = do_show_info(io_ctx, image, snap_name, formatter.get());
   if (r < 0) {
     std::cerr << "rbd: info: " << cpp_strerror(r) << std::endl;
     return r;

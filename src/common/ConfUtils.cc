@@ -252,6 +252,10 @@ trim_whitespace(std::string &str, bool strip_internal)
 std::string ConfFile::
 normalize_key_name(const std::string &key)
 {
+  if (key.find_first_of(" \t\r\n\f\v\xa0") == string::npos) {
+    return key;
+  }
+
   string k(key);
   ConfFile::trim_whitespace(k, true);
   std::replace(k.begin(), k.end(), ' ', '_');

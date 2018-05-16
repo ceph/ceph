@@ -319,7 +319,7 @@ public:
     delete data;
   }
 
-  virtual string get_marker(void *handle) {
+  virtual string get_marker(void *handle) override {
     iter_data *data = static_cast<iter_data *>(handle);
 
     if (data->iter != data->sections.end()) {
@@ -363,6 +363,16 @@ int read_history(RGWRados *store, RGWMetadataLogHistory *state,
   int ret = rgw_get_system_obj(store, ctx, pool, oid, bl, objv_tracker, nullptr);
   if (ret < 0) {
     return ret;
+  }
+  if (bl.length() == 0) {
+    /* bad history object, remove it */
+    rgw_raw_obj obj(pool, oid);
+    ret = store->delete_system_obj(obj);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
+      return ret;
+    }
+    return -ENOENT;
   }
   try {
     auto p = bl.begin();
@@ -777,6 +787,38 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
     *existing_version = objv_tracker.read_version;
   }
   return ret;
+}
+
+int RGWMetadataManager::prepare_mutate(RGWRados *store,
+                                       rgw_pool& pool, const string& oid,
+                                       const real_time& mtime,
+                                       RGWObjVersionTracker *objv_tracker,
+                                       RGWMetadataHandler::sync_type_t sync_mode)
+{
+  bufferlist bl;
+  real_time orig_mtime;
+  RGWObjectCtx obj_ctx(store);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid,
+                               bl, objv_tracker, &orig_mtime,
+                               nullptr, nullptr);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  if (ret != -ENOENT &&
+      !RGWMetadataHandler::check_versions(objv_tracker->read_version, orig_mtime,
+                                          objv_tracker->write_version, mtime, sync_mode)) {
+    return STATUS_NO_APPLY;
+  }
+
+  if (objv_tracker->write_version.tag.empty()) {
+    if (objv_tracker->read_version.tag.empty()) {
+      objv_tracker->generate_new_write_ver(store->ctx());
+    } else {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+  }
+  return 0;
 }
 
 int RGWMetadataManager::remove(string& metadata_key)

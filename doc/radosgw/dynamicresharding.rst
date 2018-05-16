@@ -54,34 +54,42 @@ Admin commands
 
 Add a bucket to the resharding queue
 ------------------------------------
+
 ::
-  # radosgw-admin reshard add --bucket <bucket_name> --num-shards <new number of shards>
+
+   # radosgw-admin reshard add --bucket <bucket_name> --num-shards <new number of shards>
 
 List resharding queue
 ---------------------
+
 ::
+
    # radosgw-admin reshard list
 
 Process/Schedule a bucket resharding
 ------------------------------------
- ::
+
+::
+
    # radosgw-admin reshard process
 
-bucket resharding status
+Bucket resharding status
 ------------------------
+
 ::
-  # radosgw-admin reshard status --bucket <bucket_name>
+
+   # radosgw-admin reshard status --bucket <bucket_name>
 
 Cancel pending bucket resharding
 --------------------------------
 
-Ongoing bucket resharding operations cannot be cancelled.
+Ongoing bucket resharding operations cannot be cancelled. ::
 
-::
-  # radosgw-admin reshard cancel --bucket <bucket_name>
+   # radosgw-admin reshard cancel --bucket <bucket_name>
 
 Manual bucket resharding
 ------------------------
-::
-  # radosgw-admin bucket reshard --bucket <bucket_name> --num-shards <new number of shards>
 
+::
+
+   # radosgw-admin bucket reshard --bucket <bucket_name> --num-shards <new number of shards>

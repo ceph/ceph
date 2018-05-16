@@ -420,13 +420,6 @@ void dump_etag(struct req_state* const s,
   }
 }
 
-void dump_etag(struct req_state* const s,
-               ceph::buffer::list& bl_etag,
-               const bool quoted)
-{
-  return dump_etag(s, get_sanitized_hdrval(bl_etag), quoted);
-}
-
 void dump_bucket_from_state(struct req_state *s)
 {
   if (g_conf->rgw_expose_bucket && ! s->bucket_name.empty()) {
@@ -819,20 +812,9 @@ int RGWGetObj_ObjStore::get_params()
     get_data &= (!rgwx_stat);
   }
 
-  /* start gettorrent */
-  bool is_torrent = s->info.args.exists(GET_TORRENT);
-  bool torrent_flag = s->cct->_conf->rgw_torrent_flag;
-  if (torrent_flag && is_torrent)
-  {
-    int ret = 0;
-    ret = torrent.get_params();
-    if (ret < 0)
-    {
-      return ret;
-    }
+  if (s->info.args.exists(GET_TORRENT)) {
+    return torrent.get_params();
   }
-  /* end gettorrent */
-
   return 0;
 }
 
@@ -1439,7 +1421,7 @@ int RGWPostObj_ObjStore::get_params()
     return -EINVAL;
   }
 
-  if (s->cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     ldout(s->cct, 20) << "request content_type_str="
 		      << req_content_type_str << dendl;
     ldout(s->cct, 20) << "request content_type params:" << dendl;
@@ -1616,7 +1598,7 @@ int RGWListBucketMultiparts_ObjStore::get_params()
 {
   delimiter = s->info.args.get("delimiter");
   prefix = s->info.args.get("prefix");
-  string str = s->info.args.get("max-parts");
+  string str = s->info.args.get("max-uploads");
   if (!str.empty())
     max_uploads = atoi(str.c_str());
   else

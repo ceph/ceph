@@ -142,6 +142,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual Context *bless_context(Context *c) = 0;
      virtual GenContext<ThreadPool::TPHandle&> *bless_gencontext(
        GenContext<ThreadPool::TPHandle&> *c) = 0;
+     virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
+       GenContext<ThreadPool::TPHandle&> *c) = 0;
 
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(
@@ -156,16 +158,17 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual epoch_t get_interval_start_epoch() const = 0;
      virtual epoch_t get_last_peering_reset_epoch() const = 0;
 
-     virtual const set<pg_shard_t> &get_actingbackfill_shards() const = 0;
+     virtual const set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
      virtual const set<pg_shard_t> &get_acting_shards() const = 0;
      virtual const set<pg_shard_t> &get_backfill_shards() const = 0;
 
-     virtual std::string gen_dbg_prefix() const = 0;
+     virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
      virtual const map<hobject_t, set<pg_shard_t>> &get_missing_loc_shards()
        const = 0;
 
      virtual const pg_missing_tracker_t &get_local_missing() const = 0;
+     virtual void add_local_next_event(const pg_log_entry_t& e) = 0;
      virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
        const = 0;
      virtual boost::optional<const pg_missing_const_i &> maybe_get_shard_missing(
@@ -287,7 +290,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual LogClientTemp clog_error() = 0;
      virtual LogClientTemp clog_warn() = 0;
 
-     virtual bool check_failsafe_full(ostream &ss) = 0;
+     virtual bool check_failsafe_full() = 0;
 
      virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
 
@@ -296,7 +299,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, coll_t coll,
+   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, const coll_t &coll,
 	     ObjectStore::CollectionHandle &ch) :
      cct(cct),
      store(store),
@@ -307,8 +310,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
 
-   std::string gen_prefix() const {
-     return parent->gen_dbg_prefix();
+   std::ostream& gen_prefix(std::ostream& out) const {
+     return parent->gen_dbg_prefix(out);
    }
 
    /**
@@ -438,8 +441,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      boost::optional<pg_hit_set_history_t> &hset_history,
-     Context *on_local_applied_sync,      ///< [in] called when applied locally
-     Context *on_all_applied,             ///< [in] called when all acked
      Context *on_all_commit,              ///< [in] called when all commit
      ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
@@ -532,7 +533,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    int objects_list_range(
      const hobject_t &start,
      const hobject_t &end,
-     snapid_t seq,
      vector<hobject_t> *ls,
      vector<ghobject_t> *gen_obs=0);
 
@@ -605,7 +605,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
-     const OSDMapRef curmap,
+     const map<string,string>& profile,
      Listener *l,
      coll_t coll,
      ObjectStore::CollectionHandle &ch,

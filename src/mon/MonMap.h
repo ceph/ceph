@@ -118,7 +118,6 @@ public:
 
   MonMap()
     : epoch(0) {
-    memset(&fsid, 0, sizeof(fsid));
   }
 
   uuid_d& get_fsid() { return fsid; }
@@ -317,7 +316,7 @@ public:
    * @param prefix prefix to prepend to generated mon names
    * @return 0 for success, -errno on error
    */
-  int build_from_host_list(std::string hosts, std::string prefix);
+  int build_from_host_list(std::string hosts, const std::string &prefix);
 
   /**
    * filter monmap given a set of initial members.

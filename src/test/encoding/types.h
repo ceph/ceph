@@ -16,6 +16,8 @@ TYPE(compressible_bloom_filter)
 
 #include "test_ceph_time.h"
 TYPE(real_time_wrapper)
+TYPE(coarse_real_time_wrapper)
+TYPE(timespan_wrapper)
 
 #include "test_sstring.h"
 TYPE(sstring_wrapper)
@@ -59,8 +61,8 @@ TYPE(object_locator_t)
 TYPE(request_redirect_t)
 TYPE(pg_t)
 TYPE(coll_t)
-TYPE(objectstore_perf_stat_t)
-TYPE(osd_stat_t)
+TYPE_FEATUREFUL(objectstore_perf_stat_t)
+TYPE_FEATUREFUL(osd_stat_t)
 TYPE(OSDSuperblock)
 TYPE_FEATUREFUL(pool_snap_info_t)
 TYPE_FEATUREFUL(pg_pool_t)
@@ -188,8 +190,8 @@ TYPE(sr_t)
 TYPE(frag_info_t)
 TYPE(nest_info_t)
 TYPE(client_writeable_range_t)
-TYPE_FEATUREFUL(inode_t)
-TYPE_FEATUREFUL(old_inode_t)
+TYPE_FEATUREFUL(inode_t<std::allocator>)
+TYPE_FEATUREFUL(old_inode_t<std::allocator>)
 TYPE(fnode_t)
 TYPE(old_rstat_t)
 TYPE_FEATUREFUL(session_info_t)
@@ -415,6 +417,7 @@ TYPE(cls_rbd_parent)
 TYPE(cls_rbd_snap)
 
 #include "cls/rbd/cls_rbd_types.h"
+TYPE(cls::rbd::ChildImageSpec)
 TYPE(cls::rbd::MirrorPeer)
 TYPE(cls::rbd::MirrorImage)
 TYPE(cls::rbd::MirrorImageMap)
@@ -442,16 +445,6 @@ TYPE_FEATUREFUL(cls_lock_get_info_reply)
 TYPE(cls_lock_list_locks_reply)
 TYPE(cls_lock_assert_op)
 TYPE(cls_lock_set_cookie_op)
-
-#include "cls/replica_log/cls_replica_log_types.h"
-TYPE(cls_replica_log_item_marker)
-TYPE(cls_replica_log_progress_marker)
-TYPE(cls_replica_log_bound)
-#include "cls/replica_log/cls_replica_log_ops.h"
-TYPE(cls_replica_log_delete_marker_op)
-TYPE(cls_replica_log_set_marker_op)
-TYPE(cls_replica_log_get_bounds_op)
-TYPE(cls_replica_log_get_bounds_ret)
 
 #include "cls/refcount/cls_refcount_ops.h"
 TYPE(cls_refcount_get_op)

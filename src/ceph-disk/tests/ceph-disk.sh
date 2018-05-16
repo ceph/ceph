@@ -23,9 +23,11 @@
 if [ -z "$CEPH_ROOT" ] || [ -z "$CEPH_BIN" ] || [ -z "$CEPH_LIB" ]; then
     CEPH_ROOT=`readlink -f $(dirname $0)/../../..`
     CEPH_BIN=$CEPH_ROOT
-    CEPH_LIB=$CEPH_ROOT/.libs
+    CEPH_LIB=$CEPH_ROOT/build/lib
 fi
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
+
+export $CEPH_LIB
 
 set -x
 
@@ -441,11 +443,8 @@ function run() {
     CEPH_ARGS+=" --mon-host=$CEPH_MON"
     CEPH_ARGS+=" --chdir="
     CEPH_ARGS+=" --journal-dio=false"
-    CEPH_ARGS+=" --erasure-code-dir=$CEPH_LIB"
-    CEPH_ARGS+=" --plugin-dir=$CEPH_LIB"
     CEPH_ARGS+=" --log-file=$dir/\$name.log"
     CEPH_ARGS+=" --pid-file=$dir/\$name.pidfile"
-    CEPH_ARGS+=" --osd-class-dir=$CEPH_LIB"
     CEPH_ARGS+=" --run-dir=$dir"
     CEPH_ARGS+=" --osd-failsafe-full-ratio=.99"
     CEPH_ARGS+=" --osd-journal-size=100"

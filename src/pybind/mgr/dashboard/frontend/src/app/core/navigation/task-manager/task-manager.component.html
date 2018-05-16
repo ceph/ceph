@@ -1,0 +1,87 @@
+<ng-template #popTemplate>
+  <!-- Executing -->
+  <div *ngIf="executingTasks.length > 0">
+    <div class="separator">
+      EXECUTING
+    </div>
+    <hr>
+    <div *ngFor="let executingTask of executingTasks">
+      <table>
+        <tr>
+          <td rowspan="3"  class="icon-col text-center">
+            <span class="fa-stack fa-2x text-info">
+              <i class="fa fa-circle fa-stack-2x"></i>
+              <i class="fa fa-stack-1x fa-inverse fa-spinner fa-spin"></i>
+            </span>
+          </td>
+          <td colspan="3"><strong>{{ executingTask.description }}</strong></td>
+        </tr>
+        <tr>
+          <td colspan="2">
+            <small class="date">{{ executingTask.begin_time | cdDate }}</small>
+          </td>
+          <td class="text-right italic" nowrap *ngIf="executingTask.progress"><span>{{ executingTask.progress }} %</span></td>
+        </tr>
+      </table>
+      <hr>
+    </div>
+  </div>
+  <!-- Finished -->
+  <div *ngIf="finishedTasks.length > 0">
+    <div class="separator">
+      FINISHED
+    </div>
+    <hr>
+    <div *ngFor="let finishedTask of finishedTasks">
+      <table>
+        <tr>
+          <td rowspan="3"  class="icon-col text-center">
+            <span *ngIf="!finishedTask.errorMessage">
+              <span class="fa-stack fa-2x text-success">
+                <i class="fa fa-circle fa-stack-2x"></i>
+                <i class="fa fa-stack-1x fa-inverse fa-check"></i>
+              </span>
+            </span>
+            <span *ngIf="finishedTask.errorMessage">
+              <span class="fa-stack fa-2x text-danger">
+                <i class="fa fa-circle fa-stack-2x"></i>
+                <i class="fa fa-stack-1x fa-inverse fa-exclamation-triangle"></i>
+              </span>
+            </span>
+          </td>
+          <td colspan="2">
+            <strong>{{ finishedTask.description }}</strong>
+          </td>
+        </tr>
+        <tr>
+          <td></td>
+          <td>
+            <span *ngIf="finishedTask.errorMessage" class="text-danger">
+              {{ finishedTask.errorMessage }}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2">
+            <small class="date">{{ finishedTask.end_time | cdDate }}</small>
+          </td>
+        </tr>
+      </table>
+      <hr>
+    </div>
+  </div>
+  <!-- Empty -->
+  <div *ngIf="executingTasks.length === 0 && finishedTasks.length === 0">
+    <div class="message">
+      There are no background tasks.
+    </div>
+  </div>
+</ng-template>
+<a [popover]="popTemplate"
+   placement="bottom"
+   container="body"
+   outsideClick="true">
+  <i class="fa"
+     [ngClass]="icon"></i>
+  Background-Tasks<span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>
+</a>

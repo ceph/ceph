@@ -234,6 +234,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 	tier->snap_epoch = base.snap_epoch;
 	tier->snaps = base.snaps;
 	tier->removed_snaps = base.removed_snaps;
+	tier->flags |= base.flags & (pg_pool_t::FLAG_SELFMANAGED_SNAPS|
+				     pg_pool_t::FLAG_POOL_SNAPS);
 
 	if (new_rem_it != new_removed_snaps.end()) {
 	  new_removed_snaps[tier_pool] = new_rem_it->second;
@@ -244,6 +246,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
   return 0;
 }
 
+// ----------------------------------
+// OSDMap
 
 bool OSDMap::subtree_is_down(int id, set<int> *down_cache) const
 {
@@ -486,8 +490,7 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     uint8_t v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
-    }
-    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 5;
     }
     ENCODE_START(v, 1, bl); // client-usable data
@@ -1451,6 +1454,11 @@ uint8_t OSDMap::get_min_compat_client() const
   return CEPH_RELEASE_ARGONAUT;    // v0.48argonaut-206-g6f381af
 }
 
+uint8_t OSDMap::get_require_min_compat_client() const
+{
+  return require_min_compat_client;
+}
+
 void OSDMap::_calc_up_osd_features()
 {
   bool first = true;
@@ -1605,6 +1613,136 @@ void OSDMap::clean_temps(CephContext *cct,
 	pending_inc->new_primary_temp[pgid] = -1;
       else
 	pending_inc->new_primary_temp.erase(pgid);
+    }
+  }
+}
+
+void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
+                                    const OSDMap& osdmap,
+                                    Incremental *pending_inc)
+{
+  ldout(cct, 10) << __func__ << dendl;
+  OSDMap tmpmap;
+  tmpmap.deepish_copy_from(osdmap);
+  tmpmap.apply_incremental(*pending_inc);
+  set<pg_t> to_check;
+  set<pg_t> to_cancel;
+  map<int, map<int, float>> rule_weight_map;
+
+  for (auto& p : tmpmap.pg_upmap) {
+    to_check.insert(p.first);
+  }
+  for (auto& p : tmpmap.pg_upmap_items) {
+    to_check.insert(p.first);
+  }
+  for (auto& p : pending_inc->new_pg_upmap) {
+    to_check.insert(p.first);
+  }
+  for (auto& p : pending_inc->new_pg_upmap_items) {
+    to_check.insert(p.first);
+  }
+  for (auto& pg : to_check) {
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
+    if (crush_rule < 0) {
+      lderr(cct) << __func__ << " unable to load crush-rule of pg "
+                 << pg << dendl;
+      continue;
+    }
+    map<int, float> weight_map;
+    auto it = rule_weight_map.find(crush_rule);
+    if (it == rule_weight_map.end()) {
+      auto r = tmpmap.crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+      if (r < 0) {
+        lderr(cct) << __func__ << " unable to get crush weight_map for "
+                   << "crush_rule " << crush_rule << dendl;
+        continue;
+      }
+      rule_weight_map[crush_rule] = weight_map;
+    } else {
+      weight_map = it->second;
+    }
+    auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
+    if (type < 0) {
+      lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
+                 << pg << dendl;
+      continue;
+    }
+    ldout(cct, 10) << __func__ << " pg " << pg
+                   << " crush-rule-id " << crush_rule
+                   << " weight_map " << weight_map
+                   << " failure-domain-type " << type
+                   << dendl;
+    vector<int> raw;
+    int primary;
+    tmpmap.pg_to_raw_up(pg, &raw, &primary);
+    set<int> parents;
+    for (auto osd : raw) {
+      if (type > 0) {
+        auto parent = tmpmap.crush->get_parent_of_type(osd, type, crush_rule);
+        if (parent >= 0) {
+          lderr(cct) << __func__ << " unable to get parent of raw osd."
+                     << osd << " of pg " << pg
+                     << dendl;
+          break;
+        }
+        auto r = parents.insert(parent);
+        if (!r.second) {
+          // two up-set osds come from same parent
+          to_cancel.insert(pg);
+          break;
+        }
+      }
+      // the above check validates collision only
+      // below we continue to check against crush-topology changing..
+      auto it = weight_map.find(osd);
+      if (it == weight_map.end()) {
+        // osd is gone or has been moved out of the specific crush-tree
+        to_cancel.insert(pg);
+        break;
+      }
+      auto adjusted_weight = tmpmap.get_weightf(it->first) * it->second;
+      if (adjusted_weight == 0) {
+        // osd is out/crush-out
+        to_cancel.insert(pg);
+        break;
+      }
+    }
+  }
+  for (auto &pg: to_cancel) {
+    { // pg_upmap
+      auto it = pending_inc->new_pg_upmap.find(pg);
+      if (it != pending_inc->new_pg_upmap.end()) {
+        ldout(cct, 10) << __func__ << " cancel invalid pending "
+                       << "pg_upmap entry "
+                       << it->first << "->" << it->second
+                       << dendl;
+        pending_inc->new_pg_upmap.erase(it);
+      }
+      if (osdmap.pg_upmap.count(pg)) {
+        ldout(cct, 10) << __func__ << " cancel invalid pg_upmap entry "
+                       << osdmap.pg_upmap.find(pg)->first << "->"
+                       << osdmap.pg_upmap.find(pg)->second
+                       << dendl;
+        pending_inc->old_pg_upmap.insert(pg);
+      }
+    }
+    { // pg_upmap_items
+      auto it = pending_inc->new_pg_upmap_items.find(pg);
+      if (it != pending_inc->new_pg_upmap_items.end()) {
+        ldout(cct, 10) << __func__ << " cancel invalid pending "
+                       << "pg_upmap_items entry "
+                       << it->first << "->" << it->second
+                       << dendl;
+        pending_inc->new_pg_upmap_items.erase(it);
+      }
+      if (osdmap.pg_upmap_items.count(pg)) {
+        ldout(cct, 10) << __func__ << " cancel invalid "
+                       << "pg_upmap_items entry "
+                       << osdmap.pg_upmap_items.find(pg)->first << "->"
+                       << osdmap.pg_upmap_items.find(pg)->second
+                       << dendl;
+        pending_inc->old_pg_upmap_items.insert(pg);
+      }
     }
   }
 }
@@ -2242,6 +2380,27 @@ bool OSDMap::primary_changed(
   return false;      // same primary (tho replicas may have changed)
 }
 
+uint64_t OSDMap::get_encoding_features() const
+{
+  uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < CEPH_RELEASE_MIMIC) {
+    f &= ~CEPH_FEATURE_SERVER_MIMIC;
+  }
+  if (require_osd_release < CEPH_RELEASE_LUMINOUS) {
+    f &= ~(CEPH_FEATURE_SERVER_LUMINOUS |
+	   CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
+  }
+  if (require_osd_release < CEPH_RELEASE_KRAKEN) {
+    f &= ~(CEPH_FEATURE_SERVER_KRAKEN |
+	   CEPH_FEATURE_MSG_ADDR2 |
+	   CEPH_FEATURE_CRUSH_TUNABLES5);
+  }
+  if (require_osd_release < CEPH_RELEASE_JEWEL) {
+    f &= ~(CEPH_FEATURE_SERVER_JEWEL |
+	   CEPH_FEATURE_NEW_OSDOP_ENCODING);
+  }
+  return f;
+}
 
 // serialize, unserialize
 void OSDMap::encode_client_old(bufferlist& bl) const
@@ -2383,11 +2542,12 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
+    // NOTE: any new encoding dependencies must be reflected by
+    // SIGNIFICANT_FEATURES
     uint8_t v = 7;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
-    }
-    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 6;
     }
     ENCODE_START(v, 1, bl); // client-usable data
@@ -2460,11 +2620,12 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   }
 
   {
+    // NOTE: any new encoding dependencies must be reflected by
+    // SIGNIFICANT_FEATURES
     uint8_t target_v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
-    }
-    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       target_v = 5;
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
@@ -3189,8 +3350,6 @@ void OSDMap::print(ostream& out) const
 
   for (const auto &addr : blacklist)
     out << "blacklist " << addr.first << " expires " << addr.second << "\n";
-
-  // ignore pg_swap_primary
 }
 
 class OSDTreePlainDumper : public CrushTreeDumper::Dumper<TextTable> {
@@ -3373,7 +3532,7 @@ void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter, string buck
 }
 
 void OSDMap::print_summary(Formatter *f, ostream& out,
-			   const string& prefix) const
+			   const string& prefix, bool extra) const
 {
   if (f) {
     f->open_object_section("osdmap");
@@ -3389,6 +3548,8 @@ void OSDMap::print_summary(Formatter *f, ostream& out,
     out << get_num_osds() << " osds: "
 	<< get_num_up_osds() << " up, "
 	<< get_num_in_osds() << " in";
+    if (extra)
+      out << "; epoch: e" << get_epoch();
     if (get_num_pg_temp())
       out << "; " << get_num_pg_temp() << " remapped pgs";
     out << "\n";
@@ -3405,9 +3566,9 @@ void OSDMap::print_oneline_summary(ostream& out) const
       << get_num_up_osds() << " up, "
       << get_num_in_osds() << " in";
   if (test_flag(CEPH_OSDMAP_FULL))
-    out << " full";
+    out << "; full flag set";
   else if (test_flag(CEPH_OSDMAP_NEARFULL))
-    out << " nearfull";
+    out << "; nearfull flag set";
 }
 
 bool OSDMap::crush_rule_in_use(int rule_id) const
@@ -3726,7 +3887,7 @@ int OSDMap::summarize_mapping_stats(
     vector<int> up, up2;
     int up_primary;
     for (unsigned ps = 0; ps < pi->get_pg_num(); ++ps) {
-      pg_t pgid(ps, pool_id, -1);
+      pg_t pgid(ps, pool_id);
       total_pg += pi->get_size();
       pg_to_up_acting_osds(pgid, &up, &up_primary, nullptr, nullptr);
       for (int osd : up) {
@@ -3997,6 +4158,9 @@ int OSDMap::calc_pg_upmaps(
       ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
       for (auto p : pmap) {
 	auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
+        if (adjusted_weight == 0) {
+          continue;
+        }
 	osd_weight[p.first] += adjusted_weight;
 	osd_weight_total += adjusted_weight;
       }
@@ -4064,6 +4228,8 @@ int OSDMap::calc_pg_upmaps(
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
       int osd = p->second;
       float deviation = p->first;
+      // make sure osd is still there (belongs to this crush-tree)
+      assert(osd_weight.count(osd));
       float target = osd_weight[osd] * pgs_per_weight;
       assert(target > 0);
       if (deviation/target < max_deviation_ratio) {
@@ -4343,9 +4509,9 @@ public:
     *tbl << ""
 	 << ""
 	 << "" << "TOTAL"
-	 << si_t(pgmap.get_osd_sum().kb << 10)
-	 << si_t(pgmap.get_osd_sum().kb_used << 10)
-	 << si_t(pgmap.get_osd_sum().kb_avail << 10)
+	 << byte_u_t(pgmap.get_osd_sum().kb << 10)
+	 << byte_u_t(pgmap.get_osd_sum().kb_used << 10)
+	 << byte_u_t(pgmap.get_osd_sum().kb_avail << 10)
 	 << lowprecision_t(average_util)
 	 << ""
 	 << TextTable::endrow;
@@ -4375,9 +4541,9 @@ protected:
 	 << c
 	 << weightf_t(qi.weight)
 	 << weightf_t(reweight)
-	 << si_t(kb << 10)
-	 << si_t(kb_used << 10)
-	 << si_t(kb_avail << 10)
+	 << byte_u_t(kb << 10)
+	 << byte_u_t(kb_used << 10)
+	 << byte_u_t(kb_avail << 10)
 	 << lowprecision_t(util)
 	 << lowprecision_t(var);
 

@@ -40,7 +40,7 @@ Manual client eviction
 ======================
 
 Sometimes, the administrator may want to evict a client manually.  This
-could happen if a client is died and the administrator does not
+could happen if a client has died and the administrator does not
 want to wait for its session to time out, or it could happen if
 a client is misbehaving and the administrator does not have access to
 the client node to unmount it.
@@ -100,9 +100,12 @@ the blacklist:
 
 ::
 
-    ceph osd blacklist ls
-    # ... identify the address of the client ...
-    ceph osd blacklist rm <address>
+    $ ceph osd blacklist ls
+    listed 1 entries
+    127.0.0.1:0/3710147553 2018-03-19 11:32:24.716146
+    $ ceph osd blacklist rm 127.0.0.1:0/3710147553
+    un-blacklisting 127.0.0.1:0/3710147553
+
 
 Doing this may put data integrity at risk if other clients have accessed
 files that the blacklisted client was doing buffered IO to.  It is also not
@@ -169,9 +172,9 @@ a per-inode basis. But we don't, because:
 
  * It would be more complicated.
  * It would use an extra 4 bytes of memory for every inode.
- * It would not be much more efficient as almost always everyone has the latest.
-   OSD map anyway, in most cases everyone will breeze through this barrier
-   rather than waiting.
+ * It would not be much more efficient as, almost always, everyone has
+   the latest OSD map. And, in most cases everyone will breeze through this
+   barrier rather than waiting.
  * This barrier is done in very rare cases, so any benefit from per-inode
    granularity would only very rarely be seen.
 

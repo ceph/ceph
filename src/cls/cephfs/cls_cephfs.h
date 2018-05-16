@@ -68,9 +68,9 @@ public:
       uint64_t obj_index_,
       uint64_t obj_size_,
       time_t mtime_,
-      std::string obj_xattr_name_,
-      std::string mtime_xattr_name_,
-      std::string obj_size_xattr_name_)
+      const std::string &obj_xattr_name_,
+      const std::string &mtime_xattr_name_,
+      const std::string &obj_size_xattr_name_)
    : obj_index(obj_index_),
      obj_size(obj_size_),
      mtime(mtime_),

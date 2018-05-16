@@ -19,9 +19,11 @@ namespace api {
 template <typename ImageCtxT = librbd::ImageCtx>
 struct Group {
 
-  static int create(librados::IoCtx& io_ctx, const char *imgname);
+  static int create(librados::IoCtx& io_ctx, const char *group_name);
   static int remove(librados::IoCtx& io_ctx, const char *group_name);
   static int list(librados::IoCtx& io_ctx, std::vector<std::string> *names);
+  static int rename(librados::IoCtx& io_ctx, const char *src_group_name,
+                    const char *dest_group_name);
 
   static int image_add(librados::IoCtx& group_ioctx, const char *group_name,
 		       librados::IoCtx& image_ioctx, const char *image_name);

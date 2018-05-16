@@ -102,6 +102,7 @@
 # redmine issue update: http://www.redmine.org/projects/redmine/wiki/Rest_Issues
 
 import argparse
+import codecs
 import datetime
 import getpass
 import git
@@ -139,7 +140,7 @@ INDICATIONS = [
 
 CONTRIBUTORS = {}
 NEW_CONTRIBUTORS = {}
-with open(".githubmap") as f:
+with codecs.open(".githubmap", encoding='utf-8') as f:
     comment = re.compile("\s*#")
     patt = re.compile("([\w-]+)\s+(.*)")
     for line in f:
@@ -259,14 +260,15 @@ def build_branch(args):
         indications = set()
         for comment in [pr_req.json()]+comments.json()+reviews.json()+review_comments.json():
             body = comment["body"]
-            url = comment["html_url"]
-            for m in BZ_MATCH.finditer(body):
-                log.info("[ {url} ] BZ cited: {cite}".format(url=url, cite=m.group(1)))
-            for m in TRACKER_MATCH.finditer(body):
-                log.info("[ {url} ] Ceph tracker cited: {cite}".format(url=url, cite=m.group(1)))
-            for indication in INDICATIONS:
-                for cap in indication.findall(comment["body"]):
-                    indications.add(cap)
+            if body:
+                url = comment["html_url"]
+                for m in BZ_MATCH.finditer(body):
+                    log.info("[ {url} ] BZ cited: {cite}".format(url=url, cite=m.group(1)))
+                for m in TRACKER_MATCH.finditer(body):
+                    log.info("[ {url} ] Ceph tracker cited: {cite}".format(url=url, cite=m.group(1)))
+                for indication in INDICATIONS:
+                    for cap in indication.findall(comment["body"]):
+                        indications.add(cap)
 
         new_new_contributors = {}
         for review in reviews.json():

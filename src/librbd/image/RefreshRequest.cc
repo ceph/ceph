@@ -16,6 +16,8 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/image/RefreshParentRequest.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/Policy.h"
 
@@ -157,7 +159,7 @@ Context *RefreshRequest<I>::handle_v1_get_snapshots(int *result) {
   for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
     m_snap_infos.push_back({m_snapc.snaps[i],
                             {cls::rbd::UserSnapshotNamespace{}},
-                            snap_names[i], snap_sizes[i], {}});
+                            snap_names[i], snap_sizes[i], {}, 0});
   }
 
   send_v1_get_locks();
@@ -600,7 +602,7 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots_legacy(int *result) {
   for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
     m_snap_infos.push_back({m_snapc.snaps[i],
                             {cls::rbd::UserSnapshotNamespace{}},
-                            snap_names[i], snap_sizes[i], {}});
+                            snap_names[i], snap_sizes[i], {}, 0});
   }
 
   send_v2_get_snap_timestamps();
@@ -1076,11 +1078,15 @@ Context *RefreshRequest<I>::send_flush_aio() {
     CephContext *cct = m_image_ctx.cct;
     ldout(cct, 10) << this << " " << __func__ << dendl;
 
-    RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-    using klass = RefreshRequest<I>;
-    Context *ctx = create_context_callback<
-      klass, &klass::handle_flush_aio>(this);
-    m_image_ctx.flush(ctx);
+    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    auto ctx = create_context_callback<
+      RefreshRequest<I>, &RefreshRequest<I>::handle_flush_aio>(this);
+    auto aio_comp = io::AioCompletion::create(
+      ctx, util::get_image_ctx(&m_image_ctx), io::AIO_TYPE_FLUSH);
+    auto req = io::ImageDispatchSpec<I>::create_flush_request(
+      m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    req->send();
+    delete req;
     return nullptr;
   } else if (m_error_result < 0) {
     // propagate saved error back to caller
@@ -1126,7 +1132,6 @@ void RefreshRequest<I>::apply() {
   RWLock::WLocker md_locker(m_image_ctx.md_lock);
 
   {
-    Mutex::Locker cache_locker(m_image_ctx.cache_lock);
     RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
     RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
 
