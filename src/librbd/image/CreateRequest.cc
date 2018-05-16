@@ -579,7 +579,11 @@ template<typename I>
 void CreateRequest<I>::handle_create_image(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r == -EEXIST) {
+    ldout(m_cct, 5) << "image id already in-use" << dendl;
+    complete(-EBADF);
+    return;
+  } else if (r < 0) {
     lderr(m_cct) << "error writing header: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
     remove_id_object();
