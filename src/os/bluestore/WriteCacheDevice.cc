@@ -48,14 +48,36 @@
  * - destination position
  */
 
+void WriteCacheDevice::header_t::setup()
+{
+  fixed_begin = 0x01A2B3C4D5E6F708LL;
+  id_reversed = -id;
+  size_reversed = -size;
+  dest_reversed = -dest;
+  fixed_end =   0x4C5D6E7F8091A2B3LL;
+}
 
+bool WriteCacheDevice::header_t::check()
+{
+  if (fixed_begin != 0x01A2B3C4D5E6F708LL)
+    return false;
+  if (id + id_reversed != 0)
+    return false;
+  if (size + size_reversed != 0)
+    return false;
+  if (dest + dest_reversed != 0)
+    return false;
+  if (fixed_end != 0x4C5D6E7F8091A2B3LL)
+    return false;
+  return true;
+}
 
 WriteCacheDevice::WriteCacheDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv)
   : KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv),
-    flushing(nullptr),
+    last_used_id(0),
     current(nullptr),
     empty(nullptr),
-    last_id(0)
+    flushing(nullptr)
 {
 }
 
@@ -69,6 +91,14 @@ WriteCacheDevice::~WriteCacheDevice()
     delete flushing;
 }
 
+uint64_t WriteCacheDevice::next_id(uint64_t v)
+{
+  v++;
+  if(v==0)
+    v++;
+  return v;
+}
+
 /*
  * true -  stored to cache
  * false - failed to store
@@ -77,7 +107,6 @@ bool WriteCacheDevice::store_in_cache(uint64_t disk_off, bufferlist& bl)
 {
   std::lock_guard<std::mutex> l(lock);
   size_t length_align_up = align_up((size_t)bl.length(), block_size);
-  string path;
   dout(20) << __func__ <<
       " disk_off=" << disk_off <<
       " bl.length()=" << bl.length() <<
@@ -89,15 +118,19 @@ bool WriteCacheDevice::store_in_cache(uint64_t disk_off, bufferlist& bl)
     if (flushing != nullptr) {
       /* must flush, no space to write */
       flush_main();
+    } else {
+      assert(flushing == nullptr);
+      assert(empty != nullptr);
+      flushing = current;
+      current = empty;
+      dout(10) << __func__ << " flush_main switched row, current=" << current <<
+              " current->disk_offset=" << current->disk_offset << dendl;
+      flushing->pos = 0;
+      empty = flushing;
+      flushing = nullptr;
     }
-    assert(flushing == nullptr);
-    assert(empty != nullptr);
-    flushing = current;
-    current = empty;
-    flushing->pos = 0;
-    empty = flushing;
-    flushing = nullptr;
-    KernelDevice::flush();
+    //flushing = nullptr;
+    //KernelDevice::flush();
   }
 
   if (current->pos + (block_size + length_align_up) > current->size)
@@ -115,11 +148,12 @@ bool WriteCacheDevice::store_in_cache(uint64_t disk_off, bufferlist& bl)
   bufferlist header_bl;
   buffer::raw* header_data = buffer::create(block_size);
   header_bl.append(header_data);
-  header* h = reinterpret_cast<header*>(header_bl.c_str());
-  h->id = last_id;
-  last_id++;
+  header_t* h = reinterpret_cast<header_t*>(header_bl.c_str());
+  last_used_id ++;
+  h->id = last_used_id;
   h->dest = disk_off;
   h->size = bl.length();
+  h->setup();
 
   write_cache->write(current->disk_offset + current->pos, header_bl, false);
   current->pos += block_size;
@@ -146,6 +180,7 @@ int WriteCacheDevice::open_write_cache(CephContext* cct, const std::string& path
 {
   int r;
   int fd;
+  this->path = path;
   fd = ::open(path.c_str(), O_RDONLY);
   if (fd < 0) {
     derr << __func__ << " cannot open '" << path << "'"  << dendl;
@@ -182,17 +217,177 @@ int WriteCacheDevice::open_write_cache(CephContext* cct, const std::string& path
     dout(20) << __func__ << " cannot open write cache '" << path << "'" << dendl;
     return r;
   }
-
-  current = new row{0, row_size, 0, false};
-  empty = new row{row_size, row_size, 0, false};
+  bool b;
+  b = replay(row_size);
+  if (!b) {
+    derr << __func__ << " unable to replay cache to main storage '" << path << "'" << dendl;
+    assert(b && "failed to replay cache");
+  }
+  //current = new row_t{0, row_size, 0, false};
+  //empty = new row_t{row_size, row_size, 0, false};
   return r;
 }
 
-static string get_dev_property(const char *dev, const char *property)
+bool WriteCacheDevice::replay(size_t row_size)
 {
-  char val[1024] = {0};
-  get_block_device_string_property(dev, property, val, sizeof(val));
-  return val;
+  row_t a_row{0, row_size, 0, false};
+  row_t b_row{row_size, row_size, 0, false};
+  dout(5) << __func__ << " entering" << dendl;
+  uint64_t a_id;
+  uint64_t b_id;
+  bool a_ok;
+  bool b_ok;
+  bool r;
+  uint64_t a_id_last;
+  uint64_t b_id_last;
+  a_ok = peek(a_row, a_id);
+  b_ok = peek(b_row, b_id);
+  dout(10) << __func__  << "row A " << (a_ok?"OK":"UNAVAIL") << " id=" << a_id << dendl;
+  dout(10) << __func__  << "row B " << (b_ok?"OK":"UNAVAIL") << " id=" << b_id << dendl;
+  if (a_ok && b_ok) {
+    if (a_id < b_id) {
+      r = replay_row(a_row, a_id_last);
+      if (!r) {
+        return false;
+      }
+      if (next_id(a_id_last) != b_id) {
+        return false;
+      }
+      r = replay_row(b_row, b_id_last);
+      if (r) {
+        last_used_id = b_id_last;
+        current = new row_t{0, row_size, 0, false};
+        empty = new row_t{row_size, row_size, 0, false};
+        return true;
+      }
+      return false;
+    }
+    if (a_id > b_id) {
+      r = replay_row(b_row, b_id_last);
+      if (!r) {
+        return false;
+      }
+      if (next_id(b_id_last) != a_id) {
+        return false;
+      }
+      r = replay_row(a_row, a_id_last);
+      if (r) {
+        last_used_id = a_id_last;
+        current = new row_t{row_size, row_size, 0, false};
+        empty = new row_t{0, row_size, 0, false};
+        return true;
+      }
+      return false;
+    }
+    //a_id == b_id
+    return false;
+  }
+  if (a_ok) {
+    r = replay_row(a_row, a_id_last);
+    if (!r) {
+      return false;
+    }
+    last_used_id = a_id_last;
+    current = new row_t{row_size, row_size, 0, false};
+    empty = new row_t{0, row_size, 0, false};
+    return true;
+  }
+  if (b_ok) {
+    r = replay_row(b_row, b_id_last);
+    if (!r) {
+      return false;
+    }
+    last_used_id = b_id_last;
+    current = new row_t{0, row_size, 0, false};
+    empty = new row_t{row_size, row_size, 0, false};
+    return true;
+  }
+
+  current = new row_t{0, row_size, 0, false};
+  empty = new row_t{row_size, row_size, 0, false};
+  dout(5) << __func__ << " done" << dendl;
+  return true;
+}
+
+bool WriteCacheDevice::peek(row_t& row, uint64_t& id)
+{
+  bool r;
+  header_t h;
+  r = read_header(row, h);
+
+  if (r) {
+    id = h.id;
+  }
+  return r;
+}
+
+bool WriteCacheDevice::replay_row(row_t& row, uint64_t& last_id)
+{
+  bool result = false;
+  bool r;
+  header_t h;
+  last_id = 0;
+  do {
+    r = read_header(row, h);
+    if (!r) {
+      dout(20) << __func__ << " subsequent entry read failed" << dendl;
+      //this is possible and ok
+      result = true;
+      break;
+    }
+    row.pos += block_size;
+    dout(30) << __func__ << " properly read entry id=" << h.id << dendl;
+    if (row.pos + h.size > row.size) {
+      dout(20) << __func__ << " entry id=" << h.id << " ok, but exceeds row size, failure" << dendl;
+      result = false;
+      break;
+    }
+    if (last_id != 0) {
+      if (next_id(last_id) != h.id) {
+        if ((int64_t)(h.id - next_id(last_id)) > 0) {
+          dout(20) << __func__ << " entry id=" << h.id << " jumps to future, failure" << dendl;
+          result = false;
+        }
+        dout(20) << __func__ << " entry id=" << h.id << " ok, but from past" << dendl;
+        result = true;
+        break;
+      }
+    }
+    last_id = h.id;
+
+    bufferptr p = buffer::create_page_aligned(h.size);
+    int rr;
+    rr = write_cache->read_random(row.disk_offset + row.pos, h.size, p.c_str(), false);
+    if (rr != 0) {
+      dout(20) << __func__ << " entry id=" << h.id << " ok, but cannot read content size=" <<
+          h.size << " error: " << cpp_strerror(rr) << dendl;
+      break;
+    }
+    bufferlist bl;
+    bl.append(p);
+    KernelDevice::write(h.dest, bl, false);
+    row.pos += h.size;
+  } while (row.pos + block_size <= row.size);
+  return result;
+}
+
+bool WriteCacheDevice::read_header(const row_t& row, header_t& h)
+{
+  bufferlist header_bl;
+  buffer::raw* header_data = buffer::create(block_size);
+  header_bl.append(header_data);
+  int r;
+  r = write_cache->read_random(row.disk_offset + row.pos, block_size, header_bl.c_str(), false);
+  if (r != 0) {
+    dout(10) << __func__  << " failed to read" << dendl;
+    return false;
+  }
+  h = *reinterpret_cast<header_t*>(header_bl.c_str());
+  if (!h.check()) {
+    dout(10) << __func__  << " check failed" << dendl;
+    return false;
+  }
+  return true;
 }
 
 int WriteCacheDevice::flush_main()
@@ -212,9 +407,13 @@ int WriteCacheDevice::flush_main()
     flushing->pos = 0;
     empty = flushing;
     flushing = nullptr;
+    dout(10) << __func__ << " last_used_id=" << last_used_id << dendl;
+    dout(10) << __func__ << " switched row, current=" << current <<
+        " current->disk_offset=" << current->disk_offset << dendl;
   }
   if (flush_main_storage) {
     res = KernelDevice::flush();
+    dout(10) << __func__ << " flushed main, res=" << res << dendl;
   }
   return res;
 }
@@ -223,7 +422,7 @@ int WriteCacheDevice::flush_main()
 int WriteCacheDevice::flush()
 {
   std::lock_guard<std::mutex> l(lock);
-  int res = 0, r;
+  int res, r;
   if (write_cache) {
     res = flush_main();
     r = write_cache->flush();

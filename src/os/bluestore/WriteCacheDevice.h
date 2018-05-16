@@ -28,9 +28,9 @@
 
 class WriteCacheDevice : public KernelDevice {
 
-  //KernelDevice block_data;
   unique_ptr<KernelDevice> write_cache;
   std::mutex lock;
+  std::string path;
 
 public:
   WriteCacheDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
@@ -42,28 +42,41 @@ public:
   int flush() override;
   int open_write_cache(CephContext* cct, const std::string& path);
 private:
-  int flush_main();
-  bool store_in_cache(uint64_t disk_off, bufferlist& bl);
-
-  struct header {
+  struct header_t {
+    uint64_t fixed_begin;
     uint64_t id;
-    size_t size;
+    uint64_t id_reversed;
+    size_t   size;
+    size_t   size_reversed;
     uint64_t dest;
+    uint64_t dest_reversed;
+    uint64_t fixed_end;
+    void setup();
+    bool check();
   };
 
-  struct row {
+  struct row_t {
     size_t disk_offset;
     size_t size;
     size_t pos;
     bool unflushed;
   };
 
+  int flush_main();
+  bool store_in_cache(uint64_t disk_off, bufferlist& bl);
+  bool replay(size_t row_size);
+  bool peek(row_t& r, uint64_t& id);
+  bool replay_row(row_t& r, uint64_t& last_id);
+  bool read_header(const row_t& r, header_t& h);
+
+
+  static uint64_t next_id(uint64_t);
   static constexpr size_t block_size = 4096;
   static constexpr size_t minimum_cache_size = 2 * 1024 * 1024;
-  uint64_t last_id;
-  row* current;
-  row* flushing;
-  row* empty;
+  uint64_t last_used_id;
+  row_t* current;
+  row_t* empty;
+  row_t* flushing;
 };
 
 #endif
