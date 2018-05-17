@@ -70,7 +70,7 @@ public:
       encode(item, bl);
       encode_nohead(dname, bl);
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       decode(item, bl);
       decode_nohead(item.dname_len, dname, bl);
@@ -175,7 +175,7 @@ public:
   bool is_queued_for_replay() { return queued_for_replay; }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
 
     if (header.version >= 4) {
       decode(head, p);

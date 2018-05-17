@@ -20,7 +20,7 @@ class time_point_wrapper {
     using ceph::encode;
     encode(t, bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     using ceph::decode;
     decode(t, p);
   }
@@ -51,7 +51,7 @@ class timespan_wrapper {
     using ceph::encode;
     encode(d, bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     using ceph::decode;
     decode(d, p);
   }

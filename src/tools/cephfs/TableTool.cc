@@ -114,7 +114,7 @@ public:
     bufferlist table_bl;
     int read_r = io->read(object_name, table_bl, 0, 0);
     if (read_r >= 0) {
-      bufferlist::iterator q = table_bl.begin();
+      auto q = table_bl.cbegin();
       try {
         if (mds_table) {
           version_t version;

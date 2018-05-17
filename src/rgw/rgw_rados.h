@@ -193,7 +193,7 @@ struct compression_block {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(old_ofs, bl);
      decode(new_ofs, bl);
@@ -222,7 +222,7 @@ struct RGWCompressionInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(compression_type, bl);
      decode(orig_size, bl);
@@ -248,7 +248,7 @@ struct RGWOLHInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(target, bl);
      decode(removed, bl);
@@ -270,7 +270,7 @@ struct RGWOLHPendingInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(time, bl);
      DECODE_FINISH(bl);
@@ -332,7 +332,7 @@ struct RGWObjManifestPart {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
      decode(loc, bl);
      decode(loc_ofs, bl);
@@ -382,7 +382,7 @@ struct RGWObjManifestRule {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(start_part_num, bl);
     decode(start_ofs, bl);
@@ -502,7 +502,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(7, 2, 2, bl);
     decode(obj_size, bl);
     decode(objs, bl);
@@ -845,7 +845,7 @@ struct RGWUploadPartInfo {
     encode(accounted_size, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(num, bl);
     decode(size, bl);
@@ -1001,7 +1001,7 @@ struct RGWDefaultSystemMetaObjInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(default_id, bl);
     DECODE_FINISH(bl);
@@ -1021,7 +1021,7 @@ struct RGWNameToId {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(obj_id, bl);
     DECODE_FINISH(bl);
@@ -1071,7 +1071,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  virtual void decode(bufferlist::iterator& bl) {
+  virtual void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(id, bl);
     decode(name, bl);
@@ -1124,7 +1124,7 @@ struct RGWZonePlacementInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(6, bl);
     string index_pool_str;
     string data_pool_str;
@@ -1234,7 +1234,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(12, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
@@ -1379,7 +1379,7 @@ struct RGWZone {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(7, bl);
     decode(name, bl);
     if (struct_v < 4) {
@@ -1430,7 +1430,7 @@ struct RGWDefaultZoneGroupInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(default_zonegroup, bl);
     DECODE_FINISH(bl);
@@ -1464,7 +1464,7 @@ struct RGWZoneGroupPlacementTarget {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(name, bl);
     decode(tags, bl);
@@ -1540,7 +1540,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(4, bl);
     decode(name, bl);
     decode(api_name, bl);
@@ -1597,7 +1597,7 @@ struct RGWPeriodMap
   string master_zonegroup;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   int update(const RGWZoneGroup& zonegroup, CephContext *cct);
 
@@ -1626,7 +1626,7 @@ struct RGWPeriodConfig
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(bucket_quota, bl);
     decode(user_quota, bl);
@@ -1658,7 +1658,7 @@ struct RGWRegionMap {
   RGWQuotaInfo user_quota;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -1679,7 +1679,7 @@ struct RGWZoneGroupMap {
   int read(CephContext *cct, RGWRados *store);
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -1705,7 +1705,7 @@ struct objexp_hint_entry {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     // XXX Do we want DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl); ?
     DECODE_START(2, bl);
     decode(bucket_name, bl);
@@ -1745,7 +1745,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) override {
+  void decode(bufferlist::const_iterator& bl) override {
     DECODE_START(1, bl);
     RGWSystemMetaObj::decode(bl);
     decode(current_period, bl);
@@ -1793,7 +1793,7 @@ struct RGWPeriodLatestEpochInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(epoch, bl);
     DECODE_FINISH(bl);
@@ -1945,7 +1945,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(id, bl);
     decode(epoch, bl);

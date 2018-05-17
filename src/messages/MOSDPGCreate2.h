@@ -39,7 +39,7 @@ public:
     encode(pgs, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     using ceph::decode;
     decode(epoch, p);
     decode(pgs, p);

@@ -17,7 +17,7 @@ struct cls_statelog_add_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     DECODE_FINISH(bl);
@@ -45,7 +45,7 @@ struct cls_statelog_list_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(object, bl);
     decode(client_id, bl);
@@ -72,7 +72,7 @@ struct cls_statelog_list_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     decode(marker, bl);
@@ -102,7 +102,7 @@ struct cls_statelog_remove_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(client_id, bl);
     decode(op_id, bl);
@@ -129,7 +129,7 @@ struct cls_statelog_check_state_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(client_id, bl);
     decode(op_id, bl);

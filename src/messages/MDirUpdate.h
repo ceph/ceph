@@ -48,7 +48,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(from_mds, p);
     decode(dirfrag, p);
     decode(dir_rep, p);

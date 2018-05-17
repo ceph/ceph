@@ -25,7 +25,7 @@ struct MConfig : public Message {
 
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(config, p);
   }
 

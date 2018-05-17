@@ -51,7 +51,7 @@ public:
     if (r >= 0) {
       cls_user_list_buckets_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(ret, iter);
         if (entries)
 	  *entries = ret.entries;
@@ -104,7 +104,7 @@ public:
     if (r >= 0) {
       cls_user_get_header_ret ret;
       try {
-        bufferlist::iterator iter = outbl.begin();
+        auto iter = outbl.cbegin();
         decode(ret, iter);
         if (header)
 	  *header = ret.header;

@@ -228,7 +228,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
   // unpack header
   if (r == 0) {
     Header h;
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       decode(h, p);
     } catch (const buffer::error &e) {
@@ -275,7 +275,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   // unpack header
   bool corrupt = false;
   Header h;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   try {
     decode(h, p);
 
@@ -1411,7 +1411,7 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t *need) const
 
   uint32_t entry_size = 0;
   uint64_t entry_sentinel = 0;
-  bufferlist::iterator p = read_buf.begin();
+  auto p = read_buf.cbegin();
 
   // Do we have enough data to decode an entry prefix?
   if (format >= JOURNAL_FORMAT_RESILIENT) {
@@ -1471,7 +1471,7 @@ size_t JournalStream::read(bufferlist &from, bufferlist *entry,
   uint32_t entry_size = 0;
 
   // Consume envelope prefix: entry_size and entry_sentinel
-  bufferlist::iterator from_ptr = from.begin();
+  auto from_ptr = from.cbegin();
   if (format >= JOURNAL_FORMAT_RESILIENT) {
     uint64_t entry_sentinel = 0;
     decode(entry_sentinel, from_ptr);

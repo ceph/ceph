@@ -39,9 +39,9 @@ public:
   void mark_old_encoding() { old_style_encode = true; }
 
   void encode(bufferlist &bl, uint64_t features) const override;
-  void decode_old(bufferlist::iterator &bl);
-  void decode_new(bufferlist::iterator &bl);
-  void decode(bufferlist::iterator &bl) override {
+  void decode_old(bufferlist::const_iterator &bl);
+  void decode_new(bufferlist::const_iterator &bl);
+  void decode(bufferlist::const_iterator &bl) override {
     if (old_style_encode) decode_old(bl);
     else decode_new(bl);
   }

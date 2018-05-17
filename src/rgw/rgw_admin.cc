@@ -984,7 +984,7 @@ BIIndexType get_bi_index_type(const string& type_str) {
 
 void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
 {
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   switch (index_type) {
     case PlainIdx:
     case InstanceIdx:
@@ -1190,7 +1190,7 @@ static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
 {
   T t;
 
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
 
   try {
     decode(t, iter);
@@ -1344,7 +1344,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
 
   try {
     bufferlist& bl = iter->second;
-    bufferlist::iterator biter = bl.begin();
+    auto biter = bl.cbegin();
     decode(manifest, biter);
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode manifest" << dendl;
@@ -7119,7 +7119,7 @@ next:
         for (auto& cls_entry : entries) {
           rgw_sync_error_info log_entry;
 
-          auto iter = cls_entry.data.begin();
+          auto iter = cls_entry.data.cbegin();
           try {
             decode(log_entry, iter);
           } catch (buffer::error& err) {

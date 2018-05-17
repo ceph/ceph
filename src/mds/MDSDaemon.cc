@@ -1385,7 +1385,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
       // Flag for auth providers that don't provide cap strings
       s->auth_caps.set_allow_all();
     } else {
-      bufferlist::iterator p = caps_info.caps.begin();
+      auto p = caps_info.caps.cbegin();
       string auth_cap_str;
       try {
         decode(auth_cap_str, p);

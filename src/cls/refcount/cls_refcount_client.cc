@@ -48,7 +48,7 @@ int cls_refcount_read(librados::IoCtx& io_ctx, string& oid, list<string> *refs, 
 
   cls_refcount_read_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;
@@ -95,7 +95,7 @@ int cls_chunk_refcount_read(librados::IoCtx& io_ctx, string& oid, set<hobject_t>
 
   cls_chunk_refcount_read_ret ret;
   try {
-    bufferlist::iterator iter = out.begin();
+    auto iter = out.cbegin();
     decode(ret, iter);
   } catch (buffer::error& err) {
     return -EIO;

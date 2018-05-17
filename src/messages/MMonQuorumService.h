@@ -54,7 +54,7 @@ public:
     encode(round, payload);
   }
 
-  void service_decode(bufferlist::iterator &p) {
+  void service_decode(bufferlist::const_iterator &p) {
     decode(epoch, p);
     decode(round, p);
   }

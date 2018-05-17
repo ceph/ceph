@@ -52,7 +52,7 @@ public:
       const std::string &prefix,      ///< [in] prefix, or CF name
       bufferlist& to_set_bl           ///< [in] encoded key/values to set
       ) {
-      bufferlist::iterator p = to_set_bl.begin();
+      auto p = std::cbegin(to_set_bl);
       uint32_t num;
       decode(num, p);
       while (num--) {
@@ -83,7 +83,7 @@ public:
       const std::string &prefix,     ///< [in] Prefix or CF to search for
       bufferlist &keys_bl            ///< [in] Keys to remove
     ) {
-      bufferlist::iterator p = keys_bl.begin();
+      auto p = std::cbegin(keys_bl);
       uint32_t num;
       decode(num, p);
       while (num--) {

@@ -599,7 +599,7 @@ public:
     }
     void decode(
       Collection */*coll*/,
-      bufferptr::iterator& p,
+      bufferptr::const_iterator& p,
       bool include_ref_map) {
       const char *start = p.get_pos();
       denc(blob, p);
@@ -639,7 +639,7 @@ public:
     }
     void decode(
       Collection *coll,
-      bufferptr::iterator& p,
+      bufferptr::const_iterator& p,
       uint64_t struct_v,
       uint64_t* sbid,
       bool include_ref_map);
@@ -799,7 +799,7 @@ public:
 
     void bound_encode_spanning_blobs(size_t& p);
     void encode_spanning_blobs(bufferlist::contiguous_appender& p);
-    void decode_spanning_blobs(bufferptr::iterator& p);
+    void decode_spanning_blobs(bufferptr::const_iterator& p);
 
     BlobRef get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
@@ -1480,7 +1480,7 @@ public:
 	values[STATFS_COMPRESSED_ORIGINAL] == 0 &&
 	values[STATFS_COMPRESSED_ALLOCATED] == 0;
     }
-    void decode(bufferlist::iterator& it) {
+    void decode(bufferlist::const_iterator& it) {
       using ceph::decode;
       for (size_t i = 0; i < STATFS_LAST; i++) {
 	decode(values[i], it);

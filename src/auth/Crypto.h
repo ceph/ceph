@@ -79,7 +79,7 @@ public:
   }
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
 
   int get_type() const { return type; }
   utime_t get_created() const { return created; }
@@ -107,7 +107,7 @@ public:
     e.append(s);
     bufferlist bl;
     bl.decode_base64(e);
-    bufferlist::iterator p = bl.begin();
+    auto p = std::cbegin(bl);
     decode(p);
   }
 

@@ -175,7 +175,7 @@ public:
       }
       encode(em, bl);
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       __u32 v;
       decode(v, bl);
@@ -197,7 +197,7 @@ public:
       }
       bufferlist em;
       decode(em, bl);
-      bufferlist::iterator t = em.begin();
+      auto t = em.cbegin();
       decode(flags, t);
       decode(fsid, t);
       decode(block_size, t);

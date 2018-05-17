@@ -1309,7 +1309,7 @@ public:
 	if (p->key()[0] == '_')
 	  continue;
 	bufferlist bl = p->value();//Copy bufferlist before creating iterator
-	bufferlist::iterator bp = bl.begin();
+	auto bp = bl.cbegin();
 	if (p->key() == "divergent_priors") {
 	  decode(divergent_priors, bp);
 	  ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()

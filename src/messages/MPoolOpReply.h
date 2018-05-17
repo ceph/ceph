@@ -65,7 +65,7 @@ public:
       encode(false, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
     decode(replyCode, p);

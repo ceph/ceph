@@ -198,7 +198,7 @@ int main(int argc, const char **argv)
     r = bl.read_file(fn.c_str(), &err);
     if (r >= 0) {
       try {
-	bufferlist::iterator iter = bl.begin();
+	auto iter = bl.cbegin();
 	decode(keyring, iter);
       } catch (const buffer::error &err) {
 	cerr << "error reading file " << fn << std::endl;
@@ -229,7 +229,7 @@ int main(int argc, const char **argv)
     int r = obl.read_file(import_keyring.c_str(), &err);
     if (r >= 0) {
       try {
-	bufferlist::iterator iter = obl.begin();
+	auto iter = obl.cbegin();
 	decode(other, iter);
       } catch (const buffer::error &err) {
 	cerr << "error reading file " << import_keyring << std::endl;

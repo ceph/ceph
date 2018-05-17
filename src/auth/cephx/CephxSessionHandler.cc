@@ -54,7 +54,7 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
     return -1;
   }
 
-  bufferlist::iterator ci = bl_ciphertext.begin();
+  auto ci = bl_ciphertext.cbegin();
   decode(*psig, ci);
 
   ldout(cct, 10) << __func__ << " seq " << m->get_seq()

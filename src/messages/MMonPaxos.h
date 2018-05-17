@@ -109,7 +109,7 @@ public:
     encode(feature_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(epoch, p);
     decode(op, p);
     decode(first_committed, p);

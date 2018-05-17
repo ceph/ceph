@@ -1077,7 +1077,7 @@ void LeaderWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
 
   NotifyMessage notify_message;
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(notify_message, iter);
   } catch (const buffer::error &err) {
     derr << ": error decoding image notification: " << err.what() << dendl;

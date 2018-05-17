@@ -63,7 +63,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void PGMapDigest::decode(bufferlist::iterator& p)
+void PGMapDigest::decode(bufferlist::const_iterator& p)
 {
   DECODE_START(3, p);
   decode(num_pg, p);
@@ -1351,7 +1351,7 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void PGMap::decode(bufferlist::iterator &bl)
+void PGMap::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START(7, bl);
   decode(version, bl);

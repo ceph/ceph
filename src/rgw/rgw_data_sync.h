@@ -46,7 +46,7 @@ struct rgw_data_sync_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(2, bl);
      decode(state, bl);
      decode(num_shards, bl);
@@ -120,7 +120,7 @@ struct rgw_data_sync_marker {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
     decode(state, bl);
     decode(marker, bl);
@@ -184,7 +184,7 @@ struct rgw_data_sync_status {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
     decode(sync_info, bl);
     /* sync markers are decoded separately */
@@ -396,7 +396,7 @@ struct rgw_bucket_shard_full_sync_marker {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
     decode(position, bl);
     decode(count, bl);
@@ -421,7 +421,7 @@ struct rgw_bucket_shard_inc_sync_marker {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
     decode(position, bl);
      DECODE_FINISH(bl);
@@ -459,7 +459,7 @@ struct rgw_bucket_shard_sync_info {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
      decode(state, bl);
      decode(full_marker, bl);

@@ -54,7 +54,7 @@ struct RGWOrphanSearchStage {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     int s;
     decode(s, bl);
@@ -83,7 +83,7 @@ struct RGWOrphanSearchInfo {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(job_name, bl);
     string s;
@@ -111,7 +111,7 @@ struct RGWOrphanSearchState {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(info, bl);
     decode(stage, bl);

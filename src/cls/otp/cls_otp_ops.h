@@ -14,7 +14,7 @@ struct cls_otp_set_otp_op
     encode(entries, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(entries, bl);
     DECODE_FINISH(bl);
@@ -35,7 +35,7 @@ struct cls_otp_check_otp_op
     encode(token, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(id, bl);
     decode(val, bl);
@@ -54,7 +54,7 @@ struct cls_otp_get_result_op
     encode(token, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(token, bl);
     DECODE_FINISH(bl);
@@ -71,7 +71,7 @@ struct cls_otp_get_result_reply
     encode(result, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(result, bl);
     DECODE_FINISH(bl);
@@ -88,7 +88,7 @@ struct cls_otp_remove_otp_op
     encode(ids, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(ids, bl);
     DECODE_FINISH(bl);
@@ -107,7 +107,7 @@ struct cls_otp_get_otp_op
     encode(ids, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(get_all, bl);
     decode(ids, bl);
@@ -125,7 +125,7 @@ struct cls_otp_get_otp_reply
     encode(found_entries, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(found_entries, bl);
     DECODE_FINISH(bl);
@@ -139,7 +139,7 @@ struct cls_otp_get_current_time_op
     ENCODE_START(1, 1, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     DECODE_FINISH(bl);
   }
@@ -155,7 +155,7 @@ struct cls_otp_get_current_time_reply
     encode(time, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(time, bl);
     DECODE_FINISH(bl);

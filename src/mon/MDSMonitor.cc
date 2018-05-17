@@ -210,7 +210,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	derr << "Missing health data for MDS " << gid << dendl;
 	continue;
       }
-      bufferlist::iterator bl_i = bl.begin();
+      auto bl_i = bl.cbegin();
       health.decode(bl_i);
     }
     for (const auto &metric : health.metrics) {
@@ -1618,7 +1618,7 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
     return r;
   }
 
-  bufferlist::iterator it = bl.begin();
+  auto it = bl.cbegin();
   ceph::decode(m, it);
   return 0;
 }

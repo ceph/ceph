@@ -35,7 +35,7 @@ void ImageAddedPayload::encode(bufferlist &bl) const {
   encode(trash_image_spec, bl);
 }
 
-void ImageAddedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void ImageAddedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(image_id, iter);
   decode(trash_image_spec, iter);
@@ -53,7 +53,7 @@ void ImageRemovedPayload::encode(bufferlist &bl) const {
   encode(image_id, bl);
 }
 
-void ImageRemovedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void ImageRemovedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
   using ceph::decode;
   decode(image_id, iter);
 }
@@ -66,7 +66,7 @@ void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
 
-void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void UnknownPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void UnknownPayload::dump(Formatter *f) const {
@@ -78,7 +78,7 @@ void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void NotifyMessage::decode(bufferlist::iterator& iter) {
+void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
 
   uint32_t notify_op;

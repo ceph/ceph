@@ -27,7 +27,7 @@ class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
   ~RGWPeriodPusher() override;
 
   /// respond to realm notifications by pushing new periods to other zones
-  void handle_notify(RGWRealmNotify type, bufferlist::iterator& p) override;
+  void handle_notify(RGWRealmNotify type, bufferlist::const_iterator& p) override;
 
   /// avoid accessing RGWRados while dynamic reconfiguration is in progress.
   /// notifications will be enqueued until resume()

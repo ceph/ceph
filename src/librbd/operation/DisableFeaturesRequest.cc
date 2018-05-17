@@ -242,7 +242,7 @@ Context *DisableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
   ldout(cct, 20) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     *result = cls_client::mirror_mode_get_finish(&it, &m_mirror_mode);
   }
 
@@ -292,7 +292,7 @@ Context *DisableFeaturesRequest<I>::handle_get_mirror_image(int *result) {
   cls::rbd::MirrorImage mirror_image;
 
   if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     *result = cls_client::mirror_image_get_finish(&it, &mirror_image);
   }
 

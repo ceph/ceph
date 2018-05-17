@@ -489,7 +489,7 @@ void CreateRequest<I>::handle_negotiate_features(int r) {
 
   uint64_t all_features;
   if (r >= 0) {
-    bufferlist::iterator it = m_outbl.begin();
+    auto it = m_outbl.cbegin();
     r = cls_client::get_all_features_finish(&it, &all_features);
   }
   if (r < 0) {
@@ -657,7 +657,7 @@ void CreateRequest<I>::handle_fetch_mirror_mode(int r) {
 
   cls::rbd::MirrorMode mirror_mode_internal = cls::rbd::MIRROR_MODE_DISABLED;
   if (r == 0) {
-    bufferlist::iterator it = m_outbl.begin();
+    auto it = m_outbl.cbegin();
     r = cls_client::mirror_mode_get_finish(&it, &mirror_mode_internal);
     if (r < 0) {
       lderr(m_cct) << "Failed to retrieve mirror mode" << dendl;

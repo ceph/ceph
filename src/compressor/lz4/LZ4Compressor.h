@@ -76,11 +76,11 @@ class LZ4Compressor : public Compressor {
     if (qat_enabled)
       return qat_accel.decompress(src, dst);
 #endif
-    bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
+    auto i = std::cbegin(src);
     return decompress(i, src.length(), dst);
   }
 
-  int decompress(bufferlist::iterator &p,
+  int decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) override {
 #ifdef HAVE_QATZIP

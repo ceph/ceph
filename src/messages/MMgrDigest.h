@@ -36,7 +36,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(mon_status_json, p);
     decode(health_json, p);
   }

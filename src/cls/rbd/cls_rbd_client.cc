@@ -25,7 +25,7 @@ namespace librbd {
       op->exec("rbd", "get_features", features_bl);
     }
 
-    int get_initial_metadata_finish(bufferlist::iterator *it,
+    int get_initial_metadata_finish(bufferlist::const_iterator *it,
                                     std::string *object_prefix,
                                     uint8_t *order,
                                     uint64_t *features) {
@@ -59,7 +59,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_initial_metadata_finish(&it, object_prefix, order, features);
     }
 
@@ -83,7 +83,7 @@ namespace librbd {
       rados::cls::lock::get_lock_info_start(op, RBD_LOCK_NAME);
     }
 
-    int get_mutable_metadata_finish(bufferlist::iterator *it,
+    int get_mutable_metadata_finish(bufferlist::const_iterator *it,
                                     uint64_t *size, uint64_t *features,
                                     uint64_t *incompatible_features,
                                     std::map<rados::cls::lock::locker_id_t,
@@ -146,7 +146,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_mutable_metadata_finish(&it, size, features,
                                          incompatible_features, lockers,
                                          exclusive_lock, lock_tag, snapc,
@@ -188,7 +188,7 @@ namespace librbd {
 	return r;
 
       try {
-	bufferlist::iterator iter = outbl.begin();
+	auto iter = outbl.cbegin();
 	decode(*features, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -225,7 +225,7 @@ namespace librbd {
 	return r;
 
       try {
-	bufferlist::iterator iter = outbl.begin();
+	auto iter = outbl.cbegin();
 	decode(*object_prefix, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -239,7 +239,7 @@ namespace librbd {
       op->exec("rbd", "get_data_pool", bl);
     }
 
-    int get_data_pool_finish(bufferlist::iterator *it, int64_t *data_pool_id) {
+    int get_data_pool_finish(bufferlist::const_iterator *it, int64_t *data_pool_id) {
       try {
 	decode(*data_pool_id, *it);
       } catch (const buffer::error &err) {
@@ -259,7 +259,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_data_pool_finish(&it, data_pool_id);
     }
 
@@ -274,7 +274,7 @@ namespace librbd {
 	return r;
 
       try {
-	bufferlist::iterator iter = outbl.begin();
+	auto iter = outbl.cbegin();
 	decode(*order, iter);
 	decode(*size, iter);
       } catch (const buffer::error &err) {
@@ -306,7 +306,7 @@ namespace librbd {
       op->exec("rbd", "get_parent", bl);
     }
 
-    int get_parent_finish(bufferlist::iterator *it, ParentSpec *pspec,
+    int get_parent_finish(bufferlist::const_iterator *it, ParentSpec *pspec,
                           uint64_t *parent_overlap)
     {
       try {
@@ -333,7 +333,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_parent_finish(&it, pspec, parent_overlap);
     }
 
@@ -370,7 +370,7 @@ namespace librbd {
 
     }
 
-    int get_flags_finish(bufferlist::iterator *it, uint64_t *flags,
+    int get_flags_finish(bufferlist::const_iterator *it, uint64_t *flags,
                          const std::vector<snapid_t> &snap_ids,
                          std::vector<uint64_t> *snap_flags) {
       snap_flags->resize(snap_ids.size());
@@ -398,7 +398,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_flags_finish(&it, flags, snap_ids, snap_flags);
     }
 
@@ -418,7 +418,7 @@ namespace librbd {
       op->exec("rbd", "op_features_get", in_bl);
     }
 
-    int op_features_get_finish(bufferlist::iterator *it, uint64_t *op_features)
+    int op_features_get_finish(bufferlist::const_iterator *it, uint64_t *op_features)
     {
       try {
         decode(*op_features, *it);
@@ -440,7 +440,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return op_features_get_finish(&it, op_features);
     }
 
@@ -523,7 +523,7 @@ namespace librbd {
       op->exec("rbd", "get_children", in_bl);
     }
 
-    int get_children_finish(bufferlist::iterator *it,
+    int get_children_finish(bufferlist::const_iterator *it,
                             std::set<std::string>* children) {
       try {
         decode(*children, *it);
@@ -545,7 +545,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_children_finish(&it, &children);
     }
 
@@ -562,7 +562,7 @@ namespace librbd {
       }
     }
 
-    int snapshot_get_finish(bufferlist::iterator *it,
+    int snapshot_get_finish(bufferlist::const_iterator *it,
                             const std::vector<snapid_t> &ids,
                             std::vector<cls::rbd::SnapshotInfo>* snaps,
                             std::vector<ParentInfo> *parents,
@@ -609,7 +609,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return snapshot_get_finish(&it, ids, snaps, parents, protection_statuses);
     }
 
@@ -655,7 +655,7 @@ namespace librbd {
       op->exec("rbd", "get_snapcontext", bl);
     }
 
-    int get_snapcontext_finish(bufferlist::iterator *it,
+    int get_snapcontext_finish(bufferlist::const_iterator *it,
                                ::SnapContext *snapc)
     {
       try {
@@ -681,7 +681,7 @@ namespace librbd {
 	return r;
       }
 
-      auto bl_it = out_bl.begin();
+      auto bl_it = out_bl.cbegin();
       return get_snapcontext_finish(&bl_it, snapc);
     }
 
@@ -698,7 +698,7 @@ namespace librbd {
       }
     }
 
-    int snapshot_list_finish(bufferlist::iterator *it,
+    int snapshot_list_finish(bufferlist::const_iterator *it,
                              const std::vector<snapid_t> &ids,
                              std::vector<string> *names,
                              std::vector<uint64_t> *sizes,
@@ -753,7 +753,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return snapshot_list_finish(&it, ids, names, sizes, parents,
                                   protection_statuses);
     }
@@ -768,7 +768,7 @@ namespace librbd {
       }
     }
 
-    int snapshot_timestamp_list_finish(bufferlist::iterator *it,
+    int snapshot_timestamp_list_finish(bufferlist::const_iterator *it,
                                        const std::vector<snapid_t> &ids,
                                        std::vector<utime_t> *timestamps)
     {
@@ -798,7 +798,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return snapshot_timestamp_list_finish(&it, ids, timestamps);
     }
 
@@ -833,7 +833,7 @@ namespace librbd {
       op->exec("rbd", "snap_list", in_bl);
     }
 
-    int old_snapshot_list_finish(bufferlist::iterator *it,
+    int old_snapshot_list_finish(bufferlist::const_iterator *it,
                                  std::vector<string> *names,
                                  std::vector<uint64_t> *sizes,
                                  ::SnapContext *snapc) {
@@ -870,7 +870,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return old_snapshot_list_finish(&it, names, sizes, snapc);
     }
 
@@ -879,7 +879,7 @@ namespace librbd {
       op->exec("rbd", "get_all_features", in);
     }
 
-    int get_all_features_finish(bufferlist::iterator *it,
+    int get_all_features_finish(bufferlist::const_iterator *it,
                                 uint64_t *all_features) {
       try {
 	decode(*all_features, *it);
@@ -900,7 +900,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_all_features_finish(&it, all_features);
     }
 
@@ -918,7 +918,7 @@ namespace librbd {
       op->exec("rbd", "get_protection_status", bl);
     }
 
-    int get_protection_status_finish(bufferlist::iterator *it,
+    int get_protection_status_finish(bufferlist::const_iterator *it,
                                      uint8_t *protection_status)
     {
       try {
@@ -941,7 +941,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_protection_status_finish(&it, protection_status);
     }
 
@@ -974,7 +974,7 @@ namespace librbd {
       }
 
       try {
-	bufferlist::iterator iter = out.begin();
+	auto iter = out.cbegin();
 	decode(*limit, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -995,7 +995,7 @@ namespace librbd {
       op->exec("rbd", "get_stripe_unit_count", empty_bl);
     }
 
-    int get_stripe_unit_count_finish(bufferlist::iterator *it,
+    int get_stripe_unit_count_finish(bufferlist::const_iterator *it,
                                      uint64_t *stripe_unit,
                                      uint64_t *stripe_count) {
       assert(stripe_unit);
@@ -1022,7 +1022,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_stripe_unit_count_finish(&it, stripe_unit, stripe_count);
     }
 
@@ -1050,7 +1050,7 @@ namespace librbd {
       op->exec("rbd", "get_create_timestamp", empty_bl);
     }
 
-    int get_create_timestamp_finish(bufferlist::iterator *it,
+    int get_create_timestamp_finish(bufferlist::const_iterator *it,
                                     utime_t *timestamp) {
       assert(timestamp);
 
@@ -1074,7 +1074,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_create_timestamp_finish(&it, timestamp);
     }
 
@@ -1085,7 +1085,7 @@ namespace librbd {
       op->exec("rbd", "get_id", empty_bl);
     }
 
-    int get_id_finish(bufferlist::iterator *it, std::string *id) {
+    int get_id_finish(bufferlist::const_iterator *it, std::string *id) {
       try {
 	decode(*id, *it);
       } catch (const buffer::error &err) {
@@ -1105,7 +1105,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return get_id_finish(&it, id);
     }
 
@@ -1134,7 +1134,7 @@ namespace librbd {
       op->exec("rbd", "dir_get_id", bl);
     }
 
-    int dir_get_id_finish(bufferlist::iterator *iter, std::string *image_id) {
+    int dir_get_id_finish(bufferlist::const_iterator *iter, std::string *image_id) {
       try {
         decode(*image_id, *iter);
       } catch (const buffer::error &err) {
@@ -1155,7 +1155,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       return dir_get_id_finish(&iter, id);
     }
 
@@ -1166,7 +1166,7 @@ namespace librbd {
       op->exec("rbd", "dir_get_name", in_bl);
     }
 
-    int dir_get_name_finish(bufferlist::iterator *it, std::string *name) {
+    int dir_get_name_finish(bufferlist::const_iterator *it, std::string *name) {
       try {
 	decode(*name, *it);
       } catch (const buffer::error &err) {
@@ -1186,7 +1186,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return dir_get_name_finish(&it, name);
     }
 
@@ -1200,7 +1200,7 @@ namespace librbd {
       op->exec("rbd", "dir_list", in_bl);
     }
 
-    int dir_list_finish(bufferlist::iterator *it, map<string, string> *images)
+    int dir_list_finish(bufferlist::const_iterator *it, map<string, string> *images)
     {
       try {
         decode(*images, *it);
@@ -1223,7 +1223,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       return dir_list_finish(&iter, images);
     }
 
@@ -1280,7 +1280,7 @@ namespace librbd {
       op->exec("rbd", "object_map_load", in_bl);
     }
 
-    int object_map_load_finish(bufferlist::iterator *it,
+    int object_map_load_finish(bufferlist::const_iterator *it,
                                ceph::BitVector<2> *object_map) {
       try {
         decode(*object_map, *it);
@@ -1302,7 +1302,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return object_map_load_finish(&it, object_map);
     }
 
@@ -1405,7 +1405,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return metadata_list_finish(&it, pairs);
     }
 
@@ -1418,7 +1418,7 @@ namespace librbd {
       op->exec("rbd", "metadata_list", in_bl);
     }
 
-    int metadata_list_finish(bufferlist::iterator *it,
+    int metadata_list_finish(bufferlist::const_iterator *it,
                              std::map<std::string, bufferlist> *pairs)
     {
       assert(pairs);
@@ -1440,7 +1440,7 @@ namespace librbd {
       if (r < 0)
         return r;
 
-      bufferlist::iterator iter = out.begin();
+      auto iter = out.cbegin();
       try {
         decode(*s, iter);
       } catch (const buffer::error &err) {
@@ -1504,7 +1504,7 @@ namespace librbd {
       op->exec("rbd", "children_list", bl);
     }
 
-    int children_list_finish(bufferlist::iterator *it,
+    int children_list_finish(bufferlist::const_iterator *it,
                              cls::rbd::ChildImageSpecs *child_images)
     {
       child_images->clear();
@@ -1529,7 +1529,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       r = children_list_finish(&it, child_images);
       if (r < 0) {
         return r;
@@ -1542,7 +1542,7 @@ namespace librbd {
       op->exec("rbd", "mirror_uuid_get", bl);
     }
 
-    int mirror_uuid_get_finish(bufferlist::iterator *it,
+    int mirror_uuid_get_finish(bufferlist::const_iterator *it,
                                std::string *uuid) {
       try {
         decode(*uuid, *it);
@@ -1562,7 +1562,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       r = mirror_uuid_get_finish(&it, uuid);
       if (r < 0) {
         return r;
@@ -1588,7 +1588,7 @@ namespace librbd {
       op->exec("rbd", "mirror_mode_get", bl);
     }
 
-    int mirror_mode_get_finish(bufferlist::iterator *it,
+    int mirror_mode_get_finish(bufferlist::const_iterator *it,
 			       cls::rbd::MirrorMode *mirror_mode) {
       try {
 	uint32_t mirror_mode_decode;
@@ -1615,7 +1615,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       r = mirror_mode_get_finish(&it, mirror_mode);
       if (r < 0) {
         return r;
@@ -1649,7 +1649,7 @@ namespace librbd {
 
       peers->clear();
       try {
-        bufferlist::iterator bl_it = out_bl.begin();
+        auto bl_it = out_bl.cbegin();
         decode(*peers, bl_it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
@@ -1728,7 +1728,7 @@ namespace librbd {
       op->exec("rbd", "mirror_image_list", in_bl);
     }
 
-    int mirror_image_list_finish(bufferlist::iterator *it,
+    int mirror_image_list_finish(bufferlist::const_iterator *it,
                                  std::map<string, string> *mirror_image_ids)
     {
       try {
@@ -1751,7 +1751,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator bl_it = out_bl.begin();
+      auto bl_it = out_bl.cbegin();
       return mirror_image_list_finish(&bl_it, mirror_image_ids);
     }
 
@@ -1762,7 +1762,7 @@ namespace librbd {
       op->exec( "rbd", "mirror_image_get_image_id", in_bl);
     }
 
-    int mirror_image_get_image_id_finish(bufferlist::iterator *it,
+    int mirror_image_get_image_id_finish(bufferlist::const_iterator *it,
                                          std::string *image_id) {
       try {
 	decode(*image_id, *it);
@@ -1784,7 +1784,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return mirror_image_get_image_id_finish(&it, image_id);
     }
 
@@ -1799,7 +1799,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       r = mirror_image_get_finish(&iter, mirror_image);
       if (r < 0) {
         return r;
@@ -1815,7 +1815,7 @@ namespace librbd {
       op->exec("rbd", "mirror_image_get", in_bl);
     }
 
-    int mirror_image_get_finish(bufferlist::iterator *iter,
+    int mirror_image_get_finish(bufferlist::const_iterator *iter,
 			        cls::rbd::MirrorImage *mirror_image) {
       try {
         decode(*mirror_image, *iter);
@@ -1909,7 +1909,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       r = mirror_image_status_get_finish(&iter, status);
       if (r < 0) {
 	return r;
@@ -1924,7 +1924,7 @@ namespace librbd {
       op->exec("rbd", "mirror_image_status_get", bl);
     }
 
-    int mirror_image_status_get_finish(bufferlist::iterator *iter,
+    int mirror_image_status_get_finish(bufferlist::const_iterator *iter,
 				       cls::rbd::MirrorImageStatus *status) {
       try {
 	decode(*status, *iter);
@@ -1947,7 +1947,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       r = mirror_image_status_list_finish(&iter, images, statuses);
       if (r < 0) {
 	return r;
@@ -1964,7 +1964,7 @@ namespace librbd {
       op->exec("rbd", "mirror_image_status_list", bl);
     }
 
-    int mirror_image_status_list_finish(bufferlist::iterator *iter,
+    int mirror_image_status_list_finish(bufferlist::const_iterator *iter,
 	std::map<std::string, cls::rbd::MirrorImage> *images,
 	std::map<std::string, cls::rbd::MirrorImageStatus> *statuses) {
       images->clear();
@@ -1989,7 +1989,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       r = mirror_image_status_get_summary_finish(&iter, states);
       if (r < 0) {
 	return r;
@@ -2003,7 +2003,7 @@ namespace librbd {
       op->exec("rbd", "mirror_image_status_get_summary", bl);
     }
 
-    int mirror_image_status_get_summary_finish(bufferlist::iterator *iter,
+    int mirror_image_status_get_summary_finish(bufferlist::const_iterator *iter,
 	std::map<cls::rbd::MirrorImageStatusState, int> *states) {
       try {
 	decode(*states, *iter);
@@ -2029,7 +2029,7 @@ namespace librbd {
       op->exec("rbd", "mirror_instances_list", bl);
     }
 
-    int mirror_instances_list_finish(bufferlist::iterator *iter,
+    int mirror_instances_list_finish(bufferlist::const_iterator *iter,
                                      std::vector<std::string> *instance_ids) {
       instance_ids->clear();
       try {
@@ -2051,7 +2051,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       r = mirror_instances_list_finish(&iter, instance_ids);
       if (r < 0) {
 	return r;
@@ -2097,7 +2097,7 @@ namespace librbd {
       op->exec("rbd", "mirror_image_map_list", bl);
     }
 
-    int mirror_image_map_list_finish(bufferlist::iterator *iter,
+    int mirror_image_map_list_finish(bufferlist::const_iterator *iter,
                                      std::map<std::string, cls::rbd::MirrorImageMap> *image_mapping) {
       try {
         decode(*image_mapping, *iter);
@@ -2137,7 +2137,7 @@ namespace librbd {
       if (r < 0)
 	return r;
 
-      bufferlist::iterator iter = out.begin();
+      auto iter = out.cbegin();
       try {
 	decode(*cgs, iter);
       } catch (const buffer::error &err) {
@@ -2199,7 +2199,7 @@ namespace librbd {
       if (r < 0)
 	return r;
 
-      bufferlist::iterator iter = bl2.begin();
+      auto iter = bl2.cbegin();
       try {
 	decode(*images, iter);
       } catch (const buffer::error &err) {
@@ -2242,7 +2242,7 @@ namespace librbd {
       op->exec("rbd", "image_group_get", in_bl);
     }
 
-    int image_group_get_finish(bufferlist::iterator *iter,
+    int image_group_get_finish(bufferlist::const_iterator *iter,
                                cls::rbd::GroupSpec *group_spec)
     {
       try {
@@ -2265,7 +2265,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       return image_group_get_finish(&iter, group_spec);
     }
 
@@ -2302,7 +2302,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator iter = outbl.begin();
+      auto iter = outbl.cbegin();
       try {
 	decode(*snapshot, iter);
       } catch (const buffer::error &err) {
@@ -2326,7 +2326,7 @@ namespace librbd {
       if (r < 0) {
 	return r;
       }
-      bufferlist::iterator iter = outbl.begin();
+      auto iter = outbl.cbegin();
       try {
 	decode(*snapshots, iter);
       } catch (const buffer::error &err) {
@@ -2381,7 +2381,7 @@ namespace librbd {
       op->exec("rbd", "trash_list", bl);
     }
 
-    int trash_list_finish(bufferlist::iterator *it,
+    int trash_list_finish(bufferlist::const_iterator *it,
                           map<string, cls::rbd::TrashImageSpec> *entries)
     {
       assert(entries);
@@ -2408,7 +2408,7 @@ namespace librbd {
 	return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       return trash_list_finish(&iter, entries);
     }
 
@@ -2420,7 +2420,7 @@ namespace librbd {
       op->exec("rbd", "trash_get", bl);
     }
 
-    int trash_get_finish(bufferlist::iterator *it,
+    int trash_get_finish(bufferlist::const_iterator *it,
                           cls::rbd::TrashImageSpec *trash_spec) {
       assert(trash_spec);
       try {
@@ -2445,7 +2445,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       return trash_get_finish(&it, trash_spec);
     }
 

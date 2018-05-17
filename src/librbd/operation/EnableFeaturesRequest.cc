@@ -147,7 +147,7 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
 
   cls::rbd::MirrorMode mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     *result = cls_client::mirror_mode_get_finish(&it, &mirror_mode);
   } else if (*result == -ENOENT) {
     *result = 0;

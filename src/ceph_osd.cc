@@ -229,7 +229,7 @@ int main(int argc, const char **argv)
 
     if (bl.read_file(dump_pg_log.c_str(), &error) >= 0) {
       pg_log_entry_t e;
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       while (!p.end()) {
 	uint64_t pos = p.get_off();
 	try {

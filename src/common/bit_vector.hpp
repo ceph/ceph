@@ -187,21 +187,21 @@ public:
   ConstReference operator[](uint64_t offset) const;
 
   void encode_header(bufferlist& bl) const;
-  void decode_header(bufferlist::iterator& it);
+  void decode_header(bufferlist::const_iterator& it);
   uint64_t get_header_length() const;
 
   void encode_data(bufferlist& bl, uint64_t byte_offset,
 		   uint64_t byte_length) const;
-  void decode_data(bufferlist::iterator& it, uint64_t byte_offset);
+  void decode_data(bufferlist::const_iterator& it, uint64_t byte_offset);
   void get_data_extents(uint64_t offset, uint64_t length,
 		        uint64_t *byte_offset, uint64_t *byte_length) const;
 
   void encode_footer(bufferlist& bl) const;
-  void decode_footer(bufferlist::iterator& it);
+  void decode_footer(bufferlist::const_iterator& it);
   uint64_t get_footer_offset() const;
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
+  void decode(bufferlist::const_iterator& it);
   void dump(Formatter *f) const;
 
   bool operator==(const BitVector &b) const;
@@ -280,12 +280,12 @@ void BitVector<_b>::encode_header(bufferlist& bl) const {
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_header(bufferlist::iterator& it) {
+void BitVector<_b>::decode_header(bufferlist::const_iterator& it) {
   using ceph::decode;
   bufferlist header_bl;
   decode(header_bl, it);
 
-  bufferlist::iterator header_it = header_bl.begin();
+  auto header_it = header_bl.cbegin();
   uint64_t size;
   DECODE_START(1, header_it);
   decode(size, header_it);
@@ -322,7 +322,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) {
+void BitVector<_b>::decode_data(bufferlist::const_iterator& it, uint64_t byte_offset) {
   assert(byte_offset % BLOCK_SIZE == 0);
   if (it.end()) {
     return;
@@ -396,14 +396,14 @@ void BitVector<_b>::encode_footer(bufferlist& bl) const {
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode_footer(bufferlist::iterator& it) {
+void BitVector<_b>::decode_footer(bufferlist::const_iterator& it) {
   using ceph::decode;
   bufferlist footer_bl;
   decode(footer_bl, it);
 
   m_crc_enabled = (footer_bl.length() > 0);
   if (m_crc_enabled) {
-    bufferlist::iterator footer_it = footer_bl.begin();
+    auto footer_it = footer_bl.cbegin();
 
     __u32 header_crc;
     decode(header_crc, footer_it);
@@ -432,7 +432,7 @@ void BitVector<_b>::encode(bufferlist& bl) const {
 }
 
 template <uint8_t _b>
-void BitVector<_b>::decode(bufferlist::iterator& it) {
+void BitVector<_b>::decode(bufferlist::const_iterator& it) {
   decode_header(it);
 
   bufferlist data_bl;
@@ -442,7 +442,7 @@ void BitVector<_b>::decode(bufferlist::iterator& it) {
 
   decode_footer(it);
 
-  bufferlist::iterator data_it = data_bl.begin();
+  auto data_it = data_bl.cbegin();
   decode_data(data_it, 0);
 }
 

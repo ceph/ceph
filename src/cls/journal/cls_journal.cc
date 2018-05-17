@@ -63,7 +63,7 @@ int read_key(cls_method_context_t hctx, const string &key, T *t,
   }
 
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(*t, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
@@ -121,7 +121,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
       }
 
       cls::journal::Client client;
-      bufferlist::iterator iter = val.second.begin();
+      auto iter = val.second.cbegin();
       try {
         decode(client, iter);
       } catch (const buffer::error &err) {
@@ -170,7 +170,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
 
     for (auto &val : vals) {
       cls::journal::Tag tag;
-      bufferlist::iterator iter = val.second.begin();
+      auto iter = val.second.cbegin();
       try {
         decode(tag, iter);
       } catch (const buffer::error &err) {
@@ -231,7 +231,7 @@ int get_client_list_range(cls_method_context_t hctx,
   for (std::map<std::string, bufferlist>::iterator it = vals.begin();
        it != vals.end(); ++it) {
     try {
-      bufferlist::iterator iter = it->second.begin();
+      auto iter = it->second.cbegin();
 
       cls::journal::Client client;
       decode(client, iter);
@@ -306,7 +306,7 @@ int journal_create(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   uint8_t splay_width;
   int64_t pool_id;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(order, iter);
     decode(splay_width, iter);
     decode(pool_id, iter);
@@ -454,7 +454,7 @@ int journal_set_minimum_set(cls_method_context_t hctx, bufferlist *in,
                             bufferlist *out) {
   uint64_t object_set;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(object_set, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
@@ -525,7 +525,7 @@ int journal_set_active_set(cls_method_context_t hctx, bufferlist *in,
                            bufferlist *out) {
   uint64_t object_set;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(object_set, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
@@ -577,7 +577,7 @@ int journal_get_client(cls_method_context_t hctx, bufferlist *in,
                        bufferlist *out) {
   std::string id;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(id, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
@@ -608,7 +608,7 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
   std::string id;
   bufferlist data;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(id, iter);
     decode(data, iter);
   } catch (const buffer::error &err) {
@@ -658,7 +658,7 @@ int journal_client_update_data(cls_method_context_t hctx, bufferlist *in,
   std::string id;
   bufferlist data;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(id, iter);
     decode(data, iter);
   } catch (const buffer::error &err) {
@@ -695,7 +695,7 @@ int journal_client_update_state(cls_method_context_t hctx, bufferlist *in,
   cls::journal::ClientState state;
   bufferlist data;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(id, iter);
     uint8_t state_raw;
     decode(state_raw, iter);
@@ -731,7 +731,7 @@ int journal_client_unregister(cls_method_context_t hctx, bufferlist *in,
                               bufferlist *out) {
   std::string id;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(id, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
@@ -773,7 +773,7 @@ int journal_client_commit(cls_method_context_t hctx, bufferlist *in,
   std::string id;
   cls::journal::ObjectSetPosition commit_position;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(id, iter);
     decode(commit_position, iter);
   } catch (const buffer::error &err) {
@@ -824,7 +824,7 @@ int journal_client_list(cls_method_context_t hctx, bufferlist *in,
   std::string start_after;
   uint64_t max_return;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(start_after, iter);
     decode(max_return, iter);
   } catch (const buffer::error &err) {
@@ -872,7 +872,7 @@ int journal_get_tag(cls_method_context_t hctx, bufferlist *in,
                     bufferlist *out) {
   uint64_t tag_tid;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(tag_tid, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
@@ -905,7 +905,7 @@ int journal_tag_create(cls_method_context_t hctx, bufferlist *in,
   uint64_t tag_class;
   bufferlist data;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(tag_tid, iter);
     decode(tag_class, iter);
     decode(data, iter);
@@ -999,7 +999,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
   // handle compiler false positive about use-before-init
   tag_class = boost::none;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(start_after_tag_tid, iter);
     decode(max_return, iter);
     decode(client_id, iter);
@@ -1042,7 +1042,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
 
     for (auto &val : vals) {
       cls::journal::Tag tag;
-      bufferlist::iterator iter = val.second.begin();
+      auto iter = val.second.cbegin();
       try {
         decode(tag, iter);
       } catch (const buffer::error &err) {
@@ -1097,7 +1097,7 @@ int journal_object_guard_append(cls_method_context_t hctx, bufferlist *in,
                                 bufferlist *out) {
   uint64_t soft_max_size;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(soft_max_size, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());

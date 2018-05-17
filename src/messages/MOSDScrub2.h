@@ -47,7 +47,7 @@ public:
     encode(deep, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(epoch, p);
     decode(scrub_pgs, p);

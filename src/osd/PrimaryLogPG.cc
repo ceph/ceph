@@ -817,7 +817,7 @@ void PrimaryLogPG::maybe_force_recovery()
 class PGLSPlainFilter : public PGLSFilter {
   string val;
 public:
-  int init(bufferlist::iterator &params) override
+  int init(bufferlist::const_iterator &params) override
   {
     try {
       decode(xattr, params);
@@ -840,7 +840,7 @@ public:
   explicit PGLSParentFilter(CephContext* cct) : cct(cct) {
     xattr = "_parent";
   }
-  int init(bufferlist::iterator &params) override
+  int init(bufferlist::const_iterator &params) override
   {
     try {
       decode(parent_ino, params);
@@ -859,7 +859,7 @@ public:
 bool PGLSParentFilter::filter(const hobject_t &obj,
                               bufferlist& xattr_data, bufferlist& outdata)
 {
-  bufferlist::iterator iter = xattr_data.begin();
+  auto iter = xattr_data.cbegin();
   inode_backtrace_t bt;
 
   generic_dout(0) << "PGLSParentFilter::filter" << dendl;
@@ -911,7 +911,7 @@ bool PrimaryLogPG::pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& 
   return filter->filter(sobj, bl, outdata);
 }
 
-int PrimaryLogPG::get_pgls_filter(bufferlist::iterator& iter, PGLSFilter **pfilter)
+int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter **pfilter)
 {
   string type;
   PGLSFilter *filter;
@@ -1189,7 +1189,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
     OSDOp& osd_op = *p;
-    bufferlist::iterator bp = p->indata.begin();
+    auto bp = p->indata.cbegin();
     switch (p->op.op) {
     case CEPH_OSD_OP_PGNLS_FILTER:
       try {
@@ -1581,7 +1581,7 @@ int PrimaryLogPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
     dout(10) << " scrubls pg=" << m->get_pg() << " != " << info.pgid << dendl;
     return -EINVAL; // hmm?
   }
-  auto bp = osd_op->indata.begin();
+  auto bp = osd_op->indata.cbegin();
   scrub_ls_arg_t arg;
   try {
     arg.decode(bp);
@@ -4143,7 +4143,7 @@ void PrimaryLogPG::do_scan(
       BackfillInterval& bi = peer_backfill_info[from];
       bi.begin = m->begin;
       bi.end = m->end;
-      bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
+      auto p = m->get_data().cbegin();
 
       // take care to preserve ordering!
       bi.clear_objects();
@@ -4654,14 +4654,14 @@ int PrimaryLogPG::do_tmap2omap(OpContext *ctx, unsigned flags)
   return do_osd_ops(ctx, ops);
 }
 
-int PrimaryLogPG::do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op,
-				    bufferlist& bl)
+int PrimaryLogPG::do_tmapup_slow(OpContext *ctx, bufferlist::const_iterator& bp,
+				 OSDOp& osd_op, bufferlist& bl)
 {
   // decode
   bufferlist header;
   map<string, bufferlist> m;
   if (bl.length()) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(header, p);
     decode(m, p);
     assert(p.end());
@@ -4720,9 +4720,9 @@ int PrimaryLogPG::do_tmapup_slow(OpContext *ctx, bufferlist::iterator& bp, OSDOp
   return 0;
 }
 
-int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd_op)
+int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::const_iterator& bp, OSDOp& osd_op)
 {
-  bufferlist::iterator orig_bp = bp;
+  bufferlist::const_iterator orig_bp = bp;
   int result = 0;
   if (bp.end()) {
     dout(10) << "tmapup is a no-op" << dendl;
@@ -4741,7 +4741,7 @@ int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
     newop.outdata.hexdump(*_dout);
     *_dout << dendl;
 
-    bufferlist::iterator ip = newop.outdata.begin();
+    auto ip = newop.outdata.cbegin();
     bufferlist obl;
 
     dout(30) << "the update command is: \n";
@@ -4887,7 +4887,7 @@ int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
       *_dout << dendl;
 
       // sanity check
-      bufferlist::iterator tp = obl.begin();
+      auto tp = obl.cbegin();
       bufferlist h;
       decode(h, tp);
       map<string,bufferlist> d;
@@ -5068,7 +5068,7 @@ struct C_ChecksumRead : public Context {
     fill_extent_ctx = nullptr;
 
     if (osd_op.rval >= 0) {
-      bufferlist::iterator init_value_bl_it = init_value_bl.begin();
+      bufferlist::const_iterator init_value_bl_it = init_value_bl.begin();
       osd_op.rval = primary_log_pg->finish_checksum(osd_op, csum_type,
 						    &init_value_bl_it, read_bl);
     }
@@ -5076,7 +5076,7 @@ struct C_ChecksumRead : public Context {
 };
 
 int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
-			      bufferlist::iterator *bl_it)
+			      bufferlist::const_iterator *bl_it)
 {
   dout(20) << __func__ << dendl;
 
@@ -5185,14 +5185,14 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
     }
   }
 
-  bufferlist::iterator init_value_bl_it = init_value_bl.begin();
+  bufferlist::const_iterator init_value_bl_it = init_value_bl.begin();
   return finish_checksum(osd_op, csum_type, &init_value_bl_it,
 			 read_op.outdata);
 }
 
 int PrimaryLogPG::finish_checksum(OSDOp& osd_op,
 				  Checksummer::CSumType csum_type,
-				  bufferlist::iterator *init_value_bl_it,
+				  bufferlist::const_iterator *init_value_bl_it,
 				  const bufferlist &read_bl) {
   dout(20) << __func__ << dendl;
 
@@ -5630,7 +5630,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     dout(10) << "do_osd_op  " << osd_op << dendl;
 
-    bufferlist::iterator bp = osd_op.indata.begin();
+    auto bp = osd_op.indata.cbegin();
 
     // user-visible modifcation?
     switch (op.op) {
@@ -6485,7 +6485,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           result = -EEXIST; /* this is an exclusive create */
 	} else {
 	  if (osd_op.indata.length()) {
-	    bufferlist::iterator p = osd_op.indata.begin();
+	    auto p = osd_op.indata.cbegin();
 	    string category;
 	    try {
 	      decode(category, p);
@@ -7376,7 +7376,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (cct->_conf->subsys.should_gather<dout_subsys, 20>()) {
 	  dout(20) << "setting vals: " << dendl;
 	  map<string,bufferlist> to_set;
-	  bufferlist::iterator pt = to_set_bl.begin();
+	  bufferlist::const_iterator pt = to_set_bl.begin();
 	  decode(to_set, pt);
 	  for (map<string, bufferlist>::iterator i = to_set.begin();
 	       i != to_set.end();
@@ -7570,7 +7570,7 @@ int PrimaryLogPG::_get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals
   newop.op.op = CEPH_OSD_OP_TMAPGET;
   do_osd_ops(ctx, nops);
   try {
-    bufferlist::iterator i = newop.outdata.begin();
+    bufferlist::const_iterator i = newop.outdata.begin();
     decode(*header, i);
     (*vals).substr_of(newop.outdata, i.get_off(), i.get_remaining());
   } catch (...) {
@@ -8505,7 +8505,7 @@ struct C_CopyChunk : public Context {
   }
 };
 
-int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
+int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 			      OSDOp& osd_op, ObjectContextRef &obc)
 {
   object_info_t& oi = obc->obs.oi;
@@ -9276,7 +9276,7 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
       }
       if (cop->omap_data.length()) {
 	map<string,bufferlist> omap;
-	bufferlist::iterator p = cop->omap_data.begin();
+	bufferlist::const_iterator p = cop->omap_data.begin();
 	decode(omap, p);
 	t->omap_setkeys(cop->results.temp_oid, omap);
 	cop->omap_data.clear();
@@ -10790,7 +10790,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
 
     object_info_t oi;
     try {
-      bufferlist::iterator bliter = bv.begin();
+      bufferlist::const_iterator bliter = bv.begin();
       decode(oi, bliter);
     } catch (...) {
       dout(0) << __func__ << ": obc corrupt: " << soid << dendl;
@@ -11168,7 +11168,7 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
     ssc = new SnapSetContext(oid.get_snapdir());
     _register_snapset_context(ssc);
     if (bv.length()) {
-      bufferlist::iterator bvp = bv.begin();
+      bufferlist::const_iterator bvp = bv.begin();
       try {
 	ssc->snapset.decode(bvp);
       } catch (buffer::error& e) {
@@ -13897,7 +13897,7 @@ void PrimaryLogPG::agent_load_hit_sets()
 	  assert(r >= 0);
 	}
 	HitSetRef hs(new HitSet);
-	bufferlist::iterator pbl = bl.begin();
+	bufferlist::const_iterator pbl = bl.begin();
 	decode(*hs, pbl);
 	agent_state->add_hit_set(p->begin.sec(), hs);
       }
@@ -14687,7 +14687,7 @@ void PrimaryLogPG::scrub_snapshot_metadata(
       } else {
 	bufferlist bl;
 	bl.push_back(p->second.attrs[SS_ATTR]);
-	bufferlist::iterator blp = bl.begin();
+	auto blp = bl.cbegin();
         try {
 	  snapset = SnapSet(); // Initialize optional<> before decoding into it
 	  decode(snapset.get(), blp);
@@ -14953,7 +14953,7 @@ int PrimaryLogPG::rep_repair_primary_object(const hobject_t& soid, OpRequestRef 
     dout(0) << __func__ << ": Need version of replica, objects_get_attr failed: "
 	    << soid << " error=" << r << dendl;
   } else try {
-    bufferlist::iterator bliter = bv.begin();
+    auto bliter = bv.cbegin();
     decode(oi, bliter);
     v = oi.version;
   } catch (...) {

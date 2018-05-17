@@ -20,7 +20,7 @@ struct cls_refcount_get_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
     decode(implicit_ref, bl);
@@ -45,7 +45,7 @@ struct cls_refcount_put_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(tag, bl);
     decode(implicit_ref, bl);
@@ -68,7 +68,7 @@ struct cls_refcount_set_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(refs, bl);
     DECODE_FINISH(bl);
@@ -91,7 +91,7 @@ struct cls_refcount_read_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(implicit_ref, bl);
     DECODE_FINISH(bl);
@@ -113,7 +113,7 @@ struct cls_refcount_read_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(refs, bl);
     DECODE_FINISH(bl);
@@ -135,7 +135,7 @@ struct cls_chunk_refcount_get_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(source, bl);
     DECODE_FINISH(bl);
@@ -156,7 +156,7 @@ struct cls_chunk_refcount_put_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(source, bl);
     DECODE_FINISH(bl);
@@ -178,7 +178,7 @@ struct cls_chunk_refcount_set_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(refs, bl);
     DECODE_FINISH(bl);
@@ -200,7 +200,7 @@ struct cls_chunk_refcount_read_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(refs, bl);
     DECODE_FINISH(bl);

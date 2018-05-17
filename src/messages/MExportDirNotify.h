@@ -68,7 +68,7 @@ public:
     encode(bounds, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(base, p);
     decode(ack, p);
     decode(old_auth, p);

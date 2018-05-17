@@ -212,7 +212,7 @@ void OSDMonitor::_get_pending_crush(CrushWrapper& newcrush)
   else
     osdmap.crush->encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   newcrush.decode(p);
 }
 
@@ -359,7 +359,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
 
   bufferlist bl;
   if (!mon->store->get(OSD_PG_CREATING_PREFIX, "creating", bl)) {
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     std::lock_guard<std::mutex> l(creating_pgs_lock);
     creating_pgs.decode(p);
     dout(7) << __func__ << " loading creating_pgs last_scan_epoch "
@@ -1372,7 +1372,7 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
   if (r < 0)
     return r;
   try {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(m, p);
   }
   catch (buffer::error& e) {
@@ -3505,7 +3505,7 @@ void OSDMonitor::get_removed_snaps_range(
       bufferlist v;
       mon->store->get(OSD_SNAP_PREFIX, k, v);
       if (v.length()) {
-	auto q = v.begin();
+	auto q = v.cbegin();
 	OSDMap::snap_interval_set_t snaps;
 	decode(snaps, q);
 	t.union_of(snaps);
@@ -3523,7 +3523,7 @@ int OSDMonitor::get_version(version_t ver, bufferlist& bl)
 void OSDMonitor::reencode_incremental_map(bufferlist& bl, uint64_t features)
 {
   OSDMap::Incremental inc;
-  bufferlist::iterator q = bl.begin();
+  auto q = bl.cbegin();
   inc.decode(q);
   // always encode with subset of osdmap's canonical features
   uint64_t f = features & inc.encode_features;
@@ -3540,7 +3540,7 @@ void OSDMonitor::reencode_incremental_map(bufferlist& bl, uint64_t features)
   if (inc.crush.length()) {
     // embedded crush map
     CrushWrapper c;
-    auto p = inc.crush.begin();
+    auto p = inc.crush.cbegin();
     c.decode(p);
     inc.crush.clear();
     c.encode(inc.crush, f);
@@ -3551,7 +3551,7 @@ void OSDMonitor::reencode_incremental_map(bufferlist& bl, uint64_t features)
 void OSDMonitor::reencode_full_map(bufferlist& bl, uint64_t features)
 {
   OSDMap m;
-  bufferlist::iterator q = bl.begin();
+  auto q = bl.cbegin();
   m.decode(q);
   // always encode with subset of osdmap's canonical features
   uint64_t f = features & m.get_encoding_features();
@@ -3590,7 +3590,7 @@ int OSDMonitor::get_inc(version_t ver, OSDMap::Incremental& inc)
   ceph_assert(err == 0);
   ceph_assert(inc_bl.length());
 
-  bufferlist::iterator p = inc_bl.begin();
+  auto p = inc_bl.cbegin();
   inc.decode(p);
   dout(10) << __func__ << "     "
            << " epoch " << inc.epoch
@@ -5691,7 +5691,7 @@ int OSDMonitor::lookup_pruned_snap(int64_t pool, snapid_t snap,
     return -ENOENT;
   }
   bufferlist v = it->value();
-  auto p = v.begin();
+  auto p = v.cbegin();
   decode(*begin, p);
   decode(*end, p);
   if (snap < *begin || snap >= *end) {
@@ -8003,7 +8003,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bufferlist data(m->get_data());
     CrushWrapper crush;
     try {
-      bufferlist::iterator bl(data.begin());
+      auto bl = data.cbegin();
       crush.decode(bl);
     }
     catch (const std::exception &e) {

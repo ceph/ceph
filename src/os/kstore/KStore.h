@@ -631,7 +631,7 @@ private:
   int _omap_rmkeys(TransContext *txc,
 		   CollectionRef& c,
 		   OnodeRef& o,
-		   bufferlist& bl);
+		   const bufferlist& bl);
   int _omap_rmkey_range(TransContext *txc,
 			CollectionRef& c,
 			OnodeRef& o,

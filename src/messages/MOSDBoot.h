@@ -74,7 +74,7 @@ public:
     encode(osd_features, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(sb, p);
     decode(hb_back_addr, p);

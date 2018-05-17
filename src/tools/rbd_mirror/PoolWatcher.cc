@@ -304,7 +304,7 @@ void PoolWatcher<I>::handle_get_mirror_uuid(int r) {
 
     m_pending_mirror_uuid = "";
     if (r >= 0) {
-      bufferlist::iterator it = m_out_bl.begin();
+      auto it = m_out_bl.cbegin();
       r = librbd::cls_client::mirror_uuid_get_finish(
         &it, &m_pending_mirror_uuid);
     }

@@ -53,7 +53,7 @@ void PrepareRemoteImageRequest<I>::get_remote_mirror_uuid() {
 template <typename I>
 void PrepareRemoteImageRequest<I>::handle_get_remote_mirror_uuid(int r) {
   if (r >= 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_uuid_get_finish(&it, m_remote_mirror_uuid);
     if (r >= 0 && m_remote_mirror_uuid->empty()) {
       r = -ENOENT;
@@ -186,7 +186,7 @@ bool PrepareRemoteImageRequest<I>::decode_client_meta() {
   dout(20) << dendl;
 
   librbd::journal::ClientData client_data;
-  bufferlist::iterator it = m_client.data.begin();
+  auto it = m_client.data.cbegin();
   try {
     decode(client_data, it);
   } catch (const buffer::error &err) {

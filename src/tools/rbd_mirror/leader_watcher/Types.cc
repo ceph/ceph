@@ -29,7 +29,7 @@ private:
 
 class DecodePayloadVisitor : public boost::static_visitor<void> {
 public:
-  DecodePayloadVisitor(__u8 version, bufferlist::iterator &iter)
+  DecodePayloadVisitor(__u8 version, bufferlist::const_iterator &iter)
     : m_version(version), m_iter(iter) {}
 
   template <typename Payload>
@@ -39,7 +39,7 @@ public:
 
 private:
   __u8 m_version;
-  bufferlist::iterator &m_iter;
+  bufferlist::const_iterator &m_iter;
 };
 
 class DumpPayloadVisitor : public boost::static_visitor<void> {
@@ -62,7 +62,7 @@ private:
 void HeartbeatPayload::encode(bufferlist &bl) const {
 }
 
-void HeartbeatPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void HeartbeatPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void HeartbeatPayload::dump(Formatter *f) const {
@@ -71,7 +71,7 @@ void HeartbeatPayload::dump(Formatter *f) const {
 void LockAcquiredPayload::encode(bufferlist &bl) const {
 }
 
-void LockAcquiredPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void LockAcquiredPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void LockAcquiredPayload::dump(Formatter *f) const {
@@ -80,7 +80,7 @@ void LockAcquiredPayload::dump(Formatter *f) const {
 void LockReleasedPayload::encode(bufferlist &bl) const {
 }
 
-void LockReleasedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void LockReleasedPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void LockReleasedPayload::dump(Formatter *f) const {
@@ -90,7 +90,7 @@ void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
 
-void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
+void UnknownPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
 }
 
 void UnknownPayload::dump(Formatter *f) const {
@@ -102,7 +102,7 @@ void NotifyMessage::encode(bufferlist& bl) const {
   ENCODE_FINISH(bl);
 }
 
-void NotifyMessage::decode(bufferlist::iterator& iter) {
+void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   DECODE_START(1, iter);
 
   uint32_t notify_op;

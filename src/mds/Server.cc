@@ -1098,7 +1098,7 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
   if (!locks.length()) return;
   int numlocks;
   ceph_filelock lock;
-  bufferlist::iterator p = locks.begin();
+  auto p = locks.cbegin();
   decode(numlocks, p);
   for (int i = 0; i < numlocks; ++i) {
     decode(lock, p);
@@ -2697,7 +2697,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   MClientRequest *req = mdr->client_request;
   if (req->get_data().length()) {
-    bufferlist::iterator p = req->get_data().begin();
+    auto p = req->get_data().cbegin();
 
     // xattrs on new inode?
     CInode::mempool_xattr_map xattrs;
@@ -5790,7 +5790,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
     pi.inode.nlink--;
     if (targeti->is_projected_snaprealm_global()) {
       assert(mdr->slave_request->desti_snapbl.length());
-      auto p = mdr->slave_request->desti_snapbl.begin();
+      auto p = mdr->slave_request->desti_snapbl.cbegin();
 
       sr_t *newsnap = targeti->project_snaprealm();
       decode(*newsnap, p);
@@ -5936,7 +5936,7 @@ struct C_MDS_LoggedLinkRollback : public ServerLogContext {
 void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& mdr)
 {
   link_rollback rollback;
-  bufferlist::iterator p = rbl.begin();
+  auto p = rbl.cbegin();
   decode(rollback, p);
 
   dout(10) << "do_link_rollback on " << rollback.reqid 
@@ -5984,7 +5984,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
   map<client_t,MClientSnap*> splits;
   if (rollback.snapbl.length() && in->snaprealm) {
     bool hadrealm;
-    bufferlist::iterator p = rollback.snapbl.begin();
+    auto p = rollback.snapbl.cbegin();
     decode(hadrealm, p);
     if (hadrealm) {
       if (!mds->is_resolve()) {
@@ -6660,7 +6660,7 @@ void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef&
   // the file system are taking place here, so there is no Mutation.
 
   rmdir_rollback rollback;
-  bufferlist::iterator p = rbl.begin();
+  auto p = rbl.cbegin();
   decode(rollback, p);
   
   dout(10) << "do_rmdir_rollback on " << rollback.reqid << dendl;
@@ -6686,7 +6686,7 @@ void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef&
 
   if (rollback.snapbl.length() && in->snaprealm) {
     bool hadrealm;
-    bufferlist::iterator p = rollback.snapbl.begin();
+    auto p = rollback.snapbl.cbegin();
     decode(hadrealm, p);
     if (hadrealm) {
       decode(in->snaprealm->srnode, p);
@@ -7388,7 +7388,7 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
   CDentry::linkage_t *srcdnl = srcdn->get_linkage();
 
   /* import node */
-  bufferlist::iterator blp = mdr->more()->inode_import.begin();
+  auto blp = mdr->more()->inode_import.cbegin();
 	  
   // imported caps
   map<client_t,entity_inst_t> client_map;
@@ -7660,7 +7660,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	if (mdr->slave_request) {
 	  if (mdr->slave_request->desti_snapbl.length() > 0) {
 	    new_srnode = new sr_t();
-	    auto p = mdr->slave_request->desti_snapbl.begin();
+	    auto p = mdr->slave_request->desti_snapbl.cbegin();
 	    decode(*new_srnode, p);
 	  }
 	} else if (auto& desti_srnode = mdr->more()->desti_srnode) {
@@ -7696,7 +7696,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       if (mdr->slave_request) {
 	if (mdr->slave_request->srci_snapbl.length() > 0) {
 	  sr_t *new_srnode = new sr_t();
-	  auto p = mdr->slave_request->srci_snapbl.begin();
+	  auto p = mdr->slave_request->srci_snapbl.cbegin();
 	  decode(*new_srnode, p);
 	  srci->project_snaprealm(new_srnode);
 	}
@@ -8351,7 +8351,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       }
 
       map<client_t,Capability::Import> peer_imported;
-      bufferlist::iterator bp = mdr->more()->inode_import.begin();
+      auto bp = mdr->more()->inode_import.cbegin();
       decode(peer_imported, bp);
 
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
@@ -8477,7 +8477,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
 				bool finish_mdr)
 {
   rename_rollback rollback;
-  bufferlist::iterator p = rbl.begin();
+  auto p = rbl.cbegin();
   decode(rollback, p);
 
   dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
@@ -8594,7 +8594,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
 
     if (rollback.srci_snapbl.length() && in->snaprealm) {
       bool hadrealm;
-      bufferlist::iterator p = rollback.srci_snapbl.begin();
+      auto p = rollback.srci_snapbl.cbegin();
       decode(hadrealm, p);
       if (hadrealm) {
 	if (projected && !mds->is_resolve()) {
@@ -8671,7 +8671,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
 
     if (rollback.desti_snapbl.length() && target->snaprealm) {
       bool hadrealm;
-      bufferlist::iterator p = rollback.desti_snapbl.begin();
+      auto p = rollback.desti_snapbl.cbegin();
       decode(hadrealm, p);
       if (hadrealm) {
 	if (projected && !mds->is_resolve()) {
@@ -9138,7 +9138,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
 
   version_t stid = mdr->more()->stid;
   snapid_t snapid;
-  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  auto p = mdr->more()->snapidbl.cbegin();
   decode(snapid, p);
   dout(10) << " stid " << stid << " snapid " << snapid << dendl;
 
@@ -9279,7 +9279,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
     return;
   }
   version_t stid = mdr->more()->stid;
-  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  auto p = mdr->more()->snapidbl.cbegin();
   snapid_t seq;
   decode(seq, p);  
   dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
@@ -9315,7 +9315,7 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
 {
   dout(10) << "_rmsnap_finish " << *mdr << " " << snapid << dendl;
   snapid_t stid = mdr->more()->stid;
-  bufferlist::iterator p = mdr->more()->snapidbl.begin();
+  auto p = mdr->more()->snapidbl.cbegin();
   snapid_t seq;
   decode(seq, p);  
 

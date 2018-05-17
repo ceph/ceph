@@ -100,7 +100,7 @@ struct FeatureMap {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
     decode(m, p);
     DECODE_FINISH(p);
@@ -166,7 +166,7 @@ struct LevelDBStoreStats {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(bytes_total, p);
     decode(bytes_sst, p);
@@ -218,7 +218,7 @@ struct DataStats {
     encode(store_stats, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     // we moved from having fields in kb to fields in byte
     if (struct_v > 2) {
@@ -258,7 +258,7 @@ struct ScrubResult {
     encode(prefix_keys, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
     decode(prefix_crc, p);
     decode(prefix_keys, p);
@@ -479,7 +479,7 @@ public:
     encode(features, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(COMPAT_VERSION, p);
     decode(features, p);
     DECODE_FINISH(p);

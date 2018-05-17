@@ -26,7 +26,7 @@ public:
     encode(pgid, payload);
   }
   void decode_payload() override {
-    auto p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(pgid, p);
   }

@@ -24,7 +24,7 @@ void frag_info_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void frag_info_t::decode(bufferlist::iterator &bl)
+void frag_info_t::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);
@@ -91,7 +91,7 @@ void nest_info_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void nest_info_t::decode(bufferlist::iterator &bl)
+void nest_info_t::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);
@@ -185,7 +185,7 @@ void client_writeable_range_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void client_writeable_range_t::decode(bufferlist::iterator& bl)
+void client_writeable_range_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(range.first, bl);
@@ -229,7 +229,7 @@ void inline_data_t::encode(bufferlist &bl) const
   else
     encode(bufferlist(), bl);
 }
-void inline_data_t::decode(bufferlist::iterator &p)
+void inline_data_t::decode(bufferlist::const_iterator &p)
 {
   using ceph::decode;
   decode(version, p);
@@ -262,7 +262,7 @@ void fnode_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void fnode_t::decode(bufferlist::iterator &bl)
+void fnode_t::decode(bufferlist::const_iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);
@@ -334,7 +334,7 @@ void old_rstat_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void old_rstat_t::decode(bufferlist::iterator& bl)
+void old_rstat_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(first, bl);
@@ -381,7 +381,7 @@ void session_info_t::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void session_info_t::decode(bufferlist::iterator& p)
+void session_info_t::decode(bufferlist::const_iterator& p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, p);
   decode(inst, p);
@@ -478,7 +478,7 @@ void string_snap_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void string_snap_t::decode(bufferlist::iterator& bl)
+void string_snap_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(name, bl);
@@ -517,7 +517,7 @@ void MDSCacheObjectInfo::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void MDSCacheObjectInfo::decode(bufferlist::iterator& p)
+void MDSCacheObjectInfo::decode(bufferlist::const_iterator& p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
   decode(ino, p);
@@ -562,7 +562,7 @@ void mds_table_pending_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void mds_table_pending_t::decode(bufferlist::iterator& bl)
+void mds_table_pending_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(reqid, bl);
@@ -600,7 +600,7 @@ void inode_load_vec_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_load_vec_t::decode(const utime_t &t, bufferlist::iterator &p)
+void inode_load_vec_t::decode(const utime_t &t, bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
   for (auto &i : vec) {
@@ -671,7 +671,7 @@ void mds_load_t::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void mds_load_t::decode(const utime_t &t, bufferlist::iterator &bl) {
+void mds_load_t::decode(const utime_t &t, bufferlist::const_iterator &bl) {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
   decode(auth, t, bl);
   decode(all, t, bl);
@@ -720,7 +720,7 @@ void cap_reconnect_t::encode_old(bufferlist& bl) const {
   encode_nohead(flockbl, bl);
 }
 
-void cap_reconnect_t::decode(bufferlist::iterator& bl) {
+void cap_reconnect_t::decode(bufferlist::const_iterator& bl) {
   DECODE_START(1, bl);
   decode_old(bl); // extract out when something changes
   if (struct_v >= 2)
@@ -728,7 +728,7 @@ void cap_reconnect_t::decode(bufferlist::iterator& bl) {
   DECODE_FINISH(bl);
 }
 
-void cap_reconnect_t::decode_old(bufferlist::iterator& bl) {
+void cap_reconnect_t::decode_old(bufferlist::const_iterator& bl) {
   using ceph::decode;
   decode(path, bl);
   decode(capinfo, bl);

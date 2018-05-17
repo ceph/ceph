@@ -32,7 +32,7 @@ using namespace rbd_replay;
 namespace {
 
 bool is_versioned_replay(BufferReader &buffer_reader) {
-  bufferlist::iterator *it;
+  bufferlist::const_iterator *it;
   int r = buffer_reader.fetch(&it);
   if (r < 0) {
     return false;
@@ -227,7 +227,7 @@ void Replayer::run(const std::string& replay_file) {
       while (true) {
         action::ActionEntry action_entry;
         try {
-          bufferlist::iterator *it;
+          bufferlist::const_iterator *it;
           int r = buffer_reader.fetch(&it);
           if (r < 0) {
             std::cerr << "Failed to read from trace file: " << cpp_strerror(r)

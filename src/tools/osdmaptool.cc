@@ -411,7 +411,7 @@ int main(int argc, const char **argv)
 
     // validate
     CrushWrapper cw;
-    bufferlist::iterator p = cbl.begin();
+    auto p = cbl.cbegin();
     cw.decode(p);
 
     if (cw.get_max_devices() > osdmap.get_max_osd()) {

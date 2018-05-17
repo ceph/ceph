@@ -48,7 +48,7 @@ public:
     encode(monmapbl, payload);
   }
   void decode_payload() override { 
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(monmapbl, p);
   }
 };

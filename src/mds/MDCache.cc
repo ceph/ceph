@@ -3226,7 +3226,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
 
 	  inodeno_t ino;
 	  map<client_t,Capability::Export> cap_exports;
-	  bufferlist::iterator q = p->second.inode_caps.begin();
+	  auto q = p->second.inode_caps.cbegin();
 	  decode(ino, q);
 	  decode(cap_exports, q);
 
@@ -5115,13 +5115,13 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
        ++p) {
     CDir *dir = get_dirfrag(p->first);
     assert(dir);
-    bufferlist::iterator q = p->second.begin();
+    auto q = p->second.cbegin();
     dir->_decode_base(q);
     dout(10) << " got dir replica " << *dir << dendl;
   }
 
   // full inodes
-  bufferlist::iterator p = ack->inode_base.begin();
+  auto p = ack->inode_base.cbegin();
   while (!p.end()) {
     inodeno_t ino;
     snapid_t last;
@@ -5131,7 +5131,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     decode(basebl, p);
     CInode *in = get_inode(ino, last);
     assert(in);
-    bufferlist::iterator q = basebl.begin();
+    auto q = basebl.cbegin();
     snapid_t sseq = 0;
     if (in->snaprealm)
       sseq = in->snaprealm->srnode.seq;
@@ -5144,7 +5144,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   }
 
   // inodes
-  p = ack->inode_locks.begin();
+  p = ack->inode_locks.cbegin();
   //dout(10) << "inode_locks len " << ack->inode_locks.length() << " is " << ack->inode_locks << dendl;
   while (!p.end()) {
     inodeno_t ino;
@@ -5159,7 +5159,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     CInode *in = get_inode(ino, last);
     assert(in);
     in->set_replica_nonce(nonce);
-    bufferlist::iterator q = lockbl.begin();
+    auto q = lockbl.cbegin();
     in->_decode_locks_rejoin(q, rejoin_waiters, rejoin_eval_locks, survivor);
     in->state_clear(CInode::STATE_REJOINING);
     dout(10) << " got inode locks " << *in << dendl;
@@ -5170,7 +5170,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   assert(isolated_inodes.empty());
 
   map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
-  bufferlist::iterator bp = ack->imported_caps.begin();
+  auto bp = ack->imported_caps.cbegin();
   decode(peer_imported, bp);
 
   for (map<inodeno_t,map<client_t,Capability::Import> >::iterator p = peer_imported.begin();
@@ -9673,7 +9673,7 @@ void MDCache::handle_snap_update(MMDSSnapUpdate *m)
     assert(!in->is_auth());
     if (mds->get_state() > MDSMap::STATE_REJOIN ||
 	(mds->is_rejoin() && !in->is_rejoining())) {
-      bufferlist::iterator p = m->snap_blob.begin();
+      auto p = m->snap_blob.cbegin();
       in->decode_snap(p);
 
       if (!notify_clients) {
@@ -10269,7 +10269,7 @@ void MDCache::handle_discover_reply(MDiscoverReply *m)
 
   // starting point
   CInode *cur = get_inode(m->get_base_ino());
-  bufferlist::iterator p = m->trace.begin();
+  auto p = m->trace.cbegin();
 
   int next = m->starts_with;
 
@@ -10431,7 +10431,7 @@ void MDCache::replicate_inode(CInode *in, mds_rank_t to, bufferlist& bl,
   in->encode_replica(to, bl, features, mds->get_state() < MDSMap::STATE_ACTIVE);
 }
 
-CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t from,
+CDir *MDCache::add_replica_dir(bufferlist::const_iterator& p, CInode *diri, mds_rank_t from,
 			       list<MDSInternalContextBase*>& finished)
 {
   dirfrag_t df;
@@ -10473,7 +10473,7 @@ CDir *MDCache::add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t
   return dir;
 }
 
-CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished)
+CDentry *MDCache::add_replica_dentry(bufferlist::const_iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished)
 {
   string name;
   snapid_t last;
@@ -10497,7 +10497,7 @@ CDentry *MDCache::add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MD
   return dn;
 }
 
-CInode *MDCache::add_replica_inode(bufferlist::iterator& p, CDentry *dn, list<MDSInternalContextBase*>& finished)
+CInode *MDCache::add_replica_inode(bufferlist::const_iterator& p, CDentry *dn, list<MDSInternalContextBase*>& finished)
 {
   inodeno_t ino;
   snapid_t last;
@@ -10545,7 +10545,7 @@ void MDCache::replicate_stray(CDentry *straydn, mds_rank_t who, bufferlist& bl)
 CDentry *MDCache::add_replica_stray(bufferlist &bl, mds_rank_t from)
 {
   list<MDSInternalContextBase*> finished;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
 
   CInode *mdsin = add_replica_inode(p, NULL, finished);
   CDir *mdsdir = add_replica_dir(p, mdsin, from, finished);
@@ -10708,7 +10708,7 @@ void MDCache::handle_dentry_link(MDentryLink *m)
     }
   }
 
-  bufferlist::iterator p = m->bl.begin();
+  auto p = m->bl.cbegin();
   list<MDSInternalContextBase*> finished;
   if (dn) {
     if (m->get_is_primary()) {
@@ -11765,7 +11765,7 @@ void MDCache::handle_fragment_notify(MMDSFragmentNotify *notify)
       diri->take_dir_waiting((*p)->get_frag(), waiters);
 
     // add new replica dirs values
-    bufferlist::iterator p = notify->basebl.begin();
+    auto p = notify->basebl.cbegin();
     while (!p.end())
       add_replica_dir(p, diri, mds_rank_t(notify->get_source().num()), waiters);
 
@@ -11863,7 +11863,7 @@ void MDCache::rollback_uncommitted_fragments()
       list<MDSInternalContextBase*> waiters;
       adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
     } else {
-      bufferlist::iterator bp = uf.rollback.begin();
+      auto bp = uf.rollback.cbegin();
       for (list<frag_t>::iterator q = uf.old_frags.begin(); q != uf.old_frags.end(); ++q) {
 	CDir *dir = force_dir_fragment(diri, *q);
 	resultfrags.push_back(dir);

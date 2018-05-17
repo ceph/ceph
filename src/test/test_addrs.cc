@@ -90,13 +90,12 @@ TEST(Msgr, TestAddrEncodeAddrvecDecode)
   for (unsigned i = 0; addr_checks2[i][0]; ++i) {
     entity_addr_t addr;
     entity_addrvec_t addrvec;
-    bufferlist::iterator bli;
     const char *end = "";
     bool ok = addr.parse(addr_checks2[i][0], &end);
     ASSERT_TRUE(ok);
     bufferlist bl;
     addr.encode(bl, 0);
-    bli = bl.begin();
+    auto bli = bl.cbegin();
     addrvec.decode(bli);
     ASSERT_EQ(addr, addrvec.v[0]);
   }
@@ -108,13 +107,12 @@ TEST(Msgr, TestAddrvec0EncodeAddrDecode)
     entity_addr_t addr;
     entity_addrvec_t addrvec;
     bufferlist bl;
-    bufferlist::iterator bli;
     const char *end = "";
     bool ok = addr.parse(addr_checks2[i][0], &end);
     ASSERT_TRUE(ok);
     addrvec.v.push_back(addr);
     addrvec.encode(bl, 0);
-    bli = bl.begin();
+    auto bli = bl.cbegin();
     entity_addr_t a;
     a.decode(bli);
     ASSERT_EQ(addr, a);
@@ -126,9 +124,8 @@ TEST(Msgr, TestEmptyAddrvecEncodeAddrDecode)
   entity_addrvec_t addrvec;
   entity_addr_t addr;
   bufferlist bl;
-  bufferlist::iterator bli;
   addrvec.encode(bl, 0);
-  bli = bl.begin();
+  auto bli = bl.cbegin();
   addr.decode(bli);
   ASSERT_EQ(addr, entity_addr_t(1, 0));
 }
@@ -150,7 +147,6 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode0)
   entity_addr_t addr;
   entity_addrvec_t addrvec;
   bufferlist bl;
-  bufferlist::iterator bli;
 
   for (unsigned i = 0; addrvec_checks[i][0]; ++i) {
     const char *end = "";
@@ -160,7 +156,7 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode0)
   }
 
   addrvec.encode(bl, 0);
-  bli = bl.begin();
+  auto bli = bl.cbegin();
 
   addr.decode(bli);
 
@@ -176,7 +172,6 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode1)
   entity_addr_t addr, a;
   entity_addrvec_t addrvec;
   bufferlist bl;
-  bufferlist::iterator bli;
   bool flag = true;
 
   for (unsigned i = 0; addrvec_checks[i][1]; ++i) {
@@ -191,7 +186,7 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode1)
   }
 
   addrvec.encode(bl, 0);
-  bli = bl.begin();
+  auto bli = bl.cbegin();
 
   addr.decode(bli);
 
@@ -204,7 +199,6 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode2)
   entity_addr_t addr;
   entity_addrvec_t addrvec;
   bufferlist bl;
-  bufferlist::iterator bli;
 
   for (unsigned i = 0; addrvec_checks[i][2]; ++i) {
     const char *end = "";
@@ -214,7 +208,7 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode2)
   }
 
   addrvec.encode(bl, 0);
-  bli = bl.begin();
+  auto bli = bl.cbegin();
 
   addr.decode(bli);
 
@@ -227,7 +221,6 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode3)
   entity_addr_t addr;
   entity_addrvec_t addrvec;
   bufferlist bl;
-  bufferlist::iterator bli;
 
   for (unsigned i = 0; addrvec_checks[i][3]; ++i) {
     const char *end = "";
@@ -237,7 +230,7 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode3)
   }
 
   addrvec.encode(bl, 0);
-  bli = bl.begin();
+  auto bli = bl.cbegin();
 
   addr.decode(bli);
 

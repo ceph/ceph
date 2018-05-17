@@ -536,7 +536,7 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
   parts_len.clear();
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
-    bufferlist::iterator miter = manifest_bl.begin();
+    auto miter = manifest_bl.cbegin();
     try {
       decode(manifest, miter);
     } catch (buffer::error& err) {

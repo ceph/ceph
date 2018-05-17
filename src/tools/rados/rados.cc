@@ -1385,7 +1385,7 @@ static void dump_shard(const shard_info_t& shard,
     if (!shard.has_info_corrupted()) {
       object_info_t oi;
       bufferlist bl;
-      bufferlist::iterator bliter = k->second.begin();
+      auto bliter = k->second.cbegin();
       decode(oi, bliter);  // Can't be corrupted
       f.open_object_section("object_info");
       oi.dump(&f);
@@ -1404,7 +1404,7 @@ static void dump_shard(const shard_info_t& shard,
     if (!shard.has_snapset_corrupted()) {
       SnapSet ss;
       bufferlist bl;
-      bufferlist::iterator bliter = k->second.begin();
+      auto bliter = k->second.cbegin();
       decode(ss, bliter);  // Can't be corrupted
       f.open_object_section("snapset");
       ss.dump(&f);
@@ -1423,7 +1423,7 @@ static void dump_shard(const shard_info_t& shard,
     if (!shard.has_hinfo_corrupted()) {
       ECUtil::HashInfo hi;
       bufferlist bl;
-      bufferlist::iterator bliter = k->second.begin();
+      auto bliter = k->second.cbegin();
       decode(hi, bliter);  // Can't be corrupted
       f.open_object_section("hashinfo");
       hi.dump(&f);
@@ -1509,7 +1509,7 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
       bufferlist bl;
       auto k = shard.attrs.find(OI_ATTR);
       assert(k != shard.attrs.end()); // Can't be missing
-      bufferlist::iterator bliter = k->second.begin();
+      auto bliter = k->second.cbegin();
       decode(oi, bliter);  // Can't be corrupted
       f.open_object_section("selected_object_info");
       oi.dump(&f);
@@ -1540,7 +1540,7 @@ static void dump_inconsistent(const inconsistent_snapset_t& inc,
   if (inc.ss_bl.length()) {
     SnapSet ss;
     bufferlist bl = inc.ss_bl;
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     decode(ss, bliter);  // Can't be corrupted
     f.open_object_section("snapset");
     ss.dump(&f);
@@ -2831,7 +2831,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	cerr << "error reading " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
 	goto out;
       }
-      bufferlist::iterator p = outdata.begin();
+      auto p = outdata.cbegin();
       bufferlist header;
       map<string, bufferlist> kv;
       try {
@@ -2884,7 +2884,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
     bufferlist hdr;
     map<string, bufferlist> kv;
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       decode(hdr, p);
       decode(kv, p);
@@ -3217,7 +3217,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (replybl.length()) {
       map<pair<uint64_t,uint64_t>,bufferlist> rm;
       set<pair<uint64_t,uint64_t> > missed;
-      bufferlist::iterator p = replybl.begin();
+      auto p = replybl.cbegin();
       decode(rm, p);
       decode(missed, p);
       for (map<pair<uint64_t,uint64_t>,bufferlist>::iterator p = rm.begin();

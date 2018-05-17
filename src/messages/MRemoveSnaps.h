@@ -41,7 +41,7 @@ public:
     encode(snaps, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(snaps, p);
     assert(p.end());

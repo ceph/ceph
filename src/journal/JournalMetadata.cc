@@ -64,7 +64,7 @@ struct C_GetClient : public Context {
     ldout(cct, 20) << "C_GetClient: " << __func__ << ": r=" << r << dendl;
 
     if (r == 0) {
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       r = client::get_client_finish(&it, client);
     }
     complete(r);
@@ -123,7 +123,7 @@ struct C_AllocateTag : public Context {
     ldout(cct, 20) << "C_AllocateTag: " << __func__ << ": r=" << r << dendl;
 
     if (r == 0) {
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       r = client::get_next_tag_tid_finish(&iter, &tag->tid);
     }
     if (r < 0) {
@@ -182,7 +182,7 @@ struct C_AllocateTag : public Context {
     ldout(cct, 20) << "C_AllocateTag: " << __func__ << ": r=" << r << dendl;
 
     if (r == 0) {
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
 
       cls::journal::Tag journal_tag;
       r = client::get_tag_finish(&iter, &journal_tag);
@@ -239,7 +239,7 @@ struct C_GetTag : public Context {
 
   void handle_get_tag(int r) {
     if (r == 0) {
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       r = client::get_tag_finish(&iter, tag);
     }
     complete(r);
@@ -301,7 +301,7 @@ struct C_GetTags : public Context {
   void handle_tag_list(int r) {
     if (r == 0) {
       std::set<cls::journal::Tag> journal_tags;
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       r = client::tag_list_finish(&iter, &journal_tags);
       if (r == 0) {
         for (auto &journal_tag : journal_tags) {
@@ -381,7 +381,7 @@ struct C_AssertActiveTag : public Context {
 
     std::set<cls::journal::Tag> tags;
     if (r == 0) {
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       r = client::tag_list_finish(&it, &tags);
     }
 

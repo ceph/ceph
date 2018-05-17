@@ -49,7 +49,7 @@ private:
 public:
   void decode_payload() override {
     uint8_t msg_ver;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(msg_ver, p);
     decode(opcode, p);
     decode(cookie, p);

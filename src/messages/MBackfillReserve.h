@@ -128,7 +128,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(query_epoch, p);
     decode(type, p);

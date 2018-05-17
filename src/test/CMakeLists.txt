@@ -740,7 +740,7 @@ add_executable(unittest_denc
   test_denc.cc
   )
 add_ceph_unittest(unittest_denc)
-target_link_libraries(unittest_denc os global)
+target_link_libraries(unittest_denc global)
 
 # unittest_mempool
 add_executable(unittest_mempool

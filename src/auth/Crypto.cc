@@ -307,7 +307,7 @@ void CryptoKey::encode(bufferlist& bl) const
   bl.append(secret);
 }
 
-void CryptoKey::decode(bufferlist::iterator& bl)
+void CryptoKey::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   decode(type, bl);

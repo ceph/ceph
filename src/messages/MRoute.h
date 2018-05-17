@@ -44,7 +44,7 @@ struct MRoute : public Message {
       session_mon_tid(0),
       dest(i),
       send_osdmap_first(0) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     msg = decode_message(NULL, 0, p);
   }
 private:
@@ -55,7 +55,7 @@ private:
 
 public:
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(session_mon_tid, p);
     decode(dest, p);
     bool m;

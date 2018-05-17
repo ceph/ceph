@@ -108,7 +108,7 @@ struct key_data {
     encode(prefix, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(raw_key, p);
     decode(prefix, p);
@@ -184,7 +184,7 @@ struct object_data {
     encode(size, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(min_kdata, p);
     decode(max_kdata, p);
@@ -236,7 +236,7 @@ struct create_data {
     encode(obj, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(min, p);
     decode(max, p);
@@ -284,7 +284,7 @@ struct delete_data {
     encode(version, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(min, p);
     decode(max, p);
@@ -363,7 +363,7 @@ struct index_data {
     encode(obj, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
     decode(prefix, p);
     decode(min_kdata, p);

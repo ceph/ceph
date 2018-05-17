@@ -147,7 +147,7 @@ int MemStore::_load()
     return r;
 
   set<coll_t> collections;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(collections, p);
 
   for (set<coll_t>::iterator q = collections.begin();
@@ -159,7 +159,7 @@ int MemStore::_load()
     if (r < 0)
       return r;
     CollectionRef c(new Collection(cct, *q));
-    bufferlist::iterator p = cbl.begin();
+    auto p = cbl.cbegin();
     c->decode(p);
     coll_map[*q] = c;
     used_bytes += c->used_bytes();
@@ -802,7 +802,7 @@ void MemStore::_do_transaction(Transaction& t)
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
@@ -1214,7 +1214,7 @@ int MemStore::_omap_setkeys(const coll_t& cid, const ghobject_t &oid,
   if (!o)
     return -ENOENT;
   std::lock_guard<std::mutex> lock(o->omap_mutex);
-  bufferlist::iterator p = aset_bl.begin();
+  auto p = aset_bl.cbegin();
   __u32 num;
   decode(num, p);
   while (num--) {
@@ -1237,7 +1237,7 @@ int MemStore::_omap_rmkeys(const coll_t& cid, const ghobject_t &oid,
   if (!o)
     return -ENOENT;
   std::lock_guard<std::mutex> lock(o->omap_mutex);
-  bufferlist::iterator p = keys_bl.begin();
+  auto p = keys_bl.cbegin();
   __u32 num;
   decode(num, p);
   while (num--) {
@@ -1424,7 +1424,7 @@ struct BufferlistObject : public MemStore::Object {
     encode_base(bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) override {
+  void decode(bufferlist::const_iterator& p) override {
     DECODE_START(1, p);
     decode(data, p);
     decode_base(p);
@@ -1533,7 +1533,7 @@ struct MemStore::PageSetObject : public Object {
     encode_base(bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) override {
+  void decode(bufferlist::const_iterator& p) override {
     DECODE_START(1, p);
     decode(data_len, p);
     data.decode(p);

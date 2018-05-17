@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -1928,7 +1929,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 #ifndef CACHE_BLOB_BL
 void BlueStore::Blob::decode(
   Collection *coll,
-  bufferptr::iterator& p,
+  bufferptr::const_iterator& p,
   uint64_t struct_v,
   uint64_t* sbid,
   bool include_ref_map)
@@ -2711,7 +2712,7 @@ void BlueStore::ExtentMap::encode_spanning_blobs(
 }
 
 void BlueStore::ExtentMap::decode_spanning_blobs(
-  bufferptr::iterator& p)
+  bufferptr::const_iterator& p)
 {
   __u8 struct_v;
   denc(struct_v, p);
@@ -3283,7 +3284,7 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 
     sb->loaded = true;
     sb->persistent = new bluestore_shared_blob_t(sbid);
-    bufferlist::iterator p = v.begin();
+    auto p = v.cbegin();
     decode(*(sb->persistent), p);
     ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " loaded shared_blob " << *sb << dendl;
@@ -3369,7 +3370,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     assert(r >= 0);
     on = new Onode(this, oid, key);
     on->exists = true;
-    bufferptr::iterator p = v.front().begin_deep();
+    auto p = v.front().begin_deep();
     on->onode.decode(p);
     for (auto& i : on->onode.attrs) {
       i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
@@ -4231,7 +4232,7 @@ int BlueStore::_read_bdev_label(CephContext* cct, string path,
   }
 
   uint32_t crc, expected_crc;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   try {
     decode(*label, p);
     bufferlist t;
@@ -5216,7 +5217,7 @@ int BlueStore::_open_collections(int *errors)
 	  cache_shards[cid.hash_to_shard(cache_shards.size())],
 	  cid));
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       try {
         decode(c->cnode, p);
       } catch (buffer::error& e) {
@@ -5241,7 +5242,7 @@ void BlueStore::_open_statfs()
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
   if (r >= 0) {
     if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
-      auto it = bl.begin();
+      auto it = bl.cbegin();
       vstatfs.decode(it);
     } else {
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
@@ -6256,7 +6257,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	sb_info_t& sbi = p->second;
 	bluestore_shared_blob_t shared_blob(sbid);
 	bufferlist bl = it->value();
-	bufferlist::iterator blp = bl.begin();
+	auto blp = bl.cbegin();
 	try {
     	  decode(shared_blob, blp);
 	} catch (buffer::error& e) {
@@ -6548,7 +6549,7 @@ int BlueStore::_fsck(bool deep, bool repair)
   if (it) {
     for (it->lower_bound(string()); it->valid(); it->next()) {
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       bluestore_deferred_transaction_t wt;
       try {
 	decode(wt, p);
@@ -7467,7 +7468,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
 {
   int r = 0;
   utime_t start = ceph_clock_now();
-  bufferlist::iterator i = source.begin();
+  auto i = source.cbegin();
   bluestore_compression_header_t chdr;
   decode(chdr, i);
   int alg = int(chdr.type);
@@ -8120,7 +8121,7 @@ int BlueStore::_open_super_meta()
     nid_max = 0;
     bufferlist bl;
     db->get(PREFIX_SUPER, "nid_max", &bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       uint64_t v;
       decode(v, p);
@@ -8138,7 +8139,7 @@ int BlueStore::_open_super_meta()
     blobid_max = 0;
     bufferlist bl;
     db->get(PREFIX_SUPER, "blobid_max", &bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       uint64_t v;
       decode(v, p);
@@ -8168,7 +8169,7 @@ int BlueStore::_open_super_meta()
     bluefs_extents.clear();
     bufferlist bl;
     db->get(PREFIX_SUPER, "bluefs_extents", &bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       decode(bluefs_extents, p);
     }
@@ -8192,7 +8193,7 @@ int BlueStore::_open_super_meta()
       ondisk_format = 1;
       compat_ondisk_format = 1;
     } else {
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       try {
 	decode(ondisk_format, p);
       } catch (buffer::error& e) {
@@ -8203,7 +8204,7 @@ int BlueStore::_open_super_meta()
       {
 	r = db->get(PREFIX_SUPER, "min_compat_ondisk_format", &bl);
 	assert(!r);
-	auto p = bl.begin();
+	auto p = bl.cbegin();
 	try {
 	  decode(compat_ondisk_format, p);
 	} catch (buffer::error& e) {
@@ -8233,7 +8234,7 @@ int BlueStore::_open_super_meta()
   {
     bufferlist bl;
     db->get(PREFIX_SUPER, "min_alloc_size", &bl);
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     try {
       uint64_t val;
       decode(val, p);
@@ -8276,7 +8277,7 @@ int BlueStore::_upgrade_super()
     {
       bufferlist bl;
       db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       try {
 	uint64_t val;
 	decode(val, p);
@@ -9410,7 +9411,7 @@ int BlueStore::_deferred_replay()
     bluestore_deferred_transaction_t *deferred_txn =
       new bluestore_deferred_transaction_t;
     bufferlist bl = it->value();
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       decode(*deferred_txn, p);
     } catch (buffer::error& e) {
@@ -9602,7 +9603,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
@@ -11413,7 +11414,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 num;
   if (!o->onode.has_omap()) {
     o->onode.set_omap_flag();
@@ -11479,7 +11480,7 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 num;
   string final_key;
 

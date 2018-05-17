@@ -283,7 +283,7 @@ static std::string read_key_from_tmap(IoCtx& ioctx, const std::string &obj,
     oss << "ioctx.read(" << obj << ", bl, 0, 0) returned " << r;
     return oss.str();
   }
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   bufferlist header;
   map<string, bufferlist> m;
   decode(header, p);
@@ -519,7 +519,7 @@ TEST_F(LibRadosMisc, Exec) {
   ASSERT_GT(res, 0);
   bufferlist bl;
   bl.append(buf2, res);
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   uint64_t all_features;
   decode(all_features, iter);
   // make sure *some* features are specified; don't care which ones
@@ -532,7 +532,7 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   bufferlist bl2, out;
   int r = ioctx.exec("foo", "rbd", "get_all_features", bl2, out);
   ASSERT_EQ(0, r);
-  bufferlist::iterator iter = out.begin();
+  auto iter = out.cbegin();
   uint64_t all_features;
   decode(all_features, iter);
   // make sure *some* features are specified; don't care which ones
@@ -1153,7 +1153,7 @@ TYPED_TEST(LibRadosChecksum, Subset) {
   for (uint32_t i = 0; i < csum_count; ++i) {
     ASSERT_EQ(0, checksum_rvals[i]);
 
-    auto bl_it = checksum_bls[i].begin();
+    auto bl_it = checksum_bls[i].cbegin();
     uint32_t count;
     decode(count, bl_it);
     ASSERT_EQ(1U, count);
@@ -1192,7 +1192,7 @@ TYPED_TEST(LibRadosChecksum, Chunked) {
   ASSERT_EQ(0, this->ioctx.operate("foo", &op, NULL));
   ASSERT_EQ(0, checksum_rval);
 
-  auto bl_it = checksum_bl.begin();
+  auto bl_it = checksum_bl.cbegin();
   uint32_t count;
   decode(count, bl_it);
   ASSERT_EQ(csum_count, count);

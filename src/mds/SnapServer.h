@@ -52,7 +52,7 @@ protected:
     encode(snaprealm_v2_since, bl);
     ENCODE_FINISH(bl);
   }
-  void decode_server_state(bufferlist::iterator& bl) override {
+  void decode_server_state(bufferlist::const_iterator& bl) override {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
     decode(last_snap, bl);
     decode(snaps, bl);
@@ -133,7 +133,7 @@ public:
   void encode(bufferlist& bl) const {
     encode_server_state(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     decode_server_state(bl);
   }
 

@@ -56,7 +56,7 @@ void IsPrimaryRequest<I>::handle_get_mirror_state(int r) {
 
   cls::rbd::MirrorImage mirror_image;
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
     if (r == 0) {
       if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {

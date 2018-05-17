@@ -78,7 +78,7 @@ public:
     encode_nohead(realms, data);
   }
   void decode_payload() override {
-    bufferlist::iterator p = data.begin();
+    auto p = data.cbegin();
     if (header.version >= 3) {
       // new protocol
       decode(caps, p);

@@ -144,7 +144,7 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
 	 q != p->second.caps.end();
 	 ++q) {
-      bufferlist::iterator dataiter = q->second.begin();
+      auto dataiter = q->second.cbegin();
       string caps;
       using ceph::decode;
       decode(caps, dataiter);
@@ -157,7 +157,7 @@ void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
   f->flush(bl);
 }
 
-void KeyRing::decode_plaintext(bufferlist::iterator& bli)
+void KeyRing::decode_plaintext(bufferlist::const_iterator& bli)
 {
   int ret;
   bufferlist bl;
@@ -200,9 +200,9 @@ void KeyRing::decode_plaintext(bufferlist::iterator& bli)
   }
 }
 
-void KeyRing::decode(bufferlist::iterator& bl) {
+void KeyRing::decode(bufferlist::const_iterator& bl) {
   __u8 struct_v;
-  bufferlist::iterator start_pos = bl;
+  auto start_pos = bl;
   try {
     using ceph::decode;
     decode(struct_v, bl);
@@ -227,7 +227,7 @@ int KeyRing::load(CephContext *cct, const std::string &filename)
   }
 
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(iter);
   }
   catch (const buffer::error& err) {
@@ -252,7 +252,7 @@ void KeyRing::print(ostream& out)
     for (map<string, bufferlist>::iterator q = p->second.caps.begin();
 	 q != p->second.caps.end();
 	 ++q) {
-      bufferlist::iterator dataiter = q->second.begin();
+      auto dataiter = q->second.cbegin();
       string caps;
       using ceph::decode;
       decode(caps, dataiter);

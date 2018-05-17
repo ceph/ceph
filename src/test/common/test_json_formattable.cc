@@ -129,7 +129,7 @@ TEST(formatable, bin_encode) {
 
   bufferlist bl;
   ::encode(f, bl);
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     ::decode(f2, iter);
   } catch (buffer::error& err) {

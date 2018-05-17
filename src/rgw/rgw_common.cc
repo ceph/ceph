@@ -1800,7 +1800,7 @@ string rgw_pool::to_str() const
   return esc_name + ":" + esc_ns;
 }
 
-void rgw_raw_obj::decode_from_rgw_obj(bufferlist::iterator& bl)
+void rgw_raw_obj::decode_from_rgw_obj(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   rgw_obj old_obj;

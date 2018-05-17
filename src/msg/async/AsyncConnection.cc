@@ -944,7 +944,7 @@ ssize_t AsyncConnection::_process_connection()
 
         bufferlist bl;
         bl.append(state_buffer+banner_len, sizeof(ceph_entity_addr)*2);
-        bufferlist::iterator p = bl.begin();
+        auto p = bl.cbegin();
         try {
           decode(paddr, p);
           decode(peer_addr_for_me, p);
@@ -1091,7 +1091,7 @@ ssize_t AsyncConnection::_process_connection()
           }
 
           authorizer_reply.append(state_buffer, connect_reply.authorizer_len);
-          bufferlist::iterator iter = authorizer_reply.begin();
+          auto iter = authorizer_reply.cbegin();
           if (authorizer && !authorizer->verify_reply(iter)) {
             ldout(async_msgr->cct, 0) << __func__ << " failed verifying authorize reply" << dendl;
             goto fail;
@@ -1247,7 +1247,7 @@ ssize_t AsyncConnection::_process_connection()
 
         addr_bl.append(state_buffer+strlen(CEPH_BANNER), sizeof(ceph_entity_addr));
         try {
-          bufferlist::iterator ti = addr_bl.begin();
+          auto ti = addr_bl.cbegin();
           decode(peer_addr, ti);
         } catch (const buffer::error& e) {
 	  lderr(async_msgr->cct) << __func__ <<  " decode peer_addr failed " << dendl;

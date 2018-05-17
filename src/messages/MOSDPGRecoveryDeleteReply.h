@@ -31,7 +31,7 @@ struct MOSDPGRecoveryDeleteReply : public MOSDFastDispatchOp {
     {}
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(map_epoch, p);
     decode(min_epoch, p);

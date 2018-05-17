@@ -1032,7 +1032,7 @@ void ImageReplayer<I>::handle_get_remote_tag(int r) {
 
   if (r == 0) {
     try {
-      bufferlist::iterator it = m_replay_tag.data.begin();
+      auto it = m_replay_tag.data.cbegin();
       decode(m_replay_tag_data, it);
     } catch (const buffer::error &err) {
       r = -EBADMSG;
@@ -1118,7 +1118,7 @@ void ImageReplayer<I>::preprocess_entry() {
            << dendl;
 
   bufferlist data = m_replay_entry.get_data();
-  bufferlist::iterator it = data.begin();
+  auto it = data.cbegin();
   int r = m_local_replay->decode(&it, &m_event_entry);
   if (r < 0) {
     derr << "failed to decode journal event" << dendl;

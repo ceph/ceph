@@ -1696,7 +1696,7 @@ CDentry *CDir::_load_dentry(
     const std::set<snapid_t> *snaps,
     bool *force_dirty)
 {
-  bufferlist::iterator q = bl.begin();
+  auto q = bl.cbegin();
 
   snapid_t first;
   decode(first, q);
@@ -1909,7 +1909,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
 
   fnode_t got_fnode;
   {
-    bufferlist::iterator p = hdrbl.begin();
+    auto p = hdrbl.cbegin();
     try {
       decode(got_fnode, p);
     } catch (const buffer::error &err) {
@@ -2512,7 +2512,7 @@ void CDir::finish_export(utime_t now)
   dirty_old_rstat.clear();
 }
 
-void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
+void CDir::decode_import(bufferlist::const_iterator& blp, utime_t now, LogSegment *ls)
 {
   decode(first, blp);
   decode(fnode, blp);

@@ -674,7 +674,7 @@ int JournalTool::recover_dentries(
     } else if (r == 0) {
       // Conditionally update existing omap header
       fnode_t old_fnode;
-      bufferlist::iterator old_fnode_iter = old_fnode_bl.begin();
+      auto old_fnode_iter = old_fnode_bl.cbegin();
       try {
         old_fnode.decode(old_fnode_iter);
         dout(4) << "frag " << frag_oid.name << " fnode old v" <<
@@ -779,7 +779,7 @@ int JournalTool::recover_dentries(
         dout(4) << "dentry exists, checking versions..." << dendl;
         bufferlist &old_dentry = read_vals[key];
         // Decode dentry+inode
-        bufferlist::iterator q = old_dentry.begin();
+        auto q = old_dentry.cbegin();
 
         snapid_t dnfirst;
         decode(dnfirst, q);
@@ -848,7 +848,7 @@ int JournalTool::recover_dentries(
         dout(4) << "dentry exists, checking versions..." << dendl;
         bufferlist &old_dentry = read_vals[key];
         // Decode dentry+inode
-        bufferlist::iterator q = old_dentry.begin();
+        auto q = old_dentry.cbegin();
 
         snapid_t dnfirst;
         decode(dnfirst, q);
@@ -904,7 +904,7 @@ int JournalTool::recover_dentries(
       if (it != read_vals.end()) {
 	dout(4) << "dentry exists, will remove" << dendl;
 
-	bufferlist::iterator q = it->second.begin();
+	auto q = it->second.cbegin();
 	snapid_t dnfirst;
 	decode(dnfirst, q);
 	char dentry_type;
@@ -980,7 +980,7 @@ int JournalTool::recover_dentries(
       InodeStore old_inode;
       dout(4) << "root exists, will modify (" << old_root_ino_bl.length()
         << ")" << dendl;
-      bufferlist::iterator inode_bl_iter = old_root_ino_bl.begin(); 
+      auto inode_bl_iter = old_root_ino_bl.cbegin(); 
       std::string magic;
       decode(magic, inode_bl_iter);
       if (magic == CEPH_FS_ONDISK_MAGIC) {
@@ -1173,7 +1173,7 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
 
     // Deserialize InoTable
     version_t inotable_ver;
-    bufferlist::iterator q = inotable_bl.begin();
+    auto q = inotable_bl.cbegin();
     decode(inotable_ver, q);
     InoTable ino_table(NULL);
     ino_table.decode(q);

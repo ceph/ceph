@@ -265,7 +265,7 @@ public:
     else
       encode((uint32_t)0, bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     using ceph::decode;
     uint32_t n;
     decode(n, p);
@@ -282,7 +282,7 @@ inline void encode(const compact_set_base<T, Set>& m, bufferlist& bl) {
   m.encode(bl);
 }
 template<class T, class Set>
-inline void decode(compact_set_base<T, Set>& m, bufferlist::iterator& p) {
+inline void decode(compact_set_base<T, Set>& m, bufferlist::const_iterator& p) {
   m.decode(p);
 }
 

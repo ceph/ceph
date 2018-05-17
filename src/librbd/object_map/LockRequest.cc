@@ -98,7 +98,7 @@ Context *LockRequest<I>::handle_get_lock_info(int *ret_val) {
   ClsLockType lock_type;
   std::string lock_tag;
   if (*ret_val == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     *ret_val = rados::cls::lock::get_lock_info_finish(&it, &m_lockers,
                                                       &lock_type, &lock_tag);
   }

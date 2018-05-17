@@ -52,7 +52,7 @@ public:
     ENCODE_FINISH(bl);
   }
   
-  void decode(bufferlist::iterator &p)
+  void decode(bufferlist::const_iterator &p)
   {
     DECODE_START(3, p);
     decode(path, p);
@@ -105,7 +105,7 @@ public:
 
   void decode_payload() override
   {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(daemon_name, p);
     decode(declare_types, p);
     decode(packed, p);

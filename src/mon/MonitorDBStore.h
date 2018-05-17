@@ -73,7 +73,7 @@ class MonitorDBStore
       ENCODE_FINISH(encode_bl);
     }
 
-    void decode(bufferlist::iterator& decode_bl) {
+    void decode(bufferlist::const_iterator& decode_bl) {
       DECODE_START(2, decode_bl);
       decode(type, decode_bl);
       decode(prefix, decode_bl);
@@ -159,7 +159,7 @@ class MonitorDBStore
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       DECODE_START(2, bl);
       decode(ops, bl);
       if (struct_v >= 2) {
@@ -188,7 +188,7 @@ class MonitorDBStore
 
     void append_from_encoded(bufferlist& bl) {
       auto other(std::make_shared<Transaction>());
-      bufferlist::iterator it = bl.begin();
+      auto it = bl.cbegin();
       other->decode(it);
       append(other);
     }
@@ -538,7 +538,7 @@ class MonitorDBStore
 
     assert(bl.length());
     version_t ver;
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(ver, p);
     return ver;
   }

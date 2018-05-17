@@ -54,7 +54,7 @@ public:
     encode_nohead(bl, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(head, p);
     decode_nohead(head.num_split_inos, split_inos, p);
     decode_nohead(head.num_split_realms, split_realms, p);

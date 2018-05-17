@@ -349,7 +349,7 @@ void MonClient::handle_monmap(MMonMap *m)
   auto peer = m->get_source_addr();
   string cur_mon = monmap.get_name(peer);
 
-  bufferlist::iterator p = m->monmapbl.begin();
+  auto p = m->monmapbl.cbegin();
   decode(monmap, p);
 
   ldout(cct, 10) << " got monmap " << monmap.epoch
@@ -1318,7 +1318,7 @@ int MonConnection::authenticate(MAuthReply *m)
     auth->set_global_id(global_id);
     ldout(cct, 10) << "my global_id is " << m->global_id << dendl;
   }
-  auto p = m->result_bl.begin();
+  auto p = m->result_bl.cbegin();
   int ret = auth->handle_response(m->result, p);
   if (ret == -EAGAIN) {
     auto ma = new MAuth;
