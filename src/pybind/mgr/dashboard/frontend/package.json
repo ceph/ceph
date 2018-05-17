@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --delete-output-path false --proxy-config proxy.conf.json",
+    "start": "ng serve --delete-output-path false --proxy-config proxy.conf.json --host 0.0.0.0",
     "build": "ng build",
     "test": "ng test",
     "lint": "ng lint",
