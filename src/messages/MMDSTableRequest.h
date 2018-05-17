@@ -47,7 +47,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(table, p);
     decode(op, p);
     decode(reqid, p);

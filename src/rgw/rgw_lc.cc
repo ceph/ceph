@@ -376,7 +376,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
   if (aiter == bucket_attrs.end())
     return 0;
 
-  bufferlist::iterator iter(&aiter->second);
+  bufferlist::const_iterator iter{&aiter->second};
   try {
       config.decode(iter);
     } catch (const buffer::error& e) {
@@ -425,7 +425,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
             }
             RGWObjTags dest_obj_tags;
             try {
-              auto iter = tags_bl.begin();
+              auto iter = tags_bl.cbegin();
               dest_obj_tags.decode(iter);
             } catch (buffer::error& err) {
                ldout(cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;

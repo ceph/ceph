@@ -12,7 +12,7 @@ void object_id_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void object_id_wrapper::decode(bufferlist::iterator& bp)
+void object_id_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(1, bp);
   decode(name, bp);
@@ -37,7 +37,7 @@ void osd_shard_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void osd_shard_wrapper::decode(bufferlist::iterator& bp)
+void osd_shard_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(1, bp);
   decode(osd, bp);
@@ -87,7 +87,7 @@ void shard_info_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void shard_info_wrapper::decode(bufferlist::iterator& bp)
+void shard_info_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(3, bp);
   decode(errors, bp);
@@ -159,7 +159,7 @@ void inconsistent_obj_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inconsistent_obj_wrapper::decode(bufferlist::iterator& bp)
+void inconsistent_obj_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(2, bp);
   DECODE_OLDEST(2);
@@ -238,7 +238,7 @@ void inconsistent_snapset_wrapper::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void inconsistent_snapset_wrapper::decode(bufferlist::iterator& bp)
+void inconsistent_snapset_wrapper::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(2, bp);
   decode(errors, bp);
@@ -263,7 +263,7 @@ void scrub_ls_arg_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void scrub_ls_arg_t::decode(bufferlist::iterator& bp)
+void scrub_ls_arg_t::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(1, bp);
   decode(interval, bp);
@@ -283,7 +283,7 @@ void scrub_ls_result_t::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void scrub_ls_result_t::decode(bufferlist::iterator& bp)
+void scrub_ls_result_t::decode(bufferlist::const_iterator& bp)
 {
   DECODE_START(1, bp);
   decode(interval, bp);

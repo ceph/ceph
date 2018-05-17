@@ -41,7 +41,7 @@ public:
   }
 
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(tag, p);
   }
 

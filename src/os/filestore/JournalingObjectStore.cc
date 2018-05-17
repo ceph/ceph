@@ -83,7 +83,7 @@ int JournalingObjectStore::journal_replay(uint64_t fs_op_seq)
     assert(op_seq == seq-1);
 
     dout(3) << "journal_replay: applying op seq " << seq << dendl;
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     vector<ObjectStore::Transaction> tls;
     while (!p.end()) {
       tls.emplace_back(Transaction(p));

@@ -2131,7 +2131,7 @@ TEST_F(TestClsRbd, group_image_clean) {
   ASSERT_EQ(0, ioctx.omap_get_vals(group_id, "", 10, &vals));
 
   cls::rbd::GroupImageLinkState ref_state;
-  bufferlist::iterator it = vals[image_key].begin();
+  auto it = vals[image_key].cbegin();
   decode(ref_state, it);
   ASSERT_EQ(cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED, ref_state);
 }
@@ -2155,7 +2155,7 @@ TEST_F(TestClsRbd, image_group_add) {
   ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", RBD_GROUP_REF, 10, &vals));
 
   cls::rbd::GroupSpec val_spec;
-  bufferlist::iterator it = vals[RBD_GROUP_REF].begin();
+  auto it = vals[RBD_GROUP_REF].cbegin();
   decode(val_spec, it);
 
   ASSERT_EQ(group_id, val_spec.group_id);

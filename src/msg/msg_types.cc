@@ -243,7 +243,7 @@ void entity_addrvec_t::encode(bufferlist& bl, uint64_t features) const
   encode(v, bl, features);
 }
 
-void entity_addrvec_t::decode(bufferlist::iterator& bl)
+void entity_addrvec_t::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   __u8 marker;

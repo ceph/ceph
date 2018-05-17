@@ -77,7 +77,7 @@ public:
     seeds[0] = 0;
   }
 
-  explicit ObjectContents(bufferlist::iterator &bp) {
+  explicit ObjectContents(bufferlist::const_iterator &bp) {
     decode(_size, bp);
     decode(seeds, bp);
     decode(written, bp);

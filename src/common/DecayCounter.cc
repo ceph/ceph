@@ -24,7 +24,7 @@ void DecayCounter::encode(bufferlist& bl) const
   ENCODE_FINISH(bl);
 }
 
-void DecayCounter::decode(const utime_t &t, bufferlist::iterator &p)
+void DecayCounter::decode(const utime_t &t, bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
   if (struct_v < 2) {

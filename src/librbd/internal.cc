@@ -532,7 +532,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 
     // old format images are in a tmap
     if (bl.length()) {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       bufferlist header;
       map<string,bufferlist> m;
       decode(header, p);

@@ -45,7 +45,7 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(head, p);
     decode_nohead(head.num, caps, p);
     if (header.version >= 2) {

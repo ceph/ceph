@@ -136,7 +136,7 @@ void SnapshotRemoveRequest<I>::handle_get_snap(int r) {
     std::vector<cls::rbd::SnapshotInfo> snap_infos;
     std::vector<ParentInfo> parents;
     std::vector<uint8_t> protections;
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = cls_client::snapshot_get_finish(&it, {m_snap_id}, &snap_infos,
                                         &parents, &protections);
     if (r == 0) {

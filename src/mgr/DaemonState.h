@@ -127,7 +127,7 @@ class DaemonState
   const std::map<std::string,std::string>& get_config_defaults() {
     if (config_defaults.empty() &&
 	config_defaults_bl.length()) {
-      auto p = config_defaults_bl.begin();
+      auto p = config_defaults_bl.cbegin();
       try {
 	decode(config_defaults, p);
       } catch (buffer::error& e) {

@@ -53,7 +53,7 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
   }
 
   try {
-    bufferlist::iterator it = bl.begin();
+    auto it = bl.cbegin();
     decode(*lock, it);
   } catch (const buffer::error &err) {
     CLS_ERR("error decoding %s", key.c_str());
@@ -214,7 +214,7 @@ static int lock_op(cls_method_context_t hctx,
   CLS_LOG(20, "lock_op");
   cls_lock_lock_op op;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(op, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
@@ -279,7 +279,7 @@ static int unlock_op(cls_method_context_t hctx,
   CLS_LOG(20, "unlock_op");
   cls_lock_unlock_op op;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
@@ -307,7 +307,7 @@ static int break_lock(cls_method_context_t hctx,
   CLS_LOG(20, "break_lock");
   cls_lock_break_op op;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
@@ -333,7 +333,7 @@ static int get_info(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   CLS_LOG(20, "get_info");
   cls_lock_get_info_op op;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
@@ -416,7 +416,7 @@ int assert_locked(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   cls_lock_assert_op op;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;
@@ -488,7 +488,7 @@ int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   cls_lock_set_cookie_op op;
   try {
-    bufferlist::iterator iter = in->begin();
+    auto iter = in->cbegin();
     decode(op, iter);
   } catch (const buffer::error& err) {
     return -EINVAL;

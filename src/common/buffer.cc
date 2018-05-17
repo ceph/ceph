@@ -929,7 +929,7 @@ public:
     return *this;
   }
 
-  void buffer::ptr::swap(ptr& other)
+  void buffer::ptr::swap(ptr& other) noexcept
   {
     raw *r = _raw;
     unsigned o = _off;
@@ -1506,7 +1506,7 @@ public:
 
   // -- buffer::list --
 
-  buffer::list::list(list&& other)
+  buffer::list::list(list&& other) noexcept
     : _buffers(std::move(other._buffers)),
       _len(other._len),
       _memcopy_count(other._memcopy_count),
@@ -1515,7 +1515,7 @@ public:
     other.clear();
   }
 
-  void buffer::list::swap(list& other)
+  void buffer::list::swap(list& other) noexcept
   {
     std::swap(_len, other._len);
     std::swap(_memcopy_count, other._memcopy_count);

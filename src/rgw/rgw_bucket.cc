@@ -840,7 +840,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     RGWAccessControlPolicy policy;
     ACLOwner owner;
     try {
-     bufferlist::iterator iter = aclbl.begin();
+     auto iter = aclbl.cbegin();
      decode(policy, iter);
      owner = policy.get_owner();
     } catch (buffer::error& err) {
@@ -1196,7 +1196,7 @@ int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
 int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
 {
   RGWAccessControlPolicy_S3 policy(g_ceph_context);
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     policy.decode(iter);
   } catch (buffer::error& err) {
@@ -1209,7 +1209,7 @@ int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
 
 static int policy_decode(RGWRados *store, bufferlist& bl, RGWAccessControlPolicy& policy)
 {
-  bufferlist::iterator iter = bl.begin();
+  auto iter = bl.cbegin();
   try {
     policy.decode(iter);
   } catch (buffer::error& err) {
@@ -1914,7 +1914,7 @@ int RGWDataChangesLog::list_entries(int shard, const real_time& start_time, cons
     log_entry.log_id = iter->id;
     real_time rt = iter->timestamp.to_real_time();
     log_entry.log_timestamp = rt;
-    bufferlist::iterator liter = iter->data.begin();
+    auto liter = iter->data.cbegin();
     try {
       decode(log_entry.entry, liter);
     } catch (buffer::error& err) {

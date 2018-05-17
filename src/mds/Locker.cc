@@ -3154,7 +3154,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
     dout(7) << " xattrs v" << i->xattr_version << " -> " << m->head.xattr_version
 	    << " len " << m->xattrbl.length() << dendl;
     i->xattr_version = m->head.xattr_version;
-    bufferlist::iterator p = m->xattrbl.begin();
+    auto p = m->xattrbl.cbegin();
     decode(*px, p);
   }
 
@@ -3361,7 +3361,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
   if (m->flockbl.length()) {
     int32_t num_locks;
-    bufferlist::iterator bli = m->flockbl.begin();
+    auto bli = m->flockbl.cbegin();
     decode(num_locks, bli);
     for ( int i=0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
@@ -3429,7 +3429,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   if (xattr) {
     dout(7) << " xattrs v" << pi.inode.xattr_version << " -> " << m->head.xattr_version << dendl;
     pi.inode.xattr_version = m->head.xattr_version;
-    bufferlist::iterator p = m->xattrbl.begin();
+    auto p = m->xattrbl.cbegin();
     decode(*pi.xattrs, p);
     wrlock_force(&in->xattrlock, mut);
   }

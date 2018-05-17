@@ -887,7 +887,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   if ((in->xattr_version  == 0 || !(issued & CEPH_CAP_XATTR_EXCL)) &&
       st->xattrbl.length() &&
       st->xattr_version > in->xattr_version) {
-    bufferlist::iterator p = st->xattrbl.begin();
+    auto p = st->xattrbl.cbegin();
     decode(in->xattrs, p);
     in->xattr_version = st->xattr_version;
   }
@@ -1072,7 +1072,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
   assert(dirp);
 
   // the extra buffer list is only set for readdir and lssnap replies
-  bufferlist::iterator p = reply->get_extra_bl().begin();
+  auto p = reply->get_extra_bl().cbegin();
   if (!p.end()) {
     // snapdir?
     if (request->head.op == CEPH_MDS_OP_LSSNAP) {
@@ -1229,7 +1229,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	   << " is_dentry=" << (int)reply->head.is_dentry
 	   << dendl;
 
-  bufferlist::iterator p = reply->get_trace_bl().begin();
+  auto p = reply->get_trace_bl().cbegin();
   if (request->got_unsafe) {
     ldout(cct, 10) << "insert_trace -- already got unsafe; ignoring" << dendl;
     assert(p.end());
@@ -4464,7 +4464,7 @@ void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush
 
   map<SnapRealm*, SnapContext> dirty_realms;
 
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   while (!p.end()) {
     SnapRealmInfo info;
     decode(info, p);
@@ -4568,7 +4568,7 @@ void Client::handle_snap(MClientSnap *m)
   if (m->head.op == CEPH_SNAP_OP_SPLIT) {
     assert(m->head.split);
     SnapRealmInfo info;
-    bufferlist::iterator p = m->bl.begin();    
+    auto p = m->bl.cbegin();
     decode(info, p);
     assert(info.ino() == m->head.split);
     
@@ -5058,7 +5058,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   if ((issued & CEPH_CAP_XATTR_EXCL) == 0 &&
       m->xattrbl.length() &&
       m->head.xattr_version > in->xattr_version) {
-    bufferlist::iterator p = m->xattrbl.begin();
+    auto p = m->xattrbl.cbegin();
     decode(in->xattrs, p);
     in->xattr_version = m->head.xattr_version;
   }
@@ -9763,7 +9763,7 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
   if (ret == 0) {
     if (op == CEPH_MDS_OP_GETFILELOCK) {
       ceph_filelock filelock;
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       decode(filelock, p);
 
       if (CEPH_LOCK_SHARED == filelock.type)

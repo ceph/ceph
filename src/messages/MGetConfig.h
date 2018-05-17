@@ -32,7 +32,7 @@ struct MGetConfig : public Message {
 
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(name, p);
     decode(host, p);
     decode(device_class, p);

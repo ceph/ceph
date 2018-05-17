@@ -44,7 +44,7 @@ public:
     encode(cmd, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(r, p);
     decode(rs, p);

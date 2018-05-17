@@ -507,7 +507,7 @@ SignedTokenEngine::authenticate(const std::string& token,
   std::string swift_user;
 
   try {
-    /*const*/ auto iter = tok_bl.begin();
+    auto iter = tok_bl.cbegin();
 
     using ceph::decode;
     decode(swift_user, iter);

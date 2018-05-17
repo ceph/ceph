@@ -98,7 +98,7 @@ public:
     encode(metadata, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(op, p);
     decode(epoch, p);

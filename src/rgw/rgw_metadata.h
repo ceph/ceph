@@ -263,7 +263,7 @@ struct RGWMetadataLogData {
   RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
@@ -279,7 +279,7 @@ struct RGWMetadataLogHistory {
     encode(oldest_period_id, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
     decode(oldest_realm_epoch, p);
     decode(oldest_period_id, p);

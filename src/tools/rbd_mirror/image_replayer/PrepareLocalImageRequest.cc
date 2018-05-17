@@ -79,7 +79,7 @@ void PrepareLocalImageRequest<I>::handle_get_local_image_name(int r) {
   dout(20) << "r=" << r << dendl;
 
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = librbd::cls_client::dir_get_name_finish(&it, m_local_image_name);
   }
 
@@ -116,7 +116,7 @@ void PrepareLocalImageRequest<I>::handle_get_mirror_state(int r) {
 
   cls::rbd::MirrorImage mirror_image;
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
   }
 

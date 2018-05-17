@@ -261,7 +261,7 @@ public:
   // zipkin tracing
   ZTracer::Trace trace;
   void encode_trace(bufferlist &bl, uint64_t features) const;
-  void decode_trace(bufferlist::iterator &p, bool create = false);
+  void decode_trace(bufferlist::const_iterator &p, bool create = false);
 
   class CompletionHook : public Context {
   protected:
@@ -506,6 +506,6 @@ inline ostream& operator<<(ostream& out, const Message& m) {
 
 extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
-                               bufferlist::iterator& bl);
+                               bufferlist::const_iterator& bl);
 
 #endif

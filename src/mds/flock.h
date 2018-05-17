@@ -255,7 +255,7 @@ public:
     encode(held_locks, bl);
     encode(client_held_lock_counts, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(held_locks, bl);
     decode(client_held_lock_counts, bl);

@@ -44,7 +44,7 @@ public:
   epoch_t get_epoch() const { return epoch; }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(fsid, p);
     decode(target_osd, p);

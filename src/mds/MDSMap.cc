@@ -544,7 +544,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
   encode(export_targets, bl);
 }
 
-void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
+void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
   decode(global_id, bl);
@@ -710,7 +710,7 @@ void MDSMap::sanitize(const std::function<bool(int64_t pool)>& pool_exists)
   }
 }
 
-void MDSMap::decode(bufferlist::iterator& p)
+void MDSMap::decode(bufferlist::const_iterator& p)
 {
   std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
 

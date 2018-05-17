@@ -431,7 +431,7 @@ void CloneRequest<I>::handle_metadata_list(int r) {
 
   map<string, bufferlist> metadata;
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = cls_client::metadata_list_finish(&it, &metadata);
   }
 
@@ -518,7 +518,7 @@ void CloneRequest<I>::handle_get_mirror_mode(int r) {
   ldout(m_cct, 20) << this << " " << __func__ << " r=" << r << dendl;
 
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = cls_client::mirror_mode_get_finish(&it, &m_mirror_mode);
   }
 

@@ -161,7 +161,7 @@ struct ceph_sockaddr_storage {
     ::encode_raw(ss, bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     struct ceph_sockaddr_storage ss;
     ::decode_raw(ss, bl);
     ss.ss_family = ntohs(ss.ss_family);
@@ -197,7 +197,7 @@ static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   encode(ss, bl);
 #endif
 }
-static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
+static inline void decode(sockaddr_storage& a, bufferlist::const_iterator& bl) {
 #if defined(__linux__)
   ::decode_raw(a, bl);
   a.ss_family = ntohs(a.ss_family);
@@ -414,7 +414,7 @@ struct entity_addr_t {
 
   bool parse(const char *s, const char **end = 0);
 
-  void decode_legacy_addr_after_marker(bufferlist::iterator& bl)
+  void decode_legacy_addr_after_marker(bufferlist::const_iterator& bl)
   {
     using ceph::decode;
     __u8 marker;
@@ -459,7 +459,7 @@ struct entity_addr_t {
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 marker;
     decode(marker, bl);
@@ -536,7 +536,7 @@ struct entity_addrvec_t {
   bool empty() const { return v.empty(); }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& bl);
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
 };
@@ -563,7 +563,7 @@ struct entity_inst_t {
     encode(name, bl);
     encode(addr, bl, features);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     decode(name, bl);
     decode(addr, bl);

@@ -33,7 +33,7 @@ public:
       encode(inode_caps, bl);
       encode(committing, bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       using ceph::decode;
       decode(inode_caps, bl);
       decode(committing, bl);
@@ -56,7 +56,7 @@ public:
       encode(type, bl);
       encode(pending_commits, bl);
     }
-    void decode(bufferlist::iterator& bl) {
+    void decode(bufferlist::const_iterator& bl) {
       using ceph::decode;
       decode(type, bl);
       decode(pending_commits, bl);
@@ -110,7 +110,7 @@ public:
   }
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(subtrees, p);
     decode(ambiguous_imports, p);
     decode(slave_requests, p);

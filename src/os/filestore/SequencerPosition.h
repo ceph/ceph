@@ -28,7 +28,7 @@ struct SequencerPosition {
     encode(op, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(1, p);
     decode(seq, p);
     decode(trans, p);

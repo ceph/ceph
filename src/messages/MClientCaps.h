@@ -198,7 +198,7 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(head, p);
     ceph_mds_caps_body_legacy body;
     decode(body, p);

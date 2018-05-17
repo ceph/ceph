@@ -17,7 +17,7 @@ struct cls_version_set_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(objv, bl);
     DECODE_FINISH(bl);
@@ -38,7 +38,7 @@ struct cls_version_inc_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(objv, bl);
     decode(conds, bl);
@@ -60,7 +60,7 @@ struct cls_version_check_op {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(objv, bl);
     decode(conds, bl);
@@ -80,7 +80,7 @@ struct cls_version_read_ret {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(objv, bl);
     DECODE_FINISH(bl);

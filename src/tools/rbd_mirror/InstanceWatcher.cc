@@ -42,7 +42,7 @@ struct C_GetInstances : public Context {
              << dendl;
 
     if (r == 0) {
-      bufferlist::iterator it = out_bl.begin();
+      auto it = out_bl.cbegin();
       r = librbd::cls_client::mirror_instances_list_finish(&it, instance_ids);
     } else if (r == -ENOENT) {
       r = 0;
@@ -183,7 +183,7 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
           continue;
         }
         try {
-          auto iter = bl.begin();
+          auto iter = bl.cbegin();
           NotifyAckPayload ack;
           decode(ack, iter);
           if (ack.instance_id != instance_watcher->get_instance_id()) {
@@ -1106,7 +1106,7 @@ void InstanceWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
 
   NotifyMessage notify_message;
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(notify_message, iter);
   } catch (const buffer::error &err) {
     derr << "error decoding image notification: " << err.what() << dendl;

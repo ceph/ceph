@@ -62,7 +62,7 @@ void LoadRequest<I>::handle_image_map_list(int r) {
 
   std::map<std::string, cls::rbd::MirrorImageMap> image_mapping;
   if (r == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_map_list_finish(&it, &image_mapping);
   }
 

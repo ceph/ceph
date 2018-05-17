@@ -49,7 +49,7 @@ namespace rados {
           encode(cookie, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
           decode(locker, bl);
           decode(cookie, bl);
@@ -85,7 +85,7 @@ namespace rados {
           encode(description, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
           decode(expiration, bl);
           decode(addr, bl);
@@ -112,7 +112,7 @@ namespace rados {
           encode(tag, bl);
           ENCODE_FINISH(bl);
         }
-        void decode(bufferlist::iterator &bl) {
+        void decode(bufferlist::const_iterator &bl) {
           DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
           decode(lockers, bl);
           uint8_t t;

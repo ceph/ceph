@@ -46,7 +46,7 @@ void SnapClient::handle_query_result(MMDSTableRequest *m)
 
   char type;
   using ceph::decode;
-  bufferlist::iterator p = m->bl.begin();
+  auto p = m->bl.cbegin();
   decode(type, p);
 
   switch (type) {

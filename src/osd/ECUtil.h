@@ -116,7 +116,7 @@ public:
       -1);
   }
   void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<HashInfo*>& o);
   uint32_t get_chunk_hash(int shard) const {

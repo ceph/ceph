@@ -151,7 +151,7 @@ public:
       if ((features & CEPH_FEATURE_MDSENC) == 0 ) encode_unversioned(bl);
       else encode_versioned(bl, features);
     }
-    void decode(bufferlist::iterator& p);
+    void decode(bufferlist::const_iterator& p);
     void dump(Formatter *f) const;
     void print_summary(ostream &out) const;
 
@@ -656,9 +656,9 @@ public:
     return -1;
   }
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void decode(bufferlist& bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(p);
   }
   void sanitize(const std::function<bool(int64_t pool)>& pool_exists);

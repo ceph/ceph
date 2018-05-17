@@ -691,7 +691,7 @@ static int do_decode_rest_obj(CephContext *cct, map<string, bufferlist>& attrs, 
   auto aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
     bufferlist& bl = aiter->second;
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     try {
       info->acls.decode(bliter);
     } catch (buffer::error& err) {
@@ -1531,7 +1531,7 @@ int decode_attr(map<string, bufferlist>& attrs, const char *attr_name, T *result
     *result = def_val;
     return 0;
   }
-  bufferlist::iterator bliter = bl.begin();
+  auto bliter = bl.cbegin();
   try {
     decode(*result, bliter);
   } catch (buffer::error& err) {

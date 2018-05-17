@@ -19,7 +19,7 @@ void LogEntryKey::encode(bufferlist& bl, uint64_t features) const
   encode(seq, bl);
 }
 
-void LogEntryKey::decode(bufferlist::iterator& bl)
+void LogEntryKey::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
   decode(who, bl);
@@ -220,7 +220,7 @@ void LogEntry::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void LogEntry::decode(bufferlist::iterator& bl)
+void LogEntry::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   __u16 t;
@@ -310,7 +310,7 @@ void LogSummary::encode(bufferlist& bl, uint64_t features) const
   ENCODE_FINISH(bl);
 }
 
-void LogSummary::decode(bufferlist::iterator& bl)
+void LogSummary::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
   decode(version, bl);

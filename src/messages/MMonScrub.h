@@ -74,7 +74,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     uint8_t o;
     decode(o, p);
     op = (op_type_t)o;

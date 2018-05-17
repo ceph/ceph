@@ -208,7 +208,7 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
         f->dump_unsigned("type", type);
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;

@@ -158,7 +158,7 @@ public:
       encode(stream_format, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       decode(magic, bl);
       decode(trimmed_pos, bl);

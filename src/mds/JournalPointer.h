@@ -45,7 +45,7 @@ class JournalPointer {
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(front, bl);
     decode(back, bl);

@@ -72,7 +72,7 @@ void OpenRequest<I>::handle_init(int r) {
   }
 
   librbd::journal::ClientData client_data;
-  bufferlist::iterator bl = client.data.begin();
+  auto bl = client.data.cbegin();
   try {
     decode(client_data, bl);
   } catch (const buffer::error &err) {

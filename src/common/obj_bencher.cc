@@ -348,7 +348,7 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
     }
     return r;
   }
-  bufferlist::iterator p = object_data.begin();
+  auto p = object_data.cbegin();
   decode(*object_size, p);
   decode(*num_objects, p);
   decode(*prevPid, p);

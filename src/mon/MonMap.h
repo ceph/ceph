@@ -55,7 +55,7 @@ struct mon_info_t {
 
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void print(ostream& out) const;
 };
 WRITE_CLASS_ENCODER_FEATURES(mon_info_t)
@@ -279,10 +279,10 @@ public:
 
   void encode(bufferlist& blist, uint64_t con_features) const;
   void decode(bufferlist& blist) {
-    bufferlist::iterator p = blist.begin();
+    auto p = std::cbegin(blist);
     decode(p);
   }
-  void decode(bufferlist::iterator &p);
+  void decode(bufferlist::const_iterator& p);
 
   void generate_fsid() {
     fsid.generate_random();

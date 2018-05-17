@@ -420,7 +420,7 @@ TEST_P(StoreTest, FiemapEmpty) {
     bufferlist bl;
     store->fiemap(ch, oid, 0, 100000, bl);
     map<uint64_t,uint64_t> m, e;
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(m, p);
     cout << " got " << m << std::endl;
     e[0] = 100000;
@@ -459,7 +459,7 @@ TEST_P(StoreTest, FiemapHoles) {
     bufferlist bl;
     store->fiemap(ch, oid, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3, bl);
     map<uint64_t,uint64_t> m, e;
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
@@ -479,7 +479,7 @@ TEST_P(StoreTest, FiemapHoles) {
     bufferlist bl;
     store->fiemap(ch, oid, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 2) + 3, bl);
     map<uint64_t,uint64_t> m, e;
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());

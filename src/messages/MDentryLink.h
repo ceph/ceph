@@ -50,7 +50,7 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(subtree, p);
     decode(dirfrag, p);
     decode(dn, p);

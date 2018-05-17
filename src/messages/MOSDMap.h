@@ -73,7 +73,7 @@ private:
 public:
   // marshalling
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(incremental_maps, p);
     decode(maps, p);
@@ -113,7 +113,7 @@ public:
 	   p != incremental_maps.end();
 	   ++p) {
 	OSDMap::Incremental inc;
-	bufferlist::iterator q = p->second.begin();
+	auto q = p->second.cbegin();
 	inc.decode(q);
 	// always encode with subset of osdmaps canonical features
 	uint64_t f = inc.encode_features & features;
@@ -128,7 +128,7 @@ public:
 	if (inc.crush.length()) {
 	  // embedded crush map
 	  CrushWrapper c;
-	  auto p = inc.crush.begin();
+	  auto p = inc.crush.cbegin();
 	  c.decode(p);
 	  inc.crush.clear();
 	  c.encode(inc.crush, f);

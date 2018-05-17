@@ -106,7 +106,7 @@ void AuthMonitor::get_initial_keyring(KeyRing *keyring)
   // fail hard only if there's an error we're not expecting to see
   assert(ret == 0);
 
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   decode(*keyring, p);
 }
 
@@ -216,7 +216,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading summary e " << latest_full << dendl;
     dout(7) << __func__ << " latest length " << latest_bl.length() << dendl;
-    bufferlist::iterator p = latest_bl.begin();
+    auto p = latest_bl.cbegin();
     __u8 struct_v;
     decode(struct_v, p);
     decode(max_global_id, p);
@@ -243,7 +243,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
     dout(20) << __func__ << " walking through version " << (keys_ver+1)
              << " len " << bl.length() << dendl;
 
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     __u8 v;
     decode(v, p);
     while (!p.end()) {
@@ -257,7 +257,7 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
       case AUTH_DATA:
         {
           KeyServerData::Incremental auth_inc;
-          bufferlist::iterator iter = inc.auth_data.begin();
+          auto iter = inc.auth_data.cbegin();
           decode(auth_inc, iter);
           mon->key_server.apply_data_incremental(auth_inc);
           break;
@@ -448,7 +448,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   AuthCapsInfo caps_info;
   MAuthReply *reply;
   bufferlist response_bl;
-  bufferlist::iterator indata = m->auth_payload.begin();
+  auto indata = m->auth_payload.cbegin();
   __u32 proto = m->protocol;
   bool start = false;
   bool finished = false;
@@ -574,7 +574,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       goto done;
     }
     if (caps_info.caps.length()) {
-      bufferlist::iterator p = caps_info.caps.begin();
+      auto p = caps_info.caps.cbegin();
       string str;
       try {
 	decode(str, p);
@@ -775,7 +775,7 @@ bool AuthMonitor::entity_is_pending(EntityName& entity)
   for (auto& p : pending_auth) {
     if (p.inc_type == AUTH_DATA) {
       KeyServerData::Incremental inc;
-      bufferlist::iterator q = p.auth_data.begin();
+      auto q = p.auth_data.cbegin();
       decode(inc, q);
       if (inc.op == KeyServerData::AUTH_INC_ADD &&
           inc.name == entity) {
@@ -1182,7 +1182,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       mon->reply_command(op, -EINVAL, rs, get_last_committed());
       return true;
     }
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     KeyRing keyring;
     try {
       decode(keyring, iter);
@@ -1218,7 +1218,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
     KeyRing new_keyring;
     if (has_keyring) {
-      bufferlist::iterator iter = bl.begin();
+      auto iter = bl.cbegin();
       try {
         decode(new_keyring, iter);
       } catch (const buffer::error &ex) {
@@ -1360,7 +1360,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	 ++p) {
       if (p->inc_type == AUTH_DATA) {
 	KeyServerData::Incremental auth_inc;
-	bufferlist::iterator q = p->auth_data.begin();
+	auto q = p->auth_data.cbegin();
 	decode(auth_inc, q);
 	if (auth_inc.op == KeyServerData::AUTH_INC_ADD &&
 	    auth_inc.name == entity) {
@@ -1579,7 +1579,7 @@ bool AuthMonitor::_upgrade_format_to_dumpling()
     if (p->second.caps.count("mon") == 0)
       continue;
     try {
-      bufferlist::iterator it = p->second.caps["mon"].begin();
+      auto it = p->second.caps["mon"].cbegin();
       decode(mon_caps, it);
     }
     catch (const buffer::error&) {
@@ -1666,7 +1666,7 @@ bool AuthMonitor::_upgrade_format_to_luminous()
     if (n.find("mgr.") == 0 &&
 	p->second.caps.count("mon")) {
       // the kraken ceph-mgr@.service set the mon cap to 'allow *'.
-      auto blp = p->second.caps["mon"].begin();
+      auto blp = p->second.caps["mon"].cbegin();
       string oldcaps;
       decode(oldcaps, blp);
       if (oldcaps == "allow *") {

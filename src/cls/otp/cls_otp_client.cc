@@ -83,7 +83,7 @@ namespace rados {
           return r;
         }
 
-        auto iter = out.begin();
+        auto iter = out.cbegin();
         cls_otp_get_result_reply ret;
         try {
           decode(ret, iter);
@@ -122,7 +122,7 @@ namespace rados {
         }
 
         cls_otp_get_otp_reply ret;
-        auto iter = out.begin();
+        auto iter = out.cbegin();
         try {
           decode(ret, iter);
         } catch (buffer::error& err) {
@@ -175,7 +175,7 @@ namespace rados {
         }
 
         cls_otp_get_current_time_reply ret;
-        auto iter = out.begin();
+        auto iter = out.cbegin();
         try {
           decode(ret, iter);
         } catch (buffer::error& err) {

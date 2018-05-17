@@ -74,7 +74,7 @@ static int get_existing_entry(cls_method_context_t hctx, const string& client_id
     return rc;
   }
   try {
-    bufferlist::iterator iter = bl.begin();
+    auto iter = bl.cbegin();
     decode(entry, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: failed to decode entry %s", obj_index.c_str());
@@ -94,7 +94,7 @@ static int get_existing_entry(cls_method_context_t hctx, const string& client_id
 
 static int cls_statelog_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_statelog_add_op op;
   try {
@@ -134,7 +134,7 @@ static int cls_statelog_add(cls_method_context_t hctx, bufferlist *in, bufferlis
 
 static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_statelog_list_op op;
   try {
@@ -186,7 +186,7 @@ static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferli
     marker = index;
 
     bufferlist& bl = iter->second;
-    bufferlist::iterator biter = bl.begin();
+    auto biter = bl.cbegin();
     try {
       cls_statelog_entry e;
       decode(e, biter);
@@ -207,7 +207,7 @@ static int cls_statelog_list(cls_method_context_t hctx, bufferlist *in, bufferli
 
 static int cls_statelog_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_statelog_remove_op op;
   try {
@@ -246,7 +246,7 @@ static int cls_statelog_remove(cls_method_context_t hctx, bufferlist *in, buffer
 
 static int cls_statelog_check_state(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_statelog_check_state_op op;
   try {

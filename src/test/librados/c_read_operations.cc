@@ -529,7 +529,7 @@ TEST_F(CReadOpsTest, Exec) {
   // make sure buffer is at least as long as it claims
   bufferlist bl;
   bl.append(out, bytes_read);
-  auto it = bl.begin();
+  auto it = bl.cbegin();
   ceph::decode(features, it);
   ASSERT_EQ(RBD_FEATURES_ALL, features);
   rados_buffer_free(out);

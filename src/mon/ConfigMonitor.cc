@@ -715,7 +715,7 @@ void ConfigMonitor::load_changeset(version_t v, ConfigChangeSet *ch)
   while (it->valid() && it->key().find(prefix) == 0) {
     if (it->key() == prefix) {
       bufferlist bl = it->value();
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       try {
 	decode(ch->stamp, p);
 	decode(ch->name, p);

@@ -54,7 +54,7 @@ void TrashMoveRequest<I>::handle_get_mirror_image_id(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r == 0) {
-    auto bl_it = m_out_bl.begin();
+    auto bl_it = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_image_id_finish(&bl_it,
                                                              &m_image_id);
   }

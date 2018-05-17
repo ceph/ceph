@@ -50,7 +50,7 @@ public:
     encode(cmd, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(cmd, p);
   }

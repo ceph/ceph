@@ -150,7 +150,7 @@ void DaemonPerfCounters::update(MMgrReport *report)
   const auto now = ceph_clock_now();
 
   // Parse packed data according to declared set of types
-  bufferlist::iterator p = report->packed.begin();
+  auto p = report->packed.cbegin();
   DECODE_START(1, p);
   for (const auto &t_path : session->declared_types) {
     const auto &t = types.at(t_path);

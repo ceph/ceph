@@ -123,7 +123,7 @@ void BootstrapRequest<I>::handle_get_remote_tag_class(int r) {
   }
 
   librbd::journal::ClientData client_data;
-  bufferlist::iterator it = m_client.data.begin();
+  auto it = m_client.data.cbegin();
   try {
     decode(client_data, it);
   } catch (const buffer::error &err) {
@@ -566,7 +566,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
     }
 
     try {
-      bufferlist::iterator it = remote_tag.data.begin();
+      auto it = remote_tag.data.cbegin();
       decode(remote_tag_data, it);
       remote_tag_data_valid = true;
     } catch (const buffer::error &err) {

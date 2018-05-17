@@ -52,7 +52,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(op, p);
     decode(map_epoch, p);
     decode(query_epoch, p);

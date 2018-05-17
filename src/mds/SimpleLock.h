@@ -569,7 +569,7 @@ public:
       encode(empty_gather_set, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) {
+  void decode(bufferlist::const_iterator& p) {
     DECODE_START(2, p);
     decode(state, p);
     set<__s32> g;
@@ -583,14 +583,14 @@ public:
     using ceph::encode;
     encode(s, bl);
   }
-  void decode_state(bufferlist::iterator& p, bool is_new=true) {
+  void decode_state(bufferlist::const_iterator& p, bool is_new=true) {
     using ceph::decode;
     __s16 s;
     decode(s, p);
     if (is_new)
       state = s;
   }
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
+  void decode_state_rejoin(bufferlist::const_iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
     __s16 s;
     using ceph::decode;
     decode(s, p);

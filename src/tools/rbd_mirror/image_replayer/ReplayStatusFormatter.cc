@@ -189,7 +189,7 @@ void ReplayStatusFormatter<I>::handle_update_tag_cache(uint64_t master_tag_tid,
   } else {
     dout(20) << "retrieved tag " << master_tag_tid << ": " << m_tag << dendl;
 
-    bufferlist::iterator it = m_tag.data.begin();
+    auto it = m_tag.data.cbegin();
     try {
       decode(tag_data, it);
     } catch (const buffer::error &err) {

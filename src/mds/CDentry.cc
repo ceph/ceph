@@ -400,7 +400,7 @@ bool CDentry::is_freezing() const
   return dir->is_freezing();
 }
 
-void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
+void CDentry::decode_replica(bufferlist::const_iterator& p, bool is_new)
 {
   __u32 nonce;
   decode(nonce, p);
@@ -459,7 +459,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
 
 void CDentry::decode_lock_state(int type, bufferlist& bl)
 {  
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
 
   snapid_t newfirst;
   decode(newfirst, p);

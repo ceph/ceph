@@ -97,13 +97,13 @@ public:
   void do_server_update(bufferlist& bl);
 
   virtual void encode_server_state(bufferlist& bl) const = 0;
-  virtual void decode_server_state(bufferlist::iterator& bl) = 0;
+  virtual void decode_server_state(bufferlist::const_iterator& bl) = 0;
 
   void encode_state(bufferlist& bl) const override {
     encode_server_state(bl);
     encode(pending_for_mds, bl);
   }
-  void decode_state(bufferlist::iterator& bl) override {
+  void decode_state(bufferlist::const_iterator& bl) override {
     decode_server_state(bl);
     decode(pending_for_mds, bl);
   }

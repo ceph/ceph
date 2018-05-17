@@ -109,7 +109,7 @@ public:
     encode(high_priority, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(pgid.pgid, p);
     decode(scrub_from, p);
     decode(scrub_to, p);

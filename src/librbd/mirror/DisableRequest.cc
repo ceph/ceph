@@ -59,7 +59,7 @@ Context *DisableRequest<I>::handle_get_mirror_image(int *result) {
   ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
 
   if (*result == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     *result = cls_client::mirror_image_get_finish(&iter, &m_mirror_image);
   }
 
@@ -245,7 +245,7 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
 
   for (auto client : m_clients) {
     journal::ClientData client_data;
-    bufferlist::iterator bl_it = client.data.begin();
+    auto bl_it = client.data.cbegin();
     try {
       using ceph::decode;
       decode(client_data, bl_it);

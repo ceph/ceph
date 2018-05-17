@@ -1041,7 +1041,7 @@ TEST(CrushWrapper, choose_args_compat) {
     c.choose_args[caid] = arg_map;
     bufferlist bl;
     c.encode(bl, features|CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
-    bufferlist::iterator i(bl.begin());
+    auto i = bl.cbegin();
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(1u, c_new.choose_args.size());
@@ -1056,7 +1056,7 @@ TEST(CrushWrapper, choose_args_compat) {
     bufferlist bl;
     c.encode(bl, features);
     c.choose_args.clear();
-    bufferlist::iterator i(bl.begin());
+    auto i = bl.cbegin();
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(0u, c_new.choose_args.size());

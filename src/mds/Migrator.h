@@ -326,17 +326,17 @@ public:
 
   void export_caps(CInode *in);
 
-  void decode_import_inode(CDentry *dn, bufferlist::iterator& blp,
+  void decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 			   mds_rank_t oldauth, LogSegment *ls,
 			   map<CInode*, map<client_t,Capability::Export> >& cap_imports,
 			   list<ScatterLock*>& updated_scatterlocks);
-  void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::iterator &blp,
+  void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::const_iterator &blp,
 				map<CInode*, map<client_t,Capability::Export> >& cap_imports);
   void finish_import_inode_caps(CInode *in, mds_rank_t from, bool auth_cap,
 				const map<client_t,pair<Session*,uint64_t> >& smap,
 				const map<client_t,Capability::Export> &export_map,
 				map<client_t,Capability::Import> &import_map);
-  int decode_import_dir(bufferlist::iterator& blp,
+  int decode_import_dir(bufferlist::const_iterator& blp,
 			mds_rank_t oldauth,
 			CDir *import_root,
 			EImportStart *le, 

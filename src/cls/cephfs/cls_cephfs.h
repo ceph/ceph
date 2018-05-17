@@ -44,7 +44,7 @@ class ObjCeiling {
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &p)
+    void decode(bufferlist::const_iterator &p)
     {
       DECODE_START(1, p);
       decode(id, p);
@@ -95,7 +95,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl)
+  void decode(bufferlist::const_iterator &bl)
   {
     DECODE_START(1, bl);
     decode(obj_xattr_name, bl);
@@ -120,7 +120,7 @@ class InodeTagFilterArgs
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl)
+  void decode(bufferlist::const_iterator &bl)
   {
     DECODE_START(1, bl);
     decode(scrub_tag, bl);

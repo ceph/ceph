@@ -32,7 +32,7 @@ public:
   Replay(ImageCtxT &image_ctx);
   ~Replay();
 
-  int decode(bufferlist::iterator *it, EventEntry *event_entry);
+  int decode(bufferlist::const_iterator *it, EventEntry *event_entry);
   void process(const EventEntry &event_entry,
                Context *on_ready, Context *on_safe);
 

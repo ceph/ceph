@@ -76,7 +76,7 @@ private:
 
 public:
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(fsid, p);
     decode(map_epoch, p);
     decode(op, p);

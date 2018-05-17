@@ -69,7 +69,7 @@ public:
       fd = -1;
       return;
     }
-    bufferlist::iterator bliter = bl.begin();
+    auto bliter = bl.cbegin();
     uint8_t ver, ver2;
     decode(ver, bliter);
     decode(ver2, bliter);
@@ -88,7 +88,7 @@ public:
       fd = -1;
       return;
     }
-    bliter = bl.begin();
+    bliter = bl.cbegin();
     t.reset(new MonitorDBStore::Transaction);
     t->decode(bliter);
   }
@@ -339,7 +339,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
       std::cerr << err << ": " << cpp_strerror(r) << std::endl;
       return r;
     }
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     crush->decode(p);
   }
 
@@ -477,7 +477,7 @@ int inflate_pgmap(MonitorDBStore& st, unsigned n, bool can_be_trimmed) {
     }
     bufferlist pg_bl = i->value();
     pg_stat_t ps;
-    bufferlist::iterator p = pg_bl.begin();
+    auto p = pg_bl.cbegin();
     decode(ps, p);
     // will update the last_epoch_clean of all the pgs.
     pg_stat[pgid] = ps;
@@ -970,14 +970,14 @@ int main(int argc, char **argv) {
           fs_map.print(ss);
         } else if (map_type == "mgr") {
           MgrMap mgr_map;
-          auto p = bl.begin();
+          auto p = bl.cbegin();
           mgr_map.decode(p);
           JSONFormatter f;
           f.dump_object("mgrmap", mgr_map);
           f.flush(ss);
         } else if (map_type == "crushmap") {
           CrushWrapper cw;
-          bufferlist::iterator it = bl.begin();
+          auto it = bl.cbegin();
           cw.decode(it);
           CrushCompiler cc(cw, std::cerr, 0);
           cc.decompile(ss);

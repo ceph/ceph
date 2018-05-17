@@ -43,7 +43,7 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     decode(map, p);
   }
   void encode_payload(uint64_t features) override {

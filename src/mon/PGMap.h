@@ -59,7 +59,7 @@ public:
       encode(up, bl);
       encode(primary, bl);
     }
-    void decode(bufferlist::iterator& p) {
+    void decode(bufferlist::const_iterator& p) {
       using ceph::decode;
       decode(acting, p);
       decode(up, p);
@@ -207,7 +207,7 @@ public:
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<PGMapDigest*>& ls);
 };
@@ -387,7 +387,7 @@ public:
   void stat_osd_sub(int osd, const osd_stat_t &s);
   
   void encode(bufferlist &bl, uint64_t features=-1) const;
-  void decode(bufferlist::iterator &bl);
+  void decode(bufferlist::const_iterator &bl);
 
   /// encode subset of our data to a PGMapDigest
   void encode_digest(const OSDMap& osdmap,

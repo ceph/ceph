@@ -174,7 +174,7 @@ TEST_P(CompressorTest, compress_decompress)
   after.clear();
   size_t compressed_len = out.length();
   out.append_zero(12);
-  auto it = out.begin();
+  auto it = out.cbegin();
   res = compressor->decompress(it, compressed_len, after);
   EXPECT_EQ(res, 0);
   EXPECT_TRUE(exp.contents_equal(after));
@@ -199,7 +199,7 @@ TEST_P(CompressorTest, compress_decompress)
   size_t prefix_len = prefix.length();
   prefix.claim_append(out);
   out.swap(prefix);
-  it = out.begin();
+  it = out.cbegin();
   it.advance(prefix_len);
   res = compressor->decompress(it, compressed_len, after);
   EXPECT_EQ(res, 0);

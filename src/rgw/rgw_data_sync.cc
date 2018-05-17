@@ -2013,7 +2013,7 @@ static void decode_attr(CephContext *cct, map<string, bufferlist>& attrs, const 
     return;
   }
 
-  bufferlist::iterator biter = iter->second.begin();
+  auto biter = iter->second.cbegin();
   try {
     decode(*val, biter);
   } catch (buffer::error& err) {

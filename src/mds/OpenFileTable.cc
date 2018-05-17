@@ -682,7 +682,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
   int err = -EINVAL;
 
   auto decode_func = [this](unsigned idx, inodeno_t ino, bufferlist &bl) {
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
 
     size_t count = loaded_anchor_map.size();
     auto it = loaded_anchor_map.emplace_hint(loaded_anchor_map.end(),
@@ -712,7 +712,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 
   try {
     if (first) {
-      bufferlist::iterator p = header_bl.begin();
+      auto p = header_bl.cbegin();
       version_t version;
       unsigned num_objs;
       __u8 jstate;
@@ -793,7 +793,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 	for (auto& it : loaded_journal) {
 	  if (journal_state != JOURNAL_FINISH)
 	    continue;
-	  bufferlist::iterator p = it.second.begin();
+	  auto p = it.second.cbegin();
 	  version_t version;
 	  std::map<string, bufferlist> to_update;
 	  std::set<string> to_remove;

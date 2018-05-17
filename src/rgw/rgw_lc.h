@@ -51,7 +51,7 @@ public:
     encode(date, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
     decode(days, bl);
     if (struct_v >= 3) {
@@ -135,7 +135,7 @@ class LCFilter
     encode(obj_tags, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
     decode(prefix, bl);
     if (struct_v >= 2) {
@@ -241,7 +241,7 @@ public:
      encode(filter, bl);
      ENCODE_FINISH(bl);
    }
-   void decode(bufferlist::iterator& bl) {
+   void decode(bufferlist::const_iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN(5, 1, 1, bl);
      decode(id, bl);
      decode(prefix, bl);
@@ -305,7 +305,7 @@ public:
     encode(rule_map, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
     decode(rule_map, bl);
     multimap<string, LCRule>::iterator iter;

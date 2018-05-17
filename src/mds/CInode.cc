@@ -1174,11 +1174,11 @@ void CInode::fetch(MDSInternalContextBase *fin)
 void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
 {
   dout(10) << __func__ << " got " << bl.length() << " and " << bl2.length() << dendl;
-  bufferlist::iterator p;
+  bufferlist::const_iterator p;
   if (bl2.length()) {
-    p = bl2.begin();
+    p = bl2.cbegin();
   } else if (bl.length()) {
-    p = bl.begin();
+    p = bl.cbegin();
   } else {
     derr << "No data while reading inode " << ino() << dendl;
     fin->complete(-ENOENT);
@@ -1442,7 +1442,7 @@ void CInode::encode_store(bufferlist& bl, uint64_t features)
 			 &snap_blob);
 }
 
-void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
+void InodeStoreBase::decode_bare(bufferlist::const_iterator &bl,
 			      bufferlist& snap_blob, __u8 struct_v)
 {
   using ceph::decode;
@@ -1480,14 +1480,14 @@ void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
 }
 
 
-void InodeStoreBase::decode(bufferlist::iterator &bl, bufferlist& snap_blob)
+void InodeStoreBase::decode(bufferlist::const_iterator &bl, bufferlist& snap_blob)
 {
   DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   decode_bare(bl, snap_blob, struct_v);
   DECODE_FINISH(bl);
 }
 
-void CInode::decode_store(bufferlist::iterator& bl)
+void CInode::decode_store(bufferlist::const_iterator& bl)
 {
   bufferlist snap_blob;
   InodeStoreBase::decode(bl, snap_blob);
@@ -1668,7 +1668,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 
 void CInode::decode_lock_state(int type, bufferlist& bl)
 {
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   utime_t tm;
 
   snapid_t newfirst;
@@ -2789,7 +2789,7 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
   if (snapbl.length()) {
     open_snaprealm();
     auto old_flags = snaprealm->srnode.flags;
-    bufferlist::iterator p = snapbl.begin();
+    auto p = snapbl.cbegin();
     decode(snaprealm->srnode, p);
     if (is_base()) {
       bool ok = snaprealm->_open_parents(NULL);
@@ -2816,7 +2816,7 @@ void CInode::encode_snap(bufferlist& bl)
   encode(oldest_snap, bl);
 }
 
-void CInode::decode_snap(bufferlist::iterator& p)
+void CInode::decode_snap(bufferlist::const_iterator& p)
 {
   using ceph::decode;
   bufferlist snapbl;
@@ -3686,7 +3686,7 @@ void CInode::_encode_base(bufferlist& bl, uint64_t features)
   encode(damage_flags, bl);
   encode_snap(bl);
 }
-void CInode::_decode_base(bufferlist::iterator& p)
+void CInode::_decode_base(bufferlist::const_iterator& p)
 {
   using ceph::decode;
   decode(first, p);
@@ -3718,7 +3718,7 @@ void CInode::_encode_locks_full(bufferlist& bl)
 
   encode(loner_cap, bl);
 }
-void CInode::_decode_locks_full(bufferlist::iterator& p)
+void CInode::_decode_locks_full(bufferlist::const_iterator& p)
 {
   using ceph::decode;
   decode(authlock, p);
@@ -3764,7 +3764,7 @@ void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
   policylock.encode_state_for_replica(bl);
 }
 
-void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
+void CInode::_decode_locks_state(bufferlist::const_iterator& p, bool is_new)
 {
   authlock.decode_state(p, is_new);
   linklock.decode_state(p, is_new);
@@ -3793,7 +3793,7 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
     policylock.mark_need_recover();
   }
 }
-void CInode::_decode_locks_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters,
+void CInode::_decode_locks_rejoin(bufferlist::const_iterator& p, list<MDSInternalContextBase*>& waiters,
 				  list<SimpleLock*>& eval_locks, bool survivor)
 {
   authlock.decode_state_rejoin(p, waiters, survivor);
@@ -3867,7 +3867,7 @@ void CInode::finish_export(utime_t now)
   put(PIN_TEMPEXPORTING);
 }
 
-void CInode::decode_import(bufferlist::iterator& p,
+void CInode::decode_import(bufferlist::const_iterator& p,
 			   LogSegment *ls)
 {
   DECODE_START(5, p);
@@ -3897,7 +3897,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   // decode fragstat info on bounding cdirs
   bufferlist bounding;
   decode(bounding, p);
-  bufferlist::iterator q = bounding.begin();
+  auto q = bounding.cbegin();
   while (!q.end()) {
     frag_t fg;
     decode(fg, q);
@@ -4101,7 +4101,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 
       // extract the backtrace, and compare it to a newly-constructed one
       try {
-        bufferlist::iterator p = bl.begin();
+        auto p = bl.cbegin();
 	using ceph::decode;
         decode(results->backtrace.ondisk_value, p);
         dout(10) << "decoded " << bl.length() << " bytes of backtrace successfully" << dendl;

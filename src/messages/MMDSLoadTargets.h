@@ -44,7 +44,7 @@ public:
 
   void decode_payload() override {
     using ceph::decode;
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
     decode(global_id, p);
     decode(targets, p);

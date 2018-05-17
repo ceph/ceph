@@ -194,7 +194,7 @@ public:
     encode(s, bl);
   }
 
-  void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
+  void decode_state_rejoin(bufferlist::const_iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
     SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();

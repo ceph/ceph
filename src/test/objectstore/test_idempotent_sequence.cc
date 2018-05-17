@@ -122,7 +122,7 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
     store->read(ch, txn_object, 0, 100, bl);
     int32_t t = 0;
     if (bl.length()) {
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       decode(t, p);
     }
     if (t > txn) {

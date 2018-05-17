@@ -139,7 +139,7 @@ public:
     encode(tv.tv_nsec, bl);
 #endif
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
 #if defined(CEPH_LITTLE_ENDIAN)
     p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
 #else
