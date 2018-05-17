@@ -13,6 +13,7 @@
 class Context;
 class ContextWQ;
 namespace librbd { class ImageCtx; }
+namespace librbd { class ImageOptions; }
 
 namespace rbd {
 namespace mirror {
@@ -134,6 +135,8 @@ private:
   void finish(int r);
 
   int validate_parent();
+
+  void populate_image_options(librbd::ImageOptions* image_options);
 
 };
 
