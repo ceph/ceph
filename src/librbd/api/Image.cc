@@ -174,7 +174,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   uint64_t src_size;
   {
     RWLock::RLocker snap_locker(src->snap_lock);
-    features = src->features;
+    features = (src->features & ~RBD_FEATURES_IMPLICIT_ENABLE);
     src_size = src->get_image_size(src->snap_id);
   }
   uint64_t format = 2;
