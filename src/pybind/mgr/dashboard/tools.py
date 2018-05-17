@@ -262,10 +262,10 @@ class SessionExpireAtBrowserCloseTool(cherrypy.Tool):
 
 class NotificationQueue(threading.Thread):
     _ALL_TYPES_ = '__ALL__'
-    _listeners = collections.defaultdict(set)
+    _listeners = collections.defaultdict(set)  # type: dict
     _lock = threading.Lock()
     _cond = threading.Condition()
-    _queue = collections.deque()
+    _queue = collections.deque()  # type: collections.deque
     _running = False
     _instance = None
 
@@ -407,8 +407,8 @@ class TaskManager(object):
     VALUE_DONE = "done"
     VALUE_EXECUTING = "executing"
 
-    _executing_tasks = set()
-    _finished_tasks = []
+    _executing_tasks = set()  # type: set
+    _finished_tasks = []  # type: list
     _lock = threading.Lock()
 
     _task_local_data = threading.local()

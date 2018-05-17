@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+try:
+    from typing import Dict, Any  # pylint: disable=unused-import
+except ImportError:
+    pass
+
 import cherrypy
 
 from . import ApiController, RESTController, AuthRequired
@@ -20,7 +25,7 @@ class Pool(RESTController):
 
         crush_rules = {r['rule_id']: r["rule_name"] for r in mgr.get('osd_map_crush')['rules']}
 
-        res = {}
+        res = {}  # type: Dict[str, Any]
         for attr in attrs:
             if attr not in pool:
                 continue

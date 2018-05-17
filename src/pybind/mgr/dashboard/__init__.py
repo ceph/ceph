@@ -33,7 +33,7 @@ if 'UNITTEST' not in os.environ:
             return getattr(self._mgr, item)
 
     mgr = _ModuleProxy()
-    logger = _LoggerProxy()
+    logger = _LoggerProxy()  # type: logging.getLogger
 
     from .module import Module, StandbyModule
 else:

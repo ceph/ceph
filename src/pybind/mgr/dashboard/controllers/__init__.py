@@ -2,6 +2,11 @@
 # pylint: disable=protected-access
 from __future__ import absolute_import
 
+try:
+    from typing import List, Tuple, Any, Optional, Dict, Union
+except ImportError:
+    pass
+
 import collections
 from datetime import datetime, timedelta
 import fnmatch
@@ -309,7 +314,7 @@ class Task(object):
 
     def _gen_arg_map(self, func, args, kwargs):
         # pylint: disable=deprecated-method
-        arg_map = {}
+        arg_map = {}  # type: Dict[Union[str, int], Any]
         if sys.version_info > (3, 0):  # pylint: disable=no-else-return
             sig = inspect.signature(func)
             arg_list = [a for a in sig.parameters]
@@ -477,7 +482,7 @@ class RESTController(BaseController):
         def isfunction(m):
             return inspect.isfunction(m) or inspect.ismethod(m)
 
-        result = []
+        result = []  # type: List[Tuple[List[Any], Optional[str], str, List[Any]]]
         for attr, val in inspect.getmembers(cls, predicate=isfunction):
             if hasattr(val, 'exposed') and val.exposed and \
                     attr != '_collection' and attr != '_element':
