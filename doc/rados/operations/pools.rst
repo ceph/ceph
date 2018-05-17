@@ -750,6 +750,13 @@ You may get values for the following keys:
 :Type: Double
 
 
+``allow_ec_overwrites``
+
+:Description: see allow_ec_overwrites_
+
+:Type: Boolean
+
+
 Set the Number of Object Replicas
 =================================
 

@@ -4060,7 +4060,7 @@ void OSDMonitor::dump_info(Formatter *f)
 namespace {
   enum osd_pool_get_choices {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
-    PG_NUM, PGP_NUM, CRUSH_RULE, HASHPSPOOL,
+    PG_NUM, PGP_NUM, CRUSH_RULE, HASHPSPOOL, EC_OVERWRITES,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
     HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
@@ -4661,8 +4661,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"min_size", MIN_SIZE},
       {"crash_replay_interval", CRASH_REPLAY_INTERVAL},
       {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM},
-      {"crush_rule", CRUSH_RULE},
-      {"hashpspool", HASHPSPOOL}, {"nodelete", NODELETE},
+      {"crush_rule", CRUSH_RULE}, {"hashpspool", HASHPSPOOL},
+      {"allow_ec_overwrites", EC_OVERWRITES}, {"nodelete", NODELETE},
       {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
       {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
       {"write_fadvise_dontneed", WRITE_FADVISE_DONTNEED},
@@ -4710,7 +4710,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
-      ERASURE_CODE_PROFILE
+      EC_OVERWRITES, ERASURE_CODE_PROFILE
     };
 
     choices_set_t selected_choices;
@@ -4800,6 +4800,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    } else {
 	      f->dump_string("crush_rule", stringify(p->get_crush_rule()));
 	    }
+	    break;
+	  case EC_OVERWRITES:
+	    f->dump_bool("allow_ec_overwrites",
+                         p->has_flag(pg_pool_t::FLAG_EC_OVERWRITES));
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -5017,6 +5021,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case HIT_SET_SEARCH_LAST_N:
 	    ss << "hit_set_search_last_n: " <<
 	      p->hit_set_search_last_n << "\n";
+	    break;
+	  case EC_OVERWRITES:
+	    ss << "allow_ec_overwrites: " <<
+	      (p->has_flag(pg_pool_t::FLAG_EC_OVERWRITES) ? "true" : "false") <<
+	      "\n";
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
