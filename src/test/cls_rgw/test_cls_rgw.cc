@@ -7,6 +7,7 @@
 
 #include "gtest/gtest.h"
 #include "test/librados/test.h"
+#include "global/global_context.h"
 
 #include <errno.h>
 #include <string>
@@ -446,6 +447,8 @@ TEST(cls_rgw, bi_list)
 {
   string bucket_oid = str_int("bucket", 5);
 
+ CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
+
   OpMgr mgr;
 
   ObjectWriteOperation *op = mgr.write_op();
@@ -454,7 +457,7 @@ TEST(cls_rgw, bi_list)
 
   string name;
   string marker;
-  int max = 10;
+  uint64_t max = 10;
   list<rgw_cls_bi_entry> entries;
   bool is_truncated;
 
@@ -465,11 +468,10 @@ TEST(cls_rgw, bi_list)
   ASSERT_EQ(is_truncated, false);
 
   uint64_t epoch = 1;
-
   uint64_t obj_size = 1024;
+  uint64_t num_objs = 35;
 
-  int num_objs = 35;
-  for (int i = 0; i < num_objs; i++) {
+  for (uint64_t i = 0; i < num_objs; i++) {
     string obj = str_int("obj", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
@@ -484,9 +486,13 @@ TEST(cls_rgw, bi_list)
   ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, num_objs + 10, &entries,
 			    &is_truncated);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entries.size(), num_objs);
+  if (cct->_conf->osd_max_omap_entries_per_request < num_objs) {
+    ASSERT_EQ(entries.size(), cct->_conf->osd_max_omap_entries_per_request);
+  } else {
+    ASSERT_EQ(entries.size(), num_objs);
+  }
 
-  int num_entries = 0;
+  uint64_t num_entries = 0;
 
   is_truncated = true;
   while(is_truncated) {
@@ -494,10 +500,37 @@ TEST(cls_rgw, bi_list)
 			  &is_truncated);
     ASSERT_EQ(ret, 0);
     if (is_truncated) {
-      ASSERT_EQ(entries.size(), max);
+      ASSERT_EQ(entries.size(), std::min(max, cct->_conf->osd_max_omap_entries_per_request));
+    } else {
+      ASSERT_EQ(entries.size(), num_objs - num_entries);
     }
     num_entries += entries.size();
     marker = entries.back().idx;
+  }
+
+  ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
+			&is_truncated);
+  ASSERT_EQ(ret, 0);
+  ASSERT_EQ(entries.size(), 0);
+  ASSERT_EQ(is_truncated, false);
+
+  if (cct->_conf->osd_max_omap_entries_per_request < 15) {
+    num_entries = 0;
+    max = 15;
+    is_truncated = true;
+    marker.clear();
+    while(is_truncated) {
+      ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
+			    &is_truncated);
+      ASSERT_EQ(ret, 0);
+      if (is_truncated) {
+	ASSERT_EQ(entries.size(), cct->_conf->osd_max_omap_entries_per_request);
+      } else {
+	ASSERT_EQ(entries.size(), num_objs - num_entries);
+      }
+      num_entries += entries.size();
+      marker = entries.back().idx;
+    }
   }
 
   ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
