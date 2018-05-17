@@ -1,0 +1,11 @@
+tasks:
+- sequential:
+  - upgrade_workload
+- ceph: 
+- print: "**** done ceph"
+- workunit:
+    branch: luminous
+    clients:
+      client.0:
+      - rbd/import_export.sh
+- print: "**** done rbd/import_export.sh"
