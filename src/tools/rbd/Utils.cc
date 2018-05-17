@@ -347,7 +347,9 @@ int get_pool_group_names(const po::variables_map &vm,
 			 size_t *spec_arg_index,
 			 std::string *pool_name,
 			 std::string *group_name,
-                         std::string *snap_name) {
+                         std::string *snap_name,
+                         SnapshotPresence snapshot_presence,
+                         SpecValidation spec_validation) {
   std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_POOL_NAME : at::POOL_NAME);
   std::string group_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
@@ -388,9 +390,12 @@ int get_pool_group_names(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  if (snap_name != nullptr && snap_name->empty()) {
-    std::cerr << "rbd: snapshot name was not specified" << std::endl;
-    return -EINVAL;
+  if (snap_name != nullptr) {
+    r = validate_snapshot_name(mod, *snap_name, snapshot_presence,
+			       spec_validation);
+    if (r < 0 ) {
+      return r;
+    }
   }
 
   return 0;
