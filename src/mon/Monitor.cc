@@ -3168,7 +3168,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   if (prefix == "compact" || prefix == "mon compact") {
     dout(1) << "triggering manual compaction" << dendl;
     auto start = ceph::coarse_mono_clock::now();
-    store->compact();
+    store->compact_async();
     auto end = ceph::coarse_mono_clock::now();
     double duration = std::chrono::duration<double>(end-start).count();
     dout(1) << "finished manual compaction in " << duration << " seconds" << dendl;
