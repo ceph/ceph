@@ -435,7 +435,9 @@ int CreateImageRequest<I>::validate_parent() {
 template <typename I>
 void CreateImageRequest<I>::populate_image_options(
     librbd::ImageOptions* image_options) {
-  image_options->set(RBD_IMAGE_OPTION_FEATURES, m_remote_image_ctx->features);
+  image_options->set(RBD_IMAGE_OPTION_FEATURES,
+                     (m_remote_image_ctx->features &
+                        ~RBD_FEATURES_IMPLICIT_ENABLE));
   image_options->set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
   image_options->set(RBD_IMAGE_OPTION_STRIPE_UNIT,
                      m_remote_image_ctx->stripe_unit);
