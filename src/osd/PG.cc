@@ -8192,7 +8192,8 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const AdvMap &adv
   int64_t poolnum = pg->info.pgid.pool();
 
   // Reset if min_size turn smaller than previous value, pg might now be able to go active
-  if (advmap.lastmap->get_pools().find(poolnum)->second.min_size >
+  if (!advmap.osdmap->have_pg_pool(poolnum) ||
+      advmap.lastmap->get_pools().find(poolnum)->second.min_size >
       advmap.osdmap->get_pools().find(poolnum)->second.min_size) {
     post_event(advmap);
     return transit< Reset >();
