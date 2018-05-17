@@ -28,7 +28,9 @@ int execute_create(const po::variables_map &vm,
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                       &arg_index, &pool_name, &group_name,
-                                      nullptr);
+                                      nullptr,
+                                      utils::SNAPSHOT_PRESENCE_NONE,
+                                      utils::SNAPSHOT_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -101,7 +103,9 @@ int execute_remove(const po::variables_map &vm,
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                       &arg_index, &pool_name, &group_name,
-                                      nullptr);
+                                      nullptr,
+                                      utils::SNAPSHOT_PRESENCE_NONE,
+                                      utils::SNAPSHOT_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -133,7 +137,9 @@ int execute_rename(const po::variables_map &vm,
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                       &arg_index, &pool_name, &group_name,
-                                      nullptr);
+                                      nullptr,
+                                      utils::SNAPSHOT_PRESENCE_NONE,
+                                      utils::SNAPSHOT_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -143,7 +149,9 @@ int execute_rename(const po::variables_map &vm,
 
   r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                   &arg_index, &dest_pool_name,
-                                  &dest_group_name, nullptr);
+                                  &dest_group_name, nullptr,
+                                  utils::SNAPSHOT_PRESENCE_NONE,
+                                  utils::SNAPSHOT_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -309,7 +317,9 @@ int execute_list_images(const po::variables_map &vm,
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                       &arg_index, &pool_name, &group_name,
-                                      nullptr);
+                                      nullptr,
+                                      utils::SNAPSHOT_PRESENCE_NONE,
+                                      utils::SNAPSHOT_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -396,7 +406,11 @@ int execute_group_snap_create(const po::variables_map &vm,
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                       &arg_index, &pool_name, &group_name,
-                                      &snap_name);
+                                      &snap_name,
+                                      utils::SNAPSHOT_PRESENCE_REQUIRED,
+                                      utils::SNAPSHOT_VALIDATION_SNAP);
+                                      
+                                      
   if (r < 0) {
     return r;
   }
@@ -418,7 +432,7 @@ int execute_group_snap_create(const po::variables_map &vm,
   return 0;
 }
 
-  int execute_group_snap_remove(const po::variables_map &vm,
+int execute_group_snap_remove(const po::variables_map &vm,
                                 const std::vector<std::string> &global_args) {
   size_t arg_index = 0;
 
@@ -428,7 +442,10 @@ int execute_group_snap_create(const po::variables_map &vm,
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                       &arg_index, &pool_name, &group_name,
-                                      &snap_name);
+                                      &snap_name,
+                                      utils::SNAPSHOT_PRESENCE_REQUIRED,
+                                      utils::SNAPSHOT_VALIDATION_SNAP);
+                                      
   if (r < 0) {
     return r;
   }
@@ -462,7 +479,10 @@ int execute_group_snap_rename(const po::variables_map &vm,
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                       &arg_index, &pool_name, &group_name,
-                                      &source_snap_name);
+                                      &source_snap_name,
+                                      utils::SNAPSHOT_PRESENCE_REQUIRED,
+                                      utils::SNAPSHOT_VALIDATION_SNAP);
+                                      
   if (r < 0) {
     return r;
   }
@@ -516,7 +536,10 @@ int execute_group_snap_list(const po::variables_map &vm,
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
                                       &arg_index, &pool_name, &group_name,
-                                      nullptr);
+                                      nullptr,
+                                      utils::SNAPSHOT_PRESENCE_NONE,
+                                      utils::SNAPSHOT_VALIDATION_NONE);
+                                      
   if (r < 0) {
     return r;
   }
