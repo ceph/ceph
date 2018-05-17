@@ -561,14 +561,20 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     }
   }
 
-  try {
-    map<string, bufferlist> uattrs;
-    if (ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {
-      s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+  if (! s->user->user_id.empty()) {
+    try {
+      map<string, bufferlist> uattrs;
+      if (ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {
+        s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+      } else {
+        if (ret == -ENOENT)
+          ret = 0;
+        else ret = -EACCES;
+      }
+    } catch (const std::exception& e) {
+      lderr(s->cct) << "Error reading IAM User Policy: " << e.what() << dendl;
+      ret = -EACCES;
     }
-  } catch (const std::exception& e) {
-    lderr(s->cct) << "Error reading IAM User Policy: " << e.what() << dendl;
-    ret = -EACCES;
   }
 
   try {
