@@ -1461,7 +1461,7 @@ namespace librados
     Rados(const Rados& rhs);
     const Rados& operator=(const Rados& rhs);
     RadosClient *client;
-  };
+  }; // Rados
 }
 
 #endif
