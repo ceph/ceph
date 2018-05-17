@@ -199,6 +199,8 @@ TEST(AES, ValidateLegacy) {
   ASSERT_EQ(plaintext, restored_plaintext);
 }
 
+#else
+# warning "NSS is not available. Skipping the AES.ValidateLegacy testcase!"
 #endif // USE_NSS
 
 TEST(AES, ValidateSecret) {
