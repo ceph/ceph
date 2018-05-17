@@ -23,9 +23,9 @@ by the `openATTIC Ceph management and monitoring tool
 behind openATTIC at SUSE.
 
 The intention is to reuse as much of the existing openATTIC functionality as
-possible, while adapting it to the different environment. The Dashboard module's
-backend code uses the CherryPy framework and a custom REST API implementation
-instead of Django and the Django REST Framework.
+possible, while adapting it to the different environment. While openATTIC is
+based on Django and the Django REST Framework, the dashboard module's backend
+code uses the CherryPy framework and a custom REST API implementation.
 
 The WebUI implementation is based on Angular/TypeScript, merging both
 functionality from the original dashboard as well as adding new functionality
@@ -38,8 +38,12 @@ information and statistics about the Ceph cluster using a web server hosted by
 The dashboard currently provides the following features to monitor and manage
 various aspects of your Ceph cluster:
 
-* **Username/password protection**: The Dashboard can only be accessed by
+* **Username/password protection**: The dashboard can only be accessed by
   providing a configurable username and password.
+* **SSL/TLS support**: All HTTP communication between the web browser and the
+  dashboard is secured via SSL. A self-signed certificate can be created with
+  a built-in command, but it's also possible to import custom certificates
+  signed and issued by a CA.
 * **Overall cluster health**: Displays the overall cluster status, storage
   utilization (e.g. number of objects, raw capacity, usage per pool), a list of
   pools and their status and usage statistics.
@@ -75,7 +79,7 @@ various aspects of your Ceph cluster:
 Enabling
 --------
 
-The *dashboard* module is enabled with::
+Within a running Ceph cluster, the *dashboard* manager module is enabled with::
 
   $ ceph mgr module enable dashboard
 
@@ -94,37 +98,83 @@ a list like so::
 Configuration
 -------------
 
+SSL/TLS Support
+^^^^^^^^^^^^^^^
+
+All HTTP connections to the dashboard are secured with SSL/TLS. 
+
+To get the dashboard up and running quickly, you can generate and install a
+self-signed certificate using the following built-in command::
+
+  $ ceph dashboard create-self-signed-cert
+
+Note that most web browsers will complain about such self-signed certificates
+and require explicit confirmation before establishing a secure connection to the
+dashboard.
+
+To properly secure a deployment and to remove the certificate warning, a
+certificate that is issued by a certificate authority (CA) should be used.
+
+For example, a key pair can be generated with a command similar to::
+
+  $ openssl req -new -nodes -x509 \
+    -subj "/O=IT/CN=ceph-mgr-dashboard" -days 3650 \
+    -keyout dashboard.key -out dashboard.crt -extensions v3_ca
+
+The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
+can enable it for all Ceph manager instances by running the following commands::
+
+  $ ceph config-key set mgr mgr/dashboard/crt -i dashboard.crt
+  $ ceph config-key set mgr mgr/dashboard/key -i dashboard.key
+
+If different certificates are desired for each manager instance for some reason,
+the name of the instance can be included as follows (where ``$name`` is the name
+of the ``ceph-mgr`` instance, usually the hostname)::
+
+  $ ceph config-key set mgr/dashboard/$name/crt -i dashboard.crt
+  $ ceph config-key set mgr/dashboard/$name/key -i dashboard.key
+
+.. note::
+
+  You need to restart the Ceph manager processes manually after changing the SSL
+  certificate and key. This can be accomplished by either running ``ceph mgr
+  fail mgr`` or by disabling and re-enabling the dashboard module (which also
+  triggers the manager to respawn itself)::
+
+    $ ceph mgr module disable dashboard
+    $ ceph mgr module enable dashboard
+
 Host name and port
 ^^^^^^^^^^^^^^^^^^
 
-Like most web applications, dashboard binds to a host name and port.
-By default, the ``ceph-mgr`` daemon hosting the dashboard (i.e., the
-currently active manager) will bind to port 7000 and any available
-IPv4 or IPv6 address on the host.
+Like most web applications, dashboard binds to a TCP/IP address and TCP port.
 
-Since each ``ceph-mgr`` hosts its own instance of dashboard, it may
-also be necessary to configure them separately. The hostname and port
-can be changed via the configuration key facility::
+By default, the ``ceph-mgr`` daemon hosting the dashboard (i.e., the currently
+active manager) will bind to TCP port 8080. If no specific address has been
+configured, the web app will bind to ``::``, which corresponds to all available
+IPv4 and IPv6 addresses.
 
-  $ ceph config-key set mgr/dashboard/$name/server_addr $IP
-  $ ceph config-key set mgr/dashboard/$name/server_port $PORT
-
-where ``$name`` is the ID of the ceph-mgr who is hosting this
-dashboard web app.
-
-These settings can also be configured cluster-wide and not manager
-specific.  For example,::
+These defaults can be changed via the configuration key facility on a
+cluster-wide level (so they apply to all manager instances) as follows::
 
   $ ceph config-key set mgr/dashboard/server_addr $IP
   $ ceph config-key set mgr/dashboard/server_port $PORT
 
-If the port is not configured, the web app will bind to port ``7000``.
-If the address it not configured, the web app will bind to ``::``,
-which corresponds to all available IPv4 and IPv6 addresses.
+Since each ``ceph-mgr`` hosts its own instance of dashboard, it may also be
+necessary to configure them separately. The IP address and port for a specific
+manager instance can be changed with the following commands::
 
-If in doubt which URL to use to access the dashboard, the ``ceph mgr services``
-command will show the endpoints currently configured (look for the "dashboard"
-key).
+  $ ceph config-key mgr/dashboard/$name/server_addr $IP
+  $ ceph config-key mgr/dashboard/$name/server_port $PORT
+
+Replace ``$name`` with the ID of the ceph-mgr instance hosting the dashboard web
+app.
+
+.. note::
+
+  The command ``ceph mgr services`` will show you all endpoints that are
+  currently configured. Look for the "dashboard" key to obtain the URL for
+  accessing the dashboard.
 
 Username and password
 ^^^^^^^^^^^^^^^^^^^^^
@@ -185,7 +235,7 @@ Accessing the dashboard
 
 You can now access the dashboard using your (JavaScript-enabled) web browser, by
 pointing it to any of the host names or IP addresses and the selected TCP port
-where a manager instance is running: e.g., ``http://<$IP>:<$PORT>/``.
+where a manager instance is running: e.g., ``httpS://<$IP>:<$PORT>/``.
 
 You should then be greeted by the dashboard login page, requesting your
 previously defined username and password. Select the **Keep me logged in**
