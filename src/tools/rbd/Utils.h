@@ -143,7 +143,9 @@ int get_pool_group_names(const boost::program_options::variables_map &vm,
 			 size_t *spec_arg_index,
 			 std::string *pool_name,
 			 std::string *group_name,
-                         std::string *snap_name);
+                         std::string *snap_name,
+                         SnapshotPresence snapshot_presence,
+                         SpecValidation spec_validation);
 
 int get_pool_journal_names(
     const boost::program_options::variables_map &vm,
