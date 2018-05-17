@@ -6,7 +6,8 @@
     "ng": "ng",
     "start": "ng serve --delete-output-path false --proxy-config proxy.conf.json --host 0.0.0.0",
     "build": "ng build",
-    "test": "ng test",
+    "test": "jest --watch",
+    "test:ci": "jest --coverage",
     "lint": "ng lint",
     "e2e": "ng e2e",
     "makePretty": "pretty-quick --staged"
