@@ -204,6 +204,9 @@
     }
     .datatable-pager .pager {
       margin-right: 5px;
+      & li > a, & li > span {
+        border-radius: 3px;
+      }
       .pages {
         & > a, & > span {
           display: inline-block;
