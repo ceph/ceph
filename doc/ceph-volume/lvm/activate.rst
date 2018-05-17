@@ -29,6 +29,13 @@ right OSD is being activated. It is entirely possible that a previous OSD with
 the same id exists and would end up activating the incorrect one.
 
 
+dmcrypt
+^^^^^^^
+If the OSD was prepared with dmcrypt by ceph-volume, there is no need to
+specify ``--dmcrypt`` on the command line again (that flag is not available for
+the ``activate`` subcommand). An encrypted OSD will be automatically detected.
+
+
 Discovery
 ---------
 With OSDs previously created by ``ceph-volume``, a *discovery* process is
