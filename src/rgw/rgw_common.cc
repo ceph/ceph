@@ -117,6 +117,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NOT_IMPLEMENTED, {501, "NotImplemented" }},
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
+    { ERR_CALLBACK_BAD_RESPONSE, {203, "CallbackFailed" }},
 });
 
 rgw_http_errors rgw_http_swift_errors({
@@ -200,7 +201,7 @@ is_clear() const
 bool rgw_err::
 is_err() const
 {
-  return !(http_ret >= 200 && http_ret <= 399);
+  return http_ret == 203 || !(http_ret >= 200 && http_ret <= 399);
 }
 
 // The requestURI transferred from the frontend can be abs_path or absoluteURI

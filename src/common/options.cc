@@ -5802,6 +5802,35 @@ std::vector<Option> get_rgw_options() {
         "the type of the frontend followed by an optional space delimited set of "
         "key=value config parameters."),
 
+    Option("rgw_callback_private_rsa_key", Option::TYPE_STR, Option::LEVEL_BASIC)
+    .set_default("")
+    .set_description("RGW callback feature rsa key configuration")
+    .set_long_description(
+        "the private rsa key path for rgw callback feature, rgw use the key to sign callback"
+        "request from client and add to header in request which will send"  
+        "to callback server."),
+
+    Option("rgw_callback_public_rsa_key_url", Option::TYPE_STR, Option::LEVEL_BASIC)
+    .set_default("")
+    .set_description("RGW callback feature public rsa key url")
+    .set_long_description(
+        "the public rsa key url for callback server get and verify the auth header send by"
+        "rgw."),
+
+    Option("rgw_callback_max_response", Option::TYPE_INT, Option::LEVEL_BASIC)
+    .set_default("1")
+    .set_description("The callback server max response size in MB for RGW callback feature")
+    .set_long_description(
+        "the max response size in MB from callback server, the rgw with return error to client "
+        "if the callback server response size is large than 1M default."),
+
+    Option("rgw_callback_callback_var_max_length", Option::TYPE_INT, Option::LEVEL_BASIC)
+    .set_default("5120")
+    .set_description("The x-amz-meta-callback-var and x-amz-mate-callback max size in Byte for RGW callback feature")
+    .set_long_description(
+        "the max size in Byte of x-amz-meta-callback-var and x-amz-mate-callback "
+        ",5K default."),
+ 
     Option("rgw_user_quota_bucket_sync_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(180)
     .set_description("User quota bucket sync interval")

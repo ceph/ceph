@@ -43,6 +43,8 @@
 #include "rgw_crypt.h"
 #include "rgw_crypt_sanitize.h"
 
+#include "rgw_rest_callback_s3.h"
+
 #include "include/assert.h"
 
 #define dout_context g_ceph_context
@@ -1405,6 +1407,9 @@ static int get_success_retcode(int code)
 
 void RGWPutObj_ObjStore_S3::send_response()
 {
+  if(op_ret == 0 && process_callback(s, this, op_ret, etag, boost::none))
+    return;
+  
   if (op_ret) {
     set_req_state_err(s, op_ret);
     dump_errno(s);
@@ -1928,6 +1933,9 @@ int RGWPostObj_ObjStore_S3::get_data(ceph::bufferlist& bl, bool& again)
 
 void RGWPostObj_ObjStore_S3::send_response()
 {
+  if(op_ret == 0 && process_callback(s, this, op_ret, etag, parts))
+    return;
+
   if (op_ret == 0 && parts.count("success_action_redirect")) {
     string redirect;
 
@@ -2571,6 +2579,9 @@ int RGWCompleteMultipart_ObjStore_S3::get_params()
 
 void RGWCompleteMultipart_ObjStore_S3::send_response()
 {
+  if(op_ret == 0 && process_callback(s, this, op_ret, etag, boost::none))
+    return;
+
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);

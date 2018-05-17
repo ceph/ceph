@@ -1440,6 +1440,11 @@ OPTION(rgw_expose_bucket, OPT_BOOL) // Return the bucket name in the 'Bucket' re
 
 OPTION(rgw_frontends, OPT_STR) // rgw front ends
 
+OPTION(rgw_callback_private_rsa_key, OPT_STR)  // private rsa key for rgw put post multipartcompletet callback feature
+OPTION(rgw_callback_public_rsa_key_url, OPT_STR) // public rsa key  url for rgw put post multipartcompletet callback feature
+OPTION(rgw_callback_max_response, OPT_LONGLONG) // Max size of callback server response in kB,default 1MB
+OPTION(rgw_callback_callback_var_max_length, OPT_LONGLONG) // Max size of callback server response in kB,default 5K
+
 OPTION(rgw_user_quota_bucket_sync_interval, OPT_INT) // time period for accumulating modified buckets before syncing stats
 OPTION(rgw_user_quota_sync_interval, OPT_INT) // time period for accumulating modified buckets before syncing entire user stats
 OPTION(rgw_user_quota_sync_idle_users, OPT_BOOL) // whether stats for idle users be fully synced
