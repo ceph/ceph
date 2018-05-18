@@ -833,7 +833,7 @@ function _scrub_snaps_multi() {
     # Since all of the snapshots on the primary is consistent there are no errors here
     if [ $which = "replica" ];
     then
-        scruberrors="20"
+        scruberrors="21"
         jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
 {
     "epoch": 23,
@@ -842,7 +842,7 @@ function _scrub_snaps_multi() {
 EOF
 
 else
-        scruberrors="30"
+        scruberrors="33"
         jq "$jqfilter" << EOF | python -c "$sortkeys" > $dir/checkcsjson
 {
     "epoch": 23,
@@ -917,6 +917,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
+                "head_exists": 1,
                 "snap_context": {
                     "seq": 1,
                     "snaps": [
@@ -942,6 +943,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
+                "head_exists": 1,
                 "snap_context": {
                     "seq": 1,
                     "snaps": [
@@ -958,11 +960,40 @@ else
             ]
         },
         {
+           "errors": [
+             "head_mismatch"
+           ],
+           "locator": "",
+           "name": "obj12",
+           "nspace": "",
+           "snap": "head",
+           "snapset": {
+             "clones": [
+               {
+                 "overlap": "[]",
+                 "size": 1032,
+                 "snap": 1,
+                 "snaps": [
+                   1
+                 ]
+               }
+             ],
+             "head_exists": 0,
+              "snap_context": {
+              "seq": 1,
+              "snaps": [
+                1
+              ]
+            }
+          }
+        },
+        {
             "name": "obj14",
             "nspace": "",
             "locator": "",
             "snap": "head",
             "snapset": {
+                "head_exists": 1,
                 "snap_context": {
                     "seq": 1,
                     "snaps": [
@@ -988,6 +1019,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
+                "head_exists": 1,
                 "snap_context": {
                     "seq": 6,
                     "snaps": [
@@ -1049,6 +1081,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
+                "head_exists": 1,
                 "snap_context": {
                     "seq": 1,
                     "snaps": [
@@ -1070,6 +1103,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
+                "head_exists": 0,
                 "snap_context": {
                     "seq": 0,
                     "snaps": []
@@ -1077,6 +1111,7 @@ else
                 "clones": []
             },
             "errors": [
+                "head_mismatch",
                 "extra_clones"
             ],
             "extra clones": [
@@ -1089,6 +1124,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
+                "head_exists": 1,
                 "snap_context": {
                     "seq": 0,
                     "snaps": [
@@ -1116,6 +1152,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
+                "head_exists": 1,
                 "snap_context": {
                     "seq": 1,
                     "snaps": [
