@@ -5058,7 +5058,7 @@ struct C_EnumerateReply : public Context {
       const hobject_t end_, const int64_t pool_id_, Context *on_finish_) :
     objecter(objecter_), next(next_), result(result_),
     end(end_), pool_id(pool_id_), on_finish(on_finish_),
-    epoch(0), budget(0)
+    epoch(0), budget(-1)
   {}
 
   void finish(int r) override {
@@ -5142,7 +5142,7 @@ void Objecter::_enumerate_reply(
     hobject_t *next,
     Context *on_finish)
 {
-  if (budget > 0) {
+  if (budget >= 0) {
     put_op_budget_bytes(budget);
   }
 
