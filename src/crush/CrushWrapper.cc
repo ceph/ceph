@@ -421,46 +421,29 @@ void CrushWrapper::update_choose_args(CephContext *cct)
 	  carg.weight_set_positions = 0;
 	}
 	continue;
-      } else if (positions != carg.weight_set_positions) {
-	// missing/mismatched positions?
-	if (cct)
-	  ldout(cct,0) << __func__ << " fixing " << i.first << " bucket "
-		       << (-1-j) << " positions " << carg.weight_set_positions
-		       << " -> " << positions << dendl;
-	auto old_pos = carg.weight_set_positions;
-	auto old_ws = carg.weight_set;
-	carg.weight_set_positions = positions;
-	carg.weight_set = static_cast<crush_weight_set*>(
-	  calloc(sizeof(crush_weight_set), positions));
-	for (unsigned p = 0; p < positions; ++p) {
-	  carg.weight_set[p].size = b->size;
-	  carg.weight_set[p].weights = (__u32*)calloc(b->size, sizeof(__u32));
-	  if (old_ws && old_pos < p) {
-	    auto max = std::max<unsigned>(old_ws[p].size, b->size);
-	    for (unsigned k = 0; k < max; ++k) {
-	      carg.weight_set[p].weights[k] = old_ws[p].weights[k];
-	    }
-	  }
-	}
-	if (old_ws) {
-	  for (unsigned p = 0; p < old_pos; ++p) {
-	    free(old_ws[p].weights);
-	  }
-	  free(old_ws);
-	}
       }
-      // mis-sized weight_sets?
+      if (carg.weight_set_positions == 0) {
+	continue;	// skip it
+      }
+      if (carg.weight_set_positions != positions) {
+	if (cct)
+	  lderr(cct) << __func__ << " " << i.first << " bucket "
+		     << (-1-j) << " positions " << carg.weight_set_positions
+		     << " -> " << positions << dendl;
+	continue;	// wth... skip!
+      }
+      // mis-sized weight_sets?  this shouldn't ever happen.
       for (unsigned p = 0; p < positions; ++p) {
 	if (carg.weight_set[p].size != b->size) {
 	  if (cct)
-	    ldout(cct,0) << __func__ << " fixing " << i.first << " bucket "
-			 << (-1-j) << " position " << p
-			 << " size " << carg.weight_set[p].size << " -> "
-			 << b->size << dendl;
+	    lderr(cct) << __func__ << " fixing " << i.first << " bucket "
+		       << (-1-j) << " position " << p
+		       << " size " << carg.weight_set[p].size << " -> "
+		       << b->size << dendl;
 	  auto old_ws = carg.weight_set[p];
 	  carg.weight_set[p].size = b->size;
 	  carg.weight_set[p].weights = (__u32*)calloc(b->size, sizeof(__u32));
-	  auto max = std::max<unsigned>(old_ws.size, b->size);
+	  auto max = std::min<unsigned>(old_ws.size, b->size);
 	  for (unsigned k = 0; k < max; ++k) {
 	    carg.weight_set[p].weights[k] = old_ws.weights[k];
 	  }
