@@ -2120,7 +2120,7 @@ namespace librbd {
         return r;
       }
 
-      bufferlist::iterator iter = out_bl.begin();
+      auto iter = out_bl.cbegin();
       return mirror_image_map_list_finish(&iter, image_mapping);
     }
 
