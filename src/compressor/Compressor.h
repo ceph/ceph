@@ -15,7 +15,6 @@
 #ifndef CEPH_COMPRESSOR_H
 #define CEPH_COMPRESSOR_H
 
-#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -44,7 +43,8 @@ public:
     COMP_ALG_LAST   //the last value for range checks
   };
 
-  inline static const std::map<const std::string, const CompressionAlgorithm> compression_algorithms {
+  using pair_type = std::pair<const char*, CompressionAlgorithm>;
+  static constexpr std::initializer_list<pair_type> compression_algorithms {
 	{ "none",	COMP_ALG_NONE },
 	{ "snappy",	COMP_ALG_SNAPPY },
 	{ "zlib",	COMP_ALG_ZLIB },
@@ -65,7 +65,7 @@ public:
     COMP_FORCE                  ///< compress always
   };
 
-  static std::string get_comp_alg_name(int a);
+  static const char* get_comp_alg_name(int a);
   static boost::optional<CompressionAlgorithm> get_comp_alg_type(const std::string &s);
 
   static const char *get_comp_mode_name(int m);
