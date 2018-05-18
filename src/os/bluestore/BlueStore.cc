@@ -8444,8 +8444,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       return;
     case TransContext::STATE_KV_SUBMITTED:
-      txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
-      txc->state = TransContext::STATE_KV_DONE;
       _txc_committed_kv(txc);
       // ** fall-thru **
 
@@ -8637,8 +8635,13 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
 void BlueStore::_txc_committed_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
+  {
+    std::lock_guard<std::mutex> l(txc->osr->qlock);
+    txc->state = TransContext::STATE_KV_DONE;
+    finishers[txc->osr->shard]->queue(txc->oncommits);
+  }
+  txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
   logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
-  finishers[txc->osr->shard]->queue(txc->oncommits);
 }
 
 void BlueStore::_txc_finish(TransContext *txc)
