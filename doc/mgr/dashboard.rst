@@ -276,13 +276,31 @@ Grafana on your preferred hosts, proceed with the following steps::
 
         root_url = http://localhost:3000/api/grafana/proxy
 
-After you have configured Grafana and Prometheus, you will need to tell the
-Ceph Manager Dashboard where it can access Grafana and what the credentials are
-to do so. This can be done by using the following commands::
+After you have set up Grafana and Prometheus, you will need to configure the
+connection information that the Ceph Manager Dashboard will use to access Grafana.
+This includes setting the authentication method to be used, the corresponding login
+credentials as well as the URL at which the Grafana instance can be reached.
+
+The URL and TCP port can be set by using the following command::
 
   $ ceph dashboard set-grafana-api-url <url>  # default: 'http://localhost:3000'
-  $ ceph dashboard set-grafana-api-username <username> # default: 'admin'
-  $ ceph dashboard set-grafana-api-password <password> # default: 'admin'
+
+You need to tell the dashboard which authentication method should be
+used::
+
+  $ ceph dashboard set-grafana-api-auth-method <method>  # default: ''
+
+Possible values are either 'password' or 'token'.
+
+To authenticate via username and password, you will need to set the following
+values::
+
+  $ ceph dashboard set-grafana-api-username <username>  # default: 'admin'
+  $ ceph dashboard set-grafana-api-password <password>  # default: 'admin'
+
+To use token based authentication, you will ned to set the token by issuing::
+
+  $ ceph dashboard set-grafana-api-token <token>  # default: ''
 
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
