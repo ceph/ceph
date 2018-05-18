@@ -1464,6 +1464,9 @@ public:
     choose_args.clear();
   }
 
+  // remove choose_args for buckets that no longer exist, create them for new buckets
+  void update_choose_args(CephContext *cct);
+
   // adjust choose_args_map weight, preserving the hierarchical summation
   // property.  used by callers optimizing layouts by tweaking weights.
   int _choose_args_adjust_item_weight_in_bucket(
