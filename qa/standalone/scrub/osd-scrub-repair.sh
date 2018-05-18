@@ -3368,8 +3368,7 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3675,8 +3674,7 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3792,8 +3790,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3889,8 +3886,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4027,8 +4023,7 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -4408,8 +4403,7 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -4527,8 +4521,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4626,8 +4619,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
