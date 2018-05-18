@@ -14,7 +14,7 @@ overrides:
       - overall HEALTH_
       - \(MGR_DOWN\)
 # slow mons -> slow peering -> PG_AVAILABILITY
-      - \(PG_AVAILABILITY)
+      - \(PG_AVAILABILITY\)
       - \(SLOW_OPS\)
 tasks:
 - install:

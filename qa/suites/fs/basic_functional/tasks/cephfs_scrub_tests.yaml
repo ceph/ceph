@@ -6,7 +6,7 @@ overrides:
       - Metadata damage detected
       - bad backtrace on inode
       - overall HEALTH_
-      - (MDS_TRIM)
+      - \(MDS_TRIM\)
     conf:
       mds:
         mds log max segments: 1
