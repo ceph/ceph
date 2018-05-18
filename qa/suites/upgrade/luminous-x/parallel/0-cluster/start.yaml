@@ -24,7 +24,8 @@ overrides:
     - scrub mismatch
     - ScrubResult
     - wrongly marked
-    - (POOL_APP_NOT_ENABLED)
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(SLOW_OPS\)
     - overall HEALTH_
     conf:
       global:
