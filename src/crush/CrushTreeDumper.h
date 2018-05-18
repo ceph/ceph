@@ -216,7 +216,7 @@ namespace CrushTreeDumper {
 	if (b &&
 	    bidx < (int)cmap.size &&
 	    cmap.args[bidx].weight_set &&
-	    cmap.args[bidx].weight_set_size >= 1) {
+	    cmap.args[bidx].weight_set_positions >= 1) {
 	  int bpos;
 	  for (bpos = 0;
 	       bpos < (int)cmap.args[bidx].weight_set[0].size &&
@@ -232,7 +232,7 @@ namespace CrushTreeDumper {
 	  }
 	  f->open_array_section(name.c_str());
 	  for (unsigned opos = 0;
-	       opos < cmap.args[bidx].weight_set_size;
+	       opos < cmap.args[bidx].weight_set_positions;
 	       ++opos) {
 	    float w = (float)cmap.args[bidx].weight_set[opos].weights[bpos] /
 	      (float)0x10000;

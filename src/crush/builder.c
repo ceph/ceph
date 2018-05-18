@@ -1447,7 +1447,7 @@ struct crush_choose_arg *crush_make_choose_args(struct crush_map *map, int num_p
       weights += bucket->h.size;
     }
     arg[b].weight_set = weight_set;
-    arg[b].weight_set_size = num_positions;
+    arg[b].weight_set_positions = num_positions;
     weight_set += position;
 
     memcpy(ids, bucket->h.items, sizeof(__s32) * bucket->h.size);
