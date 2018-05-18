@@ -13,29 +13,32 @@ from ..settings import Settings
 class GrafanaRestClient(object):
     _instance = None
 
-    @staticmethod
-    def _raise_for_validation(url, user, password):
+    def _raise_for_validation(self):
         msg = 'No {} found or misconfigured, please consult the ' \
               'documentation about how to configure Grafana for the dashboard.'
 
-        o = urlparse(url)
+        o = urlparse(self._url)
         if not (o.netloc and o.scheme):
             raise LookupError(msg.format('URL'))
 
-        if not all((user, password)):
-            raise LookupError(msg.format('credentials'))
+        auth_method = 'password' if self._token is None else 'token'
+        if auth_method == 'password' and not all((self._user, self._password)):
+            raise LookupError(msg.format('username and/or password'))
+        elif auth_method == 'token' and not self._token:
+            raise LookupError(msg.format('token'))
 
-    def __init__(self, url, username, password):
+    def __init__(self, url, username=None, password=None, token=None):
         """
         :type url: str
         :type username: str
         :type password: str
         """
-        self._raise_for_validation(url, username, password)
-
         self._url = url.rstrip('/')
         self._user = username
         self._password = password
+        self._token = token
+
+        self._raise_for_validation()
 
     @classmethod
     def instance(cls):
@@ -46,11 +49,19 @@ class GrafanaRestClient(object):
         :rtype: GrafanaRestClient
         """
         if not cls._instance:
-            url = Settings.GRAFANA_API_URL
-            user = Settings.GRAFANA_API_USERNAME
-            password = Settings.GRAFANA_API_PASSWORD
-
-            cls._instance = GrafanaRestClient(url, user, password)
+            kwargs = {}
+            if Settings.GRAFANA_API_AUTH_METHOD.lower() == 'password':
+                kwargs['username'] = Settings.GRAFANA_API_USERNAME
+                kwargs['password'] = Settings.GRAFANA_API_PASSWORD
+            elif Settings.GRAFANA_API_AUTH_METHOD.lower() == 'token':
+                kwargs['token'] = Settings.GRAFANA_API_TOKEN
+            else:
+                raise LookupError('No or unknown authentication method '
+                                  'provided. Please consult the documentation '
+                                  'about how to configure the '
+                                  'Grafana integration correctly.')
+            cls._instance = GrafanaRestClient(Settings.GRAFANA_API_URL,
+                                              **kwargs)
 
         return cls._instance
 
@@ -61,13 +72,19 @@ class GrafanaRestClient(object):
         headers = {k: v for k, v in cherrypy.request.headers.items()
                    if k.lower() in ('content-type', 'accept')}
 
+        auth = None
+        if self._token:
+            headers['Authorization'] = 'Bearer {}'.format(self._token)
+        else:
+            auth = (self._user, self._password)
+
         response = requests.request(
             method,
             url,
             params=params,
             data=data,
             headers=headers,
-            auth=(self._user, self._password))
+            auth=auth)
         logger.debug("proxying method=%s path=%s params=%s data=%s", method,
                      path, params, data)
 
