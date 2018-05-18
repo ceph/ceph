@@ -291,7 +291,6 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     base_command = [
         'ceph-osd',
         '--cluster', conf.cluster,
-        # undocumented flag, sets the `type` file to contain 'bluestore'
         '--osd-objectstore', 'bluestore',
         '--mkfs',
         '-i', osd_id,
@@ -350,7 +349,6 @@ def osd_mkfs_filestore(osd_id, fsid, keyring):
     command = [
         'ceph-osd',
         '--cluster', conf.cluster,
-        # undocumented flag, sets the `type` file to contain 'filestore'
         '--osd-objectstore', 'filestore',
         '--mkfs',
         '-i', osd_id,
