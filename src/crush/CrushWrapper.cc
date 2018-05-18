@@ -357,6 +357,7 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
     if (class_bucket.count(item) != 0)
       class_bucket.erase(item);
     class_remove_item(item);
+    update_choose_args(cct);
   }
   if ((item >= 0 || !unlink_only) && name_map.count(item)) {
     ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
@@ -399,7 +400,88 @@ int CrushWrapper::remove_root(int item)
   if (class_bucket.count(item) != 0)
     class_bucket.erase(item);
   class_remove_item(item);
+  update_choose_args(nullptr);
   return 0;
+}
+
+void CrushWrapper::update_choose_args(CephContext *cct)
+{
+  for (auto& i : choose_args) {
+    crush_choose_arg_map &arg_map = i.second;
+    unsigned positions = get_choose_args_positions(arg_map);
+    for (int j = 0; j < crush->max_buckets; ++j) {
+      crush_bucket *b = crush->buckets[j];
+      auto& carg = arg_map.args[j];
+      // strip out choose_args for any buckets that no longer exist
+      if (!b || b->alg != CRUSH_BUCKET_STRAW2) {
+	if (carg.ids) {
+	  if (cct)
+	    ldout(cct,0) << __func__ << " removing " << i.first << " bucket "
+			 << (-1-j) << " ids" << dendl;
+	  free(carg.ids);
+	  carg.ids = 0;
+	  carg.ids_size = 0;
+	}
+	if (carg.weight_set) {
+	  if (cct)
+	    ldout(cct,0) << __func__ << " removing " << i.first << " bucket "
+			 << (-1-j) << " weight_sets" << dendl;
+	  for (unsigned p = 0; p < carg.weight_set_positions; ++p) {
+	    free(carg.weight_set[p].weights);
+	  }
+	  free(carg.weight_set);
+	  carg.weight_set = 0;
+	  carg.weight_set_positions = 0;
+	}
+	continue;
+      } else if (positions != carg.weight_set_positions) {
+	// missing/mismatched positions?
+	if (cct)
+	  ldout(cct,0) << __func__ << " fixing " << i.first << " bucket "
+		       << (-1-j) << " positions " << carg.weight_set_positions
+		       << " -> " << positions << dendl;
+	auto old_pos = carg.weight_set_positions;
+	auto old_ws = carg.weight_set;
+	carg.weight_set_positions = positions;
+	carg.weight_set = static_cast<crush_weight_set*>(
+	  calloc(sizeof(crush_weight_set), positions));
+	for (unsigned p = 0; p < positions; ++p) {
+	  carg.weight_set[p].size = b->size;
+	  carg.weight_set[p].weights = (__u32*)calloc(b->size, sizeof(__u32));
+	  if (old_ws && old_pos < p) {
+	    auto max = std::max<unsigned>(old_ws[p].size, b->size);
+	    for (unsigned k = 0; k < max; ++k) {
+	      carg.weight_set[p].weights[k] = old_ws[p].weights[k];
+	    }
+	  }
+	}
+	if (old_ws) {
+	  for (unsigned p = 0; p < old_pos; ++p) {
+	    free(old_ws[p].weights);
+	  }
+	  free(old_ws);
+	}
+      }
+      // mis-sized weight_sets?
+      for (unsigned p = 0; p < positions; ++p) {
+	if (carg.weight_set[p].size != b->size) {
+	  if (cct)
+	    ldout(cct,0) << __func__ << " fixing " << i.first << " bucket "
+			 << (-1-j) << " position " << p
+			 << " size " << carg.weight_set[p].size << " -> "
+			 << b->size << dendl;
+	  auto old_ws = carg.weight_set[p];
+	  carg.weight_set[p].size = b->size;
+	  carg.weight_set[p].weights = (__u32*)calloc(b->size, sizeof(__u32));
+	  auto max = std::max<unsigned>(old_ws.size, b->size);
+	  for (unsigned k = 0; k < max; ++k) {
+	    carg.weight_set[p].weights[k] = old_ws.weights[k];
+	  }
+	  free(old_ws.weights);
+	}
+      }
+    }
+  }
 }
 
 int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
@@ -2545,6 +2627,7 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 	choose_args[choose_args_index] = arg_map;
       }
     }
+    update_choose_args(nullptr); // in case we decode a legacy "corrupted" map
     finalize();
   }
   catch (...) {
