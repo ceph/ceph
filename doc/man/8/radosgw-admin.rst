@@ -131,6 +131,12 @@ which are as follows:
 :command:`zone list`
   List all zones set on this cluster.
 
+:command:`sync error list`
+  list sync error.
+
+:command:`sync error trim`
+  trim sync error.
+
 :command:`pool add`
   Add an existing pool for data placement.
 
