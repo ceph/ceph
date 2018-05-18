@@ -2720,8 +2720,7 @@ function corrupt_scrub_erasure() {
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3009,8 +3008,7 @@ function corrupt_scrub_erasure() {
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3119,8 +3117,7 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3215,8 +3212,7 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
