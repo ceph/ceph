@@ -1024,7 +1024,7 @@ TEST(CrushWrapper, choose_args_compat) {
   crush_choose_arg choose_args[maxbuckets];
   memset(choose_args, '\0', sizeof(crush_choose_arg) * maxbuckets);
   choose_args[-1-id].ids_size = 0;
-  choose_args[-1-id].weight_set_size = 1;
+  choose_args[-1-id].weight_set_positions = 1;
   choose_args[-1-id].weight_set = &weight_set;
   crush_choose_arg_map arg_map;
   arg_map.size = c.get_max_buckets();
@@ -1042,7 +1042,7 @@ TEST(CrushWrapper, choose_args_compat) {
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(1u, c_new.choose_args.size());
-    ASSERT_EQ(1u, c_new.choose_args[caid].args[-1-id].weight_set_size);
+    ASSERT_EQ(1u, c_new.choose_args[caid].args[-1-id].weight_set_positions);
     ASSERT_EQ(weights, c_new.choose_args[caid].args[-1-id].weight_set[0].weights[0]);
     ASSERT_EQ(weight, c_new.get_bucket_item_weightf(id, 0));
   }
