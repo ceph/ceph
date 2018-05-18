@@ -151,9 +151,9 @@ bool WriteCacheDevice::store_in_cache(uint64_t disk_off, bufferlist& bl)
   h->size = bl.length();
   h->setup();
 
-  write_cache->write(current->disk_offset + current->pos, header_bl, false);
+  write_cache->write(current->disk_offset + current->pos, header_bl, true);
   current->pos += block_size;
-  write_cache->write(current->disk_offset + current->pos, bl, false);
+  write_cache->write(current->disk_offset + current->pos, bl, true);
   current->pos += length_align_up;
   return true;
 }
@@ -319,7 +319,7 @@ bool WriteCacheDevice::peek(row_t& row, uint64_t& id)
 
 bool WriteCacheDevice::replay_row(row_t& row, uint64_t& last_id)
 {
-  bool result = false;
+  bool result = true;
   bool r;
   header_t h;
   last_id = 0;
@@ -343,6 +343,7 @@ bool WriteCacheDevice::replay_row(row_t& row, uint64_t& last_id)
         if ((int64_t)(h.id - next_id(last_id)) > 0) {
           dout(20) << __func__ << " entry id=" << h.id << " jumps to future, failure" << dendl;
           result = false;
+          break;
         }
         dout(20) << __func__ << " entry id=" << h.id << " ok, but from past" << dendl;
         result = true;
@@ -357,6 +358,7 @@ bool WriteCacheDevice::replay_row(row_t& row, uint64_t& last_id)
     if (rr != 0) {
       dout(20) << __func__ << " entry id=" << h.id << " ok, but cannot read content size=" <<
           h.size << " error: " << cpp_strerror(rr) << dendl;
+      result = false;
       break;
     }
     bufferlist bl;
