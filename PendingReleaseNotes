@@ -223,3 +223,8 @@ for details.
   is permanent and instructs the cluster to proceed with an empty PG
   in its place, without making any further efforts to find the missing
   data.
+
+* The Telegraf module for the Manager allows for sending statistics to
+  an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
+  send the statistics to databases like InfluxDB, ElasticSearch, Graphite
+  and many more.
