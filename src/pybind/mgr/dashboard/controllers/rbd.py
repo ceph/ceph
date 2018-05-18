@@ -298,7 +298,7 @@ class Rbd(RESTController):
         rbd_inst = rbd.RBD()
         return _rbd_call(pool_name, rbd_inst.remove, image_name)
 
-    @RbdTask('edit', ['{pool_name}', '{image_name}'], 4.0)
+    @RbdTask('edit', ['{pool_name}', '{image_name}', '{name}'], 4.0)
     def set(self, pool_name, image_name, name=None, size=None, features=None):
         def _edit(ioctx, image):
             rbd_inst = rbd.RBD()
