@@ -212,7 +212,9 @@ struct Instances<librbd::MockTestImageCtx> {
   static Instances* s_instance;
 
   static Instances *create(Threads<librbd::MockTestImageCtx> *threads,
-                           librados::IoCtx &ioctx, instances::Listener&) {
+                           librados::IoCtx &ioctx,
+                           const std::string& instance_id,
+                           instances::Listener&) {
     assert(s_instance != nullptr);
     return s_instance;
   }
@@ -453,6 +455,10 @@ public:
     EXPECT_CALL(mock_instances, unblock_listener());
   }
 
+  void expect_instances_acked(MockInstances& mock_instances) {
+    EXPECT_CALL(mock_instances, acked(_));
+  }
+
   MockThreads *m_mock_threads;
 };
 
@@ -479,6 +485,7 @@ TEST_F(TestMockLeaderWatcher, InitShutdown) {
   expect_acquire_notify(mock_managed_lock, listener, 0);
   expect_unblock_listener(mock_instances);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
+  expect_instances_acked(mock_instances);
 
   ASSERT_EQ(0, leader_watcher.init());
   ASSERT_EQ(0, on_heartbeat_finish.wait());
@@ -517,6 +524,7 @@ TEST_F(TestMockLeaderWatcher, InitReleaseShutdown) {
   expect_acquire_notify(mock_managed_lock, listener, 0);
   expect_unblock_listener(mock_instances);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
+  expect_instances_acked(mock_instances);
 
   ASSERT_EQ(0, leader_watcher.init());
   ASSERT_EQ(0, on_heartbeat_finish.wait());
@@ -592,6 +600,7 @@ TEST_F(TestMockLeaderWatcher, AcquireError) {
   expect_acquire_notify(mock_managed_lock, listener, 0);
   expect_unblock_listener(mock_instances);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
+  expect_instances_acked(mock_instances);
 
   ASSERT_EQ(0, leader_watcher.init());
   ASSERT_EQ(0, on_heartbeat_finish.wait());
@@ -647,6 +656,7 @@ TEST_F(TestMockLeaderWatcher, Break) {
   expect_acquire_notify(mock_managed_lock, listener, 0);
   expect_unblock_listener(mock_instances);
   expect_notify_heartbeat(mock_managed_lock, &on_heartbeat_finish);
+  expect_instances_acked(mock_instances);
 
   ASSERT_EQ(0, leader_watcher.init());
   ASSERT_EQ(0, on_heartbeat_finish.wait());

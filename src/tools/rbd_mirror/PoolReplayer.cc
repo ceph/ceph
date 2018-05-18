@@ -550,6 +550,14 @@ void PoolReplayer<I>::print_status(Formatter *f, stringstream *ss)
   f->dump_stream("peer") << m_peer;
   f->dump_string("instance_id", m_instance_watcher->get_instance_id());
 
+  std::string state("running");
+  if (m_manual_stop) {
+    state = "stopped (manual)";
+  } else if (m_stopping) {
+    state = "stopped";
+  }
+  f->dump_string("state", state);
+
   std::string leader_instance_id;
   m_leader_watcher->get_leader_instance_id(&leader_instance_id);
   f->dump_string("leader_instance_id", leader_instance_id);
@@ -600,6 +608,7 @@ void PoolReplayer<I>::start()
     return;
   }
 
+  m_manual_stop = false;
   m_instance_replayer->start();
 }
 
@@ -617,6 +626,7 @@ void PoolReplayer<I>::stop(bool manual)
     return;
   }
 
+  m_manual_stop = true;
   m_instance_replayer->stop();
 }
 
@@ -729,6 +739,7 @@ void PoolReplayer<I>::init_image_map(Context *on_finish) {
   Mutex::Locker locker(m_lock);
   assert(!m_image_map);
   m_image_map.reset(ImageMap<I>::create(m_local_io_ctx, m_threads,
+                                        m_instance_watcher->get_instance_id(),
                                         m_image_map_listener));
 
   auto ctx = new FunctionContext([this, on_finish](int r) {
@@ -1029,17 +1040,26 @@ void PoolReplayer<I>::handle_remove_image(const std::string &mirror_uuid,
 template <typename I>
 void PoolReplayer<I>::handle_instances_added(const InstanceIds &instance_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
+  Mutex::Locker locker(m_lock);
+  if (!m_leader_watcher->is_leader()) {
+    return;
+  }
 
-  // TODO only register ourselves for now
-  auto instance_id = m_instance_watcher->get_instance_id();
-  m_image_map->update_instances_added({instance_id});
+  assert(m_image_map);
+  m_image_map->update_instances_added(instance_ids);
 }
 
 template <typename I>
 void PoolReplayer<I>::handle_instances_removed(
     const InstanceIds &instance_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
-  // TODO
+  Mutex::Locker locker(m_lock);
+  if (!m_leader_watcher->is_leader()) {
+    return;
+  }
+
+  assert(m_image_map);
+  m_image_map->update_instances_removed(instance_ids);
 }
 
 } // namespace mirror

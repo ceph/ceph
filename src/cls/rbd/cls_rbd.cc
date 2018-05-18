@@ -4253,7 +4253,8 @@ int mirror_image_map_list(cls_method_context_t hctx,
       try {
         decode(mirror_image_map, iter);
       } catch (const buffer::error &err) {
-        CLS_ERR("could not decode image map payload: %s", cpp_strerror(r).c_str());
+        CLS_ERR("could not decode image map payload: %s",
+                cpp_strerror(r).c_str());
         return -EINVAL;
       }
 
@@ -4261,7 +4262,7 @@ int mirror_image_map_list(cls_method_context_t hctx,
     }
 
     if (!vals.empty()) {
-      last_read = mirror_image_map_key(vals.rbegin()->first);
+      last_read = vals.rbegin()->first;
     }
   }
 

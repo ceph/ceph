@@ -379,6 +379,8 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
   m_local_ioctx.reset(new librados::IoCtx{});
   r = m_local->ioctx_create2(m_local_pool_id, *m_local_ioctx);
   if (r < 0) {
+    m_local_ioctx.reset();
+
     derr << "error opening ioctx for local pool " << m_local_pool_id
          << ": " << cpp_strerror(r) << dendl;
     on_start_fail(r, "error opening local pool");
@@ -686,7 +688,9 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
       }
 
       set_state_description(r, desc);
-      update_mirror_image_status(false, boost::none);
+      if (m_local_ioctx) {
+        update_mirror_image_status(false, boost::none);
+      }
       reschedule_update_status_task(-1);
       shut_down(r);
     });
@@ -702,7 +706,7 @@ bool ImageReplayer<I>::on_start_interrupted()
     return false;
   }
 
-  on_start_fail(-ECANCELED);
+  on_start_fail(-ECANCELED, "");
   return true;
 }
 
@@ -1270,8 +1274,8 @@ bool ImageReplayer<I>::start_mirror_image_status_update(bool force,
     }
   }
 
-  dout(20) << dendl;
   ++m_in_flight_status_updates;
+  dout(15) << "in-flight updates=" << m_in_flight_status_updates << dendl;
   return true;
 }
 
@@ -1284,7 +1288,7 @@ void ImageReplayer<I>::finish_mirror_image_status_update() {
     Mutex::Locker locker(m_lock);
     assert(m_in_flight_status_updates > 0);
     if (--m_in_flight_status_updates > 0) {
-      dout(20) << "waiting on " << m_in_flight_status_updates << " in-flight "
+      dout(15) << "waiting on " << m_in_flight_status_updates << " in-flight "
                << "updates" << dendl;
       return;
     }
@@ -1292,7 +1296,7 @@ void ImageReplayer<I>::finish_mirror_image_status_update() {
     std::swap(on_finish, m_on_update_status_finish);
   }
 
-  dout(20) << dendl;
+  dout(15) << dendl;
   if (on_finish != nullptr) {
     on_finish->complete(0);
   }
@@ -1372,6 +1376,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
         });
 
       std::string desc;
+      assert(m_replay_status_formatter != nullptr);
       if (!m_replay_status_formatter->get_or_send_update(&desc,
                                                          on_req_finish)) {
         dout(20) << "waiting for replay status" << dendl;
@@ -1423,6 +1428,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_status_set(&op, m_global_image_id, status);
 
+  assert(m_local_ioctx);
   librados::AioCompletion *aio_comp = create_rados_callback<
     ImageReplayer<I>, &ImageReplayer<I>::handle_mirror_status_update>(this);
   int r = m_local_ioctx->aio_operate(RBD_MIRRORING, aio_comp, &op);
@@ -1452,7 +1458,7 @@ void ImageReplayer<I>::handle_mirror_status_update(int r) {
   if (started) {
     queue_mirror_image_status_update(boost::none);
   } else if (running) {
-    reschedule_update_status_task();
+    reschedule_update_status_task(0);
   }
 
   // mark committed status update as no longer in-flight
@@ -1461,14 +1467,14 @@ void ImageReplayer<I>::handle_mirror_status_update(int r) {
 
 template <typename I>
 void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
-  dout(20) << dendl;
-
   bool canceled_task = false;
   {
     Mutex::Locker locker(m_lock);
     Mutex::Locker timer_locker(m_threads->timer_lock);
 
     if (m_update_status_task) {
+      dout(15) << "canceling existing status update task" << dendl;
+
       canceled_task = m_threads->timer->cancel_event(m_update_status_task);
       m_update_status_task = nullptr;
     }
@@ -1487,13 +1493,14 @@ void ImageReplayer<I>::reschedule_update_status_task(int new_interval) {
 
           queue_mirror_image_status_update(boost::none);
         });
+      dout(15) << "scheduling status update task after "
+               << m_update_status_interval << " seconds" << dendl;
       m_threads->timer->add_event_after(m_update_status_interval,
                                         m_update_status_task);
     }
   }
 
   if (canceled_task) {
-    dout(20) << "canceled task" << dendl;
     finish_mirror_image_status_update();
   }
 }
@@ -1516,6 +1523,8 @@ void ImageReplayer<I>::shut_down(int r) {
     // wake up sleeping replay
     m_event_replay_tracker.finish_op();
   }
+
+  reschedule_update_status_task(-1);
 
   {
     Mutex::Locker locker(m_lock);
@@ -1542,7 +1551,9 @@ void ImageReplayer<I>::shut_down(int r) {
   // chain the shut down sequence (reverse order)
   Context *ctx = new FunctionContext(
     [this, r](int _r) {
-      update_mirror_image_status(true, STATE_STOPPED);
+      if (m_local_ioctx) {
+        update_mirror_image_status(true, STATE_STOPPED);
+      }
       handle_shut_down(r);
     });
 

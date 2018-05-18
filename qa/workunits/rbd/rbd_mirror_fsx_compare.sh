@@ -7,7 +7,7 @@
 
 . $(dirname $0)/rbd_mirror_helpers.sh
 
-trap cleanup INT TERM EXIT
+trap 'cleanup $?' INT TERM EXIT
 
 setup_tempdir
 
