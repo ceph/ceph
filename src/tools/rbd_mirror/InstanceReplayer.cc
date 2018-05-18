@@ -155,13 +155,16 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
     assert(m_peers.size() == 1);
     auto peer = *m_peers.begin();
     image_replayer->add_peer(peer.peer_uuid, peer.io_ctx);
+    start_image_replayer(image_replayer);
+  } else {
+    // A duplicate acquire notification implies (1) connection hiccup or
+    // (2) new leader election. For the second case, restart the replayer to
+    // detect if the image has been deleted while the leader was offline
+    auto& image_replayer = it->second;
+    image_replayer->set_finished(false);
+    image_replayer->restart();
   }
 
-  auto& image_replayer = it->second;
-  // TODO temporary until policy integrated
-  image_replayer->set_finished(false);
-
-  start_image_replayer(image_replayer);
   m_threads->work_queue->queue(on_finish, 0);
 }
 
@@ -295,12 +298,11 @@ void InstanceReplayer<I>::start_image_replayer(
   assert(m_lock.is_locked());
 
   std::string global_image_id = image_replayer->get_global_image_id();
-  dout(10) << "global_image_id=" << global_image_id << dendl;
-
   if (!image_replayer->is_stopped()) {
     return;
   } else if (image_replayer->is_blacklisted()) {
-    derr << "blacklisted detected during image replay" << dendl;
+    derr << "global_image_id=" << global_image_id << ": blacklisted detected "
+         << "during image replay" << dendl;
     return;
   } else if (image_replayer->is_finished()) {
     // TODO temporary until policy integrated
@@ -309,8 +311,11 @@ void InstanceReplayer<I>::start_image_replayer(
     m_image_replayers.erase(image_replayer->get_global_image_id());
     image_replayer->destroy();
     return;
+  } else if (m_manual_stop) {
+    return;
   }
 
+  dout(10) << "global_image_id=" << global_image_id << dendl;
   image_replayer->start(nullptr, false);
 }
 

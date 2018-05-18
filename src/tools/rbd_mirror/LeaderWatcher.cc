@@ -32,6 +32,7 @@ LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
     m_threads(threads), m_listener(listener), m_instances_listener(this),
     m_lock("rbd::mirror::LeaderWatcher " + io_ctx.get_pool_name()),
     m_notifier_id(librados::Rados(io_ctx).get_instance_id()),
+    m_instance_id(stringify(m_notifier_id)),
     m_leader_lock(new LeaderLock(m_ioctx, m_work_queue, m_oid, this, true,
                                  m_cct->_conf->get_val<int64_t>(
                                    "rbd_blacklist_expire_seconds"))) {
@@ -48,7 +49,7 @@ LeaderWatcher<I>::~LeaderWatcher() {
 
 template <typename I>
 std::string LeaderWatcher<I>::get_instance_id() {
-  return stringify(m_notifier_id);
+  return m_instance_id;
 }
 
 template <typename I>
@@ -284,7 +285,7 @@ bool LeaderWatcher<I>::get_leader_instance_id(std::string *instance_id) const {
   Mutex::Locker locker(m_lock);
 
   if (is_leader(m_lock) || is_releasing_leader(m_lock)) {
-    *instance_id = stringify(m_notifier_id);
+    *instance_id = m_instance_id;
     return true;
   }
 
@@ -765,7 +766,8 @@ void LeaderWatcher<I>::init_instances() {
   assert(m_lock.is_locked());
   assert(m_instances == nullptr);
 
-  m_instances = Instances<I>::create(m_threads, m_ioctx, m_instances_listener);
+  m_instances = Instances<I>::create(m_threads, m_ioctx, m_instance_id,
+                                     m_instances_listener);
 
   Context *ctx = create_context_callback<
     LeaderWatcher<I>, &LeaderWatcher<I>::handle_init_instances>(this);
@@ -992,10 +994,6 @@ void LeaderWatcher<I>::handle_notify_heartbeat(int r) {
   std::vector<std::string> instance_ids;
   for (auto &it: m_heartbeat_response.acks) {
     uint64_t notifier_id = it.first.gid;
-    if (notifier_id == m_notifier_id) {
-      continue;
-    }
-
     instance_ids.push_back(stringify(notifier_id));
   }
   if (!instance_ids.empty()) {

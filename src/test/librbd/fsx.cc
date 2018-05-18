@@ -1938,7 +1938,14 @@ create_image()
         rados_application_enable(ioctx, "rbd", 1);
 
 	if (clone_calls || journal_replay) {
-                uint64_t features = 0;
+                r = rados_conf_get(cluster, "rbd_default_features", buf,
+                                   sizeof(buf));
+                if (r < 0) {
+                        simple_err("Could not get rbd_default_features value", r);
+                        goto failed_open;
+                }
+
+                uint64_t features = strtol(buf, NULL, 0);
                 if (clone_calls) {
                         features |= RBD_FEATURE_LAYERING;
                 }

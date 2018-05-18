@@ -2107,6 +2107,23 @@ namespace librbd {
       return 0;
     }
 
+    int mirror_image_map_list(
+        librados::IoCtx *ioctx, const std::string &start_after,
+        uint64_t max_read,
+        std::map<std::string, cls::rbd::MirrorImageMap> *image_mapping) {
+      librados::ObjectReadOperation op;
+      mirror_image_map_list_start(&op, start_after, max_read);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator iter = out_bl.begin();
+      return mirror_image_map_list_finish(&iter, image_mapping);
+    }
+
     void mirror_image_map_update(librados::ObjectWriteOperation *op,
                                  const std::string &global_image_id,
                                  const cls::rbd::MirrorImageMap &image_map) {

@@ -19,7 +19,7 @@ tasks:
       - cluster1.client.mirror.3
       - cluster1.client.mirror.4
       - cluster1.client.mirror.5
-    ops: 20000
+    ops: 6000
     keep_images: true
     pool_name: mirror
 - workunit:
