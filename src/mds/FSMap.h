@@ -47,12 +47,6 @@ class health_check_map_t;
 class Filesystem
 {
 public:
-  Filesystem()
-    :
-      fscid(FS_CLUSTER_ID_NONE)
-  {
-  }
-
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::iterator& p);
 
@@ -76,19 +70,19 @@ public:
     return false;
   }
 
-  fs_cluster_id_t fscid;
+  fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
   MDSMap mds_map;
 };
 WRITE_CLASS_ENCODER_FEATURES(Filesystem)
 
 class FSMap {
 protected:
-  epoch_t epoch;
-  uint64_t next_filesystem_id;
-  fs_cluster_id_t legacy_client_fscid;
+  epoch_t epoch = 0;
+  uint64_t next_filesystem_id = FS_CLUSTER_ID_ANONYMOUS + 1;
+  fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
   CompatSet compat;
-  bool enable_multiple;
-  bool ever_enabled_multiple; // < the cluster had multiple MDSes enabled once
+  bool enable_multiple = false;
+  bool ever_enabled_multiple = false; // < the cluster had multiple MDSes enabled once
 
   std::map<fs_cluster_id_t, std::shared_ptr<Filesystem> > filesystems;
 
@@ -105,13 +99,7 @@ public:
   friend class MDSMonitor;
   friend class PaxosFSMap;
 
-  FSMap() 
-    : epoch(0),
-      next_filesystem_id(FS_CLUSTER_ID_ANONYMOUS + 1),
-      legacy_client_fscid(FS_CLUSTER_ID_NONE),
-      compat(get_mdsmap_compat_set_default()),
-      enable_multiple(false), ever_enabled_multiple(false)
-  { }
+  FSMap() : compat(MDSMap::get_compat_set_default()) {}
 
   FSMap(const FSMap &rhs)
     :
