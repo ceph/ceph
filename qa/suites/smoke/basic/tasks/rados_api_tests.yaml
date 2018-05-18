@@ -6,7 +6,7 @@ tasks:
     - reached quota
     - but it is still running
     - objects unfound and apparently lost
-    - (POOL_APP_NOT_ENABLED)
+    - \(POOL_APP_NOT_ENABLED\)
 - thrashosds:
     chance_pgnum_grow: 2
     chance_pgpnum_fix: 1
