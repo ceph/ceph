@@ -78,6 +78,7 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   } else {
     map<int32_t, int32_t> nps;
     decode(nps, p);
+    num_pg_by_state.clear();
     for (auto i : nps) {
       num_pg_by_state[i.first] = i.second;
     }
