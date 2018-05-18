@@ -292,9 +292,10 @@ int main(int argc, char **argv)
   for (auto& i : ceph_option_strings) {
     args.push_back(i.c_str());
   }
-
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+
   common_init_finish(cct.get());
 
   if (action == "fsck" ||
