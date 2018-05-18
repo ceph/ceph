@@ -3347,11 +3347,20 @@ int CrushWrapper::_choose_args_adjust_item_weight_in_bucket(
   }
   crush_choose_arg *carg = &cmap.args[bidx];
   if (carg->weight_set == NULL) {
-    if (ss)
-      *ss << "no weight-set for bucket " << b->id;
-    ldout(cct, 10) << __func__ << "  no weight_set for bucket " << b->id
-		   << dendl;
-    return 0;
+    // create a weight-set for this bucket and populate it with the
+    // bucket weights
+    unsigned positions = get_choose_args_positions(cmap);
+    carg->weight_set_positions = positions;
+    carg->weight_set = static_cast<crush_weight_set*>(
+      calloc(sizeof(crush_weight_set), positions));
+    for (unsigned p = 0; p < positions; ++p) {
+      carg->weight_set[p].size = b->size;
+      carg->weight_set[p].weights = (__u32*)calloc(b->size, sizeof(__u32));
+      for (unsigned i = 0; i < b->size; ++i) {
+	carg->weight_set[p].weights[i] = crush_get_bucket_item_weight(b, i);
+      }
+    }
+    changed++;
   }
   if (carg->weight_set_positions != weight.size()) {
     if (ss)
