@@ -5,6 +5,7 @@ overrides:
     - overall HEALTH_
     - \(PG_
     - \(MON_DOWN\)
+    - \(CACHE_POOL_NO_HIT_SET\)
 tasks:
 - workunit:
     clients:
