@@ -601,6 +601,10 @@ Options
 
    Period id.
 
+.. option:: --url=<url>
+
+   url for pushing/pulling period or realm.
+
 .. option:: --epoch=<number>
 
    Period epoch.
