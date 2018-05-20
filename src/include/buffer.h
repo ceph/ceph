@@ -189,7 +189,7 @@ namespace buffer CEPH_BUFFER_API {
       const char *end_ptr;   ///< pointer to bp->end_c_str()
       const bool deep;   ///< if true, do not allow shallow ptr copies
 
-      iterator_impl(std::conditional_t<is_const, const ptr*, ptr*> p,
+      iterator_impl(typename std::conditional<is_const, const ptr*, ptr*>::type p,
 		    size_t offset, bool d)
 	: bp(p),
 	  start(p->c_str() + offset),
@@ -201,7 +201,7 @@ namespace buffer CEPH_BUFFER_API {
       friend class ptr;
 
     public:
-      using pointer = std::conditional_t<is_const, const char*, char *>;
+      using pointer = typename std::conditional<is_const, const char*, char *>::type;
       pointer get_pos_add(size_t n) {
 	auto r = pos;
 	advance(n);
