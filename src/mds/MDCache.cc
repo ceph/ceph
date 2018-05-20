@@ -2001,7 +2001,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   }
 }
 
-void MDCache::broadcast_quota_to_client(CInode *in)
+void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct)
 {
   if (!(mds->is_active() || mds->is_stopping()))
     return;
@@ -2026,6 +2026,10 @@ void MDCache::broadcast_quota_to_client(CInode *in)
       continue;
 
     Capability *cap = it->second;
+
+    if (exclude_ct >= 0 && exclude_ct != it->first)
+      goto update;
+
     if (cap->last_rbytes == i->rstat.rbytes &&
         cap->last_rsize == i->rstat.rsize())
       continue;
