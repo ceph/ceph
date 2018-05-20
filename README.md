@@ -75,7 +75,7 @@ To install:
 
 	make install
  
-### CMake Options
+## CMake Options
 
 If you run the `cmake` command by hand, there are many options you can
 set with "-D". For example the option to build the RADOS Gateway is
@@ -189,7 +189,7 @@ over manual test execution. To view these options run:
 	man ctest
 
 
-## Building the Documentation
+## Build instructions 
 
 ### Prerequisites
 
@@ -198,7 +198,7 @@ found in `doc_deps.deb.txt`:
 
 	sudo apt-get install `cat doc_deps.deb.txt`
 
-### Building the Documentation
+### Build documentation
 
 To build the documentation, ensure that you are in the top-level
 `/ceph` directory, and execute the build script. For example:
