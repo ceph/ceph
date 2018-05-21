@@ -132,9 +132,11 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 
 ## upgrades suites for on luminous
 ## !!!! three suites below MUST use --suite-branch hammer, kraken OR jewel
+## --filter "ubuntu_14.04,ubuntu_16.04,centos_7.4" == test only supported distro
 45 05 * * *  CEPH_BRANCH=luminous; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-hammer -k distro -e $CEPH_QA_EMAIL --suite-branch hammer
-47 05 * * *  CEPH_BRANCH=luminous; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel
+47 05 * * *  CEPH_BRANCH=luminous; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter "ubuntu_14.04,ubuntu_16.04,centos_7.4"
 50 05 * * *  CEPH_BRANCH=luminous; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-kraken -k distro -e $CEPH_QA_EMAIL --suite-branch kraken
+
 
 ##########################
 
@@ -186,11 +188,11 @@ CEPH_QA_EMAIL="ceph-qa@ceph.com"
 
 ## upgrades suites for on mimic
 ## !!!! three suites below MUST use --suite-branch hammer, krakel, jewel, luminous (see https://tracker.ceph.com/issues/24021)
-## --filter-out="ubuntu_14.04" was added as mimic is not supported on it, but hammer, jewel, kraken and luminous are asking for "ubuntu_14.04" during initial steps of upgrades
-45 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-hammer -k distro -e $CEPH_QA_EMAIL --suite-branch hammer --filter-out="ubuntu_14.04"
-47 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter-out="ubuntu_14.04"
-50 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-kraken -k distro -e $CEPH_QA_EMAIL --suite-branch kraken --filter-out="ubuntu_14.04"
-50 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=ovh; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous -k distro -e $CEPH_QA_EMAIL --suite-branch luminous --filter-out="ubuntu_14.04"
+## --filter "ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5" - test ONLY supported distro
+## to run on ovh use ~/rhel_only_on_ovh.yaml, we will run on smithi nodes
+DISTRO_MIMIC="ubuntu_16.04,ubuntu_18.04,centos_7.4,rhel_7.5"
+47 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-jewel -k distro -e $CEPH_QA_EMAIL --suite-branch jewel --filter $DISTRO_MIMIC
+50 01 * * *  CEPH_BRANCH=mimic; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH  -n 7 -m $MACHINE_NAME -s upgrade/client-upgrade-luminous -k distro -e $CEPH_QA_EMAIL --suite-branch luminous --filter $DISTRO_MIMIC
 
 
 #********** mimic branch END
