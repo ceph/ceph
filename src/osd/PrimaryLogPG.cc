@@ -10013,7 +10013,6 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
   } else if (fop->op) {
     dout(10) << __func__ << " waiting on write lock " << fop->op << " "
 	     << fop->dup_ops << dendl;
-    close_op_ctx(ctx.release());
     // fop->op is now waiting on the lock; get fop->dup_ops to wait too.
     for (auto op : fop->dup_ops) {
       bool locked = ctx->lock_manager.get_lock_type(
@@ -10023,6 +10022,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
 	op);
       assert(!locked);
     }
+    close_op_ctx(ctx.release());
     return -EAGAIN;    // will retry
   } else {
     dout(10) << __func__ << " failed write lock, no op; failing" << dendl;
