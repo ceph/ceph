@@ -520,7 +520,6 @@ install(TARGETS
 #following dependencies are run inside make check unit tests
 add_dependencies(tests
   ceph-mon
-  ceph-mgr
   ceph-authtool
   get_command_descriptions
   crushtool
@@ -542,6 +541,9 @@ add_dependencies(tests
   ceph_erasure_code
   ceph-disk
   cython_modules)
+if(WITH_MGR)
+  add_dependencies(tests ceph-mgr)
+endif()
 if(WITH_RBD)
   add_dependencies(tests unittest_librbd rbd)
   if(FREEBSD)
