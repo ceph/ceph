@@ -387,7 +387,7 @@ def zone_bucket_checkpoint(target_zone, source_zone, bucket_name):
 
         time.sleep(config.checkpoint_delay)
 
-    assert False, 'finished bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
+    assert False, 'failed bucket checkpoint for target_zone=%s source_zone=%s bucket=%s' % \
                   (target_zone.name, source_zone.name, bucket_name)
 
 def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
@@ -397,7 +397,8 @@ def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
                 continue
             log.debug('bucket checkpoint: source=%s target=%s bucket=%s', source_conn.zone.name, target_conn.zone.name, bucket_name)
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket_name)
-            target_conn.check_bucket_eq(source_conn, bucket_name)
+    for source_conn, target_conn in combinations(zonegroup_conns.zones, 2):
+        target_conn.check_bucket_eq(source_conn, bucket_name)
 
 def set_master_zone(zone):
     zone.modify(zone.cluster, ['--master'])
@@ -690,12 +691,8 @@ def test_versioned_object_incremental_sync():
             log.debug('version3 id=%s', v.version_id)
             k.bucket.delete_key(obj, version_id=v.version_id)
 
-    for source_conn, bucket in zone_bucket:
-        for target_conn in zonegroup_conns.zones:
-            if source_conn.zone == target_conn.zone:
-                continue
-            zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
-            check_bucket_eq(source_conn, target_conn, bucket)
+    for _, bucket in zone_bucket:
+        zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
