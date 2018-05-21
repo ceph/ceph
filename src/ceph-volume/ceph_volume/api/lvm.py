@@ -233,15 +233,17 @@ def get_api_vgs():
 
     Command and sample delimited output should look like::
 
-        $ vgs --noheadings --readonly --separator=';' \
+        $ vgs --noheadings --units=g --readonly --separator=';' \
           -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
           ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
           osd_vg;3;1;0;wz--n-;29.21g;9.21g
 
+    To normalize sizing, the units are forced in 'g' which is equivalent to
+    gigabytes, which uses multiples of 1024 (as opposed to 1000)
     """
     fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
+        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
