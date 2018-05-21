@@ -373,6 +373,9 @@ void Server::handle_client_session(MClientSession *m)
 
       client_metadata_t client_metadata(std::move(m->metadata),
 					std::move(m->supported_features));
+      if (client_metadata.features.empty())
+	infer_supported_features(session, client_metadata);
+
       dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN metadata entries:" << dendl;
       dout(20) << "  features: '" << client_metadata.features << dendl;
       for (auto& p : client_metadata) {
@@ -977,6 +980,9 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     } else if (mdcache->is_readonly()) {
       error_str = "mds is readonly";
     } else {
+      if (session->info.client_metadata.features.empty())
+	infer_supported_features(session,  session->info.client_metadata);
+
       feature_bitset_t missing_features = required_client_features;
       missing_features -= session->info.client_metadata.features;
       if (!missing_features.empty()) {
@@ -1085,6 +1091,35 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   m->put();
 }
 
+void Server::infer_supported_features(Session *session, client_metadata_t& client_metadata)
+{
+  int supported = -1;
+  auto it = client_metadata.find("ceph_version");
+  if (it != client_metadata.end()) {
+    // user space client
+    if (it->second.compare(0, 16, "ceph version 12.") == 0)
+      supported = CEPHFS_FEATURE_LUMINOUS;
+    else if (session->connection->has_feature(CEPH_FEATURE_FS_CHANGE_ATTR))
+      supported = CEPHFS_FEATURE_KRAKEN;
+  } else {
+    it = client_metadata.find("kernel_version");
+    if (it != client_metadata.end()) {
+      // kernel client
+      if (session->connection->has_feature(CEPH_FEATURE_NEW_OSDOP_ENCODING))
+	supported = CEPHFS_FEATURE_LUMINOUS;
+    }
+  }
+  if (supported == -1 &&
+      session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2))
+    supported = CEPHFS_FEATURE_JEWEL;
+
+  if (supported >= 0) {
+    unsigned long value = (1UL << (supported + 1)) - 1;
+    client_metadata.features = std::move(feature_bitset_t(value));
+    dout(10) << __func__ << " got '" << client_metadata.features << "'" << dendl;
+  }
+}
+
 void Server::update_required_client_features()
 {
   vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
@@ -1092,6 +1127,12 @@ void Server::update_required_client_features()
   int min_compat = mds->mdsmap->get_min_compat_client();
   if (min_compat >= CEPH_RELEASE_MIMIC)
     bits.push_back(CEPHFS_FEATURE_MIMIC);
+  else if (min_compat >= CEPH_RELEASE_LUMINOUS)
+    bits.push_back(CEPHFS_FEATURE_LUMINOUS);
+  else if (min_compat >= CEPH_RELEASE_KRAKEN)
+    bits.push_back(CEPHFS_FEATURE_KRAKEN);
+  else if (min_compat >= CEPH_RELEASE_JEWEL)
+    bits.push_back(CEPHFS_FEATURE_JEWEL);
 
   std::sort(bits.begin(), bits.end());
   required_client_features = feature_bitset_t(bits);

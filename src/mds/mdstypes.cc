@@ -368,6 +368,15 @@ void old_rstat_t::generate_test_instances(list<old_rstat_t*>& ls)
 /*
  * feature_bitset_t
  */
+feature_bitset_t::feature_bitset_t(unsigned long value)
+{
+  if (value) {
+    for (size_t i = 0; i < sizeof(value) * 8; i += bits_per_block) {
+      _vec.push_back((block_type)(value >> i));
+    }
+  }
+}
+
 feature_bitset_t::feature_bitset_t(const vector<size_t>& array)
 {
   if (!array.empty()) {

@@ -132,6 +132,7 @@ public:
   void journal_close_session(Session *session, int state, Context *on_safe);
   void reconnect_clients(MDSInternalContext *reconnect_done_);
   void handle_client_reconnect(class MClientReconnect *m);
+  void infer_supported_features(Session *session, client_metadata_t& client_metadata);
   void update_required_client_features();
 
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
