@@ -1404,7 +1404,7 @@ public:
   void destroy_choose_args(crush_choose_arg_map arg_map) {
     for (__u32 i = 0; i < arg_map.size; i++) {
       crush_choose_arg *arg = &arg_map.args[i];
-      for (__u32 j = 0; j < arg->weight_set_size; j++) {
+      for (__u32 j = 0; j < arg->weight_set_positions; j++) {
 	crush_weight_set *weight_set = &arg->weight_set[j];
 	free(weight_set->weights);
       }
@@ -1431,9 +1431,9 @@ public:
       carg.ids_size = 0;
       if (b && b->alg == CRUSH_BUCKET_STRAW2) {
 	crush_bucket_straw2 *sb = reinterpret_cast<crush_bucket_straw2*>(b);
-	carg.weight_set_size = positions;
+	carg.weight_set_positions = positions;
 	carg.weight_set = static_cast<crush_weight_set*>(calloc(sizeof(crush_weight_set),
-						    carg.weight_set_size));
+						    carg.weight_set_positions));
 	// initialize with canonical weights
 	for (int pos = 0; pos < positions; ++pos) {
 	  carg.weight_set[pos].size = b->size;
@@ -1444,7 +1444,7 @@ public:
 	}
       } else {
 	carg.weight_set = NULL;
-	carg.weight_set_size = 0;
+	carg.weight_set_positions = 0;
       }
     }
     return true;
@@ -1463,6 +1463,9 @@ public:
       destroy_choose_args(w.second);
     choose_args.clear();
   }
+
+  // remove choose_args for buckets that no longer exist, create them for new buckets
+  void update_choose_args(CephContext *cct);
 
   // adjust choose_args_map weight, preserving the hierarchical summation
   // property.  used by callers optimizing layouts by tweaking weights.
@@ -1493,8 +1496,8 @@ public:
   int get_choose_args_positions(crush_choose_arg_map cmap) {
     // infer positions from other buckets
     for (unsigned j = 0; j < cmap.size; ++j) {
-      if (cmap.args[j].weight_set_size) {
-	return cmap.args[j].weight_set_size;
+      if (cmap.args[j].weight_set_positions) {
+	return cmap.args[j].weight_set_positions;
       }
     }
     return 1;
