@@ -31,6 +31,7 @@
 static int gotrados = 0;
 std::string pool_name;              // Pool name (-p)
 std::string mount_image_name;       // Image to mount (-r)
+bool expose_snapshots = false;      // Flag indicating whether to expose image snapshots as files (-e)
 bool map_partitions = false;        // Flag indicating whether to map partitions to files (-m)
 uint64_t num_images = 0;            // Number of images to mount (-n)
 uint64_t max_writes_in_flight = 0;  // Maximum number of writes in flight (-w)
@@ -53,6 +54,7 @@ struct rbd_stat {
 // Command line options
 struct rbd_options {
     char *ceph_config;
+    bool expose_snapshots;
     char *pool_name;
     char *image_name;
     bool map_partitions;
@@ -71,6 +73,7 @@ struct rbd_image_list rbd_image_list;  // Packed RBD list, maintained for quickl
 // sector offset, and partition size information is included.
 struct rbd_image_data {
     std::string image_name;
+    std::string snapshot_name;
     struct rbd_stat rbd_stat;  // Image/file information
     uint64_t sector_size;
     uint64_t starting_sector;
@@ -100,7 +103,7 @@ in_flight_write_map in_flight_writes;  // Map of in-flight write operations
 uint64_t next_in_flight_write = 0;     // Number to assign to the next in-flight write op
 
 // Default command line options
-struct rbd_options rbd_options = {(char*) "/etc/ceph/ceph.conf", (char*) "rbd",
+struct rbd_options rbd_options = {(char*) "/etc/ceph/ceph.conf", false, (char*) "rbd",
 				  (char*)"", false, (uint64_t)128, (uint64_t)1024};
 
 #define rbdsize(fd)	get_rbd_image_data(get_open_image(fd)->name)->num_sectors * get_rbd_image_data(get_open_image(fd)->name)->sector_size
@@ -209,7 +212,7 @@ insert_in_flight_write(std::string image_name, long write_num)
     in_flight_writes_lock.unlock();
 }
 
-// Remove an in-flight wrote from the map (completed async write op)
+// Remove an in-flight write from the map (completed async write op)
 void
 remove_in_flight_write(std::string image_name, long write_num)
 {
@@ -357,18 +360,31 @@ int get_rbd_partitions(int file_descriptor)
     return get_mbr_partitions(file_descriptor);
 }
 
-int get_rbd_image(const char *image_name)
+int get_rbd_image(std::string image_name)
 {
     struct rbd_image_data *rbd = NULL;
 
-    if (image_name == (char *)NULL) 
+    if (image_name.empty())
         return -1;
 
     rbd_image_t temp_rbd;
 
     // Get the next file descriptor and open the RBD
     int file_descriptor = get_next_file_descriptor();
-    int ret = rbd_open(ioctx, image_name, &temp_rbd, NULL);
+    std::size_t snapshot_index = image_name.find('@');
+    std::string image_only_name = image_name;
+    std::string snapshot_name = "";
+    int ret = 0;
+    if (snapshot_index == std::string::npos) {
+        simple_err("adding rbd", snapshot_index);
+        ret = rbd_open(ioctx, image_name.c_str(), &temp_rbd, NULL);
+    }
+    else {
+        simple_err("adding snapshot", snapshot_index);
+        image_only_name = image_name.substr(0, snapshot_index);
+        snapshot_name = image_name.substr(snapshot_index + 1, image_name.length() - snapshot_index - 1);
+        ret = rbd_open_read_only(ioctx, image_only_name.c_str(), &temp_rbd, snapshot_name.c_str());
+    }
     if (ret < 0) {
         simple_err("add_image_data: can't open: ", ret);
         return ret;
@@ -382,7 +398,8 @@ int get_rbd_image(const char *image_name)
     open_images_lock.unlock();
     rbd = get_rbd_image_data(image_name);
     image_data_lock.lock();
-    rbd->image_name = image_name;
+    rbd->image_name = image_only_name;
+    rbd->snapshot_name = snapshot_name;
     rbd->sector_size = imagesectorsize;
     rbd->starting_sector = 0;
     image_data_lock.unlock();
@@ -400,6 +417,23 @@ int get_rbd_image(const char *image_name)
     rbd->rbd_stat.valid = 1;
     rbd->num_sectors = rbd->rbd_stat.rbd_info.size / rbd->sector_size;
     image_data_lock.unlock();
+
+    if (expose_snapshots && (snapshot_index == std::string::npos)) {
+        rbd_snap_info_t *snaps;
+        int max_snaps = 0, snap_count = 0;
+
+        do {
+            snaps = (rbd_snap_info_t *)malloc(sizeof(*snaps) * max_snaps);
+            snap_count = rbd_snap_list(open_image->image, snaps, &max_snaps);
+            if (snap_count < 0)
+                free(snaps);
+        } while (snap_count == -ERANGE);
+
+        for (int i = 0; i < snap_count; i++)
+            get_rbd_image(image_name + '@' + snaps[i].name);
+
+        rbd_snap_list_end(snaps);
+    }
 
     return file_descriptor;
 }
@@ -622,6 +656,7 @@ static void finish_aio_write(rbd_completion_t comp, void *data)
 static int rbdfs_write(const char *path, const char *buf, size_t size,
 			 off_t offset, struct fuse_file_info *fi)
 {
+    return -EROFS;
     // Find the open RBD using its file descriptor
     rbd_openimage *open_image = get_open_image(fi->fh);
     struct rbd_image_data *image_data = get_rbd_image_data(open_image->name);
@@ -723,7 +758,7 @@ static int rbdfs_fsync(const char *path, int datasync,
 {
     if (!gotrados)
         return -ENXIO;
-    rbd_flush(get_open_image(fi->fh)->image);
+    //rbd_flush(get_open_image(fi->fh)->image);
     return 0;
 }
 
@@ -791,6 +826,7 @@ rbdfs_init(struct fuse_conn_info *conn)
 
     pool_name = rbd_options.pool_name;
     mount_image_name = rbd_options.image_name;
+    expose_snapshots = rbd_options.expose_snapshots;
     map_partitions = rbd_options.map_partitions;
     // Convert num_images, and max_writes_in_flight to integers instead of strings
     num_images = rbd_options.num_images;
@@ -820,8 +856,8 @@ rbdfs_destroy(void *unused)
             open_image++) {
         // Don't try to treat invalid "files" as rbd images in the event that the OS has done something goofy
         if (open_image->second.image != NULL) {
-            wait_for_in_flight_writes(open_image->second.name, 0);
-            rbd_flush(open_image->second.image);
+            //wait_for_in_flight_writes(open_image->second.name, 0);
+            //rbd_flush(open_image->second.image);
             rbd_close(open_image->second.image);
         }
     }
@@ -864,6 +900,7 @@ rbdfs_checkname(const char *checkname)
 int
 rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
+    return -EROFS;
     int r;
     int order = imageorder;
 
@@ -880,6 +917,7 @@ rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 int
 rbdfs_rename(const char *path, const char *destname)
 {
+    return -EROFS;
     int r;
 
     r = rbdfs_checkname(destname+1);
@@ -897,6 +935,7 @@ rbdfs_rename(const char *path, const char *destname)
 int
 rbdfs_utime(const char *path, struct utimbuf *utime)
 {
+    return -EROFS;
 	// called on create; not relevant
 	return 0;
 }
@@ -904,6 +943,7 @@ rbdfs_utime(const char *path, struct utimbuf *utime)
 int
 rbdfs_unlink(const char *path)
 {
+    return -EROFS;
     std::string rbd_name(path + 1);
     open_images_lock.lock();
     for (rbd_open_image_map::iterator open_image = rbd_open_images.begin();
@@ -924,6 +964,7 @@ rbdfs_unlink(const char *path)
 int
 rbdfs_truncate(const char *path, off_t size)
 {
+    return -EROFS;
     if (map_partitions)
         return -EOPNOTSUPP;
 
@@ -977,6 +1018,7 @@ rbdfs_setxattr(const char *path, const char *name, const char *value,
 #endif
     )
 {
+    return -EROFS;
 	struct rbdfuse_attr *ap;
 	if (strcmp(path, "/") != 0)
 		return -EINVAL;
@@ -1088,6 +1130,8 @@ static struct fuse_opt rbdfs_opts[] = {
     FUSE_OPT_KEY("--version", KEY_VERSION),
     {"-c %s", offsetof(struct rbd_options, ceph_config), 0},
     {"--configfile=%s", offsetof(struct rbd_options, ceph_config), 0},
+    {"-e", offsetof(struct rbd_options, expose_snapshots), 1},
+    {"--expose-snapshots", offsetof(struct rbd_options, expose_snapshots), 1},
     {"-p %s", offsetof(struct rbd_options, pool_name), 0},
     {"--poolname=%s", offsetof(struct rbd_options, pool_name), 0},
     {"-r %s", offsetof(struct rbd_options, image_name), 0},
@@ -1110,6 +1154,7 @@ static void usage(const char *progname)
 "    -h   --help                   print help\n"
 "    -V   --version                print version\n"
 "    -c   --configfile             ceph configuration file [/etc/ceph/ceph.conf]\n"
+"    -e   --expose-snapshots       expose image snapshots as read-only files\n"
 "    -p   --poolname               rados pool name [rbd]\n"
 "    -r   --image                  RBD image name []\n"
 "    -m   --map-partitions         read image partition tables and create partition files in addition to image files\n"
