@@ -250,8 +250,8 @@ int CrushCompiler::decompile_choose_arg(crush_choose_arg *arg,
   int r;
   out << "  {\n";
   out << "    bucket_id " << bucket_id << "\n";
-  if (arg->weight_set_size > 0) {
-    r = decompile_weight_set(arg->weight_set, arg->weight_set_size, out);
+  if (arg->weight_set_positions > 0) {
+    r = decompile_weight_set(arg->weight_set, arg->weight_set_positions, out);
     if (r < 0)
       return r;
   }
@@ -269,7 +269,7 @@ int CrushCompiler::decompile_choose_arg_map(crush_choose_arg_map arg_map,
 {
   for (__u32 i = 0; i < arg_map.size; i++) {
     if ((arg_map.args[i].ids_size == 0) &&
-        (arg_map.args[i].weight_set_size == 0))
+        (arg_map.args[i].weight_set_positions == 0))
       continue;
     int r = decompile_choose_arg(&arg_map.args[i], -1-i, out);
     if (r < 0)
@@ -951,14 +951,14 @@ int CrushCompiler::parse_weight_set_weights(iter_t const& i, int bucket_id, crus
 int CrushCompiler::parse_weight_set(iter_t const& i, int bucket_id, crush_choose_arg *arg)
 {
   // -3 stands for the leading "weight_set" keyword and the enclosing [ ]
-  arg->weight_set_size = i->children.size() - 3;
-  arg->weight_set = (crush_weight_set *)calloc(arg->weight_set_size, sizeof(crush_weight_set));
+  arg->weight_set_positions = i->children.size() - 3;
+  arg->weight_set = (crush_weight_set *)calloc(arg->weight_set_positions, sizeof(crush_weight_set));
   __u32 pos = 0;
   for (iter_t p = i->children.begin(); p != i->children.end(); p++) {
     int r = 0;
     switch((int)p->value.id().to_long()) {
     case crush_grammar::_weight_set_weights:
-      if (pos < arg->weight_set_size) {
+      if (pos < arg->weight_set_positions) {
         r = parse_weight_set_weights(p, bucket_id, &arg->weight_set[pos]);
         pos++;
       } else {
