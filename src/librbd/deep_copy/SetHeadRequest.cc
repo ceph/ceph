@@ -102,7 +102,8 @@ template <typename I>
 void SetHeadRequest<I>::send_remove_parent() {
   m_image_ctx->parent_lock.get_read();
   if (m_image_ctx->parent_md.spec.pool_id == -1 ||
-      m_image_ctx->parent_md.spec == m_parent_spec) {
+      (m_image_ctx->parent_md.spec == m_parent_spec &&
+       m_image_ctx->parent_md.overlap == m_parent_overlap)) {
     m_image_ctx->parent_lock.put_read();
     send_set_parent();
     return;
