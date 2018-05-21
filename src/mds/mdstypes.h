@@ -1067,9 +1067,9 @@ public:
   typedef uint64_t block_type;
   static const size_t bits_per_block = sizeof(block_type) * 8;
 
-  feature_bitset_t() {}
   feature_bitset_t(const feature_bitset_t& other) : _vec(other._vec) {}
   feature_bitset_t(feature_bitset_t&& other) : _vec(std::move(other._vec)) {}
+  feature_bitset_t(unsigned long value = 0);
   feature_bitset_t(const vector<size_t>& array);
   feature_bitset_t& operator=(const feature_bitset_t& other) {
     _vec = other._vec;
