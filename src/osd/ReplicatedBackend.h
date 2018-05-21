@@ -327,7 +327,7 @@ private:
   /**
    * Client IO
    */
-  struct InProgressOp {
+  struct InProgressOp : public RefCountedObject {
     ceph_tid_t tid;
     set<pg_shard_t> waiting_for_commit;
     Context *on_commit;
@@ -336,13 +336,15 @@ private:
     InProgressOp(
       ceph_tid_t tid, Context *on_commit,
       OpRequestRef op, eversion_t v)
-      : tid(tid), on_commit(on_commit),
+      : RefCountedObject(nullptr, 0),
+	tid(tid), on_commit(on_commit),
 	op(op), v(v) {}
     bool done() const {
       return waiting_for_commit.empty();
     }
   };
-  map<ceph_tid_t, InProgressOp> in_progress_ops;
+  typedef boost::intrusive_ptr<InProgressOp> InProgressOpRef;
+  map<ceph_tid_t, InProgressOpRef> in_progress_ops;
 public:
   friend class C_OSD_OnOpCommit;
 
@@ -395,7 +397,7 @@ private:
     boost::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
     ObjectStore::Transaction &op_t);
-  void op_commit(InProgressOp *op);
+  void op_commit(InProgressOpRef& op);
   void do_repop_reply(OpRequestRef op);
   void do_repop(OpRequestRef op);
 
