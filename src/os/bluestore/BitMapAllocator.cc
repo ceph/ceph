@@ -113,7 +113,7 @@ int64_t BitMapAllocator::allocate(
   auto res = allocate_dis(want_size, alloc_unit / m_block_size,
                       max_alloc_size, hint / m_block_size, extents);
 
-  if (res < want_size) {
+  if (res > 0 && res < static_cast<int64_t>(want_size)) {
     auto unused = want_size - res;
     int nblks = unused / m_block_size;
     assert(!(unused % m_block_size));
