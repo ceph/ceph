@@ -25,6 +25,7 @@
 #include "mds/LogEvent.h"
 #include "mds/JournalPointer.h"
 #include "osdc/Journaler.h"
+#include "mon/MonClient.h"
 
 #include "Dumper.h"
 
@@ -100,15 +101,19 @@ int Dumper::dump(const char *dump_file)
   int fd = ::open(dump_file, O_WRONLY|O_CREAT|O_TRUNC, 0644);
   if (fd >= 0) {
     // include an informative header
+    uuid_d fsid = monc->get_fsid();
+    char fsid_str[40];
+    fsid.print(fsid_str);
     char buf[HEADER_LEN];
     memset(buf, 0, sizeof(buf));
-    snprintf(buf, HEADER_LEN, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n%c",
+    snprintf(buf, HEADER_LEN, "Ceph mds%d journal dump\n start offset %llu (0x%llx)\n       length %llu (0x%llx)\n    write_pos %llu (0x%llx)\n    format %llu\n    trimmed_pos %llu (0x%llx)\n    fsid %s\n%c",
 	    role.rank, 
 	    (unsigned long long)start, (unsigned long long)start,
 	    (unsigned long long)len, (unsigned long long)len,
 	    (unsigned long long)journaler.last_committed.write_pos, (unsigned long long)journaler.last_committed.write_pos,
 	    (unsigned long long)journaler.last_committed.stream_format,
 	    (unsigned long long)journaler.last_committed.trimmed_pos, (unsigned long long)journaler.last_committed.trimmed_pos,
+	    fsid_str,
 	    4);
     r = safe_write(fd, buf, sizeof(buf));
     if (r) {
@@ -179,7 +184,7 @@ int Dumper::dump(const char *dump_file)
   }
 }
 
-int Dumper::undump(const char *dump_file)
+int Dumper::undump(const char *dump_file, bool force)
 {
   cout << "undump " << dump_file << std::endl;
   
@@ -210,6 +215,33 @@ int Dumper::undump(const char *dump_file)
   sscanf(strstr(buf, "length"), "length %llu", &len);
   sscanf(strstr(buf, "write_pos"), "write_pos %llu", &write_pos);
   sscanf(strstr(buf, "format"), "format %llu", &format);
+
+  if (!force) {
+    // need to check if fsid match onlien cluster fsid
+    if (strstr(buf, "fsid")) {
+      uuid_d fsid;
+      char fsid_str[40];
+      sscanf(strstr(buf, "fsid"), "fsid %s", fsid_str);
+      r = fsid.parse(fsid_str);
+      if (!r) {
+	derr  << "Invalid fsid" << dendl;
+	::close(fd);
+	return -EINVAL;
+      }
+
+      if (fsid != monc->get_fsid()) {
+	derr << "Imported journal fsid does not match online cluster fsid" << dendl;
+	derr << "Use --force to skip fsid check" << dendl;
+	::close(fd);
+	return -EINVAL;
+      }
+    } else {
+      derr  << "Invalid header, no fsid embeded" << dendl;
+      ::close(fd);
+      return -EINVAL;
+    }
+  }
+
   if (strstr(buf, "trimmed_pos")) {
     sscanf(strstr(buf, "trimmed_pos"), "trimmed_pos %llu", &trimmed_pos);
   } else {
