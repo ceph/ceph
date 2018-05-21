@@ -379,7 +379,7 @@ void Server::handle_client_session(MClientSession *m)
 	dout(20) << "  " << p.first << ": " << p.second << dendl;
       }
 
-      feature_bitset_t missing_features(CEPHFS_FEATURES_MDS_REQUIRED);
+      feature_bitset_t missing_features = required_client_features;
       missing_features -= client_metadata.features;
       if (!missing_features.empty()) {
 	stringstream ss;
@@ -970,21 +970,35 @@ void Server::handle_client_reconnect(MClientReconnect *m)
        << ") from " << m->get_source_inst()
        << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")";
     deny = true;
-  } else if (!session->is_open()) {
-    dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
-    mds->clog->info() << "denied reconnect attempt (mds is "
-	<< ceph_mds_state_name(mds->get_state())
-	<< ") from " << m->get_source_inst() << " (session is closed)";
-    deny = true;
-  } else if (mdcache->is_readonly()) {
-    dout(1) << " read-only FS, ignoring reconnect, sending close" << dendl;
-    mds->clog->info() << "denied reconnect attempt (mds is read-only)";
-    deny = true;
+  } else {
+    std::string error_str;
+    if (!session->is_open()) {
+      error_str = "session is closed";
+    } else if (mdcache->is_readonly()) {
+      error_str = "mds is readonly";
+    } else {
+      feature_bitset_t missing_features = required_client_features;
+      missing_features -= session->info.client_metadata.features;
+      if (!missing_features.empty()) {
+	stringstream ss;
+	ss << "missing required features '" << missing_features << "'";
+	error_str = ss.str();
+      }
+    }
+
+    if (!error_str.empty()) {
+      deny = true;
+      dout(1) << " " << error_str << ", ignoring reconnect, sending close" << dendl;
+      mds->clog->info() << "denied reconnect attempt from "
+			<< m->get_source_inst() << " (" << error_str << ")";
+    }
   }
 
   if (deny) {
     m->get_connection()->send_message(new MClientSession(CEPH_SESSION_CLOSE));
     m->put();
+    if (session->is_open())
+      kill_session(session, nullptr);
     return;
   }
 
@@ -1071,7 +1085,17 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   m->put();
 }
 
+void Server::update_required_client_features()
+{
+  vector<size_t> bits = CEPHFS_FEATURES_MDS_REQUIRED;
 
+  int min_compat = mds->mdsmap->get_min_compat_client();
+  if (min_compat >= CEPH_RELEASE_MIMIC)
+    bits.push_back(CEPHFS_FEATURE_MIMIC);
+
+  std::sort(bits.begin(), bits.end());
+  required_client_features = feature_bitset_t(bits);
+}
 
 void Server::reconnect_gather_finish()
 {

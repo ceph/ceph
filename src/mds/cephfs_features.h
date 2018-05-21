@@ -15,9 +15,14 @@
 #ifndef CEPHFS_FEATURES_H
 #define CEPHFS_FEATURES_H
 
-#define CEPHFS_FEATURE_MIMIC 	0
+// Please add feature bits for later ceph releases and update
+// Server::update_required_client_features().
+
+// The first 8 bits are reserved for old ceph releases.
+#define CEPHFS_FEATURE_MIMIC 	8
 
 #define CEPHFS_FEATURES_ALL {		\
+  0, 1, 2, 3, 4, 5, 6, 7,		\
   CEPHFS_FEATURE_MIMIC,			\
 }
 
