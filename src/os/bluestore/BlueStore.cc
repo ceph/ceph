@@ -8337,9 +8337,10 @@ void BlueStore::get_db_statistics(Formatter *f)
 }
 
 BlueStore::TransContext *BlueStore::_txc_create(
-  Collection *c, OpSequencer *osr)
+  Collection *c, OpSequencer *osr,
+  list<Context*> *on_commits)
 {
-  TransContext *txc = new TransContext(cct, c, osr);
+  TransContext *txc = new TransContext(cct, c, osr, on_commits);
   txc->t = db->get_transaction();
   osr->queue_new(txc);
   dout(20) << __func__ << " osr " << osr << " = " << txc
@@ -9434,7 +9435,7 @@ int BlueStore::_deferred_replay()
       r = -EIO;
       goto out;
     }
-    TransContext *txc = _txc_create(ch.get(), osr);
+    TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
     txc->deferred_txn = deferred_txn;
     txc->state = TransContext::STATE_KV_DONE;
     _txc_state_proc(txc);
@@ -9481,8 +9482,8 @@ int BlueStore::queue_transactions(
   dout(10) << __func__ << " ch " << c << " " << c->cid << dendl;
 
   // prepare
-  TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr);
-  txc->oncommits.swap(on_commit);
+  TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr,
+				  &on_commit);
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     txc->bytes += (*p).get_num_bytes();
