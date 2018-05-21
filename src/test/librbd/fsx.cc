@@ -260,6 +260,7 @@ get_random(void)
 	return random_generator();
 }
 
+int get_features(uint64_t* features);
 void replay_imagename(char *buf, size_t len, int clones);
 
 namespace {
@@ -364,15 +365,19 @@ int create_replay_image(rados_ioctx_t ioctx, int order,
         librados::IoCtx io_ctx;
         librados::IoCtx::from_rados_ioctx_t(ioctx, io_ctx);
 
-        int r;
+        uint64_t features;
+        int r = get_features(&features);
+        if (r < 0) {
+                return r;
+        }
+
         librbd::RBD rbd;
         if (last_replay_image_name == nullptr) {
-                r = rbd.create2(io_ctx, replay_image_name, 0,
-                                RBD_FEATURES_ALL, &order);
+                r = rbd.create2(io_ctx, replay_image_name, 0, features, &order);
         } else {
                 r = rbd.clone2(io_ctx, last_replay_image_name, "snap",
-                               io_ctx, replay_image_name, RBD_FEATURES_ALL,
-                               &order, stripe_unit, stripe_count);
+                               io_ctx, replay_image_name, features, &order,
+                               stripe_unit, stripe_count);
         }
 
         if (r < 0) {
@@ -537,6 +542,27 @@ rados_ioctx_t ioctx;		/* handle for our test pool */
 struct krbd_ctx *krbd;		/* handle for libkrbd */
 #endif
 bool skip_partial_discard;	/* rbd_skip_partial_discard config value*/
+
+int get_features(uint64_t* features) {
+        char buf[1024];
+        int r = rados_conf_get(cluster, "rbd_default_features", buf,
+                               sizeof(buf));
+        if (r < 0) {
+                simple_err("Could not get rbd_default_features value", r);
+                return r;
+        }
+
+        *features = strtol(buf, NULL, 0);
+
+        if (clone_calls) {
+                *features |= RBD_FEATURE_LAYERING;
+        }
+        if (journal_replay) {
+                *features |= (RBD_FEATURE_EXCLUSIVE_LOCK |
+                              RBD_FEATURE_JOURNALING);
+        }
+        return 0;
+}
 
 /*
  * librbd/krbd rbd_operations handlers.  Given the rest of fsx.c, no
@@ -852,7 +878,12 @@ __librbd_clone(struct rbd_ctx *ctx, const char *src_snapname,
 		return ret;
 	}
 
-	uint64_t features = RBD_FEATURES_ALL;
+        uint64_t features;
+        ret = get_features(&features);
+        if (ret < 0) {
+                return ret;
+        }
+
 	if (krbd) {
 		features &= ~(RBD_FEATURE_OBJECT_MAP     |
                               RBD_FEATURE_FAST_DIFF      |
@@ -1938,21 +1969,12 @@ create_image()
         rados_application_enable(ioctx, "rbd", 1);
 
 	if (clone_calls || journal_replay) {
-                r = rados_conf_get(cluster, "rbd_default_features", buf,
-                                   sizeof(buf));
+                uint64_t features;
+                r = get_features(&features);
                 if (r < 0) {
-                        simple_err("Could not get rbd_default_features value", r);
                         goto failed_open;
                 }
 
-                uint64_t features = strtol(buf, NULL, 0);
-                if (clone_calls) {
-                        features |= RBD_FEATURE_LAYERING;
-                }
-                if (journal_replay) {
-                        features |= (RBD_FEATURE_EXCLUSIVE_LOCK |
-                                     RBD_FEATURE_JOURNALING);
-                }
 		r = rbd_create2(ioctx, iname, file_size, features, &order);
 	} else {
 		r = rbd_create(ioctx, iname, file_size, &order);

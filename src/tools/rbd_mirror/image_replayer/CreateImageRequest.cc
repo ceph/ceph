@@ -69,35 +69,7 @@ void CreateImageRequest<I>::create_image() {
   RWLock::RLocker snap_locker(m_remote_image_ctx->snap_lock);
 
   librbd::ImageOptions image_options;
-  image_options.set(RBD_IMAGE_OPTION_FEATURES, m_remote_image_ctx->features);
-  image_options.set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
-  image_options.set(RBD_IMAGE_OPTION_STRIPE_UNIT,
-                    m_remote_image_ctx->stripe_unit);
-  image_options.set(RBD_IMAGE_OPTION_STRIPE_COUNT,
-                    m_remote_image_ctx->stripe_count);
-
-  // Determine the data pool for the local image as follows:
-  // 1. If the local pool has a default data pool, use it.
-  // 2. If the remote image has a data pool different from its metadata pool and
-  //    a pool with the same name exists locally, use it.
-  // 3. Don't set the data pool explicitly.
-  std::string data_pool;
-  librados::Rados local_rados(m_local_io_ctx);
-  auto default_data_pool = g_ceph_context->_conf->get_val<std::string>("rbd_default_data_pool");
-  auto remote_md_pool = m_remote_image_ctx->md_ctx.get_pool_name();
-  auto remote_data_pool = m_remote_image_ctx->data_ctx.get_pool_name();
-
-  if (default_data_pool != "") {
-    data_pool = default_data_pool;
-  } else if (remote_data_pool != remote_md_pool) {
-    if (local_rados.pool_lookup(remote_data_pool.c_str()) >= 0) {
-      data_pool = remote_data_pool;
-    }
-  }
-
-  if (data_pool != "") {
-    image_options.set(RBD_IMAGE_OPTION_DATA_POOL, data_pool);
-  }
+  populate_image_options(&image_options);
 
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
     m_local_io_ctx, m_local_image_name, m_local_image_id,
@@ -325,10 +297,7 @@ void CreateImageRequest<I>::clone_image() {
   dout(20) << dendl;
 
   librbd::ImageOptions opts;
-  opts.set(RBD_IMAGE_OPTION_FEATURES, m_remote_image_ctx->features);
-  opts.set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
-  opts.set(RBD_IMAGE_OPTION_STRIPE_UNIT, m_remote_image_ctx->stripe_unit);
-  opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, m_remote_image_ctx->stripe_count);
+  populate_image_options(&opts);
 
   using klass = CreateImageRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_clone_image>(this);
@@ -461,6 +430,42 @@ int CreateImageRequest<I>::validate_parent() {
   }
 
   return 0;
+}
+
+template <typename I>
+void CreateImageRequest<I>::populate_image_options(
+    librbd::ImageOptions* image_options) {
+  image_options->set(RBD_IMAGE_OPTION_FEATURES,
+                     (m_remote_image_ctx->features &
+                        ~RBD_FEATURES_IMPLICIT_ENABLE));
+  image_options->set(RBD_IMAGE_OPTION_ORDER, m_remote_image_ctx->order);
+  image_options->set(RBD_IMAGE_OPTION_STRIPE_UNIT,
+                     m_remote_image_ctx->stripe_unit);
+  image_options->set(RBD_IMAGE_OPTION_STRIPE_COUNT,
+                     m_remote_image_ctx->stripe_count);
+
+  // Determine the data pool for the local image as follows:
+  // 1. If the local pool has a default data pool, use it.
+  // 2. If the remote image has a data pool different from its metadata pool and
+  //    a pool with the same name exists locally, use it.
+  // 3. Don't set the data pool explicitly.
+  std::string data_pool;
+  librados::Rados local_rados(m_local_io_ctx);
+  auto default_data_pool = g_ceph_context->_conf->get_val<std::string>("rbd_default_data_pool");
+  auto remote_md_pool = m_remote_image_ctx->md_ctx.get_pool_name();
+  auto remote_data_pool = m_remote_image_ctx->data_ctx.get_pool_name();
+
+  if (default_data_pool != "") {
+    data_pool = default_data_pool;
+  } else if (remote_data_pool != remote_md_pool) {
+    if (local_rados.pool_lookup(remote_data_pool.c_str()) >= 0) {
+      data_pool = remote_data_pool;
+    }
+  }
+
+  if (data_pool != "") {
+    image_options->set(RBD_IMAGE_OPTION_DATA_POOL, data_pool);
+  }
 }
 
 } // namespace image_replayer
