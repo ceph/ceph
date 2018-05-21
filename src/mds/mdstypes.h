@@ -1075,6 +1075,10 @@ public:
     _vec = other._vec;
     return *this;
   }
+  feature_bitset_t& operator=(feature_bitset_t&& other) {
+    _vec = std::move(other._vec);
+    return *this;
+  }
   bool empty() const {
     for (auto& v : _vec) {
       if (v)
