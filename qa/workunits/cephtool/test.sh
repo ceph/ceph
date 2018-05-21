@@ -1785,8 +1785,8 @@ function test_mon_osd_pool_quota()
   #
   # get quotas
   #
-  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
-  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10M objects'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10 B'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10 M objects'
   #
   # set valid quotas with unit prefix
   #
@@ -1794,7 +1794,7 @@ function test_mon_osd_pool_quota()
   #
   # get quotas
   #
-  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10Ki'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10 Ki'
   #
   # set valid quotas with unit prefix
   #
@@ -1802,7 +1802,7 @@ function test_mon_osd_pool_quota()
   #
   # get quotas
   #
-  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10Ki'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10 Ki'
   #
   #
   # reset pool quotas

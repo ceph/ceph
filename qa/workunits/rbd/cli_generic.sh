@@ -44,8 +44,8 @@ test_others() {
     rbd export testimg1 /tmp/img3
 
     # info
-    rbd info testimg1 | grep 'size 128MiB'
-    rbd info --snap=snap1 testimg1 | grep 'size 256MiB'
+    rbd info testimg1 | grep 'size 128 MiB'
+    rbd info --snap=snap1 testimg1 | grep 'size 256 MiB'
 
     # export-diff
     rm -rf /tmp/diff-testimg1-1 /tmp/diff-testimg1-2
@@ -58,10 +58,10 @@ test_others() {
     rbd import-diff --sparse-size 8K /tmp/diff-testimg1-2 testimg-diff1
 
     # info
-    rbd info testimg1 | grep 'size 128MiB'
-    rbd info --snap=snap1 testimg1 | grep 'size 256MiB'
-    rbd info testimg-diff1 | grep 'size 128MiB'
-    rbd info --snap=snap1 testimg-diff1 | grep 'size 256MiB'
+    rbd info testimg1 | grep 'size 128 MiB'
+    rbd info --snap=snap1 testimg1 | grep 'size 256 MiB'
+    rbd info testimg-diff1 | grep 'size 128 MiB'
+    rbd info --snap=snap1 testimg-diff1 | grep 'size 256 MiB'
 
     # make copies
     rbd copy testimg1 --snap=snap1 testimg2
@@ -70,16 +70,16 @@ test_others() {
     rbd copy testimg-diff1 --sparse-size 768K testimg-diff3
 
     # verify the result
-    rbd info testimg2 | grep 'size 256MiB'
-    rbd info testimg3 | grep 'size 128MiB'
-    rbd info testimg-diff2 | grep 'size 256MiB'
-    rbd info testimg-diff3 | grep 'size 128MiB'
+    rbd info testimg2 | grep 'size 256 MiB'
+    rbd info testimg3 | grep 'size 128 MiB'
+    rbd info testimg-diff2 | grep 'size 256 MiB'
+    rbd info testimg-diff3 | grep 'size 128 MiB'
 
     # deep copies
     rbd deep copy testimg1 testimg4
     rbd deep copy testimg1 --snap=snap1 testimg5
-    rbd info testimg4 | grep 'size 128MiB'
-    rbd info testimg5 | grep 'size 256MiB'
+    rbd info testimg4 | grep 'size 128 MiB'
+    rbd info testimg5 | grep 'size 256 MiB'
     rbd snap ls testimg4 | grep -v 'SNAPID' | wc -l | grep 1
     rbd snap ls testimg4 | grep '.*snap1.*'
 
@@ -98,8 +98,8 @@ test_others() {
     # rollback
     rbd snap rollback --snap=snap1 testimg1
     rbd snap rollback --snap=snap1 testimg-diff1
-    rbd info testimg1 | grep 'size 256MiB'
-    rbd info testimg-diff1 | grep 'size 256MiB'
+    rbd info testimg1 | grep 'size 256 MiB'
+    rbd info testimg-diff1 | grep 'size 256 MiB'
     rbd export testimg1 /tmp/img1.snap1
     rbd export testimg-diff1 /tmp/img-diff1.snap1
     cmp /tmp/img2 /tmp/img1.snap1
@@ -158,8 +158,8 @@ test_ls() {
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
     # look for fields in output of ls -l without worrying about space
-    rbd ls -l | grep 'test1.*1MiB.*1'
-    rbd ls -l | grep 'test2.*1MiB.*1'
+    rbd ls -l | grep 'test1.*1 MiB.*1'
+    rbd ls -l | grep 'test2.*1 MiB.*1'
 
     rbd rm test1
     rbd rm test2
@@ -169,8 +169,8 @@ test_ls() {
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1MiB.*2'
-    rbd ls -l | grep 'test2.*1MiB.*2'
+    rbd ls -l | grep 'test1.*1 MiB.*2'
+    rbd ls -l | grep 'test2.*1 MiB.*2'
 
     rbd rm test1
     rbd rm test2
@@ -180,8 +180,8 @@ test_ls() {
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
-    rbd ls -l | grep 'test1.*1MiB.*2'
-    rbd ls -l | grep 'test2.*1MiB.*1'
+    rbd ls -l | grep 'test1.*1 MiB.*2'
+    rbd ls -l | grep 'test2.*1 MiB.*1'
     remove_images
 
     # test that many images can be shown by ls
@@ -495,7 +495,7 @@ test_deep_copy_clone() {
     rbd clone testimg1@snap1 testimg2
     rbd snap create testimg2@snap2
     rbd deep copy testimg2 testimg3
-    rbd info testimg3 | grep 'size 256MiB'
+    rbd info testimg3 | grep 'size 256 MiB'
     rbd info testimg3 | grep 'parent: rbd/testimg1@snap1'
     rbd snap ls testimg3 | grep -v 'SNAPID' | wc -l | grep 1
     rbd snap ls testimg3 | grep '.*snap2.*'
@@ -513,7 +513,7 @@ test_deep_copy_clone() {
     rbd clone testimg1@snap1 testimg2
     rbd snap create testimg2@snap2
     rbd deep copy --flatten testimg2 testimg3
-    rbd info testimg3 | grep 'size 256MiB'
+    rbd info testimg3 | grep 'size 256 MiB'
     rbd info testimg3 | grep -v 'parent:'
     rbd snap ls testimg3 | grep -v 'SNAPID' | wc -l | grep 1
     rbd snap ls testimg3 | grep '.*snap2.*'
@@ -572,7 +572,7 @@ test_thick_provision() {
     ret=""
     while [ $count -lt 10 ]
     do
-        rbd du|grep test1|tr -s " "|cut -d " " -f 3|grep '^64MiB' && ret=$?
+        rbd du|grep test1|tr -s " "|cut -d " " -f 3|grep '^64 MiB' && ret=$?
         if [ "$ret" = "0" ]
         then
             break;
@@ -594,7 +594,7 @@ test_thick_provision() {
     ret=""
     while [ $count -lt 10 ]
     do
-        rbd du|grep test1|tr -s " "|cut -d " " -f 3|grep '^4GiB' && ret=$?
+        rbd du|grep test1|tr -s " "|cut -d " " -f 3|grep '^4 GiB' && ret=$?
         if [ "$ret" = "0" ]
         then
             break;
