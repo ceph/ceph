@@ -36,3 +36,4 @@ sensible.
     Influx plugin <influx>
     Hello plugin <hello>
     Telegraf plugin <telegraf>
+    Telemetry plugin <telemetry>
