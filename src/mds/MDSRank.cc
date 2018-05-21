@@ -1736,6 +1736,9 @@ void MDSRankDispatcher::handle_mds_map(
   if (objecter->get_client_incarnation() != incarnation)
     objecter->set_client_incarnation(incarnation);
 
+  if (oldmap->get_min_compat_client() != mdsmap->get_min_compat_client())
+    server->update_required_client_features();
+
   // for debug
   if (g_conf()->mds_dump_cache_on_map)
     mdcache->dump_cache();

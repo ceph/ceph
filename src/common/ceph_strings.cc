@@ -92,6 +92,8 @@ const char *ceph_release_name(int r)
 	case CEPH_RELEASE_NAUTILUS:
 		return "nautilus";
 	default:
+		if (r < 0)
+			return "unspecified";
 		return "unknown";
 	}
 }
