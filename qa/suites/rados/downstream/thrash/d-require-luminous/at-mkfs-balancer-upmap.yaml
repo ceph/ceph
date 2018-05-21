@@ -1,0 +1,20 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug osd: 20
+tasks:
+- exec:
+    retry: 10
+    sleep_for_retry: 20
+    mon.a:
+      - "ceph balancer status"
+      - "ceph balancer mode upmap"
+      - "ceph balancer on"
+
+- exec:
+    retry: 10
+    sleep_for_retry: 20
+    mon.a:
+      - "ceph balancer mode upmap"
+      - "ceph balancer on"

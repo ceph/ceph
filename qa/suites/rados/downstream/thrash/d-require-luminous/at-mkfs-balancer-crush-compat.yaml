@@ -1,0 +1,17 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug osd: 20
+tasks:
+- exec:
+    retry: 20
+    sleep_for_retry: 10
+    mon.a:
+      - "ceph balancer status"
+- exec:
+    retry: 20
+    sleep_for_retry: 10
+    mon.a:
+      - "ceph balancer mode crush-compat"
+      - "ceph balancer on"

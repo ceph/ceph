@@ -1,0 +1,67 @@
+overrides:
+  ceph:
+    crush_tunables: jewel
+    conf:
+      mon:
+        mon osd initial require min compat client: jewel
+      client.0:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+tasks:
+- parallel:
+  - therados1
+  - therados2
+  - full_sequential
+therados1:
+- rados:
+    clients: [client.1]
+    ops: 400000
+    objects: 1024
+    max_seconds: 600
+    max_in_flight: 64
+    size: 16384
+    op_weights:
+      read: 100
+      write: 100
+      delete: 50
+      snap_create: 50
+      snap_remove: 50
+      rollback: 50
+      copy_from: 50
+      setattr: 25
+      rmattr: 25 
+therados2:
+- rados:
+    clients: [client.1]
+    ops: 4000
+    objects: 500
+    write_fadvise_dontneed: true
+    op_weights:
+      write: 100
+full_sequential:
+  - radosbench:
+      clients: [client.0]
+      time: 90
+  - radosbench:
+      clients: [client.0]
+      time: 90
+  - radosbench:
+      clients: [client.0]
+      time: 90
+  - radosbench:
+      clients: [client.0]
+      time: 90
+  - radosbench:
+      clients: [client.0]
+      time: 90
+  - radosbench:
+      clients: [client.0]
+      time: 90
+  - radosbench:
+      clients: [client.0]
+      time: 90
+  - radosbench:
+      clients: [client.0]
+      time: 90
+
