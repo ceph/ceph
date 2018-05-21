@@ -99,27 +99,25 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   ASSERT_EQ(0, rados_conf_read_file(cluster_a, NULL));
   // kludge: i want to --log-file foo and only get cluster b
   //ASSERT_EQ(0, rados_conf_parse_env(cluster_a, NULL));
+  ASSERT_EQ(0, rados_conf_set(cluster_a,
+			      "objecter_debug_inject_relock_delay", "true"));
   ASSERT_EQ(0, rados_connect(cluster_a));
 
   ASSERT_EQ(0, rados_create(&cluster_b, NULL));
   ASSERT_EQ(0, rados_conf_read_file(cluster_b, NULL));
   ASSERT_EQ(0, rados_conf_parse_env(cluster_b, NULL));
-  ASSERT_EQ(0, rados_conf_set(cluster_b,
-			      "objecter_debug_inject_relock_delay", "true"));
   ASSERT_EQ(0, rados_connect(cluster_b));
 
   char poolname[80];
   snprintf(poolname, sizeof(poolname), "poolrace.%d", rand());
   rados_pool_create(cluster_a, poolname);
-  rados_ioctx_t a, b;
+  rados_ioctx_t a;
   rados_ioctx_create(cluster_a, poolname, &a);
   int64_t poolid = rados_ioctx_get_id(a);
 
-  rados_ioctx_create2(cluster_b, poolid+1, &b);
-
   char pool2name[80];
   snprintf(pool2name, sizeof(pool2name), "poolrace2.%d", rand());
-  rados_pool_create(cluster_a, pool2name);
+  rados_pool_create(cluster_b, pool2name);
 
   list<rados_completion_t> cls;
   // this should normally trigger pretty easily, but we need to bound
@@ -131,7 +129,7 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
     rados_completion_t c;
     rados_aio_create_completion(0, 0, 0, &c);
     cls.push_back(c);
-    rados_aio_read(b, "PoolCreationRaceObj", c, buf, 100, 0);
+    rados_aio_read(a, "PoolCreationRaceObj", c, buf, 100, 0);
     cout << "started " << (void*)c << std::endl;
     if (rados_aio_is_complete(cls.front())) {
       break;
@@ -151,7 +149,6 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   cout << "done." << std::endl;
 
   rados_ioctx_destroy(a);
-  rados_ioctx_destroy(b);
   rados_pool_delete(cluster_a, poolname);
   rados_pool_delete(cluster_a, pool2name);
   rados_shutdown(cluster_b);
