@@ -113,7 +113,6 @@ TEST(LibRadosMiscPool, PoolCreationRace) {
   rados_pool_create(cluster_a, poolname);
   rados_ioctx_t a;
   rados_ioctx_create(cluster_a, poolname, &a);
-  int64_t poolid = rados_ioctx_get_id(a);
 
   char pool2name[80];
   snprintf(pool2name, sizeof(pool2name), "poolrace2.%d", rand());
