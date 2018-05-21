@@ -365,13 +365,15 @@ TEST(AES, DecryptNoBl) {
     0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77,
     0x88, 0x99, 0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff,
   };
-  unsigned char plaintext[sizeof(want_plaintext)];
+  constexpr static std::size_t plain_buf_size = \
+    CryptoKey::get_max_outbuf_size(sizeof(want_plaintext));
+  unsigned char plaintext[plain_buf_size];
 
   std::string error;
   std::unique_ptr<CryptoKeyHandler> kh(h->get_key_handler(secret, error));
 
   CryptoKey::in_slice_t cipher_slice { sizeof(ciphertext), ciphertext };
-  CryptoKey::out_slice_t plain_slice { sizeof(ciphertext), plaintext };
+  CryptoKey::out_slice_t plain_slice { sizeof(plaintext), plaintext };
   const auto plain_size = kh->decrypt(cipher_slice, plain_slice);
 
   ASSERT_EQ(plain_size, sizeof(want_plaintext));
