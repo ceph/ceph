@@ -22,10 +22,11 @@ tasks:
     - failsafe engaged, dropping updates
     - failsafe disengaged, no longer dropping updates
     - overall HEALTH_
-    - (OSDMAP_FLAGS)
-    - (OSD_
-    - (PG_
-    - (SMALLER_PG_NUM)
+    - \(OSDMAP_FLAGS\)
+    - \(OSD_
+    - \(PG_
+    - \(SMALLER_PG_NUM\)
+    - \(CACHE_POOL_NO_HIT_SET\)
 - workunit:
     clients:
       all:
