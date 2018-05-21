@@ -4782,8 +4782,8 @@ struct object_info_t {
     omap_digest = -1;
   }
   void new_object() {
-    set_data_digest(-1);
-    set_omap_digest(-1);
+    clear_data_digest();
+    clear_omap_digest();
   }
 
   void encode(bufferlist& bl, uint64_t features) const;
@@ -4968,6 +4968,9 @@ struct ScrubMap {
   bool has_large_omap_object_errors:1;
 
   void merge_incr(const ScrubMap &l);
+  void clear_from(const hobject_t& start) {
+    objects.erase(objects.lower_bound(start), objects.end());
+  }
   void insert(const ScrubMap &r) {
     objects.insert(r.objects.begin(), r.objects.end());
   }
@@ -4985,6 +4988,60 @@ struct ScrubMap {
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
+
+struct ScrubMapBuilder {
+  bool deep = false;
+  vector<hobject_t> ls;
+  size_t pos = 0;
+  int64_t data_pos = 0;
+  string omap_pos;
+  int ret = 0;
+  bufferhash data_hash, omap_hash;  ///< accumulatinng hash value
+  uint64_t omap_keys = 0;
+  uint64_t omap_bytes = 0;
+
+  bool empty() {
+    return ls.empty();
+  }
+  bool done() {
+    return pos >= ls.size();
+  }
+  void reset() {
+    *this = ScrubMapBuilder();
+  }
+
+  bool data_done() {
+    return data_pos < 0;
+  }
+
+  void next_object() {
+    ++pos;
+    data_pos = 0;
+    omap_pos.clear();
+    omap_keys = 0;
+    omap_bytes = 0;
+  }
+
+  friend ostream& operator<<(ostream& out, const ScrubMapBuilder& pos) {
+    out << "(" << pos.pos << "/" << pos.ls.size();
+    if (pos.pos < pos.ls.size()) {
+      out << " " << pos.ls[pos.pos];
+    }
+    if (pos.data_pos < 0) {
+      out << " byte " << pos.data_pos;
+    }
+    if (!pos.omap_pos.empty()) {
+      out << " key " << pos.omap_pos;
+    }
+    if (pos.deep) {
+      out << " deep";
+    }
+    if (pos.ret) {
+      out << " ret " << pos.ret;
+    }
+    return out << ")";
+  }
+};
 
 struct OSDOp {
   ceph_osd_op op;

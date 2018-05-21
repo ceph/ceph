@@ -127,3 +127,4 @@ main osd-recovery-scrub "$@"
 # Local Variables:
 # compile-command: "cd build ; make -j4 && \
 #    ../qa/run-standalone.sh osd-recovery-scrub.sh"
+# End:
