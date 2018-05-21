@@ -801,6 +801,7 @@ class RGWListBucketIndexesCR : public RGWCoroutine {
   string key;
   string s;
   int i;
+  int bucket_num_shards;
 
   bool failed;
 
@@ -845,16 +846,16 @@ public:
           call(new RGWReadRESTResourceCR<bucket_instance_meta_info>(store->ctx(), sync_env->conn, sync_env->http_manager, path, pairs, &meta_info));
         }
 
-        num_shards = meta_info.data.get_bucket_info().num_shards;
-        if (num_shards > 0) {
-          for (i = 0; i < num_shards; i++) {
+        bucket_num_shards = meta_info.data.get_bucket_info().num_shards;
+        if (bucket_num_shards > 0) {
+          for (i = 0; i < bucket_num_shards; i++) {
             char buf[16];
             snprintf(buf, sizeof(buf), ":%d", i);
             s = key + buf;
-            yield entries_index->append(s, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
+            yield entries_index->append(s, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i, num_shards));
           }
         } else {
-          yield entries_index->append(key, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
+          yield entries_index->append(key, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1, num_shards));
         }
       }
       yield {

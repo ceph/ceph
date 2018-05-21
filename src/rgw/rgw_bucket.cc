@@ -1693,10 +1693,11 @@ void rgw_data_change_log_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entry", entry, obj);
 }
 
-int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs) {
+int RGWDataChangesLog::choose_oid(const rgw_bucket_shard& bs, unsigned int max_shards) {
     const string& name = bs.bucket.name;
     int shard_shift = (bs.shard_id > 0 ? bs.shard_id : 0);
-    uint32_t r = (ceph_str_hash_linux(name.c_str(), name.size()) + shard_shift) % num_shards;
+    int m = max_shards ? max_shards : num_shards;
+    uint32_t r = (ceph_str_hash_linux(name.c_str(), name.size()) + shard_shift) % m;
 
     return (int)r;
 }
@@ -1790,10 +1791,11 @@ void RGWDataChangesLog::update_renewed(rgw_bucket_shard& bs, real_time& expirati
   status->cur_expiration = expiration;
 }
 
-int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
+int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id,
+                                        unsigned int max_shards) {
   rgw_bucket_shard bs(bucket, shard_id);
 
-  return choose_oid(bs);
+  return choose_oid(bs, max_shards);
 }
 
 int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
