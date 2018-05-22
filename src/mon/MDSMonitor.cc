@@ -611,7 +611,6 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
           info.standby_for_name);
       if (leaderinfo && (leaderinfo->rank >= 0)) {
         const auto &fscid = pending.mds_roles.at(leaderinfo->global_id);
-        const auto &fs = pending.get_filesystem(fscid);
 
         pending.modify_daemon(gid, [fscid, leaderinfo](
               MDSMap::mds_info_t *info) {

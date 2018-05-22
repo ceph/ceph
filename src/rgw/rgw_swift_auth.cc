@@ -399,7 +399,7 @@ ExternalTokenEngine::authenticate(const std::string& token,
     } else {
       swift_user = std::move(swift_groups[0]);
     }
-  } catch (std::out_of_range) {
+  } catch (const std::out_of_range&) {
     /* The X-Auth-Groups header isn't present in the response. */
     return result_t::deny(-EPERM);
   }

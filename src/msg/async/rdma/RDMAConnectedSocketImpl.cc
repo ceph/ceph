@@ -459,7 +459,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
     unsigned total_copied = 0;
     Chunk *current_chunk = tx_buffers[chunk_idx];
     while (start != end) {
-      const uintptr_t addr = reinterpret_cast<const uintptr_t>(start->c_str());
+      const uintptr_t addr = reinterpret_cast<uintptr_t>(start->c_str());
       unsigned copied = 0;
       while (copied < start->length()) {
         uint32_t r = current_chunk->write((char*)addr+copied, start->length() - copied);

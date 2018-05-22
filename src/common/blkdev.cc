@@ -89,7 +89,10 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
     if (*p == '/')
       *p = '!';
 
-  snprintf(fn, sizeof(fn), "%s/sys/block/%s", sandbox_dir, devname);
+  if (static_cast<size_t>(snprintf(fn, sizeof(fn), "%s/sys/block/%s",
+                                   sandbox_dir, devname))
+      >= sizeof(fn))
+    return -ERANGE;
   if (stat(fn, &st) == 0) {
     if (strlen(devname) + 1 > out_len) {
       return -ERANGE;
@@ -107,8 +110,10 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   while ((de = ::readdir(dir))) {
     if (de->d_name[0] == '.')
       continue;
-    snprintf(fn, sizeof(fn), "%s/sys/block/%s/%s", sandbox_dir, de->d_name,
-	     devname);
+    if (static_cast<size_t>(snprintf(fn, sizeof(fn), "%s/sys/block/%s/%s",
+                                     sandbox_dir, de->d_name,
+                                     devname)) >= sizeof(fn))
+      return -ERANGE;
 
     if (stat(fn, &st) == 0) {
       // match!
@@ -207,45 +212,6 @@ bool block_device_is_rotational(const char *devname)
 int block_device_model(const char *devname, char *model, size_t max)
 {
   return get_block_device_string_property(devname, "device/model", model, max);
-}
-
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  char uuid_str[UUID_LEN+1];
-  char basename[PATH_MAX];
-  const char* temp_partition_ptr = NULL;
-  blkid_cache cache = NULL;
-  blkid_dev dev = NULL;
-  int rc = 0;
-
-  dev_uuid.print(uuid_str);
-
-  if (blkid_get_cache(&cache, NULL) >= 0)
-    dev = blkid_find_dev_with_tag(cache, label, (const char*)uuid_str);
-  else
-    return -EINVAL;
-
-  if (dev) {
-    temp_partition_ptr = blkid_dev_devname(dev);
-    strncpy(partition, temp_partition_ptr, PATH_MAX);
-    rc = get_block_device_base(partition, basename,
-      sizeof(basename));
-    if (rc >= 0) {
-      strncpy(device, basename, sizeof(basename));
-      rc = 0;
-    } else {
-      rc = -ENODEV;
-    }
-  } else {
-    rc = -EINVAL;
-  }
-
-  /* From what I can tell, blkid_put_cache cleans up dev, which
-   * appears to be a pointer into cache, as well */
-  if (cache)
-    blkid_put_cache(cache);
-  return rc;
 }
 
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
@@ -424,12 +390,6 @@ bool block_device_is_rotational(const char *devname)
   return false;
 }
 
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  return -EOPNOTSUPP;
-}
-
 void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
@@ -475,11 +435,6 @@ bool block_device_is_rotational(const char *devname)
   return false;
 }
 
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  return -EOPNOTSUPP;
-}
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
@@ -523,12 +478,6 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
 bool block_device_is_rotational(const char *devname)
 {
   return false;
-}
-
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  return -EOPNOTSUPP;
 }
 
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)

@@ -128,7 +128,6 @@ void KeyRing::encode_plaintext(bufferlist& bl)
 
 void KeyRing::encode_formatted(string label, Formatter *f, bufferlist& bl)
 {
-  std::ostringstream(os);
   f->open_array_section(label.c_str());
   for (map<EntityName, EntityAuth>::iterator p = keys.begin();
        p != keys.end();

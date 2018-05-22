@@ -584,7 +584,7 @@ int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
   end = base + bytes;
   assert(base);
   chunk_base = static_cast<Chunk*>(::malloc(sizeof(Chunk) * num));
-  memset(chunk_base, 0, sizeof(Chunk) * num);
+  memset(static_cast<void*>(chunk_base), 0, sizeof(Chunk) * num);
   free_chunks.reserve(num);
   ibv_mr* m = ibv_reg_mr(manager.pd->pd, base, bytes, IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE);
   assert(m);
