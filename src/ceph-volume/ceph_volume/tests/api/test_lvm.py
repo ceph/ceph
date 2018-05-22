@@ -363,6 +363,100 @@ class TestVolumeGroups(object):
             volume_groups.filter()
 
 
+class TestVolumeGroupFree(object):
+
+    def test_no_g_in_output(self):
+        vg = api.VolumeGroup(vg_name='nosize', vg_free='')
+        with pytest.raises(RuntimeError):
+            vg.free
+
+    def test_g_without_size(self):
+        vg = api.VolumeGroup(vg_name='nosize', vg_free='g')
+        with pytest.raises(RuntimeError):
+            vg.free
+
+    def test_size_without_g(self):
+        vg = api.VolumeGroup(vg_name='nosize', vg_free='1')
+        with pytest.raises(RuntimeError):
+            vg.free
+
+    def test_error_message(self):
+        vg = api.VolumeGroup(vg_name='nosize', vg_free='F')
+        with pytest.raises(RuntimeError) as error:
+            vg.free
+        assert "Unable to convert vg size to integer: 'F'" in str(error)
+
+    def test_invalid_float(self):
+        vg = api.VolumeGroup(vg_name='nosize', vg_free=' g')
+        with pytest.raises(RuntimeError) as error:
+            vg.free
+        assert "Unable to convert vg size to integer: ' g'" in str(error)
+
+    def test_integer_gets_produced(self):
+        vg = api.VolumeGroup(vg_name='nosize', vg_free='100g')
+        assert vg.free == 100
+
+    def test_integer_gets_produced_whitespace(self):
+        vg = api.VolumeGroup(vg_name='nosize', vg_free=' 100g ')
+        assert vg.free == 100
+
+    def test_integer_gets_rounded_down(self):
+        vg = api.VolumeGroup(vg_name='nosize', vg_free='100.99g')
+        assert vg.free == 100
+
+
+class TestVolumeGroupSizing(object):
+
+    def test_parts_and_size_errors(self):
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        with pytest.raises(ValueError) as error:
+            vg.sizing(parts=4, size=10)
+        assert "Cannot process sizing" in str(error)
+
+    def test_zero_parts_produces_100_percent(self):
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        result = vg.sizing(parts=0)
+        assert result['percentages'] == 100
+
+    def test_two_parts_produces_50_percent(self):
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        result = vg.sizing(parts=2)
+        assert result['percentages'] == 50
+
+    def test_two_parts_produces_half_size(self):
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        result = vg.sizing(parts=2)
+        assert result['sizes'] == 512
+
+    def test_half_size_produces_round_sizes(self):
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        result = vg.sizing(size=512)
+        assert result['sizes'] == 512
+        assert result['percentages'] == 50
+        assert result['parts'] == 2
+
+    def test_bit_more_than_half_size_allocates_full_size(self):
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        # 513 can't allocate more than 1, so it just fallsback to using the
+        # whole device
+        result = vg.sizing(size=513)
+        assert result['sizes'] == 1024
+        assert result['percentages'] == 100
+        assert result['parts'] == 1
+
+    def test_bit_less_size_rounds_down(self):
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        result = vg.sizing(size=129)
+        assert result['sizes'] == 146
+        assert result['percentages'] == 14
+        assert result['parts'] == 7
+
+    def test_unable_to_allocate_past_free_size(self):
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        with pytest.raises(exceptions.SizeAllocationError):
+            vg.sizing(size=2048)
+
+
 class TestGetLVFromArgument(object):
 
     def setup(self):
