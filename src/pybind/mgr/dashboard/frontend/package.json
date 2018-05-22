@@ -22,10 +22,8 @@
       "^.+\\.js$": "babel-jest"
     },
     "setupFiles": ["jest-canvas-mock"],
-    "coverageReporters" : [
-      "text",
-      "cobertura"
-    ]
+    "coverageReporters": ["text", "cobertura"],
+    "modulePathIgnorePatterns": ["<rootDir>/coverage/"]
   },
   "dependencies": {
     "@angular/animations": "^5.0.0",
