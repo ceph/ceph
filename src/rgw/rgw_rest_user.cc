@@ -23,7 +23,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "get_user_info"; }
+  const char* name() const override { return "get_user_info"; }
 };
 
 void RGWOp_User_Info::execute()
@@ -68,7 +68,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "create_user"; }
+  const char* name() const override { return "create_user"; }
 };
 
 void RGWOp_User_Create::execute()
@@ -196,7 +196,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "modify_user"; }
+  const char* name() const override { return "modify_user"; }
 };
 
 void RGWOp_User_Modify::execute()
@@ -285,7 +285,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_user"; }
+  const char* name() const override { return "remove_user"; }
 };
 
 void RGWOp_User_Remove::execute()
@@ -320,7 +320,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "create_subuser"; }
+  const char* name() const override { return "create_subuser"; }
 };
 
 void RGWOp_Subuser_Create::execute()
@@ -390,7 +390,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "modify_subuser"; }
+  const char* name() const override { return "modify_subuser"; }
 };
 
 void RGWOp_Subuser_Modify::execute()
@@ -451,7 +451,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_subuser"; }
+  const char* name() const override { return "remove_subuser"; }
 };
 
 void RGWOp_Subuser_Remove::execute()
@@ -488,7 +488,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "create_access_key"; }
+  const char* name() const override { return "create_access_key"; }
 };
 
 void RGWOp_Key_Create::execute()
@@ -544,7 +544,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_access_key"; }
+  const char* name() const override { return "remove_access_key"; }
 };
 
 void RGWOp_Key_Remove::execute()
@@ -591,7 +591,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "add_user_caps"; }
+  const char* name() const override { return "add_user_caps"; }
 };
 
 void RGWOp_Caps_Add::execute()
@@ -623,7 +623,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "remove_user_caps"; }
+  const char* name() const override { return "remove_user_caps"; }
 };
 
 void RGWOp_Caps_Remove::execute()
@@ -674,7 +674,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "get_quota_info"; }
+  const char* name() const override { return "get_quota_info"; }
 };
 
 
@@ -746,7 +746,7 @@ public:
 
   void execute() override;
 
-  const string name() override { return "set_quota_info"; }
+  const char* name() const override { return "set_quota_info"; }
 };
 
 /**

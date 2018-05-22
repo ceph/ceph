@@ -278,7 +278,7 @@ public:
 
   int verify_permission() override { return 0; }
   void execute() override;
-  const string name() override { return "swift_auth_get"; }
+  const char* name() const override { return "swift_auth_get"; }
 };
 
 class RGWHandler_SWIFT_Auth : public RGWHandler_REST {

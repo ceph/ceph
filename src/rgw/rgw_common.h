@@ -1769,16 +1769,12 @@ struct req_init_state {
   string src_bucket;
 };
 
-/* XXX why don't RGWRequest (or descendants) hold this state? */
-class RGWRequest;
-
 #include "rgw_auth.h"
 
 /** Store all the state necessary to complete and respond to an HTTP request*/
-struct req_state {
+struct req_state : DoutPrefixProvider {
   CephContext *cct;
   rgw::io::BasicClient *cio{nullptr};
-  RGWRequest *req{nullptr}; /// XXX: re-remove??
   http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
   bool content_started{false};
@@ -1895,13 +1891,19 @@ struct req_state {
   string dialect;
   string req_id;
   string trans_id;
+  uint64_t id;
 
   bool mfa_verified{false};
 
-  req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
+  req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u, uint64_t id);
   ~req_state();
 
   bool is_err() const { return err.is_err(); }
+
+  // implements DoutPrefixProvider
+  std::ostream& gen_prefix(std::ostream& out) const override;
+  CephContext* get_cct() const override { return cct; }
+  unsigned get_subsys() const override { return ceph_subsys_rgw; }
 };
 
 void set_req_state_err(struct req_state*, int);

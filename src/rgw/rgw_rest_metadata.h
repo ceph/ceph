@@ -24,7 +24,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_READ);
   }
   void execute() override;
-  const string name() override;
+  const char* name() const override { return "list_metadata"; }
 };
 
 class RGWOp_Metadata_Get : public RGWRESTOp {
@@ -36,7 +36,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_READ);
   }
   void execute() override;
-  const string name() override;
+  const char* name() const override { return "get_metadata"; }
 };
 
 class RGWOp_Metadata_Put : public RGWRESTOp {
@@ -52,7 +52,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override { return "set_metadata"; }
+  const char* name() const override { return "set_metadata"; }
   RGWOpType get_type() override { return RGW_OP_ADMIN_SET_METADATA; }
 };
 
@@ -65,7 +65,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override { return "remove_metadata"; }
+  const char* name() const override { return "remove_metadata"; }
 };
 
 class RGWOp_Metadata_Lock : public RGWRESTOp {
@@ -77,7 +77,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "lock_metadata_object";
   }
 };
@@ -91,7 +91,7 @@ public:
     return caps.check_cap("metadata", RGW_CAP_WRITE);
   }
   void execute() override;
-  const string name() override {
+  const char* name() const override {
     return "unlock_metadata_object";
   }
 };

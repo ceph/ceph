@@ -105,7 +105,7 @@ void rgw_bucket_object_pre_exec(struct req_state *s);
 /**
  * Provide the base class for all ops.
  */
-class RGWOp {
+class RGWOp : public DoutPrefixProvider {
 protected:
   struct req_state *s;
   RGWHandler *dialect_handler;
@@ -172,12 +172,17 @@ public:
   virtual void complete() {
     send_response();
   }
-  virtual const string name() = 0;
+  virtual const char* name() const = 0;
   virtual RGWOpType get_type() { return RGW_OP_UNKNOWN; }
 
   virtual uint32_t op_mask() { return 0; }
 
   virtual int error_handler(int err_no, string *error_content);
+
+  // implements DoutPrefixProvider
+  std::ostream& gen_prefix(std::ostream& out) const override;
+  CephContext* get_cct() const override { return s->cct; }
+  unsigned get_subsys() const override { return ceph_subsys_rgw; }
 };
 
 class RGWGetObj_Filter : public RGWGetDataCB
@@ -314,7 +319,7 @@ public:
   virtual int send_response_data_error() = 0;
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
-  const string name() override { return "get_obj"; }
+  const char* name() const override { return "get_obj"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   virtual bool need_object_expiration() { return false; }
@@ -349,7 +354,7 @@ class RGWGetObjTags : public RGWOp {
   void pre_exec() override;
 
   virtual void send_response_data(bufferlist& bl) = 0;
-  virtual const string name() noexcept override { return "get_obj_tags"; }
+  const char* name() const override { return "get_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_TAGGING; }
 
@@ -364,7 +369,7 @@ class RGWPutObjTags : public RGWOp {
 
   virtual void send_response() override = 0;
   virtual int get_params() = 0;
-  virtual const string name() override { return "put_obj_tags"; }
+  const char* name() const override { return "put_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ_TAGGING; }
 
@@ -376,8 +381,7 @@ class RGWDeleteObjTags: public RGWOp {
   int verify_permission() override;
   void execute() override;
 
-  virtual void send_response() override = 0;
-  virtual const string name() override { return "delete_obj_tags"; }
+  const char* name() const override { return "delete_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ_TAGGING;}
 };
@@ -449,7 +453,7 @@ public:
                        bool * is_truncated) = 0;
   void send_response() override = 0;
 
-  const string name() override { return "bulk_delete"; }
+  const char* name() const override { return "bulk_delete"; }
   RGWOpType get_type() override { return RGW_OP_BULK_DELETE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 };
@@ -522,9 +526,7 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  const std::string name() override {
-    return "bulk_upload";
-  }
+  const char* name() const override { return "bulk_upload"; }
 
   RGWOpType get_type() override {
     return RGW_OP_BULK_UPLOAD;
@@ -646,7 +648,7 @@ public:
   virtual bool should_get_stats() { return false; }
   virtual bool supports_account_metadata() { return false; }
 
-  const string name() override { return "list_buckets"; }
+  const char* name() const override { return "list_buckets"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKETS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 }; // class RGWListBuckets
@@ -675,7 +677,7 @@ public:
 
   virtual bool should_get_stats() { return false; }
 
-  const string name() override { return "get_usage"; }
+  const char* name() const override { return "get_usage"; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
@@ -691,7 +693,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const std::string name() override { return "stat_account"; }
+  const char* name() const override { return "stat_account"; }
   RGWOpType get_type() override { return RGW_OP_STAT_ACCOUNT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -729,7 +731,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "list_bucket"; }
+  const char* name() const override { return "list_bucket"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   virtual bool need_container_stats() { return false; }
@@ -742,7 +744,7 @@ public:
   void execute() override { }
 
   void send_response() override = 0;
-  const string name() override { return "get_bucket_logging"; }
+  const char* name() const override { return "get_bucket_logging"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOGGING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -755,7 +757,7 @@ public:
   void execute() override { }
 
   void send_response() override = 0;
-  const string name() override { return "get_bucket_location"; }
+  const char* name() const override { return "get_bucket_location"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_LOCATION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -773,7 +775,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "get_bucket_versioning"; }
+  const char* name() const override { return "get_bucket_versioning"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_VERSIONING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -801,7 +803,7 @@ public:
   virtual int get_params() { return 0; }
 
   void send_response() override = 0;
-  const string name() override { return "set_bucket_versioning"; }
+  const char* name() const override { return "set_bucket_versioning"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_VERSIONING; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -815,7 +817,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "get_bucket_website"; }
+  const char* name() const override { return "get_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -834,7 +836,7 @@ public:
   virtual int get_params() { return 0; }
 
   void send_response() override = 0;
-  const string name() override { return "set_bucket_website"; }
+  const char* name() const override { return "set_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -848,7 +850,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "delete_bucket_website"; }
+  const char* name() const override { return "delete_bucket_website"; }
   RGWOpType get_type() override { return RGW_OP_SET_BUCKET_WEBSITE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -866,7 +868,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "stat_bucket"; }
+  const char* name() const override { return "stat_bucket"; }
   RGWOpType get_type() override { return RGW_OP_STAT_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -904,7 +906,7 @@ public:
   }
   virtual int get_params() { return 0; }
   void send_response() override = 0;
-  const string name() override { return "create_bucket"; }
+  const char* name() const override { return "create_bucket"; }
   RGWOpType get_type() override { return RGW_OP_CREATE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -921,7 +923,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "delete_bucket"; }
+  const char* name() const override { return "delete_bucket"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 };
@@ -1071,7 +1073,7 @@ public:
   virtual int get_params() = 0;
   virtual int get_data(bufferlist& bl) = 0;
   void send_response() override = 0;
-  const string name() override { return "put_obj"; }
+  const char* name() const override { return "put_obj"; }
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1140,7 +1142,7 @@ public:
   virtual int get_params() = 0;
   virtual int get_data(ceph::bufferlist& bl, bool& again) = 0;
   void send_response() override = 0;
-  const std::string name() override { return "post_obj"; }
+  const char* name() const override { return "post_obj"; }
   RGWOpType get_type() override { return RGW_OP_POST_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1178,7 +1180,7 @@ public:
   virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
                                    const set<string>& rmattr_names,
                                    map<int, string>& temp_url_keys);
-  const string name() override { return "put_account_metadata"; }
+  const char* name() const override { return "put_account_metadata"; }
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_ACCOUNT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1214,7 +1216,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "put_bucket_metadata"; }
+  const char* name() const override { return "put_bucket_metadata"; }
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_BUCKET; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1240,7 +1242,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "put_obj_metadata"; }
+  const char* name() const override { return "put_obj_metadata"; }
   RGWOpType get_type() override { return RGW_OP_PUT_METADATA_OBJECT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   virtual bool need_object_expiration() { return false; }
@@ -1270,7 +1272,7 @@ public:
 
   virtual int get_params() { return 0; }
   void send_response() override = 0;
-  const string name() override { return "delete_obj"; }
+  const char* name() const override { return "delete_obj"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
   virtual bool need_object_expiration() { return false; }
@@ -1358,7 +1360,7 @@ public:
   virtual int get_params() = 0;
   virtual void send_partial_response(off_t ofs) {}
   void send_response() override = 0;
-  const string name() override { return "copy_obj"; }
+  const char* name() const override { return "copy_obj"; }
   RGWOpType get_type() override { return RGW_OP_COPY_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1375,7 +1377,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "get_acls"; }
+  const char* name() const override { return "get_acls"; }
   RGWOpType get_type() override { return RGW_OP_GET_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1402,7 +1404,7 @@ public:
   virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "put_acls"; }
+  const char* name() const override { return "put_acls"; }
   RGWOpType get_type() override { return RGW_OP_PUT_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1419,7 +1421,7 @@ public:
   void execute() override = 0;
 
   void send_response() override = 0;
-  const string name() override { return "get_lifecycle"; }
+  const char* name() const override { return "get_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_GET_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1457,7 +1459,7 @@ public:
 //  virtual int get_policy_from_state(RGWRados *store, struct req_state *s, stringstream& ss) { return 0; }
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "put_lifecycle"; }
+  const char* name() const override { return "put_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_PUT_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1481,7 +1483,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "delete_lifecycle"; }
+  const char* name() const override { return "delete_lifecycle"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_LC; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1496,7 +1498,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "get_cors"; }
+  const char* name() const override { return "get_cors"; }
   RGWOpType get_type() override { return RGW_OP_GET_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1515,7 +1517,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "put_cors"; }
+  const char* name() const override { return "put_cors"; }
   RGWOpType get_type() override { return RGW_OP_PUT_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1530,7 +1532,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "delete_cors"; }
+  const char* name() const override { return "delete_cors"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1550,7 +1552,7 @@ public:
   void execute() override;
   void get_response_params(string& allowed_hdrs, string& exp_hdrs, unsigned *max_age);
   void send_response() override = 0;
-  const string name() override { return "options_cors"; }
+  const char* name() const override { return "options_cors"; }
   RGWOpType get_type() override { return RGW_OP_OPTIONS_CORS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1567,7 +1569,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "get_request_payment"; }
+  const char* name() const override { return "get_request_payment"; }
   RGWOpType get_type() override { return RGW_OP_GET_REQUEST_PAYMENT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1585,7 +1587,7 @@ public:
   virtual int get_params() { return 0; }
 
   void send_response() override = 0;
-  const string name() override { return "set_request_payment"; }
+  const char* name() const override { return "set_request_payment"; }
   RGWOpType get_type() override { return RGW_OP_SET_REQUEST_PAYMENT; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1608,7 +1610,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "init_multipart"; }
+  const char* name() const override { return "init_multipart"; }
   RGWOpType get_type() override { return RGW_OP_INIT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   virtual int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
@@ -1659,7 +1661,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "complete_multipart"; }
+  const char* name() const override { return "complete_multipart"; }
   RGWOpType get_type() override { return RGW_OP_COMPLETE_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -1673,7 +1675,7 @@ public:
   void execute() override;
 
   void send_response() override = 0;
-  const string name() override { return "abort_multipart"; }
+  const char* name() const override { return "abort_multipart"; }
   RGWOpType get_type() override { return RGW_OP_ABORT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 };
@@ -1704,7 +1706,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "list_multipart"; }
+  const char* name() const override { return "list_multipart"; }
   RGWOpType get_type() override { return RGW_OP_LIST_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1744,7 +1746,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "list_bucket_multiparts"; }
+  const char* name() const override { return "list_bucket_multiparts"; }
   RGWOpType get_type() override { return RGW_OP_LIST_BUCKET_MULTIPARTS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -1763,9 +1765,7 @@ public:
     op_ret = 0;
   }
 
-  const string name() override {
-    return "get_crossdomain_policy";
-  }
+  const char* name() const override { return "get_crossdomain_policy"; }
 
   RGWOpType get_type() override {
     return RGW_OP_GET_CROSS_DOMAIN_POLICY;
@@ -1788,9 +1788,7 @@ public:
 
   void execute() override;
 
-  const string name() override {
-    return "get_health_check";
-  }
+  const char* name() const override { return "get_health_check"; }
 
   RGWOpType get_type() override {
     return RGW_OP_GET_HEALTH_CHECK;
@@ -1830,7 +1828,7 @@ public:
   virtual void send_partial_response(rgw_obj_key& key, bool delete_marker,
                                      const string& marker_version_id, int ret) = 0;
   virtual void end_response() = 0;
-  const string name() override { return "multi_object_delete"; }
+  const char* name() const override { return "multi_object_delete"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_MULTI_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 };
@@ -1841,7 +1839,7 @@ public:
   ~RGWInfo() override = default;
 
   int verify_permission() override { return 0; }
-  const string name() override { return "get info"; }
+  const char* name() const override { return "get info"; }
   RGWOpType get_type() override { return RGW_OP_GET_INFO; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -2080,7 +2078,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  const string name() override { return "set_attrs"; }
+  const char* name() const override { return "set_attrs"; }
   RGWOpType get_type() override { return RGW_OP_SET_ATTRS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -2103,8 +2101,7 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  virtual void send_response() override = 0;
-  virtual const string name() override { return "get_obj_layout"; }
+  const char* name() const override { return "get_obj_layout"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_OBJ_LAYOUT; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
@@ -2126,9 +2123,7 @@ public:
   }
   void execute() override;
   int get_params();
-  const std::string name() override {
-    return "put_bucket_policy";
-  }
+  const char* name() const override { return "put_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_PUT_BUCKET_POLICY;
   }
@@ -2144,9 +2139,7 @@ public:
     return RGW_OP_TYPE_READ;
   }
   void execute() override;
-  const std::string name() override {
-    return "get_bucket_policy";
-  }
+  const char* name() const override { return "get_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_GET_BUCKET_POLICY;
   }
@@ -2162,9 +2155,7 @@ public:
   }
   void execute() override;
   int get_params();
-  const std::string name() override {
-    return "delete_bucket_policy";
-  }
+  const char* name() const override { return "delete_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_DELETE_BUCKET_POLICY;
   }
@@ -2182,8 +2173,7 @@ public:
   void execute() override;
 
   virtual int get_params() = 0;
-  virtual void send_response() override = 0;
-  virtual const string name() override { return "config_bucket_meta_search"; }
+  const char* name() const override { return "config_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_CONFIG_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -2196,8 +2186,7 @@ public:
   void pre_exec() override;
   void execute() override {}
 
-  virtual void send_response() override = 0;
-  virtual const string name() { return "get_bucket_meta_search"; }
+  const char* name() const override { return "get_bucket_meta_search"; }
   virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
@@ -2210,8 +2199,7 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  virtual void send_response() override = 0;
-  virtual const string name() override { return "delete_bucket_meta_search"; }
+  const char* name() const override { return "delete_bucket_meta_search"; }
   virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
@@ -2229,7 +2217,7 @@ public:
   virtual void send_response() override = 0;
   virtual int get_params() = 0;
   void execute() override;
-  virtual const string name() override { return "get_cluster_stat"; }
+  const char* name() const override { return "get_cluster_stat"; }
 };
 
 

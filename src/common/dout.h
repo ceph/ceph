@@ -97,9 +97,9 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define lderr(cct) dout_impl(cct, ceph_subsys_, -1) dout_prefix
 
 #define ldpp_dout(dpp, v) 						\
-  if (dpp) 								\
-    dout_impl(dpp->get_cct(), ceph::dout::need_dynamic(dpp->get_subsys()), v)				\
-    dpp->gen_prefix(*_dout)
+  if (auto pdpp = (dpp); pdpp) /* workaround -Wnonnull-compare for 'this' */ \
+    dout_impl(pdpp->get_cct(), ceph::dout::need_dynamic(pdpp->get_subsys()), v) \
+      pdpp->gen_prefix(*_dout)
 
 #define lgeneric_subdout(cct, sub, v) dout_impl(cct, ceph_subsys_##sub, v) *_dout
 #define lgeneric_dout(cct, v) dout_impl(cct, ceph_subsys_, v) *_dout
