@@ -1,4 +1,5 @@
 import logging
+from boto.s3.deletemarker import DeleteMarker
 
 try:
     from itertools import izip_longest as zip_longest
@@ -16,6 +17,13 @@ def check_object_eq(k1, k2, check_extra = True):
     assert k2
     log.debug('comparing key name=%s', k1.name)
     eq(k1.name, k2.name)
+    eq(k1.version_id, k2.version_id)
+    eq(k1.is_latest, k2.is_latest)
+    eq(k1.last_modified, k2.last_modified)
+    if isinstance(k1, DeleteMarker):
+        assert isinstance(k2, DeleteMarker)
+        return
+
     eq(k1.get_contents_as_string(), k2.get_contents_as_string())
     eq(k1.metadata, k2.metadata)
     eq(k1.cache_control, k2.cache_control)
@@ -24,15 +32,12 @@ def check_object_eq(k1, k2, check_extra = True):
     eq(k1.content_disposition, k2.content_disposition)
     eq(k1.content_language, k2.content_language)
     eq(k1.etag, k2.etag)
-    eq(k1.last_modified, k2.last_modified)
     if check_extra:
         eq(k1.owner.id, k2.owner.id)
         eq(k1.owner.display_name, k2.owner.display_name)
     eq(k1.storage_class, k2.storage_class)
     eq(k1.size, k2.size)
-    eq(k1.version_id, k2.version_id)
     eq(k1.encrypted, k2.encrypted)
-
 
 class RadosZone(Zone):
     def __init__(self, name, zonegroup = None, cluster = None, data = None, zone_id = None, gateways = None):
@@ -78,7 +83,9 @@ class RadosZone(Zone):
                 k1_head = b1.get_key(k1.name)
                 k2_head = b2.get_key(k2.name)
 
-                check_object_eq(k1_head, k2_head, False)
+                # if there's a delete marker, HEAD will return None
+                if k1_head or k2_head:
+                    check_object_eq(k1_head, k2_head, False)
 
             log.info('success, bucket identical: bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
 
