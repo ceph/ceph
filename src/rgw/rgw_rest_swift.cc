@@ -2338,7 +2338,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
       end_header(s, this);
     }
 
-    const string name() override {
+    const char* name() const override {
       return "RGWMovedPermanently";
     }
   };

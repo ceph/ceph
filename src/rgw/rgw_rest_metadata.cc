@@ -25,10 +25,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-const string RGWOp_Metadata_Get::name() {
-  return "get_metadata";
-}
-
 static inline void frame_metadata_key(req_state *s, string& out) {
   bool exists;
   string key = s->info.args.get("key", &exists);
@@ -61,10 +57,6 @@ void RGWOp_Metadata_Get::execute() {
   }
 
   http_ret = 0;
-}
-
-const string RGWOp_Metadata_List::name() {
-  return "list_metadata";
 }
 
 void RGWOp_Metadata_List::execute() {
