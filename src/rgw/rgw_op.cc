@@ -3957,7 +3957,7 @@ void RGWPostObj::execute()
       op_ret = put_data_and_throttle(filter, flush, ofs, false);
     }
 
-    if (len < min_len) {
+    if (ofs < min_len) {
       op_ret = -ERR_TOO_SMALL;
       return;
     }
