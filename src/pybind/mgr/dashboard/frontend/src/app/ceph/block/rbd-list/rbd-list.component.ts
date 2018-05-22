@@ -208,24 +208,33 @@ export class RbdListComponent implements OnInit, OnDestroy {
         rbdModel.name = executingTask.metadata['image_name'];
         rbdModel.pool_name = executingTask.metadata['pool_name'];
         rbdModel.cdExecuting = 'creating';
-        resultRBDs.push(rbdModel);
+        this.pushIfNotExists(resultRBDs, rbdModel);
 
       } else if (executingTask.name === 'rbd/clone') {
         const rbdModel = new RbdModel();
         rbdModel.name = executingTask.metadata['child_image_name'];
         rbdModel.pool_name = executingTask.metadata['child_pool_name'];
         rbdModel.cdExecuting = 'cloning';
-        resultRBDs.push(rbdModel);
+        this.pushIfNotExists(resultRBDs, rbdModel);
 
       } else if (executingTask.name === 'rbd/copy') {
         const rbdModel = new RbdModel();
         rbdModel.name = executingTask.metadata['dest_image_name'];
         rbdModel.pool_name = executingTask.metadata['dest_pool_name'];
         rbdModel.cdExecuting = 'copying';
-        resultRBDs.push(rbdModel);
+        this.pushIfNotExists(resultRBDs, rbdModel);
       }
     });
     return resultRBDs;
+  }
+
+  private pushIfNotExists(resultRBDs: RbdModel[], rbdModel: RbdModel) {
+    const exists = resultRBDs.some((resultRBD) => {
+      return resultRBD.name === rbdModel.name && resultRBD.pool_name === rbdModel.pool_name;
+    });
+    if (!exists) {
+      resultRBDs.push(rbdModel);
+    }
   }
 
   updateSelection(selection: CdTableSelection) {

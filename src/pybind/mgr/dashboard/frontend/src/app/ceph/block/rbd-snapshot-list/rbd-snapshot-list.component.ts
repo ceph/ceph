@@ -127,10 +127,19 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         const rbdSnapshotModel = new RbdSnapshotModel();
         rbdSnapshotModel.name = executingTask.metadata['snapshot_name'];
         rbdSnapshotModel.cdExecuting = 'creating';
-        resultSnapshots.push(rbdSnapshotModel);
+        this.pushIfNotExists(resultSnapshots, rbdSnapshotModel);
       }
     });
     return resultSnapshots;
+  }
+
+  private pushIfNotExists(resultSnapshots: RbdSnapshotModel[], rbdSnapshotModel: RbdSnapshotModel) {
+    const exists = resultSnapshots.some((resultSnapshot) => {
+      return resultSnapshot.name === rbdSnapshotModel.name;
+    });
+    if (!exists) {
+      resultSnapshots.push(rbdSnapshotModel);
+    }
   }
 
   private openSnapshotModal(taskName: string, oldSnapshotName: string = null) {
