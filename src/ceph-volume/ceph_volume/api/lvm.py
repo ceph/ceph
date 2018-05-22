@@ -5,8 +5,12 @@ set of utilities for interacting with LVM.
 """
 import logging
 import os
+from math import floor
 from ceph_volume import process
-from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError, MultiplePVsError
+from ceph_volume.exceptions import (
+    MultipleLVsError, MultipleVGsError,
+    MultiplePVsError, SizeAllocationError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -808,6 +812,105 @@ class VolumeGroup(object):
 
     def __repr__(self):
         return self.__str__()
+
+    def _parse_size(self, size):
+        error_msg = "Unable to convert vg size to integer: '%s'" % str(size)
+        try:
+            integer, _ = size.split('g')
+        except ValueError:
+            logger.exception(error_msg)
+            raise RuntimeError(error_msg)
+
+        try:
+            integer = float(integer)
+        except (TypeError, ValueError):
+            logger.exception(error_msg)
+            raise RuntimeError(error_msg)
+
+        # round down the float, convert to an integer
+        return int(floor(integer))
+
+    @property
+    def free(self):
+        """
+        Parse the available size in gigabytes from the ``vg_free`` attribute, that
+        will be a string with a character ('g') to indicate gigabytes in size.
+        Returns a rounded down integer to ease internal operations::
+
+        >>> data_vg.vg_free
+        '0.01g'
+        >>> data_vg.size
+        0
+        """
+        return self._parse_size(self.vg_free)
+
+    @property
+    def size(self):
+        """
+        Parse the size in gigabytes from the ``vg_size`` attribute, that
+        will be a string with a character ('g') to indicate gigabytes in size.
+        Returns a rounded down integer to ease internal operations::
+
+        >>> data_vg.vg_size
+        '1024.9g'
+        >>> data_vg.size
+        1024
+        """
+        return self._parse_size(self.vg_size)
+
+    def sizing(self, parts=None, size=None):
+        """
+        Calculate proper sizing to fully utilize the volume group in the most
+        efficient way possible. To prevent situations where LVM might accept
+        a percentage that is beyond the vg's capabilities, it will refuse with
+        an error when requesting a larger-than-possible parameter, in addition
+        to rounding down calculations.
+
+        A dictionary with different sizing parameters is returned, to make it
+        easier for others to choose what they need in order to create logical
+        volumes::
+
+        >>> data_vg.free
+        1024
+        >>> data_vg.sizing(parts=4)
+        {'parts': 4, 'sizes': 256, 'percentages': 25}
+        >>> data_vg.sizing(size=512)
+        {'parts': 2, 'sizes': 512, 'percentages': 50}
+
+
+        :param parts: Number of parts to create LVs from
+        :param size: Size in gigabytes to divide the VG into
+
+        :raises SizeAllocationError: When requested size cannot be allocated with
+        :raises ValueError: If both ``parts`` and ``size`` are given
+        """
+        if parts is not None and size is not None:
+            raise ValueError(
+                "Cannot process sizing with both parts (%s) and size (%s)" % (parts, size)
+            )
+
+        if size and size > self.free:
+            raise SizeAllocationError(size, self.free)
+
+        def get_percentage(parts):
+            return int(floor(100 / float(parts)))
+
+        if parts is not None:
+            # Prevent parts being 0, falling back to 1 (100% usage)
+            parts = parts or 1
+            percentages = get_percentage(parts)
+
+        if size:
+            parts = int(floor(self.free / size)) or 1
+            percentages = get_percentage(parts)
+
+        sizes = int(floor(self.free / parts)) if parts else int(floor(self.free))
+
+        return {
+            'parts': parts,
+            'percentages': percentages,
+            'sizes': sizes
+        }
 
 
 class Volume(object):
