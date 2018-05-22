@@ -49,6 +49,12 @@ The *cluster* statistics (i.e. those global to the Ceph cluster)
 have labels appropriate to what they report on.  For example, 
 metrics relating to pools have a ``pool_id`` label.
 
+
+The long running averages that represent the histograms from core Ceph
+are represented by a pair of ``<name>_sum`` and ``<name>_count`` metrics.
+This is similar to how histograms are represented in `Prometheus <https://prometheus.io/docs/concepts/metric_types/#histogram>`_
+and they can also be treated `similarly <https://prometheus.io/docs/practices/histograms/>`_.
+
 Pool and OSD metadata series
 ----------------------------
 
