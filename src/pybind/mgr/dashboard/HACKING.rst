@@ -66,8 +66,8 @@ production build. Navigate to ``https://localhost:8080``.
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
 
-Run ``npm run test`` to execute the unit tests via `Karma
-<https://karma-runner.github.io>`_.
+Run ``npm run test`` to execute the unit tests via `Jest
+<https://facebook.github.io/jest/>`_.
 
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~

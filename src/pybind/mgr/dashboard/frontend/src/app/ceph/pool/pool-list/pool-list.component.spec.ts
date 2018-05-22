@@ -10,16 +10,13 @@ describe('PoolListComponent', () => {
   let component: PoolListComponent;
   let fixture: ComponentFixture<PoolListComponent>;
 
+  const fakeService = {};
+
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ PoolListComponent ],
-      imports: [
-        SharedModule,
-        TabsModule.forRoot(),
-        HttpClientTestingModule
-      ],
-    })
-    .compileComponents();
+      declarations: [PoolListComponent],
+      imports: [SharedModule, TabsModule.forRoot(), HttpClientTestingModule]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
