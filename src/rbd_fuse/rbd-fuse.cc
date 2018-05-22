@@ -376,11 +376,9 @@ int get_rbd_image(std::string image_name)
     std::string snapshot_name = "";
     int ret = 0;
     if (snapshot_index == std::string::npos) {
-        simple_err("adding rbd", snapshot_index);
         ret = rbd_open(ioctx, image_name.c_str(), &temp_rbd, NULL);
     }
     else {
-        simple_err("adding snapshot", snapshot_index);
         image_only_name = image_name.substr(0, snapshot_index);
         snapshot_name = image_name.substr(snapshot_index + 1, image_name.length() - snapshot_index - 1);
         ret = rbd_open_read_only(ioctx, image_only_name.c_str(), &temp_rbd, snapshot_name.c_str());
@@ -656,7 +654,6 @@ static void finish_aio_write(rbd_completion_t comp, void *data)
 static int rbdfs_write(const char *path, const char *buf, size_t size,
 			 off_t offset, struct fuse_file_info *fi)
 {
-    return -EROFS;
     // Find the open RBD using its file descriptor
     rbd_openimage *open_image = get_open_image(fi->fh);
     struct rbd_image_data *image_data = get_rbd_image_data(open_image->name);
@@ -900,7 +897,6 @@ rbdfs_checkname(const char *checkname)
 int
 rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 {
-    return -EROFS;
     int r;
     int order = imageorder;
 
@@ -917,7 +913,6 @@ rbdfs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 int
 rbdfs_rename(const char *path, const char *destname)
 {
-    return -EROFS;
     int r;
 
     r = rbdfs_checkname(destname+1);
@@ -935,7 +930,6 @@ rbdfs_rename(const char *path, const char *destname)
 int
 rbdfs_utime(const char *path, struct utimbuf *utime)
 {
-    return -EROFS;
 	// called on create; not relevant
 	return 0;
 }
@@ -943,7 +937,6 @@ rbdfs_utime(const char *path, struct utimbuf *utime)
 int
 rbdfs_unlink(const char *path)
 {
-    return -EROFS;
     std::string rbd_name(path + 1);
     open_images_lock.lock();
     for (rbd_open_image_map::iterator open_image = rbd_open_images.begin();
@@ -964,7 +957,6 @@ rbdfs_unlink(const char *path)
 int
 rbdfs_truncate(const char *path, off_t size)
 {
-    return -EROFS;
     if (map_partitions)
         return -EOPNOTSUPP;
 
@@ -1018,7 +1010,6 @@ rbdfs_setxattr(const char *path, const char *name, const char *value,
 #endif
     )
 {
-    return -EROFS;
 	struct rbdfuse_attr *ap;
 	if (strcmp(path, "/") != 0)
 		return -EINVAL;
