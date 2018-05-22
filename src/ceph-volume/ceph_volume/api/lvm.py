@@ -5,6 +5,7 @@ set of utilities for interacting with LVM.
 """
 import logging
 import os
+import uuid
 from math import floor
 from ceph_volume import process
 from ceph_volume.exceptions import (
@@ -264,7 +265,7 @@ def get_api_lvs():
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
-    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid'
+    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
         ['lvs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
     )
@@ -479,6 +480,25 @@ def create_lv(name, group, size=None, tags=None):
             {path_tag: lv.lv_path}
         )
     return lv
+
+
+def create_lvs(group, parts=None, size=None, name_prefix='ceph-lv'):
+    """
+    Create multiple Logical Volumes from a Volume Group by calculating the
+    proper extents from ``parts`` or ``size``. A custom prefix can be used
+    (defaults to ``ceph-lv``), these names are always suffixed with a uuid.
+    """
+    if parts is None and size is None:
+        raise RuntimeError("Unable to create lvs without 'parts' or 'size' being defined")
+    lvs = []
+    sizing = group.sizing(parts=parts, size=size)
+    for part in range(0, sizing['parts']):
+        size = sizing['sizes']
+        lv_name = '%s-%s' % (name_prefix, uuid.uuid4())
+        lvs.append(
+            create_lv(lv_name, group.name, size="%sg" % size, tags={})
+        )
+    return lvs
 
 
 def get_vg(vg_name=None, vg_tags=None):
