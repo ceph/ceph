@@ -249,7 +249,7 @@ class Module(MgrModule):
                 ])
             output += version_table.get_string() + "\n"
 
-        return 0, "", output
+        return 0, output, ""
 
     def handle_osd_status(self, cmd):
         osd_table = PrettyTable(['id', 'host', 'used', 'avail', 'wr ops', 'wr data', 'rd ops', 'rd data', 'state'])
@@ -301,7 +301,7 @@ class Module(MgrModule):
                                ','.join(osd['state']),
                                ])
 
-        return 0, "", osd_table.get_string()
+        return 0, osd_table.get_string(), ""
 
     def handle_command(self, cmd):
         self.log.error("handle_command")
