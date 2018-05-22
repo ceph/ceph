@@ -518,8 +518,8 @@ class Module(MgrModule):
                     id_, osd_hostname, osd_dev_node))
                 self.metrics.set('disk_occupation', 1, (
                     "osd.{0}".format(id_),
-                    osd_hostname,
-                    osd_dev_node
+                    osd_dev_node,
+                    osd_hostname
                 ))
             else:
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
