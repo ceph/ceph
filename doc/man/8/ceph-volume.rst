@@ -63,6 +63,10 @@ Optional Arguments:
 * [--no-systemd] Skip creating and enabling systemd units and starting of OSD
   services
 
+Multiple OSDs can be activated at once by using the (idempotent) ``--all`` flag::
+
+    ceph-volume lvm activate --all
+
 
 **prepare**
 Prepares a logical volume to be used as an OSD and journal using a ``filestore``
@@ -89,6 +93,10 @@ Optional arguments:
 Required arguments:
 
 * --data                A logical group name or a path to a logical volume
+
+For encrypting an OSD, the ``--dmcrypt`` flag must be added when preparing
+(also supported in the ``create`` sub-command).
+
 
 **create**
 Wraps the two-step process to provision a new osd (calling ``prepare`` first

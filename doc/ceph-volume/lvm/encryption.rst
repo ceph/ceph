@@ -3,10 +3,11 @@
 Encryption
 ==========
 
-Logical volumes can be encrypted using ``dmcrypt``. Encryption can be done in
-different ways, specially with LVM. ``ceph-volume`` is somewhat opinionated
-with the way it sets up encryption with logical volumes so that the process is
-consistent and robust.
+Logical volumes can be encrypted using ``dmcrypt`` by specifying the
+``--dmcrypt`` flag when creating OSDs. Encryption can be done in different ways,
+specially with LVM. ``ceph-volume`` is somewhat opinionated with the way it
+sets up encryption with logical volumes so that the process is consistent and
+robust.
 
 In this case, ``ceph-volume lvm`` follows these constraints:
 
