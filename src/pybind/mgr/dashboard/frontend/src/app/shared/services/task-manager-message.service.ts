@@ -37,7 +37,7 @@ export class TaskManagerMessageService {
                      has been updated successfully`,
       (metadata) => {
         return {
-          '17': `Name '${metadata.pool_name}/${metadata.image_name}' is already
+          '17': `Name '${metadata.pool_name}/${metadata.name}' is already
                  in use.`
         };
       }
@@ -70,7 +70,7 @@ export class TaskManagerMessageService {
                      has been copied successfully`,
       (metadata) => {
         return {
-          '17': `Name '${metadata.child_pool_name}/${metadata.child_image_name}' is already
+          '17': `Name '${metadata.dest_pool_name}/${metadata.dest_image_name}' is already
                  in use.`
         };
       }
