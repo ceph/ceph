@@ -171,6 +171,11 @@ int JournalScanner::scan_events()
   bufferlist read_buf;
   bool gap = false;
   uint64_t gap_start = -1;
+  if (header->write_pos == header->layout.get_period()) {
+    dout(4) << "Empty Purge queue" << dendl;
+    goto out;
+  }
+
   for (uint64_t obj_offset = (read_offset / object_size); ; obj_offset++) {
     uint64_t offset_in_obj = 0;
     if (obj_offset * object_size < header->expire_pos) {
@@ -325,6 +330,7 @@ int JournalScanner::scan_events()
     }
   }
 
+out:
   if (gap) {
     // Ended on a gap, assume it ran to end
     ranges_invalid.push_back(Range(gap_start, -1));
