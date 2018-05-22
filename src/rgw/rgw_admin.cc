@@ -374,6 +374,7 @@ enum {
   OPT_BUCKET_STATS,
   OPT_BUCKET_CHECK,
   OPT_BUCKET_SYNC_STATUS,
+  OPT_BUCKET_SYNC_MARKERS,
   OPT_BUCKET_SYNC_INIT,
   OPT_BUCKET_SYNC_RUN,
   OPT_BUCKET_SYNC_DISABLE,
@@ -646,6 +647,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(prev_cmd, "sync") == 0) {
       if (strcmp(cmd, "status") == 0)
         return OPT_BUCKET_SYNC_STATUS;
+      if (strcmp(cmd, "markers") == 0)
+        return OPT_BUCKET_SYNC_MARKERS;
       if (strcmp(cmd, "init") == 0)
         return OPT_BUCKET_SYNC_INIT;
       if (strcmp(cmd, "run") == 0)
@@ -2288,6 +2291,154 @@ static void sync_status(Formatter *formatter)
   tab_dump("data sync", width, data_status);
 }
 
+struct indented {
+  int w; // indent width
+  std::string_view header;
+  indented(int w, std::string_view header = "") : w(w), header(header) {}
+};
+std::ostream& operator<<(std::ostream& out, const indented& h) {
+  return out << std::setw(h.w) << h.header << std::setw(1) << ' ';
+}
+
+static int remote_bilog_markers(RGWRados *store, const RGWZone& source,
+                                RGWRESTConn *conn, const RGWBucketInfo& info,
+                                BucketIndexShardsManager *markers)
+{
+  const auto instance_key = info.bucket.get_key();
+  const rgw_http_param_pair params[] = {
+    { "type" , "bucket-index" },
+    { "bucket-instance", instance_key.c_str() },
+    { "info" , nullptr },
+    { nullptr, nullptr }
+  };
+  rgw_bucket_index_marker_info result;
+  int r = conn->get_json_resource("/admin/log/", params, result);
+  if (r < 0) {
+    lderr(store->ctx()) << "failed to fetch remote log markers: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = markers->from_string(result.max_marker, -1);
+  if (r < 0) {
+    lderr(store->ctx()) << "failed to decode remote log markers" << dendl;
+    return r;
+  }
+  return 0;
+}
+
+static int bucket_source_sync_status(RGWRados *store, const RGWZone& zone,
+                                     const RGWZone& source, RGWRESTConn *conn,
+                                     const RGWBucketInfo& bucket_info,
+                                     int width, std::ostream& out)
+{
+  out << indented{width, "source zone"} << source.id << " (" << source.name << ")\n";
+
+  // syncing from this zone?
+  if (!zone.syncs_from(source.id)) {
+    out << indented{width} << "not in sync_from\n";
+    return 0;
+  }
+  std::vector<rgw_bucket_shard_sync_info> status;
+  int r = rgw_bucket_sync_status(store, source.id, bucket_info, &status);
+  if (r < 0) {
+    lderr(store->ctx()) << "failed to read bucket sync status: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  int num_full = 0;
+  int num_inc = 0;
+  uint64_t full_complete = 0;
+  const int total_shards = status.size();
+
+  using BucketSyncState = rgw_bucket_shard_sync_info::SyncState;
+  for (size_t shard_id = 0; shard_id < total_shards; shard_id++) {
+    auto& m = status[shard_id];
+    if (m.state == BucketSyncState::StateFullSync) {
+      num_full++;
+      full_complete += m.full_marker.count;
+    } else if (m.state == BucketSyncState::StateIncrementalSync) {
+      num_inc++;
+    }
+  }
+
+  out << indented{width} << "full sync: " << num_full << "/" << total_shards << " shards\n";
+  if (num_full > 0) {
+    out << indented{width} << "full sync: " << full_complete << " objects completed\n";
+  }
+  out << indented{width} << "incremental sync: " << num_inc << "/" << total_shards << " shards\n";
+
+  BucketIndexShardsManager remote_markers;
+  r = remote_bilog_markers(store, source, conn, bucket_info, &remote_markers);
+  if (r < 0) {
+    lderr(store->ctx()) << "failed to read remote log: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::set<int> shards_behind;
+  for (auto& r : remote_markers.get()) {
+    auto shard_id = r.first;
+    auto& m = status[shard_id];
+    if (r.second.empty()) {
+      continue; // empty bucket index shard
+    }
+    auto pos = BucketIndexShardsManager::get_shard_marker(m.inc_marker.position);
+    if (m.state != BucketSyncState::StateIncrementalSync || pos != r.second) {
+      shards_behind.insert(shard_id);
+    }
+  }
+  if (shards_behind.empty()) {
+    out << indented{width} << "bucket is caught up with source\n";
+  } else {
+    out << indented{width} << "bucket is behind on " << shards_behind.size() << " shards\n";
+    out << indented{width} << "behind shards: [" << shards_behind << "]\n" ;
+  }
+  return 0;
+}
+
+static int bucket_sync_status(RGWRados *store, const RGWBucketInfo& info,
+                              const std::string& source_zone_id,
+                              std::ostream& out)
+{
+  RGWRealm& realm = store->realm;
+  RGWZoneGroup& zonegroup = store->get_zonegroup();
+  RGWZone& zone = store->get_zone();
+  constexpr int width = 15;
+
+  out << indented{width, "realm"} << realm.get_id() << " (" << realm.get_name() << ")\n";
+  out << indented{width, "zonegroup"} << zonegroup.get_id() << " (" << zonegroup.get_name() << ")\n";
+  out << indented{width, "zone"} << zone.id << " (" << zone.name << ")\n";
+  out << indented{width, "bucket"} << info.bucket << "\n\n";
+
+  if (!info.datasync_flag_enabled()) {
+    out << "Sync is disabled for bucket " << info.bucket.name << '\n';
+    return 0;
+  }
+
+  if (!source_zone_id.empty()) {
+    auto z = zonegroup.zones.find(source_zone_id);
+    if (z == zonegroup.zones.end()) {
+      lderr(store->ctx()) << "Source zone not found in zonegroup "
+          << zonegroup.get_name() << dendl;
+      return -EINVAL;
+    }
+    auto c = store->zone_conn_map.find(source_zone_id);
+    if (c == store->zone_conn_map.end()) {
+      lderr(store->ctx()) << "No connection to zone " << z->second.name << dendl;
+      return -EINVAL;
+    }
+    return bucket_source_sync_status(store, zone, z->second, c->second,
+                                     info, width, out);
+  }
+
+  for (const auto& z : zonegroup.zones) {
+    auto c = store->zone_conn_map.find(z.second.id);
+    if (c != store->zone_conn_map.end()) {
+      bucket_source_sync_status(store, zone, z.second, c->second,
+                                info, width, out);
+    }
+  }
+  return 0;
+}
+
 static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
 {
   int level = 0;
@@ -3103,6 +3254,7 @@ int main(int argc, const char **argv)
 			 OPT_BUCKET_LIMIT_CHECK,
 			 OPT_BUCKET_STATS,
 			 OPT_BUCKET_SYNC_STATUS,
+			 OPT_BUCKET_SYNC_MARKERS,
 			 OPT_LOG_LIST,
 			 OPT_LOG_SHOW,
 			 OPT_USAGE_SHOW,
@@ -6858,9 +7010,23 @@ next:
     ret = set_bucket_sync_enabled(store, opt_cmd, tenant, bucket_name);
     if (ret < 0)
       return -ret;
-}
+  }
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+    rgw_bucket bucket;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    bucket_sync_status(store, bucket_info, source_zone, std::cout);
+  }
+
+  if (opt_cmd == OPT_BUCKET_SYNC_MARKERS) {
     if (source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
