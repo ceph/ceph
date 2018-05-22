@@ -26,6 +26,7 @@ tasks:
     - \(OSD_
     - \(PG_
     - \(SMALLER_PG_NUM\)
+    - \(CACHE_POOL_NO_HIT_SET\)
 - workunit:
     clients:
       all:
