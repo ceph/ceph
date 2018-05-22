@@ -328,7 +328,7 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
     assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     for (auto& op : sdata->ops_in_flight_sharded) {
-      if (!visit(op))
+      if (op.nref > 0 && !visit(op))
 	break;
     }
   }
