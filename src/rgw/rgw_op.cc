@@ -984,7 +984,7 @@ static bool validate_cors_rule_method(RGWCORSRule *rule, const char *req_meth) {
   else if (strcmp(req_meth, "DELETE") == 0) flags = RGW_CORS_DELETE;
   else if (strcmp(req_meth, "HEAD") == 0) flags = RGW_CORS_HEAD;
 
-  if ((rule->get_allowed_methods() & flags) == flags) {
+  if (rule->get_allowed_methods() & flags) {
     dout(10) << "Method " << req_meth << " is supported" << dendl;
   } else {
     dout(5) << "Method " << req_meth << " is not supported" << dendl;
