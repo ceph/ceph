@@ -21,6 +21,8 @@ The following contains includes and globals that will be used in later examples:
 	const char sample_bucket[] = "sample_bucket";
 	const char sample_key[] = "hello.txt";
 	const char sample_file[] = "resource/hello.txt";
+	const char *security_token = NULL;
+	const char *auth_region = NULL;
 
 	S3BucketContext bucketContext =
 	{
@@ -29,7 +31,9 @@ The following contains includes and globals that will be used in later examples:
 		S3ProtocolHTTP,
 		S3UriStylePath,
 		access_key,
-		secret_key
+		secret_key,
+		security_token,
+		auth_region
 	};
 
 	S3Status responsePropertiesCallback(
@@ -105,7 +109,8 @@ for each bucket.
 		&listServiceCallback
 	};
 	bool header_printed = false;
-	S3_list_service(S3ProtocolHTTP, access_key, secret_key, host, 0, NULL, &listServiceHandler, &header_printed);
+	S3_list_service(S3ProtocolHTTP, access_key, secret_key, security_token, host, 
+                    auth_region, NULL, 0, &listServiceHandler, &header_printed);
 
 
 Creating a Bucket
@@ -162,7 +167,7 @@ last modified date.
 		responseHandler,
 		&listBucketCallback
 	};
-	S3_list_bucket(&bucketContext, NULL, NULL, NULL, 0, NULL, &listBucketHandler, NULL);
+	S3_list_bucket(&bucketContext, NULL, NULL, NULL, 0, NULL, 0, &listBucketHandler, NULL);
 
 The output will look something like this::
 
