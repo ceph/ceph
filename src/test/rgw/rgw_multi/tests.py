@@ -669,8 +669,8 @@ def test_versioned_object_incremental_sync():
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
 
     for _, bucket in zone_bucket:
-        # create and delete multiple versions of an object from each zone
         for zone_conn in zonegroup_conns.rw_zones:
+            # create and delete multiple versions of an object from each zone
             obj = 'obj-' + zone_conn.name
             k = new_key(zone_conn, bucket, obj)
 
@@ -691,6 +691,13 @@ def test_versioned_object_incremental_sync():
             v = get_latest_object_version(k)
             log.debug('version3 id=%s', v.version_id)
             k.bucket.delete_key(obj, version_id=v.version_id)
+
+            # create and delete repeatedly to test delete markers
+            obj = 'dm-' + zone_conn.name
+            k = new_key(zone_conn, bucket.name, obj)
+            for i in xrange(10):
+                k.set_contents_from_string('version' + str(i+1))
+                k.bucket.delete_key(obj)
 
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
