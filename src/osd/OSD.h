@@ -294,6 +294,111 @@ public:
     }
   }
 
+  class Oio_mon {
+    Mutex lock;
+    CephContext *cct;
+    double tot = 0;
+    uint32_t count = 0;
+    double cur_tput = 0.0;
+    double out_sum = 0.0;
+    double load_sum = 0.0;
+    double load_avg = 0.0;
+    uint32_t load_cnt = 0;
+    utime_t last_update;
+    double max_tput = 0.0;
+    double satur_load = 0.0;            // load that makes saturation
+    double target_load = 0.0;
+
+  public:
+    Oio_mon(CephContext *_cct) : lock("oio mon"), cct(_cct)
+    {}
+
+    void get(double cost = 1.0) {
+      Mutex::Locker l(lock);
+      tot += cost;
+      count++;
+
+      assert(0 != count);
+    }
+
+    void put(double cost = 1.0) {
+      Mutex::Locker l(lock);
+      assert(0 != count);
+
+      tot -= cost;
+      count--;
+      out_sum += cost;
+
+      if (0 == count)
+        tot = 0.0;
+    }
+
+    void add_load(double load) {
+      Mutex::Locker l(lock);
+      load_sum += load;
+      load_cnt++;
+    }
+
+    double get_load() { return load_avg; }
+    double get_tot() { return tot; }
+    double get_tput() { return cur_tput; }
+    double get_max_tput() { return max_tput; }
+    double get_target_load() { return target_load; }
+    double get_satur_load() { return satur_load; }
+
+    bool update() {
+      utime_t now;
+      uint32_t cnt;
+      utime_t mon_intv(0,200000000);
+      now = ceph_clock_now();
+
+      // check every mon_intv sec.
+      if (now-last_update < mon_intv)
+        return false;
+
+      cur_tput = out_sum;
+      cur_tput = cur_tput/(now-last_update);
+      out_sum = 0.0;
+
+      cnt = load_cnt;
+      if (0 == cnt)
+        load_avg = 0.0;
+      else
+        load_avg = load_sum/cnt;
+
+      load_sum = 0.0;
+      load_cnt = 0;
+
+      if (load_avg > satur_load) {
+	  if (cur_tput > max_tput)
+	    satur_load = 0.9 * satur_load + 0.1 * load_avg;
+          max_tput = 0.9 * max_tput + 0.1 * cur_tput;
+      } else {
+        if (cur_tput > max_tput) {
+          max_tput = 0.9 * max_tput + 0.1 * cur_tput;
+          satur_load = 0.9 * satur_load + 0.1 * load_avg;
+        }
+	else if (satur_load/2 < load_avg &&
+            max_tput/satur_load > cur_tput * 1.1 / load_avg) {
+          //something wrong
+          max_tput = 0.9 * max_tput + 0.1 * cur_tput;
+          satur_load = 0.9 * satur_load + 0.1 * load_avg;
+        }
+      }
+
+      if (satur_load < 3) {
+	target_load = satur_load * 2;
+      }	else {
+	target_load = satur_load * 1.1;
+      }
+
+      last_update = now;
+      return true;
+    }
+  }; // class Oio_mon
+
+  Oio_mon oio_mon;
+
 private:
   // -- superblock --
   Mutex publish_lock, pre_publish_lock; // pre-publish orders before publish

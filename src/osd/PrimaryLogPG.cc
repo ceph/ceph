@@ -1715,6 +1715,8 @@ void PrimaryLogPG::do_request(
   OpRequestRef& op,
   ThreadPool::TPHandle &handle)
 {
+  oio_throttle_get(op);
+
   if (op->osd_trace) {
     op->pg_trace.init("pg op", &trace_endpoint, &op->osd_trace);
     op->pg_trace.event("do request");
@@ -1727,6 +1729,7 @@ void PrimaryLogPG::do_request(
 	     << p->first << " not empty, queueing" << dendl;
     p->second.push_back(op);
     op->mark_delayed("waiting_for_map not empty");
+    oio_throttle_put(op);
     return;
   }
   if (!have_same_or_newer_map(op->min_epoch)) {
@@ -1735,10 +1738,12 @@ void PrimaryLogPG::do_request(
     waiting_for_map[op->get_source()].push_back(op);
     op->mark_delayed("op must wait for map");
     osd->request_osdmap_update(op->min_epoch);
+    oio_throttle_put(op);
     return;
   }
 
   if (can_discard_request(op)) {
+    oio_throttle_put(op);
     return;
   }
 
@@ -1748,11 +1753,15 @@ void PrimaryLogPG::do_request(
   if (m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF)) {
     SessionRef session{static_cast<Session*>(m->get_connection()->get_priv().get())};
     if (!session)
+    {
+      oio_throttle_put(op);
       return;  // drop it.
+    }
 
     if (msg_type == CEPH_MSG_OSD_OP) {
       if (session->check_backoff(cct, info.pgid,
 				 info.pgid.pgid.get_hobj_start(), m)) {
+	oio_throttle_put(op);
 	return;
       }
 
@@ -1767,6 +1776,7 @@ void PrimaryLogPG::do_request(
       }
       if (backoff) {
 	add_pg_backoff(session);
+	oio_throttle_put(op);
 	return;
       }
     }
@@ -1785,10 +1795,12 @@ void PrimaryLogPG::do_request(
     if (pgbackend->can_handle_while_inactive(op)) {
       bool handled = pgbackend->handle_message(op);
       ceph_assert(handled);
+      oio_throttle_put(op);
       return;
     } else {
       waiting_for_peered.push_back(op);
       op->mark_delayed("waiting for peered");
+      oio_throttle_put(op);
       return;
     }
   }
@@ -1803,8 +1815,10 @@ void PrimaryLogPG::do_request(
   }
 
   ceph_assert(is_peered() && flushes_in_progress == 0);
-  if (pgbackend->handle_message(op))
+  if (pgbackend->handle_message(op)) {
+    oio_throttle_put(op);
     return;
+  }
 
   switch (msg_type) {
   case CEPH_MSG_OSD_OP:
@@ -1883,6 +1897,10 @@ void PrimaryLogPG::do_request(
 
   default:
     ceph_abort_msg("bad message type in do_request");
+  }
+
+  if (!op->is_repop_issued()) {
+    oio_throttle_put(op);
   }
 }
 
@@ -3859,6 +3877,44 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
   info.stats.stats.sum.num_promote++;
 }
 
+void PrimaryLogPG::oio_throttle_get(OpRequestRef op)
+{
+  if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
+    osd->oio_mon.get();
+    double cur_load = osd->oio_mon.get_tot();
+    double target_load = osd->oio_mon.get_target_load();
+
+    dout(30) << "oio get: "
+      << " " << *(op->get_req())
+      << " cur_load " << cur_load
+      << " tar_load " << target_load
+      << dendl;
+  }
+}
+
+void PrimaryLogPG::oio_throttle_put(OpRequestRef op)
+{
+  if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
+    double cur_load = osd->oio_mon.get_tot();
+    osd->oio_mon.put();
+    osd->oio_mon.add_load(cur_load);
+    bool is_up = osd->oio_mon.update();
+    double target_load = osd->oio_mon.get_target_load();
+
+    if (is_up) {
+      generic_dout(30) << "oio put: "
+	<< *(op->get_req())
+	<< " avg_tput " << osd->oio_mon.get_tput()
+	<< " avg_load " << osd->oio_mon.get_load()
+	<< " cur_load " << cur_load
+	<< " max_tput " << osd->oio_mon.get_max_tput()
+	<< " satur_load " << osd->oio_mon.get_satur_load()
+	<< " target_load " << target_load
+	<< dendl;
+    }
+  }
+}
+
 void PrimaryLogPG::execute_ctx(OpContext *ctx)
 {
   FUNCTRACE(cct);
@@ -4034,6 +4090,8 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
       if (ctx->op)
 	log_op_stats(*ctx->op, ctx->bytes_written, ctx->bytes_read);
 
+      oio_throttle_put(ctx->op);
+
       if (m && !ctx->sent_reply) {
 	MOSDOpReply *reply = ctx->reply;
 	if (reply)
@@ -4068,6 +4126,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   RepGather *repop = new_repop(ctx, obc, rep_tid);
 
   issue_repop(repop, ctx);
+  ctx->op->mark_repop_issued();
   eval_repop(repop);
   repop->put();
 }

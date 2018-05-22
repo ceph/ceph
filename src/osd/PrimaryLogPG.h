@@ -1124,6 +1124,8 @@ protected:
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
   void finish_ctx(OpContext *ctx, int log_op_type);
+  void oio_throttle_put(OpRequestRef op);
+  void oio_throttle_get(OpRequestRef op);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
