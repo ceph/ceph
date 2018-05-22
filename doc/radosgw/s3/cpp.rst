@@ -184,7 +184,7 @@ Deleting a Bucket
 
 .. code-block:: cpp
 
-	S3_delete_bucket(S3ProtocolHTTP, S3UriStylePath, access_key, secret_key, host, sample_bucket, NULL, &responseHandler, NULL);
+	S3_delete_bucket(S3ProtocolHTTP, S3UriStylePath, access_key, secret_key, 0, host, sample_bucket, NULL, NULL, 0, &responseHandler, NULL);
 
 
 Creating an Object (from a file)
@@ -239,7 +239,7 @@ This creates a file ``hello.txt``.
 		&putObjectDataCallback
 	};
 
-	S3_put_object(&bucketContext, sample_key, contentLength, NULL, NULL, &putObjectHandler, &data);
+	S3_put_object(&bucketContext, sample_key, contentLength, NULL, NULL, 0, &putObjectHandler, &data);
 
 
 Download an Object (to a file)
@@ -262,7 +262,7 @@ This downloads a file and prints the contents.
 		&getObjectDataCallback
 	};
 	FILE *outfile = stdout;
-	S3_get_object(&bucketContext, sample_key, NULL, 0, 0, NULL, &getObjectHandler, outfile);
+	S3_get_object(&bucketContext, sample_key, NULL, 0, 0, NULL, 0, &getObjectHandler, outfile);
 
 
 Delete an Object
@@ -277,7 +277,7 @@ This deletes an object.
 		0,
 		&responseCompleteCallback
 	};
-	S3_delete_object(&bucketContext, sample_key, 0, &deleteResponseHandler, 0);
+	S3_delete_object(&bucketContext, sample_key, 0, 0, &deleteResponseHandler, 0);
 
 
 Change an Object's ACL
