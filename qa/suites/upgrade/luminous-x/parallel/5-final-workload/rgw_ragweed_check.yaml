@@ -1,10 +1,11 @@
 meta:
 - desc: |
-   swift api tests for rgw
+    ragweed check for rgw
 rgw-final-workload:
   full_sequential:
-  - swift:
+  - ragweed:
       client.1:
         force-branch: ceph-mimic
         rgw_server: client.1
-  - print: "**** done swift 4-final-workload"
+        stages: check
+  - print: "**** done ragweed check 4-final-workload"
