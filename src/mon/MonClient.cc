@@ -271,9 +271,8 @@ bool MonClient::ms_dispatch(Message *m)
   Mutex::Locker lock(monc_lock);
 
   if (_hunting()) {
-    auto pending_con = pending_cons.find(m->get_source_addr());
-    if (pending_con == pending_cons.end() ||
-	pending_con->second.get_con() != m->get_connection()) {
+    auto p = _find_pending_con(m->get_connection());
+    if (p == pending_cons.end()) {
       // ignore any messages outside hunting sessions
       ldout(cct, 10) << "discarding stray monitor message " << *m << dendl;
       m->put();
@@ -541,7 +540,7 @@ void MonClient::handle_auth(MAuthReply *m)
   }
 
   // hunting
-  auto found = pending_cons.find(m->get_source_addr());
+  auto found = _find_pending_con(m->get_connection());
   assert(found != pending_cons.end());
   int auth_err = found->second.handle_auth(m, entity_name, want_keys,
 					   rotating_secrets.get());
