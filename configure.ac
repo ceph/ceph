@@ -746,6 +746,7 @@ if test "x$enable_cephfs_java" = "xyes"; then
 	# Setup output var
 	AC_SUBST(JDK_CPPFLAGS)
 fi
+AM_CONDITIONAL(HAVE_JAVAH, [test -n "$JAVAH"])
 AM_CONDITIONAL(HAVE_JUNIT4, [test "$have_junit4" = "1"])
 
 #
