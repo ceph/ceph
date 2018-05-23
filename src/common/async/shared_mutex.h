@@ -12,16 +12,9 @@
  *
  */
 
-#ifndef CEPH_ASYNC_SHARED_MUTEX_H
-#define CEPH_ASYNC_SHARED_MUTEX_H
+#pragma once
 
-#include <condition_variable>
-#include <mutex>
-#include <shared_mutex> // for std::shared_lock
-
-#include <boost/intrusive/list.hpp>
-
-#include "common/async/completion.h"
+#include "common/async/detail/shared_mutex.h"
 
 namespace ceph::async {
 
@@ -62,13 +55,13 @@ namespace ceph::async {
 template <typename Executor>
 class SharedMutex {
  public:
-  SharedMutex(const Executor& ex1);
+  explicit SharedMutex(const Executor& ex);
 
   /// on destruction, all pending lock requests are canceled
   ~SharedMutex();
 
   using executor_type = Executor;
-  executor_type get_executor() const noexcept { return ex1; }
+  executor_type get_executor() const noexcept { return ex; }
 
   /// initiate an asynchronous request for an exclusive lock. when the lock is
   /// granted, the completion handler is invoked with a successful error code
@@ -121,92 +114,26 @@ class SharedMutex {
   void cancel();
 
  private:
-  Executor ex1; //< default callback executor
+  Executor ex; //< default callback executor
+  boost::intrusive_ptr<detail::SharedMutexImpl> impl;
 
-  struct LockRequest : public boost::intrusive::list_base_hook<> {
-    virtual ~LockRequest() {}
-    virtual void complete(boost::system::error_code ec) = 0;
-    virtual void destroy() = 0;
-  };
-  using RequestList = boost::intrusive::list<LockRequest>;
-
-  RequestList shared_queue; //< requests waiting on a shared lock
-  RequestList exclusive_queue; //< requests waiting on an exclusive lock
-
-  /// lock state encodes the number of shared lockers, or 'max' for exclusive
-  using LockState = uint16_t;
-  static constexpr LockState Unlocked = 0;
-  static constexpr LockState Exclusive = std::numeric_limits<LockState>::max();
-  static constexpr LockState MaxShared = Exclusive - 1;
-  LockState state = Unlocked; //< current lock state
-
-  std::mutex mutex; //< protects lock state and wait queues
-
-  // sync requests live on the stack and wait on a condition variable
-  class SyncRequest;
-
-  // async requests use async::Completion to invoke a handler on its executor
-  template <template <typename Mutex> typename Lock>
-  class AsyncRequest;
-
-  using AsyncExclusiveRequest = AsyncRequest<std::unique_lock>;
-  using AsyncSharedRequest = AsyncRequest<std::shared_lock>;
-
-  void complete(RequestList&& requests, boost::system::error_code ec);
-};
-
-template <typename Executor>
-class SharedMutex<Executor>::SyncRequest : public LockRequest {
-  std::condition_variable cond;
-  std::optional<boost::system::error_code> ec;
- public:
-  boost::system::error_code wait(std::unique_lock<std::mutex>& lock) {
-    // return the error code once its been set
-    cond.wait(lock, [this] { return ec; });
-    return *ec;
-  }
-  void complete(boost::system::error_code ec) override {
-    this->ec = ec;
-    cond.notify_one();
-  }
-  void destroy() override {
-    // nothing, SyncRequests live on the stack
-  }
-};
-
-template <typename Executor>
-template <template <typename Mutex> typename Lock>
-class SharedMutex<Executor>::AsyncRequest : public LockRequest {
-  SharedMutex& mutex; //< mutex argument for lock guard
- public:
-  AsyncRequest(SharedMutex& mutex) : mutex(mutex) {}
-
-  using Signature = void(boost::system::error_code, Lock<SharedMutex>);
-  using LockCompletion = Completion<Signature, AsBase<AsyncRequest>>;
-
-  void complete(boost::system::error_code ec) override {
-    auto r = static_cast<LockCompletion*>(this);
-    // pass ownership of ourselves to post(). on error, pass an empty lock
-    post(std::unique_ptr<LockCompletion>{r}, ec,
-         ec ? Lock{mutex, std::defer_lock} : Lock{mutex, std::adopt_lock});
-  }
-  void destroy() override {
-    delete static_cast<LockCompletion*>(this);
-  }
+  // allow lock guards to access impl
+  friend class std::unique_lock<SharedMutex>;
+  friend class std::shared_lock<SharedMutex>;
 };
 
 
 template <typename Executor>
-inline SharedMutex<Executor>::SharedMutex(const Executor& ex1)
-  : ex1(ex1)
+SharedMutex<Executor>::SharedMutex(const Executor& ex)
+  : ex(ex), impl(new detail::SharedMutexImpl)
 {
 }
 
 template <typename Executor>
-inline SharedMutex<Executor>::~SharedMutex()
+SharedMutex<Executor>::~SharedMutex()
 {
   try {
-    cancel();
+    impl->cancel();
   } catch (const std::exception&) {
     // swallow any exceptions, the destructor can't throw
   }
@@ -216,213 +143,70 @@ template <typename Executor>
 template <typename CompletionToken>
 auto SharedMutex<Executor>::async_lock(CompletionToken&& token)
 {
-  using Signature = typename AsyncExclusiveRequest::Signature;
-  boost::asio::async_completion<CompletionToken, Signature> init(token);
-  auto& handler = init.completion_handler;
-  {
-    std::lock_guard lock{mutex};
-
-    if (state == Unlocked) {
-      state = Exclusive;
-
-      // post the completion
-      auto ex2 = boost::asio::get_associated_executor(handler, ex1);
-      auto alloc2 = boost::asio::get_associated_allocator(handler);
-      auto b = bind_handler(std::move(handler), boost::system::error_code{},
-                            std::unique_lock{*this, std::adopt_lock});
-      ex2.post(forward_handler(std::move(b)), alloc2);
-    } else {
-      // create a request and add it to the exclusive list
-      using LockCompletion = typename AsyncExclusiveRequest::LockCompletion;
-      auto request = LockCompletion::create(ex1, std::move(handler), *this);
-      exclusive_queue.push_back(*request.release());
-    }
-  }
-  return init.result.get();
+  return impl->async_lock(*this, std::forward<CompletionToken>(token));
 }
 
 template <typename Executor>
-inline void SharedMutex<Executor>::lock()
+void SharedMutex<Executor>::lock()
 {
-  boost::system::error_code ec;
-  lock(ec);
-  if (ec) {
-    throw boost::system::system_error(ec);
-  }
+  impl->lock();
 }
 
 template <typename Executor>
 void SharedMutex<Executor>::lock(boost::system::error_code& ec)
 {
-  std::unique_lock lock{mutex};
-
-  if (state == Unlocked) {
-    state = Exclusive;
-    ec.clear();
-  } else {
-    SyncRequest request;
-    exclusive_queue.push_back(request);
-    ec = request.wait(lock);
-  }
+  impl->lock(ec);
 }
 
 template <typename Executor>
-inline bool SharedMutex<Executor>::try_lock()
+bool SharedMutex<Executor>::try_lock()
 {
-  std::lock_guard lock{mutex};
-
-  if (state == Unlocked) {
-    state = Exclusive;
-    return true;
-  }
-  return false;
+  return impl->try_lock();
 }
 
 template <typename Executor>
 void SharedMutex<Executor>::unlock()
 {
-  RequestList granted;
-  {
-    std::lock_guard lock{mutex};
-    assert(state == Exclusive);
-
-    if (!exclusive_queue.empty()) {
-      // grant next exclusive lock
-      auto& request = exclusive_queue.front();
-      exclusive_queue.pop_front();
-      granted.push_back(request);
-    } else {
-      // grant shared locks, if any
-      state = shared_queue.size();
-      if (state > MaxShared) {
-        state = MaxShared;
-        auto end = std::next(shared_queue.begin(), MaxShared);
-        granted.splice(granted.end(), shared_queue,
-                       shared_queue.begin(), end, MaxShared);
-      } else {
-        granted.splice(granted.end(), shared_queue);
-      }
-    }
-  }
-  complete(std::move(granted), boost::system::error_code{});
+  impl->unlock();
 }
 
 template <typename Executor>
 template <typename CompletionToken>
 auto SharedMutex<Executor>::async_lock_shared(CompletionToken&& token)
 {
-  using Signature = typename AsyncSharedRequest::Signature;
-  boost::asio::async_completion<CompletionToken, Signature> init(token);
-  auto& handler = init.completion_handler;
-  {
-    std::lock_guard lock{mutex};
-
-    if (exclusive_queue.empty() && state < MaxShared) {
-      state++;
-
-      auto ex2 = boost::asio::get_associated_executor(handler, ex1);
-      auto alloc2 = boost::asio::get_associated_allocator(handler);
-      auto b = bind_handler(std::move(handler), boost::system::error_code{},
-                            std::shared_lock{*this, std::adopt_lock});
-      ex2.post(forward_handler(std::move(b)), alloc2);
-    } else {
-      using LockCompletion = typename AsyncSharedRequest::LockCompletion;
-      auto request = LockCompletion::create(ex1, std::move(handler), *this);
-      shared_queue.push_back(*request.release());
-    }
-  }
-  return init.result.get();
+  return impl->async_lock_shared(*this, std::forward<CompletionToken>(token));
 }
 
 template <typename Executor>
-inline void SharedMutex<Executor>::lock_shared()
+void SharedMutex<Executor>::lock_shared()
 {
-  boost::system::error_code ec;
-  lock_shared(ec);
-  if (ec) {
-    throw boost::system::system_error(ec);
-  }
+  impl->lock_shared();
 }
 
 template <typename Executor>
 void SharedMutex<Executor>::lock_shared(boost::system::error_code& ec)
 {
-  std::unique_lock lock{mutex};
-
-  if (exclusive_queue.empty() && state < MaxShared) {
-    state++;
-    ec.clear();
-  } else {
-    SyncRequest request;
-    shared_queue.push_back(request);
-    ec = request.wait(lock);
-  }
+  impl->lock_shared(ec);
 }
 
 template <typename Executor>
-inline bool SharedMutex<Executor>::try_lock_shared()
+bool SharedMutex<Executor>::try_lock_shared()
 {
-  std::lock_guard lock{mutex};
-
-  if (exclusive_queue.empty() && state < MaxShared) {
-    state++;
-    return true;
-  }
-  return false;
+  return impl->try_lock_shared();
 }
 
 template <typename Executor>
-inline void SharedMutex<Executor>::unlock_shared()
+void SharedMutex<Executor>::unlock_shared()
 {
-  std::lock_guard lock{mutex};
-  assert(state != Unlocked && state <= MaxShared);
-
-  if (state == 1 && !exclusive_queue.empty()) {
-    // grant next exclusive lock
-    state = Exclusive;
-    auto& request = exclusive_queue.front();
-    exclusive_queue.pop_front();
-    request.complete(boost::system::error_code{});
-  } else if (state == MaxShared && !shared_queue.empty() &&
-             exclusive_queue.empty()) {
-    // grant next shared lock
-    auto& request = shared_queue.front();
-    shared_queue.pop_front();
-    request.complete(boost::system::error_code{});
-  } else {
-    state--;
-  }
+  impl->unlock_shared();
 }
 
 template <typename Executor>
-inline void SharedMutex<Executor>::cancel()
+void SharedMutex<Executor>::cancel()
 {
-  RequestList canceled;
-  {
-    std::lock_guard lock{mutex};
-    canceled.splice(canceled.end(), shared_queue);
-    canceled.splice(canceled.end(), exclusive_queue);
-  }
-  complete(std::move(canceled), boost::asio::error::operation_aborted);
-}
-
-template <typename Executor>
-void SharedMutex<Executor>::complete(RequestList&& requests,
-                                     boost::system::error_code ec)
-{
-  while (!requests.empty()) {
-    auto& request = requests.front();
-    requests.pop_front();
-    try {
-      request.complete(ec);
-    } catch (...) {
-      // clean up any remaining completions and rethrow
-      requests.clear_and_dispose([] (LockRequest *r) { r->destroy(); });
-      throw;
-    }
-  }
+  impl->cancel();
 }
 
 } // namespace ceph::async
 
-#endif // CEPH_ASYNC_SHARED_MUTEX_H
+#include "common/async/detail/shared_lock.h"
