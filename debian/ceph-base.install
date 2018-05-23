@@ -1,6 +1,5 @@
 etc/init.d/ceph
 usr/bin/ceph-debugpack
-usr/bin/ceph-detect-init
 usr/bin/ceph-run
 usr/bin/crushtool
 usr/bin/monmaptool
@@ -15,7 +14,6 @@ usr/share/doc/ceph/sample.ceph.conf
 usr/share/man/man8/ceph-create-keys.8
 usr/share/man/man8/ceph-debugpack.8
 usr/share/man/man8/ceph-deploy.8
-usr/share/man/man8/ceph-detect-init.8
 usr/share/man/man8/ceph-run.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/monmaptool.8
