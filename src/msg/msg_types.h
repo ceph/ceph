@@ -535,6 +535,15 @@ struct entity_addrvec_t {
   unsigned size() const { return v.size(); }
   bool empty() const { return v.empty(); }
 
+  entity_addr_t legacy_addr() const {
+    for (auto& a : v) {
+      if (a.type == entity_addr_t::TYPE_LEGACY) {
+	return a;
+      }
+    }
+    return entity_addr_t();
+  }
+
   bool parse(const char *s, const char **end = 0);
 
   void encode(bufferlist& bl, uint64_t features) const;
