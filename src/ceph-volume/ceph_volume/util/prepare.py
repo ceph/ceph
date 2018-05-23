@@ -64,7 +64,7 @@ def create_id(fsid, json_secrets, osd_id=None):
         '-i', '-',
         'osd', 'new', fsid
     ]
-    if check_id(osd_id):
+    if osd_id is not None and not osd_id_exists(osd_id):
         cmd.append(osd_id)
     stdout, stderr, returncode = process.call(
         cmd,
@@ -76,7 +76,7 @@ def create_id(fsid, json_secrets, osd_id=None):
     return ' '.join(stdout).strip()
 
 
-def check_id(osd_id):
+def osd_id_exists(osd_id):
     """
     Checks to see if an osd ID exists or not. Returns True
     if it does exist, False if it doesn't.
