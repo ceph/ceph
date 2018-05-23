@@ -28,4 +28,11 @@
       </cd-table-key-value>
     </tab>
   </tabset>
+  <ng-template #confValTpl let-value="value">
+    <span *ngIf="value">
+      <span *ngFor="let conf of value; last as isLast">
+        {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br/>
+      </span>
+    </span>
+  </ng-template>
 </cd-table>
