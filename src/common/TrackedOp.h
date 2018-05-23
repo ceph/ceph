@@ -192,10 +192,15 @@ protected:
   mutable const char *desc = nullptr;  ///< readable without lock
   mutable atomic<bool> want_new_desc = {false};
 
-  TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
-    tracker(_tracker),
-    initiated_at(initiated) {
+  TrackedOp(OpTracker* const tracker, const utime_t& initiated_at) :
+    tracker(tracker),
+    initiated_at(initiated_at) {
   }
+
+  template <class ParamsT>
+  TrackedOp(OpTracker* const tracker,
+	    const utime_t& initiated_at,
+	    const ParamsT params);
 
   /// output any type-specific data you want to get when dump() is called
   virtual void _dump(Formatter *f) const {}
@@ -270,8 +275,6 @@ public:
 
   void dump(utime_t now, Formatter *f) const;
 
-  void tracking_start();
-
   // ref counting via intrusive_ptr, with special behavior on final
   // put for historical op tracking
   friend void intrusive_ptr_add_ref(TrackedOp *o) {
@@ -326,7 +329,7 @@ public:
   bool dump_ops_in_flight(Formatter *f, bool print_only_blocked = false, set<string> filters = {""});
   bool dump_historic_ops(Formatter *f, bool by_duration = false, set<string> filters = {""});
   bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
-  bool register_inflight_op(TrackedOp *i);
+  void register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
   void record_history_op(TrackedOpRef&& i) {
     history.insert(ceph_clock_now(), std::move(i));
@@ -378,18 +381,9 @@ public:
   ~OpTracker();
 
   template <typename T, typename U>
-  typename T::Ref create_request(U params)
-  {
+  typename T::Ref create_request(U params) {
     typename T::Ref retval(new T(params, this));
-    retval->tracking_start();
-
-    if (is_tracking()) {
-      retval->mark_event("header_read", params->get_recv_stamp());
-      retval->mark_event("throttled", params->get_throttle_stamp());
-      retval->mark_event("all_read", params->get_recv_complete_stamp());
-      retval->mark_event("dispatched", params->get_dispatch_stamp());
-    }
-
+    register_inflight_op(retval.get());
     return retval;
   }
 };
@@ -405,6 +399,21 @@ public:
  * See: https://stackoverflow.com/questions/7833941/putting- \
         function-definitions-in-header-files#comment9553758_7834555
  */
+template <class ParamsT>
+inline TrackedOp::TrackedOp(OpTracker* const tracker,
+			    const utime_t& initiated_at,
+			    const ParamsT params)
+  : TrackedOp(tracker, initiated_at) {
+  if (tracker && tracker->is_tracking()) {
+    events.emplace_back(initiated_at, "initiated");
+
+    events.emplace_back(params->get_recv_stamp(), "header_read");
+    events.emplace_back(params->get_throttle_stamp(), "throttled");
+    events.emplace_back(params->get_recv_complete_stamp(), "all_read");
+    events.emplace_back(params->get_dispatch_stamp(), "dispatched");
+  }
+}
+
 inline void TrackedOp::put() {
 again:
   auto nref_snap = nref.load();
