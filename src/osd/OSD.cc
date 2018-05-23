@@ -6453,7 +6453,16 @@ void OSD::ms_fast_dispatch(Message *m)
     }
   }
 
-  OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
+  OpRequestRef op;
+  if (m->get_connection()->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT) ||
+      m->get_type() != CEPH_MSG_OSD_OP) {
+    // XXX: hmm, specialize create_request for Message*?
+    op = op_tracker.create_request<OpRequest, Message*>(m,
+      static_cast<MOSDFastDispatchOp*>(m)->get_spg());
+  } else {
+    op = op_tracker.create_request<OpRequest, Message*>(m);
+  }
+
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = op->get_reqid();
