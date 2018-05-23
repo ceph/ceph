@@ -535,10 +535,22 @@ struct entity_addrvec_t {
   unsigned size() const { return v.size(); }
   bool empty() const { return v.empty(); }
 
+  bool parse(const char *s, const char **end = 0);
+
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
+
+  friend ostream& operator<<(ostream& out, const entity_addrvec_t& av) {
+    if (av.v.empty()) {
+      return out;
+    } else if (av.v.size() == 1) {
+      return out << av.v[0];
+    } else {
+      return out << av.v;
+    }
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
 

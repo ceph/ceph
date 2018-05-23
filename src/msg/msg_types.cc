@@ -220,6 +220,26 @@ ostream& operator<<(ostream& out, const sockaddr *sa)
 
 // entity_addrvec_t
 
+bool entity_addrvec_t::parse(const char *s, const char **end)
+{
+  v.clear();
+  while (*s) {
+    entity_addr_t a;
+    bool r = a.parse(s, end);
+    if (!r) {
+      break;
+    }
+    v.push_back(a);
+    s = *end;
+    while (*s == ',' ||
+	   *s == ' ' ||
+	   *s == ';') {
+      ++s;
+    }
+  }
+  return !v.empty();
+}
+
 void entity_addrvec_t::encode(bufferlist& bl, uint64_t features) const
 {
   using ceph::encode;
