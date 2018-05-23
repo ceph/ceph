@@ -1794,6 +1794,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     } else {
       bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
     }
+    h->dirty_devs[p->bdev] = true;
     bloff += x_len;
     length -= x_len;
     ++p;
@@ -1928,6 +1929,8 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 
 void BlueFS::_flush_bdev_safely(FileWriter *h)
 {
+  std::array<bool, MAX_BDEV> flush_devs = h->dirty_devs;
+  h->dirty_devs.fill(false);
 #ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
@@ -1935,14 +1938,24 @@ void BlueFS::_flush_bdev_safely(FileWriter *h)
     lock.unlock();
     wait_for_aio(h);
     completed_ios.clear();
-    flush_bdev();
+    flush_bdev(flush_devs);
     lock.lock();
   } else
 #endif
   {
     lock.unlock();
-    flush_bdev();
+    flush_bdev(flush_devs);
     lock.lock();
+  }
+}
+
+void BlueFS::flush_bdev(std::array<bool, MAX_BDEV>& dirty_bdevs)
+{
+  // NOTE: this is safe to call without a lock.
+  dout(20) << __func__ << dendl;
+  for (unsigned i = 0; i < MAX_BDEV; i++) {
+    if (dirty_bdevs[i])
+      bdev[i]->flush();
   }
 }
 
