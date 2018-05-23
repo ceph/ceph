@@ -218,6 +218,21 @@ public:
     calc_addr_mons();
   }
 
+  int set_rank(const string& name, int rank) {
+    int oldrank = get_rank(name);
+    if (oldrank < 0) {
+      return -ENOENT;
+    }
+    if (rank < 0 || rank >= (int)ranks.size()) {
+      return -EINVAL;
+    }
+    if (oldrank != rank) {
+      ranks.erase(ranks.begin() + oldrank);
+      ranks.insert(ranks.begin() + rank, name);
+    }
+    return 0;
+  }
+
   bool contains(const string& name) const {
     return mon_info.count(name);
   }
