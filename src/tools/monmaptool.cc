@@ -219,7 +219,7 @@ int main(int argc, const char **argv)
 	return -1;
       }
       if (addr.get_port() == 0)
-	addr.set_port(CEPH_MON_PORT);
+	addr.set_port(CEPH_MON_PORT_LEGACY);
       add[name] = addr;
       modified = true;
       i = args.erase(i);

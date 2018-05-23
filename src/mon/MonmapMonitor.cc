@@ -504,8 +504,8 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     }
 
     if (addr.get_port() == 0) {
-      ss << "port defaulted to " << CEPH_MON_PORT;
-      addr.set_port(CEPH_MON_PORT);
+      ss << "port defaulted to " << CEPH_MON_PORT_LEGACY;
+      addr.set_port(CEPH_MON_PORT_LEGACY);
     }
 
     /**
