@@ -1090,7 +1090,7 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
   }
 
   if (addr.get_port() == 0)
-    addr.set_port(CEPH_MON_PORT);
+    addr.set_port(CEPH_MON_PORT_LEGACY);
 
   extra_probe_peers.insert(addr);
   ss << "adding peer " << addr << " to list: " << extra_probe_peers;
@@ -3344,7 +3344,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
 
     ostringstream ss2;
-    ss2 << "report " << rdata.crc32c(CEPH_MON_PORT);
+    ss2 << "report " << rdata.crc32c(CEPH_MON_PORT_LEGACY);
     rs = ss2.str();
     r = 0;
   } else if (prefix == "osd last-stat-seq") {
