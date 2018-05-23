@@ -12,11 +12,10 @@ The patch signing procedures and definitions are unmodified.
 SIGNING CONTRIBUTIONS
 =====================
 
-In order to keep the record of code attribution clean within the
-source repository, please follow these guidelines for signing 
-patches submitted to the project.  These definitions are taken
-from those used by the Linux kernel and many other open source
-projects.
+In order to keep the record of code attribution clean within the source
+repository, follow these guidelines for signing patches submitted to the
+project.  These definitions are taken from those used by the Linux kernel
+and many other open source projects.
 
 
 1. Sign your work
@@ -489,6 +488,9 @@ clear place to note the change that is being made, the reviewer should
 contact the component lead, who should arrange for the missing section
 to be created with sufficient detail for the patch submitter to
 document their changes.
+
+When writing and/or editing documentation, follow the Google Developer
+Documentation Style Guide: https://developers.google.com/style/
 
 6. Style check your changes
 ---------------------------
