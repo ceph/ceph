@@ -289,10 +289,9 @@ public:
 
 class OpTracker {
   struct ShardedTrackingData {
-    mutable Mutex ops_in_flight_lock_sharded;
+    mutable std::mutex ops_in_flight_lock_sharded;
     TrackedOp::tracked_op_list_t ops_in_flight_sharded;
-    explicit ShardedTrackingData(string lock_name):
-      ops_in_flight_lock_sharded(lock_name.c_str()) {
+    explicit ShardedTrackingData(char* lock_name) {
     }
   };
 
