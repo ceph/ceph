@@ -13,6 +13,7 @@
  */
 
 #include "include/types.h"
+#include "include/stringify.h"
 #include "msg/msg_types.h"
 #include "gtest/gtest.h"
 
@@ -236,4 +237,30 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode3)
 
   ASSERT_NE(addr, addrvec.v[0]); // it's not the first addr(which is non-legacy)
   ASSERT_NE(addr, entity_addr_t(1, 0)); // it's not a blank addr either
+}
+
+const char *addrvec_parse_checks[][3] = {
+  { "127.0.0.1", "127.0.0.1:0/0", "" },
+  { "127.0.0.1 foo", "127.0.0.1:0/0", " foo" },
+  { "127.0.0.1 1.2.3.4 foo", "[127.0.0.1:0/0,1.2.3.4:0/0]", " foo" },
+  { "127.0.0.1 :: - foo", "[127.0.0.1:0/0,[::]:0/0,-]", " foo" },
+  { NULL, NULL, NULL },
+};
+
+TEST(entity_addrvec_t, parse)
+{
+  entity_addrvec_t addrvec;
+
+  for (auto v : { addr_checks, addr_checks2, addrvec_parse_checks }) {
+    for (unsigned i = 0; v[i][0]; ++i) {
+      const char *end = "";
+      addrvec.parse(v[i][0], &end);
+      string out = stringify(addrvec);
+      string left = end;
+      cout << "'" << v[i][0] << "' -> '" << out << "' + '" << left << "'"
+	   << std::endl;
+      ASSERT_EQ(out, v[i][1]);
+      ASSERT_EQ(left, v[i][2]);
+    }
+  }
 }
