@@ -538,9 +538,8 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   omap_vals["snap_seq"] = snap_seqbl;
   omap_vals["create_timestamp"] = create_timestampbl;
 
-  if ((features & RBD_FEATURES_INTERNAL) != 0ULL) {
-    CLS_ERR("Attempting to set internal feature: %" PRIu64,
-            static_cast<uint64_t>(features & RBD_FEATURES_INTERNAL));
+  if ((features & RBD_FEATURE_OPERATIONS) != 0ULL) {
+    CLS_ERR("Attempting to set internal feature: operations");
     return -EINVAL;
   }
 
