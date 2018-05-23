@@ -110,7 +110,6 @@ private:
       }
       f->close_section();
       f->open_object_section("info");
-      f->dump_int("seq", seq);
       f->dump_bool("src_is_mon", is_src_mon());
       f->dump_stream("source") << request->get_source_inst();
       f->dump_bool("forwarded_to_leader", forwarded_to_leader);

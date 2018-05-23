@@ -178,7 +178,7 @@ protected:
 
   mutable std::mutex lock; ///< to protect the events list
   const char *current = 0; ///< the current state the event is in
-  uint64_t seq = 0;        ///< a unique value set by the OpTracker
+  uint64_t shard_index = 0;///< set by the OpTracker
 
   uint32_t warn_interval_multiplier = 1; //< limits output of a given op warning
 

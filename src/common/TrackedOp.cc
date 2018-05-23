@@ -253,7 +253,7 @@ void OpTracker::register_inflight_op(TrackedOp *i,
   {
     Mutex::Locker locker(sdata.ops_in_flight_lock_sharded);
     sdata.ops_in_flight_sharded.push_back(*i);
-    i->seq = shard_index;
+    i->shard_index = shard_index;
     // default state is STATE_UNTRACKED. Altough TrackedOp::state
     // is std::atomic, we're setting it inside critical section.
     // This means the cost of MFENCE on x86 should be relatively
@@ -267,7 +267,7 @@ void OpTracker::unregister_inflight_op(TrackedOp* const i)
   // caller checks;
   assert(i->state);
 
-  ShardedTrackingData& sdata = sharded_in_flight_list.get_shard(i->seq);
+  ShardedTrackingData& sdata = sharded_in_flight_list.get_shard(i->shard_index);
   {
     Mutex::Locker locker(sdata.ops_in_flight_lock_sharded);
     auto p = sdata.ops_in_flight_sharded.iterator_to(*i);
@@ -427,7 +427,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
     events.emplace_back(stamp, event);
     current = events.back().c_str();
   }
-  dout(6) << " seq: " << seq
+  dout(6) << " shard_index: " << shard_index
 	  << ", time: " << stamp
 	  << ", event: " << event
 	  << ", op: " << get_desc()
@@ -445,7 +445,7 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
     events.emplace_back(stamp, event);
     current = event;
   }
-  dout(6) << " seq: " << seq
+  dout(6) << " shard_index: " << shard_index
 	  << ", time: " << stamp
 	  << ", event: " << event
 	  << ", op: " << get_desc()
