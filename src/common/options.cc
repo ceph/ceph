@@ -242,6 +242,12 @@ int Option::parse_value(
       return -EINVAL;
     }
     *out = addr;
+  } else if (type == Option::TYPE_ADDR) {
+    entity_addrvec_t addr;
+    if (!addr.parse(val.c_str())){
+      return -EINVAL;
+    }
+    *out = addr;
   } else if (type == Option::TYPE_UUID) {
     uuid_d uuid;
     if (!uuid.parse(val.c_str())) {
