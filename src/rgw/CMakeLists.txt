@@ -285,7 +285,7 @@ add_library(rgw_admin_user SHARED
 target_link_libraries(rgw_admin_user PRIVATE
   librados
   cls_rgw_client
-  cls_opt_client
+  cls_otp_client
   cls_lock_client
   cls_refcount_client
   cls_log_client
