@@ -23,7 +23,6 @@ tasks:
       - \(PG_
       - Monitor daemon marked osd
       - Behind on trimming
-      - is unresponsive
     conf:
       global:
         mon warn on pool no app: false
