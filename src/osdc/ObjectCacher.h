@@ -243,6 +243,7 @@ class ObjectCacher {
 
     bool complete;
     bool exists;
+    bool be_discarded;
 
     map<loff_t, BufferHead*>     data;
 
@@ -263,7 +264,7 @@ class ObjectCacher {
       oc(_oc),
       oid(o), object_no(ono), oset(os), set_item(this), oloc(l),
       truncate_size(ts), truncate_seq(tq),
-      complete(false), exists(true),
+      complete(false), exists(true), be_discarded(false),
       last_write_tid(0), last_commit_tid(0),
       dirty_or_tx(0) {
       // add to set
