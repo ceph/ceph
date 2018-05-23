@@ -332,5 +332,5 @@ This generates a signed download URL that will be valid for 5 minutes.
 	char buffer[S3_MAX_AUTHENTICATED_QUERY_STRING_SIZE];
 	int64_t expires = time(NULL) + 60 * 5; // Current time + 5 minutes
 
-	S3_generate_authenticated_query_string(buffer, &bucketContext, sample_key, expires, NULL);
+	S3_generate_authenticated_query_string(buffer, &bucketContext, sample_key, expires, NULL, "GET");
 
