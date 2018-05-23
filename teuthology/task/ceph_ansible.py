@@ -446,6 +446,7 @@ class CephAnsible(Task):
             'pip',
             'install',
             run.Raw('setuptools>=11.3'),
+            run.Raw('notario>=0.0.13'), # FIXME: use requirements.txt
             run.Raw(ansible_ver),
             run.Raw(';'),
             run.Raw(str_args)
