@@ -577,7 +577,7 @@ void MgrMonitor::tick()
                         << " daemon " << pending_map.active_name;
     } else {
       dout(4) << "Active is laggy but have no standbys to replace it" << dendl;
-      mon->clog->warn() << "Manager daemon " << old_active_name
+      mon->clog->info() << "Manager daemon " << old_active_name
                         << " is unresponsive.  No standby daemons available.";
     }
   } else if (pending_map.active_gid == 0) {
