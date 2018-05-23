@@ -45,6 +45,7 @@ CEPH_PROXY=java/com/ceph/fs/CephMount.class
 # as per
 #   https://blogs.oracle.com/darcy/entry/bootclasspath_older_source
 
+if HAVE_JAVAH
 $(CEPH_PROXY): $(JAVA_SRC)
 	export CLASSPATH=java/ ; \
 	$(JAVAC) -classpath java -source 1.5 -target 1.5 -Xlint:-options java/com/ceph/fs/*.java
@@ -52,6 +53,14 @@ $(CEPH_PROXY): $(JAVA_SRC)
 $(JAVA_H): $(CEPH_PROXY)
 	export CLASSPATH=java/ ; \
 	$(JAVAH) -classpath java -jni -o $@ com.ceph.fs.CephMount
+else
+$(CEPH_PROXY): $(JAVA_SRC)
+	export CLASSPATH=java/ ; \
+	$(JAVAC) -classpath java -source 1.5 -target 1.5 -Xlint:-options -h native java/com/ceph/fs/*.java
+
+$(JAVA_H): $(CEPH_PROXY)
+endif # HAVE_JAVAH
+
 
 libcephfs.jar: $(CEPH_PROXY)
 	$(JAR) cf $@ $(JAVA_CLASSES:%=-C java %) 
