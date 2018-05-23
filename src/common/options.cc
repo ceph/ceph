@@ -3161,7 +3161,7 @@ std::vector<Option> get_global_options() {
     .set_description("Number of entries difference above which to use asynchronous recovery when appropriate"),
 
     Option("osd_max_pg_per_osd_hard_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(2)
+    .set_default(3)
     .set_min(1)
     .set_description("Maximum number of PG per OSD, a factor of 'mon_max_pg_per_osd'")
     .set_long_description("OSD will refuse to instantiate PG if the number of PG it serves exceeds this number.")
