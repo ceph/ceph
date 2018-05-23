@@ -50,11 +50,13 @@ export class MonitorComponent {
       data.in_quorum.map((row) => {
         row.cdOpenSessions = row.stats.num_sessions.map(i => i[1]);
         row.cdLink = '/perf_counters/mon/' + row.name;
+        row.cdParams = {fromLink: '/monitor'};
         return row;
       });
 
       data.out_quorum.map((row) => {
         row.cdLink = '/perf_counters/mon/' + row.name;
+        row.cdParams = {fromLink: '/monitor'};
         return row;
       });
 
