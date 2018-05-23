@@ -136,28 +136,14 @@ void MonMap::calc_ranks() {
 
 void MonMap::encode(bufferlist& blist, uint64_t con_features) const
 {
-  /* we keep the mon_addr map when encoding to ensure compatibility
-   * with clients and other monitors that do not yet support the 'mons'
-   * map. This map keeps its original behavior, containing a mapping of
-   * monitor id (i.e., 'foo' in 'mon.foo') to the monitor's public
-   * address -- which is obtained from the public address of each entry
-   * in the 'mons' map.
-   */
-  map<string,entity_addr_t> mon_addr;
-  for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
-       p != mon_info.end();
-       ++p) {
-    mon_addr[p->first] = p->second.public_addr;
-  }
-
   if ((con_features & CEPH_FEATURE_MONNAMES) == 0) {
     using ceph::encode;
     __u16 v = 1;
     encode(v, blist);
     encode_raw(fsid, blist);
     encode(epoch, blist);
-    vector<entity_inst_t> mon_inst(mon_addr.size());
-    for (unsigned n = 0; n < mon_addr.size(); n++)
+    vector<entity_inst_t> mon_inst(ranks.size());
+    for (unsigned n = 0; n < ranks.size(); n++)
       mon_inst[n] = get_inst(n);
     encode(mon_inst, blist, con_features);
     encode(last_changed, blist);
@@ -166,12 +152,26 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   }
 
   if ((con_features & CEPH_FEATURE_MONENC) == 0) {
+    /* we keep the mon_addr map when encoding to ensure compatibility
+       * with clients and other monitors that do not yet support the 'mons'
+       * map. This map keeps its original behavior, containing a mapping of
+       * monitor id (i.e., 'foo' in 'mon.foo') to the monitor's public
+       * address -- which is obtained from the public address of each entry
+       * in the 'mons' map.
+       */
+    map<string,entity_addr_t> legacy_mon_addr;
+    for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
+	 p != mon_info.end();
+	 ++p) {
+      legacy_mon_addr[p->first] = p->second.public_addr;
+    }
+
     using ceph::encode;
     __u16 v = 2;
     encode(v, blist);
     encode_raw(fsid, blist);
     encode(epoch, blist);
-    encode(mon_addr, blist, con_features);
+    encode(legacy_mon_addr, blist, con_features);
     encode(last_changed, blist);
     encode(created, blist);
   }
@@ -184,7 +184,6 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   encode(created, blist);
   encode(persistent_features, blist);
   encode(optional_features, blist);
-  // this superseeds 'mon_addr'
   encode(mon_info, blist, con_features);
   ENCODE_FINISH(blist);
 }
