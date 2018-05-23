@@ -6,6 +6,7 @@ import { CephfsService } from './cephfs.service';
 import { ConfigurationService } from './configuration.service';
 import { DashboardService } from './dashboard.service';
 import { HostService } from './host.service';
+import { LoggingService } from './logging.service';
 import { MonitorService } from './monitor.service';
 import { OsdService } from './osd.service';
 import { PerformanceCounterService } from './performance-counter.service';
@@ -35,6 +36,7 @@ import { TcmuIscsiService } from './tcmu-iscsi.service';
     RgwDaemonService,
     RgwUserService,
     PerformanceCounterService,
+    LoggingService,
     TcmuIscsiService
   ]
 })
