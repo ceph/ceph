@@ -124,7 +124,6 @@ set(rgw_a_srcs
   rgw_realm_watcher.cc
   rgw_os_lib.cc
   rgw_process.cc
-  rgw_request.cc
   rgw_rest_bucket.cc
   rgw_rest_config.cc
   rgw_rest_log.cc
