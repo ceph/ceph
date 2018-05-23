@@ -4,6 +4,7 @@
 /* flags we export */
 int ceph_arch_neon = 0;
 int ceph_arch_aarch64_crc32 = 0;
+int ceph_arch_aarch64_pmull = 0;
 
 #include <stdio.h>
 
@@ -46,9 +47,8 @@ int ceph_arch_arm_probe(void)
 	ceph_arch_neon = (get_hwcap() & HWCAP_NEON) == HWCAP_NEON;
 #elif __aarch64__ && __linux__
 	ceph_arch_neon = (get_hwcap() & HWCAP_ASIMD) == HWCAP_ASIMD;
-# if defined(HAVE_ARMV8_CRC) && defined(HWCAP_CRC32)
 	ceph_arch_aarch64_crc32 = (get_hwcap() & HWCAP_CRC32) == HWCAP_CRC32;
-# endif
+        ceph_arch_aarch64_pmull = (get_hwcap() & HWCAP_PMULL) == HWCAP_PMULL;
 #else
 	if (0)
 		get_hwcap();  // make compiler shut up
