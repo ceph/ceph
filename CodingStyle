@@ -101,7 +101,11 @@ by section.
 
 	if (foo) { bar; }  // definitely no
 
+* Header Files -> The `#define` Guard:
 
+  `#pragma once` is allowed for simplicity at the expense of
+   portability sinces `#pragma once` is wildly supported and is known
+   to work on GCC and Clang.
 
 
 The following guidelines have not been followed in the legacy code,
