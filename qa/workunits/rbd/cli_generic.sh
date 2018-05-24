@@ -572,7 +572,7 @@ test_thick_provision() {
     ret=""
     while [ $count -lt 10 ]
     do
-        rbd du|grep test1|tr -s " "|cut -d " " -f 3|grep '^64 MiB' && ret=$?
+        rbd du|grep test1|tr -s " "|cut -d " " -f 4-5|grep '^64 MiB' && ret=$?
         if [ "$ret" = "0" ]
         then
             break;
@@ -594,7 +594,7 @@ test_thick_provision() {
     ret=""
     while [ $count -lt 10 ]
     do
-        rbd du|grep test1|tr -s " "|cut -d " " -f 3|grep '^4 GiB' && ret=$?
+        rbd du|grep test1|tr -s " "|cut -d " " -f 4-5|grep '^4 GiB' && ret=$?
         if [ "$ret" = "0" ]
         then
             break;
