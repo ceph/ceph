@@ -792,7 +792,7 @@ static int rbdfs_fsync(const char *path, int datasync,
 {
     if (!gotrados)
         return -ENXIO;
-    //rbd_flush(get_open_image(fi->fh)->image);
+    rbd_flush(get_open_image(fi->fh)->image);
     return 0;
 }
 
@@ -890,8 +890,8 @@ rbdfs_destroy(void *unused)
             open_image++) {
         // Don't try to treat invalid "files" as rbd images in the event that the OS has done something goofy
         if (open_image->second.image != NULL) {
-            //wait_for_in_flight_writes(open_image->second.name, 0);
-            //rbd_flush(open_image->second.image);
+            wait_for_in_flight_writes(open_image->second.name, 0);
+            rbd_flush(open_image->second.image);
             rbd_close(open_image->second.image);
         }
     }
