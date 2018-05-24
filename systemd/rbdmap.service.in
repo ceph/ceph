@@ -7,6 +7,7 @@ Wants=network-online.target local-fs.target
 [Service]
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=RBDMAPFILE=/etc/ceph/rbdmap
+Environment=RBDREQTIMEOUT=60
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/bin/rbdmap map
