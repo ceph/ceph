@@ -187,7 +187,7 @@ void CloneRequest<I>::send_create() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
   if (m_use_p_features) {
-    m_features = m_p_features;
+    m_features = (m_p_features & ~RBD_FEATURES_IMPLICIT_ENABLE);
   }
 
   uint64_t order = m_p_imctx->order;
