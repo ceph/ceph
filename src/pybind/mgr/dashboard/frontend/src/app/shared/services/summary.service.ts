@@ -38,8 +38,6 @@ export class SummaryService {
   }
 
   get() {
-    return this.http.get('api/summary').toPromise().then((resp: any) => {
-      return resp;
-    });
+    return this.http.get('api/summary');
   }
 }
