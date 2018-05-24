@@ -642,12 +642,6 @@ def test_object_delete():
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket.name)
             check_bucket_eq(source_conn, target_conn, bucket)
 
-def get_latest_object_version(key):
-    for k in key.bucket.list_versions(key.name):
-        if k.is_latest:
-            return k
-    return None
-
 def test_versioned_object_incremental_sync():
     zonegroup = realm.master_zonegroup()
     zonegroup_conns = ZonegroupConns(zonegroup)
@@ -675,22 +669,19 @@ def test_versioned_object_incremental_sync():
             k = new_key(zone_conn, bucket, obj)
 
             k.set_contents_from_string('version1')
-            v = get_latest_object_version(k)
-            log.debug('version1 id=%s', v.version_id)
+            log.debug('version1 id=%s', k.version_id)
             # don't delete version1 - this tests that the initial version
             # doesn't get squashed into later versions
 
             # create and delete the following object versions to test that
             # the operations don't race with each other during sync
             k.set_contents_from_string('version2')
-            v = get_latest_object_version(k)
-            log.debug('version2 id=%s', v.version_id)
-            k.bucket.delete_key(obj, version_id=v.version_id)
+            log.debug('version2 id=%s', k.version_id)
+            k.bucket.delete_key(obj, version_id=k.version_id)
 
             k.set_contents_from_string('version3')
-            v = get_latest_object_version(k)
-            log.debug('version3 id=%s', v.version_id)
-            k.bucket.delete_key(obj, version_id=v.version_id)
+            log.debug('version3 id=%s', k.version_id)
+            k.bucket.delete_key(obj, version_id=k.version_id)
 
             # create and delete repeatedly to test delete markers
             obj = 'dm-' + zone_conn.name
