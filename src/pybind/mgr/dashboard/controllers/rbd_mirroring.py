@@ -6,10 +6,9 @@ import re
 
 from functools import partial
 
-import cherrypy
 import rbd
 
-from . import ApiController, AuthRequired, BaseController
+from . import ApiController, AuthRequired, Endpoint, BaseController
 from .. import logger, mgr
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
@@ -155,7 +154,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
     }
 
 
-@ApiController('rbdmirror')
+@ApiController('/rbdmirror')
 @AuthRequired()
 class RbdMirror(BaseController):
 
@@ -163,8 +162,7 @@ class RbdMirror(BaseController):
         super(RbdMirror, self).__init__()
         self.pool_data = {}
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     @handle_rbd_error()
     def __call__(self):
         status, content_data = self._get_content_data()

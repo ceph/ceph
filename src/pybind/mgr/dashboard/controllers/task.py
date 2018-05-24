@@ -5,7 +5,7 @@ from . import ApiController, AuthRequired, RESTController
 from ..tools import TaskManager
 
 
-@ApiController('task')
+@ApiController('/task')
 @AuthRequired()
 class Task(RESTController):
     def list(self, name=None):

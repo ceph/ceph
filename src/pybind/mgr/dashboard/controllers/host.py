@@ -5,7 +5,7 @@ from . import ApiController, AuthRequired, RESTController
 from .. import mgr
 
 
-@ApiController('host')
+@ApiController('/host')
 @AuthRequired()
 class Host(RESTController):
     def list(self):

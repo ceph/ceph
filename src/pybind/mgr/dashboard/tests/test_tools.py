@@ -10,12 +10,12 @@ from mock import patch
 from ..services.exception import handle_rados_error
 from .helper import ControllerTestCase
 from ..controllers import RESTController, ApiController, Controller, \
-                          BaseController
+                          BaseController, Proxy
 from ..tools import is_valid_ipv6_address, dict_contains_path
 
 
 # pylint: disable=W0613
-@Controller('foo')
+@Controller('/foo')
 class FooResource(RESTController):
     elems = []
 
@@ -40,20 +40,20 @@ class FooResource(RESTController):
         return dict(key=key, newdata=newdata)
 
 
-@Controller('foo/:key/:method')
+@Controller('/foo/:key/:method')
 class FooResourceDetail(RESTController):
     def list(self, key, method):
         return {'detail': (key, [method])}
 
 
-@ApiController('rgw/proxy/{path:.*}')
+@ApiController('/rgw/proxy')
 class GenerateControllerRoutesController(BaseController):
-    @cherrypy.expose
+    @Proxy()
     def __call__(self, path, **params):
         pass
 
 
-@ApiController('fooargs')
+@ApiController('/fooargs')
 class FooArgs(RESTController):
     def set(self, code, name=None, opt1=None, opt2=None):
         return {'code': code, 'name': name, 'opt1': opt1, 'opt2': opt2}

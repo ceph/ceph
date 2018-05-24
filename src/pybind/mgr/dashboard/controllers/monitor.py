@@ -3,17 +3,14 @@ from __future__ import absolute_import
 
 import json
 
-import cherrypy
-
-from . import ApiController, AuthRequired, BaseController
+from . import ApiController, AuthRequired, Endpoint, BaseController
 from .. import mgr
 
 
-@ApiController('monitor')
+@ApiController('/monitor')
 @AuthRequired()
 class Monitor(BaseController):
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     def __call__(self):
         in_quorum, out_quorum = [], []
 
