@@ -29,33 +29,75 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
   const ceph_msg_header& header = m->get_header();
   const ceph_msg_footer& footer = m->get_footer();
 
-  // optimized signature calculation
-  // - avoid temporary allocated buffers from encode_encrypt[_enc_bl]
-  // - skip the leading 4 byte wrapper from encode_encrypt
-  struct {
-    __u8 v;
-    __le64 magic;
-    __le32 len;
-    __le32 header_crc;
-    __le32 front_crc;
-    __le32 middle_crc;
-    __le32 data_crc;
-  } __attribute__ ((packed)) sigblock = {
-    1, mswab(AUTH_ENC_MAGIC), mswab<uint32_t>(4*4),
-    mswab<uint32_t>(header.crc), mswab<uint32_t>(footer.front_crc),
-    mswab<uint32_t>(footer.middle_crc), mswab<uint32_t>(footer.data_crc)
-  };
-  bufferlist bl_plaintext;
-  bl_plaintext.append(buffer::create_static(sizeof(sigblock), (char*)&sigblock));
+  if (!HAVE_FEATURE(features, CEPHX_V2)) {
+    // legacy pre-mimic behavior for compatibility
 
-  bufferlist bl_ciphertext;
-  if (key.encrypt(cct, bl_plaintext, bl_ciphertext, NULL) < 0) {
-    lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
-    return -1;
+    // optimized signature calculation
+    // - avoid temporary allocated buffers from encode_encrypt[_enc_bl]
+    // - skip the leading 4 byte wrapper from encode_encrypt
+    struct {
+      __u8 v;
+      __le64 magic;
+      __le32 len;
+      __le32 header_crc;
+      __le32 front_crc;
+      __le32 middle_crc;
+      __le32 data_crc;
+    } __attribute__ ((packed)) sigblock = {
+      1, mswab(AUTH_ENC_MAGIC), mswab<uint32_t>(4*4),
+      mswab<uint32_t>(header.crc), mswab<uint32_t>(footer.front_crc),
+      mswab<uint32_t>(footer.middle_crc), mswab<uint32_t>(footer.data_crc)
+    };
+
+    bufferlist bl_plaintext;
+    bl_plaintext.append(buffer::create_static(sizeof(sigblock),
+					      (char*)&sigblock));
+
+    bufferlist bl_ciphertext;
+    if (key.encrypt(cct, bl_plaintext, bl_ciphertext, NULL) < 0) {
+      lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
+      return -1;
+    }
+
+    bufferlist::iterator ci = bl_ciphertext.begin();
+    ::decode(*psig, ci);
+  } else {
+    // newer mimic+ signatures
+    struct {
+      __le32 header_crc;
+      __le32 front_crc;
+      __le32 front_len;
+      __le32 middle_crc;
+      __le32 middle_len;
+      __le32 data_crc;
+      __le32 data_len;
+      __le32 seq_lower_word;
+    } __attribute__ ((packed)) sigblock = {
+      mswab<uint32_t>(header.crc),
+      mswab<uint32_t>(footer.front_crc),
+      mswab<uint32_t>(header.front_len),
+      mswab<uint32_t>(footer.middle_crc),
+      mswab<uint32_t>(header.middle_len),
+      mswab<uint32_t>(footer.data_crc),
+      mswab<uint32_t>(header.data_len),
+      mswab<uint32_t>(header.seq)
+    };
+
+    bufferlist bl_plaintext;
+    bl_plaintext.append(buffer::create_static(sizeof(sigblock),
+					      (char*)&sigblock));
+
+    bufferlist bl_ciphertext;
+    if (key.encrypt(cct, bl_plaintext, bl_ciphertext, NULL) < 0) {
+      lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
+      return -1;
+    }
+
+    struct enc {
+      __le64 a, b, c, d;
+    } *penc = reinterpret_cast<enc*>(bl_ciphertext.c_str());
+    *psig = penc->a ^ penc->b ^ penc->c ^ penc->d;
   }
-
-  bufferlist::iterator ci = bl_ciphertext.begin();
-  ::decode(*psig, ci);
 
   ldout(cct, 10) << __func__ << " seq " << m->get_seq()
 		 << " front_crc_ = " << footer.front_crc
