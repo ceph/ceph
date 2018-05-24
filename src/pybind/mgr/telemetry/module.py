@@ -336,7 +336,7 @@ class Module(MgrModule):
         self.event.wait(10)
 
         while self.run:
-            if self.config['enabled']:
+            if not self.config['enabled']:
                 self.log.info('Not sending report until configured to do so')
                 self.event.wait(1800)
                 continue
