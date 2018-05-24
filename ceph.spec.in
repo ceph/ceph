@@ -1564,6 +1564,7 @@ fi
 
 %files -n librgw2
 %{_libdir}/librgw.so.*
+%{_libdir}/librgw_admin_user.so.*
 
 %post -n librgw2 -p /sbin/ldconfig
 
@@ -1572,8 +1573,10 @@ fi
 %files -n librgw-devel
 %dir %{_includedir}/rados
 %{_includedir}/rados/librgw.h
+%{_includedir}/rados/librgw_admin_user.h
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
+%{_libdir}/librgw_admin_user.so
 
 %files -n python-rgw
 %{python_sitearch}/rgw.so
