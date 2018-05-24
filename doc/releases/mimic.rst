@@ -388,6 +388,11 @@ These changes occurred between the Luminous and Mimic releases.
     via a "pass through" method. See http://docs.ceph.com/docs/master/mgr/restful
     for details.
 
+  - New command to track throughput and IOPS statistics, also available in
+    ``ceph -s`` and previously in ``ceph -w``. To use this command, enable
+    the ``iostat`` Manager module and invoke it using ``ceph iostat``. See the
+    :ref:`iostat documentation <mgr-iostat-overview>` for details.
+
 * *build/packaging*
 
   - The ``rcceph`` script (``systemd/ceph`` in the source code tree, shipped as
