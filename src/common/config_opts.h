@@ -1307,6 +1307,7 @@ OPTION(rgw_dns_s3website_name, OPT_STR, "") // hostname suffix on buckets for s3
 OPTION(rgw_content_length_compat, OPT_BOOL, false) // Check both HTTP_CONTENT_LENGTH and CONTENT_LENGTH in fcgi env
 OPTION(rgw_script_uri, OPT_STR, "") // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR,  "") // alternative value for REQUEST_URI if not set in request
+OPTION(rgw_ignore_get_invalid_range, OPT_BOOL, false) // treat invalid (e.g., negative) range requests as full
 OPTION(rgw_swift_url, OPT_STR, "")             // the swift url, being published by the internal swift auth
 OPTION(rgw_swift_url_prefix, OPT_STR, "swift") // entry point for which a url is considered a swift url
 OPTION(rgw_swift_auth_url, OPT_STR, "")        // default URL to go and verify tokens for v1 auth (if not using internal swift auth)
