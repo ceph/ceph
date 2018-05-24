@@ -675,22 +675,19 @@ def test_versioned_object_incremental_sync():
             k = new_key(zone_conn, bucket, obj)
 
             k.set_contents_from_string('version1')
-            v = get_latest_object_version(k)
-            log.debug('version1 id=%s', v.version_id)
+            log.debug('version1 id=%s', k.version_id)
             # don't delete version1 - this tests that the initial version
             # doesn't get squashed into later versions
 
             # create and delete the following object versions to test that
             # the operations don't race with each other during sync
             k.set_contents_from_string('version2')
-            v = get_latest_object_version(k)
-            log.debug('version2 id=%s', v.version_id)
-            k.bucket.delete_key(obj, version_id=v.version_id)
+            log.debug('version2 id=%s', k.version_id)
+            k.bucket.delete_key(obj, version_id=k.version_id)
 
             k.set_contents_from_string('version3')
-            v = get_latest_object_version(k)
-            log.debug('version3 id=%s', v.version_id)
-            k.bucket.delete_key(obj, version_id=v.version_id)
+            log.debug('version3 id=%s', k.version_id)
+            k.bucket.delete_key(obj, version_id=k.version_id)
 
     for _, bucket in zone_bucket:
         zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
