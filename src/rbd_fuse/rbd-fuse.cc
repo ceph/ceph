@@ -234,14 +234,24 @@ clear_in_flight_writes()
 }
 
 // Add a partition to rbd_image_data
-void add_partition(uint32_t partition_num, const char *image_name, rbd_image_t image, uint64_t start_sector, uint64_t num_sectors)
+void add_partition(uint32_t partition_num, const std::string image_name, rbd_image_t image, uint64_t start_sector, uint64_t num_sectors)
 {
     std::string partition_name(image_name);  // The partition file follows the same naming convention as the RBD kernel client
     partition_name += "-part";
     partition_name += std::to_string(partition_num);
     struct rbd_image_data *image_data = get_rbd_image_data(partition_name);
+    std::string image_name_only = image_name;
+    std::string snapshot_name = "";
+    std::string::size_type snapshot_index = image_name.find('@');
+    
+    if (snapshot_index != std::string::npos) {
+        image_name_only = image_name.substr(0, snapshot_index);
+        snapshot_name = image_name.substr(snapshot_index + 1, image_name.length() - snapshot_index - 1);
+    }
+    
     image_data_lock.lock();
-    image_data->image_name = image_name;
+    image_data->image_name = image_name_only;
+    image_data->snapshot_name = snapshot_name;
     image_data->rbd_stat = get_rbd_image_data(image_name)->rbd_stat;
     image_data->sector_size = imagesectorsize;
     image_data->starting_sector = start_sector;
@@ -304,7 +314,7 @@ int get_gpt_partitions(int file_descriptor)
         // Any partition that has a non-empty type GUID gets added as a file
         for (int i = 0; i < num_partitions; i++)
             if (memcmp((void *)&partitions[i].type, (void *)&empty_guid, sizeof(gpt_guid)) != 0)
-                add_partition(i + 1, open_image->name.c_str(), open_image->image, partitions[i].lba_start, partitions[i].lba_end - partitions[i].lba_start + 1);
+                add_partition(i + 1, open_image->name, open_image->image, partitions[i].lba_start, partitions[i].lba_end - partitions[i].lba_start + 1);
     }
     
     return 0;
@@ -348,7 +358,7 @@ int get_mbr_partitions(int file_descriptor)
             if (partitions[i].part_type == 0xee)
                 get_gpt_partitions(file_descriptor);
             else if (partitions[i].part_type != 0)
-                add_partition(i + 1, open_image->name.c_str(), open_image->image, partitions[i].start_sector, partitions[i].num_sectors);
+                add_partition(i + 1, open_image->name, open_image->image, partitions[i].start_sector, partitions[i].num_sectors);
     }
     
     return 0;
@@ -422,7 +432,9 @@ int get_rbd_image(std::string image_name)
 
         do {
             snaps = (rbd_snap_info_t *)malloc(sizeof(*snaps) * max_snaps);
+            open_images_lock.lock();
             snap_count = rbd_snap_list(open_image->image, snaps, &max_snaps);
+            open_images_lock.unlock();
             if (snap_count < 0)
                 free(snaps);
         } while (snap_count == -ERANGE);
@@ -512,7 +524,15 @@ open_rbd_image(const char *image_name)
     struct rbd_openimage *open_image = get_open_image(file_descriptor);
     open_images_lock.lock();
     open_image->name = image_name;
-    int ret = rbd_open(ioctx, get_rbd_image_data(image_name)->image_name.c_str(), &open_image->image, NULL);
+    struct rbd_image_data *image_data = get_rbd_image_data(image_name);
+    int ret = 0;
+    if (image_data->snapshot_name.empty())
+        ret = rbd_open(ioctx, image_data->image_name.c_str(), &open_image->image, NULL);
+    else
+        ret = rbd_open_read_only(ioctx,
+                                 image_data->image_name.c_str(),
+                                 &open_image->image,
+                                 image_data->snapshot_name.c_str());
     open_images_lock.unlock();
     if (ret < 0) {
         return ret;
