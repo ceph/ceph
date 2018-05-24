@@ -891,6 +891,23 @@ def verify_not_in_use(dev, check_partitions=False):
                             'mapping (dm-crypt?)'
                             % partition, ','.join(holders))
 
+def verify_partition_not_in_use(partition, check_partition=False):
+    """
+    Verify if a given partition is in use (e.g. mounted or
+    in use by device-mapper).
+
+    :raises: Error if partition is in use.
+    """
+    if not os.path.exists(partition):
+        return
+    if is_mounted(partition):
+        raise Error('Partition is mounted', partition)
+    holders = is_held(partition)
+    if holders:
+        raise Error('Partition %s is in use by a device-mapper '
+                    'mapping (dm-crypt?)'
+                    % partition, ','.join(holders))
+
 
 def must_be_one_line(line):
     """
@@ -1645,15 +1662,15 @@ class Device(object):
                 return PTYPE['regular']['lockbox']['tobe']
         if self.ptype_map is None:
             partition = DevicePartition.factory(
-                path=self.path, dev=None, args=self.args)
+                path=self.path, dev=None, name=name, args=self.args)
             self.ptype_map = partition.ptype_map
         return self.ptype_map[name]['tobe']
 
-    def get_partition(self, num):
+    def get_partition(self, num, name):
         if num not in self.partitions:
             dev = get_partition_dev(self.path, num)
             partition = DevicePartition.factory(
-                path=self.path, dev=dev, args=self.args)
+                path=self.path, dev=dev, name=name, args=self.args)
             partition.set_partition_number(num)
             self.partitions[num] = partition
         return self.partitions[num]
@@ -1714,15 +1731,15 @@ class DevicePartition(object):
 
     @staticmethod
     @retry(OSError)
-    def factory(path, dev, args):
-        dmcrypt_type = CryptHelpers.get_dmcrypt_type(args)
+    def factory(path, dev, name, args):
+        dmcrypt_type = CryptHelpers.get_dmcrypt_type(name, args)
         if ((path is not None and is_mpath(path)) or
                 (dev is not None and is_mpath(dev))):
             partition = DevicePartitionMultipath(args)
         elif dmcrypt_type == 'luks':
-            partition = DevicePartitionCryptLuks(args)
+            partition = DevicePartitionCryptLuks(name, args)
         elif dmcrypt_type == 'plain':
-            partition = DevicePartitionCryptPlain(args)
+            partition = DevicePartitionCryptPlain(name, args)
         else:
             partition = DevicePartition(args)
         partition.set_dev(dev)
@@ -1737,13 +1754,13 @@ class DevicePartitionMultipath(DevicePartition):
 
 class DevicePartitionCrypt(DevicePartition):
 
-    def __init__(self, args):
+    def __init__(self, name, args):
         super(DevicePartitionCrypt, self).__init__(args)
         self.osd_dm_key = None
         self.cryptsetup_parameters = CryptHelpers.get_cryptsetup_parameters(
             self.args)
-        self.dmcrypt_type = CryptHelpers.get_dmcrypt_type(self.args)
-        self.dmcrypt_keysize = CryptHelpers.get_dmcrypt_keysize(self.args)
+        self.dmcrypt_type = CryptHelpers.get_dmcrypt_type(name, self.args)
+        self.dmcrypt_keysize = CryptHelpers.get_dmcrypt_keysize(name, self.args)
 
     def setup_crypt(self):
         pass
@@ -1841,6 +1858,16 @@ class Prepare(object):
             help='encrypt DATA and/or JOURNAL devices with dm-crypt',
         )
         parser.add_argument(
+            '--journal-non-dmcrypt',
+            action='store_true', default=None,
+            help='do not dmcrypt JOURNAL devices',
+        )
+        parser.add_argument(
+            '--journal-dmcrypt',
+            action='store_true', default=None,
+            help='dmcrypt JOURNAL devices',
+        )
+        parser.add_argument(
             '--dmcrypt-key-dir',
             metavar='KEYDIR',
             default='/etc/ceph/dmcrypt-keys',
@@ -1852,6 +1879,31 @@ class Prepare(object):
             help='bootstrap-osd keyring path template (%(default)s)',
             default='{statedir}/bootstrap-osd/{cluster}.keyring',
             dest='prepare_key_template',
+        )
+        parser.add_argument(
+            '--lockbox-partition-number',
+            default=None,
+            help='partition number on lockbox/data device',
+        )
+        parser.add_argument(
+            '--journal-partition-number',
+            default=None,
+            help='partition number on journal device',
+        )
+        parser.add_argument(
+            '--data-partition-number',
+            default=None,
+            help='partition number on data device',
+        )
+        parser.add_argument(
+            '--data-partition-size',
+            default=None,
+            help='partition size in MB on data device used for Filestore. Bluestore defaults to 100MB',
+        )
+        parser.add_argument(
+            '--block-partition-number',
+            default=None,
+            help='partition number on block device',
         )
         return parser
 
@@ -1893,8 +1945,11 @@ class Prepare(object):
 class PrepareFilestore(Prepare):
 
     def __init__(self, args):
-        if args.dmcrypt:
+        if args.dmcrypt or args.journal_dmcrypt:
+            self.dmcrypt = True
             self.lockbox = Lockbox(args)
+        else:
+            self.dmcrypt = False
         self.data = PrepareFilestoreData(args)
         self.journal = PrepareJournal(args)
 
@@ -1905,7 +1960,7 @@ class PrepareFilestore(Prepare):
         ]
 
     def prepare_locked(self):
-        if self.data.args.dmcrypt:
+        if self.data.args.dmcrypt or self.dmcrypt:
             self.lockbox.prepare()
         self.data.prepare(self.journal)
 
@@ -2146,7 +2201,12 @@ class PrepareSpace(object):
         self.space_symlink = '/dev/disk/by-partuuid/{uuid}'.format(
             uuid=getattr(self.args, self.name + '_uuid'))
 
-        if self.args.dmcrypt:
+        if 'journal' in self.name and self.args.journal_non_dmcrypt:
+            LOG.info('not encrypting journal')
+        elif (
+                ('journal' in self.name and self.args.journal_dmcrypt and self.args.dmcrypt is None) or
+                (self.args.dmcrypt)
+            ):
             self.space_dmcrypt = self.space_symlink
             self.space_symlink = '/dev/mapper/{uuid}'.format(
                 uuid=getattr(self.args, self.name + '_uuid'))
@@ -2172,7 +2232,7 @@ class PrepareSpace(object):
             size=self.space_size,
             num=num)
 
-        partition = device.get_partition(num)
+        partition = device.get_partition(num, self.name)
 
         LOG.debug('%s is GPT partition %s',
                   self.name.capitalize(),
@@ -2222,7 +2282,9 @@ class PrepareJournal(PrepareSpace):
         ))
 
     def desired_partition_number(self):
-        if self.args.journal == self.args.data:
+        if self.args.journal_partition_number is not None:
+            num = int(self.args.journal_partition_number)
+        elif self.args.journal == self.args.data:
             # we're sharing the disk between osd data and journal;
             # make journal be partition number 2
             num = 2
@@ -2242,10 +2304,15 @@ class PrepareBluestoreBlock(PrepareSpace):
         super(PrepareBluestoreBlock, self).__init__(args)
 
     def get_space_size(self):
-        return 0  # get as much space as possible
+        if self.args.block_db_partition_size is not None:
+            return int(self.args.block_db_partition_size)
+        else:
+            return 0  # get as much space as possible
 
     def desired_partition_number(self):
-        if self.args.block == self.args.data:
+        if self.args.block_partition_number is not None:
+            num = int(self.args.block_partition_number)
+        elif self.args.block == self.args.data:
             num = 2
         else:
             num = 0
@@ -2270,12 +2337,12 @@ class CryptHelpers(object):
             return shlex.split(cryptsetup_parameters_str)
 
     @staticmethod
-    def get_dmcrypt_keysize(args):
+    def get_dmcrypt_keysize(name, args):
         dmcrypt_keysize_str = get_conf(
             cluster=args.cluster,
             variable='osd_dmcrypt_key_size',
         )
-        dmcrypt_type = CryptHelpers.get_dmcrypt_type(args)
+        dmcrypt_type = CryptHelpers.get_dmcrypt_type(name, args)
         if dmcrypt_type == 'luks':
             if dmcrypt_keysize_str is None:
                 # As LUKS will hash the 'passphrase' in .luks.key
@@ -2300,8 +2367,14 @@ class CryptHelpers(object):
             return 0
 
     @staticmethod
-    def get_dmcrypt_type(args):
-        if hasattr(args, 'dmcrypt') and args.dmcrypt:
+    def get_dmcrypt_type(name, args):
+        if 'journal' in str(name) and hasattr(args, 'dmcrypt') and args.dmcrypt and hasattr(args, 'journal_non_dmcrypt') and args.journal_non_dmcrypt:
+            return None
+        elif (
+                (hasattr(args, 'dmcrypt') and args.dmcrypt) or
+                ('journal' in str(name) and hasattr(args, 'journal_dmcrypt') and args.journal_dmcrypt) or 
+                ('lockbox' in str(name) and hasattr(args, 'journal_dmcrypt') and args.journal_dmcrypt)
+            ):
             dmcrypt_type = get_conf(
                 cluster=args.cluster,
                 variable='osd_dmcrypt_type',
@@ -2324,6 +2397,7 @@ class Lockbox(object):
         self.args = args
         self.partition = None
         self.device = None
+        self.name = 'lockbox'
 
         if hasattr(self.args, 'lockbox') and self.args.lockbox is None:
             self.args.lockbox = self.args.data
@@ -2347,12 +2421,15 @@ class Lockbox(object):
 
     def create_partition(self):
         self.device = Device.factory(self.args.lockbox, argparse.Namespace())
-        partition_number = 3
+        if self.args.lockbox_partition_number is not None:
+            partition_number = int(self.args.lockbox_partition_number)
+        else:
+            partition_number = 3
         self.device.create_partition(uuid=self.args.lockbox_uuid,
                                      name='lockbox',
                                      num=partition_number,
                                      size=10)  # MB
-        return self.device.get_partition(partition_number)
+        return self.device.get_partition(partition_number, 'lockbox')
 
     def set_or_create_partition(self):
         if is_partition(self.args.lockbox):
@@ -2371,7 +2448,7 @@ class Lockbox(object):
             self.partition = self.create_partition()
 
     def create_key(self):
-        key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
+        key_size = CryptHelpers.get_dmcrypt_keysize(self.name, self.args)
         key = open('/dev/urandom', 'rb').read(key_size / 8)
         base64_key = base64.b64encode(key)
         cluster = self.args.cluster
@@ -2487,7 +2564,11 @@ class Lockbox(object):
                 command_check_call(args)
 
     def prepare(self):
-        verify_not_in_use(self.args.lockbox, check_partitions=True)
+        if self.args.lockbox_partition_number is not None:
+            partition_number = self.args.lockbox_partition_number
+        else:
+            partition_number = 3
+        verify_partition_not_in_use(self.args.lockbox + str(partition_number), check_partition=True)
         self.set_or_create_partition()
         self.populate()
 
@@ -2599,8 +2680,11 @@ class PrepareData(object):
         if not os.path.exists(self.args.data):
             raise Error('data path for device does not exist',
                         self.args.data)
-        verify_not_in_use(self.args.data,
-                          check_partitions=not self.args.dmcrypt)
+        if self.args.data_partition_number is not None:
+            partition_number = self.args.data_partition_number
+        else:
+            partition_number = 1
+        verify_partition_not_in_use(self.args.data + str(partition_number), check_partition=True)
 
     def set_variables(self):
         if self.args.fs_type is None:
@@ -2644,12 +2728,19 @@ class PrepareData(object):
 
     def create_data_partition(self):
         device = Device.factory(self.args.data, self.args)
-        partition_number = 1
+        if self.args.data_partition_number is not None:
+            partition_number = int(self.args.data_partition_number)
+        else:
+            partition_number = 1
+        if self.args.data_partition_size is not None:
+            partition_size = int(self.args.data_partition_size)
+        else:
+            partition_size = self.get_space_size()
         device.create_partition(uuid=self.args.osd_uuid,
                                 name='data',
                                 num=partition_number,
-                                size=self.get_space_size())
-        return device.get_partition(partition_number)
+                                size=partition_size)
+        return device.get_partition(partition_number, 'data')
 
     def set_data_partition(self):
         if is_partition(self.args.data):
@@ -3481,7 +3572,7 @@ def main_activate_lockbox(args):
 
 def main_activate_lockbox_protected(args):
     partition = DevicePartition.factory(
-        path=None, dev=args.path, args=args)
+        path=None, dev=args.path, name='lockbox', args=args)
 
     lockbox = Lockbox(args)
     lockbox.set_partition(partition)
