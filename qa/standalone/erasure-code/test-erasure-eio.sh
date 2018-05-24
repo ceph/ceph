@@ -353,6 +353,37 @@ function TEST_rados_get_with_subreadall_eio_shard_1() {
     delete_erasure_coded_pool $poolname
 }
 
+# Test recovery the object attr read error
+function TEST_ec_object_attr_read_error() {
+    local dir=$1
+    local objname=myobject
+
+    setup_osds 7 || return 1
+
+    local poolname=pool-jerasure
+    create_erasure_coded_pool $poolname 3 2 || return 1
+
+    local primary_osd=$(get_primary $poolname $objname)
+    # Kill primary OSD
+    kill_daemons $dir TERM osd.${primary_osd} >&2 < /dev/null || return 1
+
+    # Write data
+    rados_put $dir $poolname $objname || return 1
+
+    # Inject eio, shard 1 is the one read attr
+    inject_eio ec mdata $poolname $objname $dir 1 || return 1
+
+    # Restart OSD
+    run_osd $dir ${primary_osd} || return 1
+
+    # Cluster should recover this object
+    wait_for_clean || return 1
+
+    rados_get $dir $poolname myobject || return 1
+
+    delete_erasure_coded_pool $poolname
+}
+
 # Test recovery the first k copies aren't all available
 function TEST_ec_single_recovery_error() {
     local dir=$1

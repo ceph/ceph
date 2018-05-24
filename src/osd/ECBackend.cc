@@ -1059,6 +1059,8 @@ error:
 	*i, ghobject_t::NO_GEN, shard),
       reply->attrs_read[*i]);
     if (r < 0) {
+      // If we read error, we should not return the attrs too.
+      reply->attrs_read.erase(*i);
       reply->buffers_read.erase(*i);
       reply->errors[*i] = r;
     }
@@ -2342,13 +2344,21 @@ int ECBackend::send_all_remaining_reads(
   GenContext<pair<RecoveryMessages *, read_result_t& > &> *c =
     rop.to_read.find(hoid)->second.cb;
 
+  // (Note cuixf) If we need to read attrs and we read failed, try to read again.
+  bool want_attrs =
+    rop.to_read.find(hoid)->second.want_attrs &&
+    (!rop.complete[hoid].attrs || rop.complete[hoid].attrs->empty());
+  if (want_attrs) {
+    dout(10) << __func__ << " want attrs again" << dendl;
+  }
+
   rop.to_read.erase(hoid);
   rop.to_read.insert(make_pair(
       hoid,
       read_request_t(
 	offsets,
 	shards,
-	false,
+	want_attrs,
 	c)));
   do_read_op(rop);
   return 0;
