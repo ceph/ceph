@@ -403,7 +403,22 @@ int main(int argc, char **argv)
 	   << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
-    label.meta[key] = value;
+    if (key == "size") {
+      label.size = strtoull(value.c_str(), nullptr, 10);
+    } else if (key =="osd_uuid") {
+      label.osd_uuid.parse(value.c_str());
+    } else if (key =="btime") {
+      uint64_t epoch;
+      uint64_t nsec;
+      int r = utime_t::parse_date(value.c_str(), &epoch, &nsec);
+      if (r == 0) {
+	label.btime = utime_t(epoch, nsec);
+      }
+    } else if (key =="description") {
+      label.description = value;
+    } else {
+      label.meta[key] = value;
+    }
     r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
     if (r < 0) {
       cerr << "unable to write label for " << devs.front() << ": "
