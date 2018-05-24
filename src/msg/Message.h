@@ -194,6 +194,7 @@
 #define MSG_NOP                   0x607
 
 #define MSG_MON_HEALTH_CHECKS     0x608
+#define MSG_TIMECHECK2            0x609
 
 // *** ceph-mgr <-> OSD/MDS daemons ***
 #define MSG_MGR_OPEN              0x700
