@@ -109,10 +109,8 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   }
 
   map<string,entity_addr_t> legacy_mon_addr;
-  for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
-       p != mon_info.end();
-       ++p) {
-    legacy_mon_addr[p->first] = p->second.public_addr;
+  for (auto& [name, info] : mon_info) {
+    legacy_mon_addr[name] = info.public_addr;
   }
 
   if ((con_features & CEPH_FEATURE_MONENC) == 0) {
@@ -187,10 +185,10 @@ void MonMap::decode(bufferlist::const_iterator& p)
   }
   if (struct_v < 5) {
     // generate mon_info from legacy mon_addr
-    for (auto& p : mon_addr) {
-      mon_info_t &m = mon_info[p.first];
-      m.name = p.first;
-      m.public_addr = p.second;
+    for (auto& [name, addr] : mon_addr) {
+      mon_info_t &m = mon_info[name];
+      m.name = name;
+      m.public_addr = addr;
     }
   } else {
     decode(mon_info, p);
