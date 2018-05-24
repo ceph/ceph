@@ -111,7 +111,7 @@ def _sort_features(features, enable=True):
     features.sort(key=key_func, reverse=not enable)
 
 
-@ApiController('block/image')
+@ApiController('/block/image')
 @AuthRequired()
 class Rbd(RESTController):
 
@@ -333,7 +333,7 @@ class Rbd(RESTController):
               'src_image_name': '{image_name}',
               'dest_pool_name': '{dest_pool_name}',
               'dest_image_name': '{dest_image_name}'}, 2.0)
-    @RESTController.resource(['POST'])
+    @RESTController.Resource('POST')
     def copy(self, pool_name, image_name, dest_pool_name, dest_image_name,
              snapshot_name=None, obj_size=None, features=None, stripe_unit=None,
              stripe_count=None, data_pool=None):
@@ -359,7 +359,7 @@ class Rbd(RESTController):
         return _rbd_image_call(pool_name, image_name, _src_copy)
 
     @RbdTask('flatten', ['{pool_name}', '{image_name}'], 2.0)
-    @RESTController.resource(['POST'])
+    @RESTController.Resource('POST')
     def flatten(self, pool_name, image_name):
 
         def _flatten(ioctx, image):
@@ -367,13 +367,13 @@ class Rbd(RESTController):
 
         return _rbd_image_call(pool_name, image_name, _flatten)
 
-    @RESTController.collection(['GET'])
+    @RESTController.Collection('GET')
     def default_features(self):
         rbd_default_features = mgr.get('config')['rbd_default_features']
         return _format_bitmask(int(rbd_default_features))
 
 
-@ApiController('block/image/:pool_name/:image_name/snap')
+@ApiController('/block/image/:pool_name/:image_name/snap')
 @AuthRequired()
 class RbdSnapshot(RESTController):
 
@@ -416,7 +416,7 @@ class RbdSnapshot(RESTController):
 
     @RbdTask('snap/rollback',
              ['{pool_name}', '{image_name}', '{snapshot_name}'], 5.0)
-    @RESTController.resource(['POST'])
+    @RESTController.Resource('POST')
     def rollback(self, pool_name, image_name, snapshot_name):
         def _rollback(ioctx, img, snapshot_name):
             img.rollback_to_snap(snapshot_name)
@@ -428,7 +428,7 @@ class RbdSnapshot(RESTController):
               'parent_snap_name': '{snapshot_name}',
               'child_pool_name': '{child_pool_name}',
               'child_image_name': '{child_image_name}'}, 2.0)
-    @RESTController.resource(['POST'])
+    @RESTController.Resource('POST')
     def clone(self, pool_name, image_name, snapshot_name, child_pool_name,
               child_image_name, obj_size=None, features=None,
               stripe_unit=None, stripe_count=None, data_pool=None):

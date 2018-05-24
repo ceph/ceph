@@ -29,12 +29,12 @@ class TaskTest(RESTController):
         time.sleep(TaskTest.sleep_time)
 
     @Task('task/foo', ['{param}'])
-    @RESTController.collection(['POST'])
+    @RESTController.Collection('POST')
     def foo(self, param):
         return {'my_param': param}
 
     @Task('task/bar', ['{key}', '{param}'])
-    @RESTController.resource(['PUT'])
+    @RESTController.Resource('PUT')
     def bar(self, key, param=None):
         return {'my_param': param, 'key': key}
 

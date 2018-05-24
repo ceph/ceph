@@ -8,7 +8,7 @@ from ..services.ceph_service import CephService
 SERVICE_TYPE = 'tcmu-runner'
 
 
-@ApiController('tcmuiscsi')
+@ApiController('/tcmuiscsi')
 @AuthRequired()
 class TcmuIscsi(RESTController):
     # pylint: disable=too-many-nested-blocks

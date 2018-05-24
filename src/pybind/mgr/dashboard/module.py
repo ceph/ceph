@@ -292,7 +292,7 @@ class Module(MgrModule, SSLCherryPyConfig):
             }
         }
         for purl in parent_urls:
-            config['{}/{}'.format(self.url_prefix, purl)] = {
+            config[purl] = {
                 'request.dispatch': mapper
             }
         cherrypy.tree.mount(None, config=config)

@@ -7,7 +7,7 @@ from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
 
 
-@ApiController('osd')
+@ApiController('/osd')
 @AuthRequired()
 class Osd(RESTController):
     def list(self):
