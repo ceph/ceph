@@ -602,6 +602,7 @@ void ObjectCacher::Object::discard(loff_t off, loff_t len,
     if (bh->is_tx() && commit_gather != nullptr) {
       // wait for the writeback to commit
       waitfor_commit[bh->last_write_tid].emplace_back(commit_gather->new_sub());
+      be_discarded = true;
     } else if (bh->is_rx()) {
       // cannot remove bh with in-flight read, but we can ensure the
       // read won't overwrite the discard
@@ -1230,7 +1231,15 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
   if (flush_set_callback &&
       was_dirty_or_tx > 0 &&
       oset->dirty_or_tx == 0) {        // nothing dirty/tx
-    flush_set_callback(flush_set_callback_arg, oset);
+
+    /* if we did discard the obect before, 
+    /* just skip flush_set_callback because 
+    /* _discard_finish will call it
+    */
+    if (ob->be_discarded)
+      ob->be_discarded = false;
+    else
+      flush_set_callback(flush_set_callback_arg, oset);
   }
 
   if (!ls.empty())
