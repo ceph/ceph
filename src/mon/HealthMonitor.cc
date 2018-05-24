@@ -285,8 +285,7 @@ bool HealthMonitor::check_member_health()
     changed = true;
   } else {
     // tell the leader
-    mon->messenger->send_message(new MMonHealthChecks(next),
-                                 mon->monmap->get_inst(mon->get_leader()));
+    mon->send_mon_message(new MMonHealthChecks(next), mon->get_leader());
   }
 
   return changed;
@@ -348,8 +347,7 @@ bool HealthMonitor::check_leader_health()
       if (tcstatus != HEALTH_OK) {
 	warns.push_back(name);
 	ostringstream tmp_ss;
-	tmp_ss << "mon." << name
-	       << " " << tcss.str()
+	tmp_ss << "mon." << name << " " << tcss.str()
 	       << " (latency " << latency << "s)";
 	details.push_back(tmp_ss.str());
       }

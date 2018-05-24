@@ -1051,8 +1051,9 @@ void Monitor::bootstrap()
   dout(10) << "probing other monitors" << dendl;
   for (unsigned i = 0; i < monmap->size(); i++) {
     if ((int)i != rank)
-      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
-			      monmap->get_inst(i));
+      send_mon_message(
+	new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
+	i);
   }
   for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
        p != extra_probe_peers.end();
@@ -1061,7 +1062,9 @@ void Monitor::bootstrap()
       entity_inst_t i;
       i.name = entity_name_t::MON(-1);
       i.addr = *p;
-      messenger->send_message(new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined), i);
+      messenger->send_message(
+	new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
+	i);
     }
   }
 }
@@ -1865,8 +1868,9 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       start_election();
     } else {
       dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
-      messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
-                              monmap->get_inst(*m->quorum.begin()));
+      send_mon_message(
+	new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+	*m->quorum.begin());
     }
   } else {
     if (monmap->contains(m->name)) {
@@ -2110,8 +2114,9 @@ void Monitor::finish_election()
   string cur_name = monmap->get_name(messenger->get_myaddr());
   if (cur_name != name) {
     dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
-    messenger->send_message(new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
-			    monmap->get_inst(*quorum.begin()));
+    send_mon_message(
+      new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+      *quorum.begin());
   }
 }
 
@@ -3674,7 +3679,7 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
     } else if (req->get_source().is_mon()) {
       forward->entity_name.set_type(CEPH_ENTITY_TYPE_MON);
     }
-    messenger->send_message(forward, monmap->get_inst(mon));
+    send_mon_message(forward, mon);
     op->mark_forwarded();
     assert(op->get_req()->get_type() != 0);
   } else {
@@ -3775,7 +3780,7 @@ void Monitor::try_send_message(Message *m, const entity_inst_t& to)
 
   for (int i=0; i<(int)monmap->size(); i++) {
     if (i != rank)
-      messenger->send_message(new MRoute(bl, to), monmap->get_inst(i));
+      send_mon_message(new MRoute(bl, to), i);
   }
 }
 
@@ -3913,7 +3918,7 @@ void Monitor::resend_routed_requests()
       req->put();  // forward takes its own ref; drop ours.
       forward->client = rr->client_inst;
       forward->set_priority(req->get_priority());
-      messenger->send_message(forward, monmap->get_inst(mon));
+      send_mon_message(forward, mon);
     }
   }
   if (mon == rank) {
@@ -3963,6 +3968,11 @@ void Monitor::send_command(const entity_inst_t& inst,
   MMonCommand *c = new MMonCommand(monmap->fsid);
   c->cmd = com;
   try_send_message(c, inst);
+}
+
+void Monitor::send_mon_message(Message *m, int rank)
+{
+  messenger->send_message(m, monmap->get_inst(rank));
 }
 
 void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
@@ -4345,7 +4355,6 @@ void Monitor::handle_ping(MonOpRequestRef op)
   MPing *m = static_cast<MPing*>(op->get_req());
   dout(10) << __func__ << " " << *m << dendl;
   MPing *reply = new MPing;
-  entity_inst_t inst = m->get_source_inst();
   bufferlist payload;
   boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
@@ -4362,7 +4371,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   encode(ss.str(), payload);
   reply->set_payload(payload);
   dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
-  messenger->send_message(reply, inst);
+  m->get_connection()->send_message(reply);
 }
 
 void Monitor::timecheck_start()
@@ -4562,8 +4571,7 @@ void Monitor::timecheck_report()
     }
     do_output = false;
     dout(10) << __func__ << " send report to mon." << *q << dendl;
-    entity_inst_t inst = monmap->get_inst(*q);
-    messenger->send_message(m, inst);
+    send_mon_message(m, *q);
   }
 }
 
@@ -4590,14 +4598,13 @@ void Monitor::timecheck()
     if (monmap->get_name(*it) == name)
       continue;
 
-    entity_inst_t inst = monmap->get_inst(*it);
     utime_t curr_time = ceph_clock_now();
     timecheck_waiting[*it] = curr_time;
     MTimeCheck2 *m = new MTimeCheck2(MTimeCheck2::OP_PING);
     m->epoch = get_epoch();
     m->round = timecheck_round;
     dout(10) << __func__ << " send " << *m << " to mon." << *it << dendl;
-    messenger->send_message(m, inst);
+    send_mon_message(m, *it);
   }
 }
 
@@ -5118,7 +5125,7 @@ int Monitor::scrub()
     MMonScrub *r = new MMonScrub(MMonScrub::OP_SCRUB, scrub_version,
                                  num_keys);
     r->key = scrub_state->last_key;
-    messenger->send_message(r, monmap->get_inst(*p));
+    send_mon_message(r, *p);
   }
 
   // scrub my keys
