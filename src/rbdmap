@@ -61,6 +61,15 @@ unmount_unmap() {
 	local mnts=$(findmnt --mtab --source ${rbd_dev} --noheadings \
 							| awk '{print $1'})
 
+        DEV_NUM=`echo $rbd_dev | sed 's/\/dev\/rbd//'`
+        FSID=`cat /sys/bus/rbd/devices/$DEV_NUM/cluster_fsid`
+        CLI_ID=`cat /sys/bus/rbd/devices/$DEV_NUM/client_id`
+
+        TIMEOUTPATH="/sys/kernel/debug/ceph/${FSID}.${CLI_ID}/osd_request_timeout"
+        if [ -f "$TIMEOUTPATH" ]; then
+            echo ${RBDREQTIMEOUT} > $TIMEOUTPATH
+        fi
+
 	logger -p "daemon.debug" -t rbdmap "Unmapping '${rbd_dev}'"
 	for mnt in ${mnts}; do
 	    logger -p "daemon.debug" -t rbdmap "Unmounting '${mnt}'"
@@ -143,6 +152,7 @@ do_unmap() {
 
 # default to reasonable value if RBDMAPFILE not set in environment
 RBDMAPFILE="${RBDMAPFILE:-/etc/ceph/rbdmap}"
+RBDREQTIMEOUT="${RBDREQTIMEOUT:-60}"
 
 if [ ! -f "$RBDMAPFILE" ]; then
 	logger -p "daemon.warning" -t rbdmap "No $RBDMAPFILE found."
