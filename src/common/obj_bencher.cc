@@ -606,7 +606,7 @@ int ObjBencher::write_bench(int secondsToRun,
     formatter->dump_format("min_iops", "%d", data.idata.min_iops);
     formatter->dump_format("average_latency", "%f", data.avg_latency);
     formatter->dump_format("stddev_latency", "%f", latency_stddev);
-    formatter->dump_format("max_latency:", "%f", data.max_latency);
+    formatter->dump_format("max_latency", "%f", data.max_latency);
     formatter->dump_format("min_latency", "%f", data.min_latency);
   }
   //write object size/number data for read benchmarks
