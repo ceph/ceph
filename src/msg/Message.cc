@@ -182,6 +182,7 @@
 
 #include "messages/MWatchNotify.h"
 #include "messages/MTimeCheck.h"
+#include "messages/MTimeCheck2.h"
 
 #include "common/config.h"
 
@@ -808,6 +809,9 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   case MSG_TIMECHECK:
     m = new MTimeCheck();
+    break;
+  case MSG_TIMECHECK2:
+    m = new MTimeCheck2();
     break;
 
   case MSG_MON_HEALTH:

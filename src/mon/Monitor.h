@@ -107,7 +107,7 @@ class MMonProbe;
 struct MMonSubscribe;
 struct MRoute;
 struct MForward;
-struct MTimeCheck;
+struct MTimeCheck2;
 struct MMonHealth;
 
 #define COMPAT_SET_LOC "feature_set"
@@ -485,9 +485,9 @@ private:
    *  - Once all the quorum members have pong'ed, the leader will share the
    *    clock skew and latency maps with all the monitors in the quorum.
    */
-  map<entity_inst_t, utime_t> timecheck_waiting;
-  map<entity_inst_t, double> timecheck_skews;
-  map<entity_inst_t, double> timecheck_latencies;
+  map<int, utime_t> timecheck_waiting;
+  map<int, double> timecheck_skews;
+  map<int, double> timecheck_latencies;
   // odd value means we are mid-round; even value means the round has
   // finished.
   version_t timecheck_round;

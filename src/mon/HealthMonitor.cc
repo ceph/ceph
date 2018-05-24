@@ -339,19 +339,17 @@ bool HealthMonitor::check_leader_health()
   if (!mon->timecheck_skews.empty()) {
     list<string> warns;
     list<string> details;
-    for (map<entity_inst_t,double>::iterator i = mon->timecheck_skews.begin();
-	 i != mon->timecheck_skews.end(); ++i) {
-      entity_inst_t inst = i->first;
-      double skew = i->second;
-      double latency = mon->timecheck_latencies[inst];
-      string name = mon->monmap->get_name(inst.addr);
+    for (auto& i : mon->timecheck_skews) {
+      double skew = i.second;
+      double latency = mon->timecheck_latencies[i.first];
+      string name = mon->monmap->get_name(i.first);
       ostringstream tcss;
       health_status_t tcstatus = mon->timecheck_status(tcss, skew, latency);
       if (tcstatus != HEALTH_OK) {
 	warns.push_back(name);
 	ostringstream tmp_ss;
 	tmp_ss << "mon." << name
-	       << " addr " << inst.addr << " " << tcss.str()
+	       << " " << tcss.str()
 	       << " (latency " << latency << "s)";
 	details.push_back(tmp_ss.str());
       }
