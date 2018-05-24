@@ -25,7 +25,7 @@ tasks:
     - \(OSDMAP_FLAGS\)
     - \(OSD_
     - \(PG_
-    - \(SMALLER_PG_NUM\)
+    - \(SMALLER_PGP_NUM\)
     - \(CACHE_POOL_NO_HIT_SET\)
     - \(CACHE_POOL_NEAR_FULL\)
     - \(FS_WITH_FAILED_MDS\)
