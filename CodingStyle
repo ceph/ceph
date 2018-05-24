@@ -32,8 +32,9 @@ by section.
       Yes, _t also means typedef.  It's perhaps not ideal.
 
         struct my_type_t {
-          int a, b;
-          my_type_t() : a(0), b(0) {}
+          int a = 0, b = 0;
+	  void encode(...) ...
+	  ...
         };
 
     - for full-blown classes, CamelCaps, private: section, accessors,
