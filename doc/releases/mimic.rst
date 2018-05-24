@@ -139,6 +139,10 @@ Instructions
 
         # systemctl restart ceph-mds.target
 
+   #. Restart all standby MDS daemons that were taken offline::
+
+	# systemctl start ceph-mds.target
+
    #. Restore the original value of ``max_mds`` for the volume::
 
 	# ceph fs set <fs_name> max_mds <original_max_mds>
@@ -265,10 +269,13 @@ These changes occurred between the Luminous and Mimic releases.
     (even as standby). Operators may ignore the error messages and continue
     upgrading/restarting or follow this upgrade sequence:
 
-    Reduce the number of ranks to 1 (`ceph fs set <fs_name> max_mds 1`),
-    deactivate all other ranks (`ceph mds deactivate <fs_name>:<n>`), shutdown
-    standbys leaving the one active MDS, upgrade the single active MDS, then
-    upgrade/start standbys. Finally, restore the previous max_mds.
+    After upgrading the monitors to Mimic, reduce the number of ranks to 1
+    (`ceph fs set <fs_name> max_mds 1`), wait for all other MDS to deactivate,
+    leaving the one active MDS, stop all standbys, upgrade the single active
+    MDS, then upgrade/start standbys. Finally, restore the previous max_mds.
+
+    !! NOTE: see release notes on snapshots in CephFS if you have ever enabled
+    snapshots on your file system.
 
     See also: https://tracker.ceph.com/issues/23172
 
@@ -317,7 +324,7 @@ These changes occurred between the Luminous and Mimic releases.
     obsolete.
 
   - Each mds rank now maintains a table that tracks open files and their
-    ancestor directories. Recovering MDS can quickly get open files' pathes,
+    ancestor directories. Recovering MDS can quickly get open files' paths,
     significantly reducing the time of loading inodes for open files. MDS
     creates the table automatically if it does not exist.
 
@@ -331,7 +338,7 @@ These changes occurred between the Luminous and Mimic releases.
     To guarantee all snapshot metadata on existing filesystems get updated,
     perform the sequence of upgrading the MDS cluster strictly.
 
-    See http://docs.ceph.com/docs/master/cephfs/upgrading/
+    See http://docs.ceph.com/docs/mimic/cephfs/upgrading/
 
     For filesystems that have ever enabled snapshots, the multiple-active MDS
     feature is disabled by the mimic monitor daemon. This will cause the "restore
@@ -340,6 +347,30 @@ These changes occurred between the Luminous and Mimic releases.
 
       - ``ceph daemon <mds of rank 0> scrub_path /``
       - ``ceph daemon <mds of rank 0> scrub_path '~mdsdir'``
+
+  - Support has been added in Mimic for quotas in the Linux kernel client as of v4.17.
+
+    See http://docs.ceph.com/docs/mimic/cephfs/quota/
+
+  - Many fixes have been made to the MDS metadata balancer which distributes
+    load across MDS. It is expected that the automatic balancing should work
+    well for most use-cases. In Luminous, subtree pinning was advised as a
+    manual workaround for poor balancer behavior. This may no longer be
+    necessary so it is recommended to try experimentally disabling pinning as a
+    form of load balancing to see if the built-in balancer adequately works for
+    you. Please report any poor behavior post-upgrade.
+
+  - NFS-Ganesha is an NFS userspace server that can export shares from multiple
+    file systems, including CephFS. Support for this CephFS client has improved
+    significantly in Mimic. In particular, delegations are now supported through
+    the libcephfs library so that Ganesha may issue delegations to its NFS clients
+    allowing for safe write buffering and coherent read caching. Documentation
+    is also now available: http://docs.ceph.com/docs/mimic/cephfs/nfs/
+
+  - MDS uptime is now available in the output of the MDS admin socket ``status`` command.
+
+  - MDS performance counters for client requests now include average latency as well as the count.
+
 
 * *RBD*
 
