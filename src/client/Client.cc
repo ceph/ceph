@@ -11275,7 +11275,8 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
 			      file_layout_t* layout)
 {
   Mutex::Locker lock(client_lock);
-  inodeno_t ino = ll_get_inodeno(in);
+
+  inodeno_t ino = in->ino;
   uint32_t object_size = layout->object_size;
   uint32_t su = layout->stripe_unit;
   uint32_t stripe_count = layout->stripe_count;
