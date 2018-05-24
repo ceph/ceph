@@ -381,6 +381,7 @@ int get_rbd_image(std::string image_name)
 
     // Get the next file descriptor and open the RBD
     int file_descriptor = get_next_file_descriptor();
+    // Get the image and snapshot names from image_name
     std::size_t snapshot_index = image_name.find('@');
     std::string image_only_name = image_name;
     std::string snapshot_name = "";
@@ -391,6 +392,7 @@ int get_rbd_image(std::string image_name)
     else {
         image_only_name = image_name.substr(0, snapshot_index);
         snapshot_name = image_name.substr(snapshot_index + 1, image_name.length() - snapshot_index - 1);
+        // Open snapshot files read-only
         ret = rbd_open_read_only(ioctx, image_only_name.c_str(), &temp_rbd, snapshot_name.c_str());
     }
     if (ret < 0) {
@@ -426,13 +428,16 @@ int get_rbd_image(std::string image_name)
     rbd->num_sectors = rbd->rbd_stat.rbd_info.size / rbd->sector_size;
     image_data_lock.unlock();
 
+    // Recursively add snapshots if we're exposing them
     if (expose_snapshots && (snapshot_index == std::string::npos)) {
         rbd_snap_info_t *snaps;
         int max_snaps = 0, snap_count = 0;
 
         do {
+            // Allocate a buffer to hold snapshots (initially 0 size)
             snaps = (rbd_snap_info_t *)malloc(sizeof(*snaps) * max_snaps);
             open_images_lock.lock();
+            // First call will fail and populate max_snaps with the snapshot count, second should succeed
             snap_count = rbd_snap_list(open_image->image, snaps, &max_snaps);
             open_images_lock.unlock();
             if (snap_count < 0)
@@ -440,6 +445,7 @@ int get_rbd_image(std::string image_name)
         } while (snap_count == -ERANGE);
 
         for (int i = 0; i < snap_count; i++)
+            // Recursively process snapshots as new files
             get_rbd_image(image_name + '@' + snaps[i].name);
 
         rbd_snap_list_end(snaps);
@@ -455,13 +461,14 @@ build_image_data_from_list(char *list_buffer, size_t list_buffer_len)
 {
     char *ip;
     
-    image_data_lock.lock();
     clear_rbd_image_data();
+    image_data_lock.lock();
     free(rbd_image_list.buf);
     // Save the image list for a future comparison
     rbd_image_list.buf = malloc(list_buffer_len);
     rbd_image_list.buf_len = list_buffer_len;
     memcpy(rbd_image_list.buf, list_buffer, list_buffer_len);
+    image_data_lock.unlock();
 
     for (ip = list_buffer; ip < &list_buffer[list_buffer_len]; ip += strlen(ip) + 1)  {
         // Add the image to the map if there is room and we are either not restricting by name or the name matches
@@ -474,7 +481,6 @@ build_image_data_from_list(char *list_buffer, size_t list_buffer_len)
             get_rbd_image(ip);
         }
     }
-    image_data_lock.unlock();
     fprintf(stderr, "\n");
 }
 
@@ -526,9 +532,11 @@ open_rbd_image(const char *image_name)
     open_image->name = image_name;
     struct rbd_image_data *image_data = get_rbd_image_data(image_name);
     int ret = 0;
+    // Check to see if this file represents an image snapshot
     if (image_data->snapshot_name.empty())
         ret = rbd_open(ioctx, image_data->image_name.c_str(), &open_image->image, NULL);
     else
+        // Open the image read-only if it's a snapshot
         ret = rbd_open_read_only(ioctx,
                                  image_data->image_name.c_str(),
                                  &open_image->image,
@@ -589,9 +597,13 @@ static int rbdfs_getattr(const char *path, struct stat *stbuf)
 	fd = open_rbd_image(path + 1);
 	if (fd < 0)
 		return -ENOENT;
+        
+        // Check to see if this file is an image snapshot
+        std::string snapshot_name = get_rbd_image_data(get_open_image(fd)->name)->snapshot_name;
 
 	now = time(NULL);
-	stbuf->st_mode = S_IFREG | 0666;
+        // -rw-rw-rw- if this is head, -r--r--r-- if it's a snapshot
+	stbuf->st_mode = S_IFREG | (snapshot_name.empty() ? 0666 : 0444);
 	stbuf->st_nlink = 1;
 	stbuf->st_uid = getuid();
 	stbuf->st_gid = getgid();
@@ -677,6 +689,11 @@ static int rbdfs_write(const char *path, const char *buf, size_t size,
     // Find the open RBD using its file descriptor
     rbd_openimage *open_image = get_open_image(fi->fh);
     struct rbd_image_data *image_data = get_rbd_image_data(open_image->name);
+    
+    // Return -EROFS if this file represents an image snapshot
+    // The write operation will fail anyway, but not necessarily explicitly
+    if (!image_data->snapshot_name.empty())
+        return -EROFS;
     
     if (map_partitions && offset + size > image_data->num_sectors * imagesectorsize)
         return -EOPNOTSUPP;
