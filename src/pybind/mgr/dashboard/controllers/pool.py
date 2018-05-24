@@ -3,13 +3,13 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from . import ApiController, RESTController, AuthRequired
+from . import ApiController, RESTController, Endpoint, AuthRequired
 from .. import mgr
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
 
 
-@ApiController('pool')
+@ApiController('/pool')
 @AuthRequired()
 class Pool(RESTController):
 
@@ -88,8 +88,7 @@ class Pool(RESTController):
         for key, value in kwargs.items():
             CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=value)
 
-    @cherrypy.tools.json_out()
-    @cherrypy.expose
+    @Endpoint()
     def _info(self):
         """Used by the create-pool dialog"""
         def rules(pool_type):

@@ -3,17 +3,15 @@ from __future__ import absolute_import
 
 import json
 
-import cherrypy
-
 from .. import mgr
-from . import AuthRequired, ApiController, BaseController
+from . import AuthRequired, ApiController, Endpoint, BaseController
 from ..controllers.rbd_mirroring import get_daemons_and_pools
 from ..tools import ViewCacheNoDataException
 from ..services.ceph_service import CephService
 from ..tools import TaskManager
 
 
-@ApiController('summary')
+@ApiController('/summary')
 @AuthRequired()
 class Summary(BaseController):
     def _rbd_pool_data(self):
@@ -57,8 +55,7 @@ class Summary(BaseController):
                 warnings += 1
         return {'warnings': warnings, 'errors': errors}
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     def __call__(self):
         executing_t, finished_t = TaskManager.list_serializable()
         return {

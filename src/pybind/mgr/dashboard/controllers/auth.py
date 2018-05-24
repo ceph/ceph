@@ -11,7 +11,7 @@ from .. import logger, mgr
 from ..tools import Session
 
 
-@ApiController('auth')
+@ApiController('/auth')
 class Auth(RESTController):
     """
     Provide login and logout actions.
