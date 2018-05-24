@@ -5410,6 +5410,12 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
   if (info.history.merge(oinfo.history))
     dirty_info = true;
   reg_next_scrub();
+  if (!info.stats.stats_invalid && info.stats.stats.sum.num_scrub_errors) {
+    info.stats.stats.sum.num_scrub_errors = 0;
+    info.stats.stats.sum.num_shallow_scrub_errors = 0;
+    info.stats.stats.sum.num_deep_scrub_errors = 0;
+    dirty_info = true;
+  }
 
   if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
     // DEBUG: verify that the snaps are empty in snap_mapper
