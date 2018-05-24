@@ -81,6 +81,9 @@ using rgw::IAM::TokenID;
 using rgw::IAM::Version;
 using rgw::IAM::Action_t;
 using rgw::IAM::NotAction_t;
+using rgw::IAM::iamCreateRole;
+using rgw::IAM::iamDeleteRole;
+using rgw::IAM::iamAll;
 
 class FakeIdentity : public Identity {
   const Principal id;
@@ -126,6 +129,9 @@ protected:
   static string example1;
   static string example2;
   static string example3;
+  static string example4;
+  static string example5;
+  static string example6;
 public:
   PolicyTest() {
     cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
@@ -484,6 +490,152 @@ TEST_F(PolicyTest, Eval3) {
   }
 }
 
+TEST_F(PolicyTest, Parse4) {
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
+			     bufferlist::static_from_string(example4)));
+  ASSERT_TRUE(p);
+
+  EXPECT_EQ(p->text, example4);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_FALSE(p->id);
+  EXPECT_FALSE(p->statements[0].sid);
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  act[iamCreateRole] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 1U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::wildcard);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::wildcard);
+  EXPECT_EQ(p->statements[0].resource.begin()->region, "*");
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "*");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  EXPECT_TRUE(p->statements[0].conditions.empty());
+}
+
+TEST_F(PolicyTest, Eval4) {
+  auto p  = Policy(cct.get(), arbitrary_tenant,
+		   bufferlist::static_from_string(example4));
+  Environment e;
+
+  EXPECT_EQ(p.eval(e, none, iamCreateRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "role/example_role")),
+	    Effect::Allow);
+
+  EXPECT_EQ(p.eval(e, none, iamDeleteRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "role/example_role")),
+	    Effect::Pass);
+}
+
+TEST_F(PolicyTest, Parse5) {
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
+			     bufferlist::static_from_string(example5)));
+  ASSERT_TRUE(p);
+  EXPECT_EQ(p->text, example5);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_FALSE(p->id);
+  EXPECT_FALSE(p->statements[0].sid);
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  for (auto i = s3All+1; i <= iamAll; i++)
+    act[i] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 1U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::iam);
+  EXPECT_EQ(p->statements[0].resource.begin()->region, "");
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "role/example_role");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  EXPECT_TRUE(p->statements[0].conditions.empty());
+}
+
+TEST_F(PolicyTest, Eval5) {
+  auto p  = Policy(cct.get(), arbitrary_tenant,
+		   bufferlist::static_from_string(example5));
+  Environment e;
+
+  EXPECT_EQ(p.eval(e, none, iamCreateRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "role/example_role")),
+	    Effect::Allow);
+
+  EXPECT_EQ(p.eval(e, none, s3ListBucket,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "role/example_role")),
+	    Effect::Pass);
+
+  EXPECT_EQ(p.eval(e, none, iamCreateRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", "", "role/example_role")),
+	    Effect::Pass);
+}
+
+TEST_F(PolicyTest, Parse6) {
+  boost::optional<Policy> p;
+
+  ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
+			     bufferlist::static_from_string(example6)));
+  ASSERT_TRUE(p);
+  EXPECT_EQ(p->text, example6);
+  EXPECT_EQ(p->version, Version::v2012_10_17);
+  EXPECT_FALSE(p->id);
+  EXPECT_FALSE(p->statements[0].sid);
+  EXPECT_FALSE(p->statements.empty());
+  EXPECT_EQ(p->statements.size(), 1U);
+  EXPECT_TRUE(p->statements[0].princ.empty());
+  EXPECT_TRUE(p->statements[0].noprinc.empty());
+  EXPECT_EQ(p->statements[0].effect, Effect::Allow);
+  Action_t act;
+  for (auto i = 0U; i <= iamAll; i++)
+    act[i] = 1;
+  EXPECT_EQ(p->statements[0].action, act);
+  EXPECT_EQ(p->statements[0].notaction, None);
+  ASSERT_FALSE(p->statements[0].resource.empty());
+  ASSERT_EQ(p->statements[0].resource.size(), 1U);
+  EXPECT_EQ(p->statements[0].resource.begin()->partition, Partition::aws);
+  EXPECT_EQ(p->statements[0].resource.begin()->service, Service::iam);
+  EXPECT_EQ(p->statements[0].resource.begin()->region, "");
+  EXPECT_EQ(p->statements[0].resource.begin()->account, arbitrary_tenant);
+  EXPECT_EQ(p->statements[0].resource.begin()->resource, "user/A");
+  EXPECT_TRUE(p->statements[0].notresource.empty());
+  EXPECT_TRUE(p->statements[0].conditions.empty());
+}
+
+TEST_F(PolicyTest, Eval6) {
+  auto p  = Policy(cct.get(), arbitrary_tenant,
+		   bufferlist::static_from_string(example6));
+  Environment e;
+
+  EXPECT_EQ(p.eval(e, none, iamCreateRole,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "user/A")),
+	    Effect::Allow);
+
+  EXPECT_EQ(p.eval(e, none, s3ListBucket,
+		   ARN(Partition::aws, Service::iam,
+		       "", arbitrary_tenant, "user/A")),
+	    Effect::Allow);
+}
+
 const string PolicyTest::arbitrary_tenant = "arbitrary_tenant";
 string PolicyTest::example1 = R"(
 {
@@ -546,6 +698,38 @@ string PolicyTest::example3 = R"(
 }
 )";
 
+string PolicyTest::example4 = R"(
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Action": "iam:CreateRole",
+    "Resource": "*"
+  }
+}
+)";
+
+string PolicyTest::example5 = R"(
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Action": "iam:*",
+    "Resource": "arn:aws:iam:::role/example_role"
+  }
+}
+)";
+
+string PolicyTest::example6 = R"(
+{
+  "Version": "2012-10-17",
+  "Statement": {
+    "Effect": "Allow",
+    "Action": "*",
+    "Resource": "arn:aws:iam:::user/A"
+  }
+}
+)";
 class IPPolicyTest : public ::testing::Test {
 protected:
   intrusive_ptr<CephContext> cct;

@@ -102,7 +102,6 @@ static constexpr std::uint64_t iamPutUserPolicy = 55;
 static constexpr std::uint64_t iamGetUserPolicy = 56;
 static constexpr std::uint64_t iamDeleteUserPolicy = 57;
 static constexpr std::uint64_t iamListUserPolicies = 58;
-
 static constexpr std::uint64_t iamCreateRole = 59;
 static constexpr std::uint64_t iamDeleteRole = 60;
 static constexpr std::uint64_t iamModifyRole = 61;
@@ -112,17 +111,19 @@ static constexpr std::uint64_t iamPutRolePolicy = 64;
 static constexpr std::uint64_t iamGetRolePolicy = 65;
 static constexpr std::uint64_t iamListRolePolicies = 66;
 static constexpr std::uint64_t iamDeleteRolePolicy = 67;
+static constexpr std::uint64_t iamAll = 68;
 
 static constexpr std::uint64_t s3Count = s3DeleteObjectVersionTagging + 1;
-static constexpr std::uint64_t allCount = iamDeleteRolePolicy + 1;
+static constexpr std::uint64_t allCount = iamAll + 1;
 
 using Action_t = bitset<allCount>;
 using NotAction_t = Action_t;
 
 static const Action_t None(0);
 static const Action_t s3AllValue("111111111111111111111111111111111111111111111111111111");
-//Modify iamAllValue if more IAM actions are added
-static const Action_t iamAllValue("11111111111111111111111111111111111111111111111111111111111111111111");
+static const Action_t iamAllValue("11111111111110000000000000000000000000000000000000000000000000000000");
+//Modify allValue if more Actions are added
+static const Action_t allValue("111111111111111111111111111111111111111111111111111111111111111111111");
 
 namespace {
 inline int op_to_perm(std::uint64_t op) {
