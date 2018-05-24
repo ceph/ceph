@@ -250,7 +250,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
-  if (prefix == "mon stat") {
+  if (prefix == "mon status") {
     mon->monmap->print_summary(ss);
     ss << ", election epoch " << mon->get_epoch() << ", leader "
        << mon->get_leader() << " " << mon->get_leader_name()

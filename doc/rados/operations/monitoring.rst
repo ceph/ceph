@@ -256,7 +256,7 @@ monitor status periodically to ensure that they are running.
 
 To see display the monitor map, execute the following::
 
-	ceph mon stat
+	ceph mon status
 	
 Or:: 
 
