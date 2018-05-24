@@ -22,9 +22,9 @@ function run() {
     shift
 
     export CEPH_MON="127.0.0.1:7105" # git grep '\<7105\>' : there must be only one
-    export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    export CEPH_ARGS
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -283,6 +283,30 @@ function TEST_utf8_cli() {
     ceph -f json-pretty osd dump | \
         python -c "import json; import sys; json.load(sys.stdin)" || return 1
     ceph osd pool delete 黄 黄 --yes-i-really-really-mean-it
+}
+
+function TEST_pool_create_rep_expected_num_objects() {
+    local dir=$1
+    setup $dir || return 1
+
+    # disable pg dir merge
+    CEPH_ARGS+="--filestore-merge-threshold=-10 "
+    export CEPH_ARGS
+    run_mon $dir a || return 1
+    run_osd $dir 0 || return 1
+
+    local expected_num_objects=100000
+    ceph osd pool create rep_expected_num_objects 64 64 replicated replicated_ruleset $expected_num_objects || return 1
+    # wait for pg dir creating
+    sleep 5
+    local ret=$(ceph osd pool ls detail --format=xml -c td/osd-pool-create/ceph.conf | \
+        xmlstarlet sel -t -m "//pool[./pool_name='rep_expected_num_objects']/expected_num_objects"  -v .)
+    if [ "$ret" -eq $expected_num_objects ];
+    then
+        echo "TEST_pool_create_rep_expected_num_objects PASS"
+    else
+        return 1
+    fi
 }
 
 main osd-pool-create "$@"
