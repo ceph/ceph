@@ -4,6 +4,7 @@
 /* flags we export */
 int ceph_arch_neon = 0;
 int ceph_arch_aarch64_crc32 = 0;
+int ceph_arch_aarch64_pmull = 0;
 
 #include <stdio.h>
 
@@ -11,6 +12,7 @@ int ceph_arch_aarch64_crc32 = 0;
 
 #include <elf.h>
 #include <link.h> // ElfW macro
+#include <sys/auxv.h>
 
 #if __arm__ || __aarch64__
 #include <asm/hwcap.h>
@@ -35,20 +37,20 @@ static unsigned long get_auxval(unsigned long type)
 
 static unsigned long get_hwcap(void)
 {
-	return get_auxval(AT_HWCAP);
+	return getauxval(AT_HWCAP);
 }
 
 #endif // __linux__
 
 int ceph_arch_arm_probe(void)
 {
+	unsigned long hwcap = get_hwcap();
 #if __arm__ && __linux__
-	ceph_arch_neon = (get_hwcap() & HWCAP_NEON) == HWCAP_NEON;
+	ceph_arch_neon = (hwcap & HWCAP_NEON) == HWCAP_NEON;
 #elif __aarch64__ && __linux__
-	ceph_arch_neon = (get_hwcap() & HWCAP_ASIMD) == HWCAP_ASIMD;
-# if defined(HAVE_ARMV8_CRC) && defined(HWCAP_CRC32)
-	ceph_arch_aarch64_crc32 = (get_hwcap() & HWCAP_CRC32) == HWCAP_CRC32;
-# endif
+	ceph_arch_neon = (hwcap & HWCAP_ASIMD) == HWCAP_ASIMD;
+	ceph_arch_aarch64_crc32 = (hwcap & HWCAP_CRC32) == HWCAP_CRC32;
+	ceph_arch_aarch64_pmull = (hwcap & HWCAP_PMULL) == HWCAP_PMULL;
 #else
 	if (0)
 		get_hwcap();  // make compiler shut up
