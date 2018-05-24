@@ -39,7 +39,7 @@ describe('FormatterService', () => {
       expect(service.truncate(value, 6)).toBe('1234.567899');
       expect(service.truncate(value, 7)).toBe('1234.567899');
       expect(service.truncate(value, 10)).toBe('1234.567899');
-      expect(service.truncate(100.00, 4)).toBe('100');
+      expect(service.truncate(100.0, 4)).toBe('100');
     });
   });
 
@@ -57,6 +57,9 @@ describe('FormatterService', () => {
       expect(service.format_number('1', 1024, formats)).toBe('1B');
       expect(service.format_number('1024', 1024, formats)).toBe('1KiB');
       expect(service.format_number(23.45678 * Math.pow(1024, 3), 1024, formats)).toBe('23.4568GiB');
+      expect(service.format_number(23.45678 * Math.pow(1024, 3), 1024, formats, 2)).toBe(
+        '23.46GiB'
+      );
     });
   });
 

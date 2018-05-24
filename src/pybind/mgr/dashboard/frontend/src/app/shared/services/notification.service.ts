@@ -19,8 +19,10 @@ export class NotificationService {
 
   KEY = 'cdNotifications';
 
-  constructor(public toastr: ToastsManager,
-              private taskManagerMessageService: TaskManagerMessageService) {
+  constructor(
+    public toastr: ToastsManager,
+    private taskManagerMessageService: TaskManagerMessageService
+  ) {
     const stringNotifications = localStorage.getItem(this.KEY);
     let notifications: CdNotification[] = [];
 
@@ -89,12 +91,16 @@ export class NotificationService {
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true) {
     if (finishedTask.success && success) {
-      this.show(NotificationType.success,
-        this.taskManagerMessageService.getSuccessMessage(finishedTask));
+      this.show(
+        NotificationType.success,
+        this.taskManagerMessageService.getSuccessMessage(finishedTask)
+      );
     } else {
-      this.show(NotificationType.error,
+      this.show(
+        NotificationType.error,
         this.taskManagerMessageService.getErrorMessage(finishedTask),
-        this.taskManagerMessageService.getDescription(finishedTask));
+        this.taskManagerMessageService.getDescription(finishedTask)
+      );
     }
   }
 
@@ -103,8 +109,6 @@ export class NotificationService {
    * @param {number} timeoutId A number representing the ID of the timeout to be canceled.
    */
   cancel(timeoutId) {
-    if (timeoutId) {
-      clearTimeout(timeoutId);
-    }
+    clearTimeout(timeoutId);
   }
 }
