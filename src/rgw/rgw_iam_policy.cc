@@ -826,7 +826,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
     if (*s == '*') {
       is_validaction = true;
       (w->id == TokenID::Action ?
-        t->action = iamAllValue : t->notaction = iamAllValue);
+        t->action = allValue : t->notaction = allValue);
     } else {
       for (auto& p : actpairs) {
         if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
@@ -838,6 +838,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         }
         if ((t->notaction & s3AllValue) == s3AllValue) {
           t->notaction[s3All] = 1;
+        }
+        if ((t->action & iamAllValue) == iamAllValue) {
+          t->action[iamAll] = 1;
+        }
+        if ((t->notaction & iamAllValue) == iamAllValue) {
+          t->notaction[iamAll] = 1;
         }
       }
     }
