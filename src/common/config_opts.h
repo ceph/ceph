@@ -415,7 +415,8 @@ OPTION(fuse_require_active_mds, OPT_BOOL, true) // if ceph_fuse requires active 
 OPTION(fuse_syncfs_on_mksnap, OPT_BOOL, true)
 
 OPTION(client_try_dentry_invalidate, OPT_BOOL, false) // the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
-OPTION(client_die_on_failed_remount, OPT_BOOL, true)
+OPTION(client_die_on_failed_remount, OPT_BOOL, false)
+OPTION(client_die_on_failed_dentry_invalidate, OPT_BOOL, true)
 OPTION(client_check_pool_perm, OPT_BOOL, true)
 OPTION(client_use_faked_inos, OPT_BOOL, false)
 OPTION(client_mds_namespace, OPT_INT, -1)
