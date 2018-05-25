@@ -46,7 +46,7 @@ static seastar::future<> test_echo()
         .then([&] {
           return t.client.messenger.start(&t.client.dispatcher)
             .then([&] {
-              return t.client.messenger.connect(t.addr);
+              return t.client.messenger.connect(t.addr, entity_name_t::TYPE_OSD);
             }).then([] (ceph::net::ConnectionRef conn) {
               std::cout << "client connected" << std::endl;
               return conn->send(MessageRef{new MPing(), false});

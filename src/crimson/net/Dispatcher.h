@@ -18,8 +18,9 @@
 
 #include "Fwd.h"
 
-namespace ceph {
-namespace net {
+class AuthAuthorizer;
+
+namespace ceph::net {
 
 class Dispatcher {
  public:
@@ -45,8 +46,14 @@ class Dispatcher {
     return seastar::make_ready_future<>();
   }
 
-  // TODO: authorizer
+  virtual seastar::future<msgr_tag_t, bufferlist>
+  ms_verify_authorizer(peer_type_t,
+		       auth_proto_t,
+		       bufferlist&) {
+    return seastar::make_ready_future<msgr_tag_t, bufferlist>(0, bufferlist{});
+  }
+  virtual seastar::future<std::unique_ptr<AuthAuthorizer>>
+  ms_get_authorizer(peer_type_t, bool force_new);
 };
 
-} // namespace net
-} // namespace ceph
+} // namespace ceph::net
