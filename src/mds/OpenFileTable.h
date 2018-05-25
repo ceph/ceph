@@ -67,6 +67,9 @@ protected:
   MDSRank *mds;
 
   version_t omap_version = 0;
+
+  static const unsigned MAX_ITEMS_PER_OBJ = 1024 * 1024;
+  static const unsigned MAX_OBJECTS = 1024; // billion items at most
   unsigned omap_num_objs = 0;
   std::vector<unsigned> omap_num_items;
 
