@@ -105,7 +105,8 @@ def create_users(ctx, config):
     for client in config['clients']:
         s3tests_conf = config['s3tests_conf'][client]
         s3tests_conf.setdefault('fixtures', {})
-        s3tests_conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
+        # Dropping the trailing dash as it would create invalid dns names
+        s3tests_conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}')
         for section, user in users.iteritems():
             _config_user(s3tests_conf, section, '{user}.{client}'.format(user=user, client=client))
             log.debug('Creating user {user} on {host}'.format(user=s3tests_conf[section]['user_id'], host=client))
@@ -263,6 +264,7 @@ def run_tests(ctx, config):
             args += ['REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt']
         else:
             args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
+        attrs.extend(client_config.get("extra_attrs",[]))
         args += [
             '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
             '-w',
