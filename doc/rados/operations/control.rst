@@ -310,7 +310,7 @@ Mon Subsystem
 
 Show monitor stats::
 
-	ceph mon stat
+	ceph mon status
 
 	e2: 3 mons at {a=127.0.0.1:40000/0,b=127.0.0.1:40001/0,c=127.0.0.1:40002/0}, election epoch 6, quorum 0,1,2 a,b,c
 

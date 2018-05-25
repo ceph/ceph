@@ -585,7 +585,7 @@ To upgrade monitors, perform the following steps:
    
 #. Ensure each monitor has rejoined the quorum. ::
 
-	ceph mon stat
+	ceph mon status
 
 Ensure that you have completed the upgrade cycle for all of your Ceph Monitors.
 

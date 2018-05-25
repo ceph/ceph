@@ -447,7 +447,7 @@ Subcommand ``stat`` summarizes monitor status.
 
 Usage::
 
-	ceph mon stat
+	ceph mon status
 
 mon_status
 ----------

@@ -37,7 +37,7 @@ function TEST_dashboard() {
     shift
 
     run_mon $dir a || return 1
-    timeout 30 ceph mon stat || return 1
+    timeout 30 ceph mon status || return 1
     ceph config-key set mgr/dashboard/x/server_port 7161
     MGR_ARGS+="--mgr_module_path=${CEPH_ROOT}/src/pybind/mgr "
     run_mgr $dir x ${MGR_ARGS} || return 1

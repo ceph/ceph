@@ -492,7 +492,7 @@ class TestMon(TestArgparse):
         self.check_0_or_1_natural_arg('mon', 'dump')
 
     def test_stat(self):
-        self.check_no_arg('mon', 'stat')
+        self.check_no_arg('mon', 'status')
 
     def test_getmap(self):
         self.check_0_or_1_natural_arg('mon', 'getmap')
