@@ -121,9 +121,14 @@ void Graylog::log_log_entry(LogEntry const * const e)
     m_formatter->dump_float("timestamp", e->stamp.sec() + (e->stamp.usec() / 1000000.0));
     m_formatter->dump_string("_app", "ceph");
 
-    m_formatter_section->open_object_section("");
-    e->who.addr.dump(m_formatter_section.get());
-    e->who.name.dump(m_formatter_section.get());
+    m_formatter->dump_string("name", e->name.to_str());
+
+    m_formatter_section->open_object_section("rank");
+    e->rank.dump(m_formatter_section.get());
+    m_formatter_section->close_section();
+
+    m_formatter_section->open_object_section("addrs");
+    e->addrs.dump(m_formatter_section.get());
     m_formatter_section->close_section();
 
     m_ostream_section.clear();
