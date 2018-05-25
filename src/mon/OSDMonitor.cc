@@ -248,11 +248,16 @@ void OSDMonitor::create_initial()
   if (newmap.nearfull_ratio > 1.0) newmap.nearfull_ratio /= 100;
 
   // new cluster should require latest by default
-  if (g_conf->mon_debug_no_require_mimic) {
-    newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
-    derr << __func__ << " mon_debug_no_require_mimic=true" << dendl;
+  if (g_conf->get_val<bool>("mon_debug_no_require_nautilus")) {
+    if (g_conf->mon_debug_no_require_mimic) {
+      derr << __func__ << " mon_debug_no_require_mimic=true and nautilus=true" << dendl;
+      newmap.require_osd_release = CEPH_RELEASE_LUMINOUS;
+    } else {
+      derr << __func__ << " mon_debug_no_require_nautilus=true" << dendl;
+      newmap.require_osd_release = CEPH_RELEASE_MIMIC;
+    }
   } else {
-    newmap.require_osd_release = CEPH_RELEASE_MIMIC;
+    newmap.require_osd_release = CEPH_RELEASE_NAUTILUS;
     int r = ceph_release_from_name(
       g_conf->mon_osd_initial_require_min_compat_client.c_str());
     if (r <= 0) {
@@ -1176,7 +1181,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     // upgrade to mimic?
     if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC &&
 	tmp.require_osd_release >= CEPH_RELEASE_MIMIC) {
-      dout(10) << __func__ << " first mimic epoch" << dendl;
+      dout(10) << __func__ << " first mimic+ epoch" << dendl;
       // record this epoch as the deletion for all legacy removed_snaps
       for (auto& p : tmp.get_pools()) {
 	// update every pool
@@ -1235,6 +1240,10 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	  t->put(OSD_SNAP_PREFIX, k, v);
 	}
       }
+    }
+    if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS &&
+	tmp.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+      dout(10) << __func__ << " first nautilus+ epoch" << dendl;
     }
   }
 
@@ -3944,7 +3953,7 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
   // create message handling path in the OSD still does the old thing where
   // the pg history is pregenerated and it's instantiated at the latest osdmap
   // epoch; child pgs are simply not created.
-  bool old = true; // !HAVE_FEATURE(con->get_features(), SERVER_MIMIC);
+  bool old = true; // !HAVE_FEATURE(con->get_features(), SERVER_NAUTILUS);
 
   epoch_t last = 0;
   for (auto epoch_pgs = creating_pgs_by_epoch->second.lower_bound(next);
@@ -9602,16 +9611,23 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     assert(osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS);
+    if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
+      ss << "Not advisable to continue since no OSDs are up. Pass "
+	 << "--yes-i-really-mean-it if you really wish to continue.";
+      err = -EPERM;
+      goto reply;
+    }
     if (rel == CEPH_RELEASE_MIMIC) {
-      if (!osdmap.get_num_up_osds() && sure != "--yes-i-really-mean-it") {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_MIMIC))
            && sure != "--yes-i-really-mean-it") {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_MIMIC feature";
+	err = -EPERM;
+	goto reply;
+      }
+    } else if (rel == CEPH_RELEASE_NAUTILUS) {
+      if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_NAUTILUS))
+           && sure != "--yes-i-really-mean-it") {
+	ss << "not all up OSDs have CEPH_FEATURE_SERVER_NAUTILUS feature";
 	err = -EPERM;
 	goto reply;
       }

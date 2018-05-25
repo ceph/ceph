@@ -2383,6 +2383,9 @@ bool OSDMap::primary_changed(
 uint64_t OSDMap::get_encoding_features() const
 {
   uint64_t f = SIGNIFICANT_FEATURES;
+  if (require_osd_release < CEPH_RELEASE_NAUTILUS) {
+    f &= ~CEPH_FEATURE_SERVER_NAUTILUS;
+  }
   if (require_osd_release < CEPH_RELEASE_MIMIC) {
     f &= ~CEPH_FEATURE_SERVER_MIMIC;
   }
