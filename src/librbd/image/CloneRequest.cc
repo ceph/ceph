@@ -325,7 +325,7 @@ template <typename I>
 void CloneRequest<I>::open_child() {
   ldout(m_cct, 20) << dendl;
 
-  m_imctx = I::create(m_name, "", NULL, m_ioctx, false);
+  m_imctx = I::create(m_name, "", nullptr, m_ioctx, false);
 
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<

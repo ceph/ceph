@@ -262,7 +262,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
   }
   opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
 
-  ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
+  ImageCtx *dest = new librbd::ImageCtx(destname, "", nullptr,
                                         dest_md_ctx, false);
   r = dest->state->open(0);
   if (r < 0) {

@@ -602,7 +602,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
       for (auto &id_it : info.second) {
-	ImageCtx *imctx = new ImageCtx("", id_it, NULL, ioctx, false);
+	ImageCtx *imctx = new ImageCtx("", id_it, nullptr, ioctx, false);
 	int r = imctx->state->open(0);
 	if (r < 0) {
 	  lderr(cct) << "error opening image: "
@@ -1813,8 +1813,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
     opts.set(RBD_IMAGE_OPTION_ORDER, static_cast<uint64_t>(order));
 
-    ImageCtx *dest = new librbd::ImageCtx(destname, "", NULL,
-					  dest_md_ctx, false);
+    ImageCtx *dest = new librbd::ImageCtx(destname, "", nullptr, dest_md_ctx,
+                                          false);
     r = dest->state->open(0);
     if (r < 0) {
       lderr(cct) << "failed to read newly created header" << dendl;
