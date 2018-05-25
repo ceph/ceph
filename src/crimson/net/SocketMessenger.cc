@@ -12,6 +12,7 @@
  *
  */
 
+#include "auth/Auth.h"
 #include "SocketMessenger.h"
 #include "SocketConnection.h"
 #include "Dispatcher.h"
@@ -113,8 +114,9 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
   return seastar::now();
 }
 
-seastar::future<ceph::net::ConnectionRef> SocketMessenger::connect(const entity_addr_t& addr,
-                                                        const entity_addr_t& myaddr)
+seastar::future<ceph::net::ConnectionRef>
+SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type,
+			 const entity_addr_t& myaddr, entity_type_t host_type)
 {
   if (auto found = std::find_if(connections.begin(),
 				connections.end(),
@@ -129,11 +131,12 @@ seastar::future<ceph::net::ConnectionRef> SocketMessenger::connect(const entity_
       ConnectionRef conn = new SocketConnection(this, get_myaddr(), addr,
                                                 std::move(socket));
       // complete the handshake before returning to the caller
-      return conn->client_handshake()
+      return conn->client_handshake(peer_type, host_type)
         .handle_exception([conn] (std::exception_ptr eptr) {
           // close the connection before returning errors
           return seastar::make_exception_future<>(eptr)
             .finally([conn] { return conn->close(); });
+	  // TODO: retry on fault
         }).then([=] {
           dispatcher->ms_handle_connect(conn);
           // dispatch replies on this connection
@@ -153,4 +156,28 @@ seastar::future<> SocketMessenger::shutdown()
     [this] (ConnectionRef conn) {
       return conn->close();
     }).finally([this] { connections.clear(); });
+}
+
+seastar::future<msgr_tag_t, bufferlist>
+SocketMessenger::verify_authorizer(peer_type_t peer_type,
+				   auth_proto_t protocol,
+				   bufferlist& auth)
+{
+  if (dispatcher) {
+    return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
+  } else {
+    return seastar::make_ready_future<msgr_tag_t, bufferlist>(
+        CEPH_MSGR_TAG_BADAUTHORIZER,
+        bufferlist{});
+  }
+}
+
+seastar::future<std::unique_ptr<AuthAuthorizer>>
+SocketMessenger::get_authorizer(peer_type_t peer_type, bool force_new)
+{
+  if (dispatcher) {
+    return dispatcher->ms_get_authorizer(peer_type, force_new);
+  } else {
+    return seastar::make_ready_future<std::unique_ptr<AuthAuthorizer>>(nullptr);
+  }
 }

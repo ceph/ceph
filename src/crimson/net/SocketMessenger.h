@@ -22,9 +22,11 @@
 
 namespace ceph::net {
 
-class SocketMessenger : public Messenger {
+class SocketMessenger final : public Messenger {
   boost::optional<seastar::server_socket> listener;
   Dispatcher *dispatcher = nullptr;
+  uint32_t global_seq = 0;
+
   std::list<ConnectionRef> connections;
 
   seastar::future<> dispatch(ConnectionRef conn);
@@ -40,9 +42,18 @@ class SocketMessenger : public Messenger {
   seastar::future<> start(Dispatcher *dispatcher) override;
 
   seastar::future<ConnectionRef> connect(const entity_addr_t& addr,
-                                         const entity_addr_t& myaddr) override;
+					 entity_type_t peer_type,
+                                         const entity_addr_t& myaddr,
+					 entity_type_t host_type) override;
 
   seastar::future<> shutdown() override;
+  seastar::future<msgr_tag_t, bufferlist>
+  verify_authorizer(peer_type_t peer_type,
+		    auth_proto_t protocol,
+		    bufferlist& auth) override;
+  seastar::future<std::unique_ptr<AuthAuthorizer>>
+  get_authorizer(peer_type_t peer_type,
+		 bool force_new) override;
 };
 
 } // namespace ceph::net

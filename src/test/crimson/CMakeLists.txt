@@ -15,7 +15,8 @@ target_link_libraries(unittest_seastar_denc ceph-common global Seastar::seastar)
 set(test_messenger_srcs
   test_messenger.cc
   $<TARGET_OBJECTS:seastar_buffer_obj>
-  $<TARGET_OBJECTS:crimson_net_objs>)
+  $<TARGET_OBJECTS:crimson_net_objs>
+  $<TARGET_OBJECTS:crimson_thread_objs>)
 add_executable(unittest_seastar_messenger ${test_messenger_srcs})
 add_ceph_unittest(unittest_seastar_messenger)
 target_link_libraries(unittest_seastar_messenger ceph-common Seastar::seastar)

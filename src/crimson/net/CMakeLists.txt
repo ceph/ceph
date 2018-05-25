@@ -1,4 +1,5 @@
 set(crimson_net_srcs
+  Dispatcher.cc
   Errors.cc
   SocketConnection.cc
   SocketMessenger.cc)
