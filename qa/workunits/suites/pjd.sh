@@ -2,6 +2,9 @@
 
 set -e
 
+test ! -d pjd.$$
+mkdir pjd.$$
+cd $$
 wget http://download.ceph.com/qa/pjd-fstest-20090130-RC-aclfixes.tgz
 tar zxvf pjd*.tgz
 cd pjd*
@@ -14,4 +17,5 @@ cd tmp
 sudo prove -r -v --exec 'bash -x' ../pjd*/tests
 cd ..
 rm -rf tmp pjd*
-
+cd ..
+rmdir pjd.$$
