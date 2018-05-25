@@ -11,23 +11,6 @@
 // ----
 // LogEntryKey
 
-void LogEntryKey::encode(bufferlist& bl, uint64_t features) const
-{
-  using ceph::encode;
-  encode(who, bl, features);
-  encode(stamp, bl);
-  encode(seq, bl);
-}
-
-void LogEntryKey::decode(bufferlist::const_iterator& bl)
-{
-  using ceph::decode;
-  decode(who, bl);
-  decode(stamp, bl);
-  decode(seq, bl);
-  _calc_hash();
-}
-
 void LogEntryKey::dump(Formatter *f) const
 {
   f->dump_stream("who") << who;
