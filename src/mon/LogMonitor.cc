@@ -63,6 +63,8 @@ void LogMonitor::create_initial()
   dout(10) << "create_initial -- creating initial map" << dendl;
   LogEntry e;
   e.name = g_conf->name;
+  e.rank = entity_name_t::MON(mon->rank);
+  e.addrs.v.push_back(mon->messenger->get_myaddr());
   e.stamp = ceph_clock_now();
   e.prio = CLOG_INFO;
   std::stringstream ss;
@@ -528,7 +530,8 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
     vector<string> logtext;
     cmd_getval(g_ceph_context, cmdmap, "logtext", logtext);
     LogEntry le;
-    le.who = m->get_orig_source_inst();
+    le.rank = m->get_orig_source();
+    le.addrs.v.push_back(m->get_orig_source_addr());
     le.name = session->entity_name;
     le.stamp = m->get_recv_stamp();
     le.seq = 0;

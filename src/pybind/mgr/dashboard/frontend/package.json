@@ -16,13 +16,17 @@
   "jest": {
     "preset": "jest-preset-angular",
     "setupTestFrameworkScriptFile": "<rootDir>/src/setupJest.ts",
-    "transformIgnorePatterns": ["node_modules/(?!@ngrx|ngx-bootstrap|@progress)"],
+    "transformIgnorePatterns": [
+      "node_modules/(?!@ngrx|ngx-bootstrap|@progress)"
+    ],
     "transform": {
       "^.+\\.(ts|html)$": "<rootDir>/node_modules/jest-preset-angular/preprocessor.js",
       "^.+\\.js$": "babel-jest"
     },
-    "setupFiles": ["jest-canvas-mock"],
-    "coverageReporters" : [
+    "setupFiles": [
+      "jest-canvas-mock"
+    ],
+    "coverageReporters": [
       "text",
       "cobertura"
     ]

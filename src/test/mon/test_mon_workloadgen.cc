@@ -703,7 +703,8 @@ class OSDStub : public TestStub
     int seq = 0;
     for (; num_entries > 0; --num_entries) {
       LogEntry e;
-      e.who = messenger->get_myinst();
+      e.rank = messenger->get_myname();
+      e.addrs.v.push_back(messenger->get_myaddr());
       e.stamp = now;
       e.seq = seq++;
       e.prio = CLOG_DEBUG;
