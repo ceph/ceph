@@ -296,7 +296,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
 {
   CephXAuthorizer *a = new CephXAuthorizer(cct);
   a->session_key = session_key;
-  a->nonce = ((uint64_t)rand() << 32) + rand();
+  get_random_bytes((char*)&a->nonce, sizeof(a->nonce));
 
   __u8 authorizer_v = 1;
   ::encode(authorizer_v, a->bl);
