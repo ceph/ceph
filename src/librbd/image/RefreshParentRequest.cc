@@ -10,7 +10,6 @@
 #include "librbd/Utils.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/OpenRequest.h"
-#include "librbd/image/SetSnapRequest.h"
 #include "librbd/io/ObjectDispatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -127,8 +126,8 @@ void RefreshParentRequest<I>::send_open_parent() {
     flags |= OPEN_FLAG_OLD_FORMAT;
   }
 
-  m_parent_image_ctx = new I(image_name, m_parent_md.spec.image_id, nullptr,
-                             parent_io_ctx, true);
+  m_parent_image_ctx = new I(image_name, m_parent_md.spec.image_id,
+                             m_parent_md.spec.snap_id, parent_io_ctx, true);
   m_parent_image_ctx->child = &m_child_image_ctx;
 
   // set rados flags for reading the parent image
@@ -159,44 +158,6 @@ Context *RefreshParentRequest<I>::handle_open_parent(int *result) {
     // image already closed by open state machine
     delete m_parent_image_ctx;
     m_parent_image_ctx = nullptr;
-
-    return m_on_finish;
-  }
-
-  if (m_parent_md.spec.snap_id == CEPH_NOSNAP) {
-    return m_on_finish;
-  }
-
-  send_set_parent_snap();
-  return nullptr;
-}
-
-template <typename I>
-void RefreshParentRequest<I>::send_set_parent_snap() {
-  assert(m_parent_md.spec.snap_id != CEPH_NOSNAP);
-
-  CephContext *cct = m_child_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  using klass = RefreshParentRequest<I>;
-  Context *ctx = create_context_callback<
-    klass, &klass::handle_set_parent_snap, false>(this);
-  SetSnapRequest<I> *req = SetSnapRequest<I>::create(
-    *m_parent_image_ctx, m_parent_md.spec.snap_id, ctx);
-  req->send();
-}
-
-template <typename I>
-Context *RefreshParentRequest<I>::handle_set_parent_snap(int *result) {
-  CephContext *cct = m_child_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
-
-  save_result(result);
-  if (*result < 0) {
-    lderr(cct) << "failed to set parent snapshot: " << cpp_strerror(*result)
-               << dendl;
-    send_close_parent();
-    return nullptr;
   }
 
   return m_on_finish;
