@@ -39,7 +39,6 @@ size_t SimplePolicy::calc_images_per_instance(const InstanceToImageMap& map,
 
 void SimplePolicy::do_shuffle_add_instances(
     const InstanceToImageMap& map, size_t image_count,
-    const std::vector<std::string> &instance_ids,
     std::set<std::string> *remap_global_image_ids) {
   uint64_t images_per_instance = calc_images_per_instance(map, image_count);
   dout(5) << "images per instance=" << images_per_instance << dendl;

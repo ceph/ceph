@@ -141,8 +141,7 @@ void Policy::add_instances(const InstanceIds &instance_ids,
   }
 
   GlobalImageIds shuffle_global_image_ids;
-  do_shuffle_add_instances(m_map, m_image_states.size(), instance_ids,
-                           &shuffle_global_image_ids);
+  do_shuffle_add_instances(m_map, m_image_states.size(), &shuffle_global_image_ids);
   dout(5) << "shuffling global_image_ids=[" << shuffle_global_image_ids
           << "]" << dendl;
   for (auto& global_image_id : shuffle_global_image_ids) {
