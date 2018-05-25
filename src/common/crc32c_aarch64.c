@@ -1,6 +1,7 @@
 #include "acconfig.h"
 #include "include/int_types.h"
 #include "common/crc32c_aarch64.h"
+#include "arch/arm.h"
 
 #ifndef HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
 /* Request crc extension capabilities from the assembler */
@@ -96,6 +97,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 
 	if (buffer) {
 #ifdef HAVE_ARMV8_CRYPTO
+	        if (ceph_arch_aarch64_pmull) {
 #ifdef HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
 		/* Calculate reflected crc with PMULL Instruction */
 		const poly64_t k1 = 0xe417f38a, k2 = 0x8f158014;
@@ -183,7 +185,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 
 		if(!(length += 1024))
 			return crc;
-
+	        }
 #endif /* HAVE_ARMV8_CRYPTO */
 		while ((length -= sizeof(uint64_t)) >= 0) {
 			CRC32CX(crc, *(uint64_t *)buffer);
@@ -203,6 +205,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 			CRC32CB(crc, *buffer);
 	} else {
 #ifdef HAVE_ARMV8_CRYPTO
+	        if (ceph_arch_aarch64_pmull) {
 #ifdef HAVE_ARMV8_CRC_CRYPTO_INTRINSICS
 		const poly64_t k1 = 0xe417f38a;
 		uint64_t t0;
@@ -250,7 +253,7 @@ uint32_t ceph_crc32c_aarch64(uint32_t crc, unsigned char const *buffer, unsigned
 
 		if(!(length += 1024))
 			return crc;
-
+	        }
 #endif /* HAVE_ARMV8_CRYPTO */
 		while ((length -= sizeof(uint64_t)) >= 0)
 			CRC32CX(crc, 0);
