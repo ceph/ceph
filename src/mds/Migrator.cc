@@ -3326,8 +3326,11 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   assert(in->is_auth());
 
   // FIXME
-  if (!in->can_auth_pin())
+  if (!in->can_auth_pin()) {
+    ex->put();
     return;
+  }
+
   in->auth_pin(this);
 
   C_M_LoggedImportCaps *finish = new C_M_LoggedImportCaps(
