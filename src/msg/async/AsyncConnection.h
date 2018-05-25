@@ -350,6 +350,7 @@ class AsyncConnection : public Connection {
   NetHandler net;
   EventCenter *center;
   ceph::shared_ptr<AuthSessionHandler> session_security;
+  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge; // accept side
 
 #if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
   sigset_t sigpipe_mask;

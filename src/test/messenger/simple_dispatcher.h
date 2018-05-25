@@ -110,10 +110,11 @@ public:
    * @return True if we were able to prove or disprove correctness of
    * authorizer, false otherwise.
    */
-  virtual bool ms_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer,
-				    bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key) {
+  bool ms_verify_authorizer(Connection *con, int peer_type,
+			    int protocol, bufferlist& authorizer,
+			    bufferlist& authorizer_reply,
+			    bool& isvalid, CryptoKey& session_key,
+			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
     /* always succeed */
     isvalid = true;
     return true;

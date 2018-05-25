@@ -17,6 +17,8 @@
 
 #include "../Auth.h"
 
+class CephContext;
+
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
   bool build_authorizer(const EntityName &ename, uint64_t global_id) {
@@ -26,7 +28,8 @@ struct AuthNoneAuthorizer : public AuthAuthorizer {
     ::encode(global_id, bl);
     return 0;
   }
-  bool verify_reply(bufferlist::iterator& reply) { return true; }
+  bool verify_reply(bufferlist::iterator& reply) override { return true; }
+  bool add_challenge(CephContext *cct, bufferlist& ch) override { return true; }
 };
 
 #endif

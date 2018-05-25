@@ -1631,7 +1631,8 @@ public:
     void ms_handle_remote_reset(Connection *con) {}
     bool ms_verify_authorizer(Connection *con, int peer_type,
 			      int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			      bool& isvalid, CryptoKey& session_key) {
+			      bool& isvalid, CryptoKey& session_key,
+			      std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
       isvalid = true;
       return true;
     }
@@ -2379,12 +2380,13 @@ protected:
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new);
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key);
-  void ms_handle_connect(Connection *con);
-  void ms_handle_fast_connect(Connection *con);
-  void ms_handle_fast_accept(Connection *con);
-  bool ms_handle_reset(Connection *con);
-  void ms_handle_remote_reset(Connection *con) {}
+			    bool& isvalid, CryptoKey& session_key,
+			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  void ms_handle_connect(Connection *con) override;
+  void ms_handle_fast_connect(Connection *con) override;
+  void ms_handle_fast_accept(Connection *con) override;
+  bool ms_handle_reset(Connection *con) override;
+  void ms_handle_remote_reset(Connection *con) override {}
 
   io_queue get_io_queue() const {
     if (cct->_conf->osd_op_queue == "debug_random") {

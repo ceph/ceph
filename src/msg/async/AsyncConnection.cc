@@ -1202,8 +1202,7 @@ ssize_t AsyncConnection::_process_connection()
 
     case STATE_CONNECTING_SEND_CONNECT_MSG:
       {
-        if (!got_bad_auth) {
-          delete authorizer;
+        if (!authorizer) {
           authorizer = async_msgr->get_authorizer(peer_type, false);
         }
         bufferlist bl;
@@ -1284,7 +1283,15 @@ ssize_t AsyncConnection::_process_connection()
           }
 
           authorizer_reply.append(state_buffer, connect_reply.authorizer_len);
-          bufferlist::iterator iter = authorizer_reply.begin();
+
+	  if (connect_reply.tag == CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER) {
+	    ldout(async_msgr->cct,10) << __func__ << " connect got auth challenge" << dendl;
+	    authorizer->add_challenge(async_msgr->cct, authorizer_reply);
+	    state = STATE_CONNECTING_SEND_CONNECT_MSG;
+	    break;
+	  }
+
+          auto iter = authorizer_reply.begin();
           if (authorizer && !authorizer->verify_reply(iter)) {
             ldout(async_msgr->cct, 0) << __func__ << " failed verifying authorize reply" << dendl;
             goto fail;
@@ -1692,11 +1699,25 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   lock.Unlock();
 
   bool authorizer_valid;
-  if (!async_msgr->verify_authorizer(this, peer_type, connect.authorizer_protocol, authorizer_bl,
-                               authorizer_reply, authorizer_valid, session_key) || !authorizer_valid) {
-    ldout(async_msgr->cct,0) << __func__ << ": got bad authorizer" << dendl;
+  bool need_challenge = connect.features & CEPH_FEATURE_CEPHX_V2;
+  bool had_challenge = (bool)authorizer_challenge;
+  if (!async_msgr->verify_authorizer(
+	this, peer_type, connect.authorizer_protocol, authorizer_bl,
+	authorizer_reply, authorizer_valid, session_key,
+	need_challenge ? &authorizer_challenge : nullptr) ||
+      !authorizer_valid) {
+    char tag;
+    if (need_challenge && !had_challenge && authorizer_challenge) {
+      ldout(async_msgr->cct,0) << __func__ << ": challenging authorizer"
+			       << dendl;
+      assert(authorizer_reply.length());
+      tag = CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER;
+    } else {
+      ldout(async_msgr->cct,0) << __func__ << ": got bad authorizer" << dendl;
+      tag = CEPH_MSGR_TAG_BADAUTHORIZER;
+    }
     session_security.reset();
-    return _reply_accept(CEPH_MSGR_TAG_BADAUTHORIZER, connect, reply, authorizer_reply);
+    return _reply_accept(tag, connect, reply, authorizer_reply);
   }
 
   // We've verified the authorizer for this AsyncConnection, so set up the session security structure.  PLR
@@ -1900,6 +1921,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       ldout(async_msgr->cct, 0) << __func__ << " reply fault for existing connection." << dendl;
       existing->fault();
     }
+    existing->authorizer_challenge.reset();
 
     ldout(async_msgr->cct, 1) << __func__ << " stop myself to swap existing" << dendl;
     _stop();
