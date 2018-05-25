@@ -243,14 +243,16 @@ using underlying_type_t = typename underlying_type<T>::type;
 }
 
 template<class It>
-struct is_const_iterator {
-  using pointer = typename It::pointer;
-  static constexpr bool value = std::is_const_v<std::remove_pointer_t<pointer>>;
-};
+struct is_const_iterator
+  : std::conditional_t<std::is_const_v<std::remove_pointer_t<typename It::pointer>>,
+		       std::true_type,
+		       std::false_type>
+{};
 template<>
-struct is_const_iterator<buffer::list::contiguous_appender> {
+struct is_const_iterator<size_t> : std::false_type {};
+template<>
+struct is_const_iterator<buffer::list::contiguous_appender> : std::false_type {
   // appender is used for *changing* the buffer
-  static constexpr bool value = false;
 };
 template<class It>
 inline constexpr bool is_const_iterator_v = is_const_iterator<It>::value;
