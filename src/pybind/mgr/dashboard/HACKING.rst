@@ -443,13 +443,15 @@ and unifies the work with collections. A collection is just an array of objects
 with a specific type. ``RESTController`` enables some default mappings of
 request types and given parameters to specific method names. This may sound
 complicated at first, but it's fairly easy. Lets have look at the following
-example::
+example:
+
+.. code-block:: python
 
   import cherrypy
   from ..tools import ApiController, RESTController
 
-  @ApiController('ping2')
-  class Ping2(RESTController):
+  @ApiController('ping')
+  class Ping(RESTController):
     def list(self):
       return {"msg": "Hello"}
 
@@ -457,7 +459,7 @@ example::
       return self.objects[id]
 
 In this case, the ``list`` method is automatically used for all requests to
-``api/ping2`` where no additional argument is given and where the request type
+``api/ping`` where no additional argument is given and where the request type
 is ``GET``. If the request is given an additional argument, the ID in our
 case, it won't map to ``list`` anymore but to ``get`` and return the element
 with the given ID (assuming that ``self.objects`` has been filled before). The
@@ -470,8 +472,6 @@ same applies to other request types:
 +--------------+------------+----------------+-------------+
 | PUT          | No         | bulk_set       | 200         |
 +--------------+------------+----------------+-------------+
-| PATCH        | No         | bulk_set       | 200         |
-+--------------+------------+----------------+-------------+
 | POST         | No         | create         | 201         |
 +--------------+------------+----------------+-------------+
 | DELETE       | No         | bulk_delete    | 204         |
@@ -479,8 +479,6 @@ same applies to other request types:
 | GET          | Yes        | get            | 200         |
 +--------------+------------+----------------+-------------+
 | PUT          | Yes        | set            | 200         |
-+--------------+------------+----------------+-------------+
-| PATCH        | Yes        | set            | 200         |
 +--------------+------------+----------------+-------------+
 | DELETE       | Yes        | delete         | 204         |
 +--------------+------------+----------------+-------------+
@@ -512,7 +510,9 @@ How to access the manager module instance from a controller?
 We provide the manager module instance as a global variable that can be
 imported in any module. We also provide a logger instance in the same way.
 
-Example::
+Example:
+
+.. code-block:: python
 
   import cherrypy
   from .. import logger, mgr
@@ -532,29 +532,31 @@ How to write a unit test for a controller?
 We provide a test helper class called ``ControllerTestCase`` to easily create
 unit tests for your controller.
 
-If we want to write a unit test for the above ``Ping2`` controller, create a
-``test_ping2.py`` file under the ``tests`` directory with the following code::
+If we want to write a unit test for the above ``Ping`` controller, create a
+``test_ping.py`` file under the ``tests`` directory with the following code:
+
+.. code-block:: python
 
   from .helper import ControllerTestCase
-  from .controllers.ping2 import Ping2
+  from .controllers.ping import Ping
 
 
-  class Ping2Test(ControllerTestCase):
+  class PingTest(ControllerTestCase):
       @classmethod
       def setup_test(cls):
-          Ping2._cp_config['tools.authentica.on'] = False
+          Ping._cp_config['tools.authentication.on'] = False
+          cls.setup_controllers([Ping])
 
-      def test_ping2(self):
-          self._get("/api/ping2")
+      def test_ping(self):
+          self._get("/api/ping")
           self.assertStatus(200)
           self.assertJsonBody({'msg': 'Hello'})
 
-The ``ControllerTestCase`` class will call the dashboard module code that loads
-the controllers and initializes the CherryPy webserver. Then it will call the
-``setup_test()`` class method to execute additional instructions that each test
-case needs to add to the test.
-In the example above we use the ``setup_test()`` method to disable the
-authentication handler for the ``Ping2`` controller.
+The ``ControllerTestCase`` class starts by initializing a CherryPy webserver.
+Then it will call the ``setup_test()`` class method where we can explicitly
+load the controllers that we want to test. In the above example we are only
+loading the ``Ping`` controller. We can also disable authentication of a
+controller at this stage, as depicted in the example.
 
 
 How to listen for manager notifications in a controller?
@@ -570,7 +572,9 @@ For this reason we provide a notification queue that controllers can register
 themselves with to receive cluster notifications.
 
 The example below represents a controller that implements a very simple live
-log viewer page::
+log viewer page:
+
+.. code-block:: python
 
   from __future__ import absolute_import
 
@@ -626,7 +630,9 @@ How to write a unit test when a controller accesses a Ceph module?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Consider the following example that implements a controller that retrieves the
-list of RBD images of the ``rbd`` pool::
+list of RBD images of the ``rbd`` pool:
+
+.. code-block:: python
 
   import rbd
   from .. import mgr
@@ -645,7 +651,9 @@ list of RBD images of the ``rbd`` pool::
 In the example above, we want to mock the return value of the ``rbd.list``
 function, so that we can test the JSON response of the controller.
 
-The unit test code will look like the following::
+The unit test code will look like the following:
+
+.. code-block:: python
 
   import mock
   from .helper import ControllerTestCase
@@ -688,7 +696,9 @@ get and set that setting::
 
 To access, or modify the config setting value from your Python code, either
 inside a controller or anywhere else, you just need to import the ``Settings``
-class and access it like this::
+class and access it like this:
+
+.. code-block:: python
 
   from settings import Settings
 
