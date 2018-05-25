@@ -3344,8 +3344,11 @@ void Migrator::handle_export_caps(MExportCaps *ex)
   assert(in->is_auth());
 
   // FIXME
-  if (!in->can_auth_pin())
+  if (!in->can_auth_pin()) {
+    ex->put();
     return;
+  }
+
   in->auth_pin(this);
 
   map<client_t,entity_inst_t> client_map;
