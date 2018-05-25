@@ -18,7 +18,8 @@ expect_false()
     if "$@"; then return 1; else return 0; fi
 }
 
-TEMP_DIR=$(mktemp -d ${TMPDIR-/tmp}/cephtool.XXX)
+TMPDIR=${TMPDIR:-${TESTDIR}}
+TEMP_DIR=$(mktemp -d ${TMPDIR:-/tmp}/cephtool.XXX)
 trap "rm -fr $TEMP_DIR" 0
 
 TEMP_FILE=$(mktemp $TEMP_DIR/test_invalid.XXX)
