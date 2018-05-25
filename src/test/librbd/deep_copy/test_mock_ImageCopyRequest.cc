@@ -10,7 +10,6 @@
 #include "librbd/deep_copy/ObjectCopyRequest.h"
 #include "librbd/image/CloseRequest.h"
 #include "librbd/image/OpenRequest.h"
-#include "librbd/image/SetSnapRequest.h"
 #include "librbd/internal.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -25,7 +24,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
   static MockTestImageCtx* s_instance;
   static MockTestImageCtx* create(const std::string &image_name,
                                   const std::string &image_id,
-                                  const char *snap, librados::IoCtx& p,
+                                  librados::snap_t snap_id, librados::IoCtx& p,
                                   bool read_only) {
     assert(s_instance != nullptr);
     return s_instance;
@@ -118,26 +117,6 @@ struct OpenRequest<MockTestImageCtx> {
 };
 
 OpenRequest<MockTestImageCtx>* OpenRequest<MockTestImageCtx>::s_instance = nullptr;
-
-template <>
-struct SetSnapRequest<MockTestImageCtx> {
-  Context* on_finish = nullptr;
-  static SetSnapRequest* s_instance;
-  static SetSnapRequest* create(MockTestImageCtx &image_ctx, uint64_t snap_id,
-                                Context *on_finish) {
-    assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  MOCK_METHOD0(send, void());
-
-  SetSnapRequest() {
-    s_instance = this;
-  }
-};
-
-SetSnapRequest<MockTestImageCtx>* SetSnapRequest<MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace image
 
