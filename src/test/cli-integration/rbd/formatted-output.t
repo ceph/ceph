@@ -637,15 +637,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quuy</name>
   </images>
   $ rbd list -l
-  NAME        SIZE PARENT FMT PROT LOCK 
-  foo         1 GiB          1
-  foo@snap    1 GiB          1
-  quux        1 MiB          1      excl
-  bar         1 GiB          2
-  bar@snap  512 MiB          2 yes
-  bar@snap2   1 GiB          2
-  baz         2 GiB          2      shr
-  quuy        2 GiB          2
+  NAME         SIZE PARENT FMT PROT LOCK 
+  foo         1 GiB          1           
+  foo@snap    1 GiB          1           
+  quux        1 MiB          1      excl 
+  bar         1 GiB          2           
+  bar@snap  512 MiB          2 yes       
+  bar@snap2   1 GiB          2           
+  baz         2 GiB          2      shr  
+  quuy        2 GiB          2           
   $ rbd list -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -762,11 +762,11 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>deep-flatten-child</name>
   </images>
   $ rbd list rbd_other -l
-  NAME                      SIZE PARENT       FMT PROT LOCK 
-  child                   512 MiB                2
-  child@snap              512 MiB rbd/bar@snap   2
-  deep-flatten-child      512 MiB                2
-  deep-flatten-child@snap 512 MiB                2
+  NAME                       SIZE PARENT       FMT PROT LOCK 
+  child                   512 MiB                2           
+  child@snap              512 MiB rbd/bar@snap   2           
+  deep-flatten-child      512 MiB                2           
+  deep-flatten-child@snap 512 MiB                2           
   $ rbd list rbd_other -l --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -900,8 +900,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </lock>
   </locks>
   $ rbd snap list foo
-  SNAPID NAME SIZE TIMESTAMP 
-      *snap*1 GiB* (glob)
+  SNAPID NAME  SIZE TIMESTAMP 
+  *snap*1 GiB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -921,9 +921,9 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd snap list bar
-  SNAPID NAME    SIZE TIMESTAMP                
-      *snap*512 MiB* (glob)
-      *snap2*1 GiB* (glob)
+  SNAPID NAME     SIZE TIMESTAMP                
+  *snap*512 MiB* (glob)
+  *snap2*1 GiB* (glob)
   $ rbd snap list bar --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -960,8 +960,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd snap list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <snapshots></snapshots>
   $ rbd snap list rbd_other/child
-  SNAPID NAME   SIZE TIMESTAMP                
-      *snap*512 MiB* (glob)
+  SNAPID NAME    SIZE TIMESTAMP                
+  *snap*512 MiB* (glob)
   $ rbd snap list rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   [
       {
@@ -981,12 +981,12 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd disk-usage --pool rbd_other 2>/dev/null
-  NAME                    PROVISIONED USED 
-  child@snap                   512 MiB   0 B
-  child                        512 MiB 4 MiB
-  deep-flatten-child@snap      512 MiB   0 B
-  deep-flatten-child           512 MiB   0 B
-  <TOTAL>                        1 GiB 4 MiB
+  NAME                    PROVISIONED  USED 
+  child@snap                  512 MiB   0 B 
+  child                       512 MiB 4 MiB 
+  deep-flatten-child@snap     512 MiB   0 B 
+  deep-flatten-child          512 MiB   0 B 
+  <TOTAL>                       1 GiB 4 MiB 
   $ rbd disk-usage --pool rbd_other --format json | python -mjson.tool | sed 's/,$/, /'
   {
       "images": [
