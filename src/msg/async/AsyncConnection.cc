@@ -1663,14 +1663,25 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
         ldout(async_msgr->cct, 10) << __func__ << " using cephx, requiring MSG_AUTH feature bit for cluster" << dendl;
         policy.features_required |= CEPH_FEATURE_MSG_AUTH;
       }
+      if (async_msgr->cct->_conf->cephx_require_version >= 2 ||
+	  async_msgr->cct->_conf->cephx_cluster_require_version >= 2) {
+        ldout(async_msgr->cct, 10) << __func__ << " using cephx, requiring cephx v2 feature bit for cluster" << dendl;
+        policy.features_required |= CEPH_FEATURE_CEPHX_V2;
+      }
     } else {
       if (async_msgr->cct->_conf->cephx_require_signatures ||
           async_msgr->cct->_conf->cephx_service_require_signatures) {
         ldout(async_msgr->cct, 10) << __func__ << " using cephx, requiring MSG_AUTH feature bit for service" << dendl;
         policy.features_required |= CEPH_FEATURE_MSG_AUTH;
       }
+      if (async_msgr->cct->_conf->cephx_require_version >= 2 ||
+	  async_msgr->cct->_conf->cephx_service_require_version >= 2) {
+        ldout(async_msgr->cct, 10) << __func__ << " using cephx, requiring cephx v2 feature bit for service" << dendl;
+        policy.features_required |= CEPH_FEATURE_CEPHX_V2;
+      }
     }
   }
+
   uint64_t feat_missing = policy.features_required & ~(uint64_t)connect.features;
   if (feat_missing) {
     ldout(async_msgr->cct, 1) << __func__ << " peer missing required features "
