@@ -122,6 +122,8 @@ For all requests, condition keys we support are:
 
 We support certain s3 condition keys for bucket and object requests.
 
+.. versionadded:: Mimic
+
 Bucket Related Operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -145,6 +147,7 @@ Bucket Related Operations
 |                       | s3:x-amz-grant-<perm>|                |
 +-----------------------+----------------------+----------------+
 
+.. _tag_policy:
 
 Object Related Operations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -194,7 +197,7 @@ Object Related Operations
 |s3:GetObjectVersionTagging   |                                               |                   |
 +-----------------------------+-----------------------------------------------+-------------------+
 |s3:DeleteObjectTagging &     |s3:ExistingOBjectTag/<tag-key>                 |                   |
-|s3:DeleteOBjectVersionTagging|                                               |                   |
+|s3:DeleteObjectVersionTagging|                                               |                   |
 +-----------------------------+-----------------------------------------------+-------------------+
 
 
