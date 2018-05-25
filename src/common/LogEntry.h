@@ -77,8 +77,6 @@ public:
     return _hash;
   }
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<LogEntryKey*>& o);
 
@@ -86,7 +84,6 @@ public:
     return l.who == r.who && l.stamp == r.stamp && l.seq == r.seq;
   }
 };
-WRITE_CLASS_ENCODER_FEATURES(LogEntryKey)
 
 namespace std {
   template<> struct hash<LogEntryKey> {
