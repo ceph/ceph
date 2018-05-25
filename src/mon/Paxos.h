@@ -1231,14 +1231,6 @@ public:
    * @return the first committed version
    */
   version_t get_first_committed() { return first_committed; }
-  /** 
-   * Get the last commit time
-   *
-   * @returns Our last commit time
-  */
-  utime_t get_last_commit_time() const{
-    return last_commit_time;
-  }
   /**
    * Check if a given version is readable.
    *
