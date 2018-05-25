@@ -43,13 +43,10 @@ private:
    *    | (open required)
    *    |----------------> OPEN_PARENT * * * * * * * * * * * * * * *
    *    |                     |                                    *
-   *    |                     v                                    *
-   *    |                  SET_PARENT_SNAP * * * * * *             *
-   *    |                     |                      *             *
-   *    |                     v                      * (on error)  *
-   *    \----------------> <apply>                   *             *
-   *                          |                      *             *
-   *                          | (close required)     v             *
+   *    |                     v                        (on error)  *
+   *    \----------------> <apply>                                 *
+   *                          |                                    *
+   *                          | (close required)                   *
    *                          |-----------------> CLOSE_PARENT     *
    *                          |                      |             *
    *                          |                      v             *
@@ -86,9 +83,6 @@ private:
 
   void send_open_parent();
   Context *handle_open_parent(int *result);
-
-  void send_set_parent_snap();
-  Context *handle_set_parent_snap(int *result);
 
   void send_close_parent();
   Context *handle_close_parent(int *result);
