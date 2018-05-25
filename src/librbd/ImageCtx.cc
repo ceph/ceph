@@ -150,6 +150,12 @@ public:
     journal_policy = new journal::StandardPolicy<ImageCtx>(this);
   }
 
+  ImageCtx::ImageCtx(const string &image_name, const string &image_id,
+		     uint64_t snap_id, IoCtx& p, bool ro)
+    : ImageCtx(image_name, image_id, "", p, ro) {
+    open_snap_id = snap_id;
+  }
+
   ImageCtx::~ImageCtx() {
     assert(image_watcher == NULL);
     assert(exclusive_lock == NULL);
