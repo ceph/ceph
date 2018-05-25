@@ -37,7 +37,7 @@
           [--feature-unset <value> [--optional|--persistent]] <mapfilename>
   [1]
 
-  $ monmaptool --feature-set kraken --feature-set 16 --optional --feature-set 32 --persistent /tmp/test.monmap.1234
+  $ monmaptool --feature-set kraken --feature-set 64 --optional --feature-set 32 --persistent /tmp/test.monmap.1234
   monmaptool: monmap file /tmp/test.monmap.1234
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
@@ -45,8 +45,8 @@
   monmaptool: monmap file /tmp/test.monmap.1234
   MONMAP FEATURES:
       persistent: [kraken(1),unknown(32)]
-      optional:   [unknown(16)]
-      required:   [kraken(1),unknown(16),unknown(32)]
+      optional:   [unknown(64)]
+      required:   [kraken(1),unknown(32),unknown(64)]
   
   AVAILABLE FEATURES:
       supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16)]
@@ -56,15 +56,15 @@
   monmaptool: monmap file /tmp/test.monmap.1234
   MONMAP FEATURES:
       persistent: [kraken(1),unknown(32)]
-      optional:   [unknown(16)]
-      required:   [kraken(1),unknown(16),unknown(32)]
+      optional:   [unknown(64)]
+      required:   [kraken(1),unknown(32),unknown(64)]
   
   AVAILABLE FEATURES:
       supported:  [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16)]
       persistent: [kraken(1),luminous(2),mimic(4),osdmap-prune(8),nautilus(16)]
   monmaptool: writing epoch 0 to /tmp/test.monmap.1234 (1 monitors)
 
-  $ monmaptool --feature-unset 32 --persistent --feature-unset 16 --optional --feature-list /tmp/test.monmap.1234
+  $ monmaptool --feature-unset 32 --persistent --feature-unset 64 --optional --feature-list /tmp/test.monmap.1234
   monmaptool: monmap file /tmp/test.monmap.1234
   MONMAP FEATURES:
       persistent: [kraken(1)]
