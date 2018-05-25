@@ -2,9 +2,20 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent
+from . import MetricsAgent, AGENT_VERSION
 from ...common.db import DB_API
 from ...models.metrics.dp import SAI_Disk
+
+
+def get_human_readable(size, precision=2):
+    suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
+    suffix_index = 0
+    while size > 1024 and suffix_index < 4:
+        # increment the index of the suffix
+        suffix_index += 1
+        # apply the division
+        size = size/1000.0
+    return "%.*d %s" % (precision, size, suffixes[suffix_index])
 
 
 class SAI_DiskAgent(MetricsAgent):
@@ -59,20 +70,27 @@ class SAI_DiskAgent(MetricsAgent):
                 d_data.tags['agenthost_domain_id'] = \
                     str("%s_%s" % (cluster_id, d_data.tags['agenthost']))
                 serial_number = s_val.get("serial_number")
-                wwn = s_val.get("wwn", {}).get("id")
-
+                wwn = s_val.get("wwn", {})
+                wwpn = ''
                 if wwn:
-                    d_data.tags['disk_domain_id'] = str(wwn)
-                    d_data.tags['disk_wwn'] = str(wwn)
+                    wwpn = '%06X%X' % (wwn.get('oui', 0), wwn.get('id', 0))
+                    for k in wwn.keys():
+                        if k in ['naa', 't10', 'eui', 'iqn']:
+                            wwpn = ("%X%s" % (wwn[k], wwpn)).lower()
+                            break
+
+                if wwpn:
+                    d_data.tags['disk_domain_id'] = str(wwpn)
+                    d_data.tags['disk_wwn'] = str(wwpn)
                     if serial_number:
-                        d_data.tags['serial_number'] = str(serial_number)
+                        d_data.fields['serial_number'] = str(serial_number)
                     else:
-                        d_data.tags['serial_number'] = str(wwn)
+                        d_data.fields['serial_number'] = str(wwpn)
                 elif serial_number:
                     d_data.tags['disk_domain_id'] = str(serial_number)
                     d_data.fields['serial_number'] = str(serial_number)
-                    if wwn:
-                        d_data.tags['disk_wwn'] = str(wwn)
+                    if wwpn:
+                        d_data.tags['disk_wwn'] = str(wwpn)
                     else:
                         d_data.tags['disk_wwn'] = str(serial_number)
                 else:
@@ -83,7 +101,7 @@ class SAI_DiskAgent(MetricsAgent):
                     str("%s%s%s"
                         % (cluster_id, d_data.fields['host_domain_id'],
                            d_data.tags['disk_domain_id']))
-                d_data.tags['disk_status'] = 1
+                d_data.fields['disk_status'] = int(1)
                 is_ssd = True if s_val.get('rotation_rate') == 0 else False
                 vendor = s_val.get('vendor', None)
                 model = s_val.get('model_name', None)
@@ -101,11 +119,15 @@ class SAI_DiskAgent(MetricsAgent):
                 if s_val.get('logical_block_size'):
                     d_data.fields['sector_size'] = \
                         str(str(s_val['logical_block_size']))
-
-                d_data.fields['size'] = str(s_val.get('user_capacity', '0'))
+                d_data.fields['transport_protocol'] = str('')
+                d_data.fields['vendor'] = \
+                    str(s_val.get('model_family', '')).replace("\"", "'")
+                d_data.fields['agent_version'] = str(AGENT_VERSION)
+                d_data.fields['size'] = \
+                    get_human_readable(
+                        int(s_val.get('user_capacity', '0')), 0)
                 if s_val.get('smart_status', {}).get('passed'):
-                    d_data.fields['smart_health_status'] = 'OK'
+                    d_data.fields['smart_health_status'] = 'PASSED'
                 else:
-                    d_data.fields['smart_health_status'] = 'FAIL'
-
+                    d_data.fields['smart_health_status'] = 'FAILED'
                 self.data.append(d_data)

@@ -497,7 +497,6 @@ class DB_RelayAgent(MetricsAgent):
                     data.fields['cmd'] = str(cypher_cmd)
                     self.data.append(data)
 
-
     def _collect_data(self):
         if not self._ceph_context:
             return

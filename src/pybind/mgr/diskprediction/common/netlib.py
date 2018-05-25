@@ -1,9 +1,7 @@
 from __future__ import absolute_import
 
-from httplib import INTERNAL_SERVER_ERROR, SERVICE_UNAVAILABLE, REQUEST_TIMEOUT, BAD_REQUEST
-
+from httplib import SERVICE_UNAVAILABLE, REQUEST_TIMEOUT, BAD_REQUEST
 from requests import Request, Session, exceptions
-from requests.models import Response
 
 
 DEFAULT_TIMEOUT = 30

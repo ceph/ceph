@@ -5,10 +5,10 @@ from functools import wraps
 import os
 import signal
 
-#Source: http://stackoverflow.com/questions/2281850/timeout-function-if-it-takes-too-long-to-finish
 
 class TimeoutError(Exception):
     pass
+
 
 def timeout(seconds=10, error_message=os.strerror(errno.ETIME)):
     def decorator(func):

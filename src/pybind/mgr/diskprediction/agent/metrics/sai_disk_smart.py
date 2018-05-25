@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent
+from . import MetricsAgent, AGENT_VERSION
 from ...common.db import DB_API
 from ...models.metrics.dp import SAI_Disk_Smart
 
@@ -37,34 +37,52 @@ class SAI_DiskSmartAgent(MetricsAgent):
                 # parse attributes
                 ata_smart = s_val.get('ata_smart_attributes', {})
                 for attr in ata_smart.get('attrs', []):
-                    smart_data.fields['%s_raw' % attr.get('id')] = \
-                        attr.get('raw', {}).get('value', 0)
+                    if attr.get('raw', {}).get('string'):
+                        if str(attr.get('raw', {}).get('string', "0")).isdigit():
+                            smart_data.fields['%s_raw' % attr.get('id')] = \
+                                int(attr.get('raw', {}).get('string', "0"))
+                        else:
+                            if str(attr.get('raw', {}).get('string', "0")).split(" ")[0].isdigit():
+                                smart_data.fields['%s_raw' % attr.get('id')] = \
+                                    int(attr.get('raw', {}).get('string', "0").split(" ")[0])
+                            else:
+                                smart_data.fields['%s_raw' % attr.get('id')] = \
+                                    attr.get('raw', {}).get('value', 0)
+
                 if s_val.get('temperature', {}).get('current'):
                     smart_data.fields['CurrentDriveTemperature_raw'] = \
                         int(s_val['temperature']['current'])
                 serial_number = s_val.get('serial_number')
-                wwn = s_val.get("wwn", {}).get("id")
+                wwn = s_val.get("wwn", {})
+                wwpn = ''
                 if wwn:
-                    smart_data.tags['disk_domain_id'] = str(wwn)
-                    smart_data.tags['disk_wwn'] = str(wwn)
+                    wwpn = '%06X%X' % (wwn.get('oui', 0), wwn.get('id', 0))
+                    for k in wwn.keys():
+                        if k in ['naa', 't10', 'eui', 'iqn']:
+                            wwpn = ("%X%s" % (wwn[k], wwpn)).lower()
+                            break
+                if wwpn:
+                    smart_data.tags['disk_domain_id'] = str(wwpn)
+                    smart_data.tags['disk_wwn'] = str(wwpn)
                     if serial_number:
-                        smart_data.tags['serial_number'] = str(serial_number)
+                        smart_data.fields['serial_number'] = str(serial_number)
                     else:
-                        smart_data.tags['serial_number'] = str(wwn)
+                        smart_data.fields['serial_number'] = str(wwpn)
                 elif serial_number:
                     smart_data.tags['disk_domain_id'] = str(serial_number)
                     smart_data.fields['serial_number'] = str(serial_number)
-                    if wwn:
-                        smart_data.tags['disk_wwn'] = str(wwn)
+                    if wwpn:
+                        smart_data.tags['disk_wwn'] = str(wwpn)
                     else:
                         smart_data.tags['disk_wwn'] = str(serial_number)
                 else:
                     smart_data.tags['disk_domain_id'] = str(dev_name)
                     smart_data.tags['disk_wwn'] = str(dev_name)
                     smart_data.fields['serial_number'] = str(dev_name)
-
+                smart_data.fields['agent_version'] = AGENT_VERSION
                 smart_data.tags['primary_key'] = \
-                    str('%s%s%s' % (cluster_id,
-                                smart_data.fields['host_domain_id'],
-                                smart_data.tags['disk_domain_id']))
+                    str('%s%s%s'
+                        % (cluster_id,
+                           smart_data.fields['host_domain_id'],
+                           smart_data.tags['disk_domain_id']))
                 self.data.append(smart_data)

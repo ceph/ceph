@@ -2,8 +2,6 @@ from __future__ import absolute_import
 
 import json
 import os
-import socket
-import sys
 import time
 
 from .. import BaseAgent
@@ -14,7 +12,9 @@ PREDICTION_FILE = '/var/tmp/disk_prediction.json'
 
 test_json = '{"results":[{"statement_id":0,"series":[{"name":"sai_disk_prediction","columns":["time","cluster_domain_id","confidence","disk_domain_id","disk_model","disk_name","disk_serial_number","disk_type","disk_vendor","host_domain_id","life_expectancy","life_expectancy_day","near_failure","predicted","primary_key"],"values":[["2018-05-25T01:26:18.231490725Z","dpCluster",100,"55cd2e404b7ee6d3","INTEL SSDSC2BP480G4","MegaraidDisk-0","BTJR516601GW480BGN","5","","da24c5fac654244dccffeb6b564b139b",24,730,"Good",1527211578228188894,"dpCluster-da24c5fac654244dccffeb6b564b139b-55cd2e404b7ee6d3"]]}]}]}'
 
+
 class Prediction_Agent(BaseAgent):
+
     measurement = 'sai_disk_prediction'
 
     @staticmethod
@@ -68,7 +68,7 @@ class Prediction_Agent(BaseAgent):
         try:
             query_info = self._command.query_info(sql % (self.__class__.measurement, where))
             status_code = query_info.status_code
-            if status_code >= 200 and status_code < 300:
+            if status_code == 200:
                 resp = query_info.json()
                 rc = resp.get('results', [])
                 if rc:
@@ -126,7 +126,7 @@ class Prediction_Agent(BaseAgent):
 
     def _fetch_prediction_result(self):
         obj_api = DB_API(self._ceph_context)
-        cluster_id =  obj_api.get_cluster_id()
+        cluster_id = obj_api.get_cluster_id()
 
         result = {cluster_id: {}}
         osds = obj_api.get_osds()
@@ -157,20 +157,28 @@ class Prediction_Agent(BaseAgent):
                 model = s_val.get('model_name', '')
                 disk_type = self._get_disk_type(is_ssd, vendor, model)
                 serial_number = s_val.get("serial_number")
-                wwn = s_val.get("wwn", {}).get("id")
-                tmp = {}
+                wwn = s_val.get("wwn", {})
+                wwpn = ''
                 if wwn:
-                    tmp['disk_domain_id'] = wwn
-                    tmp['disk_wwn'] = wwn
+                    wwpn = '%06X%X' % (wwn.get('oui', 0), wwn.get('id', 0))
+                    for k in wwn.keys():
+                        if k in ['naa', 't10', 'eui', 'iqn']:
+                            wwpn = ("%X%s" % (wwn[k], wwpn)).lower()
+                            break
+
+                tmp = {}
+                if wwpn:
+                    tmp['disk_domain_id'] = wwpn
+                    tmp['disk_wwn'] = wwpn
                     if serial_number:
                         tmp['serial_number'] = serial_number
                     else:
-                        tmp['serial_number'] = wwn
+                        tmp['serial_number'] = wwpn
                 elif serial_number:
                     tmp['disk_domain_id'] = serial_number
                     tmp['serial_number'] = serial_number
-                    if wwn:
-                        tmp['disk_wwn'] = wwn
+                    if wwpn:
+                        tmp['disk_wwn'] = wwpn
                     else:
                         tmp['disk_wwn'] = serial_number
                 else:
@@ -179,9 +187,9 @@ class Prediction_Agent(BaseAgent):
                     tmp['serial_number'] = dev_name
 
                 if s_val.get('smart_status', {}).get("passed"):
-                    tmp['smart_health_status'] = 'OK'
+                    tmp['smart_health_status'] = 'PASSED'
                 else:
-                    tmp['smart_health_status'] = 'FAIL'
+                    tmp['smart_health_status'] = 'FAILED'
 
                 tmp['sata_version'] = s_val.get('sata_version', {}).get('string', '')
                 tmp['sector_size'] = str(s_val.get('logical_block_size', ''))
@@ -247,7 +255,6 @@ class Prediction_Agent(BaseAgent):
                     })
 
         return result
-
 
     def run(self):
         result = self._fetch_prediction_result()

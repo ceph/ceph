@@ -9,6 +9,7 @@ from .agent.metrics.ceph_mon import CephMon_Agent
 from .agent.metrics.ceph_osd import CephOSD_Agent
 from .agent.metrics.ceph_pool import CephPool_Agent
 from .agent.metrics.db_relay import DB_RelayAgent
+from .agent.metrics.sai_cluster import SAI_CluserAgent
 from .agent.metrics.sai_disk import SAI_DiskAgent
 from .agent.metrics.sai_disk_smart import SAI_DiskSmartAgent
 from .agent.metrics.sai_host import SAI_HostAgent
@@ -40,7 +41,7 @@ class DP_Task(object):
         self.task_interval = \
             self._context.get_configuration(self._interval_key)
         self.cluster_domain_id = \
-            self._context.get_configuration('diskprophet_cluster_domain_id')
+            self._context.get_configuration('diskprediction_cluster_domain_id')
 
     def run(self):
         self._start_time = time.time()
@@ -74,11 +75,11 @@ class DP_Task(object):
         try:
             self._log.debug("run_agents %s" % self._task_name)
             self._obj_sender = Command(
-                host=self._context.get_configuration("diskprophet_server"),
-                user=self._context.get_configuration("diskprophet_user"),
-                password=self._context.get_configuration("diskprophet_password"))
+                host=self._context.get_configuration("diskprediction_server"),
+                user=self._context.get_configuration("diskprediction_user"),
+                password=self._context.get_configuration("diskprediction_password"))
             if not self._obj_sender:
-                self._log.error("invalid diskprophet sender")
+                self._log.error("invalid diskprediction sender")
                 return
             if self._obj_sender.test_connection():
                 self._log.debug("succeed to test connection")
@@ -96,9 +97,9 @@ class DP_Task(object):
 class Metrics_Task(DP_Task):
 
     _task_name = "Metrics Task"
-    _interval_key = "diskprophet_upload_metrics_interval"
+    _interval_key = "diskprediction_upload_metrics_interval"
     _agents = [CephCluster_Agent, CephMon_Agent, CephOSD_Agent, CephPool_Agent,
-               SAI_DiskAgent, SAI_HostAgent, DB_RelayAgent]
+               SAI_CluserAgent, SAI_DiskAgent, SAI_HostAgent, DB_RelayAgent]
 
     def _run(self):
         self._log.debug("%s run" % self._task_name)
@@ -114,7 +115,7 @@ class Metrics_Task(DP_Task):
 class Prediction_Task(DP_Task):
 
     _task_name = "Prediction Task"
-    _interval_key = "diskprophet_retrieve_prediction_interval"
+    _interval_key = "diskprediction_retrieve_prediction_interval"
     _agents = [Prediction_Agent]
 
     def _run(self):
@@ -131,7 +132,7 @@ class Prediction_Task(DP_Task):
 class Smart_Task(DP_Task):
 
     _task_name = "Smart data Task"
-    _interval_key = "diskprophet_upload_smart_interval"
+    _interval_key = "diskprediction_upload_smart_interval"
     _agents = [SAI_DiskSmartAgent]
 
     def _run(self):

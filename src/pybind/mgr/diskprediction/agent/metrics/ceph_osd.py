@@ -25,7 +25,7 @@ class CephOSD_Agent(MetricsAgent):
             d_osd.tags['cluster_id'] = cluster_id
             d_osd.tags['osd_id'] = n_name[4:]
             d_osd.tags['agenthost'] = socket.gethostname()
-            d_osd.tags['agenthost_domain_id']= \
+            d_osd.tags['agenthost_domain_id'] = \
                 "%s_%s" % (cluster_id, d_osd.tags['agenthost'])
             for i_key, i_val in i_perf.iteritems():
                 if i_key[:4] == 'osd.':
@@ -33,5 +33,4 @@ class CephOSD_Agent(MetricsAgent):
                 else:
                     key_name = i_key
                 d_osd.fields[key_name] = i_val.get('value', 0)
-
             self.data.append(d_osd)

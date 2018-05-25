@@ -1,10 +1,10 @@
 from __future__ import absolute_import
 
-
-from logging import Logger
 import time
 
 from .. import BaseAgent
+
+AGENT_VERSION = '1.0.0'
 
 
 class MetricsAgent(BaseAgent):
@@ -49,7 +49,7 @@ class MetricsAgent(BaseAgent):
         collect_data = self.data
         result = {}
         if collect_data:
-            status_info = {}
+            status_info = dict()
             status_info['measurement'] = None
             status_info['success_count'] = 0
             status_info['failure_count'] = 0
@@ -83,9 +83,9 @@ class MetricsAgent(BaseAgent):
                 try:
                     resp = self._command.send_info(data)
                     status_code = resp.status_code
-                    if status_code >= 200 and status_code < 300:
+                    if status_code >= 200 or status_code < 300:
                         self._logger.debug(
-                            "%s send diskprophet api success" % measurement)
+                            "%s send diskprediction api success" % measurement)
                         status_info['success_count'] += 1
                     else:
                         self._logger.error(resp.content)

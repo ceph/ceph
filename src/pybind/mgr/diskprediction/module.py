@@ -1,11 +1,12 @@
 """
-A diskprophet module
+A diskprediction module
 """
 from __future__ import absolute_import
 
+from datetime import datetime
 import json
-from threading import Event
 from mgr_module import MgrModule
+from threading import Event
 
 from .task import Metrics_Task, Prediction_Task, Smart_Task
 
@@ -18,81 +19,81 @@ class Module(MgrModule):
 
     OPTIONS = [
         {
-            'name': 'diskprophet_server',
+            'name': 'diskprediction_server',
             'default': None
         },
         {
-            'name': 'diskprophet_port',
+            'name': 'diskprediction_port',
             'default': 8086
         },
         {
-            'name': 'diskprophet_database',
+            'name': 'diskprediction_database',
             'default': 'telegraf'
         },
         {
-            'name': 'diskprophet_user',
+            'name': 'diskprediction_user',
             'default': None
         },
         {
-            'name': 'diskprophet_password',
+            'name': 'diskprediction_password',
             'default': None
         },
         {
-            'name': 'diskprophet_cluster_domain_id',
+            'name': 'diskprediction_cluster_domain_id',
             'default': None
         },
         {
-            'name': 'diskprophet_upload_metrics_interval',
+            'name': 'diskprediction_upload_metrics_interval',
             'default': 600
         },
         {
-            'name': 'diskprophet_upload_smart_interval',
+            'name': 'diskprediction_upload_smart_interval',
             'default': 43200
         },
         {
-            'name': 'diskprophet_retrieve_prediction_interval',
+            'name': 'diskprediction_retrieve_prediction_interval',
             'default': 43200
         },
     ]
 
     COMMANDS = [
         {
-            'cmd': 'diskprophet self-test',
+            'cmd': 'diskprediction self-test',
             'desc': 'Prints hello world to mgr.x.log',
             'perm': 'r'
         },
         {
-            'cmd': 'diskprophet config-show',
-            'desc': 'Prints diskprophet configuration',
+            'cmd': 'diskprediction config-show',
+            'desc': 'Prints diskprediction configuration',
             'perm': 'r'
         },
         {
-            'cmd': 'diskprophet get-predicted-status '
+            'cmd': 'diskprediction get-predicted-status '
                    'name=osd_id,type=CephString,req=true',
             'desc': 'Get osd physical disk predicted result',
             'perm': 'r'
         },
         {
-            'cmd': 'diskprophet config-set '
+            'cmd': 'diskprediction config-set '
                    'name=server,type=CephString,req=true '
                    'name=user,type=CephString,req=true '
                    'name=password,type=CephString,req=true '
                    'name=port,type=CephInt,req=false ',
-            'desc': 'Configure DiskProphet service',
+            'desc': 'Configure Disk Prediction service',
             'perm': 'rw'
         },
         {
-            'cmd': 'diskprophet run-metrics-forcely',
+            'cmd': 'diskprediction run-metrics-forcely',
             'desc': 'Run metrics agent forcely',
             'perm': 'r'
         },
         {
-            'cmd': 'diskprophet run-prediction-forcely',
+            'cmd': 'diskprediction run-prediction-forcely',
             'desc': 'Run prediction agent forcely',
             'perm': 'r'
         },
         {
-            'cmd': 'diskprophet run-smart-forcely',
+            'cmd': 'diskprediction run-smart-forcely',
             'desc': 'Run smart agent forcely',
             'perm': 'r'
         },
@@ -113,10 +114,10 @@ class Module(MgrModule):
             raise RuntimeError('{0} is a unknown configuration '
                                'option'.format(option))
 
-        if option in ['diskprophet_port',
-                      'diskprophet_upload_metrics_interval',
-                      'diskprophet_upload_smart_interval',
-                      'diskprophet_retrieve_prediction_interval']:
+        if option in ['diskprediction_port',
+                      'diskprediction_upload_metrics_interval',
+                      'diskprediction_upload_smart_interval',
+                      'diskprediction_retrieve_prediction_interval']:
             try:
                 value = int(value)
             except (ValueError, TypeError):
@@ -132,11 +133,12 @@ class Module(MgrModule):
         return self.get_config(key, self.config_keys[key])
 
     def handle_command(self, cmd):
-        if cmd['prefix'] == 'diskprophet config-show':
+        if cmd['prefix'] == 'diskprediction config-show':
             self.show_module_config()
-            return 0, json.dumps(self.config), ''
-        if cmd['prefix'] == 'diskprophet get-predicted-status':
-            osd_data = {}
+            return 0, json.dumps(self.config, indent=4), ''
+        if cmd['prefix'] == 'diskprediction get-predicted-status':
+            osd_data = dict()
+            physical_data = dict()
             from .agent.predict.prediction import PREDICTION_FILE
             try:
                 with open(PREDICTION_FILE, "r+") as fd:
@@ -144,7 +146,25 @@ class Module(MgrModule):
                 fsid = self.get('mon_map')['fsid']
                 for d_host, d_val in pre_data.get(fsid, {}).iteritems():
                     if "osd.%s" % cmd['osd_id'] in d_val.get("osd", {}).keys():
-                        osd_data = d_val['osd']['osd.%s' % cmd['osd_id']]
+                        s_data = d_val['osd']['osd.%s' % cmd['osd_id']]
+                        for dev in s_data.get("physicalDisks", []):
+                            p_data = dev.get('prediction', {})
+                            if not p_data.get('predicted'):
+                                predicted = None
+                            else:
+                                predicted = datetime.fromtimestamp(int(p_data.get('predicted'))/1000/1000/1000)
+                            d_data = {
+                                'device': dev.get("diskName"),
+                                'near_failure': p_data.get('near_failure'),
+                                'life_expectancy_day': p_data.get('life_expectancy_day'),
+                                'replacment_time': p_data.get('replacement_time'),
+                                'predicted': str(predicted),
+                                'serial_number': dev.get('serialNumber'),
+                                'disk_wwn': dev.get('diskWWN')
+                            }
+                            physical_data[dev.get('diskName')] = d_data
+                        osd_data['osd.%s' % cmd['osd_id']] = dict(
+                                prediction=physical_data)
                         break
                 if not osd_data:
                     msg = 'not found osd %s predicted data' % cmd['osd_id']
@@ -154,29 +174,29 @@ class Module(MgrModule):
                 msg = 'unable to get osd %s predicted data' % cmd['osd_id']
                 self.log.error(msg)
             return 0, msg, ''
-        if cmd['prefix'] == 'diskprophet config-set':
-            self.set_config('diskprophet_server', cmd['server'])
-            self.set_config('diskprophet_user', cmd['user'])
-            self.set_config('diskprophet_password', cmd['password'])
+        if cmd['prefix'] == 'diskprediction config-set':
+            self.set_config('diskprediction_server', cmd['server'])
+            self.set_config('diskprediction_user', cmd['user'])
+            self.set_config('diskprediction_password', cmd['password'])
             if cmd.get('port'):
-                self.set_config('diskprophet_port', cmd['port'])
+                self.set_config('diskprediction_port', cmd['port'])
             self.show_module_config()
             return 0, json.dumps(self.config, indent=4), ''
-        if cmd['prefix'] == 'diskprophet run-metrics-forcely':
+        if cmd['prefix'] == 'diskprediction run-metrics-forcely':
             msg = ''
             for _task in self._tasks:
                 if isinstance(_task, Metrics_Task):
                     msg = 'run metrics agent successfully'
                     _task.event.set()
             return 0, msg, ''
-        if cmd['prefix'] == 'diskprophet run-prediction-forcely':
+        if cmd['prefix'] == 'diskprediction run-prediction-forcely':
             msg = ''
             for _task in self._tasks:
                 if isinstance(_task, Prediction_Task):
                     msg = 'run prediction agent successfully'
                     _task.event.set()
             return 0, msg, ''
-        if cmd['prefix'] == 'diskprophet run-smart-forcely':
+        if cmd['prefix'] == 'diskprediction run-smart-forcely':
             msg = ''
             for _task in self._tasks:
                 if isinstance(_task, Smart_Task):
@@ -192,7 +212,7 @@ class Module(MgrModule):
             self.set_config_option(key, self.get_config(key, default))
 
     def serve(self):
-        self.log.info('Starting diskprophet module')
+        self.log.info('Starting diskprediction module')
         self.run = True
 
         try:

@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 
 class BaseDP(object):
-    """ basic diskprophet structure """
+    """ basic diskprediction structure """
     _fields = []
     def __init__(self, *args, **kwargs):
         if len(args) > len(self._fields):

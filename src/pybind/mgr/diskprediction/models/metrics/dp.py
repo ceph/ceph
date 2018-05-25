@@ -114,6 +114,19 @@ class SAI_Host(MetricsField):
         self.fields['os_version'] = None
 
 
+class SAI_Cluster(MetricsField):
+    """ SAI Host structure """
+    measurement = 'sai_cluster'
+
+    def __init__(self):
+        super(SAI_Cluster, self).__init__()
+        self.tags['domain_id'] = None
+        self.fields['agenthost'] = None
+        self.fields['agenthost_domain_id'] = None
+        self.fields['name'] = None
+        self.fields['agent_version'] = None
+
+
 class SAI_Disk(MetricsField):
     """ SAI Disk structure """
     measurement = 'sai_disk'
@@ -162,6 +175,7 @@ class SAI_Disk_Smart(MetricsField):
         self.tags['primary_key'] = None
         self.fields['cluster_domain_id'] = None
         self.fields['host_domain_id'] = None
+        self.fields['agent_version'] = None
 
     def __str__(self):
         return super(SAI_Disk_Smart, self).__str__()
