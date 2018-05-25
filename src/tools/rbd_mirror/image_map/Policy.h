@@ -65,7 +65,6 @@ protected:
   // shuffle images when instances are added/removed
   virtual void do_shuffle_add_instances(
       const InstanceToImageMap& map, size_t image_count,
-      const std::vector<std::string> &instance_ids,
       std::set<std::string> *remap_global_image_ids) = 0;
 
 private:
