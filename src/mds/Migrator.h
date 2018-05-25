@@ -194,6 +194,7 @@ protected:
   void handle_export_finish(MExportDirFinish *m);
 
   void handle_export_caps(MExportCaps *m);
+  void handle_export_caps_ack(MExportCapsAck *m);
   void logged_import_caps(CInode *in,
 			  mds_rank_t from,
 			  map<client_t,pair<Session*,uint64_t> >& imported_session_map,
