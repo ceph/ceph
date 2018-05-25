@@ -78,11 +78,8 @@ function(do_build_boost version)
     message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
     list(APPEND b2 -j${BOOST_J})
   endif()
-  if(CMAKE_VERBOSE_MAKEFILE)
-    list(APPEND b2 -d1)
-  else()
-    list(APPEND b2 -d0)
-  endif()
+  # suppress all debugging levels for b2
+  list(APPEND b2 -d0)
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(toolset gcc)
