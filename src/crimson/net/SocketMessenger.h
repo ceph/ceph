@@ -18,15 +18,21 @@
 #include <boost/optional.hpp>
 #include <core/reactor.hh>
 
+#include "msg/Policy.h"
 #include "Messenger.h"
+#include "crimson/thread/Throttle.h"
 
 namespace ceph::net {
+
+using SocketPolicy = ceph::net::Policy<ceph::thread::Throttle>;
 
 class SocketMessenger final : public Messenger {
   boost::optional<seastar::server_socket> listener;
   Dispatcher *dispatcher = nullptr;
   uint32_t global_seq = 0;
   std::map<entity_addr_t, ConnectionRef> connections;
+  using Throttle = ceph::thread::Throttle;
+  ceph::net::PolicySet<Throttle> policy_set;
 
   seastar::future<> dispatch(ConnectionRef conn);
 
@@ -41,11 +47,12 @@ class SocketMessenger final : public Messenger {
   seastar::future<> start(Dispatcher *dispatcher) override;
 
   seastar::future<ConnectionRef> connect(const entity_addr_t& addr,
-					 entity_type_t peer_type,
-                                         const entity_addr_t& myaddr,
-					 entity_type_t host_type) override;
+					 entity_type_t peer_type) override;
 
   seastar::future<> shutdown() override;
+  void set_default_policy(const SocketPolicy& p);
+  void set_policy(entity_type_t peer_type, const SocketPolicy& p);
+  void set_policy_throttler(entity_type_t peer_type, Throttle* throttle);
   ConnectionRef lookup_conn(const entity_addr_t& addr) override;
   void unregister_conn(ConnectionRef) override;
   seastar::future<msgr_tag_t, bufferlist>
