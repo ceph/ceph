@@ -18,6 +18,7 @@
 
 #include "msg/Policy.h"
 #include "Connection.h"
+#include "crimson/thread/Throttle.h"
 
 class AuthSessionHandler;
 
@@ -91,6 +92,7 @@ class SocketConnection : public Connection {
   /// header will follow
   seastar::promise<> on_message;
 
+  seastar::future<> maybe_throttle();
   void read_tags_until_next_message();
   seastar::future<seastar::stop_iteration> handle_ack();
 
@@ -102,7 +104,7 @@ class SocketConnection : public Connection {
   /// encode/write a message
   seastar::future<> write_message(MessageRef msg);
 
-  ceph::net::Policy policy;
+  ceph::net::Policy<ceph::thread::Throttle> policy;
   uint64_t features;
   void set_features(uint64_t new_features) {
     features = new_features;

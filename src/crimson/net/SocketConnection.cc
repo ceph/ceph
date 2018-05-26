@@ -180,6 +180,17 @@ void SocketConnection::requeue_sent()
   }
 }
 
+seastar::future<> SocketConnection::maybe_throttle()
+{
+  if (!policy.throttler_bytes) {
+    return seastar::now();
+  }
+  const auto to_read = (m.header.front_len +
+                        m.header.middle_len +
+                        m.header.data_len);
+  return policy.throttler_bytes->get(to_read);
+}
+
 seastar::future<MessageRef> SocketConnection::read_message()
 {
   return on_message.get_future()
@@ -187,8 +198,10 @@ seastar::future<MessageRef> SocketConnection::read_message()
       // read header
       return read(sizeof(m.header));
     }).then([this] (bufferlist bl) {
+      // throttle the traffic, maybe
       auto p = bl.cbegin();
       ::decode(m.header, p);
+      return maybe_throttle();
     }).then([this] {
       // read front
       return read(m.header.front_len);

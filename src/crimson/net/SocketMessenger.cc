@@ -118,8 +118,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
 }
 
 seastar::future<ceph::net::ConnectionRef>
-SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type,
-			 const entity_addr_t& myaddr, entity_type_t host_type)
+SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
 {
   if (auto found = lookup_conn(addr); found) {
     return seastar::make_ready_future<ceph::net::ConnectionRef>(found);
@@ -129,7 +128,7 @@ SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type,
       ConnectionRef conn = new SocketConnection(this, get_myaddr(), addr,
                                                 std::move(socket));
       // complete the handshake before returning to the caller
-      return conn->client_handshake(peer_type, host_type)
+      return conn->client_handshake(peer_type, get_myname().type())
         .handle_exception([conn] (std::exception_ptr eptr) {
           // close the connection before returning errors
           return seastar::make_exception_future<>(eptr)
@@ -154,6 +153,24 @@ seastar::future<> SocketMessenger::shutdown()
     [this] (auto conn) {
       return conn.second->close();
     }).finally([this] { connections.clear(); });
+}
+
+void SocketMessenger::set_default_policy(const SocketPolicy& p)
+{
+  policy_set.set_default(p);
+}
+
+void SocketMessenger::set_policy(entity_type_t peer_type,
+				 const SocketPolicy& p)
+{
+  policy_set.set(peer_type, p);
+}
+
+void SocketMessenger::set_policy_throttler(entity_type_t peer_type,
+					   Throttle* throttle)
+{
+  // only byte throttler is used in OSD
+  policy_set.set_throttlers(peer_type, throttle, nullptr);
 }
 
 ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
