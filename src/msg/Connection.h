@@ -158,6 +158,9 @@ public:
   bool peer_is_client() const { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
 
   const entity_addr_t& get_peer_addr() const { return peer_addr; }
+  entity_addrvec_t get_peer_addrs() const {
+    return entity_addrvec_t(peer_addr);
+  }
   void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
 
   uint64_t get_features() const { return features; }

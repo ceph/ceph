@@ -7436,7 +7436,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
     service.retrieve_epochs(&boot_epoch, &up_epoch, NULL);
     if (!up_epoch &&
 	osdmap->is_up(whoami) &&
-	osdmap->get_inst(whoami) == client_messenger->get_myinst()) {
+	osdmap->get_addr(whoami) == client_messenger->get_myaddr()) {
       up_epoch = osdmap->get_epoch();
       dout(10) << "up_epoch is " << up_epoch << dendl;
       if (!boot_epoch) {

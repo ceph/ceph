@@ -44,7 +44,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << *this
 ostream& Pipe::_pipe_prefix(std::ostream &out) const {
-  return out << "-- " << msgr->get_myinst().addr << " >> " << peer_addr << " pipe(" << this
+  return out << "-- " << msgr->get_myaddr() << " >> " << peer_addr << " pipe(" << this
 	     << " sd=" << sd << " :" << port
              << " s=" << state
              << " pgs=" << peer_global_seq
@@ -363,9 +363,9 @@ int Pipe::accept()
   }
 
   // and my addr
-  encode(msgr->my_inst.addr, addrs, 0);  // legacy
+  encode(msgr->my_addr, addrs, 0);  // legacy
 
-  port = msgr->my_inst.addr.get_port();
+  port = msgr->my_addr.get_port();
 
   // and peer's socket addr (they might not know their ip)
   sockaddr_storage ss;
@@ -611,7 +611,7 @@ int Pipe::accept()
 	}
 
 	// connection race?
-	if (peer_addr < msgr->my_inst.addr ||
+	if (peer_addr < msgr->my_addr ||
 	    existing->policy.server) {
 	  // incoming wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
@@ -630,7 +630,7 @@ int Pipe::accept()
 	  // our existing outgoing wins
 	  ldout(msgr->cct,10) << "accept connection race, existing " << existing << ".cseq " << existing->connect_seq
 		   << " == " << connect.connect_seq << ", sending WAIT" << dendl;
-	  assert(peer_addr > msgr->my_inst.addr);
+	  assert(peer_addr > msgr->my_addr);
 	  if (!(existing->state == STATE_CONNECTING))
 	    lderr(msgr->cct) << "accept race bad state, would send wait, existing="
 			     << existing->get_state_name()
@@ -1100,7 +1100,7 @@ int Pipe::connect()
 
   msgr->learned_addr(peer_addr_for_me);
 
-  encode(msgr->my_inst.addr, myaddrbl, 0);  // legacy
+  encode(msgr->my_addr, myaddrbl, 0);  // legacy
 
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = myaddrbl.c_str();
@@ -1113,7 +1113,7 @@ int Pipe::connect()
     ldout(msgr->cct,2) << "connect couldn't write my addr, " << cpp_strerror(rc) << dendl;
     goto fail;
   }
-  ldout(msgr->cct,10) << "connect sent my addr " << msgr->my_inst.addr << dendl;
+  ldout(msgr->cct,10) << "connect sent my addr " << msgr->my_addr << dendl;
 
 
   while (1) {
@@ -1123,7 +1123,7 @@ int Pipe::connect()
 
     ceph_msg_connect connect;
     connect.features = policy.features_supported;
-    connect.host_type = msgr->get_myinst().name.type();
+    connect.host_type = msgr->get_myname().type();
     connect.global_seq = gseq;
     connect.connect_seq = cseq;
     connect.protocol_version = msgr->get_proto_version(peer_type, true);

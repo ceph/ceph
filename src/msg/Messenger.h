@@ -48,7 +48,11 @@ private:
 
 protected:
   /// the "name" of the local daemon. eg client.99
-  entity_inst_t my_inst;
+  entity_name_t my_name;
+
+  /// my addr
+  entity_addr_t my_addr;
+
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
   bool started;
@@ -141,15 +145,13 @@ public:
    */
   Messenger(CephContext *cct_, entity_name_t w)
     : trace_endpoint("0.0.0.0", 0, "Messenger"),
-      my_inst(),
-      default_send_priority(CEPH_MSG_PRIO_DEFAULT), started(false),
+      my_name(w),
+      default_send_priority(CEPH_MSG_PRIO_DEFAULT),
+      started(false),
       magic(0),
       socket_priority(-1),
       cct(cct_),
-      crcflags(get_default_crc_flags(cct->_conf))
-  {
-    my_inst.name = w;
-  }
+      crcflags(get_default_crc_flags(cct->_conf)) {}
   virtual ~Messenger() {}
 
   /**
@@ -192,20 +194,15 @@ public:
    * @defgroup Accessors
    * @{
    */
+  int get_mytype() const { return my_name.type(); }
+
   /**
-   * Retrieve the Messenger's instance.
+   * Retrieve the Messenger's name
    *
-   * @return A const reference to the instance this Messenger
+   * @return A const reference to the name this Messenger
    * currently believes to be its own.
    */
-  const entity_inst_t& get_myinst() { return my_inst; }
-  /**
-   * set messenger's instance
-   */
-  void set_myinst(entity_inst_t i) { my_inst = i; }
-
-  uint32_t get_magic() { return magic; }
-  void set_magic(int _magic) { magic = _magic; }
+  const entity_name_t& get_myname() { return my_name; }
 
   /**
    * Retrieve the Messenger's address.
@@ -213,14 +210,24 @@ public:
    * @return A const reference to the address this Messenger
    * currently believes to be its own.
    */
-  const entity_addr_t& get_myaddr() { return my_inst.addr; }
+  const entity_addr_t& get_myaddr() { return my_addr; }
+  entity_addrvec_t get_myaddrs() {
+    return entity_addrvec_t(my_addr);
+  }
+
+  /**
+   * set messenger's instance
+   */
+  uint32_t get_magic() { return magic; }
+  void set_magic(int _magic) { magic = _magic; }
+
 protected:
   /**
    * set messenger's address
    */
   virtual void set_myaddr(const entity_addr_t& a) {
-    my_inst.addr = a;
-    set_endpoint_addr(a, my_inst.name);
+    my_addr = a;
+    set_endpoint_addr(a, my_name);
   }
 public:
   /**
@@ -231,20 +238,14 @@ public:
   }
 
   /**
-   * Retrieve the Messenger's name.
-   *
-   * @return A const reference to the name this Messenger
-   * currently believes to be its own.
-   */
-  const entity_name_t& get_myname() { return my_inst.name; }
-  /**
    * Set the name of the local entity. The name is reported to others and
    * can be changed while the system is running, but doing so at incorrect
    * times may have bad results.
    *
    * @param m The name to set.
    */
-  void set_myname(const entity_name_t& m) { my_inst.name = m; }
+  void set_myname(const entity_name_t& m) { my_name = m; }
+
   /**
    * Set the unknown address components for this Messenger.
    * This is useful if the Messenger doesn't know its full address just by
