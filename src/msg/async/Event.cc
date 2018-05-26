@@ -171,7 +171,8 @@ EventCenter::~EventCenter()
       external_events.pop_front();
     }
   }
-  assert(time_events.empty());
+  time_events.clear();
+  //assert(time_events.empty());
 
   if (notify_receive_fd >= 0)
     ::close(notify_receive_fd);
