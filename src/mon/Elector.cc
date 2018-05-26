@@ -105,7 +105,7 @@ void Elector::start()
     MMonElection *m =
       new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
     m->mon_features = ceph::features::mon::get_supported();
-    mon->messenger->send_message(m, mon->monmap->get_inst(i));
+    mon->send_mon_message(m, i);
   }
   
   reset_timer();
@@ -127,7 +127,7 @@ void Elector::defer(int who)
   m->mon_features = ceph::features::mon::get_supported();
   mon->collect_metadata(&m->metadata);
 
-  mon->messenger->send_message(m, mon->monmap->get_inst(who));
+  mon->send_mon_message(m, who);
   
   // set a timer
   reset_timer(1.0);  // give the leader some extra time to declare victory
@@ -220,7 +220,7 @@ void Elector::victory()
     m->quorum_features = cluster_features;
     m->mon_features = mon_features;
     m->sharing_bl = mon->get_local_commands_bl(mon_features);
-    mon->messenger->send_message(m, mon->monmap->get_inst(*p));
+    mon->send_mon_message(m, *p);
   }
 
   // tell monitor

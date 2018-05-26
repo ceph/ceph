@@ -540,7 +540,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	int leader = mon->get_leader();
 	MMonGlobalID *req = new MMonGlobalID();
 	req->old_max_id = max_global_id;
-	mon->messenger->send_message(req, mon->monmap->get_inst(leader));
+	mon->send_mon_message(req, leader);
 	wait_for_finished_proposal(op, new C_RetryMessage(this, op));
 	return true;
       }
