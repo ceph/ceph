@@ -33,6 +33,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
+#include "common/Throttle.h"
 #include "common/Timer.h"
 #include "common/errno.h"
 #include "common/Preforker.h"
