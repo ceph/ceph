@@ -31,6 +31,7 @@
 
 #include "msg/Messenger.h"
 
+#include "common/Throttle.h"
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
 #include "common/ceph_argparse.h"

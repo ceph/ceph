@@ -25,7 +25,7 @@
 
 #include "include/types.h"
 #include "include/buffer.h"
-#include "common/Throttle.h"
+#include "common/ThrottleInterface.h"
 #include "common/zipkin_trace.h"
 #include "msg_types.h"
 
@@ -283,10 +283,10 @@ protected:
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
-  Throttle *byte_throttler = nullptr;
+  ThrottleInterface *byte_throttler = nullptr;
 
   // release a count back to this throttler when we are destroyed
-  Throttle *msg_throttler = nullptr;
+  ThrottleInterface *msg_throttler = nullptr;
 
   // keep track of how big this message was when we reserved space in
   // the msgr dispatch_throttler, so that we can properly release it
@@ -333,10 +333,12 @@ public:
   }
   CompletionHook* get_completion_hook() { return completion_hook; }
   void set_completion_hook(CompletionHook *hook) { completion_hook = hook; }
-  void set_byte_throttler(Throttle *t) { byte_throttler = t; }
-  Throttle *get_byte_throttler() { return byte_throttler; }
-  void set_message_throttler(Throttle *t) { msg_throttler = t; }
-  Throttle *get_message_throttler() { return msg_throttler; }
+  void set_byte_throttler(ThrottleInterface *t) {
+    byte_throttler = t;
+  }
+  void set_message_throttler(ThrottleInterface *t) {
+    msg_throttler = t;
+  }
 
   void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
   uint64_t get_dispatch_throttle_size() const { return dispatch_throttle_size; }

@@ -35,6 +35,7 @@
 #include "include/mempool.h"
 #include "common/bloom_filter.hpp"
 #include "common/Finisher.h"
+#include "common/Throttle.h"
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
 #include "compressor/Compressor.h"
