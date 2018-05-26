@@ -746,7 +746,7 @@ COMMAND("osd unset " \
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim", \
 	"unset <key>", "osd", "rw", "cli,rest")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=luminous|mimic " \
+	"name=release,type=CephChoices,strings=luminous|mimic|nautilus " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw", "cli,rest")
