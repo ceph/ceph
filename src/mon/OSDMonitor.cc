@@ -1872,6 +1872,7 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   return false;
 
  didit:
+  mon->no_reply(op);
   return true;
 }
 
