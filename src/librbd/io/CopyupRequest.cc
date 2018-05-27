@@ -234,7 +234,7 @@ void CopyupRequest<I>::send()
   if (is_deep_copy()) {
     bool flatten = is_copyup_required() ? true : m_ictx->migration_info.flatten;
     auto req = deep_copy::ObjectCopyRequest<I>::create(
-        m_ictx->parent, m_ictx->parent->parent /* TODO */, m_ictx,
+        m_ictx->parent, m_ictx->migration_parent, m_ictx,
         m_ictx->migration_info.snap_map, m_object_no, flatten,
         util::create_context_callback(this));
     ldout(m_ictx->cct, 20) << "deep copy object req " << req

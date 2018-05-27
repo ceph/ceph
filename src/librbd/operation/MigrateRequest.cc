@@ -127,7 +127,7 @@ private:
       assert(image_ctx.parent != nullptr);
 
       auto req = deep_copy::ObjectCopyRequest<I>::create(
-        image_ctx.parent, image_ctx.parent->parent /* TODO */, &image_ctx,
+        image_ctx.parent, image_ctx.migration_parent, &image_ctx,
         image_ctx.migration_info.snap_map, m_object_no,
         image_ctx.migration_info.flatten, ctx);
 
