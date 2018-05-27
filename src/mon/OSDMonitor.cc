@@ -2561,6 +2561,7 @@ void OSDMonitor::process_failures()
           o->mark_event(__func__);
           MOSDFailure *m = o->get_req<MOSDFailure>();
           send_latest(o, m->get_epoch());
+	  mon->no_reply(o);
         }
 	ls.pop_front();
       }
