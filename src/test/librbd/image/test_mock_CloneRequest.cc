@@ -29,6 +29,13 @@ struct MockTestImageCtx : public MockImageCtx {
     assert(s_instance != nullptr);
     return s_instance;
   }
+  static MockTestImageCtx* create(const std::string &image_name,
+                                  const std::string &image_id,
+                                  librados::snap_t snap_id, IoCtx& p,
+                                  bool read_only) {
+    assert(s_instance != nullptr);
+    return s_instance;
+  }
 
   MockTestImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
     s_instance = this;
@@ -229,14 +236,6 @@ public:
     }
   }
 
-  void expect_snap_set(librbd::MockTestImageCtx &mock_image_ctx,
-                       uint64_t snap_id, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, snap_set(snap_id, _))
-      .WillOnce(WithArg<1>(Invoke([this, r](Context *on_finish) {
-          image_ctx->op_work_queue->queue(on_finish, r);
-        })));
-  }
-
   void expect_set_parent(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
@@ -364,7 +363,6 @@ TEST_F(TestMockImageCloneRequest, SuccessV1) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -413,7 +411,6 @@ TEST_F(TestMockImageCloneRequest, SuccessV2) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -462,7 +459,6 @@ TEST_F(TestMockImageCloneRequest, SuccessAuto) {
   InSequence seq;
   expect_get_min_compat_client(1, 0);
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -521,26 +517,6 @@ TEST_F(TestMockImageCloneRequest, OpenParentError) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageCloneRequest, SetParentSnapError) {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
-
-  MockTestImageCtx mock_image_ctx(*image_ctx);
-  expect_op_work_queue(mock_image_ctx);
-
-  InSequence seq;
-  expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, -EINVAL);
-  expect_close(mock_image_ctx, 0);
-
-  C_SaferCond ctx;
-  ImageOptions clone_opts;
-  auto req = new MockCloneRequest(m_ioctx, "parent id", "", 123, m_ioctx,
-                                  "clone name", "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
-}
-
 TEST_F(TestMockImageCloneRequest, CreateError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
@@ -549,7 +525,6 @@ TEST_F(TestMockImageCloneRequest, CreateError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -576,7 +551,6 @@ TEST_F(TestMockImageCloneRequest, OpenError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -608,7 +582,6 @@ TEST_F(TestMockImageCloneRequest, SetParentError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -643,7 +616,6 @@ TEST_F(TestMockImageCloneRequest, AddChildError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -679,7 +651,6 @@ TEST_F(TestMockImageCloneRequest, RefreshError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -719,7 +690,6 @@ TEST_F(TestMockImageCloneRequest, MetadataListError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -761,7 +731,6 @@ TEST_F(TestMockImageCloneRequest, MetadataSetError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -803,7 +772,6 @@ TEST_F(TestMockImageCloneRequest, GetMirrorModeError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -848,7 +816,6 @@ TEST_F(TestMockImageCloneRequest, MirrorEnableError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -894,7 +861,6 @@ TEST_F(TestMockImageCloneRequest, CloseError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -935,7 +901,6 @@ TEST_F(TestMockImageCloneRequest, RemoveError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
@@ -967,7 +932,6 @@ TEST_F(TestMockImageCloneRequest, CloseParentError) {
 
   InSequence seq;
   expect_open(mock_image_ctx, 0);
-  expect_snap_set(mock_image_ctx, 123, 0);
 
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
