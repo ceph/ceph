@@ -171,8 +171,8 @@ inline ostream& operator<<(ostream& out, const clog_type t)
 
 inline ostream& operator<<(ostream& out, const LogEntry& e)
 {
-  return out << e.stamp << " " << e.name << " (" << e.rank
-	     << " " << e.addrs << ") " << e.seq << " : "
+  return out << e.stamp << " " << e.name << " (" << e.rank << ") "
+	     << e.seq << " : "
              << e.channel << " " << e.prio << " " << e.msg;
 }
 
