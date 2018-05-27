@@ -52,17 +52,14 @@ private:
    * <start>
    *    |
    *    v
-   * OPEN PARENT                       <finish>
+   * OPEN PARENT
+   *    |
+   *    v
+   * VALIDATE CHILD                    <finish>
    *    |                                 ^
    *    v                                 |
-   * SET PARENT SNAP  * * * * * * * > CLOSE PARENT
-   *    |                       *         ^
-   *    v                       *         |
-   * VALIDATE CHILD             *         |
-   *    |                       *         |
-   *    v                       *         |
-   * CREATE CHILD * * * * * * * *         |
-   *    |                                 |
+   * CREATE CHILD * * * * * * * * * > CLOSE PARENT
+   *    |                                 ^
    *    v                                 |
    * OPEN CHILD * * * * * * * * * * > REMOVE CHILD
    *    |                                 ^
@@ -140,9 +137,6 @@ private:
 
   void open_parent();
   void handle_open_parent(int r);
-
-  void set_parent_snap();
-  void handle_set_parent_snap(int r);
 
   void validate_parent();
 
