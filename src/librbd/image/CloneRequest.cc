@@ -117,8 +117,16 @@ void CloneRequest<I>::validate_options() {
 template <typename I>
 void CloneRequest<I>::open_parent() {
   ldout(m_cct, 20) << dendl;
+  assert(m_parent_snap_name.empty() ^ (m_parent_snap_id == CEPH_NOSNAP));
 
-  m_parent_image_ctx = I::create("", m_parent_image_id, "", m_parent_io_ctx, true);
+  if (m_parent_snap_id != CEPH_NOSNAP) {
+    m_parent_image_ctx = I::create("", m_parent_image_id, m_parent_snap_id,
+                                   m_parent_io_ctx, true);
+  } else {
+    m_parent_image_ctx = I::create("", m_parent_image_id,
+                                   m_parent_snap_name.c_str(), m_parent_io_ctx,
+                                   true);
+  }
 
   Context *ctx = create_context_callback<
     CloneRequest<I>, &CloneRequest<I>::handle_open_parent>(this);
@@ -138,52 +146,7 @@ void CloneRequest<I>::handle_open_parent(int r) {
     return;
   }
 
-  set_parent_snap();
-}
-
-template <typename I>
-void CloneRequest<I>::set_parent_snap() {
-  assert((m_parent_snap_name.empty()) ^ (m_parent_snap_id == CEPH_NOSNAP));
-
-  if (m_parent_snap_id == CEPH_NOSNAP) {
-    // look up user snapshot by name
-    m_parent_image_ctx->snap_lock.get_read();
-    auto it = m_parent_image_ctx->snap_ids.find(
-      {cls::rbd::UserSnapshotNamespace{}, m_parent_snap_name});
-    if (it == m_parent_image_ctx->snap_ids.end()) {
-      m_parent_image_ctx->snap_lock.put_read();
-
-      lderr(m_cct) << "failed to located parent snapshot: " <<
-                   m_parent_snap_name << dendl;
-      m_r_saved = -ENOENT;
-      close_parent();
-      return;
-    }
-
-    m_parent_snap_id = it->second;
-    m_parent_image_ctx->snap_lock.put_read();
-  }
-
-  ldout(m_cct, 20) << "parent_snap_id=" << m_parent_snap_id << dendl;
-
-  Context *ctx = create_context_callback<
-    CloneRequest<I>, &CloneRequest<I>::handle_set_parent_snap>(this);
-  m_parent_image_ctx->state->snap_set(m_parent_snap_id, ctx);
-}
-
-template <typename I>
-void CloneRequest<I>::handle_set_parent_snap(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to set parent snapshot: " << cpp_strerror(r)
-                 << dendl;
-
-    m_r_saved = r;
-    close_parent();
-    return;
-  }
-
+  m_parent_snap_id = m_parent_image_ctx->snap_id;
   m_pspec = {m_parent_io_ctx.get_id(), m_parent_image_id, m_parent_snap_id};
   validate_parent();
 }
