@@ -15,7 +15,7 @@ def _serialize_ecp(name, ecp):
     return ecp
 
 
-@ApiController('erasure_code_profile')
+@ApiController('/erasure_code_profile')
 @AuthRequired()
 class ErasureCodeProfile(RESTController):
     """

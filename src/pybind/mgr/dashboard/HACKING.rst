@@ -245,48 +245,191 @@ Or, ``source`` the script and run the tests manually::
 How to add a new controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you want to add a new endpoint to the backend, you just need to add a
-class derived from ``BaseController`` decorated with ``ApiController`` in a
-Python file located under the ``controllers`` directory. The Dashboard module
-will automatically load your new controller upon start.
+A controller is a Python class that extends from the ``BaseController`` class
+and is decorated with either the ``@Controller`` or ``@ApiController``
+decorators. The Python class must be stored inside a Python file located under
+the ``controllers`` directory. The Dashboard module will automatically load
+your new controller upon start.
 
-For example create a file ``ping2.py`` under ``controllers`` directory with the
-following code::
+The ``@ApiController`` decorator is a specialization of the ``@Controller``
+decorator, and should be used for controllers that provide an API-like REST
+interface. For any other kinds of controllers the ``@Controller`` decorator
+should be used.
 
-  import cherrypy
-  from ..tools import ApiController, BaseController
+A controller has a URL prefix path associated that is specified in the
+controller decorator, and all endpoints exposed by the controller will share
+the same URL prefix path.
 
-  @ApiController('ping2')
-  class Ping2(BaseController):
-    @cherrypy.expose
-    def default(self, *args):
-      return "Hello"
+A controller's endpoint is exposed by implementing a method on the controller
+class decorated with the ``@Endpoint`` decorator.
 
-Every path given in the ``ApiController`` decorator will automatically be
-prefixed with ``api``. After reloading the Dashboard module you can access the
-above mentioned controller by pointing your browser to
-https://mgr_hostname:8080/api/ping2.
+For example create a file ``ping.py`` under ``controllers`` directory with the
+following code:
 
-It is also possible to have nested controllers. The ``RgwController`` uses
-this technique to make the daemons available through the URL
-https://mgr_hostname:8080/api/rgw/daemon::
+.. code-block:: python
 
-  @ApiController('rgw')
-  @AuthRequired()
-  class Rgw(RESTController):
-    pass
+  from ..tools import Controller, ApiController, BaseController, Endpoint
 
+  @Controller('/ping')
+  class Ping(BaseController):
+    @Endpoint()
+    def hello(self):
+      return {msg: "Hello"}
 
-  @ApiController('rgw/daemon')
-  @AuthRequired()
-  class RgwDaemon(RESTController):
-
-    def list(self):
-      pass
+  @ApiController('/ping')
+  class ApiPing(BaseController):
+    @Endpoint()
+    def hello(self):
+      return {msg: "Hello"}
 
 
-Note that paths must be unique and that a path like ``rgw/daemon`` has to have
-a parent ``rgw``. Otherwise it won't work.
+The ``hello`` endpoint of the ``Ping`` controller can be reached by the
+following URL: https://mgr_hostname:8080/ping/hello using HTTP GET requests.
+As you can see the controller URL path ``/ping`` is concatenated to the
+method name ``hello`` to generate the endpoint's URL.
+
+In the case of the ``ApiPing`` controller, the ``hello`` endpoint can be
+reached by the following URL: https://mgr_hostname:8080/api/ping/hello using
+HTTP GET request.
+The API controller URL path ``/ping`` is prefixed by the ``/api`` path and then
+concatenated to the method name ``hello`` to generate the endpoint's URL.
+Internally, the ``@ApiController`` is actually calling the ``@Controller``
+decorator by passing an additional decorator parameter called ``base_url``::
+
+  @ApiController('/ping') <=> @Controller('/ping', base_url="/api")
+
+The ``@Endpoint`` decorator also supports many parameters to customize the
+endpoint:
+
+* ``method="GET"``: the HTTP method allowed to access this endpoint.
+* ``path="/<method_name>"``: the URL path of the endpoint, excluding the
+  controller URL path prefix.
+* ``path_params=[]``: list of method parameter names that correspond to URL
+  path parameters. Can only be used when ``method in ['POST', 'PUT']``.
+* ``query_params=[]``: list of method parameter names that correspond to URL
+  query parameters.
+* ``json_response=True``: indicates if the endpoint response should be
+  serialized in JSON format.
+* ``proxy=False``: indicates if the endpoint should be used as a proxy.
+
+An endpoint method may have parameters declared. Depending on the HTTP method
+defined for the endpoint the method parameters might be considered either
+path parameters, query parameters, or body parameters.
+
+For ``GET`` and ``DELETE`` methods, the method non-optional parameters are
+considered path parameters by default. Optional parameters are considered
+query parameters. By specifing the ``query_parameters`` in the endpoint
+decorator it is possible to make a non-optional parameter to be a query
+parameter.
+
+For ``POST`` and ``PUT`` methods, all method parameters are considered
+body parameters by default. To override this default, one can use the
+``path_params`` and ``query_params`` to specify which method parameters are
+path and query parameters respectivelly.
+Body parameters are decoded from the request body, either from a form format, or
+from a dictionary in JSON format.
+
+Let's use an example to better understand the possible ways to custumize an
+endpoint:
+
+.. code-block:: python
+
+  from ..tools import Controller, BaseController, Endpoint
+
+  @Controller('/ping')
+  class Ping(BaseController):
+
+    # URL: /ping/{key}?opt1=...&opt2=...
+    @Endpoint(path="/", query_params=['opt1'])
+    def index(self, key, opt1, opt2=None):
+      # ...
+
+    # URL: /ping/{key}?opt1=...&opt2=...
+    @Endpoint(query_params=['opt1'])
+    def __call__(self, key, opt1, opt2=None):
+      # ...
+
+    # URL: /ping/post/{key1}/{key2}
+    @Endpoint('POST', path_params=['key1', 'key2'])
+    def post(self, key1, key2, data1, data2=None):
+      # ...
+
+From the above example you can see that the path parameters are collected from
+the URL by parsing the list of values separated by slashes ``/`` that come
+after the URL path ``/ping`` for ``index`` method case, and ``/ping/post`` for
+the ``post`` method case.
+
+In the above example we also see how the ``path`` option can be used to
+override the generated endpoint URL in order to not use the method name in the
+URL. In the ``index`` method we set the ``path`` to ``"/"`` to generate an
+endpoint that is accessible by the root URL of the controller.
+
+An alternative approach to generate an endpoint that is accessible through just
+the controller's path URL is by using the ``__call__`` method, as we show in
+the above example.
+
+Defining path parameters in endpoints's URLs using python methods's parameters
+is very easy but it is still a bit strict with respect to the position of these
+parameters in the URL structure.
+Sometimes we may want to explictly define a URL scheme that
+contains path parameters mixed with static parts of the URL.
+Our controller infrastructure also supports the declaration of URL paths with
+explicit path parameters at both the controller level and method level.
+
+Consider the following example:
+
+.. code-block:: python
+
+  from ..tools import Controller, BaseController, Endpoint
+
+  @Controller('/ping/{node}/stats')
+  class Ping(BaseController):
+
+    # URL: /ping/{node}/stats/{date}/latency?unit=...
+    @Endpoint(path="/{date}/latency")
+    def latency(self, node, date, unit="ms"):
+      # ...
+
+In this example we explicitly declare a path parameter ``{node}`` in the
+controller URL path, and a path parameter ``{date}`` in the ``latency``
+method. The endpoint for the ``latency`` method is then accessible through
+the URL: https://mgr_hostname:8080/ping/{node}/stats/{date}/latency .
+
+For a full set of examples on how to use the ``@Endpoint``
+decorator please check the unit test file: ``tests/test_controllers.py``.
+There you will find many examples of how to customize endpoint methods.
+
+
+Implementing Proxy Controller
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Sometimes you might need to relay some requests from the Dashboard frontend
+directly to an external service.
+For that purpose we provide a decorator called ``@Proxy``.
+(As a concrete example, check the ``controllers/rgw.py`` file where we
+implemented an RGW Admin Ops proxy.)
+
+
+The ``@Proxy`` decorator is a wrapper of the ``@Endpoint`` decorator that
+already customizes the endpoint for working as a proxy.
+A proxy endpoint works by capturing the URL path that follows the controller
+URL prefix path, and does not do any decoding of the request body.
+
+Example:
+
+.. code-block:: python
+
+  from ..tools import Controller, BaseController, Proxy
+
+  @Controller('/foo/proxy')
+  class FooServiceProxy(BaseController):
+
+    @Proxy()
+    def proxy(self, path, **params):
+      # if requested URL is "/foo/proxy/access/service?opt=1"
+      # then path is "access/service" and params is {'opt': '1'}
+      # ...
+
 
 How does the RESTController work?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -300,13 +443,15 @@ and unifies the work with collections. A collection is just an array of objects
 with a specific type. ``RESTController`` enables some default mappings of
 request types and given parameters to specific method names. This may sound
 complicated at first, but it's fairly easy. Lets have look at the following
-example::
+example:
+
+.. code-block:: python
 
   import cherrypy
   from ..tools import ApiController, RESTController
 
-  @ApiController('ping2')
-  class Ping2(RESTController):
+  @ApiController('ping')
+  class Ping(RESTController):
     def list(self):
       return {"msg": "Hello"}
 
@@ -314,7 +459,7 @@ example::
       return self.objects[id]
 
 In this case, the ``list`` method is automatically used for all requests to
-``api/ping2`` where no additional argument is given and where the request type
+``api/ping`` where no additional argument is given and where the request type
 is ``GET``. If the request is given an additional argument, the ID in our
 case, it won't map to ``list`` anymore but to ``get`` and return the element
 with the given ID (assuming that ``self.objects`` has been filled before). The
@@ -327,8 +472,6 @@ same applies to other request types:
 +--------------+------------+----------------+-------------+
 | PUT          | No         | bulk_set       | 200         |
 +--------------+------------+----------------+-------------+
-| PATCH        | No         | bulk_set       | 200         |
-+--------------+------------+----------------+-------------+
 | POST         | No         | create         | 201         |
 +--------------+------------+----------------+-------------+
 | DELETE       | No         | bulk_delete    | 204         |
@@ -336,8 +479,6 @@ same applies to other request types:
 | GET          | Yes        | get            | 200         |
 +--------------+------------+----------------+-------------+
 | PUT          | Yes        | set            | 200         |
-+--------------+------------+----------------+-------------+
-| PATCH        | Yes        | set            | 200         |
 +--------------+------------+----------------+-------------+
 | DELETE       | Yes        | delete         | 204         |
 +--------------+------------+----------------+-------------+
@@ -369,7 +510,9 @@ How to access the manager module instance from a controller?
 We provide the manager module instance as a global variable that can be
 imported in any module. We also provide a logger instance in the same way.
 
-Example::
+Example:
+
+.. code-block:: python
 
   import cherrypy
   from .. import logger, mgr
@@ -389,29 +532,31 @@ How to write a unit test for a controller?
 We provide a test helper class called ``ControllerTestCase`` to easily create
 unit tests for your controller.
 
-If we want to write a unit test for the above ``Ping2`` controller, create a
-``test_ping2.py`` file under the ``tests`` directory with the following code::
+If we want to write a unit test for the above ``Ping`` controller, create a
+``test_ping.py`` file under the ``tests`` directory with the following code:
+
+.. code-block:: python
 
   from .helper import ControllerTestCase
-  from .controllers.ping2 import Ping2
+  from .controllers.ping import Ping
 
 
-  class Ping2Test(ControllerTestCase):
+  class PingTest(ControllerTestCase):
       @classmethod
       def setup_test(cls):
-          Ping2._cp_config['tools.authentica.on'] = False
+          Ping._cp_config['tools.authentication.on'] = False
+          cls.setup_controllers([Ping])
 
-      def test_ping2(self):
-          self._get("/api/ping2")
+      def test_ping(self):
+          self._get("/api/ping")
           self.assertStatus(200)
           self.assertJsonBody({'msg': 'Hello'})
 
-The ``ControllerTestCase`` class will call the dashboard module code that loads
-the controllers and initializes the CherryPy webserver. Then it will call the
-``setup_test()`` class method to execute additional instructions that each test
-case needs to add to the test.
-In the example above we use the ``setup_test()`` method to disable the
-authentication handler for the ``Ping2`` controller.
+The ``ControllerTestCase`` class starts by initializing a CherryPy webserver.
+Then it will call the ``setup_test()`` class method where we can explicitly
+load the controllers that we want to test. In the above example we are only
+loading the ``Ping`` controller. We can also disable authentication of a
+controller at this stage, as depicted in the example.
 
 
 How to listen for manager notifications in a controller?
@@ -427,7 +572,9 @@ For this reason we provide a notification queue that controllers can register
 themselves with to receive cluster notifications.
 
 The example below represents a controller that implements a very simple live
-log viewer page::
+log viewer page:
+
+.. code-block:: python
 
   from __future__ import absolute_import
 
@@ -483,7 +630,9 @@ How to write a unit test when a controller accesses a Ceph module?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Consider the following example that implements a controller that retrieves the
-list of RBD images of the ``rbd`` pool::
+list of RBD images of the ``rbd`` pool:
+
+.. code-block:: python
 
   import rbd
   from .. import mgr
@@ -502,7 +651,9 @@ list of RBD images of the ``rbd`` pool::
 In the example above, we want to mock the return value of the ``rbd.list``
 function, so that we can test the JSON response of the controller.
 
-The unit test code will look like the following::
+The unit test code will look like the following:
+
+.. code-block:: python
 
   import mock
   from .helper import ControllerTestCase
@@ -545,7 +696,9 @@ get and set that setting::
 
 To access, or modify the config setting value from your Python code, either
 inside a controller or anywhere else, you just need to import the ``Settings``
-class and access it like this::
+class and access it like this:
+
+.. code-block:: python
 
   from settings import Settings
 
