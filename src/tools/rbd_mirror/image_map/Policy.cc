@@ -395,9 +395,8 @@ bool Policy::set_state(ImageState* image_state, StateTransition::State state,
 
 bool Policy::is_state_scheduled(const ImageState& image_state,
                                 StateTransition::State state) const {
-  return (image_state.state == StateTransition::STATE_DISSOCIATING ||
-          (image_state.next_state &&
-           *image_state.next_state == StateTransition::STATE_DISSOCIATING));
+  return (image_state.state == state ||
+          (image_state.next_state && *image_state.next_state == state));
 }
 
 } // namespace image_map
