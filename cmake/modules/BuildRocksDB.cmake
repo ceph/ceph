@@ -20,6 +20,7 @@ function(do_build_rocksdb)
   list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
   list(APPEND ROCKSDB_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
   list(APPEND ROCKSDB_CMAKE_ARGS -DFAIL_ON_WARNINGS=OFF)
+  list(APPEND ROCKSDB_CMAKE_ARGS -DUSE_RTTI=1)
 
   # we use an external project and copy the sources to bin directory to ensure
   # that object files are built outside of the source tree.
