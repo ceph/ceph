@@ -64,6 +64,11 @@ class ApiController(Controller):
         return cls
 
 
+class UiApiController(Controller):
+    def __init__(self, path):
+        super(UiApiController, self).__init__(path, base_url="/ui-api")
+
+
 def AuthRequired(enabled=True):
     def decorate(cls):
         if not hasattr(cls, '_cp_config'):

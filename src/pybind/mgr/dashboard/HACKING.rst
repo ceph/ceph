@@ -246,15 +246,18 @@ How to add a new controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A controller is a Python class that extends from the ``BaseController`` class
-and is decorated with either the ``@Controller`` or ``@ApiController``
-decorators. The Python class must be stored inside a Python file located under
-the ``controllers`` directory. The Dashboard module will automatically load
-your new controller upon start.
+and is decorated with either the ``@Controller``, ``@ApiController`` or
+``@UiApiController`` decorators. The Python class must be stored inside a Python
+file located under the ``controllers`` directory. The Dashboard module will
+automatically load your new controller upon start.
 
-The ``@ApiController`` decorator is a specialization of the ``@Controller``
-decorator, and should be used for controllers that provide an API-like REST
-interface. For any other kinds of controllers the ``@Controller`` decorator
-should be used.
+``@ApiController`` and ``@UiApiController`` are both specializations of the
+``@Controller`` decorator.
+
+The ``@ApiController`` should be used for controllers that provide an API-like
+REST interface and the ``@UiApiController`` should be used for endpoints consumed
+by the UI but that are not part of the 'public' API. For any other kinds of
+controllers the ``@Controller`` decorator should be used.
 
 A controller has a URL prefix path associated that is specified in the
 controller decorator, and all endpoints exposed by the controller will share
@@ -268,7 +271,7 @@ following code:
 
 .. code-block:: python
 
-  from ..tools import Controller, ApiController, BaseController, Endpoint
+  from ..tools import Controller, ApiController, UiApiController, BaseController, Endpoint
 
   @Controller('/ping')
   class Ping(BaseController):
@@ -282,6 +285,11 @@ following code:
     def hello(self):
       return {'msg': "Hello"}
 
+  @UiApiController('/ping')
+  class UiApiPing(BaseController):
+    @Endpoint()
+    def hello(self):
+      return {'msg': "Hello"}
 
 The ``hello`` endpoint of the ``Ping`` controller can be reached by the
 following URL: https://mgr_hostname:8080/ping/hello using HTTP GET requests.
@@ -297,6 +305,12 @@ Internally, the ``@ApiController`` is actually calling the ``@Controller``
 decorator by passing an additional decorator parameter called ``base_url``::
 
   @ApiController('/ping') <=> @Controller('/ping', base_url="/api")
+
+``UiApiPing`` works in a similar way than the ``ApiPing``, but the URL will be
+prefixed by ``/ui-api``: https://mgr_hostname:8080/ui-api/ping/hello. ``UiApiPing`` is
+also a ``@Controller`` extension::
+
+  @UiApiController('/ping') <=> @Controller('/ping', base_url="/ui-api")
 
 The ``@Endpoint`` decorator also supports many parameters to customize the
 endpoint:
