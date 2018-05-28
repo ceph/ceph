@@ -363,6 +363,7 @@ int MonMap::build_from_host_list(std::string hostlist, const std::string &prefix
 	!contains(name))
       add(name, addrs[i]);
   }
+  calc_legacy_ranks();
   return 0;
 }
 
@@ -409,6 +410,7 @@ void MonMap::set_initial_members(CephContext *cct,
       assert(contains(*p));
     }
   }
+  calc_legacy_ranks();
 }
 
 
@@ -449,6 +451,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
     }
     created = ceph_clock_now();
     last_changed = created;
+    calc_legacy_ranks();
     return 0;
   }
 
@@ -547,5 +550,6 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
   }
   created = ceph_clock_now();
   last_changed = created;
+  calc_legacy_ranks();
   return 0;
 }
