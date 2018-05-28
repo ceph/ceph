@@ -13,7 +13,6 @@ import { RgwUserS3Key } from '../models/rgw-user-s3-key';
   styleUrls: ['./rgw-user-s3-key-modal.component.scss']
 })
 export class RgwUserS3KeyModalComponent {
-
   /**
    * The event that is triggered when the 'Add' button as been pressed.
    */
@@ -23,29 +22,17 @@ export class RgwUserS3KeyModalComponent {
   viewing = true;
   userCandidates: string[] = [];
 
-  constructor(private formBuilder: FormBuilder,
-              public bsModalRef: BsModalRef) {
+  constructor(private formBuilder: FormBuilder, public bsModalRef: BsModalRef) {
     this.createForm();
     this.listenToChanges();
   }
 
   createForm() {
     this.formGroup = this.formBuilder.group({
-      'user': [
-        null,
-        [Validators.required]
-      ],
-      'generate_key': [
-        true
-      ],
-      'access_key': [
-        null,
-        [CdValidators.requiredIf({'generate_key': false})]
-      ],
-      'secret_key': [
-        null,
-        [CdValidators.requiredIf({'generate_key': false})]
-      ]
+      user: [null, [Validators.required]],
+      generate_key: [true],
+      access_key: [null, [CdValidators.requiredIf({ generate_key: false })]],
+      secret_key: [null, [CdValidators.requiredIf({ generate_key: false })]]
     });
   }
 
@@ -55,7 +42,7 @@ export class RgwUserS3KeyModalComponent {
     // validated again if the status of their prerequisites have been changed.
     this.formGroup.get('generate_key').valueChanges.subscribe(() => {
       ['access_key', 'secret_key'].forEach((path) => {
-        this.formGroup.get(path).updateValueAndValidity({onlySelf: true});
+        this.formGroup.get(path).updateValueAndValidity({ onlySelf: true });
       });
     });
   }
@@ -75,10 +62,10 @@ export class RgwUserS3KeyModalComponent {
    */
   setValues(user: string, access_key: string, secret_key: string) {
     this.formGroup.setValue({
-      'user': user,
-      'generate_key': _.isEmpty(access_key),
-      'access_key': access_key,
-      'secret_key': secret_key
+      user: user,
+      generate_key: _.isEmpty(access_key),
+      access_key: access_key,
+      secret_key: secret_key
     });
   }
 

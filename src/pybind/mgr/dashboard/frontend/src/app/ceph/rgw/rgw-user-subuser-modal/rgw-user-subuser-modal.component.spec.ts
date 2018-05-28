@@ -12,14 +12,10 @@ describe('RgwUserSubuserModalComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RgwUserSubuserModalComponent ],
-      imports: [
-        ReactiveFormsModule,
-        SharedModule
-      ],
-      providers: [ BsModalRef ]
-    })
-    .compileComponents();
+      declarations: [RgwUserSubuserModalComponent],
+      imports: [ReactiveFormsModule, SharedModule],
+      providers: [BsModalRef]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
@@ -36,8 +32,8 @@ describe('RgwUserSubuserModalComponent', () => {
     beforeEach(() => {
       component.editing = false;
       component.subusers = [
-        {id: 'Edith', permissions: 'full-control'},
-        {id: 'Edith:images', permissions: 'read-write'}
+        { id: 'Edith', permissions: 'full-control' },
+        { id: 'Edith:images', permissions: 'read-write' }
       ];
     });
 

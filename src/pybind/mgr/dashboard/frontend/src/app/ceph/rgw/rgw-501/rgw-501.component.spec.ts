@@ -10,13 +10,9 @@ describe('Rgw501Component', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ Rgw501Component ],
-      imports: [
-        RouterTestingModule,
-        SharedModule
-      ]
-    })
-    .compileComponents();
+      declarations: [Rgw501Component],
+      imports: [RouterTestingModule, SharedModule]
+    }).compileComponents();
   }));
 
   beforeEach(() => {

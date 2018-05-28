@@ -8,7 +8,6 @@ import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
   styleUrls: ['./rgw-user-swift-key-modal.component.scss']
 })
 export class RgwUserSwiftKeyModalComponent {
-
   user: string;
   secret_key: string;
 
