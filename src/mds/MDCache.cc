@@ -1559,7 +1559,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
     // clone caps?
     for (auto &p : in->client_caps) {
       client_t client = p.first;
-      Capability *cap = p.second;
+      Capability *cap = &p.second;
       int issued = cap->need_snapflush() ? CEPH_CAP_ANY_WR : cap->issued();
       if ((issued & CEPH_CAP_ANY_WR) &&
 	  cap->client_follows < last) {
@@ -2017,17 +2017,15 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct)
   if (!in->get_projected_srnode())
     mds->server->create_quota_realm(in);
 
-  for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
-       it != in->client_caps.end();
-       ++it) {
-    Session *session = mds->get_session(it->first);
+  for (auto &p : in->client_caps) {
+    Session *session = mds->get_session(p.first);
     if (!session || !session->connection ||
         !session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA))
       continue;
 
-    Capability *cap = it->second;
+    Capability *cap = &p.second;
 
-    if (exclude_ct >= 0 && exclude_ct != it->first)
+    if (exclude_ct >= 0 && exclude_ct != p.first)
       goto update;
 
     if (cap->last_rbytes == i->rstat.rbytes &&
