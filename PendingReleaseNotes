@@ -5,3 +5,12 @@
   an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
   send the statistics to databases like InfluxDB, ElasticSearch, Graphite
   and many more.
+
+* The graylog fields naming the originator of a log event have
+  changed: the string-form name is now included (e.g., ``"name":
+  "mgr.foo"``), and the rank-form name is now in a nested section
+  (e.g., ``"rank": {"type": "mgr", "num": 43243}``).
+
+* If the cluster log is directed at syslog, the entries are now
+  prefixed by both the string-form name and the rank-form name (e.g.,
+  ``mgr.x mgr.12345 ...`` instead of just ``mgr.12345 ...``).

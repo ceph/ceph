@@ -1042,7 +1042,7 @@ void librados::RadosClient::handle_log(MLog *m)
         ostringstream ss;
         ss << e.stamp << " " << e.name << " " << e.prio << " " << e.msg;
         string line = ss.str();
-        string who = stringify(e.who);
+        string who = stringify(e.rank) + " " + stringify(e.addrs);
 	string name = stringify(e.name);
         string level = stringify(e.prio);
         struct timespec stamp;
