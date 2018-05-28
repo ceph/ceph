@@ -581,8 +581,8 @@ public:
   // -- distributed state --
 protected:
   // file capabilities
-  using cap_map = mempool::mds_co::map<client_t, Capability*>;
-  cap_map client_caps;         // client -> caps
+  using mempool_cap_map = mempool::mds_co::map<client_t, Capability>;
+  mempool_cap_map client_caps;         // client -> caps
   mempool::mds_co::compact_map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
   int replica_caps_wanted = 0; // [replica] what i've requested from auth
   int num_caps_wanted = 0;
@@ -975,7 +975,7 @@ public:
   int count_nonstale_caps() {
     int n = 0;
     for (const auto &p : client_caps) {
-      if (!p.second->is_stale())
+      if (!p.second.is_stale())
 	n++;
     }
     return n;
@@ -983,7 +983,7 @@ public:
   bool multiple_nonstale_caps() {
     int n = 0;
     for (const auto &p : client_caps) {
-      if (!p.second->is_stale()) {
+      if (!p.second.is_stale()) {
 	if (n)
 	  return true;
 	n++;
@@ -999,17 +999,17 @@ public:
   void set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m);
   void set_mds_caps_wanted(mds_rank_t mds, int32_t wanted);
 
-  const cap_map& get_client_caps() const { return client_caps; }
+  const mempool_cap_map& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
     auto client_caps_entry = client_caps.find(client);
     if (client_caps_entry != client_caps.end())
-      return client_caps_entry->second;
+      return &client_caps_entry->second;
     return 0;
   }
   int get_client_cap_pending(client_t client) const {
     auto client_caps_entry = client_caps.find(client);
     if (client_caps_entry != client_caps.end()) {
-      return client_caps_entry->second->pending();
+      return client_caps_entry->second.pending();
     } else {
       return 0;
     }

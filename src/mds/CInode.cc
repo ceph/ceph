@@ -210,16 +210,16 @@ ostream& operator<<(ostream& out, const CInode& in)
 
   if (!in.get_client_caps().empty()) {
     out << " caps={";
-    for (map<client_t,Capability*>::const_iterator it = in.get_client_caps().begin();
-         it != in.get_client_caps().end();
-         ++it) {
-      if (it != in.get_client_caps().begin()) out << ",";
-      out << it->first << "="
-	  << ccap_string(it->second->pending());
-      if (it->second->issued() != it->second->pending())
-	out << "/" << ccap_string(it->second->issued());
-      out << "/" << ccap_string(it->second->wanted())
-	  << "@" << it->second->get_last_sent();
+    bool first = true;
+    for (const auto &p : in.get_client_caps()) {
+      if (!first) out << ",";
+      out << p.first << "="
+	  << ccap_string(p.second.pending());
+      if (p.second.issued() != p.second.pending())
+	out << "/" << ccap_string(p.second.issued());
+      out << "/" << ccap_string(p.second.wanted())
+	  << "@" << p.second.get_last_sent();
+      first = false;
     }
     out << "}";
     if (in.get_loner() >= 0 || in.get_wanted_loner() >= 0) {
@@ -2836,17 +2836,16 @@ client_t CInode::calc_ideal_loner()
   
   int n = 0;
   client_t loner = -1;
-  for (map<client_t,Capability*>::iterator it = client_caps.begin();
-       it != client_caps.end();
-       ++it) 
-    if (!it->second->is_stale() &&
-	((it->second->wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD)) ||
+  for (const auto &p : client_caps) {
+    if (!p.second.is_stale() &&
+	((p.second.wanted() & (CEPH_CAP_ANY_WR|CEPH_CAP_FILE_WR|CEPH_CAP_FILE_RD)) ||
 	 (inode.is_dir() && !has_subtree_root_dirfrag()))) {
       if (n)
 	return -1;
       n++;
-      loner = it->first;
+      loner = p.first;
     }
+  }
   return loner;
 }
 
@@ -2998,26 +2997,27 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
     if (parent)
       parent->dir->adjust_num_inodes_with_caps(1);
   }
-  
-  Capability *cap = new Capability(this, ++mdcache->last_cap_id, client);
-  assert(client_caps.count(client) == 0);
-  client_caps[client] = cap;
+
+  uint64_t cap_id = ++mdcache->last_cap_id;
+  auto ret = client_caps.emplace(std::piecewise_construct, std::forward_as_tuple(client),
+                                 std::forward_as_tuple(this, cap_id, client));
+  assert(ret.second == true);
+  Capability *cap = &ret.first->second;
 
   session->add_cap(cap);
   if (session->is_stale())
     cap->mark_stale();
-  
   cap->client_follows = first-1;
-  
   containing_realm->add_cap(client, cap);
-  
+
   return cap;
 }
 
 void CInode::remove_client_cap(client_t client)
 {
-  assert(client_caps.count(client) == 1);
-  Capability *cap = client_caps[client];
+  auto it = client_caps.find(client);
+  assert(it != client_caps.end());
+  Capability *cap = &it->second;
   
   cap->item_session_caps.remove_myself();
   cap->item_revoking_caps.remove_myself();
@@ -3030,8 +3030,7 @@ void CInode::remove_client_cap(client_t client)
   if (cap->wanted())
     adjust_num_caps_wanted(-1);
 
-  delete cap;
-  client_caps.erase(client);
+  client_caps.erase(it);
   if (client_caps.empty()) {
     dout(10) << __func__ << " last cap, leaving realm " << *containing_realm << dendl;
     put(PIN_CAPS);
@@ -3056,11 +3055,9 @@ void CInode::move_to_realm(SnapRealm *realm)
 {
   dout(10) << __func__ << " joining realm " << *realm
 	   << ", leaving realm " << *containing_realm << dendl;
-  for (map<client_t,Capability*>::iterator q = client_caps.begin();
-       q != client_caps.end();
-       ++q) {
-    containing_realm->remove_cap(q->first, q->second);
-    realm->add_cap(q->first, q->second);
+  for (auto& p : client_caps) {
+    containing_realm->remove_cap(p.first, &p.second);
+    realm->add_cap(p.first, &p.second);
   }
   item_caps.remove_myself();
   realm->inodes_with_caps.push_back(&item_caps);
@@ -3098,10 +3095,8 @@ void CInode::clear_client_caps_after_export()
 
 void CInode::export_client_caps(map<client_t,Capability::Export>& cl)
 {
-  for (map<client_t,Capability*>::iterator it = client_caps.begin();
-       it != client_caps.end();
-       ++it) {
-    cl[it->first] = it->second->make_export();
+  for (const auto &p : client_caps) {
+    cl[p.first] = p.second.make_export();
   }
 }
 
@@ -3190,16 +3185,14 @@ int CInode::get_caps_issued(int *ploner, int *pother, int *pxlocker,
     loner_cap = -1;
   }
 
-  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
-       it != client_caps.end();
-       ++it) {
-    int i = it->second->issued();
+  for (const auto &p : client_caps) {
+    int i = p.second.issued();
     c |= i;
-    if (it->first == loner_cap)
+    if (p.first == loner_cap)
       loner |= i;
     else
       other |= i;
-    xlocker |= get_xlocker_mask(it->first) & i;
+    xlocker |= get_xlocker_mask(p.first) & i;
   }
   if (ploner) *ploner = (loner >> shift) & mask;
   if (pother) *pother = (other >> shift) & mask;
@@ -3209,11 +3202,10 @@ int CInode::get_caps_issued(int *ploner, int *pother, int *pxlocker,
 
 bool CInode::is_any_caps_wanted() const
 {
-  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
-       it != client_caps.end();
-       ++it)
-    if (it->second->wanted())
+  for (const auto &p : client_caps) {
+    if (p.second.wanted())
       return true;
+  }
   return false;
 }
 
@@ -3221,13 +3213,11 @@ int CInode::get_caps_wanted(int *ploner, int *pother, int shift, int mask) const
 {
   int w = 0;
   int loner = 0, other = 0;
-  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
-       it != client_caps.end();
-       ++it) {
-    if (!it->second->is_stale()) {
-      int t = it->second->wanted();
+  for (const auto &p : client_caps) {
+    if (!p.second.is_stale()) {
+      int t = p.second.wanted();
       w |= t;
-      if (it->first == loner_cap)
+      if (p.first == loner_cap)
 	loner |= t;
       else
 	other |= t;	
@@ -4511,7 +4501,7 @@ void CInode::dump(Formatter *f, int flags) const
     f->open_array_section("client_caps");
     for (const auto &p : client_caps) {
       auto &client = p.first;
-      auto &cap = p.second;
+      auto cap = &p.second;
       f->open_object_section("client_cap");
       f->dump_int("client_id", client.v);
       f->dump_string("pending", ccap_string(cap->pending()));

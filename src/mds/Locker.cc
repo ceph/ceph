@@ -2005,13 +2005,13 @@ bool Locker::issue_caps(CInode *in, Capability *only_cap)
   int nissued = 0;        
 
   // client caps
-  map<client_t, Capability*>::iterator it;
+  map<client_t, Capability>::iterator it;
   if (only_cap)
     it = in->client_caps.find(only_cap->get_client());
   else
     it = in->client_caps.begin();
   for (; it != in->client_caps.end(); ++it) {
-    Capability *cap = it->second;
+    Capability *cap = &it->second;
     if (cap->is_stale())
       continue;
 
@@ -2110,10 +2110,8 @@ void Locker::issue_truncate(CInode *in)
 {
   dout(7) << "issue_truncate on " << *in << dendl;
   
-  for (map<client_t, Capability*>::iterator it = in->client_caps.begin();
-       it != in->client_caps.end();
-       ++it) {
-    Capability *cap = it->second;
+  for (auto &p : in->client_caps) {
+    Capability *cap = &p.second;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_TRUNC,
 				     in->ino(),
 				     in->find_snaprealm()->inode->ino(),
@@ -2122,7 +2120,7 @@ void Locker::issue_truncate(CInode *in)
 				     cap->get_mseq(),
                                      mds->get_osd_epoch_barrier());
     in->encode_cap_message(m, cap);			     
-    mds->send_message_client_counted(m, it->first);
+    mds->send_message_client_counted(m, p.first);
   }
 
   // should we increase max_size?
@@ -2328,14 +2326,12 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size,
 
   // increase ranges as appropriate.
   // shrink to 0 if no WR|BUFFER caps issued.
-  for (map<client_t,Capability*>::iterator p = in->client_caps.begin();
-       p != in->client_caps.end();
-       ++p) {
-    if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
-      client_writeable_range_t& nr = (*new_ranges)[p->first];
+  for (const auto &p : in->get_client_caps()) {
+    if ((p.second.issued() | p.second.wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
+      client_writeable_range_t& nr = (*new_ranges)[p.first];
       nr.range.first = 0;
-      if (latest->client_ranges.count(p->first)) {
-	client_writeable_range_t& oldr = latest->client_ranges[p->first];
+      if (latest->client_ranges.count(p.first)) {
+	client_writeable_range_t& oldr = latest->client_ranges[p.first];
 	if (ms > oldr.range.last)
 	  *max_increased = true;
 	nr.range.last = std::max(ms, oldr.range.last);
@@ -2481,14 +2477,14 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
    * the cap later.
    */
   dout(10) << "share_inode_max_size on " << *in << dendl;
-  map<client_t, Capability*>::iterator it;
+  map<client_t, Capability>::iterator it;
   if (only_cap)
     it = in->client_caps.find(only_cap->get_client());
   else
     it = in->client_caps.begin();
   for (; it != in->client_caps.end(); ++it) {
     const client_t client = it->first;
-    Capability *cap = it->second;
+    Capability *cap = &it->second;
     if (cap->is_suppress())
       continue;
     if (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
