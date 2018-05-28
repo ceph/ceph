@@ -486,10 +486,10 @@ public:
 
   ~RGWDataChangesLog();
 
-  int choose_oid(const rgw_bucket_shard& bs);
+  int choose_oid(const rgw_bucket_shard& bs, unsigned int max_shards = 0);
   const std::string& get_oid(int shard_id) const { return oids[shard_id]; }
   int add_entry(rgw_bucket& bucket, int shard_id);
-  int get_log_shard_id(rgw_bucket& bucket, int shard_id);
+  int get_log_shard_id(rgw_bucket& bucket, int shard_id, unsigned int max_shards);
   int renew_entries();
   int list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
 		   list<rgw_data_change_log_entry>& entries,
