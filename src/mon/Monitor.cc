@@ -1005,6 +1005,12 @@ void Monitor::bootstrap()
   unregister_cluster_logger();
   cancel_probe_timeout();
 
+  if (monmap->get_epoch() == 0) {
+    dout(10) << "reverting to legacy ranks for seed monmap (epoch 0)" << dendl;
+    monmap->calc_legacy_ranks();
+  }
+  dout(10) << "monmap " << *monmap << dendl;
+
   // note my rank
   int newrank = monmap->get_rank(messenger->get_myaddr());
   if (newrank < 0 && rank >= 0) {
