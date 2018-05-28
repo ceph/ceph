@@ -3,17 +3,12 @@
 from __future__ import absolute_import
 
 import collections
-from datetime import datetime, timedelta
-import fnmatch
 import importlib
 import inspect
 import json
 import os
 import pkgutil
 import sys
-import time
-import threading
-import types  # pylint: disable=import-error
 
 import cherrypy
 from six import add_metaclass
@@ -287,7 +282,7 @@ def browsable_api_view(meth):
             create_form=create_form,
             delete_form=delete_form_template.format(path=self._cp_path_, sub_path='/'.join(
                 sub_path)) if sub_path else '',
-            params='<h2>Rrequest Params</h2><pre>{}</pre>'.format(
+            params='<h2>Request Params</h2><pre>{}</pre>'.format(
                 json.dumps(kwargs, indent=2)) if kwargs else '',
         )
 
@@ -370,9 +365,7 @@ class BaseControllerMeta(type):
         new_cls = type.__new__(mcs, name, bases, dct)
 
         for a_name, thing in new_cls.__dict__.items():
-            if isinstance(thing, (types.FunctionType, types.MethodType))\
-                    and getattr(thing, 'exposed', False):
-
+            if callable(thing) and getattr(thing, 'exposed', False):
                 setattr(new_cls, a_name, browsable_api_view(thing))
         return new_cls
 
@@ -411,19 +404,32 @@ class BaseController(object):
 
     @classmethod
     def endpoints(cls):
+        """
+        The endpoints method returns a list of endpoints. Each endpoint
+        consists of a tuple with methods, URL suffix, an action and its
+        arguments.
+
+        By default, endpoints will be methods of the BaseController class,
+        which have been decorated by the @cherrpy.expose decorator. A method
+        will also be considered an endpoint if the `exposed` attribute has been
+        set on the method to a value which evaluates to True, which is
+        basically what @cherrpy.expose does, too.
+
+        :return: A tuple of methods, url_suffix, action and arguments of the
+                 function
+        :rtype: list[tuple]
+        """
         result = []
 
-        def isfunction(m):
-            return inspect.isfunction(m) or inspect.ismethod(m)
-
-        for attr, val in inspect.getmembers(cls, predicate=isfunction):
-            if (hasattr(val, 'exposed') and val.exposed):
-                args = cls._parse_function_args(val)
-                suffix = attr
-                action = attr
-                if attr == '__call__':
-                    suffix = None
-                result.append(([], suffix, action, args))
+        for name, func in inspect.getmembers(cls, predicate=callable):
+            if hasattr(func, 'exposed') and func.exposed:
+                args = cls._parse_function_args(func)
+                methods = []
+                url_suffix = name
+                action = name
+                if name == '__call__':
+                    url_suffix = None
+                result.append((methods, url_suffix, action, args))
         return result
 
 
@@ -474,11 +480,8 @@ class RESTController(BaseController):
     def endpoints(cls):
         # pylint: disable=too-many-branches
 
-        def isfunction(m):
-            return inspect.isfunction(m) or inspect.ismethod(m)
-
         result = []
-        for attr, val in inspect.getmembers(cls, predicate=isfunction):
+        for attr, val in inspect.getmembers(cls, predicate=callable):
             if hasattr(val, 'exposed') and val.exposed and \
                     attr != '_collection' and attr != '_element':
                 result.append(([], attr, attr, cls._parse_function_args(val)))
@@ -502,12 +505,12 @@ class RESTController(BaseController):
         if methods:
             result.append((methods, None, '_element', args))
 
-        for attr, val in inspect.getmembers(cls, predicate=isfunction):
+        for attr, val in inspect.getmembers(cls, predicate=callable):
             if hasattr(val, '_collection_method_'):
                 result.append(
                     (val._collection_method_, attr, '_handle_detail_method', []))
 
-        for attr, val in inspect.getmembers(cls, predicate=isfunction):
+        for attr, val in inspect.getmembers(cls, predicate=callable):
             if hasattr(val, '_resource_method_'):
                 res_params = [":{}".format(arg) for arg in args]
                 url_suffix = "{}/{}".format("/".join(res_params), attr)
