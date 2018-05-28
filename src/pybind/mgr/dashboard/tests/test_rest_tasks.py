@@ -4,12 +4,12 @@
 import time
 
 from .helper import ControllerTestCase
-from ..controllers import ApiController, RESTController, Task
+from ..controllers import Controller, RESTController, Task
 from ..controllers.task import Task as TaskController
 from ..tools import NotificationQueue, TaskManager
 
 
-@ApiController('test/task')
+@Controller('test/task')
 class TaskTest(RESTController):
     sleep_time = 0.0
 
@@ -29,12 +29,12 @@ class TaskTest(RESTController):
         time.sleep(TaskTest.sleep_time)
 
     @Task('task/foo', ['{param}'])
-    @RESTController.collection(['POST'])
+    @RESTController.Collection('POST')
     def foo(self, param):
         return {'my_param': param}
 
     @Task('task/bar', ['{key}', '{param}'])
-    @RESTController.resource(['PUT'])
+    @RESTController.Resource('PUT')
     def bar(self, key, param=None):
         return {'my_param': param, 'key': key}
 
@@ -45,6 +45,7 @@ class TaskControllerTest(ControllerTestCase):
         # pylint: disable=protected-access
         NotificationQueue.start_queue()
         TaskManager.init()
+        TaskTest._cp_config['tools.authenticate.on'] = False
         TaskController._cp_config['tools.authenticate.on'] = False
         cls.setup_controllers([TaskTest, TaskController])
 

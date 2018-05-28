@@ -7,7 +7,7 @@ from .. import mgr
 from . import ApiController, RESTController, AuthRequired
 
 
-@ApiController('cluster_conf')
+@ApiController('/cluster_conf')
 @AuthRequired()
 class ClusterConfiguration(RESTController):
     def list(self):

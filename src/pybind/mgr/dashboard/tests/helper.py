@@ -91,7 +91,7 @@ class ControllerTestCase(helper.CPWebCase):
                     logger.info("task (%s, %s) is still executing", self.task_name,
                                 self.task_metadata)
                     time.sleep(1)
-                    self.tc._get('/task?name={}'.format(self.task_name))
+                    self.tc._get('/api/task?name={}'.format(self.task_name))
                     res = self.tc.jsonBody()
                     for task in res['finished_tasks']:
                         if task['metadata'] == self.task_metadata:

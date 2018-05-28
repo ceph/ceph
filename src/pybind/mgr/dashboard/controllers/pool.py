@@ -3,13 +3,13 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from . import ApiController, RESTController, AuthRequired
+from . import ApiController, RESTController, Endpoint, AuthRequired
 from .. import mgr
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
 
 
-@ApiController('pool')
+@ApiController('/pool')
 @AuthRequired()
 class Pool(RESTController):
 
@@ -43,7 +43,7 @@ class Pool(RESTController):
             return var
         return var.lower() in ("true", "yes", "1", 1)
 
-    def list(self, attrs=None, stats=False):
+    def _pool_list(self, attrs=None, stats=False):
         if attrs:
             attrs = attrs.split(',')
 
@@ -54,8 +54,11 @@ class Pool(RESTController):
 
         return [self._serialize_pool(pool, attrs) for pool in pools]
 
+    def list(self, attrs=None, stats=False):
+        return self._pool_list(attrs, stats)
+
     def get(self, pool_name, attrs=None, stats=False):
-        pools = self.list(attrs, stats)
+        pools = self._pool_list(attrs, stats)
         pool = [pool for pool in pools if pool['pool_name'] == pool_name]
         if not pool:
             return cherrypy.NotFound('No such pool')
@@ -85,8 +88,7 @@ class Pool(RESTController):
         for key, value in kwargs.items():
             CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=value)
 
-    @cherrypy.tools.json_out()
-    @cherrypy.expose
+    @Endpoint()
     def _info(self):
         """Used by the create-pool dialog"""
         def rules(pool_type):
@@ -103,7 +105,7 @@ class Pool(RESTController):
                     if o['name'] == conf_name][0]
 
         return {
-            "pool_names": [p['pool_name'] for p in self.list()],
+            "pool_names": [p['pool_name'] for p in self._pool_list()],
             "crush_rules_replicated": rules(1),
             "crush_rules_erasure": rules(3),
             "is_all_bluestore": all_bluestore(),

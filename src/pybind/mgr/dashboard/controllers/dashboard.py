@@ -4,9 +4,7 @@ from __future__ import absolute_import
 import collections
 import json
 
-import cherrypy
-
-from . import ApiController, AuthRequired, BaseController
+from . import ApiController, AuthRequired, Endpoint, BaseController
 from .. import mgr
 from ..services.ceph_service import CephService
 from ..tools import NotificationQueue
@@ -15,7 +13,7 @@ from ..tools import NotificationQueue
 LOG_BUFFER_SIZE = 30
 
 
-@ApiController('dashboard')
+@ApiController('/dashboard')
 @AuthRequired()
 class Dashboard(BaseController):
     def __init__(self):
@@ -38,8 +36,7 @@ class Dashboard(BaseController):
         for l in lines:
             buf.appendleft(l)
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
+    @Endpoint()
     def health(self):
         if not self._log_initialized:
             self._log_initialized = True
