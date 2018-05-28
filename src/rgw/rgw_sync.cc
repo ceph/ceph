@@ -908,7 +908,7 @@ public:
             string s = *sections_iter + ":" + *iter;
             int shard_id;
             RGWRados *store = sync_env->store;
-            int ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id);
+            int ret = store->meta_mgr->get_log_shard_id(*sections_iter, *iter, &shard_id, num_shards);
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: could not determine shard id for " << *sections_iter << ":" << *iter << dendl;
               ret_status = ret;

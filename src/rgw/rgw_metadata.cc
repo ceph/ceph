@@ -1105,7 +1105,8 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler, string& key, R
 }
 
 int RGWMetadataManager::get_log_shard_id(const string& section,
-                                         const string& key, int *shard_id)
+                                         const string& key, int *shard_id,
+                                         unsigned int max_shards)
 {
   RGWMetadataHandler *handler = get_handler(section);
   if (!handler) {
@@ -1113,6 +1114,6 @@ int RGWMetadataManager::get_log_shard_id(const string& section,
   }
   string hash_key;
   handler->get_hash_key(section, key, hash_key);
-  *shard_id = store->key_to_shard_id(hash_key, cct->_conf->rgw_md_log_max_shards);
+  *shard_id = store->key_to_shard_id(hash_key, max_shards);
   return 0;
 }
