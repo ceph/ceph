@@ -12,13 +12,9 @@ describe('RgwBucketDetailsComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RgwBucketDetailsComponent ],
-      imports: [
-        SharedModule,
-        TabsModule.forRoot()
-      ]
-    })
-    .compileComponents();
+      declarations: [RgwBucketDetailsComponent],
+      imports: [SharedModule, TabsModule.forRoot()]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
