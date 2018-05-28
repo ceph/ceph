@@ -1,10 +1,7 @@
-13.1.0
-======
+13.2.0 Mimic
+============
 
-This is the first release candidate for mimic, the next long term release. While
-this is not the final release yet, consider testing this on your testing and non
-production clusters for a preview of upcoming features and please report all the
-bugs to the tracker.
+This is the first stable release of Mimic, the next long term release series.
 
 Major Changes from Luminous
 ---------------------------
@@ -49,11 +46,11 @@ Upgrading from Luminous
 Notes
 ~~~~~
 
-* Avoid creating any RADOS pools while the upgrade is in process
-  (Optional, but recommended.)
+* We recommend you avoid creating any RADOS pools while the upgrade is
+  in process.
 
 * You can monitor the progress of your upgrade at each stage with the
-  ``ceph versions`` command, which will tell you what ceph version is
+  ``ceph versions`` command, which will tell you what ceph version(s) are
   running for each type of daemon.
 
 Instructions
