@@ -254,13 +254,14 @@ TEST(entity_addrvec_t, parse)
   for (auto v : { addr_checks, addr_checks2, addrvec_parse_checks }) {
     for (unsigned i = 0; v[i][0]; ++i) {
       const char *end = "";
-      addrvec.parse(v[i][0], &end);
+      bool ret = addrvec.parse(v[i][0], &end);
       string out = stringify(addrvec);
       string left = end;
       cout << "'" << v[i][0] << "' -> '" << out << "' + '" << left << "'"
 	   << std::endl;
       ASSERT_EQ(out, v[i][1]);
       ASSERT_EQ(left, v[i][2]);
+      ASSERT_TRUE(out.empty() || ret);
     }
   }
 }
