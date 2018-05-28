@@ -22,12 +22,8 @@ describe('RgwDaemonDetailsComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RgwDaemonDetailsComponent ],
-      imports: [
-        SharedModule,
-        PerformanceCounterModule,
-        TabsModule.forRoot()
-      ],
+      declarations: [RgwDaemonDetailsComponent],
+      imports: [SharedModule, PerformanceCounterModule, TabsModule.forRoot()],
       providers: [{ provide: RgwDaemonService, useValue: fakeRgwDaemonService }]
     });
   }));

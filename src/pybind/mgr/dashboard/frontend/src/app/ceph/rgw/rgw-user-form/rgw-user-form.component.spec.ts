@@ -24,19 +24,10 @@ describe('RgwUserFormComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RgwUserFormComponent ],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule
-      ],
-      providers: [
-        BsModalService,
-        { provide: RgwUserService, useClass: MockRgwUserService }
-      ]
-    })
-    .compileComponents();
+      declarations: [RgwUserFormComponent],
+      imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
+      providers: [BsModalService, { provide: RgwUserService, useClass: MockRgwUserService }]
+    }).compileComponents();
   }));
 
   beforeEach(() => {

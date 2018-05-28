@@ -11,13 +11,14 @@ import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.p
   styleUrls: ['./rgw-daemon-list.component.scss']
 })
 export class RgwDaemonListComponent {
-
   columns: CdTableColumn[] = [];
   daemons: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
 
-  constructor(private rgwDaemonService: RgwDaemonService,
-              cephShortVersionPipe: CephShortVersionPipe) {
+  constructor(
+    private rgwDaemonService: RgwDaemonService,
+    cephShortVersionPipe: CephShortVersionPipe
+  ) {
     this.columns = [
       {
         name: 'ID',
@@ -39,14 +40,16 @@ export class RgwDaemonListComponent {
   }
 
   getDaemonList() {
-    this.rgwDaemonService.list()
-      .subscribe((resp: object[]) => {
+    this.rgwDaemonService.list().subscribe(
+      (resp: object[]) => {
         this.daemons = resp;
-      }, () => {
+      },
+      () => {
         // Force datatable to hide the loading indicator in
         // case of an error.
         this.daemons = [];
-      });
+      }
+    );
   }
 
   updateSelection(selection: CdTableSelection) {

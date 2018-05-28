@@ -3,10 +3,9 @@ import { Injectable } from '@angular/core';
 
 @Injectable()
 export class RgwDaemonService {
-
   private url = 'api/rgw/daemon';
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient) {}
 
   list() {
     return this.http.get(this.url);
