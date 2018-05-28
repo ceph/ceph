@@ -532,13 +532,47 @@ namespace std {
 struct entity_addrvec_t {
   vector<entity_addr_t> v;
 
+  entity_addrvec_t() {}
+  explicit entity_addrvec_t(const entity_addr_t& a) : v({ a }) {}
+
   unsigned size() const { return v.size(); }
   bool empty() const { return v.empty(); }
+
+  entity_addr_t legacy_addr() const {
+    for (auto& a : v) {
+      if (a.type == entity_addr_t::TYPE_LEGACY) {
+	return a;
+      }
+    }
+    return entity_addr_t();
+  }
+
+  bool parse(const char *s, const char **end = 0);
 
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
+
+  friend ostream& operator<<(ostream& out, const entity_addrvec_t& av) {
+    if (av.v.empty()) {
+      return out;
+    } else if (av.v.size() == 1) {
+      return out << av.v[0];
+    } else {
+      return out << av.v;
+    }
+  }
+
+  friend bool operator==(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v == r.v;
+  }
+  friend bool operator!=(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v != r.v;
+  }
+  friend bool operator<(const entity_addrvec_t& l, const entity_addrvec_t& r) {
+    return l.v < r.v;  // see lexicographical_compare()
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
 
