@@ -274,13 +274,13 @@ following code:
   class Ping(BaseController):
     @Endpoint()
     def hello(self):
-      return {msg: "Hello"}
+      return {'msg': "Hello"}
 
   @ApiController('/ping')
   class ApiPing(BaseController):
     @Endpoint()
     def hello(self):
-      return {msg: "Hello"}
+      return {'msg': "Hello"}
 
 
 The ``hello`` endpoint of the ``Ping`` controller can be reached by the
@@ -289,7 +289,7 @@ As you can see the controller URL path ``/ping`` is concatenated to the
 method name ``hello`` to generate the endpoint's URL.
 
 In the case of the ``ApiPing`` controller, the ``hello`` endpoint can be
-reached by the following URL: https://mgr_hostname:8080/api/ping/hello using
+reached by the following URL: https://mgr_hostname:8080/api/ping/hello using a
 HTTP GET request.
 The API controller URL path ``/ping`` is prefixed by the ``/api`` path and then
 concatenated to the method name ``hello`` to generate the endpoint's URL.
@@ -316,7 +316,7 @@ An endpoint method may have parameters declared. Depending on the HTTP method
 defined for the endpoint the method parameters might be considered either
 path parameters, query parameters, or body parameters.
 
-For ``GET`` and ``DELETE`` methods, the method non-optional parameters are
+For ``GET`` and ``DELETE`` methods, the method's non-optional parameters are
 considered path parameters by default. Optional parameters are considered
 query parameters. By specifing the ``query_parameters`` in the endpoint
 decorator it is possible to make a non-optional parameter to be a query
@@ -329,7 +329,7 @@ path and query parameters respectivelly.
 Body parameters are decoded from the request body, either from a form format, or
 from a dictionary in JSON format.
 
-Let's use an example to better understand the possible ways to custumize an
+Let's use an example to better understand the possible ways to customize an
 endpoint:
 
 .. code-block:: python
@@ -354,19 +354,20 @@ endpoint:
     def post(self, key1, key2, data1, data2=None):
       # ...
 
-From the above example you can see that the path parameters are collected from
-the URL by parsing the list of values separated by slashes ``/`` that come
-after the URL path ``/ping`` for ``index`` method case, and ``/ping/post`` for
-the ``post`` method case.
 
-In the above example we also see how the ``path`` option can be used to
-override the generated endpoint URL in order to not use the method name in the
-URL. In the ``index`` method we set the ``path`` to ``"/"`` to generate an
-endpoint that is accessible by the root URL of the controller.
+In the above example we see how the ``path`` option can be used to override the
+generated endpoint URL in order to not use the method's name in the URL. In the
+``index`` method we set the ``path`` to ``"/"`` to generate an endpoint that is
+accessible by the root URL of the controller.
 
 An alternative approach to generate an endpoint that is accessible through just
 the controller's path URL is by using the ``__call__`` method, as we show in
 the above example.
+
+From the third method you can see that the path parameters are collected from
+the URL by parsing the list of values separated by slashes ``/`` that come
+after the URL path ``/ping`` for ``index`` method case, and ``/ping/post`` for
+the ``post`` method case.
 
 Defining path parameters in endpoints's URLs using python methods's parameters
 is very easy but it is still a bit strict with respect to the position of these
