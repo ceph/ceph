@@ -27,6 +27,10 @@ Major Changes from Luminous
 
   * RGW can now replicate a zone (or a subset of buckets) to an
     external cloud storage service like S3.
+  * RGW now supports the S3 multi-factor authentication api on
+    versioned buckets.
+  * The Beast frontend is no long expermiental and is considered stable
+    and ready for use.
 
 - *CephFS*:
 
