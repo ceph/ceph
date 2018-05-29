@@ -461,9 +461,9 @@ static int os_readdir(const char *path,
       ghobject_t next = cid.get_min_hobj();
       if (offset) {
 	// obey the offset
-	next.hobj.set_hash(hobject_t::_reverse_bits(bitwise_hash));
+	next.hobj_non_const().set_hash(hobject_t::_reverse_bits(bitwise_hash));
       } else if (t == FN_HASH_VAL) {
-	next.hobj.set_hash(hobject_t::_reverse_bits(hash_value));
+	next.hobj_non_const().set_hash(hobject_t::_reverse_bits(hash_value));
       }
       ghobject_t last;
       if (t == FN_HASH_VAL) {
@@ -472,7 +472,7 @@ static int os_readdir(const char *path,
 	if (rev_end >= 0x100000000)
 	  last = ghobject_t::get_max();
 	else
-	  last.hobj.set_hash(hobject_t::_reverse_bits(rev_end));
+	  last.hobj_non_const().set_hash(hobject_t::_reverse_bits(rev_end));
       } else {
 	last = ghobject_t::get_max();
       }
@@ -494,7 +494,7 @@ static int os_readdir(const char *path,
 	    --skip;
 	    continue;
 	  }
-	  uint32_t cur_bitwise_hash = p.hobj.get_bitwise_key_u32();
+	  uint32_t cur_bitwise_hash = p.hobj().get_bitwise_key_u32();
 	  if (cur_bitwise_hash != bitwise_hash) {
 	    bitwise_hash = cur_bitwise_hash;
 	    hashoff = 0;
@@ -642,7 +642,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
       pbl = new bufferlist;
       char buf[10];
       snprintf(buf, sizeof(buf), "%08x\n",
-	       (unsigned)oid.hobj.get_bitwise_key_u32());
+	       (unsigned)oid.hobj().get_bitwise_key_u32());
       pbl->append(buf);
     }
     break;

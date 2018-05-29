@@ -1325,7 +1325,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   coll_t cid;
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   ghobject_t hoid2 = hoid;
-  hoid2.hobj.snap = 1;
+  hoid2.hobj_non_const().snap = 1;
   {
     auto ch = store->open_collection(cid);
     ASSERT_FALSE(ch);
@@ -1999,7 +1999,7 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
   coll_t cid;
   ghobject_t a(hobject_t(sobject_t("fooo", CEPH_NOSNAP)));
   ghobject_t b = a;
-  b.hobj.snap = 1;
+  b.hobj_non_const().snap = 1;
   auto ch = store->create_new_collection(cid);
   {
     ObjectStore::Transaction t;
@@ -2454,7 +2454,7 @@ TEST_P(StoreTest, SimpleListTest) {
       name += stringify(i);
       ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)),
 		      ghobject_t::NO_GEN, shard_id_t(1));
-      hoid.hobj.pool = 1;
+      hoid.hobj_non_const().pool = 1;
       all.insert(hoid);
       t.touch(cid, hoid);
       cerr << "Creating object " << hoid << std::endl;
@@ -2518,7 +2518,7 @@ TEST_P(StoreTest, ListEndTest) {
       name += stringify(i);
       ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)),
 		      ghobject_t::NO_GEN, shard_id_t(1));
-      hoid.hobj.pool = 1;
+      hoid.hobj_non_const().pool = 1;
       all.insert(hoid);
       t.touch(cid, hoid);
       cerr << "Creating object " << hoid << std::endl;
@@ -2529,7 +2529,7 @@ TEST_P(StoreTest, ListEndTest) {
   {
     ghobject_t end(hobject_t(sobject_t("object_100", CEPH_NOSNAP)),
 		   ghobject_t::NO_GEN, shard_id_t(1));
-    end.hobj.pool = 1;
+    end.hobj_non_const().pool = 1;
     vector<ghobject_t> objects;
     ghobject_t next;
     int r = store->collection_list(ch, ghobject_t(), end, 500,
@@ -2567,13 +2567,13 @@ TEST_P(StoreTest, Sort) {
   {
     ghobject_t a(hobject_t(sobject_t("a", CEPH_NOSNAP)));
     ghobject_t b(hobject_t(sobject_t("b", CEPH_NOSNAP)));
-    a.hobj.pool = 1;
-    b.hobj.pool = 1;
+    a.hobj_non_const().pool = 1;
+    b.hobj_non_const().pool = 1;
     ASSERT_TRUE(a < b);
-    a.hobj.pool = -3;
+    a.hobj_non_const().pool = -3;
     ASSERT_TRUE(a < b);
-    a.hobj.pool = 1;
-    b.hobj.pool = -3;
+    a.hobj_non_const().pool = 1;
+    b.hobj_non_const().pool = -3;
     ASSERT_TRUE(a > b);
   }
 }
@@ -2598,9 +2598,9 @@ TEST_P(StoreTest, MultipoolListTest) {
       name += stringify(i);
       ghobject_t hoid(hobject_t(sobject_t(name, CEPH_NOSNAP)));
       if (rand() & 1)
-	hoid.hobj.pool = -2 - poolid;
+	hoid.hobj_non_const().pool = -2 - poolid;
       else
-	hoid.hobj.pool = poolid;
+	hoid.hobj_non_const().pool = poolid;
       all.insert(hoid);
       t.touch(cid, hoid);
       cerr << "Creating object " << hoid << std::endl;
@@ -3104,7 +3104,7 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
     ASSERT_EQ(r, 0);
   }
   ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
-  hoid.hobj.pool = -1;
+  hoid.hobj_non_const().pool = -1;
   bufferlist small, newdata;
   small.append("small");
   {
@@ -3115,7 +3115,7 @@ TEST_P(StoreTest, SimpleCloneRangeTest) {
     ASSERT_EQ(r, 0);
   }
   ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
-  hoid2.hobj.pool = -1;
+  hoid2.hobj_non_const().pool = -1;
   {
     ObjectStore::Transaction t;
     t.clone_range(cid, hoid, hoid2, 10, 5, 10);
@@ -3186,7 +3186,7 @@ ghobject_t generate_long_name(unsigned i)
   name << "object id " << i << " ";
   for (unsigned j = 0; j < 500; ++j) name << 'a';
   ghobject_t hoid(hobject_t(sobject_t(name.str(), CEPH_NOSNAP)));
-  hoid.hobj.set_hash(i % 2);
+  hoid.hobj_non_const().set_hash(i % 2);
   return hoid;
 }
 
@@ -3212,7 +3212,7 @@ TEST_P(StoreTest, LongnameSplitTest) {
 
   ghobject_t test_obj = generate_long_name(319);
   ghobject_t test_obj_2 = test_obj;
-  test_obj_2.generation = 0;
+  test_obj_2.set_generation(0);
   {
     ObjectStore::Transaction t;
     // should cause a split
@@ -3681,7 +3681,7 @@ public:
     } while (--max && !contents[old_obj].data.length());
     available_objects.erase(old_obj);
     ghobject_t new_obj = old_obj;
-    new_obj.generation++;
+    new_obj.set_generation(new_obj.get_generation() + 1);
     available_objects.erase(new_obj);
 
     ObjectStore::Transaction t;
@@ -3714,7 +3714,7 @@ public:
     available_objects.erase(old_obj);
     ghobject_t new_obj = object_gen->create_object(rng);
     // make the hash match
-    new_obj.hobj.set_hash(old_obj.hobj.get_hash());
+    new_obj.hobj_non_const().set_hash(old_obj.hobj().get_hash());
     available_objects.erase(new_obj);
 
     ObjectStore::Transaction t;
@@ -5143,7 +5143,7 @@ void colsplittest(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    ASSERT_EQ(!!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
+    ASSERT_EQ(!!(i->hobj().get_hash() & (1<<common_suffix_size)), 0u);
     t.remove(cid, *i);
     if (++size > 100) {
       size = 0;
@@ -5168,7 +5168,7 @@ void colsplittest(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    ASSERT_EQ(!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
+    ASSERT_EQ(!(i->hobj().get_hash() & (1<<common_suffix_size)), 0u);
     t.remove(tid, *i);
     if (++size > 100) {
       size = 0;
@@ -5226,12 +5226,12 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 0; i < 360; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
-    o.hobj.pool = -1;
+    o.hobj_non_const().pool = -1;
     if (i < 8) {
-      o.hobj.set_hash((i << 16) | 0xA1);
+      o.hobj_non_const().set_hash((i << 16) | 0xA1);
       t.touch(cid, o);
     }
-    o.hobj.set_hash((i << 16) | 0xB1);
+    o.hobj_non_const().set_hash((i << 16) | 0xB1);
     t.touch(cid, o);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
@@ -5240,8 +5240,8 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 1; i < 8; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
-    o.hobj.pool = -1;
-    o.hobj.set_hash((i << 16) | 0xA1);
+    o.hobj_non_const().pool = -1;
+    o.hobj_non_const().set_hash((i << 16) | 0xA1);
     t.remove(cid, o);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
@@ -5250,15 +5250,15 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 1; i < 8; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
-    o.hobj.set_hash((i << 16) | 0xA1);
-    o.hobj.pool = -1;
+    o.hobj_non_const().set_hash((i << 16) | 0xA1);
+    o.hobj_non_const().pool = -1;
     bool exists = store->exists(ch, o);
     ASSERT_EQ(exists, false);
   }
   {
     ghobject_t o;
-    o.hobj.set_hash(0xA1);
-    o.hobj.pool = -1;
+    o.hobj_non_const().set_hash(0xA1);
+    o.hobj_non_const().pool = -1;
     bool exists = store->exists(ch, o);
     ASSERT_EQ(exists, true);
   }
@@ -5266,10 +5266,10 @@ TEST_P(StoreTest, TwoHash) {
   for (int i = 0; i < 360; ++i) {
     ObjectStore::Transaction t;
     ghobject_t o;
-    o.hobj.set_hash((i << 16) | 0xA1);
-    o.hobj.pool = -1;
+    o.hobj_non_const().set_hash((i << 16) | 0xA1);
+    o.hobj_non_const().pool = -1;
     t.remove(cid, o);
-    o.hobj.set_hash((i << 16) | 0xB1);
+    o.hobj_non_const().set_hash((i << 16) | 0xB1);
     t.remove(cid, o);
     r = queue_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
@@ -5415,9 +5415,9 @@ TEST_P(StoreTest, BigRGWObjectName) {
     15,
     shard_id_t::NO_SHARD);
   ghobject_t oid2(oid);
-  oid2.generation = 17;
+  oid2.set_generation(17);
   ghobject_t oidhead(oid);
-  oidhead.generation = ghobject_t::NO_GEN;
+  oidhead.set_generation(ghobject_t::NO_GEN);
 
   auto ch = store->create_new_collection(cid);
 
@@ -6853,10 +6853,10 @@ TEST_P(StoreTest, BluestoreRepairTest) {
   ghobject_t hoid_dup(hobject_t(sobject_t("Object 1(dup)", CEPH_NOSNAP)));
   ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
   ghobject_t hoid_cloned = hoid2;
-  hoid_cloned.hobj.snap = 1;
+  hoid_cloned.hobj_non_const().snap = 1;
   ghobject_t hoid3(hobject_t(sobject_t("Object 3", CEPH_NOSNAP)));
   ghobject_t hoid3_cloned = hoid3;
-  hoid3_cloned.hobj.snap = 1;
+  hoid3_cloned.hobj_non_const().snap = 1;
   bufferlist bl;
   bl.append("1234512345");
   int r;

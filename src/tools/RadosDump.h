@@ -171,21 +171,25 @@ struct object_begin {
   // pool.  This means we will allow the decode by struct_v 1.
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
-    encode(hoid.hobj, bl);
-    encode(hoid.generation, bl);
-    encode(hoid.shard_id, bl);
+    encode(hoid.hobj(), bl);
+    encode(hoid.get_generation(), bl);
+    encode(hoid.get_shard_id(), bl);
     encode(oi, bl, -1);  /* FIXME: we always encode with full features */
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(3, bl);
-    decode(hoid.hobj, bl);
+    decode(hoid.hobj_non_const(), bl);
     if (struct_v > 1) {
-      decode(hoid.generation, bl);
-      decode(hoid.shard_id, bl);
+      gen_t generation;
+      shard_id_t shard_id;
+      decode(generation, bl);
+      decode(shard_id, bl);
+      hoid.set_generation(generation);
+      hoid.set_shard_id(shard_id);
     } else {
-      hoid.generation = ghobject_t::NO_GEN;
-      hoid.shard_id = shard_id_t::NO_SHARD;
+      hoid.set_generation(ghobject_t::NO_GEN);
+      hoid.set_shard_id(shard_id_t::NO_SHARD);
     }
     if (struct_v > 2) {
       decode(oi, bl);

@@ -304,8 +304,8 @@ void ECBackend::handle_recovery_push(
 		      get_parent()->whoami_shard().shard);
     if (op.before_progress.first) {
       dout(10) << __func__ << ": Adding oid "
-	       << tobj.hobj << " in the temp collection" << dendl;
-      add_temp_obj(tobj.hobj);
+	       << tobj.hobj() << " in the temp collection" << dendl;
+      add_temp_obj(tobj.hobj());
     }
   }
 
@@ -339,8 +339,8 @@ void ECBackend::handle_recovery_push(
 
   if (op.after_progress.data_complete && !oneshot) {
     dout(10) << __func__ << ": Removing oid "
-	     << tobj.hobj << " from the temp collection" << dendl;
-    clear_temp_obj(tobj.hobj);
+	     << tobj.hobj() << " from the temp collection" << dendl;
+    clear_temp_obj(tobj.hobj());
     m->t.remove(coll, ghobject_t(
 	op.soid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
     m->t.collection_move_rename(

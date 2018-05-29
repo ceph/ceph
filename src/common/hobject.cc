@@ -363,13 +363,13 @@ void ghobject_t::encode(bufferlist& bl) const
 {
   // when changing this, remember to update encoded_size() too.
   ENCODE_START(6, 3, bl);
-  encode(hobj.key, bl);
-  encode(hobj.oid, bl);
-  encode(hobj.snap, bl);
-  encode(hobj.hash, bl);
-  encode(hobj.max, bl);
-  encode(hobj.nspace, bl);
-  encode(hobj.pool, bl);
+  encode(m_hobj.key, bl);
+  encode(m_hobj.oid, bl);
+  encode(m_hobj.snap, bl);
+  encode(m_hobj.hash, bl);
+  encode(m_hobj.max, bl);
+  encode(m_hobj.nspace, bl);
+  encode(m_hobj.pool, bl);
   encode(generation, bl);
   encode(shard_id, bl);
   encode(max, bl);
@@ -406,13 +406,13 @@ size_t ghobject_t::encoded_size() const
   r += sizeof(bool);
 
   // hobj.key
-  r += hobj.key.size();
+  r += m_hobj.key.size();
 
   // hobj.oid
-  r += hobj.oid.name.size();
+  r += m_hobj.oid.name.size();
 
   // hobj.nspace
-  r += hobj.nspace.size();
+  r += m_hobj.nspace.size();
 
   return r;
 }
@@ -421,26 +421,26 @@ void ghobject_t::decode(bufferlist::const_iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
   if (struct_v >= 1)
-    decode(hobj.key, bl);
-  decode(hobj.oid, bl);
-  decode(hobj.snap, bl);
-  decode(hobj.hash, bl);
+    decode(m_hobj.key, bl);
+  decode(m_hobj.oid, bl);
+  decode(m_hobj.snap, bl);
+  decode(m_hobj.hash, bl);
   if (struct_v >= 2)
-    decode(hobj.max, bl);
+    decode(m_hobj.max, bl);
   else
-    hobj.max = false;
+    m_hobj.max = false;
   if (struct_v >= 4) {
-    decode(hobj.nspace, bl);
-    decode(hobj.pool, bl);
+    decode(m_hobj.nspace, bl);
+    decode(m_hobj.pool, bl);
     // for compat with hammer, which did not handle the transition from
     // pool -1 -> pool INT64_MIN for MIN properly (see hobject_t::decode()).
-    if (hobj.pool == -1 &&
-	hobj.snap == 0 &&
-	hobj.hash == 0 &&
-	!hobj.max &&
-	hobj.oid.name.empty()) {
-      hobj.pool = INT64_MIN;
-      assert(hobj.is_min());
+    if (m_hobj.pool == -1 &&
+	m_hobj.snap == 0 &&
+	m_hobj.hash == 0 &&
+	!m_hobj.max &&
+	m_hobj.oid.name.empty()) {
+      m_hobj.pool = INT64_MIN;
+      assert(m_hobj.is_min());
     }
   }
   if (struct_v >= 5) {
@@ -456,12 +456,12 @@ void ghobject_t::decode(bufferlist::const_iterator& bl)
     max = false;
   }
   DECODE_FINISH(bl);
-  hobj.build_hash_cache();
+  m_hobj.build_hash_cache();
 }
 
 void ghobject_t::decode(json_spirit::Value& v)
 {
-  hobj.decode(v);
+  m_hobj.decode(v);
   using namespace json_spirit;
   Object& o = v.get_obj();
   for (Object::size_type i=0; i<o.size(); i++) {
@@ -477,7 +477,7 @@ void ghobject_t::decode(json_spirit::Value& v)
 
 void ghobject_t::dump(Formatter *f) const
 {
-  hobj.dump(f);
+  m_hobj.dump(f);
   if (generation != NO_GEN)
     f->dump_int("generation", generation);
   if (shard_id != shard_id_t::NO_SHARD)
@@ -489,7 +489,7 @@ void ghobject_t::generate_test_instances(list<ghobject_t*>& o)
 {
   o.push_back(new ghobject_t);
   o.push_back(new ghobject_t);
-  o.back()->hobj.max = true;
+  o.back()->m_hobj.max = true;
   o.push_back(new ghobject_t(hobject_t(object_t("oname"), string(), 1, 234, -1, "")));
 
   o.push_back(new ghobject_t(hobject_t(object_t("oname2"), string("okey"), CEPH_NOSNAP,
@@ -518,7 +518,7 @@ ostream& operator<<(ostream& out, const ghobject_t& o)
     return out << "GHMAX";
   if (o.shard_id != shard_id_t::NO_SHARD)
     out << std::hex << o.shard_id << std::dec;
-  out << '#' << o.hobj << '#';
+  out << '#' << o.m_hobj << '#';
   if (o.generation != ghobject_t::NO_GEN)
     out << std::hex << (unsigned long long)(o.generation) << std::dec;
   return out;
@@ -570,7 +570,7 @@ bool ghobject_t::parse(const string& s)
   }
 
   shard_id = shard_id_t(sh);
-  hobj = h;
+  m_hobj = h;
   generation = g;
   max = false;
   return true;
@@ -586,7 +586,7 @@ int cmp(const ghobject_t& l, const ghobject_t& r)
     return -1;
   if (l.shard_id > r.shard_id)
     return 1;
-  int ret = cmp(l.hobj, r.hobj);
+  int ret = cmp(l.m_hobj, r.m_hobj);
   if (ret != 0)
     return ret;
   if (l.generation < r.generation)

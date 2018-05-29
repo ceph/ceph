@@ -51,12 +51,12 @@ int PoolDump::dump(IoCtx *io_ctx)
     // Compose OBJECT_BEGIN
     // ====================
     object_begin obj_begin;
-    obj_begin.hoid.hobj.oid = i->get_oid();
-    obj_begin.hoid.hobj.nspace = i->get_nspace();
-    obj_begin.hoid.hobj.set_key(i->get_locator());
+    obj_begin.hoid.hobj_non_const().oid = i->get_oid();
+    obj_begin.hoid.hobj_non_const().nspace = i->get_nspace();
+    obj_begin.hoid.hobj_non_const().set_key(i->get_locator());
 
     // Only output head, RadosImport only wants that
-    obj_begin.hoid.hobj.snap = CEPH_NOSNAP;
+    obj_begin.hoid.hobj_non_const().snap = CEPH_NOSNAP;
 
     // Skip setting object_begin.oi, RadosImport doesn't care
 

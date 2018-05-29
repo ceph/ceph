@@ -150,7 +150,7 @@ int main(int argc, char **argv) {
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (vm.count("oid") != 0 && i->hobj.oid.name != oid)
+      if (vm.count("oid") != 0 && i->hobj().oid.name != oid)
         continue;
       std::cout << *i << std::endl;
     }
@@ -165,10 +165,10 @@ int main(int argc, char **argv) {
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (vm.count("oid") != 0 && i->hobj.oid.name != oid)
+      if (vm.count("oid") != 0 && i->hobj().oid.name != oid)
         continue;
       std::cout << "Object: " << *i << std::endl;
-      ObjectMap::ObjectMapIterator j = omap.get_iterator(ghobject_t(i->hobj));
+      ObjectMap::ObjectMapIterator j = omap.get_iterator(ghobject_t(i->hobj()));
       for (j->seek_to_first(); j->valid(); j->next()) {
 	std::cout << j->key() << std::endl;
 	j->value().hexdump(std::cout);

@@ -38,7 +38,7 @@ class DeterministicOpSequence : public TestObjectStoreState {
     spg_t pgid;
     bool r = cid.is_pg(&pgid);
     if (r) {
-      oid.hobj.set_hash(pgid.ps());
+      oid.hobj_non_const().set_hash(pgid.ps());
     }
     return oid;
   }

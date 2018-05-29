@@ -78,9 +78,9 @@ struct FDCloser {
 uint64_t LFNIndex::get_max_escaped_name_len(const hobject_t &obj)
 {
   ghobject_t ghobj(obj);
-  ghobj.shard_id = shard_id_t(0);
-  ghobj.generation = 0;
-  ghobj.hobj.snap = 0;
+  ghobj.set_shard_id(shard_id_t(0));
+  ghobj.set_generation(0);
+  ghobj.hobj_non_const().snap = 0;
   return lfn_generate_object_name_current(ghobj).size();
 }
 
@@ -560,10 +560,10 @@ string LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid)
   char *end = s + sizeof(s);
   char *t = s;
 
-  assert(oid.generation == ghobject_t::NO_GEN);
-  const char *i = oid.hobj.oid.name.c_str();
+  assert(oid.get_generation() == ghobject_t::NO_GEN);
+  const char *i = oid.hobj().oid.name.c_str();
   // Escape subdir prefix
-  if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {
+  if (oid.hobj().oid.name.substr(0, 4) == "DIR_") {
     *t++ = '\\';
     *t++ = 'd';
     i += 4;
@@ -572,7 +572,7 @@ string LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid)
     if (*i == '\\') {
       *t++ = '\\';
       *t++ = '\\';
-    } else if (*i == '.' && i == oid.hobj.oid.name.c_str()) {  // only escape leading .
+    } else if (*i == '.' && i == oid.hobj().oid.name.c_str()) {  // only escape leading .
       *t++ = '\\';
       *t++ = '.';
     } else if (*i == '/') {
@@ -583,13 +583,13 @@ string LFNIndex::lfn_generate_object_name_keyless(const ghobject_t &oid)
     i++;
   }
 
-  if (oid.hobj.snap == CEPH_NOSNAP)
+  if (oid.hobj().snap == CEPH_NOSNAP)
     t += snprintf(t, end - t, "_head");
-  else if (oid.hobj.snap == CEPH_SNAPDIR)
+  else if (oid.hobj().snap == CEPH_SNAPDIR)
     t += snprintf(t, end - t, "_snapdir");
   else
-    t += snprintf(t, end - t, "_%llx", (long long unsigned)oid.hobj.snap);
-  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
+    t += snprintf(t, end - t, "_%llx", (long long unsigned)oid.hobj().snap);
+  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj().get_hash())*2), oid.hobj().get_hash());
 
   return string(s);
 }
@@ -616,54 +616,54 @@ static void append_escaped(string::const_iterator begin,
 string LFNIndex::lfn_generate_object_name_current(const ghobject_t &oid)
 {
   string full_name;
-  string::const_iterator i = oid.hobj.oid.name.begin();
-  if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {
+  string::const_iterator i = oid.hobj().oid.name.begin();
+  if (oid.hobj().oid.name.substr(0, 4) == "DIR_") {
     full_name.append("\\d");
     i += 4;
-  } else if (oid.hobj.oid.name[0] == '.') {
+  } else if (oid.hobj().oid.name[0] == '.') {
     full_name.append("\\.");
     ++i;
   }
-  append_escaped(i, oid.hobj.oid.name.end(), &full_name);
+  append_escaped(i, oid.hobj().oid.name.end(), &full_name);
   full_name.append("_");
-  append_escaped(oid.hobj.get_key().begin(), oid.hobj.get_key().end(), &full_name);
+  append_escaped(oid.hobj().get_key().begin(), oid.hobj().get_key().end(), &full_name);
   full_name.append("_");
 
   char buf[PATH_MAX];
   char *t = buf;
   const char *end = t + sizeof(buf);
-  if (oid.hobj.snap == CEPH_NOSNAP)
+  if (oid.hobj().snap == CEPH_NOSNAP)
     t += snprintf(t, end - t, "head");
-  else if (oid.hobj.snap == CEPH_SNAPDIR)
+  else if (oid.hobj().snap == CEPH_SNAPDIR)
     t += snprintf(t, end - t, "snapdir");
   else
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.snap);
-  t += snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
+    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj().snap);
+  t += snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj().get_hash())*2), oid.hobj().get_hash());
   full_name.append(buf, t);
   full_name.append("_");
 
-  append_escaped(oid.hobj.nspace.begin(), oid.hobj.nspace.end(), &full_name);
+  append_escaped(oid.hobj().nspace.begin(), oid.hobj().nspace.end(), &full_name);
   full_name.append("_");
 
   t = buf;
-  if (oid.hobj.pool == -1)
+  if (oid.hobj().pool == -1)
     t += snprintf(t, end - t, "none");
   else
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.pool);
+    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj().pool);
   full_name.append(buf, t);
 
-  if (oid.generation != ghobject_t::NO_GEN ||
-      oid.shard_id != shard_id_t::NO_SHARD) {
+  if (oid.get_generation() != ghobject_t::NO_GEN ||
+      oid.get_shard_id() != shard_id_t::NO_SHARD) {
     full_name.append("_");
 
     t = buf;
-    t += snprintf(t, end - buf, "%llx", (long long unsigned)oid.generation);
+    t += snprintf(t, end - buf, "%llx", (long long unsigned)oid.get_generation());
     full_name.append(buf, t);
 
     full_name.append("_");
 
     t = buf;
-    t += snprintf(t, end - buf, "%x", (int)oid.shard_id);
+    t += snprintf(t, end - buf, "%x", (int)oid.get_shard_id());
     full_name.append(buf, t);
   }
 
@@ -675,31 +675,31 @@ string LFNIndex::lfn_generate_object_name_poolless(const ghobject_t &oid)
   if (index_version == HASH_INDEX_TAG)
     return lfn_generate_object_name_keyless(oid);
 
-  assert(oid.generation == ghobject_t::NO_GEN);
+  assert(oid.get_generation() == ghobject_t::NO_GEN);
   string full_name;
-  string::const_iterator i = oid.hobj.oid.name.begin();
-  if (oid.hobj.oid.name.substr(0, 4) == "DIR_") {
+  string::const_iterator i = oid.hobj().oid.name.begin();
+  if (oid.hobj().oid.name.substr(0, 4) == "DIR_") {
     full_name.append("\\d");
     i += 4;
-  } else if (oid.hobj.oid.name[0] == '.') {
+  } else if (oid.hobj().oid.name[0] == '.') {
     full_name.append("\\.");
     ++i;
   }
-  append_escaped(i, oid.hobj.oid.name.end(), &full_name);
+  append_escaped(i, oid.hobj().oid.name.end(), &full_name);
   full_name.append("_");
-  append_escaped(oid.hobj.get_key().begin(), oid.hobj.get_key().end(), &full_name);
+  append_escaped(oid.hobj().get_key().begin(), oid.hobj().get_key().end(), &full_name);
   full_name.append("_");
 
   char snap_with_hash[PATH_MAX];
   char *t = snap_with_hash;
   char *end = t + sizeof(snap_with_hash);
-  if (oid.hobj.snap == CEPH_NOSNAP)
+  if (oid.hobj().snap == CEPH_NOSNAP)
     t += snprintf(t, end - t, "head");
-  else if (oid.hobj.snap == CEPH_SNAPDIR)
+  else if (oid.hobj().snap == CEPH_SNAPDIR)
     t += snprintf(t, end - t, "snapdir");
   else
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.snap);
-  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj.get_hash())*2), oid.hobj.get_hash());
+    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj().snap);
+  snprintf(t, end - t, "_%.*X", (int)(sizeof(oid.hobj().get_hash())*2), oid.hobj().get_hash());
   full_name += string(snap_with_hash);
   return full_name;
 }
@@ -1015,17 +1015,17 @@ static int parse_object(const char *s, ghobject_t& o)
       i++;
     }
     *t = 0;
-    o.hobj.oid.name = string(buf, t-buf);
+    o.hobj_non_const().oid.name = string(buf, t-buf);
     if (strncmp(bar+1, "head", 4) == 0)
-      o.hobj.snap = CEPH_NOSNAP;
+      o.hobj_non_const().snap = CEPH_NOSNAP;
     else if (strncmp(bar+1, "snapdir", 7) == 0)
-      o.hobj.snap = CEPH_SNAPDIR;
+      o.hobj_non_const().snap = CEPH_SNAPDIR;
     else
-      o.hobj.snap = strtoull(bar+1, NULL, 16);
+      o.hobj_non_const().snap = strtoull(bar+1, NULL, 16);
 
     uint32_t hobject_hash_input;
     sscanf(hash, "_%X", &hobject_hash_input);
-    o.hobj.set_hash(hobject_hash_input);
+    o.hobj_non_const().set_hash(hobject_hash_input);
 
     return 1;
   }
@@ -1039,7 +1039,7 @@ int LFNIndex::lfn_parse_object_name_keyless(const string &long_name, ghobject_t 
   spg_t pg;
   if (coll().is_pg_prefix(&pg))
     pool = (int64_t)pg.pgid.pool();
-  out->hobj.pool = pool;
+  out->hobj_non_const().pool = pool;
   if (!r) return -EINVAL;
   string temp = lfn_generate_object_name(*out);
   return 0;

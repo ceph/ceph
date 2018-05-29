@@ -1390,12 +1390,12 @@ public:
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
-	return oid.hobj.pool == -1;
+	return oid.hobj().pool == -1;
       spg_t spgid;
       if (cid.is_pg(&spgid))
 	return
 	  spgid.pgid.contains(cnode.bits, oid) &&
-	  oid.shard_id == spgid.shard;
+	  oid.get_shard_id() == spgid.shard;
       return false;
     }
 
@@ -2748,7 +2748,7 @@ public:
       auto end_pos = (offset + len - 1) / granularity;
       while (pos <= end_pos) {
         collections_bfs[pos].insert(get_hash(cid));
-        objects_bfs[pos].insert(oid.hobj.get_hash());
+        objects_bfs[pos].insert(oid.hobj().get_hash());
         ++pos;
       }
     }
@@ -2770,7 +2770,7 @@ public:
     inline bool is_used(const ghobject_t& oid) const {
       assert(was_filtered_out);
       for(auto& bf : objects_bfs) {
-        if (bf.contains(oid.hobj.get_hash())) {
+        if (bf.contains(oid.hobj().get_hash())) {
           return true;
         }
       }
@@ -2791,7 +2791,7 @@ public:
       assert(granularity); // initialized
       assert(!was_filtered_out);
       auto &bf = objects_bfs[offs / granularity];
-      if (bf.contains(oid.hobj.get_hash())) {
+      if (bf.contains(oid.hobj().get_hash())) {
         return true;
       }
       return false;

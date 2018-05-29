@@ -904,7 +904,7 @@ int HashIndex::complete_split(const vector<string> &path, subdir_info_s info) {
 void HashIndex::get_path_components(const ghobject_t &oid,
 				    vector<string> *path) {
   char buf[MAX_HASH_LEVEL + 1];
-  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)oid.hobj.get_nibblewise_key());
+  snprintf(buf, sizeof(buf), "%.*X", MAX_HASH_LEVEL, (uint32_t)oid.hobj().get_nibblewise_key());
 
   // Path components are the hex characters of oid.hobj.hash, least
   // significant first
@@ -925,7 +925,7 @@ string HashIndex::get_hash_str(uint32_t hash) {
 
 string HashIndex::get_path_str(const ghobject_t &oid) {
   assert(!oid.is_max());
-  return get_hash_str(oid.hobj.get_hash());
+  return get_hash_str(oid.hobj().get_hash());
 }
 
 uint32_t HashIndex::hash_prefix_to_hash(string prefix) {

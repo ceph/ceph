@@ -1194,12 +1194,12 @@ TEST(ghobject_t, cmp) {
   ghobject_t min;
   ghobject_t sep;
   sep.set_shard(shard_id_t(1));
-  sep.hobj.pool = -1;
+  sep.hobj_non_const().pool = -1;
   cout << min << " < " << sep << std::endl;
   ASSERT_TRUE(min < sep);
 
   sep.set_shard(shard_id_t::NO_SHARD);
-  cout << "sep shard " << sep.shard_id << std::endl;
+  cout << "sep shard " << sep.get_shard_id() << std::endl;
   ghobject_t o(hobject_t(object_t(), string(), CEPH_NOSNAP, 0x42,
 			 1, string()));
   cout << "o " << o << std::endl;
