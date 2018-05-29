@@ -443,6 +443,11 @@ COMMAND("mon feature set " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
         "set provided feature on mon map", \
         "mon", "rw", "cli,rest")
+COMMAND("mon set-rank " \
+	"name=name,type=CephString " \
+	"name=rank,type=CephInt",
+	"set the rank for the specified mon",
+	"mon", "rw", "cli,rest")
 
 /*
  * OSD commands
