@@ -247,6 +247,7 @@ protected:
   map<string, bufferlist> attrs;
   bool get_data;
   bool partial_content;
+  bool ignore_invalid_range;
   bool range_parsed;
   bool skip_manifest;
   bool skip_decrypt{false};
@@ -300,9 +301,11 @@ public:
   void set_get_data(bool get_data) {
     this->get_data = get_data;
   }
+
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
+  int parse_range();
   int read_user_manifest_part(
     rgw_bucket& bucket,
     const rgw_bucket_dir_entry& ent,
