@@ -3,20 +3,44 @@ import contextlib
 import logging
 
 from teuthology import misc as teuthology
+from util import get_remote_for_role
 
 log = logging.getLogger(__name__)
 
-def assign_ports(ctx, config):
+class RGWEndpoint:
+    def __init__(self, hostname=None, port=None, cert=None):
+        self.hostname = hostname
+        self.port = port
+        self.cert = cert
+
+    def url(self):
+        proto = 'https' if self.cert else 'http'
+        return '{proto}://{hostname}:{port}/'.format(proto=proto, hostname=self.hostname, port=self.port)
+
+def assign_endpoints(ctx, config, default_cert):
     """
-    Assign port numberst starting with port 7280.
+    Assign port numbers starting with port 8000.
     """
     port = 8000
     role_endpoints = {}
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
-        for role in roles_for_host:
-            if role in config:
-                role_endpoints[role] = (remote.name.split('@')[1], port)
-                port += 1
+
+    for role, client_config in config.iteritems():
+        client_config = client_config or {}
+        remote = get_remote_for_role(ctx, role)
+
+        cert = client_config.get('ssl certificate', default_cert)
+        if cert:
+            # find the certificate created by the ssl task
+            if not hasattr(ctx, 'ssl_certificates'):
+                raise ConfigError('rgw: no ssl task found for option "ssl certificate"')
+            ssl_certificate = ctx.ssl_certificates.get(cert, None)
+            if not ssl_certificate:
+                raise ConfigError('rgw: missing ssl certificate "{}"'.format(cert))
+        else:
+            ssl_certificate = None
+
+        role_endpoints[role] = RGWEndpoint(remote.hostname, port, ssl_certificate)
+        port += 1
 
     return role_endpoints
 
@@ -40,13 +64,12 @@ def task(ctx, config):
     client = clients_from_config[0]
     log.debug('client is: %r', client)
 
-    #role_endpoints = assign_ports(ctx, config)
-    #ctx.rgw.role_endpoints = role_endpoints
     ctx.rgw.use_fastcgi = True
     ctx.rgw.frontend = config.pop('frontend', 'civetweb')
+    default_cert = config.pop('ssl certificate', None)
 
-    ctx.rgw.role_endpoints = {}
-    ctx.rgw.role_endpoints[client] = ('localhost', 8000)
-    log.debug("role_endpoints {}".format(ctx.rgw.role_endpoints))
+    role_endpoints = assign_endpoints(ctx, config,default_cert)
+    ctx.rgw.role_endpoints = role_endpoints
+    log.debug("role_endpoints %r", ctx.rgw.role_endpoints)
 
     yield
