@@ -113,6 +113,8 @@ Hints for using config options:
   value will become visible to `get_config` immediately, although the
   mon->mgr update is asynchronous, so `config set` will return a fraction
   of a second before the new value is visible on the mgr.
+* To delete a config value (i.e. revert to default), just pass ``None`` to
+  set_config.
 
 .. py:currentmodule:: mgr_module
 .. automethod:: MgrModule.get_config
