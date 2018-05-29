@@ -39,6 +39,14 @@ public:
   const string name() override;
 };
 
+class RGWOp_Metadata_Get_Myself : public RGWOp_Metadata_Get {
+public:
+  RGWOp_Metadata_Get_Myself() {}
+  ~RGWOp_Metadata_Get_Myself() override {}
+
+  void execute() override;
+};
+
 class RGWOp_Metadata_Put : public RGWRESTOp {
   int get_data(bufferlist& bl);
   string update_status;
