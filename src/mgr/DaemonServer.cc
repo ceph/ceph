@@ -138,9 +138,9 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
   return 0;
 }
 
-entity_addr_t DaemonServer::get_myaddr() const
+entity_addrvec_t DaemonServer::get_myaddrs() const
 {
-  return msgr->get_myaddr();
+  return msgr->get_myaddrs();
 }
 
 

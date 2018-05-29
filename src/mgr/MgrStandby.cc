@@ -199,7 +199,7 @@ void MgrStandby::send_beacon()
   // as available in the map)
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
 
-  auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
+  auto addrs = available ? active_mgr->get_server_addrs() : entity_addrvec_t();
   dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
   map<string,string> metadata;
@@ -209,7 +209,7 @@ void MgrStandby::send_beacon()
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
 				 monc.get_global_id(),
                                  g_conf->name.get_id(),
-                                 addr,
+                                 addrs,
                                  available,
 				 std::move(module_info),
 				 std::move(metadata));

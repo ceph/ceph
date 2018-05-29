@@ -202,7 +202,7 @@ void Mgr::init()
     // systemd restart us.
     exit(1);
   }
-  dout(4) << "Initialized server at " << server.get_myaddr() << dendl;
+  dout(4) << "Initialized server at " << server.get_myaddrs() << dendl;
 
   // Preload all daemon metadata (will subsequently keep this
   // up to date by watching maps, so do the initial load before
