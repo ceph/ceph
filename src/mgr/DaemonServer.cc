@@ -1837,7 +1837,8 @@ void DaemonServer::send_report()
           if (!collector) {
             derr << __func__ << " " << key.first << "." << key.second
 		 << " sent me an unknown health metric: "
-		 << hex << static_cast<uint8_t>(metric.get_type()) << dendl;
+		 << std::hex << static_cast<uint8_t>(metric.get_type())
+		 << std::dec << dendl;
             continue;
           }
 	  dout(20) << " + " << state->key << " "

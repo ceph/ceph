@@ -664,7 +664,8 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
 void Client::trim_dentry(Dentry *dn)
 {
   ldout(cct, 15) << "trim_dentry unlinking dn " << dn->name 
-		 << " in dir " << hex << dn->dir->parent_inode->ino 
+		 << " in dir "
+		 << std::hex << dn->dir->parent_inode->ino << std::dec
 		 << dendl;
   if (dn->inode) {
     Inode *diri = dn->dir->parent_inode;
