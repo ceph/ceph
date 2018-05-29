@@ -2659,7 +2659,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	  << " on " << m->get_ino()
 	  << " tid " << m->get_client_tid() << " follows " << follows
 	  << " op " << ceph_cap_op_name(m->get_op())
-	  << " flags 0x" << hex << m->flags << dendl;
+	  << " flags 0x" << std::hex << m->flags << std::dec << dendl;
 
   Session *session = mds->get_session(m);
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {

@@ -3362,7 +3362,8 @@ MOSDMap *OSDMonitor::build_latest_full(uint64_t features)
 
 MOSDMap *OSDMonitor::build_incremental(epoch_t from, epoch_t to, uint64_t features)
 {
-  dout(10) << "build_incremental [" << from << ".." << to << "] with features " << std::hex << features << dendl;
+  dout(10) << "build_incremental [" << from << ".." << to << "] with features "
+	   << std::hex << features << std::dec << dendl;
   MOSDMap *m = new MOSDMap(mon->monmap->fsid, features);
   m->oldest_map = get_first_committed();
   m->newest_map = osdmap.get_epoch();
