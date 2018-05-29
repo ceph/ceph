@@ -58,6 +58,15 @@ class SettingsTest(unittest.TestCase):
         self.assertEqual(out, 'Option GRAFANA_API_PORT updated')
         self.assertEqual(err, '')
 
+    def test_reset_cmd(self):
+        r, out, err = handle_option_command(
+            {'prefix': 'dashboard reset-grafana-enabled'}
+        )
+        self.assertEqual(r, 0)
+        self.assertEqual(out, 'Option {} reset to default value "{}"'.format(
+            'GRAFANA_ENABLED', Settings.GRAFANA_ENABLED))
+        self.assertEqual(err, '')
+
     def test_inv_cmd(self):
         r, out, err = handle_option_command(
             {'prefix': 'dashboard get-non-existent-option'})

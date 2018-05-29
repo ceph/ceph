@@ -51,6 +51,10 @@ class SettingsMeta(type):
         else:
             setattr(SettingsMeta, attr, value)
 
+    def __delattr__(self, attr):
+        if not attr.startswith('_') and hasattr(Options, attr):
+            mgr.set_config(attr, None)
+
 
 # pylint: disable=no-init
 @add_metaclass(SettingsMeta)
@@ -68,8 +72,10 @@ def _options_command_map():
             continue
         key_get = 'dashboard get-{}'.format(option.lower().replace('_', '-'))
         key_set = 'dashboard set-{}'.format(option.lower().replace('_', '-'))
+        key_reset = 'dashboard reset-{}'.format(option.lower().replace('_', '-'))
         cmd_map[key_get] = {'name': option, 'type': None}
         cmd_map[key_set] = {'name': option, 'type': value[1]}
+        cmd_map[key_reset] = {'name': option, 'type': None}
     return cmd_map
 
 
@@ -90,17 +96,25 @@ def options_command_list():
 
     cmd_list = []
     for cmd, opt in _OPTIONS_COMMAND_MAP.items():
-        if not opt['type']:
+        if cmd.startswith('dashboard get'):
             cmd_list.append({
                 'cmd': '{}'.format(cmd),
                 'desc': 'Get the {} option value'.format(opt['name']),
                 'perm': 'r'
             })
-        else:
+        elif cmd.startswith('dashboard set'):
             cmd_list.append({
                 'cmd': '{} name=value,type={}'
                        .format(cmd, py2ceph(opt['type'])),
                 'desc': 'Set the {} option value'.format(opt['name']),
+                'perm': 'w'
+            })
+        elif cmd.startswith('dashboard reset'):
+            desc = 'Reset the {} option to its default value'.format(
+                opt['name'])
+            cmd_list.append({
+                'cmd': '{}'.format(cmd),
+                'desc': desc,
                 'perm': 'w'
             })
 
@@ -110,12 +124,14 @@ def options_command_list():
 def handle_option_command(cmd):
     if cmd['prefix'] not in _OPTIONS_COMMAND_MAP:
         return (-errno.ENOSYS, '', "Command not found '{}'".format(cmd['prefix']))
-
     opt = _OPTIONS_COMMAND_MAP[cmd['prefix']]
-    if not opt['type']:
-        # get option
-        return 0, str(getattr(Settings, opt['name'])), ''
 
-    # set option
-    setattr(Settings, opt['name'], opt['type'](cmd['value']))
-    return 0, 'Option {} updated'.format(opt['name']), ''
+    if cmd['prefix'].startswith('dashboard reset'):
+        delattr(Settings, opt['name'])
+        return 0, 'Option {} reset to default value "{}"'.format(
+            opt['name'], getattr(Settings, opt['name'])), ''
+    elif cmd['prefix'].startswith('dashboard get'):
+        return 0, str(getattr(Settings, opt['name'])), ''
+    elif cmd['prefix'].startswith('dashboard set'):
+        setattr(Settings, opt['name'], opt['type'](cmd['value']))
+        return 0, 'Option {} updated'.format(opt['name']), ''
