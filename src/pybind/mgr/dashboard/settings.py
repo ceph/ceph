@@ -43,7 +43,12 @@ class Options(object):
 class SettingsMeta(type):
     def __getattr__(cls, attr):
         default, stype = getattr(Options, attr)
-        return stype(mgr.get_config(attr, default))
+        if stype == bool and str(mgr.get_config(attr,
+                                                default)).lower() == 'false':
+            value = False
+        else:
+            value = stype(mgr.get_config(attr, default))
+        return value
 
     def __setattr__(cls, attr, value):
         if not attr.startswith('_') and hasattr(Options, attr):
@@ -133,5 +138,8 @@ def handle_option_command(cmd):
     elif cmd['prefix'].startswith('dashboard get'):
         return 0, str(getattr(Settings, opt['name'])), ''
     elif cmd['prefix'].startswith('dashboard set'):
-        setattr(Settings, opt['name'], opt['type'](cmd['value']))
+        value = opt['type'](cmd['value'])
+        if opt['type'] == bool and cmd['value'].lower() == 'false':
+            value = False
+        setattr(Settings, opt['name'], value)
         return 0, 'Option {} updated'.format(opt['name']), ''
