@@ -1802,7 +1802,7 @@ int Objecter::_get_session(int osd, OSDSession **session, shunique_lock& sul)
   OSDSession *s = new OSDSession(cct, osd);
   osd_sessions[osd] = s;
   s->con = messenger->get_connection(osdmap->get_inst(osd));
-  s->con->set_priv(s->get());
+  s->con->set_priv(RefCountedPtr{s});
   logger->inc(l_osdc_osd_session_open);
   logger->set(l_osdc_osd_sessions, osd_sessions.size());
   s->get();
@@ -1845,7 +1845,7 @@ void Objecter::_reopen_session(OSDSession *s)
     logger->inc(l_osdc_osd_session_close);
   }
   s->con = messenger->get_connection(inst);
-  s->con->set_priv(s->get());
+  s->con->set_priv(RefCountedPtr{s});
   s->incarnation++;
   logger->inc(l_osdc_osd_session_open);
 }
@@ -3364,12 +3364,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   ConnectionRef con = m->get_connection();
-  OSDSession *s = static_cast<OSDSession*>(con->get_priv());
+  auto priv = con->get_priv();
+  auto s = static_cast<OSDSession*>(priv.get());
   if (!s || s->con != con) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
-    if (s) {
-      s->put();
-    }
     m->put();
     return;
   }
@@ -3383,7 +3381,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 						    " onnvram" : " ack"))
 		  << " ... stray" << dendl;
     sl.unlock();
-    s->put();
     m->put();
     return;
   }
@@ -3406,7 +3403,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
     _session_op_remove(s, op);
     sl.unlock();
-    s->put();
 
     _op_submit(op, sul, NULL);
     m->put();
@@ -3422,7 +3418,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		    << op->session->con->get_peer_addr() << dendl;
       m->put();
       sl.unlock();
-      s->put();
       return;
     }
   } else {
@@ -3441,7 +3436,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_in_flight--;
     _session_op_remove(s, op);
     sl.unlock();
-    s->put();
 
     // FIXME: two redirects could race and reorder
 
@@ -3460,7 +3454,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_in_flight--;
     _session_op_remove(s, op);
     sl.unlock();
-    s->put();
 
     op->tid = 0;
     op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
@@ -3554,7 +3547,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   m->put();
-  s->put();
 }
 
 void Objecter::handle_osd_backoff(MOSDBackoff *m)
@@ -3567,17 +3559,15 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
   }
 
   ConnectionRef con = m->get_connection();
-  OSDSession *s = static_cast<OSDSession*>(con->get_priv());
+  auto priv = con->get_priv();
+  auto s = static_cast<OSDSession*>(priv.get());
   if (!s || s->con != con) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
-    if (s)
-      s->put();
     m->put();
     return;
   }
 
   get_session(s);
-  s->put();  // from get_priv() above
 
   OSDSession::unique_lock sl(s->lock);
 
@@ -4429,7 +4419,8 @@ bool Objecter::ms_handle_reset(Connection *con)
   if (!initialized)
     return false;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    OSDSession *session = static_cast<OSDSession*>(con->get_priv());
+    auto priv = con->get_priv();
+    auto session = static_cast<OSDSession*>(priv.get());
     if (session) {
       ldout(cct, 1) << "ms_handle_reset " << con << " session " << session
 		    << " osd." << session->osd << dendl;
@@ -4446,7 +4437,6 @@ bool Objecter::ms_handle_reset(Connection *con)
       _linger_ops_resend(lresend, wl);
       wl.unlock();
       maybe_request_map();
-      session->put();
     }
     return true;
   }
@@ -4763,12 +4753,11 @@ void Objecter::handle_command_reply(MCommandReply *m)
   }
 
   ConnectionRef con = m->get_connection();
-  OSDSession *s = static_cast<OSDSession*>(con->get_priv());
+  auto priv = con->get_priv();
+  auto s = static_cast<OSDSession*>(priv.get());
   if (!s || s->con != con) {
     ldout(cct, 7) << __func__ << " no session on con " << con << dendl;
     m->put();
-    if (s)
-      s->put();
     return;
   }
 
@@ -4779,7 +4768,6 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << " not found" << dendl;
     m->put();
     sl.unlock();
-    s->put();
     return;
   }
 
@@ -4792,7 +4780,6 @@ void Objecter::handle_command_reply(MCommandReply *m)
 		   << dendl;
     m->put();
     sl.unlock();
-    s->put();
     return;
   }
   if (c->poutbl) {
@@ -4806,7 +4793,6 @@ void Objecter::handle_command_reply(MCommandReply *m)
   sul.unlock();
 
   m->put();
-  s->put();
 }
 
 void Objecter::submit_command(CommandOp *c, ceph_tid_t *ptid)
