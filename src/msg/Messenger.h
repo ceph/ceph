@@ -496,6 +496,15 @@ public:
    */
   virtual int send_message(Message *m, const entity_inst_t& dest) = 0;
 
+  virtual int send_to(
+    Message *m,
+    int type,
+    const entity_addrvec_t& addr) {
+    // temporary
+    return send_message(m, entity_inst_t(entity_name_t(type, -1),
+					 addr.legacy_addr()));
+  }
+
   /**
    * @} // Messaging
    */
@@ -512,6 +521,14 @@ public:
    * @param dest The entity to get a connection for.
    */
   virtual ConnectionRef get_connection(const entity_inst_t& dest) = 0;
+
+  virtual ConnectionRef connect_to(
+    int type, const entity_addrvec_t& dest) {
+    // temporary
+    return get_connection(entity_inst_t(entity_name_t(type, -1),
+					dest.legacy_addr()));
+  }
+
   /**
    * Get the Connection object associated with ourselves.
    */
