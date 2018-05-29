@@ -388,11 +388,6 @@ int get_pool_group_names(const po::variables_map &vm,
     return -EINVAL;
   }
 
-  if (snap_name != nullptr && snap_name->empty()) {
-    std::cerr << "rbd: snapshot name was not specified" << std::endl;
-    return -EINVAL;
-  }
-
   return 0;
 }
 
