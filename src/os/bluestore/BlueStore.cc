@@ -827,9 +827,10 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   }
 
   // onodes
-  int num = onode_lru.size() - onode_max;
-  if (num <= 0)
+  if (onode_max >= onode_lru.size()) {
     return; // don't even try
+  }
+  uint64_t num = onode_lru.size() - onode_max;
 
   auto p = onode_lru.end();
   ceph_assert(p != onode_lru.begin());
@@ -1123,9 +1124,10 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
   }
 
   // onodes
-  int num = onode_lru.size() - onode_max;
-  if (num <= 0)
+  if (onode_max >= onode_lru.size()) {
     return; // don't even try
+  }
+  uint64_t num = onode_lru.size() - onode_max;
 
   auto p = onode_lru.end();
   ceph_assert(p != onode_lru.begin());
