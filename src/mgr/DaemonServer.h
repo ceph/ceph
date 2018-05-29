@@ -107,7 +107,7 @@ public:
   int init(uint64_t gid, entity_addr_t client_addr);
   void shutdown();
 
-  entity_addr_t get_myaddr() const;
+  entity_addrvec_t get_myaddrs() const;
 
   DaemonServer(MonClient *monc_,
                Finisher &finisher_,
