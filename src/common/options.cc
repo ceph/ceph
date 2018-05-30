@@ -2896,10 +2896,6 @@ std::vector<Option> get_global_options() {
     .set_default(15_min)
     .set_description(""),
 
-    Option("osd_heartbeat_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
-    .set_default(entity_addr_t())
-    .set_description(""),
-
     Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(6)
     .set_min_max(1, 86400)
