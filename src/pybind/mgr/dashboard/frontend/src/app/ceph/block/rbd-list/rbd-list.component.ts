@@ -8,7 +8,6 @@ import {
   DeletionModalComponent
 } from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -16,12 +15,8 @@ import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import {
-  NotificationService
-} from '../../../shared/services/notification.service';
 import { SummaryService } from '../../../shared/services/summary.service';
-import { TaskManagerMessageService } from '../../../shared/services/task-manager-message.service';
-import { TaskManagerService } from '../../../shared/services/task-manager.service';
+import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import {
   FlattenConfirmationModalComponent
 } from '../flatten-confirmation-modal/flatten-confimation-modal.component';
@@ -55,9 +50,7 @@ export class RbdListComponent implements OnInit, OnDestroy {
               private dimlessPipe: DimlessPipe,
               private summaryService: SummaryService,
               private modalService: BsModalService,
-              private notificationService: NotificationService,
-              private taskManagerMessageService: TaskManagerMessageService,
-              private taskManagerService: TaskManagerService) {
+              private taskWrapper: TaskWrapperService) {
   }
 
   ngOnInit() {
@@ -241,35 +234,6 @@ export class RbdListComponent implements OnInit, OnDestroy {
     this.selection = selection;
   }
 
-  deleteRbd(poolName: string, imageName: string) {
-    const finishedTask = new FinishedTask();
-    finishedTask.name = 'rbd/delete';
-    finishedTask.metadata = {'pool_name': poolName, 'image_name': imageName};
-    this.rbdService.delete(poolName, imageName)
-      .toPromise().then((resp) => {
-        if (resp.status === 202) {
-          this.notificationService.show(NotificationType.info,
-            `RBD deletion in progress...`,
-            this.taskManagerMessageService.getDescription(finishedTask));
-          const executingTask = new ExecutingTask();
-          executingTask.name = finishedTask.name;
-          executingTask.metadata = finishedTask.metadata;
-          this.executingTasks.push(executingTask);
-          this.taskManagerService.subscribe(executingTask.name, executingTask.metadata,
-            (asyncFinishedTask: FinishedTask) => {
-              this.notificationService.notifyTask(asyncFinishedTask);
-            });
-        } else {
-          finishedTask.success = true;
-          this.notificationService.notifyTask(finishedTask);
-        }
-        this.modalRef.hide();
-        this.loadImages(null);
-      }).catch((resp) => {
-        this.modalRef.content.stopLoadingSpinner();
-      });
-  }
-
   deleteRbdModal() {
     const poolName = this.selection.first().pool_name;
     const imageName = this.selection.first().name;
@@ -277,36 +241,35 @@ export class RbdListComponent implements OnInit, OnDestroy {
     this.modalRef.content.setUp({
       metaType: 'RBD',
       pattern: `${poolName}/${imageName}`,
-      deletionMethod: () => this.deleteRbd(poolName, imageName),
+      deletionObserver: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('rbd/delete', {
+            pool_name: poolName,
+            image_name: imageName
+          }),
+          tasks: this.executingTasks,
+          call: this.rbdService.delete(poolName, imageName)
+        }),
       modalRef: this.modalRef
     });
   }
 
   flattenRbd(poolName, imageName) {
-    const finishedTask = new FinishedTask();
-    finishedTask.name = 'rbd/flatten';
-    finishedTask.metadata = {'pool_name': poolName, 'image_name': imageName};
-    this.rbdService.flatten(poolName, imageName)
-      .toPromise().then((resp) => {
-        if (resp.status === 202) {
-          this.notificationService.show(NotificationType.info,
-            `RBD flatten in progress...`,
-            this.taskManagerMessageService.getDescription(finishedTask));
-          const executingTask = new ExecutingTask();
-          executingTask.name = finishedTask.name;
-          executingTask.metadata = finishedTask.metadata;
-          this.executingTasks.push(executingTask);
-          this.taskManagerService.subscribe(executingTask.name, executingTask.metadata,
-            (asyncFinishedTask: FinishedTask) => {
-              this.notificationService.notifyTask(asyncFinishedTask);
-            });
-        } else {
-          finishedTask.success = true;
-          this.notificationService.notifyTask(finishedTask);
-        }
+    this.taskWrapper.wrapTaskAroundCall({
+      task: new FinishedTask('rbd/flatten', {
+        pool_name: poolName,
+        image_name: imageName
+      }),
+      tasks: this.executingTasks,
+      call: this.rbdService.flatten(poolName, imageName)
+    }).subscribe(
+      undefined,
+      undefined,
+      () => {
         this.modalRef.hide();
         this.loadImages(null);
-      });
+      }
+    );
   }
 
   flattenRbdModal() {
