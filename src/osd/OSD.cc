@@ -849,8 +849,8 @@ void OSDService::send_message_osd_cluster(int peer, Message *m, epoch_t from_epo
     release_map(next_map);
     return;
   }
-  const entity_inst_t& peer_inst = next_map->get_cluster_inst(peer);
-  ConnectionRef peer_con = osd->cluster_messenger->get_connection(peer_inst);
+  ConnectionRef peer_con = osd->cluster_messenger->connect_to_osd(
+    next_map->get_cluster_addrs(peer));
   share_map_peer(peer, peer_con.get(), next_map);
   peer_con->send_message(m);
   release_map(next_map);
@@ -867,7 +867,8 @@ ConnectionRef OSDService::get_con_osd_cluster(int peer, epoch_t from_epoch)
     release_map(next_map);
     return NULL;
   }
-  ConnectionRef con = osd->cluster_messenger->get_connection(next_map->get_cluster_inst(peer));
+  ConnectionRef con = osd->cluster_messenger->connect_to_osd(
+    next_map->get_cluster_addrs(peer));
   release_map(next_map);
   return con;
 }
@@ -884,9 +885,10 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
     release_map(next_map);
     return ret;
   }
-  ret.first = osd->hb_back_client_messenger->get_connection(next_map->get_hb_back_inst(peer));
-  if (next_map->get_hb_front_addr(peer) != entity_addr_t())
-    ret.second = osd->hb_front_client_messenger->get_connection(next_map->get_hb_front_inst(peer));
+  ret.first = osd->hb_back_client_messenger->connect_to_osd(
+    next_map->get_hb_back_addrs(peer));
+  ret.second = osd->hb_front_client_messenger->connect_to_osd(
+    next_map->get_hb_front_addrs(peer));
   release_map(next_map);
   return ret;
 }
