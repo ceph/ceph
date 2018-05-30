@@ -2197,7 +2197,8 @@ public:
       op,
       new MOSDMarkMeDown(
 	m->fsid,
-	m->get_target(),
+	m->target_osd,
+	m->target_addrs,
 	m->get_epoch(),
 	false));   // ACK itself does not request an ack
   }
@@ -2209,8 +2210,7 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
-  int requesting_down = m->get_target().name.num();
-  int from = m->get_orig_source().num();
+  int from = m->target_osd;
 
   // check permissions
   if (check_source(m, m->fsid))
@@ -2222,7 +2222,7 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
 
   if (!osdmap.exists(from) ||
       osdmap.is_down(from) ||
-      osdmap.get_addr(from) != m->get_target().addr) {
+      osdmap.get_addrs(from) != m->target_addrs) {
     dout(5) << "preprocess_mark_me_down from dead osd."
 	    << from << ", ignoring" << dendl;
     send_incremental(op, m->get_epoch()+1);
@@ -2230,10 +2230,11 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
   }
 
   // no down might be set
-  if (!can_mark_down(requesting_down))
+  if (!can_mark_down(from))
     goto reply;
 
-  dout(10) << "MOSDMarkMeDown for: " << m->get_target() << dendl;
+  dout(10) << "MOSDMarkMeDown for: " << m->get_orig_source()
+	   << " " << m->target_addrs << dendl;
   return false;
 
  reply:
@@ -2248,10 +2249,10 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
-  int target_osd = m->get_target().name.num();
+  int target_osd = m->target_osd;
 
   assert(osdmap.is_up(target_osd));
-  assert(osdmap.get_addr(target_osd) == m->get_target().addr);
+  assert(osdmap.get_addrs(target_osd) == m->target_addrs);
 
   mon->clog->info() << "osd." << target_osd << " marked itself down";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
