@@ -1991,6 +1991,7 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   Message *m = op->get_req();
   dout(7) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
+  op->set_could_duplicate(true);
 
   switch (m->get_type()) {
     // damp updates
