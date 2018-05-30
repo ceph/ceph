@@ -23,13 +23,9 @@
       "^.+\\.(ts|html)$": "<rootDir>/node_modules/jest-preset-angular/preprocessor.js",
       "^.+\\.js$": "babel-jest"
     },
-    "setupFiles": [
-      "jest-canvas-mock"
-    ],
-    "coverageReporters": [
-      "text",
-      "cobertura"
-    ]
+    "setupFiles": ["jest-canvas-mock"],
+    "coverageReporters": ["text", "cobertura"],
+    "modulePathIgnorePatterns": ["<rootDir>/coverage/"]
   },
   "dependencies": {
     "@angular/animations": "^5.0.0",
