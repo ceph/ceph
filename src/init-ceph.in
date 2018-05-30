@@ -522,13 +522,4 @@ for name in $what; do
     esac
 done
 
-# activate latent osds?
-if [ "$command" = "start" -a "$BINDIR" != "." ]; then
-    if [ "$*" = "" ] || echo $* | grep -q ^osd\$ ; then
-       if [ -x $SBINDIR/ceph-disk ]; then
-           ceph-disk activate-all
-       fi
-    fi
-fi
-
 exit $EXIT_STATUS
