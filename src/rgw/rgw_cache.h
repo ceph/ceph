@@ -57,7 +57,7 @@ struct ObjectCacheInfo {
   map<string, bufferlist> rm_xattrs;
   ObjectMetaInfo meta;
   obj_version version = {};
-  ceph::mono_time time_added = ceph::mono_clock::now();
+  ceph::mono_time time_added;
 
   ObjectCacheInfo() = default;
 
