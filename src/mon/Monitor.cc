@@ -3670,6 +3670,8 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
     rr->session = static_cast<MonSession *>(session->get());
     rr->op = op;
     routed_requests[rr->tid] = rr;
+    list<uint64_t>& rr_list = src_rr_map[req->get_source_inst()];
+    rr_list.push_back(rr->tid);
     session->routed_request_tids.insert(rr->tid);
     
     dout(10) << "forward_request " << rr->tid << " request " << *req
@@ -3877,12 +3879,30 @@ void Monitor::handle_route(MonOpRequestRef op)
       if (m->send_osdmap_first) {
 	dout(10) << " sending osdmaps from " << m->send_osdmap_first << dendl;
 	osdmon()->send_incremental(m->send_osdmap_first, rr->session,
-				   true, MonOpRequestRef());
+				   true, MonOpRequestRef()); 
+
       }
-      assert(rr->tid == m->session_mon_tid && rr->session->routed_request_tids.count(m->session_mon_tid));
-      routed_requests.erase(m->session_mon_tid);
-      rr->session->routed_request_tids.erase(m->session_mon_tid);
-      delete rr;
+      if (op->could_dupcate()) {
+  	map<entity_inst_t, set<uint64_t> >::iterator iter = src_rr_map.find(rr->session->inst);
+	set<uint64_t>::iterator tid_iter = iter->second.begin();
+  	while(tid_iter != iter->second.end()) {
+	  RoutedRequest *rreq = routed_requests[*tid_iter];
+  	  routed_requests.erase(*tid_iter);
+  	  rreq->session->routed_request_tids.erase(*tid_iter);
+  	  delete rreq;
+  	}
+	src_rr_map.erase(rr->session->inst);
+      } else {
+  	assert(rr->tid == m->session_mon_tid && rr->session->routed_request_tids.count(m->session_mon_tid));
+  	routed_requests.erase(m->session_mon_tid);
+  	rr->session->routed_request_tids.erase(m->session_mon_tid);
+  	map<entity_inst_t, set<uint64_t> >::iterator iter = src_rr_map.find(rr->session->inst);
+  	iter->second.erase(m->session_mon_tid);
+  	if (iter->second.size() == 0) {
+  	  src_rr_map.erase(rr->session->inst);
+  	}
+  	delete rr;      
+      }
     } else {
       dout(10) << " don't have routed request tid " << m->session_mon_tid << dendl;
     }

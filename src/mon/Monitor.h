@@ -798,6 +798,7 @@ public:
   };
   uint64_t routed_request_tid;
   map<uint64_t, RoutedRequest*> routed_requests;
+  map<entity_inst_t, set<uint64_t> > src_rr_map;
   
   void forward_request_leader(MonOpRequestRef op);
   void handle_forward(MonOpRequestRef op);

@@ -79,6 +79,7 @@ struct MonOpRequest : public TrackedOp {
 
 private:
   Message *request;
+  bool could_duplicate;
   utime_t dequeued_time;
   MonSession *session;
   ConnectionRef con;
@@ -93,6 +94,7 @@ private:
     session(NULL),
     con(NULL),
     forwarded_to_leader(false),
+    could_duplicate(false),
     op_type(OP_TYPE_NONE)
   {
     if (req) {
@@ -192,6 +194,14 @@ public:
 
   op_type_t get_op_type() {
     return op_type;
+  }
+
+  void set_could_duplicate(bool cd) {
+    could_duplicate = cd;
+  }
+
+  bool could_duplicate() {
+    return could_duplicate;
   }
 
   bool is_type_service() {
