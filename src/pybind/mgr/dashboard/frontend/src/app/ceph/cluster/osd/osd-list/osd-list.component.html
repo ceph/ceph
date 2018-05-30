@@ -10,6 +10,37 @@
           selectionType="single"
           (updateSelection)="updateSelection($event)"
           [updateSelectionOnRefresh]="false">
+  <div class="table-actions">
+    <div class="btn-group"
+         dropdown>
+      <button dropdownToggle
+              type="button"
+              class="btn btn-sm btn-primary dropdown-toggle tc_scrub_toggle"
+              [ngClass]="{disabled: !tableComponent.selection.hasSelection}">
+        <ng-container i18n> Perform Task</ng-container>
+        <span class="caret"></span>
+      </button>
+      <ul *dropdownMenu
+          class="dropdown-menu"
+          role="menu">
+        <li role="menuitem"
+            (click)="scrubAction(false)">
+          <a>
+            <i class="fa fa-fw fa-stethoscope"></i>
+            <ng-container i18n>Scrub</ng-container>
+          </a>
+        </li>
+        <li role="menuitem"
+            (click)="scrubAction(true)">
+          <a>
+            <i class="fa fa-fw fa-stethoscope"></i>
+            <ng-container i18n>Deep Scrub</ng-container>
+          </a>
+        </li>
+      </ul>
+    </div>
+  </div>
+
   <cd-osd-details cdTableDetail
                   [selection]="selection">
   </cd-osd-details>
@@ -20,12 +51,14 @@
   <span *ngFor="let state of value; last as last">
     <span [class.text-success]="'up' === state || 'in' === state"
           [class.text-warning]="'down' === state || 'out' === state">
-      {{ state }}</span><span *ngIf="!last">, </span>
+      {{ state }}</span>
+    <span *ngIf="!last">, </span>
     <!-- Has to be on the same line to prevent a space between state and comma. -->
   </span>
 </ng-template>
 
 <ng-template #osdUsageTpl
              let-row="row">
-  <cd-usage-bar [totalBytes]="row.stats.stat_bytes" [usedBytes]="row.stats.stat_bytes_used"></cd-usage-bar>
+  <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
+                [usedBytes]="row.stats.stat_bytes_used"></cd-usage-bar>
 </ng-template>

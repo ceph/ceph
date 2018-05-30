@@ -18,9 +18,7 @@ import { OsdPerformanceHistogramComponent } from './osd/osd-performance-histogra
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
 
 @NgModule({
-  entryComponents: [
-    OsdDetailsComponent
-  ],
+  entryComponents: [OsdDetailsComponent, OsdScrubModalComponent],
   imports: [
     CommonModule,
     PerformanceCounterModule,
