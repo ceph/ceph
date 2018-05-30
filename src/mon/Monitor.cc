@@ -3771,21 +3771,6 @@ void Monitor::handle_forward(MonOpRequestRef op)
   }
 }
 
-void Monitor::try_send_message(Message *m, const entity_inst_t& to)
-{
-  dout(10) << "try_send_message " << *m << " to " << to << dendl;
-
-  bufferlist bl;
-  encode_message(m, quorum_con_features, bl);
-
-  messenger->send_message(m, to);
-
-  for (int i=0; i<(int)monmap->size(); i++) {
-    if (i != rank)
-      send_mon_message(new MRoute(bl, to), i);
-  }
-}
-
 void Monitor::send_reply(MonOpRequestRef op, Message *reply)
 {
   op->mark_event(__func__);
