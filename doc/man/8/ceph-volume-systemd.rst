@@ -53,4 +53,3 @@ See also
 ========
 
 :doc:`ceph-osd <ceph-osd>`\(8),
-:doc:`ceph-disk <ceph-volume>`\(8),
