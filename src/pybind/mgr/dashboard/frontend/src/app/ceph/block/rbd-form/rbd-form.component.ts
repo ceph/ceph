@@ -3,16 +3,14 @@ import { FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms'
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
+import { Observable } from 'rxjs/Observable';
 
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { FormatterService } from '../../../shared/services/formatter.service';
-import { NotificationService } from '../../../shared/services/notification.service';
-import { TaskManagerMessageService } from '../../../shared/services/task-manager-message.service';
-import { TaskManagerService } from '../../../shared/services/task-manager.service';
+import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
 import { RbdFormCopyRequestModel } from './rbd-form-copy-request.model';
 import { RbdFormCreateRequestModel } from './rbd-form-create-request.model';
@@ -72,15 +70,15 @@ export class RbdFormComponent implements OnInit {
     '32MiB'
   ];
 
-  constructor(private route: ActivatedRoute,
-              private router: Router,
-              private poolService: PoolService,
-              private rbdService: RbdService,
-              private formatter: FormatterService,
-              private dimlessBinaryPipe: DimlessBinaryPipe,
-              private taskManagerService: TaskManagerService,
-              private taskManagerMessageService: TaskManagerMessageService,
-              private notificationService: NotificationService) {
+  constructor(
+    private route: ActivatedRoute,
+    private router: Router,
+    private poolService: PoolService,
+    private rbdService: RbdService,
+    private formatter: FormatterService,
+    private taskWrapper: TaskWrapperService,
+    private dimlessBinaryPipe: DimlessBinaryPipe
+  ) {
     this.features = {
       'deep-flatten': {
         desc: 'Deep flatten',
@@ -442,27 +440,14 @@ export class RbdFormComponent implements OnInit {
     return request;
   }
 
-  createAction() {
+  createAction(): Observable<any> {
     const request = this.createRequest();
-    const finishedTask = new FinishedTask();
-    finishedTask.name = 'rbd/create';
-    finishedTask.metadata = {'pool_name': request.pool_name, 'image_name': request.name};
-    this.rbdService.create(request).toPromise().then((resp) => {
-      if (resp.status === 202) {
-        this.notificationService.show(NotificationType.info,
-          `RBD creation in progress...`,
-          this.taskManagerMessageService.getDescription(finishedTask));
-        this.taskManagerService.subscribe(finishedTask.name, finishedTask.metadata,
-          (asyncFinishedTask: FinishedTask) => {
-            this.notificationService.notifyTask(asyncFinishedTask);
-          });
-      } else {
-        finishedTask.success = true;
-        this.notificationService.notifyTask(finishedTask);
-      }
-      this.router.navigate(['/block/rbd']);
-    }, (resp) => {
-      this.rbdForm.setErrors({'cdSubmitButton': true});
+    return this.taskWrapper.wrapTaskAroundCall({
+      task: new FinishedTask('rbd/create', {
+        pool_name: request.pool_name,
+        image_name: request.name
+      }),
+      call: this.rbdService.create(request)
     });
   }
 
@@ -494,64 +479,33 @@ export class RbdFormComponent implements OnInit {
     return request;
   }
 
-  editAction() {
-    const request = this.editRequest();
-    const finishedTask = new FinishedTask();
-    finishedTask.name = 'rbd/edit';
-    finishedTask.metadata = {
-      'pool_name':  this.response.pool_name,
-      'image_name': this.response.name
-    };
-    this.rbdService.update(this.response.pool_name, this.response.name, request)
-      .toPromise().then((resp) => {
-        if (resp.status === 202) {
-          this.notificationService.show(NotificationType.info,
-            `RBD update in progress...`,
-            this.taskManagerMessageService.getDescription(finishedTask));
-          this.taskManagerService.subscribe(finishedTask.name, finishedTask.metadata,
-            (asyncFinishedTask: FinishedTask) => {
-              this.notificationService.notifyTask(asyncFinishedTask);
-            });
-        } else {
-          finishedTask.success = true;
-          this.notificationService.notifyTask(finishedTask);
-        }
-        this.router.navigate(['/block/rbd']);
-      }).catch((resp) => {
-        this.rbdForm.setErrors({'cdSubmitButton': true});
-      });
+  editAction(): Observable<any> {
+    return this.taskWrapper.wrapTaskAroundCall({
+      task: new FinishedTask('rbd/edit', {
+        pool_name: this.response.pool_name,
+        image_name: this.response.name
+      }),
+      call: this.rbdService.update(this.response.pool_name, this.response.name, this.editRequest())
+    });
   }
 
-  cloneAction() {
+  cloneAction(): Observable<any> {
     const request = this.cloneRequest();
-    const finishedTask = new FinishedTask();
-    finishedTask.name = 'rbd/clone';
-    finishedTask.metadata = {
-      'parent_pool_name': this.response.pool_name,
-      'parent_image_name': this.response.name,
-      'parent_snap_name': this.snapName,
-      'child_pool_name': request.child_pool_name,
-      'child_image_name': request.child_image_name
-    };
-    this.rbdService
-      .cloneSnapshot(this.response.pool_name, this.response.name, this.snapName, request)
-      .subscribe((resp) => {
-        if (resp.status === 202) {
-          this.notificationService.show(NotificationType.info,
-            `RBD clone in progress...`,
-            this.taskManagerMessageService.getDescription(finishedTask));
-          this.taskManagerService.subscribe(finishedTask.name, finishedTask.metadata,
-            (asyncFinishedTask: FinishedTask) => {
-              this.notificationService.notifyTask(asyncFinishedTask);
-            });
-        } else {
-          finishedTask.success = true;
-          this.notificationService.notifyTask(finishedTask);
-        }
-        this.router.navigate(['/block/rbd']);
-      }, (resp) => {
-        this.rbdForm.setErrors({'cdSubmitButton': true});
-      });
+    return this.taskWrapper.wrapTaskAroundCall({
+      task: new FinishedTask('rbd/clone', {
+        parent_pool_name: this.response.pool_name,
+        parent_image_name: this.response.name,
+        parent_snap_name: this.snapName,
+        child_pool_name: request.child_pool_name,
+        child_image_name: request.child_image_name
+      }),
+      call: this.rbdService.cloneSnapshot(
+        this.response.pool_name,
+        this.response.name,
+        this.snapName,
+        request
+      )
+    });
   }
 
   copyRequest(): RbdFormCopyRequestModel {
@@ -573,46 +527,34 @@ export class RbdFormComponent implements OnInit {
     return request;
   }
 
-  copyAction() {
+  copyAction(): Observable<any> {
     const request = this.copyRequest();
-    const finishedTask = new FinishedTask();
-    finishedTask.name = 'rbd/copy';
-    finishedTask.metadata = {
-      'src_pool_name': this.response.pool_name,
-      'src_image_name': this.response.name,
-      'dest_pool_name': request.dest_pool_name,
-      'dest_image_name': request.dest_image_name
-    };
-    this.rbdService.copy(this.response.pool_name, this.response.name, request)
-      .toPromise().then((resp) => {
-        if (resp.status === 202) {
-          this.notificationService.show(NotificationType.info,
-            `RBD copy in progress...`,
-            this.taskManagerMessageService.getDescription(finishedTask));
-          this.taskManagerService.subscribe(finishedTask.name, finishedTask.metadata,
-            (asyncFinishedTask: FinishedTask) => {
-              this.notificationService.notifyTask(asyncFinishedTask);
-            });
-        } else {
-          finishedTask.success = true;
-          this.notificationService.notifyTask(finishedTask);
-        }
-        this.router.navigate(['/block/rbd']);
-      }).catch((resp) => {
-        this.rbdForm.setErrors({'cdSubmitButton': true});
-      });
+    return this.taskWrapper.wrapTaskAroundCall({
+      task: new FinishedTask('rbd/copy', {
+        src_pool_name: this.response.pool_name,
+        src_image_name: this.response.name,
+        dest_pool_name: request.dest_pool_name,
+        dest_image_name: request.dest_image_name
+      }),
+      call: this.rbdService.copy(this.response.pool_name, this.response.name, request)
+    });
   }
 
   submit() {
+    let action: Observable<any>;
     if (this.mode === this.rbdFormMode.editing) {
-      this.editAction();
+      action = this.editAction();
     } else if (this.mode === this.rbdFormMode.cloning) {
-      this.cloneAction();
+      action = this.cloneAction();
     } else if (this.mode === this.rbdFormMode.copying) {
-      this.copyAction();
+      action = this.copyAction();
     } else {
-      this.createAction();
+      action = this.createAction();
     }
+    action.subscribe(
+      undefined,
+      () => this.rbdForm.setErrors({ cdSubmitButton: true }),
+      () => this.router.navigate(['/block/rbd'])
+    );
   }
-
 }
