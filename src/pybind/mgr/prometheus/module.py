@@ -571,22 +571,43 @@ class Module(MgrModule):
 
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
+                # Skip histograms, they are represented by long running avgs
                 stattype = self._stattype_to_str(counter_info['type'])
-                # XXX simplify first effort: no histograms
-                # averages are already collapsed to one value for us
                 if not stattype or stattype == 'histogram':
                     self.log.debug('ignoring %s, type %s' % (path, stattype))
                     continue
 
-                self.metrics.add_metric(path, Metric(
+                # Get the value of the counter
+                value = self._perfvalue_to_value(counter_info['type'], counter_info['value'])
+
+                # Represent the long running avgs as sum/count pairs
+                if counter_info['type'] & self.PERFCOUNTER_LONGRUNAVG:
+                    _path = path + '_sum'
+                    self.metrics.add_metric(_path, Metric(
+                        stattype,
+                        _path,
+                        counter_info['description'] + ' Total',
+                        ("ceph_daemon",),
+                    ))
+                    self.metrics.append(_path, value, (daemon,))
+
+                    _path = path + '_count'
+                    self.metrics.add_metric(_path, Metric(
+                        'counter',
+                        _path,
+                        counter_info['description'] + ' Count',
+                        ("ceph_daemon",),
+                    ))
+                    self.metrics.append(_path, counter_info['count'], (daemon,))
+                else:
+                    self.metrics.add_metric(path, Metric(
                         stattype,
                         path,
                         counter_info['description'],
                         ("ceph_daemon",),
                     ))
+                    self.metrics.append(path, value, (daemon,))
 
-                value = self._perfvalue_to_value(counter_info['type'], counter_info['value'])
-                self.metrics.append(path, value, (daemon,))
         # It is sufficient to reset the pending metrics once per scrape
         self.metrics.reset()
 
