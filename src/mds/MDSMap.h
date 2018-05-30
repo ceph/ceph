@@ -146,6 +146,9 @@ public:
     void clear_laggy() { laggy_since = utime_t(); }
 
     entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
+    entity_addrvec_t get_addrs() const {
+      return entity_addrvec_t(addr);
+    }
 
     void encode(bufferlist& bl, uint64_t features) const {
       if ((features & CEPH_FEATURE_MDSENC) == 0 ) encode_unversioned(bl);
@@ -624,6 +627,10 @@ public:
   const entity_addr_t get_addr(mds_rank_t m) {
     assert(up.count(m));
     return mds_info[up[m]].addr;
+  }
+  entity_addrvec_t get_addrs(mds_rank_t m) {
+    assert(up.count(m));
+    return mds_info[up[m]].get_addrs();
   }
 
   /**
