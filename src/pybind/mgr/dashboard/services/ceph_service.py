@@ -176,9 +176,9 @@ class CephService(object):
         :rtype: list[tuple[int, float]]"""
         data = mgr.get_counter(svc_type, svc_name, path)[path]
         if not data:
-            return [(0, 0)]
+            return [(0, 0.0)]
         elif len(data) == 1:
-            return [(data[0][0], 0)]
+            return [(data[0][0], 0.0)]
         return [(data2[0], differentiate(data1, data2)) for data1, data2 in pairwise(data)]
 
     @classmethod
