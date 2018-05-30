@@ -154,6 +154,13 @@ are two or more different tenants all creating a container named
 ``foo``, radosgw is able to transparently discern them by their tenant
 prefix.
 
+It is also possible to limit the effects of implicit tenants
+to only apply to swift or s3, by setting ``rgw keystone implicit tenants``
+to either ``s3`` or ``swift``.  This will likely primarily
+be of use to users who had previously used implicit tenants
+with older versions of ceph, where implicit tenants
+only applied to the swift protocol.
+
 Notes and known issues
 ----------------------
 
