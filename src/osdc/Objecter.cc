@@ -1244,7 +1244,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  // osd down or addr change?
 	  if (!osdmap->is_up(s->osd) ||
 	      (s->con &&
-	       s->con->get_peer_addr() != osdmap->get_inst(s->osd).addr)) {
+	       s->con->get_peer_addrs() != osdmap->get_addrs(s->osd))) {
 	    close_session(s);
 	  }
 	}
@@ -1801,7 +1801,7 @@ int Objecter::_get_session(int osd, OSDSession **session, shunique_lock& sul)
   }
   OSDSession *s = new OSDSession(cct, osd);
   osd_sessions[osd] = s;
-  s->con = messenger->get_connection(osdmap->get_inst(osd));
+  s->con = messenger->connect_to_osd(osdmap->get_addrs(osd));
   s->con->set_priv(RefCountedPtr{s});
   logger->inc(l_osdc_osd_session_open);
   logger->set(l_osdc_osd_sessions, osd_sessions.size());
@@ -1836,15 +1836,15 @@ void Objecter::_reopen_session(OSDSession *s)
 {
   // s->lock is locked
 
-  entity_inst_t inst = osdmap->get_inst(s->osd);
+  auto addrs = osdmap->get_addrs(s->osd);
   ldout(cct, 10) << "reopen_session osd." << s->osd << " session, addr now "
-		 << inst << dendl;
+		 << addrs << dendl;
   if (s->con) {
     s->con->set_priv(NULL);
     s->con->mark_down();
     logger->inc(l_osdc_osd_session_close);
   }
-  s->con = messenger->get_connection(inst);
+  s->con = messenger->connect_to_osd(addrs);
   s->con->set_priv(RefCountedPtr{s});
   s->incarnation++;
   logger->inc(l_osdc_osd_session_open);
