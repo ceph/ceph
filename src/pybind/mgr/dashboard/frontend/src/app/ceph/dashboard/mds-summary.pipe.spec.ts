@@ -12,7 +12,6 @@ describe('MdsSummaryPipe', () => {
       standbys: [0],
       filesystems: [{ mdsmap: { info: [{ state: 'up:standby-replay' }] } }]
     };
-    const result = { color: '#FF2222' };
     expect(pipe.transform(value)).toBe('0 active, 2 standby');
   });
 
@@ -21,7 +20,6 @@ describe('MdsSummaryPipe', () => {
       standbys: [0],
       filesystems: [{ mdsmap: { info: [{ state: 'up:active' }] } }]
     };
-    const result = { color: '#FF2222' };
     expect(pipe.transform(value)).toBe('1 active, 1 standby');
   });
 

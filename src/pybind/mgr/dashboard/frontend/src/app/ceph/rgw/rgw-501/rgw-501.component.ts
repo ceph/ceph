@@ -1,8 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
-import * as _ from 'lodash';
-
 @Component({
   selector: 'cd-rgw-501',
   templateUrl: './rgw-501.component.html',

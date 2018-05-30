@@ -21,10 +21,9 @@ class TaskSubscription {
 
 @Injectable()
 export class TaskManagerService {
-
   subscriptions: Array<TaskSubscription> = [];
 
-  constructor(private summaryService: SummaryService) {
+  constructor(summaryService: SummaryService) {
     summaryService.summaryData$.subscribe((data: any) => {
       const executingTasks = data.executing_tasks;
       const finishedTasks = data.finished_tasks;
@@ -49,8 +48,7 @@ export class TaskManagerService {
 
   _getTask(subscription: TaskSubscription, tasks: Array<Task>): Task {
     for (const task of tasks) {
-      if (task.name === subscription.name &&
-        _.isEqual(task.metadata, subscription.metadata)) {
+      if (task.name === subscription.name && _.isEqual(task.metadata, subscription.metadata)) {
         return task;
       }
     }

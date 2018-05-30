@@ -10,7 +10,6 @@ import {
 } from '@angular/core';
 
 import * as Chart from 'chart.js';
-import * as _ from 'lodash';
 
 import { ChartTooltip } from '../../../shared/models/chart-tooltip';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
@@ -99,11 +98,10 @@ export class HealthPieComponent implements OnChanges, OnInit {
       this.chartCanvasRef,
       this.chartTooltipRef,
       getStyleLeft,
-      getStyleTop,
+      getStyleTop
     );
     chartTooltip.getBody = getBody;
 
-    const self = this;
     this.chart.options.tooltips.custom = (tooltip) => {
       chartTooltip.customTooltips(tooltip);
     };
