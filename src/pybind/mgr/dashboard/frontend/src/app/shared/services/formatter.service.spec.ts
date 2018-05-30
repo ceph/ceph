@@ -68,7 +68,7 @@ describe('FormatterService', () => {
     });
 
     it('should test some dimless values', () => {
-      expect(dimlessPipe.transform(0.6)).toBe('0.6 ');
+      expect(dimlessPipe.transform(0.6)).toBe('0.6');
       expect(dimlessPipe.transform(1000.608)).toBe('1.0006k');
       expect(dimlessPipe.transform(1e10)).toBe('10G');
       expect(dimlessPipe.transform(2.37e16)).toBe('23.7P');
