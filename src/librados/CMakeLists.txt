@@ -30,7 +30,7 @@ endif(ENABLE_SHARED)
 target_link_libraries(librados PRIVATE
   osdc ceph-common cls_lock_client
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS} 
-  ${OPENLDAP_LIBRARIES} ${GSSAPI_LIBRARIES})
+  ${GSSAPI_LIBRARIES})
 if(WITH_STATIC_LIBSTDCXX)
   target_link_libraries(librados
     INTERFACE "-static-libstdc++ -static-libgcc")

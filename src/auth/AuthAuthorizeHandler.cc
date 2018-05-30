@@ -15,7 +15,6 @@
 #include "AuthAuthorizeHandler.h"
 #include "cephx/CephxAuthorizeHandler.h"
 #include "ldap_krb/KrbAuthorizeHandler.hpp"
-#include "ldap_krb/LdapAuthorizeHandler.hpp"
 #include "none/AuthNoneAuthorizeHandler.h"
 #include "common/Mutex.h"
 
@@ -42,15 +41,6 @@ AuthAuthorizeHandler *AuthAuthorizeHandlerRegistry::get_handler(int protocol)
     case CEPH_AUTH_KRB5: 
       m_authorizers[protocol] = new KrbAuthorizeHandler();
       return m_authorizers[protocol];
-    /*
-    case CEPH_AUTH_LDAP:
-      m_authorizers[protocol] = new CephxAuthorizeHandler();
-      return m_authorizers[protocol];
-    
-    case CEPH_AUTH_LDAP_KRB5: 
-      m_authorizers[protocol] = new CephxAuthorizeHandler();
-      return m_authorizers[protocol];
-    */
   }
   return NULL;
 }

@@ -152,7 +152,6 @@ target_link_libraries(librbd PRIVATE
   pthread
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS}
-  ${OPENLDAP_LIBRARIES} 
   ${GSSAPI_LIBRARIES})
 
 if(HAVE_UDEV)

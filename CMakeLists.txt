@@ -202,7 +202,7 @@ if(WITH_OPENLDAP)
   set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
 endif()
 
-option(WITH_LDAP_GSSAPI "OPENLDAP and GSSAPI is here" ON)
+option(WITH_LDAP_GSSAPI "OPENLDAP and GSSAPI are here" ON)
 find_package(GSSApi)
 set(HAVE_GSSAPI ${GSSApi_FOUND})
 
