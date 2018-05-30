@@ -180,7 +180,7 @@ struct MonSessionMap {
     while (backward || forward) {
       if (backward) {
         if (osdmap->is_up(b->first) &&
-	    osdmap->get_addr(b->first) == b->second->con->get_peer_addr()) {
+	    osdmap->get_addrs(b->first) == b->second->con->get_peer_addrs()) {
           s = b->second;
           break;
         }
