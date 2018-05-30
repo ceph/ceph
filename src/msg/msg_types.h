@@ -549,6 +549,17 @@ struct entity_addrvec_t {
 
   bool parse(const char *s, const char **end = 0);
 
+  void get_ports(set<int> *ports) const {
+    for (auto& a : v) {
+      ports->insert(a.get_port());
+    }
+  }
+  set<int> get_ports() const {
+    set<int> r;
+    get_ports(&r);
+    return r;
+  }
+
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
