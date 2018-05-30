@@ -301,8 +301,6 @@ TEST_F(MonMsgTest, MRouteTest)
   Message *payload = new MGenericMessage(CEPH_MSG_SHUTDOWN);
   MRoute *m = new MRoute;
   m->msg = payload;
-  m->dest.addr = msg->get_myaddr();
-  m->dest.name = entity_name_t(msg->get_mytype(), -1);
   Message *r = send_wait_reply(m, CEPH_MSG_SHUTDOWN);
   // we want an error
   ASSERT_NE(IS_ERR(r), 0);

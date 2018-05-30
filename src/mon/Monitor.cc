@@ -3840,9 +3840,10 @@ void Monitor::handle_route(MonOpRequestRef op)
     return;
   }
   if (m->msg)
-    dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
+    dout(10) << "handle_route tid " << m->session_mon_tid << " " << *m->msg
+	     << dendl;
   else
-    dout(10) << "handle_route null to " << m->dest << dendl;
+    dout(10) << "handle_route tid " << m->session_mon_tid << " null" << dendl;
   
   // look it up
   if (m->session_mon_tid) {
@@ -3868,11 +3869,7 @@ void Monitor::handle_route(MonOpRequestRef op)
       dout(10) << " don't have routed request tid " << m->session_mon_tid << dendl;
     }
   } else {
-    dout(10) << " not a routed request, trying to send anyway" << dendl;
-    if (m->msg) {
-      messenger->send_message(m->msg, m->dest);
-      m->msg = NULL;
-    }
+    dout(10) << " not a routed request, ignoring" << dendl;
   }
 }
 
