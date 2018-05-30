@@ -95,6 +95,7 @@ Swift with Keystone
 TBD -- don't forget to explain the function of
        rgw keystone implicit tenants = true
        in commit e9259486decab52a362443d3fd3dec33b0ec654f
+       [ There is a description of this in keystone.rst ]
 
 Notes and known issues
 ----------------------
