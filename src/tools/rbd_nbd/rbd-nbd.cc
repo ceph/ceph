@@ -453,7 +453,7 @@ std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
   }
 
   os << ctx.request.from << "~" << ctx.request.len << " "
-     << ntohl(ctx.reply.error) << "]";
+     << std::dec << ntohl(ctx.reply.error) << "]";
 
   return os;
 }
