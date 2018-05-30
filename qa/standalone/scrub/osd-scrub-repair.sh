@@ -667,12 +667,13 @@ function TEST_corrupt_scrub_replicated() {
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
+            "omap_digest": "0xf5fba2c6",
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -711,12 +712,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0xf5fba2c6",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -777,12 +779,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x067f306a",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -840,12 +843,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x6441854d",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -923,12 +927,13 @@ function TEST_corrupt_scrub_replicated() {
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
+            "omap_digest": "0x2d2a4d6e",
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -972,12 +977,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x2d2a4d6e",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1068,12 +1074,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x00b35dfd",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1154,12 +1161,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0xd6be81dc",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1205,12 +1213,13 @@ function TEST_corrupt_scrub_replicated() {
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": "0x2b63260d",
-            "omap_digest": "0xffffffff",
+            "omap_digest": "0x2eecc539",
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -1246,12 +1255,13 @@ function TEST_corrupt_scrub_replicated() {
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
+            "omap_digest": "0x2eecc539",
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -1289,12 +1299,13 @@ function TEST_corrupt_scrub_replicated() {
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2b63260d",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x2eecc539",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1400,12 +1411,13 @@ EOF
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
+            "omap_digest": "0xf5fba2c6",
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -1447,12 +1459,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0xf5fba2c6",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1476,6 +1489,72 @@ EOF
         "locator": "",
         "nspace": "",
         "name": "ROBJ1"
+      }
+    },
+    {
+      "shards": [
+        {
+          "data_digest": "0x2ddbf8f5",
+          "omap_digest": "0xa8dd5adc",
+          "size": 7,
+          "errors": [
+            "omap_digest_mismatch_info"
+          ],
+          "osd": 0,
+          "primary": false
+        },
+        {
+          "data_digest": "0x2ddbf8f5",
+          "omap_digest": "0xa8dd5adc",
+          "size": 7,
+          "errors": [
+            "omap_digest_mismatch_info"
+          ],
+          "osd": 1,
+          "primary": true
+        }
+      ],
+      "selected_object_info": {
+        "alloc_hint_flags": 0,
+        "data_digest": "0x2ddbf8f5",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest",
+          "omap_digest"
+        ],
+        "lost": 0,
+        "manifest": {
+          "type": 0
+        },
+        "oid": {
+          "hash": 3174666125,
+          "key": "",
+          "max": 0,
+          "namespace": "",
+          "oid": "ROBJ10",
+          "pool": 3,
+          "snapid": -2
+        },
+        "omap_digest": "0xc2025a24",
+        "size": 7,
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "user_version": 30,
+        "watchers": {}
+      },
+      "union_shard_errors": [
+        "omap_digest_mismatch_info"
+      ],
+      "errors": [],
+      "object": {
+        "version": 30,
+        "snap": "head",
+        "locator": "",
+        "nspace": "",
+        "name": "ROBJ10"
       }
     },
     {
@@ -1518,12 +1597,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0xa03cef03",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1583,12 +1663,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x067f306a",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1701,12 +1782,13 @@ EOF
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
+            "omap_digest": "0x2d2a4d6e",
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -1754,12 +1836,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x2d2a4d6e",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1859,12 +1942,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0xf8e11918",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1926,12 +2010,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x00b35dfd",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -1958,7 +2043,9 @@ EOF
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0xd7178dfe",
           "size": 7,
-          "errors": [],
+          "errors": [
+            "omap_digest_mismatch_info"
+          ],
           "osd": 0,
           "primary": false
         },
@@ -1992,12 +2079,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0xe2d46ea4",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2006,7 +2094,9 @@ EOF
         },
         "watchers": {}
       },
-      "union_shard_errors": [],
+      "union_shard_errors": [
+        "omap_digest_mismatch_info"
+      ],
       "errors": [
         "omap_digest_mismatch"
       ],
@@ -2032,7 +2122,9 @@ EOF
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x06cac8f6",
           "size": 7,
-          "errors": [],
+          "errors": [
+            "omap_digest_mismatch_info"
+          ],
           "osd": 1,
           "primary": true
         }
@@ -2058,12 +2150,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x1a862a41",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2072,7 +2165,9 @@ EOF
         },
         "watchers": {}
       },
-      "union_shard_errors": [],
+      "union_shard_errors": [
+        "omap_digest_mismatch_info"
+      ],
       "errors": [
         "omap_digest_mismatch"
       ],
@@ -2090,7 +2185,9 @@ EOF
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x689ee887",
           "size": 7,
-          "errors": [],
+          "errors": [
+            "omap_digest_mismatch_info"
+          ],
           "osd": 0,
           "primary": false
         },
@@ -2124,12 +2221,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x179c919f",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2138,7 +2236,9 @@ EOF
         },
         "watchers": {}
       },
-      "union_shard_errors": [],
+      "union_shard_errors": [
+        "omap_digest_mismatch_info"
+      ],
       "errors": [
         "omap_digest_mismatch"
       ],
@@ -2164,7 +2264,9 @@ EOF
           "data_digest": "0x2ddbf8f5",
           "omap_digest": "0x6a73cc07",
           "size": 7,
-          "errors": [],
+          "errors": [
+            "omap_digest_mismatch_info"
+          ],
           "osd": 1,
           "primary": true
         }
@@ -2190,12 +2292,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0xefced57a",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2204,7 +2307,9 @@ EOF
         },
         "watchers": {}
       },
-      "union_shard_errors": [],
+      "union_shard_errors": [
+        "omap_digest_mismatch_info"
+      ],
       "errors": [
         "omap_digest_mismatch"
       ],
@@ -2280,12 +2385,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x2ddbf8f5",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0xd6be81dc",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
@@ -2331,12 +2437,13 @@ EOF
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": "0x2ddbf8f5",
-            "omap_digest": "0xffffffff",
+            "omap_digest": "0x2eecc539",
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -2376,12 +2483,13 @@ EOF
             "flags": [
               "dirty",
               "omap",
-              "data_digest"
+              "data_digest",
+              "omap_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
             "data_digest": "0x1f26fb26",
-            "omap_digest": "0xffffffff",
+            "omap_digest": "0x2eecc539",
             "expected_object_size": 0,
             "expected_write_size": 0,
             "alloc_hint_flags": 0,
@@ -2419,12 +2527,13 @@ EOF
         "flags": [
           "dirty",
           "omap",
-          "data_digest"
+          "data_digest",
+          "omap_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
         "data_digest": "0x1f26fb26",
-        "omap_digest": "0xffffffff",
+        "omap_digest": "0x2eecc539",
         "expected_object_size": 0,
         "expected_write_size": 0,
         "alloc_hint_flags": 0,
