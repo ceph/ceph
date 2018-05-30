@@ -921,9 +921,8 @@ public:
   }
   const entity_addr_t &get_cluster_addr(int osd) const {
     assert(exists(osd));
-    if (!osd_addrs->cluster_addr[osd] || *osd_addrs->cluster_addr[osd] == entity_addr_t())
-      return get_addr(osd);
-    return *osd_addrs->cluster_addr[osd];
+    return osd_addrs->cluster_addr[osd] ?
+      *osd_addrs->cluster_addr[osd] : _blank_addr;
   }
   const entity_addr_t &get_hb_back_addr(int osd) const {
     assert(exists(osd));

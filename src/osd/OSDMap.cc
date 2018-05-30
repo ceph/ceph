@@ -1318,7 +1318,8 @@ void OSDMap::adjust_osd_weights(const map<int,double>& weights, Incremental& inc
 int OSDMap::identify_osd(const entity_addr_t& addr) const
 {
   for (int i=0; i<max_osd; i++)
-    if (exists(i) && (get_addr(i) == addr || get_cluster_addr(i) == addr))
+    if (exists(i) && (get_addrs(i).contains(addr) ||
+		      get_cluster_addr(i) == addr))
       return i;
   return -1;
 }
@@ -1334,7 +1335,7 @@ int OSDMap::identify_osd(const uuid_d& u) const
 int OSDMap::identify_osd_on_all_channels(const entity_addr_t& addr) const
 {
   for (int i=0; i<max_osd; i++)
-    if (exists(i) && (get_addr(i) == addr || get_cluster_addr(i) == addr ||
+    if (exists(i) && (get_addrs(i).contains(addr) || get_cluster_addr(i) == addr ||
 	get_hb_back_addr(i) == addr || get_hb_front_addr(i) == addr))
       return i;
   return -1;
@@ -1343,7 +1344,8 @@ int OSDMap::identify_osd_on_all_channels(const entity_addr_t& addr) const
 int OSDMap::find_osd_on_ip(const entity_addr_t& ip) const
 {
   for (int i=0; i<max_osd; i++)
-    if (exists(i) && (get_addr(i).is_same_host(ip) || get_cluster_addr(i).is_same_host(ip)))
+    if (exists(i) && (get_addrs(i).is_same_host(ip) ||
+		      get_cluster_addr(i).is_same_host(ip)))
       return i;
   return -1;
 }
@@ -3071,7 +3073,7 @@ void OSDMap::dump(Formatter *f) const
       f->dump_float("weight", get_weightf(i));
       f->dump_float("primary_affinity", get_primary_affinityf(i));
       get_info(i).dump(f);
-      f->dump_stream("public_addr") << get_addr(i);
+      f->dump_object("public_addr", get_addrs(i));
       f->dump_stream("cluster_addr") << get_cluster_addr(i);
       f->dump_stream("heartbeat_back_addr") << get_hb_back_addr(i);
       f->dump_stream("heartbeat_front_addr") << get_hb_front_addr(i);
@@ -3326,7 +3328,8 @@ void OSDMap::print(ostream& out) const
 	out << " primary_affinity " << get_primary_affinityf(i);
       const osd_info_t& info(get_info(i));
       out << " " << info;
-      out << " " << get_addr(i) << " " << get_cluster_addr(i) << " " << get_hb_back_addr(i)
+      out << " " << get_addrs(i) << " " << get_cluster_addr(i)
+	  << " " << get_hb_back_addr(i)
 	  << " " << get_hb_front_addr(i);
       set<string> st;
       get_state(i, st);
