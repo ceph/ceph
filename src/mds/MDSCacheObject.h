@@ -367,7 +367,7 @@ protected:
     }
     if (waiting->empty()) {
       put(PIN_WAITER);
-      waiting.release();
+      waiting.reset();
     }
   }
   void finish_waiting(uint64_t mask, int result = 0);
