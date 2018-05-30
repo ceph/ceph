@@ -12,14 +12,10 @@ describe('RgwUserCapabilityModalComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RgwUserCapabilityModalComponent ],
-      imports: [
-        ReactiveFormsModule,
-        SharedModule
-      ],
-      providers: [ BsModalRef ]
-    })
-    .compileComponents();
+      declarations: [RgwUserCapabilityModalComponent],
+      imports: [ReactiveFormsModule, SharedModule],
+      providers: [BsModalRef]
+    }).compileComponents();
   }));
 
   beforeEach(() => {

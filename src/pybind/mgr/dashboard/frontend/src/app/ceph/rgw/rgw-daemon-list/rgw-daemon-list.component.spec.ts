@@ -14,18 +14,9 @@ describe('RgwDaemonListComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [
-        RgwDaemonListComponent,
-        RgwDaemonDetailsComponent
-      ],
-      imports: [
-        HttpClientModule,
-        TabsModule.forRoot(),
-        PerformanceCounterModule,
-        SharedModule
-      ]
-    })
-    .compileComponents();
+      declarations: [RgwDaemonListComponent, RgwDaemonDetailsComponent],
+      imports: [HttpClientModule, TabsModule.forRoot(), PerformanceCounterModule, SharedModule]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
