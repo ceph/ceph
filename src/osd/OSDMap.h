@@ -933,14 +933,6 @@ public:
     assert(exists(osd));
     return osd_addrs->hb_front_addr[osd] ? *osd_addrs->hb_front_addr[osd] : osd_addrs->blank;
   }
-  entity_inst_t get_most_recent_inst(int osd) const {
-    assert(exists(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_addr(osd));
-  }
-  entity_inst_t get_inst(int osd) const {
-    assert(is_up(osd));
-    return get_most_recent_inst(osd);
-  }
 
   const uuid_d& get_uuid(int osd) const {
     assert(exists(osd));
