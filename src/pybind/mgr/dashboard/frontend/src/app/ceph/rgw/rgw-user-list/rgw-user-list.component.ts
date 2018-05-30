@@ -1,5 +1,4 @@
 import { Component, ViewChild } from '@angular/core';
-import { Router } from '@angular/router';
 
 import { BsModalService } from 'ngx-bootstrap';
 import 'rxjs/add/observable/forkJoin';
@@ -25,11 +24,7 @@ export class RgwUserListComponent {
   users: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
 
-  constructor(
-    private router: Router,
-    private rgwUserService: RgwUserService,
-    private bsModalService: BsModalService
-  ) {
+  constructor(private rgwUserService: RgwUserService, private bsModalService: BsModalService) {
     this.columns = [
       {
         name: 'Username',
