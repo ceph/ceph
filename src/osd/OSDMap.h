@@ -941,18 +941,6 @@ public:
     assert(is_up(osd));
     return get_most_recent_inst(osd);
   }
-  entity_inst_t get_cluster_inst(int osd) const {
-    assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_cluster_addr(osd));
-  }
-  entity_inst_t get_hb_back_inst(int osd) const {
-    assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_hb_back_addr(osd));
-  }
-  entity_inst_t get_hb_front_inst(int osd) const {
-    assert(is_up(osd));
-    return entity_inst_t(entity_name_t::OSD(osd), get_hb_front_addr(osd));
-  }
 
   const uuid_d& get_uuid(int osd) const {
     assert(exists(osd));
