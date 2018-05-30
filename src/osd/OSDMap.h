@@ -891,6 +891,30 @@ public:
     return identify_osd(addr) >= 0;
   }
   int find_osd_on_ip(const entity_addr_t& ip) const;
+
+  entity_addrvec_t get_addrs(int osd) const {
+    assert(exists(osd));
+    return entity_addrvec_t(osd_addrs->client_addr[osd] ? *osd_addrs->client_addr[osd] : osd_addrs->blank);
+  }
+  entity_addrvec_t get_cluster_addrs(int osd) const {
+    assert(exists(osd));
+    if (!osd_addrs->cluster_addr[osd] || *osd_addrs->cluster_addr[osd] == entity_addr_t())
+      return get_addrs(osd);
+    return entity_addrvec_t(*osd_addrs->cluster_addr[osd]);
+  }
+  entity_addrvec_t get_hb_back_addrs(int osd) const {
+    assert(exists(osd));
+    return entity_addrvec_t(osd_addrs->hb_back_addr[osd] ? *osd_addrs->hb_back_addr[osd] : osd_addrs->blank);
+  }
+  entity_addrvec_t get_hb_front_addrs(int osd) const {
+    assert(exists(osd));
+    return entity_addrvec_t(osd_addrs->hb_front_addr[osd] ? *osd_addrs->hb_front_addr[osd] : osd_addrs->blank);
+  }
+  entity_addrvec_t get_most_recent_addrs(int osd) const {
+    assert(exists(osd));
+    return get_addrs(osd);
+  }
+
   const entity_addr_t &get_addr(int osd) const {
     assert(exists(osd));
     return osd_addrs->client_addr[osd] ? *osd_addrs->client_addr[osd] : osd_addrs->blank;
