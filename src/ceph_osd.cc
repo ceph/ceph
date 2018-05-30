@@ -589,12 +589,9 @@ flushjournal_out:
   }
 
   // hb back should bind to same ip as cluster_addr (if specified)
-  entity_addr_t haddr = g_conf->get_val<entity_addr_t>("osd_heartbeat_addr");
-  if (haddr.is_blank_ip()) {
-    haddr = caddr;
-    if (haddr.is_ip())
-      haddr.set_port(0);
-  }
+  entity_addr_t haddr = caddr;
+  if (haddr.is_ip())
+    haddr.set_port(0);
 
   if (ms_hb_back_server->bind(haddr) < 0)
     forker.exit(1);
