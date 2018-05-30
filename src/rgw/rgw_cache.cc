@@ -127,6 +127,7 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
 
   auto [iter, inserted] = cache_map.emplace(name, ObjectCacheEntry{});
   ObjectCacheEntry& entry = iter->second;
+  entry.info.time_added = ceph::coarse_mono_clock::now();
   if (inserted) {
     entry.lru_iter = lru.end();
   }
