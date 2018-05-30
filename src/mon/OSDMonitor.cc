@@ -4501,7 +4501,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("osd_location");
     f->dump_int("osd", osd);
-    f->dump_stream("ip") << osdmap.get_addr(osd);
+    f->dump_object("addrs", osdmap.get_addrs(osd));
     f->open_object_section("crush_location");
     map<string,string> loc = osdmap.crush->get_full_location(osd);
     for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)

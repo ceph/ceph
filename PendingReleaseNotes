@@ -14,3 +14,7 @@
 * If the cluster log is directed at syslog, the entries are now
   prefixed by both the string-form name and the rank-form name (e.g.,
   ``mgr.x mgr.12345 ...`` instead of just ``mgr.12345 ...``).
+
+* The JSON output of the ``osd find`` command has replaced the ``ip``
+  field with an ``addrs`` section to reflect that OSDs may bind to
+  multiple addresses.
