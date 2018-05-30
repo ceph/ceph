@@ -1,8 +1,10 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
-import { FormsModule } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ModalModule } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { SharedModule } from '../../shared/shared.module';
@@ -12,9 +14,8 @@ import { HostsComponent } from './hosts/hosts.component';
 import { MonitorComponent } from './monitor/monitor.component';
 import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
 import { OsdListComponent } from './osd/osd-list/osd-list.component';
-import {
-  OsdPerformanceHistogramComponent
-} from './osd/osd-performance-histogram/osd-performance-histogram.component';
+import { OsdPerformanceHistogramComponent } from './osd/osd-performance-histogram/osd-performance-histogram.component';
+import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
 
 @NgModule({
   entryComponents: [
@@ -26,7 +27,10 @@ import {
     TabsModule.forRoot(),
     SharedModule,
     RouterModule,
-    FormsModule
+    FormsModule,
+    ReactiveFormsModule,
+    BsDropdownModule.forRoot(),
+    ModalModule.forRoot()
   ],
   declarations: [
     HostsComponent,
@@ -34,7 +38,8 @@ import {
     ConfigurationComponent,
     OsdListComponent,
     OsdDetailsComponent,
-    OsdPerformanceHistogramComponent
+    OsdPerformanceHistogramComponent,
+    OsdScrubModalComponent
   ]
 })
 export class ClusterModule {}
