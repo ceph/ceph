@@ -2676,7 +2676,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   if (osdmap.exists(from) &&
       osdmap.get_info(from).up_from > m->version &&
-      osdmap.get_most_recent_inst(from) == m->get_orig_source_inst()) {
+      osdmap.get_most_recent_addrs(from) == m->get_orig_source_addrs()) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
     send_latest(op, m->sb.current_epoch+1);
     return true;
@@ -2893,7 +2893,7 @@ bool OSDMonitor::preprocess_full(MonOpRequestRef op)
     goto ignore;
   }
   if ((!osdmap.is_up(from) &&
-       osdmap.get_most_recent_inst(from) == m->get_orig_source_inst()) ||
+       osdmap.get_most_recent_addrs(from) == m->get_orig_source_addrs()) ||
       (osdmap.is_up(from) &&
        osdmap.get_inst(from) != m->get_orig_source_inst())) {
     dout(7) << __func__ << " ignoring full message from down "
