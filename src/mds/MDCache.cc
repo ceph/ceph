@@ -1735,7 +1735,7 @@ void MDCache::journal_cow_inode(MutationRef& mut, EMetaBlob *metablob,
 void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode *in, snapid_t follows)
 {
   if (in->is_base()) {
-    metablob->add_root(true, in, in->get_projected_inode());
+    metablob->add_root(true, in);
   } else {
     if (follows == CEPH_NOSNAP && in->last != CEPH_NOSNAP)
       follows = in->first - 1;
@@ -12665,7 +12665,7 @@ void MDCache::upgrade_inode_snaprealm_work(MDRequestRef& mdr)
   mds->mdlog->start_entry(le);
 
   if (in->is_base()) {
-    le->metablob.add_root(true, in, in->get_projected_inode());
+    le->metablob.add_root(true, in);
   } else {
     CDentry *pdn = in->get_projected_parent_dn();
     le->metablob.add_dir_context(pdn->get_dir());
