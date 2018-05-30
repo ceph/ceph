@@ -4666,42 +4666,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     goto reply;
 
-  } else if (prefix == "osd scrub" ||
-	     prefix == "osd deep-scrub" ||
-	     prefix == "osd repair") {
-    string whostr;
-    cmd_getval(cct, cmdmap, "who", whostr);
-    vector<string> pvec;
-    get_str_vec(prefix, pvec);
-
-    if (whostr == "*" || whostr == "all" || whostr == "any") {
-      ss << "osds ";
-      int c = 0;
-      for (int i = 0; i < osdmap.get_max_osd(); i++)
-	if (osdmap.is_up(i)) {
-	  ss << (c++ ? "," : "") << i;
-	  mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
-					      pvec.back() == "repair",
-					      pvec.back() == "deep-scrub"),
-				osdmap.get_inst(i));
-	}
-      r = 0;
-      ss << " instructed to " << pvec.back();
-    } else {
-      long osd = parse_osd_id(whostr.c_str(), &ss);
-      if (osd < 0) {
-	r = -EINVAL;
-      } else if (osdmap.is_up(osd)) {
-	mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
-					    pvec.back() == "repair",
-					    pvec.back() == "deep-scrub"),
-			      osdmap.get_inst(osd));
-	ss << "osd." << osd << " instructed to " << pvec.back();
-      } else {
-	ss << "osd." << osd << " is not up";
-	r = -EAGAIN;
-      }
-    }
   } else if (prefix == "osd lspools") {
     int64_t auid;
     cmd_getval(cct, cmdmap, "auid", auid, int64_t(0));
