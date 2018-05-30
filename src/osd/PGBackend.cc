@@ -1063,13 +1063,6 @@ void PGBackend::be_compare_scrubmaps(
 	dout(20) << __func__ << " missing digest on " << *k << dendl;
 	update = MAYBE;
       }
-      if (auth_object.digest_present && auth_object.omap_digest_present &&
-	  cct->_conf->osd_debug_scrub_chance_rewrite_digest &&
-	  (((unsigned)rand() % 100) >
-	   cct->_conf->osd_debug_scrub_chance_rewrite_digest)) {
-	dout(20) << __func__ << " randomly updating digest on " << *k << dendl;
-	update = MAYBE;
-      }
 
       // recorded digest != actual digest?
       if (auth_oi.is_data_digest() && auth_object.digest_present &&
