@@ -877,14 +877,14 @@ bool MDSRank::is_stale_message(Message *m) const
   if (m->get_source().is_mds()) {
     mds_rank_t from = mds_rank_t(m->get_source().num());
     if (!mdsmap->have_inst(from) ||
-	mdsmap->get_inst(from) != m->get_source_inst() ||
+	mdsmap->get_addrs(from) != m->get_source_addrs() ||
 	mdsmap->is_down(from)) {
       // bogus mds?
       if (m->get_type() == CEPH_MSG_MDS_MAP) {
 	dout(5) << "got " << *m << " from old/bad/imposter mds " << m->get_source()
 		<< ", but it's an mdsmap, looking at it" << dendl;
       } else if (m->get_type() == MSG_MDS_CACHEEXPIRE &&
-		 mdsmap->get_inst(from) == m->get_source_inst()) {
+		 mdsmap->get_addrs(from) == m->get_source_addrs()) {
 	dout(5) << "got " << *m << " from down mds " << m->get_source()
 		<< ", but it's a cache_expire, looking at it" << dendl;
       } else {
@@ -947,13 +947,13 @@ void MDSRank::send_message_mds(Message *m, mds_rank_t mds)
 
   // send mdsmap first?
   if (mds != whoami && peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap),
-			    mdsmap->get_inst(mds));
+    messenger->send_to_mds(new MMDSMap(monc->get_fsid(), mdsmap),
+			   mdsmap->get_addrs(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
 
   // send message
-  messenger->send_message(m, mdsmap->get_inst(mds));
+  messenger->send_to_mds(m, mdsmap->get_addrs(mds));
 }
 
 void MDSRank::forward_message_mds(Message *m, mds_rank_t mds)
@@ -994,12 +994,12 @@ void MDSRank::forward_message_mds(Message *m, mds_rank_t mds)
 
   // send mdsmap first?
   if (peer_mdsmap_epoch[mds] < mdsmap->get_epoch()) {
-    messenger->send_message(new MMDSMap(monc->get_fsid(), mdsmap),
-			    mdsmap->get_inst(mds));
+    messenger->send_to_mds(new MMDSMap(monc->get_fsid(), mdsmap),
+			   mdsmap->get_addrs(mds));
     peer_mdsmap_epoch[mds] = mdsmap->get_epoch();
   }
 
-  messenger->send_message(m, mdsmap->get_inst(mds));
+  messenger->send_to_mds(m, mdsmap->get_addrs(mds));
 }
 
 
@@ -1869,7 +1869,7 @@ void MDSRankDispatcher::handle_mds_map(
     mdsmap->get_down_mds_set(&down);
     for (set<mds_rank_t>::iterator p = down.begin(); p != down.end(); ++p) {
       if (oldmap->have_inst(*p) && olddown.count(*p) == 0) {
-        messenger->mark_down(oldmap->get_inst(*p).addr);
+        messenger->mark_down_addrs(oldmap->get_addrs(*p));
         handle_mds_failure(*p);
       }
     }
@@ -1882,8 +1882,8 @@ void MDSRankDispatcher::handle_mds_map(
     mdsmap->get_up_mds_set(up);
     for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
       if (oldmap->have_inst(*p) &&
-         oldmap->get_inst(*p) != mdsmap->get_inst(*p)) {
-        messenger->mark_down(oldmap->get_inst(*p).addr);
+	  oldmap->get_addrs(*p) != mdsmap->get_addrs(*p)) {
+        messenger->mark_down_addrs(oldmap->get_addrs(*p));
         handle_mds_failure(*p);
       }
     }
