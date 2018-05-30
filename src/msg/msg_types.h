@@ -582,6 +582,22 @@ struct entity_addrvec_t {
     }
     return true;
   }
+  bool contains(const entity_addr_t& a) const {
+    for (auto& i : v) {
+      if (a == i) {
+	return true;
+      }
+    }
+    return false;
+  }
+  bool is_same_host(const entity_addr_t& a) const {
+    for (auto& i : v) {
+      if (i.is_same_host(a)) {
+	return true;
+      }
+    }
+    return false;
+  }
 
   friend ostream& operator<<(ostream& out, const entity_addrvec_t& av) {
     if (av.v.empty()) {
