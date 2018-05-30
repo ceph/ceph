@@ -4565,6 +4565,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
             dout(10) << "handle_osd_ping canceling in-flight "
                      << "failure report for osd." << from << dendl;
             send_still_alive(curmap->get_epoch(),
+			     from,
 			     failure_pending_entry->second.second);
             failure_pending.erase(failure_pending_entry);
           }
@@ -5205,12 +5206,15 @@ bool OSD::ms_handle_refused(Connection *con)
       if (id >= 0 && osdmap->is_up(id)) {
 	// I'm cheating mon heartbeat grace logic, because we know it's not going
 	// to respawn alone. +1 so we won't hit any boundary case.
-	monc->send_mon_message(new MOSDFailure(monc->get_fsid(),
-						  osdmap->get_inst(id),
-						  cct->_conf->osd_heartbeat_grace + 1,
-						  osdmap->get_epoch(),
-						  MOSDFailure::FLAG_IMMEDIATE | MOSDFailure::FLAG_FAILED
-						  ));
+	monc->send_mon_message(
+	  new MOSDFailure(
+	    monc->get_fsid(),
+	    id,
+	    osdmap->get_addrs(id),
+	    cct->_conf->osd_heartbeat_grace + 1,
+	    osdmap->get_epoch(),
+	    MOSDFailure::FLAG_IMMEDIATE | MOSDFailure::FLAG_FAILED
+	    ));
       }
     }
   }
@@ -5537,9 +5541,7 @@ void OSD::requeue_failures()
   Mutex::Locker l(heartbeat_lock);
   unsigned old_queue = failure_queue.size();
   unsigned old_pending = failure_pending.size();
-  for (map<int,pair<utime_t,entity_inst_t> >::iterator p =
-	 failure_pending.begin();
-       p != failure_pending.end(); ) {
+  for (auto p = failure_pending.begin(); p != failure_pending.end(); ) {
     failure_queue[p->first] = p->second.first;
     failure_pending.erase(p++);
   }
@@ -5556,19 +5558,25 @@ void OSD::send_failures()
   while (!failure_queue.empty()) {
     int osd = failure_queue.begin()->first;
     if (!failure_pending.count(osd)) {
-      entity_inst_t i = osdmap->get_inst(osd);
       int failed_for = (int)(double)(now - failure_queue.begin()->second);
-      monc->send_mon_message(new MOSDFailure(monc->get_fsid(), i, failed_for,
-					     osdmap->get_epoch()));
-      failure_pending[osd] = make_pair(failure_queue.begin()->second, i);
+      monc->send_mon_message(
+	new MOSDFailure(
+	  monc->get_fsid(),
+	  osd,
+	  osdmap->get_addrs(osd),
+	  failed_for,
+	  osdmap->get_epoch()));
+      failure_pending[osd] = make_pair(failure_queue.begin()->second,
+				       osdmap->get_addrs(osd));
     }
     failure_queue.erase(osd);
   }
 }
 
-void OSD::send_still_alive(epoch_t epoch, const entity_inst_t &i)
+void OSD::send_still_alive(epoch_t epoch, int osd, const entity_addrvec_t &addrs)
 {
-  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), i, 0, epoch, MOSDFailure::FLAG_ALIVE);
+  MOSDFailure *m = new MOSDFailure(monc->get_fsid(), osd, addrs, 0, epoch,
+				   MOSDFailure::FLAG_ALIVE);
   monc->send_mon_message(m);
 }
 
@@ -7613,12 +7621,11 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   if (do_shutdown) {
     if (network_error) {
       Mutex::Locker l(heartbeat_lock);
-      map<int,pair<utime_t,entity_inst_t>>::iterator it =
-	failure_pending.begin();
+      auto it = failure_pending.begin();
       while (it != failure_pending.end()) {
         dout(10) << "handle_osd_ping canceling in-flight failure report for osd."
 		 << it->first << dendl;
-        send_still_alive(osdmap->get_epoch(), it->second.second);
+        send_still_alive(osdmap->get_epoch(), it->first, it->second.second);
         failure_pending.erase(it++);
       }
     }

@@ -2116,7 +2116,7 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
   // who is target_osd
-  int badboy = m->get_target().name.num();
+  int badboy = m->get_target_osd();
 
   // check permissions
   if (check_source(m, m->fsid))
@@ -2126,9 +2126,10 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   if (m->get_orig_source().is_osd()) {
     int from = m->get_orig_source().num();
     if (!osdmap.exists(from) ||
-	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
+	osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
 	(osdmap.is_down(from) && m->if_osd_failed())) {
-      dout(5) << "preprocess_failure from dead osd." << from << ", ignoring" << dendl;
+      dout(5) << "preprocess_failure from dead osd." << from
+	      << ", ignoring" << dendl;
       send_incremental(op, m->get_epoch()+1);
       goto didit;
     }
@@ -2137,14 +2138,18 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
 
   // weird?
   if (osdmap.is_down(badboy)) {
-    dout(5) << "preprocess_failure dne(/dup?): " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure dne(/dup?): osd." << m->get_target_osd()
+	    << " " << m->get_target_addrs()
+	    << ", from " << m->get_orig_source() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
-  if (osdmap.get_inst(badboy) != m->get_target()) {
-    dout(5) << "preprocess_failure wrong osd: report " << m->get_target() << " != map's " << osdmap.get_inst(badboy)
-	    << ", from " << m->get_orig_source_inst() << dendl;
+  if (osdmap.get_addrs(badboy) != m->get_target_addrs()) {
+    dout(5) << "preprocess_failure wrong osd: report osd." << m->get_target_osd()
+	    << " " << m->get_target_addrs()
+	    << " != map's " << osdmap.get_addrs(badboy)
+	    << ", from " << m->get_orig_source() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
     goto didit;
@@ -2153,18 +2158,24 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   // already reported?
   if (osdmap.is_down(badboy) ||
       osdmap.get_up_from(badboy) > m->get_epoch()) {
-    dout(5) << "preprocess_failure dup/old: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure dup/old: osd." << m->get_target_osd()
+	    << " " << m->get_target_addrs()
+	    << ", from " << m->get_orig_source() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
 
   if (!can_mark_down(badboy)) {
-    dout(5) << "preprocess_failure ignoring report of " << m->get_target() << " from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure ignoring report of osd."
+	    << m->get_target_osd() << " " << m->get_target_addrs()
+	    << " from " << m->get_orig_source() << dendl;
     goto didit;
   }
 
-  dout(10) << "preprocess_failure new: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "preprocess_failure new: osd." << m->get_target_osd()
+	   << " " << m->get_target_addrs()
+	   << ", from " << m->get_orig_source() << dendl;
   return false;
 
  didit:
@@ -2475,14 +2486,15 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
-  dout(1) << "prepare_failure " << m->get_target()
-	  << " from " << m->get_orig_source_inst()
+  dout(1) << "prepare_failure osd." << m->get_target_osd()
+	  << " " << m->get_target_addrs()
+	  << " from " << m->get_orig_source()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
 
-  int target_osd = m->get_target().name.num();
+  int target_osd = m->get_target_osd();
   int reporter = m->get_orig_source().num();
   assert(osdmap.is_up(target_osd));
-  assert(osdmap.get_addr(target_osd) == m->get_target().addr);
+  assert(osdmap.get_addrs(target_osd) == m->get_target_addrs());
 
   if (m->if_osd_failed()) {
     // calculate failure time
@@ -2492,14 +2504,15 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 
     // add a report
     if (m->is_immediate()) {
-      mon->clog->debug() << m->get_target() << " reported immediately failed by "
-            << m->get_orig_source_inst();
+      mon->clog->debug() << "osd." << m->get_target_osd()
+			 << " reported immediately failed by "
+			 << m->get_orig_source();
       force_failure(target_osd, reporter);
       mon->no_reply(op);
       return true;
     }
-    mon->clog->debug() << m->get_target() << " reported failed by "
-		      << m->get_orig_source_inst();
+    mon->clog->debug() << "osd." << m->get_target_osd() << " reported failed by "
+		      << m->get_orig_source();
 
     failure_info_t& fi = failure_info[target_osd];
     MonOpRequestRef old_op = fi.add_report(reporter, failed_since, op);
@@ -2510,8 +2523,9 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     return check_failure(now, target_osd, fi);
   } else {
     // remove the report
-    mon->clog->debug() << m->get_target() << " failure report canceled by "
-		       << m->get_orig_source_inst();
+    mon->clog->debug() << "osd." << m->get_target_osd()
+		       << " failure report canceled by "
+		       << m->get_orig_source();
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
       MonOpRequestRef report_op = fi.cancel_report(reporter);

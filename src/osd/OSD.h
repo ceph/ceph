@@ -1932,11 +1932,11 @@ protected:
 
   // -- failures --
   map<int,utime_t> failure_queue;
-  map<int,pair<utime_t,entity_inst_t> > failure_pending;
+  map<int,pair<utime_t,entity_addrvec_t> > failure_pending;
 
   void requeue_failures();
   void send_failures();
-  void send_still_alive(epoch_t epoch, const entity_inst_t &i);
+  void send_still_alive(epoch_t epoch, int osd, const entity_addrvec_t &addrs);
 
   ceph::coarse_mono_clock::time_point last_sent_beacon;
   Mutex min_last_epoch_clean_lock{"OSD::min_last_epoch_clean_lock"};
