@@ -8,12 +8,8 @@ import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserSwiftKey } from '../models/rgw-user-swift-key';
-import {
-  RgwUserS3KeyModalComponent
-} from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
-import {
-  RgwUserSwiftKeyModalComponent
-} from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { RgwUserS3KeyModalComponent } from '../rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
+import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 
 @Component({
   selector: 'cd-rgw-user-details',
@@ -21,7 +17,6 @@ import {
   styleUrls: ['./rgw-user-details.component.scss']
 })
 export class RgwUserDetailsComponent implements OnChanges, OnInit {
-
   @ViewChild('accessKeyTpl') public accessKeyTpl: TemplateRef<any>;
   @ViewChild('secretKeyTpl') public secretKeyTpl: TemplateRef<any>;
 
@@ -35,8 +30,7 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
   keysColumns: CdTableColumn[] = [];
   keysSelection: CdTableSelection = new CdTableSelection();
 
-  constructor(private rgwUserService: RgwUserService,
-              private bsModalService: BsModalService) {}
+  constructor(private rgwUserService: RgwUserService, private bsModalService: BsModalService) {}
 
   ngOnInit() {
     this.keysColumns = [
@@ -63,10 +57,9 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
       // Load the user/bucket quota of the selected user.
       if (this.user.tenant === '') {
-        this.rgwUserService.getQuota(this.user.user_id)
-          .subscribe((resp: object) => {
-            _.extend(this.user, resp);
-          });
+        this.rgwUserService.getQuota(this.user.user_id).subscribe((resp: object) => {
+          _.extend(this.user, resp);
+        });
       }
 
       // Process the keys.
@@ -97,13 +90,13 @@ export class RgwUserDetailsComponent implements OnChanges, OnInit {
 
   showKeyModal() {
     const key = this.keysSelection.first();
-    const modalRef = this.bsModalService.show(key.type === 'S3' ?
-      RgwUserS3KeyModalComponent : RgwUserSwiftKeyModalComponent);
+    const modalRef = this.bsModalService.show(
+      key.type === 'S3' ? RgwUserS3KeyModalComponent : RgwUserSwiftKeyModalComponent
+    );
     switch (key.type) {
       case 'S3':
         modalRef.content.setViewing();
-        modalRef.content.setValues(key.ref.user, key.ref.access_key,
-          key.ref.secret_key);
+        modalRef.content.setValues(key.ref.user, key.ref.access_key, key.ref.secret_key);
         break;
       case 'Swift':
         modalRef.content.setValues(key.ref.user, key.ref.secret_key);

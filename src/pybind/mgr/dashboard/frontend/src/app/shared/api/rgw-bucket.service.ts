@@ -8,26 +8,25 @@ import { Observable } from 'rxjs/Observable';
 
 @Injectable()
 export class RgwBucketService {
-
   private url = '/api/rgw/proxy/bucket';
 
-  constructor(private http: HttpClient) { }
+  constructor(private http: HttpClient) {}
 
   /**
    * Get the list of buckets.
    * @return {Observable<Object[]>}
    */
   list() {
-    return this.enumerate()
-      .flatMap((buckets: string[]) => {
-        if (buckets.length > 0) {
-          return Observable.forkJoin(
-            buckets.map((bucket: string) => {
-              return this.get(bucket);
-            }));
-        }
-        return Observable.of([]);
-      });
+    return this.enumerate().flatMap((buckets: string[]) => {
+      if (buckets.length > 0) {
+        return Observable.forkJoin(
+          buckets.map((bucket: string) => {
+            return this.get(bucket);
+          })
+        );
+      }
+      return Observable.of([]);
+    });
   }
 
   /**
@@ -41,13 +40,13 @@ export class RgwBucketService {
   get(bucket: string) {
     let params = new HttpParams();
     params = params.append('bucket', bucket);
-    return this.http.get(this.url, {params: params});
+    return this.http.get(this.url, { params: params });
   }
 
   create(bucket: string, uid: string) {
     const body = {
-      'bucket': bucket,
-      'uid': uid
+      bucket: bucket,
+      uid: uid
     };
     return this.http.post('/api/rgw/bucket', body);
   }
@@ -57,14 +56,14 @@ export class RgwBucketService {
     params = params.append('bucket', bucket);
     params = params.append('bucket-id', bucketId as string);
     params = params.append('uid', uid);
-    return this.http.put(this.url, null, {params: params});
+    return this.http.put(this.url, null, { params: params });
   }
 
   delete(bucket: string, purgeObjects = true) {
     let params = new HttpParams();
     params = params.append('bucket', bucket);
     params = params.append('purge-objects', purgeObjects ? 'true' : 'false');
-    return this.http.delete(this.url, {params: params});
+    return this.http.delete(this.url, { params: params });
   }
 
   /**
@@ -73,10 +72,9 @@ export class RgwBucketService {
    * @return {Observable<boolean>}
    */
   exists(bucket: string) {
-    return this.enumerate()
-      .flatMap((resp: string[]) => {
-        const index = _.indexOf(resp, bucket);
-        return Observable.of(-1 !== index);
-      });
+    return this.enumerate().flatMap((resp: string[]) => {
+      const index = _.indexOf(resp, bucket);
+      return Observable.of(-1 !== index);
+    });
   }
 }

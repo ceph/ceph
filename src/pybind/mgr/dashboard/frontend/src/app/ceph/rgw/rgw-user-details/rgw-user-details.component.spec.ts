@@ -15,18 +15,10 @@ describe('RgwUserDetailsComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RgwUserDetailsComponent ],
-      imports: [
-        HttpClientTestingModule,
-        HttpClientModule,
-        SharedModule,
-        TabsModule.forRoot()
-      ],
-      providers: [
-        BsModalService
-      ]
-    })
-    .compileComponents();
+      declarations: [RgwUserDetailsComponent],
+      imports: [HttpClientTestingModule, HttpClientModule, SharedModule, TabsModule.forRoot()],
+      providers: [BsModalService]
+    }).compileComponents();
   }));
 
   beforeEach(() => {

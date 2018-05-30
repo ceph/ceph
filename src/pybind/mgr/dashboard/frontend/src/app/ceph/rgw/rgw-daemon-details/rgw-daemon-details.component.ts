@@ -29,9 +29,8 @@ export class RgwDaemonDetailsComponent implements OnChanges {
     if (_.isEmpty(this.serviceId)) {
       return;
     }
-    this.rgwDaemonService.get(this.serviceId)
-      .subscribe((resp) => {
-        this.metadata = resp['rgw_metadata'];
-      });
+    this.rgwDaemonService.get(this.serviceId).subscribe((resp) => {
+      this.metadata = resp['rgw_metadata'];
+    });
   }
 }

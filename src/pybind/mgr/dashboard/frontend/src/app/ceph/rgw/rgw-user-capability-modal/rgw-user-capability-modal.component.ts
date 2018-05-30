@@ -12,7 +12,6 @@ import { RgwUserCapability } from '../models/rgw-user-capability';
   styleUrls: ['./rgw-user-capability-modal.component.scss']
 })
 export class RgwUserCapabilityModalComponent {
-
   /**
    * The event that is triggered when the 'Add' or 'Update' button
    * has been pressed.
@@ -23,21 +22,14 @@ export class RgwUserCapabilityModalComponent {
   editing = true;
   types: string[] = [];
 
-  constructor(private formBuilder: FormBuilder,
-              public bsModalRef: BsModalRef) {
+  constructor(private formBuilder: FormBuilder, public bsModalRef: BsModalRef) {
     this.createForm();
   }
 
   createForm() {
     this.formGroup = this.formBuilder.group({
-      'type': [
-        null,
-        [Validators.required]
-      ],
-      'perm': [
-        null,
-        [Validators.required]
-      ]
+      type: [null, [Validators.required]],
+      perm: [null, [Validators.required]]
     });
   }
 
@@ -56,8 +48,8 @@ export class RgwUserCapabilityModalComponent {
    */
   setValues(type: string, perm: string) {
     this.formGroup.setValue({
-      'type': type,
-      'perm': perm
+      type: type,
+      perm: perm
     });
   }
 

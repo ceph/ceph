@@ -12,14 +12,10 @@ describe('RgwUserS3KeyModalComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RgwUserS3KeyModalComponent ],
-      imports: [
-        ReactiveFormsModule,
-        SharedModule
-      ],
-      providers: [ BsModalRef ]
-    })
-    .compileComponents();
+      declarations: [RgwUserS3KeyModalComponent],
+      imports: [ReactiveFormsModule, SharedModule],
+      providers: [BsModalRef]
+    }).compileComponents();
   }));
 
   beforeEach(() => {

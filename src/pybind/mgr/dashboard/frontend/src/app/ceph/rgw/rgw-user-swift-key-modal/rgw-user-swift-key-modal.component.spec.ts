@@ -11,13 +11,10 @@ describe('RgwUserSwiftKeyModalComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RgwUserSwiftKeyModalComponent ],
-      imports: [
-        FormsModule
-      ],
-      providers: [ BsModalRef ]
-    })
-    .compileComponents();
+      declarations: [RgwUserSwiftKeyModalComponent],
+      imports: [FormsModule],
+      providers: [BsModalRef]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
