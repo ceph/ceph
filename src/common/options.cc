@@ -5368,6 +5368,22 @@ std::vector<Option> get_rgw_options() {
     .set_default("")
     .set_description("LDAP search filter."),
 
+    Option("rgw_opa_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("URL to OPA server."),
+
+    Option("rgw_opa_token", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("The Bearer token OPA uses to authenticate client requests."),
+
+    Option("rgw_opa_verify_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Should RGW verify the OPA server SSL certificate."),
+
+    Option("rgw_use_opa_authz", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Should OPA be used to authorize client requests."),
+
     Option("rgw_admin_entry", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("admin")
     .set_description("Path prefix to be used for accessing RGW RESTful admin API."),

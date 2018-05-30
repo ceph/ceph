@@ -4215,7 +4215,7 @@ void rgw::auth::s3::LDAPEngine::shutdown() {
   }
 }
 
-/* LocalEndgine */
+/* LocalEngine */
 rgw::auth::Engine::result_t
 rgw::auth::s3::LocalEngine::authenticate(
   const boost::string_view& _access_key_id,
