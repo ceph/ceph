@@ -1300,7 +1300,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  }
 
           dout(10) << " pgnls candidate 0x" << std::hex << candidate.get_hash()
-            << " vs lower bound 0x" << lower_bound.get_hash() << dendl;
+		   << " vs lower bound 0x" << lower_bound.get_hash()
+		   << std::dec << dendl;
 
 	  if (candidate >= next) {
 	    break;

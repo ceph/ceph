@@ -6119,7 +6119,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	if (i.second & blob.unused) {
 	  derr << "fsck error: " << oid << " blob claims unused 0x"
 	       << std::hex << blob.unused
-	       << " but extents reference 0x" << i.second
+	       << " but extents reference 0x" << i.second << std::dec
 	       << " on blob " << *i.first << dendl;
 	  ++errors;
 	}
@@ -6603,7 +6603,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	      // since we will never allocate this region below min_alloc_size.
 	      dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
 		       << " and min_alloc_size, 0x" << std::hex << offset << "~"
-		       << length << dendl;
+		       << length << std::dec << dendl;
 	    } else {
               intersects = true;
 	      if (repair) {
