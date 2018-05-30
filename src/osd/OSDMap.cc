@@ -915,7 +915,8 @@ void OSDMap::Incremental::dump(Formatter *f) const
   for (const auto &upclient : new_up_client) {
     f->open_object_section("osd");
     f->dump_int("osd", upclient.first);
-    f->dump_stream("public_addr") << upclient.second;
+    f->dump_stream("public_addr") << upclient.second.legacy_addr();
+    f->dump_object("public_addrs", upclient.second);
     f->dump_stream("cluster_addr") << new_up_cluster.find(upclient.first)->second;
     f->dump_stream("heartbeat_back_addr") << new_hb_back_up.find(upclient.first)->second;
     map<int32_t, entity_addr_t>::const_iterator q;
@@ -1174,7 +1175,7 @@ void OSDMap::set_max_osd(int m)
   }
   osd_info.resize(m);
   osd_xinfo.resize(m);
-  osd_addrs->client_addr.resize(m);
+  osd_addrs->client_addrs.resize(m);
   osd_addrs->cluster_addr.resize(m);
   osd_addrs->hb_back_addr.resize(m);
   osd_addrs->hb_front_addr.resize(m);
@@ -1497,9 +1498,9 @@ void OSDMap::dedup(const OSDMap *o, OSDMap *n)
   if (o->max_osd != n->max_osd)
     diff++;
   for (int i = 0; i < o->max_osd && i < n->max_osd; i++) {
-    if ( n->osd_addrs->client_addr[i] &&  o->osd_addrs->client_addr[i] &&
-	*n->osd_addrs->client_addr[i] == *o->osd_addrs->client_addr[i])
-      n->osd_addrs->client_addr[i] = o->osd_addrs->client_addr[i];
+    if ( n->osd_addrs->client_addrs[i] &&  o->osd_addrs->client_addrs[i] &&
+	*n->osd_addrs->client_addrs[i] == *o->osd_addrs->client_addrs[i])
+      n->osd_addrs->client_addrs[i] = o->osd_addrs->client_addrs[i];
     else
       diff++;
     if ( n->osd_addrs->cluster_addr[i] &&  o->osd_addrs->cluster_addr[i] &&
@@ -1872,7 +1873,7 @@ int OSDMap::apply_incremental(const Incremental &inc)
       osd_info[osd] = osd_info_t();
       osd_xinfo[osd] = osd_xinfo_t();
       set_primary_affinity(osd, CEPH_OSD_DEFAULT_PRIMARY_AFFINITY);
-      osd_addrs->client_addr[osd].reset(new entity_addr_t());
+      osd_addrs->client_addrs[osd].reset(new entity_addrvec_t());
       osd_addrs->cluster_addr[osd].reset(new entity_addr_t());
       osd_addrs->hb_front_addr[osd].reset(new entity_addr_t());
       osd_addrs->hb_back_addr[osd].reset(new entity_addr_t());
@@ -1884,12 +1885,10 @@ int OSDMap::apply_incremental(const Incremental &inc)
 
   for (const auto &client : inc.new_up_client) {
     osd_state[client.first] |= CEPH_OSD_EXISTS | CEPH_OSD_UP;
-    osd_addrs->client_addr[client.first].reset(new entity_addr_t(client.second));
-    if (inc.new_hb_back_up.empty())
-      osd_addrs->hb_back_addr[client.first].reset(new entity_addr_t(client.second)); //this is a backward-compatibility hack
-    else
-      osd_addrs->hb_back_addr[client.first].reset(
-	new entity_addr_t(inc.new_hb_back_up.find(client.first)->second));
+    osd_addrs->client_addrs[client.first].reset(
+      new entity_addrvec_t(client.second));
+    osd_addrs->hb_back_addr[client.first].reset(
+      new entity_addr_t(inc.new_hb_back_up.find(client.first)->second));
     const auto j = inc.new_hb_front_up.find(client.first);
     if (j != inc.new_hb_front_up.end())
       osd_addrs->hb_front_addr[client.first].reset(new entity_addr_t(j->second));
@@ -2452,7 +2451,7 @@ void OSDMap::encode_client_old(bufferlist& bl) const
     }
   }
   encode(osd_weight, bl);
-  encode(osd_addrs->client_addr, bl, 0);
+  encode(osd_addrs->client_addrs, bl, 0);
 
   // for encode(pg_temp, bl);
   n = pg_temp->size();
@@ -2501,7 +2500,7 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
     }
   }
   encode(osd_weight, bl);
-  encode(osd_addrs->client_addr, bl, features);
+  encode(osd_addrs->client_addrs, bl, features);
 
   encode(*pg_temp, bl);
 
@@ -2590,7 +2589,7 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       }
     }
     encode(osd_weight, bl);
-    encode(osd_addrs->client_addr, bl, features);
+    encode(osd_addrs->client_addrs, bl, features);
 
     encode(*pg_temp, bl);
     encode(*primary_temp, bl);
@@ -2754,7 +2753,7 @@ void OSDMap::decode_classic(bufferlist::const_iterator& p)
     }
   }
   decode(osd_weight, p);
-  decode(osd_addrs->client_addr, p);
+  decode(osd_addrs->client_addrs, p);
   if (v <= 5) {
     pg_temp->clear();
     decode(n, p);
@@ -2788,7 +2787,7 @@ void OSDMap::decode_classic(bufferlist::const_iterator& p)
   if (ev >= 6)
     decode(osd_addrs->cluster_addr, p);
   else
-    osd_addrs->cluster_addr.resize(osd_addrs->client_addr.size());
+    osd_addrs->cluster_addr.resize(osd_addrs->client_addrs.size());
 
   if (ev >= 7) {
     decode(cluster_snapshot_epoch, p);
@@ -2865,7 +2864,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
       }
     }
     decode(osd_weight, bl);
-    decode(osd_addrs->client_addr, bl);
+    decode(osd_addrs->client_addrs, bl);
 
     decode(*pg_temp, bl);
     decode(*primary_temp, bl);
@@ -3073,7 +3072,8 @@ void OSDMap::dump(Formatter *f) const
       f->dump_float("weight", get_weightf(i));
       f->dump_float("primary_affinity", get_primary_affinityf(i));
       get_info(i).dump(f);
-      f->dump_object("public_addr", get_addrs(i));
+      f->dump_stream("public_addr") << get_addrs(i).legacy_addr();
+      f->dump_object("public_addrs", get_addrs(i));
       f->dump_stream("cluster_addr") << get_cluster_addr(i);
       f->dump_stream("heartbeat_back_addr") << get_hb_back_addr(i);
       f->dump_stream("heartbeat_front_addr") << get_hb_front_addr(i);

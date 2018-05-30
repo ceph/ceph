@@ -48,7 +48,7 @@ public:
       sample_uuid.generate_random();
       sample_addr.nonce = i;
       pending_inc.new_state[i] = CEPH_OSD_EXISTS | CEPH_OSD_NEW;
-      pending_inc.new_up_client[i] = sample_addr;
+      pending_inc.new_up_client[i] = entity_addrvec_t(sample_addr);
       pending_inc.new_up_cluster[i] = sample_addr;
       pending_inc.new_hb_back_up[i] = sample_addr;
       pending_inc.new_hb_front_up[i] = sample_addr;

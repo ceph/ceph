@@ -1256,7 +1256,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     if (s & CEPH_OSD_EXISTS)
       dout(2) << " osd." << i->first << " DNE" << dendl;
   }
-  for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
+  for (auto i = pending_inc.new_up_client.begin();
        i != pending_inc.new_up_client.end();
        ++i) {
     //FIXME: insert cluster addresses too
@@ -2758,12 +2758,10 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     wait_for_finished_proposal(op, new C_RetryMessage(this, op));
   } else {
     // mark new guy up.
-    pending_inc.new_up_client[from] = m->get_orig_source_addr();
-    if (!m->cluster_addr.is_blank_ip())
-      pending_inc.new_up_cluster[from] = m->cluster_addr;
+    pending_inc.new_up_client[from] = m->get_orig_source_addrs();
+    pending_inc.new_up_cluster[from] = m->cluster_addr;
     pending_inc.new_hb_back_up[from] = m->hb_back_addr;
-    if (!m->hb_front_addr.is_blank_ip())
-      pending_inc.new_hb_front_up[from] = m->hb_front_addr;
+    pending_inc.new_hb_front_up[from] = m->hb_front_addr;
 
     down_pending_out.erase(from);  // if any
 
