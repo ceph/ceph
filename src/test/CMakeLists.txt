@@ -545,7 +545,7 @@ add_dependencies(tests
   ceph_erasure_code_non_regression
   ceph_erasure_code
   ceph-disk
-  cython_modules)
+  cython${PY_BINDING_INFIX}_modules)
 if(WITH_RBD)
   add_dependencies(tests unittest_librbd rbd)
   if(FREEBSD)
