@@ -122,15 +122,14 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
     return;
   }
 
-  ldout(cct, 10) << "cache put: name=" << name << " info.flags=" << info.flags << dendl;
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
-  if (iter == cache_map.end()) {
-    ObjectCacheEntry entry;
-    entry.lru_iter = lru.end();
-    cache_map.insert(pair<string, ObjectCacheEntry>(name, entry));
-    iter = cache_map.find(name);
-  }
+  ldout(cct, 10) << "cache put: name=" << name << " info.flags=0x"
+                 << std::hex << info.flags << std::dec << dendl;
+
+  auto [iter, inserted] = cache_map.emplace(name, ObjectCacheEntry{});
   ObjectCacheEntry& entry = iter->second;
+  if (inserted) {
+    entry.lru_iter = lru.end();
+  }
   ObjectCacheInfo& target = entry.info;
 
   invalidate_lru(entry);
