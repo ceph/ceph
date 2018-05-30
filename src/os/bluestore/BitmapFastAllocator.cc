@@ -24,6 +24,11 @@ int64_t BitmapFastAllocator::allocate(
 {
   uint64_t allocated = 0;
 
+  ldout(cct, 10) << __func__ << std::hex << "0x" << want_size
+		 << "/" << alloc_unit << "," << max_alloc_size << "," << hint
+		 << std::dec << dendl;
+    
+    
   _allocate_l2(want_size, alloc_unit, max_alloc_size, hint,
     &allocated, extents);
   if (!allocated) {
@@ -46,6 +51,7 @@ void BitmapFastAllocator::release(
 		  << std::dec << dendl;
   }
   _free_l2(release_set);
+  ldout(cct, 10) << __func__ << " done" << dendl;
 }
 
 
@@ -59,6 +65,7 @@ void BitmapFastAllocator::init_add_free(uint64_t offset, uint64_t length)
   uint64_t l = P2ALIGN(offset + length - offs, mas);
 
   _mark_free(offs, l);
+  ldout(cct, 10) << __func__ << " done" << dendl;
 }
 void BitmapFastAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
@@ -68,6 +75,7 @@ void BitmapFastAllocator::init_rm_free(uint64_t offset, uint64_t length)
   uint64_t offs = ROUND_UP_TO(offset, mas);
   uint64_t l = P2ALIGN(offset + length - offs, mas);
   _mark_allocated(offs, l);
+  ldout(cct, 10) << __func__ << " done" << dendl;
 }
 
 void BitmapFastAllocator::shutdown()
