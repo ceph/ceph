@@ -36,6 +36,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                              public rgw::auth::RemoteApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
   RGWRados* const store;
+  rgw::auth::ImplicitTenants& implicit_tenant_context;
 
   using keystone_config_t = rgw::keystone::CephCtxConfig;
   using keystone_cache_t = rgw::keystone::TokenCache;
@@ -51,7 +52,8 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                             ) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
-                               cct->_conf->rgw_keystone_implicit_tenants));
+                               implicit_tenant_context,
+                               rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_S3));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -59,8 +61,10 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
 public:
   ExternalAuthStrategy(CephContext* const cct,
                        RGWRados* const store,
+                       rgw::auth::ImplicitTenants& implicit_tenant_context,
                        AWSEngine::VersionAbstractor* const ver_abstractor)
     : store(store),
+      implicit_tenant_context(implicit_tenant_context),
       ldap_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
@@ -151,12 +155,13 @@ public:
   }
 
   AWSAuthStrategy(CephContext* const cct,
+                  rgw::auth::ImplicitTenants& implicit_tenant_context,
                   RGWRados* const store)
     : store(store),
       ver_abstractor(cct),
       anonymous_engine(cct,
                        static_cast<rgw::auth::LocalApplier::Factory*>(this)),
-      external_engines(cct, store, &ver_abstractor),
+      external_engines(cct, store, implicit_tenant_context, &ver_abstractor),
       local_engine(cct, store, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
     /* The anonymous auth. */
