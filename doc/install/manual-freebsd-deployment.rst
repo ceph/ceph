@@ -357,6 +357,7 @@ The procedure is as follows:
    **Note:** Once you add OSDs and start them, the placement group health errors
    should disappear. See the next section for details.
 
+.. _freebsd_adding_osds:
 
 Adding OSDs
 ===========
