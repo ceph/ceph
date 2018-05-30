@@ -915,10 +915,6 @@ public:
     return get_addrs(osd);
   }
 
-  const entity_addr_t &get_addr(int osd) const {
-    assert(exists(osd));
-    return osd_addrs->client_addr[osd] ? *osd_addrs->client_addr[osd] : osd_addrs->blank;
-  }
   const entity_addr_t &get_cluster_addr(int osd) const {
     assert(exists(osd));
     return osd_addrs->cluster_addr[osd] ?
