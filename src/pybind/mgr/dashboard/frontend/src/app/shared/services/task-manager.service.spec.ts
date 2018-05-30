@@ -59,7 +59,7 @@ describe('TaskManagerService', () => {
       let called = false;
       taskManagerService.subscribe('foo', {}, () => (called = true));
       const original_subscriptions = _.cloneDeep(taskManagerService.subscriptions);
-      const new_summary = _.assign(summary, {
+      _.assign(summary, {
         executing_tasks: [{ name: 'foo', metadata: {} }],
         finished_tasks: []
       });

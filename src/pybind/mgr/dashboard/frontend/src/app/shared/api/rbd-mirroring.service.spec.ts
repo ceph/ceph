@@ -1,5 +1,5 @@
 import { HttpClientModule } from '@angular/common/http';
-import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { inject, TestBed } from '@angular/core/testing';
 
 import { RbdMirroringService } from './rbd-mirroring.service';
@@ -12,7 +12,10 @@ describe('RbdMirroringService', () => {
     });
   });
 
-  it('should be created', inject([RbdMirroringService], (service: RbdMirroringService) => {
-    expect(service).toBeTruthy();
-  }));
+  it(
+    'should be created',
+    inject([RbdMirroringService], (service: RbdMirroringService) => {
+      expect(service).toBeTruthy();
+    })
+  );
 });

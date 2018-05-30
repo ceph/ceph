@@ -1,7 +1,5 @@
 import { Component, OnInit } from '@angular/core';
 
-import * as _ from 'lodash';
-
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
