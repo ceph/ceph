@@ -375,7 +375,7 @@ public:
     mempool::osdmap::set<int64_t> old_pools;
     mempool::osdmap::map<string,map<string,string> > new_erasure_code_profiles;
     mempool::osdmap::vector<string> old_erasure_code_profiles;
-    mempool::osdmap::map<int32_t,entity_addr_t> new_up_client;
+    mempool::osdmap::map<int32_t,entity_addrvec_t> new_up_client;
     mempool::osdmap::map<int32_t,entity_addr_t> new_up_cluster;
     mempool::osdmap::map<int32_t,uint32_t> new_state;             // XORed onto previous state.
     mempool::osdmap::map<int32_t,uint32_t> new_weight;
@@ -524,13 +524,15 @@ private:
     CEPH_FEATUREMASK_SERVER_NAUTILUS;
 
   struct addrs_s {
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > client_addr;
+    mempool::osdmap::vector<ceph::shared_ptr<entity_addrvec_t> > client_addrs;
     mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > cluster_addr;
     mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > hb_back_addr;
     mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > hb_front_addr;
-    entity_addr_t blank;
   };
   ceph::shared_ptr<addrs_s> osd_addrs;
+
+  entity_addr_t _blank_addr;
+  entity_addrvec_t _blank_addrvec;
 
   mempool::osdmap::vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   mempool::osdmap::vector<osd_info_t> osd_info;
@@ -892,26 +894,28 @@ public:
   }
   int find_osd_on_ip(const entity_addr_t& ip) const;
 
-  entity_addrvec_t get_addrs(int osd) const {
+  const entity_addrvec_t& get_addrs(int osd) const {
     assert(exists(osd));
-    return entity_addrvec_t(osd_addrs->client_addr[osd] ? *osd_addrs->client_addr[osd] : osd_addrs->blank);
+    return osd_addrs->client_addrs[osd] ?
+      *osd_addrs->client_addrs[osd] : _blank_addrvec;
   }
   entity_addrvec_t get_cluster_addrs(int osd) const {
     assert(exists(osd));
-    if (!osd_addrs->cluster_addr[osd] || *osd_addrs->cluster_addr[osd] == entity_addr_t())
-      return get_addrs(osd);
+    if (!osd_addrs->cluster_addr[osd])
+      return entity_addrvec_t();
     return entity_addrvec_t(*osd_addrs->cluster_addr[osd]);
   }
   entity_addrvec_t get_hb_back_addrs(int osd) const {
     assert(exists(osd));
-    return entity_addrvec_t(osd_addrs->hb_back_addr[osd] ? *osd_addrs->hb_back_addr[osd] : osd_addrs->blank);
+    return entity_addrvec_t(osd_addrs->hb_back_addr[osd] ?
+			    *osd_addrs->hb_back_addr[osd] : _blank_addr);
   }
   entity_addrvec_t get_hb_front_addrs(int osd) const {
     assert(exists(osd));
-    return entity_addrvec_t(osd_addrs->hb_front_addr[osd] ? *osd_addrs->hb_front_addr[osd] : osd_addrs->blank);
+    return entity_addrvec_t(osd_addrs->hb_front_addr[osd] ?
+			    *osd_addrs->hb_front_addr[osd] : _blank_addr);
   }
-  entity_addrvec_t get_most_recent_addrs(int osd) const {
-    assert(exists(osd));
+  const entity_addrvec_t& get_most_recent_addrs(int osd) const {
     return get_addrs(osd);
   }
 
@@ -922,11 +926,13 @@ public:
   }
   const entity_addr_t &get_hb_back_addr(int osd) const {
     assert(exists(osd));
-    return osd_addrs->hb_back_addr[osd] ? *osd_addrs->hb_back_addr[osd] : osd_addrs->blank;
+    return osd_addrs->hb_back_addr[osd] ?
+      *osd_addrs->hb_back_addr[osd] : _blank_addr;
   }
   const entity_addr_t &get_hb_front_addr(int osd) const {
     assert(exists(osd));
-    return osd_addrs->hb_front_addr[osd] ? *osd_addrs->hb_front_addr[osd] : osd_addrs->blank;
+    return osd_addrs->hb_front_addr[osd] ?
+      *osd_addrs->hb_front_addr[osd] : _blank_addr;
   }
 
   const uuid_d& get_uuid(int osd) const {
