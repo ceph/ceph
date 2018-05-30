@@ -446,8 +446,48 @@ void rgw::auth::RemoteApplier::to_str(std::ostream& out) const
       << ", is_admin=" << info.is_admin << ")";
 }
 
+void rgw::auth::ImplicitTenants::recompute_value(const ConfigProxy& c)
+{
+  std::string s = c.get_val<std::string>("rgw_keystone_implicit_tenants");
+  int v = 0;
+  if (boost::iequals(s, "both")
+    || boost::iequals(s, "true")
+    || boost::iequals(s, "1")) {
+    v = IMPLICIT_TENANTS_S3|IMPLICIT_TENANTS_SWIFT;
+  } else if (boost::iequals(s, "0")
+    || boost::iequals(s, "none")
+    || boost::iequals(s, "false")) {
+    v = 0;
+  } else if (boost::iequals(s, "s3")) {
+    v = IMPLICIT_TENANTS_S3;
+  } else if (boost::iequals(s, "swift")) {
+    v = IMPLICIT_TENANTS_SWIFT;
+  } else {  /* "" (and anything else) */
+    v = IMPLICIT_TENANTS_BAD;
+    // assert(0);
+  }
+  saved = v;
+}
+
+const char **rgw::auth::ImplicitTenants::get_tracked_conf_keys() const
+{
+  static const char *keys[] = {
+    "rgw_keystone_implicit_tenants",
+  nullptr };
+  return keys;
+}
+
+void rgw::auth::ImplicitTenants::handle_conf_change(const ConfigProxy& c,
+	const std::set <std::string> &changed)
+{
+  if (changed.count("rgw_keystone_implicit_tenants")) {
+    recompute_value(c);
+  }
+}
+
 void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
                                               const rgw_user& acct_user,
+                                              bool implicit_tenant,
                                               RGWUserInfo& user_info) const      /* out */
 {
   rgw_user new_acct_user = acct_user;
@@ -459,7 +499,7 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
 
   /* An upper layer may enforce creating new accounts within their own
    * tenants. */
-  if (new_acct_user.tenant.empty() && implicit_tenants) {
+  if (new_acct_user.tenant.empty() && implicit_tenant) {
     new_acct_user.tenant = new_acct_user.id;
   }
 
@@ -486,6 +526,9 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
    * that belongs to the authenticated identity. Another policy may be
    * applied by using a RGWThirdPartyAccountAuthApplier decorator. */
   const rgw_user& acct_user = info.acct_user;
+  auto implicit_value = implicit_tenant_context.get_value();
+  bool implicit_tenant = implicit_value.implicit_tenants_for_(implicit_tenant_bit);
+  bool split_mode = implicit_value.is_split_mode();
 
   /* Normally, empty "tenant" field of acct_user means the authenticated
    * identity has the legacy, global tenant. However, due to inclusion
@@ -497,8 +540,16 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
    * the wiser.
    * If that fails, we look up in the requested (possibly empty) tenant.
    * If that fails too, we create the account within the global or separated
-   * namespace depending on rgw_keystone_implicit_tenants. */
-  if (acct_user.tenant.empty()) {
+   * namespace depending on rgw_keystone_implicit_tenants.
+   * For compatibility with previous versions of ceph, it is possible
+   * to enable implicit_tenants for only s3 or only swift.
+   * in this mode ("split_mode"), we must constrain the id lookups to
+   * only use the identifier space that would be used if the id were
+   * to be created. */
+
+  if (split_mode && !implicit_tenant)
+	;	/* suppress lookup for id used by "other" protocol */
+  else if (acct_user.tenant.empty()) {
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
 
     if (rgw_get_user_info_by_uid(store, tenanted_uid, user_info) >= 0) {
@@ -507,10 +558,15 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
     }
   }
 
-  if (rgw_get_user_info_by_uid(store, acct_user, user_info) < 0) {
-    ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
-    create_account(dpp, acct_user, user_info);
+  if (split_mode && implicit_tenant)
+	;	/* suppress lookup for id used by "other" protocol */
+  else if (rgw_get_user_info_by_uid(store, acct_user, user_info) >= 0) {
+      /* Succeeded. */
+      return;
   }
+
+  ldout(cct, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
+  create_account(dpp, acct_user, implicit_tenant, user_info);
 
   /* Succeeded if we are here (create_account() hasn't throwed). */
 }

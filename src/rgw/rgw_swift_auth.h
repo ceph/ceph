@@ -168,6 +168,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::LocalApplier::Factory,
                         public rgw::auth::swift::TempURLApplier::Factory {
   RGWRados* const store;
+  ImplicitTenants& implicit_tenant_context;
 
   /* The engines. */
   const rgw::auth::swift::TempURLEngine tempurl_engine;
@@ -196,7 +197,8 @@ class DefaultStrategy : public rgw::auth::Strategy,
       rgw::auth::add_3rdparty(store, s->account_name,
         rgw::auth::add_sysreq(cct, store, s,
           rgw::auth::RemoteApplier(cct, store, std::move(extra_acl_strategy), info,
-                                   cct->_conf->rgw_keystone_implicit_tenants)));
+                                   implicit_tenant_context,
+                                   rgw::auth::ImplicitTenants::IMPLICIT_TENANTS_SWIFT)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -225,8 +227,10 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
 public:
   DefaultStrategy(CephContext* const cct,
+                  ImplicitTenants& implicit_tenant_context,
                   RGWRados* const store)
     : store(store),
+      implicit_tenant_context(implicit_tenant_context),
       tempurl_engine(cct,
                      store,
                      static_cast<rgw::auth::swift::TempURLApplier::Factory*>(this)),
