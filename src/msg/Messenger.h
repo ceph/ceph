@@ -504,6 +504,22 @@ public:
     return send_message(m, entity_inst_t(entity_name_t(type, -1),
 					 addr.legacy_addr()));
   }
+  int send_to_mon(
+    Message *m, const entity_addrvec_t& addrs) {
+    return send_to(m, CEPH_ENTITY_TYPE_MON, addrs);
+  }
+  int send_to_mds(
+    Message *m, const entity_addrvec_t& addrs) {
+    return send_to(m, CEPH_ENTITY_TYPE_MDS, addrs);
+  }
+  int send_to_osd(
+    Message *m, const entity_addrvec_t& addrs) {
+    return send_to(m, CEPH_ENTITY_TYPE_OSD, addrs);
+  }
+  int send_to_mgr(
+    Message *m, const entity_addrvec_t& addrs) {
+    return send_to(m, CEPH_ENTITY_TYPE_MGR, addrs);
+  }
 
   /**
    * @} // Messaging
@@ -528,6 +544,18 @@ public:
     return get_connection(entity_inst_t(entity_name_t(type, -1),
 					dest.legacy_addr()));
   }
+  ConnectionRef connect_to_mon(const entity_addrvec_t& dest) {
+    return connect_to(CEPH_ENTITY_TYPE_MON, dest);
+  }
+  ConnectionRef connect_to_mds(const entity_addrvec_t& dest) {
+    return connect_to(CEPH_ENTITY_TYPE_MDS, dest);
+  }
+  ConnectionRef connect_to_osd(const entity_addrvec_t& dest) {
+    return connect_to(CEPH_ENTITY_TYPE_OSD, dest);
+  }
+  ConnectionRef connect_to_mgr(const entity_addrvec_t& dest) {
+    return connect_to(CEPH_ENTITY_TYPE_MGR, dest);
+  }
 
   /**
    * Get the Connection object associated with ourselves.
@@ -551,6 +579,9 @@ public:
    * @param a The address to mark down.
    */
   virtual void mark_down(const entity_addr_t& a) = 0;
+  virtual void mark_down_addrs(const entity_addrvec_t& a) {
+    mark_down(a.legacy_addr());
+  }
   /**
    * Mark all the existing Connections down. This is equivalent
    * to iterating over all Connections and calling mark_down()
