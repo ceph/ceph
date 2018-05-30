@@ -467,6 +467,11 @@ public:
       return connection->get_peer_addr();
     return entity_addr_t();
   }
+  entity_addrvec_t get_source_addrs() const {
+    if (connection)
+      return connection->get_peer_addrs();
+    return entity_addrvec_t();
+  }
 
   // forwarded?
   entity_inst_t get_orig_source_inst() const {
@@ -477,6 +482,9 @@ public:
   }
   entity_addr_t get_orig_source_addr() const {
     return get_source_addr();
+  }
+  entity_addrvec_t get_orig_source_addrs() const {
+    return get_source_addrs();
   }
 
   // virtual bits
