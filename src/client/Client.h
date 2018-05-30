@@ -390,7 +390,7 @@ protected:
   // contact it again.  Remember which inst rejected us, so that
   // when we talk to another inst with the same rank we can
   // try again.
-  std::map<mds_rank_t, entity_inst_t> rejected_by_mds;
+  std::map<mds_rank_t, entity_addrvec_t> rejected_by_mds;
 
   int local_osd;
   epoch_t local_osd_epoch;
