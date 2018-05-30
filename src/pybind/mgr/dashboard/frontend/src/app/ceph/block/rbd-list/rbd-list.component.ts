@@ -116,7 +116,7 @@ export class RbdListComponent implements OnInit, OnDestroy {
       }
     ];
 
-    this.summaryService.get().then(resp => {
+    this.summaryService.get().subscribe((resp: any) => {
       this.loadImages(resp.executing_tasks);
       this.summaryDataSubscription = this.summaryService.summaryData$.subscribe((data: any) => {
         this.loadImages(data.executing_tasks);

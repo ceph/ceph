@@ -1,0 +1,107 @@
+import { HttpClient } from '@angular/common/http';
+import { Component } from '@angular/core';
+import { fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
+import { RouterTestingModule } from '@angular/router/testing';
+
+import 'rxjs/add/observable/of';
+import { Observable } from 'rxjs/Observable';
+
+import { ModuleStatusGuardService } from './module-status-guard.service';
+
+describe('ModuleStatusGuardService', () => {
+  let service: ModuleStatusGuardService;
+
+  @Component({ selector: 'cd-foo', template: '' })
+  class FooComponent {}
+
+  const fakeService = {
+    get: () => true
+  };
+
+  const routes: Routes = [{ path: '**', component: FooComponent }];
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({
+      imports: [RouterTestingModule.withRoutes(routes)],
+      providers: [ModuleStatusGuardService, { provide: HttpClient, useValue: fakeService }],
+      declarations: [FooComponent]
+    });
+
+    service = TestBed.get(ModuleStatusGuardService);
+  });
+
+  it('should be created', () => {
+    expect(service).toBeTruthy();
+  });
+
+  it(
+    'should test canActivate with status available',
+    fakeAsync(() => {
+      let result = false;
+      const route = new ActivatedRouteSnapshot();
+      route.data = {
+        moduleStatusGuardConfig: {
+          apiPath: 'bar',
+          redirectTo: 'foo'
+        }
+      };
+      const httpClient = TestBed.get(HttpClient);
+      spyOn(httpClient, 'get').and.returnValue(Observable.of({ available: true, message: 'foo' }));
+      service.canActivate(route, null).subscribe((resp) => {
+        result = resp;
+      });
+
+      tick();
+      expect(result).toBe(true);
+    })
+  );
+
+  it(
+    'should test canActivateChild with status unavailable',
+    fakeAsync(() => {
+      let result = true;
+      const route = new ActivatedRouteSnapshot();
+      route.data = {
+        moduleStatusGuardConfig: {
+          apiPath: 'bar',
+          redirectTo: '/foo'
+        }
+      };
+      const httpClient = TestBed.get(HttpClient);
+      const router = TestBed.get(Router);
+      spyOn(httpClient, 'get').and.returnValue(Observable.of({ available: false, message: null }));
+      service.canActivateChild(route, null).subscribe((resp) => {
+        result = resp;
+      });
+
+      tick();
+      expect(result).toBe(false);
+      expect(router.url).toBe('/foo/');
+    })
+  );
+
+  it(
+    'should test canActivateChild with status unavailable',
+    fakeAsync(() => {
+      let result = true;
+      const route = new ActivatedRouteSnapshot();
+      route.data = {
+        moduleStatusGuardConfig: {
+          apiPath: 'bar',
+          redirectTo: '/foo'
+        }
+      };
+      const httpClient = TestBed.get(HttpClient);
+      const router = TestBed.get(Router);
+      spyOn(httpClient, 'get').and.returnValue(Observable.of(null));
+      service.canActivateChild(route, null).subscribe((resp) => {
+        result = resp;
+      });
+
+      tick();
+      expect(result).toBe(false);
+      expect(router.url).toBe('/foo');
+    })
+  );
+});
