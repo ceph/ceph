@@ -12431,7 +12431,7 @@ int Client::ll_osdaddr(int osd, uint32_t *addr)
   bool exists = objecter->with_osdmap([&](const OSDMap& o) {
       if (!o.exists(osd))
 	return false;
-      g = o.get_addr(osd);
+      g = o.get_addrs(osd).front();
       return true;
     });
   if (!exists)
@@ -13449,7 +13449,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset,
       if (osds.empty())
 	return -EINVAL;
       for (unsigned i = 0; i < osds.size(); i++) {
-	entity_addr_t addr = o.get_addr(osds[i]);
+	entity_addr_t addr = o.get_addrs(osds[i]).front();
 	address.push_back(addr);
       }
       return 0;
@@ -13467,7 +13467,7 @@ int Client::get_osd_addr(int osd, entity_addr_t& addr)
       if (!o.exists(osd))
 	return -ENOENT;
 
-      addr = o.get_addr(osd);
+      addr = o.get_addrs(osd).front();
       return 0;
     });
 }
