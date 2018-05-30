@@ -130,8 +130,12 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
   ldout(cct, 10) << "cache put: name=" << name << " info.flags=0x"
                  << std::hex << info.flags << std::dec << dendl;
 
-  auto [iter, inserted] = cache_map.emplace(name, ObjectCacheEntry{});
-  ObjectCacheEntry& entry = iter->second;
+  const std::pair<std::map<std::string,
+			   ObjectCacheEntry>::iterator, bool>& emp_pair
+    = cache_map.emplace(name, ObjectCacheEntry{});
+  ObjectCacheEntry& entry = emp_pair.first->second;
+  bool inserted = emp_pair.second;
+  entry.info.time_added = ceph::coarse_mono_clock::now();
   if (inserted) {
     entry.lru_iter = lru.end();
   }
