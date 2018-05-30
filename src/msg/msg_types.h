@@ -565,6 +565,18 @@ struct entity_addrvec_t {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
 
+  bool probably_equals(const entity_addrvec_t& o) const {
+    if (o.v.size() != v.size()) {
+      return false;
+    }
+    for (unsigned i = 0; i < v.size(); ++i) {
+      if (!v[i].probably_equals(o.v[i])) {
+	return false;
+      }
+    }
+    return true;
+  }
+
   friend ostream& operator<<(ostream& out, const entity_addrvec_t& av) {
     if (av.v.empty()) {
       return out;
