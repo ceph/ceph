@@ -809,9 +809,6 @@ public:
   void remove_all_sessions();
   void waitlist_or_zap_client(MonOpRequestRef op);
 
-  void send_command(const entity_inst_t& inst,
-		    const vector<string>& com);
-
   void send_mon_message(Message *m, int rank);
 
 public:
