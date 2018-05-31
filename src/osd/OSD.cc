@@ -3884,6 +3884,17 @@ void OSD::load_pgs()
   ceph_assert(osd_lock.is_locked());
   dout(0) << "load_pgs" << dendl;
 
+  {
+    auto pghist = make_pg_num_history_oid();
+    bufferlist bl;
+    int r = store->read(service.meta_ch, pghist, 0, 0, bl, 0);
+    if (r >= 0 && bl.length() > 0) {
+      auto p = bl.cbegin();
+      decode(pg_num_history, p);
+    }
+    dout(20) << __func__ << " pg_num_history " << pg_num_history << dendl;
+  }
+
   vector<coll_t> ls;
   int r = store->list_collections(ls);
   if (r < 0) {
@@ -7515,6 +7526,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   if (superblock.oldest_map) {
     // make sure we at least keep pace with incoming maps
     trim_maps(m->oldest_map, last - first + 1, skip_maps);
+    pg_num_history.prune(superblock.oldest_map);
   }
 
   if (!superblock.oldest_map || skip_maps)
@@ -7529,7 +7541,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.clean_thru = last;
   }
 
-  // check for deleted pools
+  // check for pg_num changes and deleted pools
   OSDMapRef lastmap;
   for (auto& i : added_maps) {
     if (!lastmap) {
@@ -7542,6 +7554,7 @@ void OSD::handle_osd_map(MOSDMap *m)
     ceph_assert(lastmap->get_epoch() + 1 == i.second->get_epoch());
     for (auto& j : lastmap->get_pools()) {
       if (!i.second->have_pg_pool(j.first)) {
+	pg_num_history.log_pool_delete(i.first, j.first);
 	dout(10) << __func__ << " recording final pg_pool_t for pool "
 		 << j.first << dendl;
 	// this information is needed by _make_pg() if have to restart before
@@ -7559,9 +7572,29 @@ void OSD::handle_osd_map(MOSDMap *m)
 	encode(profile, bl);
 	t.write(coll_t::meta(), obj, 0, bl.length(), bl);
 	service.store_deleted_pool_pg_num(j.first, j.second.get_pg_num());
+      } else if (unsigned new_pg_num = i.second->get_pg_num(j.first);
+		 new_pg_num != j.second.get_pg_num()) {
+	dout(10) << __func__ << " recording pool " << j.first << " pg_num "
+		 << j.second.get_pg_num() << " -> " << new_pg_num << dendl;
+	pg_num_history.log_pg_num_change(i.first, j.first, new_pg_num);
+      }
+    }
+    for (auto& j : i.second->get_pools()) {
+      if (!lastmap->have_pg_pool(j.first)) {
+	dout(10) << __func__ << " recording new pool " << j.first << " pg_num "
+		 << j.second.get_pg_num() << dendl;
+	pg_num_history.log_pg_num_change(i.first, j.first,
+					 j.second.get_pg_num());
       }
     }
     lastmap = i.second;
+  }
+  pg_num_history.epoch = last;
+  {
+    bufferlist bl;
+    ::encode(pg_num_history, bl);
+    t.write(coll_t::meta(), make_pg_num_history_oid(), 0, bl.length(), bl);
+    dout(20) << __func__ << " pg_num_history " << pg_num_history << dendl;
   }
 
   // superblock and commit
