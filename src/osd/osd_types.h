@@ -5454,4 +5454,92 @@ struct store_statfs_t
 };
 ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
 
+
+struct pool_pg_num_history_t {
+  /// last epoch updated
+  epoch_t epoch = 0;
+  /// poolid -> epoch -> pg_num
+  map<int64_t,map<epoch_t,uint32_t>> pg_nums;
+  /// pair(epoch, poolid)
+  set<pair<epoch_t,int64_t>> deleted_pools;
+
+  void log_pg_num_change(epoch_t epoch, int64_t pool, uint32_t pg_num) {
+    pg_nums[pool][epoch] = pg_num;
+  }
+  void log_pool_delete(epoch_t epoch, int64_t pool) {
+    deleted_pools.insert(make_pair(epoch, pool));
+  }
+
+  /// prune history based on oldest osdmap epoch in the cluster
+  void prune(epoch_t oldest_epoch) {
+    auto i = deleted_pools.begin();
+    while (i != deleted_pools.end()) {
+      if (i->first >= oldest_epoch) {
+	break;
+      }
+      pg_nums.erase(i->second);
+      i = deleted_pools.erase(i);
+    }
+    for (auto& j : pg_nums) {
+      auto k = j.second.lower_bound(oldest_epoch);
+      // keep this and the entry before it (just to be paranoid)
+      if (k != j.second.begin()) {
+	--k;
+	j.second.erase(j.second.begin(), k);
+      }
+    }
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(epoch, bl);
+    encode(pg_nums, bl);
+    encode(deleted_pools, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(epoch, p);
+    decode(pg_nums, p);
+    decode(deleted_pools, p);
+    DECODE_FINISH(p);
+  }
+  void dump(Formatter *f) const {
+    f->dump_unsigned("epoch", epoch);
+    f->open_object_section("pools");
+    for (auto& i : pg_nums) {
+      f->open_object_section("pool");
+      f->dump_unsigned("pool_id", i.first);
+      f->open_array_section("changes");
+      for (auto& j : i.second) {
+	f->open_object_section("change");
+	f->dump_unsigned("epoch", j.first);
+	f->dump_unsigned("pg_num", j.second);
+	f->close_section();
+      }
+      f->close_section();
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("deleted_pools");
+    for (auto& i : deleted_pools) {
+      f->open_object_section("deletion");
+      f->dump_unsigned("pool_id", i.second);
+      f->dump_unsigned("epoch", i.first);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(list<pool_pg_num_history_t*>& ls) {
+    ls.push_back(new pool_pg_num_history_t);
+  }
+  friend ostream& operator<<(ostream& out, const pool_pg_num_history_t& h) {
+    return out << "pg_num_history(e" << h.epoch
+	       << " pg_nums " << h.pg_nums
+	       << " deleted_pools " << h.deleted_pools
+	       << ")";
+  }
+};
+WRITE_CLASS_ENCODER(pool_pg_num_history_t)
+
 #endif
