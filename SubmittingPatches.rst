@@ -329,7 +329,7 @@ with the 'git format-patch' command. For example,
 will take the last two commits and generate patches in the mything/
 directory. The commit you specify on the command line is the
 'upstream' commit that you are diffing against. Note that it does
-not necesarily have to be an ancestor of your current commit. You
+not necessarily have to be an ancestor of your current commit. You
 can do something like
 
 .. code-block:: bash
