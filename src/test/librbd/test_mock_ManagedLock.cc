@@ -554,4 +554,25 @@ TEST_F(TestMockManagedLock, ReacquireWithSameCookie) {
   ASSERT_EQ(0, when_shut_down(managed_lock));
 }
 
+TEST_F(TestMockManagedLock, ShutDownWhileWaiting) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockManagedLockImageCtx mock_image_ctx(*ictx);
+  MockMockManagedLock managed_lock(ictx->md_ctx, ictx->op_work_queue,
+                               ictx->header_oid, mock_image_ctx.image_watcher,
+                               librbd::managed_lock::EXCLUSIVE, true, 0);
+
+  InSequence seq;
+
+  expect_get_watch_handle(*mock_image_ctx.image_watcher, 0);
+
+  C_SaferCond acquire_ctx;
+  managed_lock.acquire_lock(&acquire_ctx);
+
+  ASSERT_EQ(0, when_shut_down(managed_lock));
+  ASSERT_EQ(-ESHUTDOWN, acquire_ctx.wait());
+  ASSERT_FALSE(is_lock_owner(managed_lock));
+}
+
 } // namespace librbd
