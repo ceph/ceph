@@ -31,7 +31,7 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
   for (auto pos = pos_start / d; pos < pos_end / d; ++pos) {
     slot_t slot_val = l1[pos];
     // FIXME minor: code below can be optimized to check slot_val against
-    // all_slot_set(_clear)
+    // all_slot_set(_clear) value
 
     for (auto c = 0; c < d; c++) {
       switch (slot_val & L1_ENTRY_MASK) {
@@ -54,28 +54,25 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
       case L1_ENTRY_PARTIAL:
         uint64_t l;
         uint64_t p0 = 0;
-	uint64_t p1 = 0;
         ++ctx->partial_count;
 
         if (!prev_pos_partial) {
-          l = _get_longest_from_l0(l1_pos * l0_w, (l1_pos + 1) * l0_w, &p0, &p1);
+          l = _get_longest_from_l0(l1_pos * l0_w, (l1_pos + 1) * l0_w, &p0);
           prev_pos_partial = true;
         } else {
-          l = _get_longest_from_l0((l1_pos - 1) * l0_w, (l1_pos + 1) * l0_w, &p0, &p1);
+          l = _get_longest_from_l0((l1_pos - 1) * l0_w, (l1_pos + 1) * l0_w, &p0);
         }
         if (l >= length) {
-          if ((ctx->min_affordable_len == 0) ||
-              ((ctx->min_affordable_len != 0) &&
-                (l - length < ctx->min_affordable_len - length))) {
-            ctx->min_affordable_len = l;
+          if ((ctx->affordable_len == 0) ||
+              ((ctx->affordable_len != 0) &&
+                (l < ctx->affordable_len))) {
+            ctx->affordable_len = l;
             ctx->affordable_l0_pos_start = p0;
-            ctx->affordable_l0_pos_end = p1;
           }
         }
-        if (l > ctx->max_len) {
-          ctx->max_len = l;
-          ctx->max_l0_pos_start = p0;
-          ctx->max_l0_pos_end = p1;
+        if (l > ctx->min_affordable_len) {
+          ctx->min_affordable_len = l;
+          ctx->min_affordable_l0_pos_start = p0;
         }
         if (mode == STOP_ON_PARTIAL) {
           return;
@@ -192,9 +189,9 @@ interval_t AllocatorLevel01Loose::_allocate_l1(uint64_t length,
 
     // check partially free slot sets first (including neighboring),
     // full length match required.
-    if (ctx.min_affordable_len) {
+    if (ctx.affordable_len) {
       // allocate as specified
-      assert(ctx.min_affordable_len >= length);
+      assert(ctx.affordable_len >= length);
       auto pos_end = ctx.affordable_l0_pos_start + 1;
       _mark_alloc_l1_l0(ctx.affordable_l0_pos_start, pos_end);
       res = interval_t(ctx.affordable_l0_pos_start * l0_granularity, length);
@@ -232,19 +229,21 @@ interval_t AllocatorLevel01Loose::_allocate_l1(uint64_t length,
 
     // check partially free slot sets first (including neighboring),
     // full length match required.
-    if (ctx.min_affordable_len) {
-      assert(ctx.min_affordable_len >= length);
+    if (ctx.affordable_len) {
+      assert(ctx.affordable_len >= length);
       assert((length % l0_granularity) == 0);
       auto pos_end = ctx.affordable_l0_pos_start + length / l0_granularity;
       _mark_alloc_l1_l0(ctx.affordable_l0_pos_start, pos_end);
       res = interval_t(ctx.affordable_l0_pos_start * l0_granularity, length);
       return res;
     }
-    if (ctx.max_len >= min_length) {
-      assert((ctx.max_len % l0_granularity) == 0);
-      auto pos_end = ctx.max_l0_pos_start + ctx.max_len / l0_granularity;
-      _mark_alloc_l1_l0(ctx.max_l0_pos_start, pos_end);
-      res = interval_t(ctx.max_l0_pos_start * l0_granularity, ctx.max_len);
+    if (ctx.min_affordable_len >= min_length) {
+      assert((ctx.min_affordable_len % l0_granularity) == 0);
+      auto pos_end = ctx.min_affordable_l0_pos_start +
+	ctx.min_affordable_len / l0_granularity;
+      _mark_alloc_l1_l0(ctx.min_affordable_l0_pos_start, pos_end);
+      res = interval_t(ctx.min_affordable_l0_pos_start * l0_granularity,
+	ctx.min_affordable_len);
       return res;
     }
   } else {
@@ -253,8 +252,8 @@ interval_t AllocatorLevel01Loose::_allocate_l1(uint64_t length,
     assert(ctx.fully_processed);
     // check partially free slot sets first (including neighboring),
     // full length match required.
-    if (ctx.min_affordable_len) {
-      assert(ctx.min_affordable_len >= length);
+    if (ctx.affordable_len) {
+      assert(ctx.affordable_len >= length);
       assert((length % l0_granularity) == 0);
       auto pos_end = ctx.affordable_l0_pos_start + length / l0_granularity;
       _mark_alloc_l1_l0(ctx.affordable_l0_pos_start, pos_end);
@@ -272,11 +271,13 @@ interval_t AllocatorLevel01Loose::_allocate_l1(uint64_t length,
       res = interval_t(ctx.free_l1_pos * l1_granularity, l);
       return res;
     }
-    if (ctx.max_len >= min_length) {
-      assert((ctx.max_len % l0_granularity) == 0);
-      auto pos_end = ctx.max_l0_pos_start + ctx.max_len / l0_granularity;
-      _mark_alloc_l1_l0(ctx.max_l0_pos_start, pos_end);
-      res = interval_t(ctx.max_l0_pos_start * l0_granularity, ctx.max_len);
+    if (ctx.min_affordable_len >= min_length) {
+      assert((ctx.min_affordable_len % l0_granularity) == 0);
+      auto pos_end = ctx.min_affordable_l0_pos_start +
+	ctx.min_affordable_len / l0_granularity;
+      _mark_alloc_l1_l0(ctx.min_affordable_l0_pos_start, pos_end);
+      res = interval_t(ctx.min_affordable_l0_pos_start * l0_granularity,
+	ctx.min_affordable_len);
       return res;
     }
   }
@@ -325,7 +326,8 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
         ++alloc_fragments_fast;
 	_fragment_and_emplace(max_length, idx * d1 * l1_granularity, to_alloc,
 	  res);
-        _mark_alloc_l1_l0(idx * d1 * bits_per_slotset, idx * d1 * bits_per_slotset + to_alloc / l0_granularity);
+        _mark_alloc_l1_l0(idx * d1 * bits_per_slotset,
+	  idx * d1 * bits_per_slotset + to_alloc / l0_granularity);
         continue;
       }
       auto free_pos = find_next_set_bit(slot_val, 0);
@@ -334,7 +336,7 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
         assert(length > *allocated);
 
         bool empty;
-        empty = _allocate_l0(length, min_length, max_length,
+        empty = _allocate_l0(length, max_length,
 	  (idx * d1 + free_pos / L1_ENTRY_WIDTH) * l0_w,
           (idx * d1 + free_pos / L1_ENTRY_WIDTH + 1) * l0_w,
           allocated,

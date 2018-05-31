@@ -131,7 +131,7 @@ class AllocatorLevel01Loose : public AllocatorLevel01
   }
 
   uint64_t _get_longest_from_l0(uint64_t pos0, uint64_t pos1,
-    uint64_t* pos0_res, uint64_t* pos1_res) const
+    uint64_t* pos0_res) const
   {
     uint64_t res = 0;
     if (pos0 >= pos1) {
@@ -164,7 +164,6 @@ class AllocatorLevel01Loose : public AllocatorLevel01
             end_loop = pos >= pos1;
             if (end_loop && res < res_candidate) {
               *pos0_res = pos_free_start;
-              *pos1_res = pos;
               res = res_candidate;
               res_candidate = 0;
             }
@@ -175,7 +174,6 @@ class AllocatorLevel01Loose : public AllocatorLevel01
             if (was_free) {
               if (res < res_candidate) {
                 *pos0_res = pos_free_start;
-                *pos1_res = pos;
                 res = res_candidate;
                 res_candidate = 0;
               }
@@ -200,7 +198,6 @@ class AllocatorLevel01Loose : public AllocatorLevel01
       if (was_free && (end_loop || !(bits & 1))) {
         if (res < res_candidate) {
           *pos0_res = pos_free_start;
-          *pos1_res = pos;
           res = res_candidate;
         }
         res_candidate = 0;
@@ -227,7 +224,7 @@ class AllocatorLevel01Loose : public AllocatorLevel01
   }
 
   bool _allocate_l0(uint64_t length,
-    uint64_t min_length, uint64_t max_length,
+    uint64_t max_length,
     uint64_t l0_pos0, uint64_t l0_pos1,
     uint64_t* allocated,
     interval_vector_t* res)
@@ -240,8 +237,6 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     assert(length > *allocated);
     assert(0 == (l0_pos0 % (slotset_width * d0)));
     assert(0 == (l0_pos1 % (slotset_width * d0)));
-    assert(max_length == 0 || max_length >= min_length);
-    assert(max_length == 0 || (max_length % min_length) == 0);
     assert(((length - *allocated) % l0_granularity) == 0);
 
     uint64_t need_entries = (length - *allocated) / l0_granularity;
@@ -340,12 +335,10 @@ protected:
     size_t free_count = 0;
     uint64_t free_l1_pos = 0;
 
-    uint64_t max_len = 0;
-    uint64_t max_l0_pos_start = 0;
-    uint64_t max_l0_pos_end = 0;
     uint64_t min_affordable_len = 0;
+    uint64_t min_affordable_l0_pos_start = 0;
+    uint64_t affordable_len = 0;
     uint64_t affordable_l0_pos_start = 0;
-    uint64_t affordable_l0_pos_end = 0;
 
     bool fully_processed = false;
 
@@ -661,6 +654,8 @@ protected:
     assert(min_length <= l2_granularity);
     assert(max_length == 0 || max_length >= min_length);
     assert(max_length == 0 || (max_length % min_length) == 0);
+    assert(length >= min_length);
+    assert((length % min_length) == 0);
 
     uint64_t l1_w = slotset_width * l1._children_per_slot();
 
