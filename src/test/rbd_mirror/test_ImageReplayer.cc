@@ -83,6 +83,9 @@ public:
   TestImageReplayer()
     : m_local_cluster(new librados::Rados()), m_watch_handle(0)
   {
+    EXPECT_EQ(0, g_ceph_context->_conf->set_val("rbd_mirror_journal_commit_age",
+                                                "0.1"));
+
     EXPECT_EQ("", connect_cluster_pp(*m_local_cluster.get()));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_cache", "false"));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_poll_age", "1"));
@@ -142,6 +145,8 @@ public:
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
+    EXPECT_EQ(0, g_ceph_context->_conf->set_val("rbd_mirror_journal_commit_age",
+                                                "5"));
   }
 
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
@@ -301,10 +306,6 @@ public:
     cls::journal::ObjectPosition mirror_position;
 
     for (int i = 0; i < 100; i++) {
-      printf("m_replayer->flush()\n");
-      C_SaferCond cond;
-      m_replayer->flush(&cond);
-      ASSERT_EQ(0, cond.wait());
       get_commit_positions(&master_position, &mirror_position);
       if (master_position == mirror_position) {
 	break;
