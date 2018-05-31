@@ -324,6 +324,7 @@ TYPE(rgw_bucket_dir)
 TYPE(rgw_bucket_entry_ver)
 TYPE(cls_rgw_obj_key)
 TYPE(rgw_bucket_olh_log_entry)
+TYPE(rgw_usage_log_entry)
 
 #include "cls/rgw/cls_rgw_ops.h"
 TYPE(rgw_cls_obj_prepare_op)
