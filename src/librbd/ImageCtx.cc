@@ -904,6 +904,10 @@ public:
     journal_policy = policy;
   }
 
+  bool ImageCtx::is_writeback_cache_enabled() const {
+    return (cache && cache_max_dirty > 0);
+  }
+
   void ImageCtx::get_thread_pool_instance(CephContext *cct,
                                           ThreadPool **thread_pool,
                                           ContextWQ **op_work_queue) {
