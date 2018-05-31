@@ -190,7 +190,7 @@ base() {
 		xfsprogs
 	"
 
-	_pkg $_bindir crushtool monmaptool osdmaptool ceph-run ceph-detect-init
+	_pkg $_bindir crushtool monmaptool osdmaptool ceph-run
 	_pkg $_sbindir ceph-create-keys mount.ceph
 	_pkg $_libexecdir/ceph ceph_common.sh
 	_pkg $_libdir/rados-classes *.so*
@@ -296,7 +296,7 @@ osd() {
 	depends="ceph-base parted gptfdisk"
 
 	_pkg $_bindir ceph-clsinfo ceph-bluefs-tool ceph-objectstore-tool ceph-osd
-	_pkg $_sbindir ceph-disk
+	_pkg $_sbindir ceph-volume
 	_pkg $_libexecdir/ceph ceph-osd-prestart.sh
 	_pkg $_udevrulesdir 60-ceph-by-parttypeuuid.rules 95-ceph-osd.rules
 	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
