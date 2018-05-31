@@ -41,7 +41,7 @@ class Messenger;
 struct Connection : public RefCountedObject {
   mutable Mutex lock;
   Messenger *msgr;
-  RefCountedObject *priv;
+  RefCountedPtr priv;
   int peer_type;
   entity_addr_t peer_addr;
   utime_t last_keepalive, last_keepalive_ack;
@@ -63,7 +63,6 @@ public:
     : RefCountedObject(cct, 0),
       lock("Connection::lock"),
       msgr(m),
-      priv(NULL),
       peer_type(-1),
       features(0),
       failed(false),
@@ -72,24 +71,16 @@ public:
 
   ~Connection() override {
     //generic_dout(0) << "~Connection " << this << dendl;
-    if (priv) {
-      //generic_dout(0) << "~Connection " << this << " dropping priv " << priv << dendl;
-      priv->put();
-    }
   }
 
-  void set_priv(RefCountedObject *o) {
+  void set_priv(const RefCountedPtr& o) {
     Mutex::Locker l(lock);
-    if (priv)
-      priv->put();
     priv = o;
   }
 
-  RefCountedObject *get_priv() {
+  RefCountedPtr get_priv() {
     Mutex::Locker l(lock);
-    if (priv)
-      return priv->get();
-    return NULL;
+    return priv;
   }
 
   /**
