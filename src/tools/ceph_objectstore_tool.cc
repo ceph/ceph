@@ -19,6 +19,9 @@
 
 #include <stdlib.h>
 
+#include <iostream>
+#include <fstream>
+
 #include "common/Formatter.h"
 #include "common/errno.h"
 #include "common/ceph_argparse.h"
@@ -2259,6 +2262,43 @@ int do_rm_omap(ObjectStore *store, coll_t coll,
   return 0;
 }
 
+int do_bulkrm_omap(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
+                   std::istream *f)
+{
+  auto ch = store->open_collection(coll);
+  size_t bulk_size =
+    g_conf().get_val<int64_t>("osd_target_transaction_size") > 0 ?
+    g_conf().get_val<int64_t>("osd_target_transaction_size") : UINT64_MAX;
+
+  while (!f->eof()) {
+    ObjectStore::Transaction t;
+    std::set<std::string> keys;
+    std::string key;
+
+    while (keys.size() < bulk_size && std::getline(*f, key)) {
+      if (debug) {
+        std::cerr << "Rm_omap " << ghobj << " " << key << std::endl;
+      }
+      keys.insert(key);
+    }
+
+    if (dry_run) {
+      continue;
+    }
+
+    t.omap_rmkeys(coll, ghobj, keys);
+
+    store->queue_transaction(ch, std::move(t));
+  }
+
+  if (f->bad()) {
+    std::cerr << "I/O error while reading keys" << std::endl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
 int do_get_omaphdr(ObjectStore *store, coll_t coll, ghobject_t &ghobj)
 {
   auto ch = store->open_collection(coll);
@@ -3196,12 +3236,6 @@ int main(int argc, char **argv)
 
   ObjectStoreTool tool = ObjectStoreTool(file_fd, dry_run);
 
-  if (vm.count("file") && file_fd == fd_none && !dry_run) {
-    cerr << "--file option only applies to import, dump-import, export, export-remove, "
-	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
-    return 1;
-  }
-
   if (file_fd != fd_none && file_fd < 0) {
     string err = string("file: ") + file;
     perror(err.c_str());
@@ -3888,8 +3922,25 @@ int main(int argc, char **argv)
         goto out;
       } else if (objcmd == "rm-omap") {
 	if (vm.count("arg1") == 0) {
-	  usage(desc);
-          ret = 1;
+          std::ifstream ifs;
+          std::istream *f;
+          if (!vm.count("file") || file == "-") {
+            if (isatty(STDIN_FILENO)) {
+              cerr << "stdin is a tty and no file specified" << std::endl;
+              ret = 1;
+              goto out;
+            }
+            f = &std::cin;
+          } else {
+            ifs.open(file.c_str(), std::ifstream::in);
+            if (!ifs.is_open()) {
+              cerr << "open " << file << " " << cpp_strerror(errno) << std::endl;
+              ret = 1;
+              goto out;
+            }
+            f = &ifs;
+          }
+          ret = do_bulkrm_omap(fs, coll, ghobj, f);
           goto out;
         }
 	ret = do_rm_omap(fs, coll, ghobj, arg1);
