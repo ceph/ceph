@@ -1765,6 +1765,10 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
+    Option("mon_inject_pg_merge_bounce_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description(""),
+
     Option("mon_sync_provider_kill_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
