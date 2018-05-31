@@ -580,6 +580,7 @@ class RESTController(BaseController):
             no_resource_id_params = False
             status = 200
             method = None
+            query_params = None
             path = ""
 
             if func.__name__ in cls._method_mapping:
@@ -598,7 +599,8 @@ class RESTController(BaseController):
 
             elif hasattr(func, "_collection_method_"):
                 path = "/{}".format(func.__name__)
-                method = func._collection_method_
+                method = func._collection_method_['method']
+                query_params = func._collection_method_['query_params']
 
             elif hasattr(func, "_resource_method_"):
                 res_id_params = cls.infer_resource_id()
@@ -609,7 +611,8 @@ class RESTController(BaseController):
                     path += "/{}".format("/".join(res_id_params))
                     path += "/{}".format(func.__name__)
 
-                method = func._resource_method_
+                method = func._resource_method_['method']
+                query_params = func._resource_method_['query_params']
 
             else:
                 continue
@@ -622,7 +625,8 @@ class RESTController(BaseController):
                                 .format(func.__name__))
 
             func = cls._status_code_wrapper(func, status)
-            endp_func = Endpoint(method, path=path)(func)
+            endp_func = Endpoint(method, path=path,
+                                 query_params=query_params)(func)
             result.append(cls.Endpoint(cls, endp_func))
 
         return result
@@ -637,21 +641,27 @@ class RESTController(BaseController):
         return wrapper
 
     @staticmethod
-    def Resource(method=None):
+    def Resource(method=None, query_params=None):
         if not method:
             method = 'GET'
 
         def _wrapper(func):
-            func._resource_method_ = method
+            func._resource_method_ = {
+                'method': method,
+                'query_params': query_params
+            }
             return func
         return _wrapper
 
     @staticmethod
-    def Collection(method=None):
+    def Collection(method=None, query_params=None):
         if not method:
             method = 'GET'
 
         def _wrapper(func):
-            func._collection_method_ = method
+            func._collection_method_ = {
+                'method': method,
+                'query_params': query_params
+            }
             return func
         return _wrapper
