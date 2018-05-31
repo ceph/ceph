@@ -3288,7 +3288,21 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
 
   pending_inc.new_pools[m->pgid.pool()] = p;
 
-  wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
+  auto prob = g_conf().get_val<double>("mon_inject_pg_merge_bounce_probability");
+  if (prob > 0 && prob > (double)(rand() % 1000)/1000.0) {
+    derr << __func__ << " injecting pg merge pg_num bounce" << dendl;
+    auto n = new MMonCommand(mon->monmap->get_fsid());
+    n->set_connection(m->get_connection());
+    n->cmd = { "{\"prefix\":\"osd pool set\", \"pool\": \"" +
+	       osdmap.get_pool_name(m->pgid.pool()) +
+	       "\", \"var\": \"pg_num_actual\", \"val\": \"" +
+	       stringify(m->pgid.ps() + 1) + "\"}" };
+    MonOpRequestRef nop = mon->op_tracker.create_request<MonOpRequest>(n);
+    nop->set_type_service();
+    wait_for_finished_proposal(op, new C_RetryMessage(this, nop));
+  } else {
+    wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
+  }
   mon->no_reply(op);
   return true;
 }
