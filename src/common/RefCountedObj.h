@@ -20,6 +20,8 @@
 #include "common/ceph_context.h"
 #include "common/valgrind.h"
 
+#include <boost/smart_ptr/intrusive_ptr.hpp>
+
 // re-include our assert to clobber the system one; fix dout:
 #include "include/assert.h"
 
@@ -163,5 +165,7 @@ struct RefCountedWaitObject {
 
 void intrusive_ptr_add_ref(const RefCountedObject *p);
 void intrusive_ptr_release(const RefCountedObject *p);
+
+using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
 
 #endif
