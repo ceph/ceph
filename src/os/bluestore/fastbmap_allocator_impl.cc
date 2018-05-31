@@ -70,7 +70,9 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
             ctx->affordable_l0_pos_start = p0;
           }
         }
-        if (l > ctx->min_affordable_len) {
+        if (l >= min_length &&
+	    (ctx->min_affordable_len == 0 ||
+	      (l < ctx->min_affordable_len))) {
           ctx->min_affordable_len = l;
           ctx->min_affordable_l0_pos_start = p0;
         }
@@ -237,7 +239,8 @@ interval_t AllocatorLevel01Loose::_allocate_l1(uint64_t length,
       res = interval_t(ctx.affordable_l0_pos_start * l0_granularity, length);
       return res;
     }
-    if (ctx.min_affordable_len >= min_length) {
+    if (ctx.min_affordable_len) {
+      assert(ctx.min_affordable_len >= min_length);
       assert((ctx.min_affordable_len % l0_granularity) == 0);
       auto pos_end = ctx.min_affordable_l0_pos_start +
 	ctx.min_affordable_len / l0_granularity;
@@ -271,7 +274,8 @@ interval_t AllocatorLevel01Loose::_allocate_l1(uint64_t length,
       res = interval_t(ctx.free_l1_pos * l1_granularity, l);
       return res;
     }
-    if (ctx.min_affordable_len >= min_length) {
+    if (ctx.min_affordable_len) {
+      assert(ctx.min_affordable_len >= min_length);
       assert((ctx.min_affordable_len % l0_granularity) == 0);
       auto pos_end = ctx.min_affordable_l0_pos_start +
 	ctx.min_affordable_len / l0_granularity;
