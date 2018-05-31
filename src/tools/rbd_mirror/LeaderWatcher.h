@@ -295,6 +295,8 @@ private:
   void handle_notify(uint64_t notify_id, uint64_t handle,
                      uint64_t notifier_id, bufferlist &bl) override;
 
+  void handle_rewatch_complete(int r) override;
+
   void handle_heartbeat(Context *on_ack);
   void handle_lock_acquired(Context *on_ack);
   void handle_lock_released(Context *on_ack);
