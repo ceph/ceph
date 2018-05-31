@@ -129,6 +129,16 @@ void ManagedLock<I>::shut_down(Context *on_shut_down) {
 
   Mutex::Locker locker(m_lock);
   assert(!is_state_shutdown());
+
+  if (m_state == STATE_WAITING_FOR_REGISTER) {
+    // abort stalled acquire lock state
+    ldout(m_cct, 10) << "woke up waiting acquire" << dendl;
+    Action active_action = get_active_action();
+    assert(active_action == ACTION_TRY_LOCK ||
+           active_action == ACTION_ACQUIRE_LOCK);
+    complete_active_action(STATE_UNLOCKED, -ESHUTDOWN);
+  }
+
   execute_action(ACTION_SHUT_DOWN, on_shut_down);
 }
 
