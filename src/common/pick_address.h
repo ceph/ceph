@@ -6,8 +6,14 @@
 class CephContext;
 
 
-#define CEPH_PICK_ADDRESS_PUBLIC     0x01
-#define CEPH_PICK_ADDRESS_CLUSTER    0x02
+#define CEPH_PICK_ADDRESS_PUBLIC      0x01
+#define CEPH_PICK_ADDRESS_CLUSTER     0x02
+#define CEPH_PICK_ADDRESS_MSGR1       0x04
+#define CEPH_PICK_ADDRESS_MSGR2       0x08
+#define CEPH_PICK_ADDRESS_IPV4        0x10
+#define CEPH_PICK_ADDRESS_IPV6        0x20
+#define CEPH_PICK_ADDRESS_PREFER_IPV4 0x40
+#define CEPH_PICK_ADDRESS_DEFAULT_MON_PORTS  0x80
 
 /*
   Pick addresses based on subnets if needed.
@@ -51,6 +57,7 @@ bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_add
 const struct sockaddr *find_ip_in_subnet_list(
   CephContext *cct,
   const struct ifaddrs *ifa,
+  unsigned ipv,
   const std::string &networks,
   const std::string &interfaces);
 

@@ -26,6 +26,7 @@
 const struct sockaddr *find_ip_in_subnet_list(
   CephContext *cct,
   const struct ifaddrs *ifa,
+  unsigned ipv,
   const std::string &networks,
   const std::string &interfaces)
 {
@@ -78,6 +79,19 @@ const struct sockaddr *find_ip_in_subnet_list(
       exit(1);
     }
 
+    switch (net.ss_family) {
+    case AF_INET:
+      if (!(ipv & CEPH_PICK_ADDRESS_IPV4)) {
+	continue;
+      }
+      break;
+    case AF_INET6:
+      if (!(ipv & CEPH_PICK_ADDRESS_IPV6)) {
+	continue;
+      }
+      break;
+    }
+
     const struct ifaddrs *found = find_ip_in_subnet(
       filtered,
       (struct sockaddr *) &net, prefix_len);
@@ -121,8 +135,12 @@ static void fill_in_one_address(CephContext *cct,
 				const string interfaces,
 				const char *conf_var)
 {
-  const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, networks,
-							interfaces);
+  const struct sockaddr *found = find_ip_in_subnet_list(
+    cct,
+    ifa,
+    CEPH_PICK_ADDRESS_IPV4|CEPH_PICK_ADDRESS_IPV6,
+    networks,
+    interfaces);
   if (!found) {
     lderr(cct) << "unable to find any IP address in networks '" << networks
 	       << "' interfaces '" << interfaces << "'" << dendl;

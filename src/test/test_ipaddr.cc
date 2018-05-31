@@ -542,26 +542,33 @@ TEST(CommonIPAddr, ParseNetwork_IPv6_9000)
 
 TEST(pick_address, find_ip_in_subnet_list)
 {
-  struct ifaddrs one, two;
+  struct ifaddrs one, two, three;
   struct sockaddr_in a_one;
   struct sockaddr_in a_two;
+  struct sockaddr_in6 a_three;
   const struct sockaddr *result;
 
   one.ifa_next = &two;
   one.ifa_addr = (struct sockaddr*)&a_one;
   one.ifa_name = eth0;
 
-  two.ifa_next = NULL;
+  two.ifa_next = &three;
   two.ifa_addr = (struct sockaddr*)&a_two;
   two.ifa_name = eth1;
 
+  three.ifa_next = NULL;
+  three.ifa_addr = (struct sockaddr*)&a_three;
+  three.ifa_name = eth1;
+
   ipv4(&a_one, "10.1.1.2");
   ipv4(&a_two, "10.2.1.123");
+  ipv6(&a_three, "2001:1234:5678:90ab::cdef");
 
   // match by network
   result = find_ip_in_subnet_list(
     g_ceph_context,
     &one,
+    CEPH_PICK_ADDRESS_IPV4,
     "10.1.0.0/16",
     "eth0");
   ASSERT_EQ((struct sockaddr*)&a_one, result);
@@ -569,6 +576,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   result = find_ip_in_subnet_list(
     g_ceph_context,
     &one,
+    CEPH_PICK_ADDRESS_IPV4,
     "10.2.0.0/16",
     "eth1");
   ASSERT_EQ((struct sockaddr*)&a_two, result);
@@ -577,6 +585,7 @@ TEST(pick_address, find_ip_in_subnet_list)
   result = find_ip_in_subnet_list(
     g_ceph_context,
     &one,
+    CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
     "eth0");
   ASSERT_EQ((struct sockaddr*)&a_one, result);
@@ -584,7 +593,16 @@ TEST(pick_address, find_ip_in_subnet_list)
   result = find_ip_in_subnet_list(
     g_ceph_context,
     &one,
+    CEPH_PICK_ADDRESS_IPV4,
     "10.0.0.0/8",
     "eth1");
   ASSERT_EQ((struct sockaddr*)&a_two, result);
+
+  result = find_ip_in_subnet_list(
+    g_ceph_context,
+    &one,
+    CEPH_PICK_ADDRESS_IPV6,
+    "2001::/16",
+    "eth1");
+  ASSERT_EQ((struct sockaddr*)&a_three, result);
 }
