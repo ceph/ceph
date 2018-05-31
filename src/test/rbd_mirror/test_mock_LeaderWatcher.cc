@@ -42,6 +42,7 @@ struct MockManagedLock {
   MOCK_METHOD1(shut_down, void(Context *));
   MOCK_METHOD1(try_acquire_lock, void(Context *));
   MOCK_METHOD1(release_lock, void(Context *));
+  MOCK_METHOD0(reacquire_lock, void());
   MOCK_METHOD3(break_lock, void(const managed_lock::Locker &, bool, Context *));
   MOCK_METHOD2(get_locker, void(managed_lock::Locker *, Context *));
 
@@ -124,6 +125,10 @@ struct ManagedLock<MockTestImageCtx> {
       });
 
     m_work_queue->queue(pre_release_ctx, 0);
+  }
+
+  void reacquire_lock() {
+    MockManagedLock::get_instance().reacquire_lock();
   }
 
   void get_locker(managed_lock::Locker *locker, Context *on_finish) {
