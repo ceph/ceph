@@ -214,6 +214,8 @@ struct MockImageCtx {
   MOCK_CONST_METHOD0(get_stripe_count, uint64_t());
   MOCK_CONST_METHOD0(get_stripe_period, uint64_t());
 
+  MOCK_CONST_METHOD0(is_writeback_cache_enabled, bool());
+
   ImageCtx *image_ctx;
   CephContext *cct;
   PerfCounters *perfcounter;
