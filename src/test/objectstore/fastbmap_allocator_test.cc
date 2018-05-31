@@ -421,18 +421,18 @@ TEST(TestAllocatorLevel01, test_l2_huge)
     uint64_t allocated4 = 0;
     interval_vector_t a4;
     al2.allocate_l2(0x1000, 0x1000, &allocated4, &a4);
-    ASSERT_TRUE(a4.size() == 1);
-    ASSERT_TRUE(allocated4 == 0x1000);
-    ASSERT_TRUE(a4[0].offset == i);
-    ASSERT_TRUE(a4[0].length == 0x1000);
+    ASSERT_EQ(a4.size(), 1);
+    ASSERT_EQ(allocated4, 0x1000);
+    ASSERT_EQ(a4[0].offset, i);
+    ASSERT_EQ(a4[0].length, 0x1000);
 
     allocated4 = 0;
     a4.clear();
-    al2.allocate_l2(_1m - 0x1000, _1m - 0x1000, &allocated4, &a4);
-    ASSERT_TRUE(a4.size() == 1);
-    ASSERT_TRUE(allocated4 == _1m - 0x1000);
-    ASSERT_TRUE(a4[0].offset == i + 0x1000);
-    ASSERT_TRUE(a4[0].length == _1m - 0x1000);
+    al2.allocate_l2(_1m - 0x1000, 0x1000, &allocated4, &a4);
+    ASSERT_EQ(a4.size(), 1);
+    ASSERT_EQ(allocated4, _1m - 0x1000);
+    ASSERT_EQ(a4[0].offset, i + 0x1000);
+    ASSERT_EQ(a4[0].length, _1m - 0x1000);
     if (0 == (i % (1 * 1024 * _1m))) {
       std::cout << "allocH " << i / 1024 / 1024 << " mb of "
         << capacity / 1024 / 1024 << std::endl;
@@ -454,7 +454,7 @@ TEST(TestAllocatorLevel01, test_l2_huge)
       uint64_t allocated = 0;
       interval_vector_t a;
       al2.allocate_l2(0x2000, 0x2000, &allocated, &a);
-      ASSERT_TRUE(a.size() == 0);
+      ASSERT_EQ(a.size(), 0);
     }
     std::cout << "End try in " << time(NULL) - t << " seconds" << std::endl;
   }
@@ -465,12 +465,12 @@ TEST(TestAllocatorLevel01, test_l2_huge)
       uint64_t allocated = 0;
       interval_vector_t a;
       al2.allocate_l2(_2m, _2m, &allocated, &a);
-      ASSERT_TRUE(a.size() == 0);
+      ASSERT_EQ(a.size(), 0);
     }
     std::cout << "End try in " << time(NULL) - t << " seconds" << std::endl;
   }
 
-  ASSERT_TRUE((capacity / _1m) * 0x1000 == al2.debug_get_free());
+  ASSERT_EQ((capacity / _1m) * 0x1000, al2.debug_get_free());
 
   std::cout << "Done L2 Huge" << std::endl;
 }
