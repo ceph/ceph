@@ -177,7 +177,7 @@ void AllocatorLevel01Loose::_mark_alloc_l0(int64_t l0_pos_start,
   }
 }
 
-interval_t AllocatorLevel01Loose::_allocate_l1(uint64_t length,
+interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
   uint64_t min_length, uint64_t max_length,
   uint64_t pos_start, uint64_t pos_end)
 {
@@ -305,7 +305,7 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
     bool has_space = true;
     while (length > *allocated && has_space) {
       interval_t i =
-        _allocate_l1(length - *allocated, min_length, max_length,
+        _allocate_l1_contiguous(length - *allocated, min_length, max_length,
 	  l1_pos_start, l1_pos_end);
       if (i.length == 0) {
         has_space = false;

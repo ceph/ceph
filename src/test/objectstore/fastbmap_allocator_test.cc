@@ -13,10 +13,10 @@ public:
   {
     _init(capacity, alloc_unit);
   }
-  interval_t allocate_l1(uint64_t length, uint64_t min_length,
+  interval_t allocate_l1_cont(uint64_t length, uint64_t min_length,
     uint64_t pos_start, uint64_t pos_end)
   {
-    return _allocate_l1(length, min_length, 0, pos_start, pos_end);
+    return _allocate_l1_contiguous(length, min_length, 0, pos_start, pos_end);
   }
   void free_l1(const interval_t& r)
   {
@@ -57,50 +57,50 @@ TEST(TestAllocatorLevel01, test_l1)
   al1.init(capacity, 0x1000);
   ASSERT_TRUE(capacity == al1.debug_get_free());
 
-  auto i1 = al1.allocate_l1(0x1000, 0x1000, 0, num_l1_entries);
+  auto i1 = al1.allocate_l1_cont(0x1000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i1.offset == 0);
   ASSERT_TRUE(i1.length == 0x1000);
   ASSERT_TRUE(capacity - 0x1000 == al1.debug_get_free());
 
-  auto i2 = al1.allocate_l1(0x1000, 0x1000, 0, num_l1_entries);
+  auto i2 = al1.allocate_l1_cont(0x1000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == 0x1000);
   ASSERT_TRUE(i2.length == 0x1000);
   al1.free_l1(i2);
   al1.free_l1(i1);
-  i1 = al1.allocate_l1(0x1000, 0x1000, 0, num_l1_entries);
+  i1 = al1.allocate_l1_cont(0x1000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i1.offset == 0);
   ASSERT_TRUE(i1.length == 0x1000);
-  i2 = al1.allocate_l1(0x1000, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(0x1000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == 0x1000);
   ASSERT_TRUE(i2.length == 0x1000);
   al1.free_l1(i1);
   al1.free_l1(i2);
 
-  i1 = al1.allocate_l1(0x2000, 0x1000, 0, num_l1_entries);
+  i1 = al1.allocate_l1_cont(0x2000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i1.offset == 0);
   ASSERT_TRUE(i1.length == 0x2000);
 
-  i2 = al1.allocate_l1(0x3000, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(0x3000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == 0x2000);
   ASSERT_TRUE(i2.length == 0x3000);
 
   al1.free_l1(i1);
   al1.free_l1(i2);
 
-  i1 = al1.allocate_l1(0x2000, 0x1000, 0, num_l1_entries);
+  i1 = al1.allocate_l1_cont(0x2000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i1.offset == 0);
   ASSERT_TRUE(i1.length == 0x2000);
 
-  i2 = al1.allocate_l1(2 * 1024 * 1024, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(2 * 1024 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == 2 * 1024 * 1024);
   ASSERT_TRUE(i2.length == 2 * 1024 * 1024);
 
   al1.free_l1(i1);
-  i1 = al1.allocate_l1(1024 * 1024, 0x1000, 0, num_l1_entries);
+  i1 = al1.allocate_l1_cont(1024 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i1.offset == 0);
   ASSERT_TRUE(i1.length == 1024 * 1024);
 
-  auto i3 = al1.allocate_l1(1024 * 1024 + 0x1000, 0x1000, 0, num_l1_entries);
+  auto i3 = al1.allocate_l1_cont(1024 * 1024 + 0x1000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i3.offset == 2 * 2 * 1024 * 1024);
   ASSERT_TRUE(i3.length == 1024 * 1024 + 0x1000);
 
@@ -108,17 +108,17 @@ TEST(TestAllocatorLevel01, test_l1)
   // Alloc: 0~1M, 2M~2M, 4M~1M+4K
   // Free: 1M~1M, 4M+4K ~ 2M-4K, 6M ~...
   //
-  auto i4 = al1.allocate_l1(1024 * 1024, 0x1000, 0, num_l1_entries);
+  auto i4 = al1.allocate_l1_cont(1024 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i4.offset == 1 * 1024 * 1024);
   ASSERT_TRUE(i4.length == 1024 * 1024);
   al1.free_l1(i4);
 
-  i4 = al1.allocate_l1(1024 * 1024 - 0x1000, 0x1000, 0, num_l1_entries);
+  i4 = al1.allocate_l1_cont(1024 * 1024 - 0x1000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i4.offset == 5 * 1024 * 1024 + 0x1000);
   ASSERT_TRUE(i4.length == 1024 * 1024 - 0x1000);
   al1.free_l1(i4);
 
-  i4 = al1.allocate_l1(1024 * 1024 + 0x1000, 0x1000, 0, num_l1_entries);
+  i4 = al1.allocate_l1_cont(1024 * 1024 + 0x1000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i4.offset == 6 * 1024 * 1024);
   //ASSERT_TRUE(i4.offset == 5 * 1024 * 1024 + 0x1000);
   ASSERT_TRUE(i4.length == 1024 * 1024 + 0x1000);
@@ -128,36 +128,36 @@ TEST(TestAllocatorLevel01, test_l1)
   al1.free_l1(i3);
   al1.free_l1(i4);
 
-  i1 = al1.allocate_l1(1024 * 1024, 0x1000, 0, num_l1_entries);
+  i1 = al1.allocate_l1_cont(1024 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i1.offset == 0);
   ASSERT_TRUE(i1.length == 1024 * 1024);
 
-  i2 = al1.allocate_l1(1024 * 1024, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(1024 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == 1 * 1024 * 1024);
   ASSERT_TRUE(i2.length == 1024 * 1024 );
 
-  i3 = al1.allocate_l1(512 * 1024, 0x1000, 0, num_l1_entries);
+  i3 = al1.allocate_l1_cont(512 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i3.offset == 2 * 1024 * 1024);
   ASSERT_TRUE(i3.length == 512 * 1024);
 
-  i4 = al1.allocate_l1(1536 * 1024, 0x1000, 0, num_l1_entries);
+  i4 = al1.allocate_l1_cont(1536 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i4.offset == (2 * 1024 + 512) * 1024 );
   ASSERT_TRUE(i4.length == 1536 * 1024);
   // making a hole 1.5 Mb length
   al1.free_l1(i2);
   al1.free_l1(i3);
   // and trying to fill it
-  i2 = al1.allocate_l1(1536 * 1024, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(1536 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == 1024 * 1024);
   ASSERT_TRUE(i2.length == 1536 * 1024);
 
   al1.free_l1(i2);
   // and trying to fill it partially
-  i2 = al1.allocate_l1(1528 * 1024, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(1528 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == 1024 * 1024);
   ASSERT_TRUE(i2.length == 1528 * 1024);
 
-  i3 = al1.allocate_l1(8 * 1024, 0x1000, 0, num_l1_entries);
+  i3 = al1.allocate_l1_cont(8 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i3.offset == 2552 * 1024);
   ASSERT_TRUE(i3.length == 8 * 1024);
 
@@ -166,7 +166,7 @@ TEST(TestAllocatorLevel01, test_l1)
   // Alloc: 0~1M, 2552K~8K, num_l1_entries0K~1.5M
   // Free: 1M~1528K, 4M ~...
   //
-  i2 = al1.allocate_l1(1536 * 1024, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(1536 * 1024, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == 4 * 1024 * 1024);
   ASSERT_TRUE(i2.length == 1536 * 1024);
 
@@ -177,61 +177,61 @@ TEST(TestAllocatorLevel01, test_l1)
   ASSERT_TRUE(capacity == al1.debug_get_free());
 
   for (uint64_t i = 0; i < capacity; i += _2m) {
-    i1 = al1.allocate_l1(_2m, _2m, 0, num_l1_entries);
+    i1 = al1.allocate_l1_cont(_2m, _2m, 0, num_l1_entries);
     ASSERT_TRUE(i1.offset == i);
     ASSERT_TRUE(i1.length == _2m);
   }
   ASSERT_TRUE(0 == al1.debug_get_free());
-  i2 = al1.allocate_l1(_2m, _2m, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(_2m, _2m, 0, num_l1_entries);
   ASSERT_TRUE(i2.length == 0);
   ASSERT_TRUE(0 == al1.debug_get_free());
 
   al1.free_l1(i1);
-  i2 = al1.allocate_l1(_2m, _2m, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(_2m, _2m, 0, num_l1_entries);
   ASSERT_TRUE(i2 == i1);
   al1.free_l1(i2);
-  i2 = al1.allocate_l1(_1m, _1m, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(_1m, _1m, 0, num_l1_entries);
   ASSERT_TRUE(i2.offset == i1.offset);
   ASSERT_TRUE(i2.length == _1m);
 
-  i3 = al1.allocate_l1(_2m, _2m, 0, num_l1_entries);
+  i3 = al1.allocate_l1_cont(_2m, _2m, 0, num_l1_entries);
   ASSERT_TRUE(i3.length == 0);
 
-  i3 = al1.allocate_l1(_2m, _1m, 0, num_l1_entries);
+  i3 = al1.allocate_l1_cont(_2m, _1m, 0, num_l1_entries);
   ASSERT_TRUE(i3.length == _1m);
 
-  i4 = al1.allocate_l1(_2m, _1m, 0, num_l1_entries);
+  i4 = al1.allocate_l1_cont(_2m, _1m, 0, num_l1_entries);
   ASSERT_TRUE(i4.length == 0);
 
   al1.free_l1(i2);
-  i2 = al1.allocate_l1(_2m, _2m, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(_2m, _2m, 0, num_l1_entries);
   ASSERT_TRUE(i2.length == 0);
 
-  i2 = al1.allocate_l1(_2m, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(_2m, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.length == _1m);
 
   al1.free_l1(i2);
   al1.free_l1(i3);
   ASSERT_TRUE(_2m == al1.debug_get_free());
 
-  i1 = al1.allocate_l1(_2m - 3 * 0x1000, 0x1000, 0, num_l1_entries);
-  i2 = al1.allocate_l1(0x1000, 0x1000, 0, num_l1_entries);
-  i3 = al1.allocate_l1(0x1000, 0x1000, 0, num_l1_entries);
-  i4 = al1.allocate_l1(0x1000, 0x1000, 0, num_l1_entries);
+  i1 = al1.allocate_l1_cont(_2m - 3 * 0x1000, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(0x1000, 0x1000, 0, num_l1_entries);
+  i3 = al1.allocate_l1_cont(0x1000, 0x1000, 0, num_l1_entries);
+  i4 = al1.allocate_l1_cont(0x1000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(0 == al1.debug_get_free());
 
   al1.free_l1(i2);
   al1.free_l1(i4);
 
-  i2 = al1.allocate_l1(0x4000, 0x2000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(0x4000, 0x2000, 0, num_l1_entries);
   ASSERT_TRUE(i2.length == 0);
-  i2 = al1.allocate_l1(0x4000, 0x1000, 0, num_l1_entries);
+  i2 = al1.allocate_l1_cont(0x4000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i2.length == 0x1000);
 
   al1.free_l1(i3);
-  i3 = al1.allocate_l1(0x6000, 0x3000, 0, num_l1_entries);
+  i3 = al1.allocate_l1_cont(0x6000, 0x3000, 0, num_l1_entries);
   ASSERT_TRUE(i3.length == 0);
-  i3 = al1.allocate_l1(0x6000, 0x1000, 0, num_l1_entries);
+  i3 = al1.allocate_l1_cont(0x6000, 0x1000, 0, num_l1_entries);
   ASSERT_TRUE(i3.length == 0x2000);
   ASSERT_TRUE(0 == al1.debug_get_free());
 
