@@ -857,6 +857,10 @@ struct rgw_usage_log_entry {
     usage_map[category].aggregate(data);
     total_usage.aggregate(data);
   }
+
+  void dump(Formatter* f) const;
+  static void generate_test_instances(list<rgw_usage_log_entry*>& o);
+
 };
 WRITE_CLASS_ENCODER(rgw_usage_log_entry)
 
