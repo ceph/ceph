@@ -493,20 +493,18 @@ private:
     add_primary_dentry(dn, 0, dirty, dirty_parent, dirty_pool);
   }
 
-  void add_root(bool dirty, CInode *in, const CInode::mempool_inode *pi=0, fragtree_t *pdft=0, bufferlist *psnapbl=0,
-		    CInode::mempool_xattr_map *px=0) {
+  void add_root(bool dirty, CInode *in) {
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    if (!pi) pi = in->get_projected_inode();
-    if (!pdft) pdft = &in->dirfragtree;
-    if (!px) px = in->get_projected_xattrs();
+    const auto& pi = *(in->get_projected_inode());
+    const auto& pdft = in->dirfragtree;
+    const auto& px = *(in->get_projected_xattrs());
 
     bufferlist snapbl;
-    if (psnapbl)
-      snapbl = *psnapbl;
-    else
-      in->encode_snap_blob(snapbl);
+    const sr_t *sr = in->get_projected_srnode();
+    if (sr)
+      sr->encode(snapbl);
 
     for (list<ceph::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
       if ((*p)->inode.ino == in->ino()) {
@@ -516,8 +514,8 @@ private:
     }
 
     string empty;
-    roots.push_back(ceph::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, *pi,
-							  *pdft, *px, in->symlink,
+    roots.push_back(ceph::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, pi,
+							  pdft, px, in->symlink,
 							  in->oldest_snap, snapbl,
 							  dirty ? fullbit::STATE_DIRTY : 0,
 							  &in->old_inodes)));
