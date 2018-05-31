@@ -2483,12 +2483,6 @@ public:
             retcode = -EIO;
           } else if (op == CLS_RGW_OP_ADD ||
                      op == CLS_RGW_OP_LINK_OLH) {
-            if (op == CLS_RGW_OP_ADD && !key.instance.empty() && key.instance != "null") {
-              set_status("skipping entry");
-              ldout(sync_env->cct, 10) << "bucket skipping sync obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]: versioned object will be synced on link_olh" << dendl;
-              goto done;
-
-            }
             set_status("syncing obj");
             ldout(sync_env->cct, 5) << "bucket sync: sync obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch << "]" << dendl;
             logger.log("fetch");
