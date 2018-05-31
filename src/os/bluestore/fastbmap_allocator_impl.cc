@@ -40,7 +40,13 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
         if (!ctx->free_count) {
           ctx->free_l1_pos = l1_pos;
         } else if (l1_pos != next_free_l1_pos){
-	  break;
+          // check if already found extent fits min_length
+	  if (ctx->free_count * l1_granularity >= min_length) {
+	    break;
+	  }
+	  // if not - proceed with the next one
+          ctx->free_l1_pos = l1_pos;
+          ctx->free_count = 0;
 	}
 	next_free_l1_pos = l1_pos + 1;
         ++ctx->free_count;
@@ -73,7 +79,8 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
         if (l >= min_length &&
 	    (ctx->min_affordable_len == 0 ||
 	      (l < ctx->min_affordable_len))) {
-          ctx->min_affordable_len = l;
+
+          ctx->min_affordable_len = P2ALIGN(l, min_length);
           ctx->min_affordable_l0_pos_start = p0;
         }
         if (mode == STOP_ON_PARTIAL) {
@@ -184,7 +191,7 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
   interval_t res = { 0, 0 };
   uint64_t l0_w = slotset_width * CHILD_PER_SLOT_L0;
 
-  if (length <= l0_granularity) {
+  if (unlikely(length <= l0_granularity)) {
     search_ctx_t ctx;
     _analyze_partials(pos_start, pos_end, l0_granularity, l0_granularity,
       STOP_ON_PARTIAL, &ctx);
@@ -210,12 +217,13 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
       res = interval_t(ctx.free_l1_pos * l1_granularity, l);
       return res;
     }
-  } else if (length == l1_granularity) {
+  } else if (unlikely(length == l1_granularity)) {
     search_ctx_t ctx;
     _analyze_partials(pos_start, pos_end, length, min_length, STOP_ON_EMPTY, &ctx);
 
-    // allocate exactly matched entry if any
+    // allocate using contiguous extent found at l1 if any
     if (ctx.free_count) {
+
       auto l = std::min(length, ctx.free_count * l1_granularity);
       assert((l % l0_granularity) == 0);
       auto pos_end = ctx.free_l1_pos * l0_w + l / l0_granularity;
@@ -240,14 +248,9 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
       return res;
     }
     if (ctx.min_affordable_len) {
-      assert(ctx.min_affordable_len >= min_length);
-      assert((ctx.min_affordable_len % l0_granularity) == 0);
-      auto pos_end = ctx.min_affordable_l0_pos_start +
-	ctx.min_affordable_len / l0_granularity;
-      _mark_alloc_l1_l0(ctx.min_affordable_l0_pos_start, pos_end);
-      res = interval_t(ctx.min_affordable_l0_pos_start * l0_granularity,
-	ctx.min_affordable_len);
-      return res;
+      auto pos0 = ctx.min_affordable_l0_pos_start;
+      _mark_alloc_l1_l0(pos0, pos0 + ctx.min_affordable_len / l0_granularity);
+      return interval_t(pos0 * l0_granularity, ctx.min_affordable_len);
     }
   } else {
     search_ctx_t ctx;
@@ -263,10 +266,11 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
       res = interval_t(ctx.affordable_l0_pos_start * l0_granularity, length);
       return res;
     }
-    // allocate exactly matched entry if any
-    if (ctx.free_count) {
+    // allocate using contiguous extent found at l1 if affordable
+    if (ctx.free_count && ctx.free_count * l1_granularity >= min_length) {
 
-      auto l = std::min(length, ctx.free_count * l1_granularity);
+      auto l = P2ALIGN(std::min(length, ctx.free_count * l1_granularity),
+	min_length);
       assert((l % l0_granularity) == 0);
       auto pos_end = ctx.free_l1_pos * l0_w + l / l0_granularity;
 
@@ -275,14 +279,9 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
       return res;
     }
     if (ctx.min_affordable_len) {
-      assert(ctx.min_affordable_len >= min_length);
-      assert((ctx.min_affordable_len % l0_granularity) == 0);
-      auto pos_end = ctx.min_affordable_l0_pos_start +
-	ctx.min_affordable_len / l0_granularity;
-      _mark_alloc_l1_l0(ctx.min_affordable_l0_pos_start, pos_end);
-      res = interval_t(ctx.min_affordable_l0_pos_start * l0_granularity,
-	ctx.min_affordable_len);
-      return res;
+      auto pos0 = ctx.min_affordable_l0_pos_start;
+      _mark_alloc_l1_l0(pos0, pos0 + ctx.min_affordable_len / l0_granularity);
+      return interval_t(pos0 * l0_granularity, ctx.min_affordable_len);
     }
   }
   return res;

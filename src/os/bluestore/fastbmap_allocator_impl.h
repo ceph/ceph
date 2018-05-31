@@ -33,6 +33,7 @@ typedef std::vector<interval_t> interval_vector_t;
 typedef std::vector<slot_t> slot_vector_t;
 #else
 #include "include/assert.h"
+#include "common/likely.h"
 #include "os/bluestore/bluestore_types.h"
 #include "include/mempool.h"
 
@@ -214,14 +215,35 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     uint64_t len,
     interval_vector_t* res)
   {
+    auto it = res->rbegin();
+
     if (max_length) {
+      if (it != res->rend() && it->offset + it->length == offset) {
+	auto l = max_length - it->length;
+	if (l >= len) {
+	  it->length += len;
+	  return;
+	} else {
+	  offset += l;
+	  len -= l;
+	  it->length += l;
+	}
+      }
+
       while (len > max_length) {
 	res->emplace_back(offset, max_length);
 	offset += max_length;
 	len -= max_length;
       }
+      res->emplace_back(offset, len);
+      return;
     }
-    res->emplace_back(offset, len);
+
+    if (it != res->rend() && it->offset + it->length == offset) {
+      it->length += len;
+    } else {
+      res->emplace_back(offset, len);
+    }
   }
 
   bool _allocate_l0(uint64_t length,
@@ -565,6 +587,7 @@ protected:
 
   void _init(uint64_t capacity, uint64_t _alloc_unit, bool mark_as_free = true)
   {
+    assert(ISP2(_alloc_unit));
     l1._init(capacity, _alloc_unit, mark_as_free);
 
     l2_granularity =
@@ -652,7 +675,8 @@ protected:
   {
     uint64_t prev_allocated = *allocated;
     uint64_t d = CHILD_PER_SLOT;
-    assert(min_length <= l2_granularity);
+    assert(ISP2(min_length));
+    assert(min_length <= l1._level_granularity());
     assert(max_length == 0 || max_length >= min_length);
     assert(max_length == 0 || (max_length % min_length) == 0);
     assert(length >= min_length);
