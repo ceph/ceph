@@ -434,7 +434,7 @@ protected:
     return no_free;
   }
 
-  interval_t _allocate_l1(uint64_t length,
+  interval_t _allocate_l1_contiguous(uint64_t length,
     uint64_t min_length, uint64_t max_length,
     uint64_t pos_start, uint64_t pos_end);
 
