@@ -18,8 +18,7 @@ PrivateTmp=true
 TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min
-StartLimitBurst=30
-RestartSec=20s
+StartLimitBurst=3
 
 [Install]
 WantedBy=ceph-osd.target
