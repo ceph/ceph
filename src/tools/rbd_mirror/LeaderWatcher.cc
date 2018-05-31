@@ -1090,6 +1090,13 @@ void LeaderWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
 }
 
 template <typename I>
+void LeaderWatcher<I>::handle_rewatch_complete(int r) {
+  dout(5) << "r=" << r << dendl;
+
+  m_leader_lock->reacquire_lock();
+}
+
+template <typename I>
 void LeaderWatcher<I>::handle_payload(const HeartbeatPayload &payload,
                                       Context *on_notify_ack) {
   dout(20) << "heartbeat" << dendl;
