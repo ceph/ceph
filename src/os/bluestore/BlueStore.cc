@@ -7057,7 +7057,7 @@ int BlueStore::read(
   bufferlist& bl,
   uint32_t op_flags)
 {
-  utime_t start = ceph_clock_now();
+  auto start = mono_clock::now();
   Collection *c = static_cast<Collection *>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
@@ -7070,9 +7070,9 @@ int BlueStore::read(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    utime_t start1 = ceph_clock_now();
+    auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
-    logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start1);
+    logger->tinc(l_bluestore_read_onode_meta_lat, mono_clock::now() - start1);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -7101,7 +7101,7 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
-  logger->tinc(l_bluestore_read_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_read_lat, mono_clock::now() - start);
   return r;
 }
 
@@ -7172,9 +7172,9 @@ int BlueStore::_do_read(
     length = o->onode.size - offset;
   }
 
-  utime_t start = ceph_clock_now();
+  auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
-  logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_read_onode_meta_lat, mono_clock::now() - start);
   _dump_onode(o);
 
   ready_regions_t ready_regions;
@@ -7240,9 +7240,9 @@ int BlueStore::_do_read(
   }
 
   // read raw blob data.  use aio if we have >1 blobs to read.
-  start = ceph_clock_now(); // for the sake of simplicity 
-                                    // measure the whole block below.
-                                    // The error isn't that much...
+  start = mono_clock::now(); // for the sake of simplicity
+                             // measure the whole block below.
+                             // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
   IOContext ioc(cct, NULL, true); // allow EIO
   for (auto& p : blobs2read) {
@@ -7339,7 +7339,7 @@ int BlueStore::_do_read(
       return -EIO;
     }
   }
-  logger->tinc(l_bluestore_read_wait_aio_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_read_wait_aio_lat, mono_clock::now() - start);
 
   // enumerate and decompress desired blobs
   auto p = compressed_blob_bls.begin();
@@ -7425,7 +7425,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
 {
   int bad;
   uint64_t bad_csum;
-  utime_t start = ceph_clock_now();
+  auto start = mono_clock::now();
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (r < 0) {
     if (r == -1) {
@@ -7453,14 +7453,14 @@ int BlueStore::_verify_csum(OnodeRef& o,
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
   }
-  logger->tinc(l_bluestore_csum_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_csum_lat, mono_clock::now() - start);
   return r;
 }
 
 int BlueStore::_decompress(bufferlist& source, bufferlist* result)
 {
   int r = 0;
-  utime_t start = ceph_clock_now();
+  auto start = mono_clock::now();
   auto i = source.cbegin();
   bluestore_compression_header_t chdr;
   decode(chdr, i);
@@ -7482,7 +7482,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
       r = -EIO;
     }
   }
-  logger->tinc(l_bluestore_decompress_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_decompress_lat, mono_clock::now() - start);
   return r;
 }
 
@@ -8945,7 +8945,7 @@ void BlueStore::_kv_sync_thread()
       costs = kv_throttle_costs;
       kv_ios = 0;
       kv_throttle_costs = 0;
-      utime_t start = ceph_clock_now();
+      auto start = mono_clock::now();
       l.unlock();
 
       dout(30) << __func__ << " committing " << kv_committing << dendl;
@@ -8987,7 +8987,7 @@ void BlueStore::_kv_sync_thread()
 			       deferred_done.end());
 	deferred_done.clear();
       }
-      utime_t after_flush = ceph_clock_now();
+      auto after_flush = mono_clock::now();
 
       // we will use one final transaction to force a sync
       KeyValueDB::Transaction synct = db->get_transaction();
@@ -9051,7 +9051,7 @@ void BlueStore::_kv_sync_thread()
       PExtentVector bluefs_gift_extents;
       if (bluefs &&
 	  after_flush - bluefs_last_balance >
-	  cct->_conf->bluestore_bluefs_balance_interval) {
+	  ceph::make_timespan(cct->_conf->bluestore_bluefs_balance_interval)) {
 	bluefs_last_balance = after_flush;
 	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
 	assert(r >= 0);
@@ -9115,10 +9115,10 @@ void BlueStore::_kv_sync_thread()
       }
 
       {
-	utime_t finish = ceph_clock_now();
-	utime_t dur_flush = after_flush - start;
-	utime_t dur_kv = finish - after_flush;
-	utime_t dur = finish - start;
+	auto finish = mono_clock::now();
+	ceph::timespan dur_flush = after_flush - start;
+	ceph::timespan dur_kv = finish - after_flush;
+	ceph::timespan dur = finish - start;
 	dout(20) << __func__ << " committed " << kv_committing.size()
 	  << " cleaned " << deferred_stable.size()
 	  << " in " << dur
@@ -9458,7 +9458,7 @@ int BlueStore::queue_transactions(
     }
     return 0;
   }
-  utime_t start = ceph_clock_now();
+  auto start = mono_clock::now();
 
   Collection *c = static_cast<Collection*>(ch.get());
   OpSequencer *osr = c->osr.get();
@@ -9490,7 +9490,7 @@ int BlueStore::queue_transactions(
   if (handle)
     handle->suspend_tp_timeout();
 
-  utime_t tstart = ceph_clock_now();
+  auto tstart = mono_clock::now();
   throttle_bytes.get(txc->cost);
   if (txc->deferred_txn) {
     // ensure we do not block here because of deferred writes
@@ -9508,7 +9508,7 @@ int BlueStore::queue_transactions(
       --deferred_aggressive;
    }
   }
-  utime_t tend = ceph_clock_now();
+  auto tend = mono_clock::now();
 
   if (handle)
     handle->reset_tp_timeout();
@@ -9526,7 +9526,7 @@ int BlueStore::queue_transactions(
     finishers[osr->shard]->queue(c);
   }
 
-  logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_submit_lat, mono_clock::now() - start);
   logger->tinc(l_bluestore_throttle_lat, tend - tstart);
   return 0;
 }
@@ -10497,7 +10497,7 @@ int BlueStore::_do_alloc_write(
   auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   for (auto& wi : wctx->writes) {
     if (c && wi.blob_length > min_alloc_size) {
-      utime_t start = ceph_clock_now();
+      auto start = mono_clock::now();
 
       // compress
       assert(wi.b_off == 0);
@@ -10545,7 +10545,7 @@ int BlueStore::_do_alloc_write(
 	need += wi.blob_length;
       }
       logger->tinc(l_bluestore_compress_lat,
-		   ceph_clock_now() - start);
+                  mono_clock::now() - start);
     } else {
       need += wi.blob_length;
     }
@@ -12019,7 +12019,7 @@ void BlueStore::generate_db_histogram(Formatter *f)
   size_t key_size = 0, value_size = 0;
   DBHistogram hist;
 
-  utime_t start = ceph_clock_now();
+  auto start = coarse_mono_clock::now();
 
   KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
   iter->seek_to_first();
@@ -12074,7 +12074,7 @@ void BlueStore::generate_db_histogram(Formatter *f)
     iter->next();
   }
 
-  utime_t duration = ceph_clock_now() - start;
+  ceph::timespan duration = coarse_mono_clock::now() - start;
   f->open_object_section("rocksdb_key_value_stats");
   f->dump_unsigned("num_onodes", num_onodes);
   f->dump_unsigned("num_shards", num_shards);

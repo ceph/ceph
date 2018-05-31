@@ -1816,7 +1816,7 @@ private:
   BlueFS *bluefs = nullptr;
   unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
   bool bluefs_single_shared_device = true;
-  utime_t bluefs_last_balance;
+  mono_time bluefs_last_balance;
   utime_t next_dump_on_bluefs_balance_failure;
 
   KeyValueDB *db = nullptr;
