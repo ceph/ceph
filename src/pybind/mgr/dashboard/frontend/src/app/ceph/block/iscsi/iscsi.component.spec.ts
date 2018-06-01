@@ -1,7 +1,8 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AppModule } from '../../../app.module';
 import { TcmuIscsiService } from '../../../shared/api/tcmu-iscsi.service';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { IscsiComponent } from './iscsi.component';
 
 describe('IscsiComponent', () => {
@@ -16,14 +17,10 @@ describe('IscsiComponent', () => {
     },
   };
 
-  beforeEach(
-    async(() => {
-      TestBed.configureTestingModule({
-        imports: [AppModule],
-        providers: [{ provide: TcmuIscsiService, useValue: fakeService }]
-      }).compileComponents();
-    })
-  );
+  configureTestBed({
+    imports: [AppModule],
+    providers: [{ provide: TcmuIscsiService, useValue: fakeService }]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiComponent);

@@ -1,5 +1,5 @@
 import { HttpClientModule } from '@angular/common/http';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap';
@@ -8,6 +8,7 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { DataTableModule } from '../../../shared/datatable/datatable.module';
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RgwBucketDetailsComponent } from '../rgw-bucket-details/rgw-bucket-details.component';
 import { RgwBucketListComponent } from './rgw-bucket-list.component';
 
@@ -23,24 +24,21 @@ describe('RgwBucketListComponent', () => {
     }
   };
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [
-        RgwBucketListComponent,
-        RgwBucketDetailsComponent
-      ],
-      imports: [
-        HttpClientModule,
-        RouterTestingModule,
-        BsDropdownModule.forRoot(),
-        TabsModule.forRoot(),
-        DataTableModule,
-        SharedModule
-      ],
-      providers: [{ provide: RgwBucketService, useValue: fakeRgwBucketService }]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [
+      RgwBucketListComponent,
+      RgwBucketDetailsComponent
+    ],
+    imports: [
+      HttpClientModule,
+      RouterTestingModule,
+      BsDropdownModule.forRoot(),
+      TabsModule.forRoot(),
+      DataTableModule,
+      SharedModule
+    ],
+    providers: [{ provide: RgwBucketService, useValue: fakeRgwBucketService }]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwBucketListComponent);

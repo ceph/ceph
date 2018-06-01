@@ -2,14 +2,13 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { inject, TestBed } from '@angular/core/testing';
 
 import { SharedModule } from '../shared.module';
+import { configureTestBed } from '../unit-test-helper';
 import { SummaryService } from './summary.service';
 
 describe('SummaryService', () => {
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [SummaryService],
-      imports: [HttpClientTestingModule, SharedModule]
-    });
+  configureTestBed({
+    providers: [SummaryService],
+    imports: [HttpClientTestingModule, SharedModule]
   });
 
   it(

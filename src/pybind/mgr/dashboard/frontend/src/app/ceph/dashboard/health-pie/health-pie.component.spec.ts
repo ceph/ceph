@@ -1,22 +1,19 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { HealthPieComponent } from './health-pie.component';
 
 describe('HealthPieComponent', () => {
   let component: HealthPieComponent;
   let fixture: ComponentFixture<HealthPieComponent>;
 
-  beforeEach(
-    async(() => {
-      TestBed.configureTestingModule({
-        imports: [ChartsModule, SharedModule],
-        declarations: [HealthPieComponent]
-      }).compileComponents();
-    })
-  );
+  configureTestBed({
+    imports: [ChartsModule, SharedModule],
+    declarations: [HealthPieComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(HealthPieComponent);

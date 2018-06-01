@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
@@ -14,30 +14,28 @@ import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ServicesModule } from '../../../shared/services/services.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 
 describe('RbdSnapshotListComponent', () => {
   let component: RbdSnapshotListComponent;
   let fixture: ComponentFixture<RbdSnapshotListComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ RbdSnapshotListComponent ],
-      imports: [
-        DataTableModule,
-        ComponentsModule,
-        ModalModule.forRoot(),
-        ToastModule.forRoot(),
-        ServicesModule,
-        ApiModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        PipesModule
-      ],
-      providers: [ AuthStorageService ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [ RbdSnapshotListComponent ],
+    imports: [
+      DataTableModule,
+      ComponentsModule,
+      ModalModule.forRoot(),
+      ToastModule.forRoot(),
+      ServicesModule,
+      ApiModule,
+      HttpClientTestingModule,
+      RouterTestingModule,
+      PipesModule
+    ],
+    providers: [ AuthStorageService ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdSnapshotListComponent);

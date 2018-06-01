@@ -1,5 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -9,6 +9,7 @@ import { Observable } from 'rxjs/Observable';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 
 describe('RgwBucketFormComponent', () => {
@@ -22,22 +23,19 @@ describe('RgwBucketFormComponent', () => {
     }
   }
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ RgwBucketFormComponent ],
-      imports: [
-        HttpClientTestingModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        SharedModule
-      ],
-      providers: [
-        RgwUserService,
-        { provide: RgwBucketService, useClass: MockRgwBucketService }
-      ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [ RgwBucketFormComponent ],
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule
+    ],
+    providers: [
+      RgwUserService,
+      { provide: RgwBucketService, useClass: MockRgwBucketService }
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwBucketFormComponent);

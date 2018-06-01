@@ -1,21 +1,21 @@
 import { SimpleChange } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AppModule } from '../../../app.module';
 import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
 import { FormatterService } from '../../services/formatter.service';
+
+import { configureTestBed } from '../../unit-test-helper';
 import { SparklineComponent } from './sparkline.component';
 
 describe('SparklineComponent', () => {
   let component: SparklineComponent;
   let fixture: ComponentFixture<SparklineComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [AppModule],
-      providers: [DimlessBinaryPipe, FormatterService]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [AppModule],
+    providers: [DimlessBinaryPipe, FormatterService]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(SparklineComponent);

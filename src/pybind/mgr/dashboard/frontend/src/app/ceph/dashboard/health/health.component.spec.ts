@@ -1,10 +1,11 @@
 import { HttpClientModule } from '@angular/common/http';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { DashboardService } from '../../../shared/api/dashboard.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { HealthComponent } from './health.component';
 
 describe('HealthComponent', () => {
@@ -17,15 +18,11 @@ describe('HealthComponent', () => {
     }
   };
 
-  beforeEach(
-    async(() => {
-      TestBed.configureTestingModule({
-        providers: [{ provide: DashboardService, useValue: fakeService }],
-        imports: [SharedModule],
-        declarations: [HealthComponent]
-      }).compileComponents();
-    })
-  );
+  configureTestBed({
+    providers: [{ provide: DashboardService, useValue: fakeService }],
+    imports: [SharedModule],
+    declarations: [HealthComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(HealthComponent);

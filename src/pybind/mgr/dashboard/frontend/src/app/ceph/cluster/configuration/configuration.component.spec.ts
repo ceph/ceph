@@ -1,10 +1,11 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 
 import { Observable } from 'rxjs/Observable';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { ConfigurationComponent } from './configuration.component';
 
 describe('ConfigurationComponent', () => {
@@ -13,21 +14,17 @@ describe('ConfigurationComponent', () => {
 
   const fakeService = {
     getConfigData: () => {
-      return Observable.create(observer => {
+      return Observable.create((observer) => {
         return () => console.log('disposed');
       });
     }
   };
 
-  beforeEach(
-    async(() => {
-      TestBed.configureTestingModule({
-        declarations: [ConfigurationComponent],
-        providers: [{ provide: ConfigurationService, useValue: fakeService }],
-        imports: [SharedModule, FormsModule]
-      }).compileComponents();
-    })
-  );
+  configureTestBed({
+    declarations: [ConfigurationComponent],
+    providers: [{ provide: ConfigurationService, useValue: fakeService }],
+    imports: [SharedModule, FormsModule]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(ConfigurationComponent);

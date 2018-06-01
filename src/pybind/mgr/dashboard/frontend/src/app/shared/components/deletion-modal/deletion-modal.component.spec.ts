@@ -1,11 +1,12 @@
 import { Component, NgModule, TemplateRef, ViewChild } from '@angular/core';
-import { async, ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 import { Subscriber } from 'rxjs/Subscriber';
 
+import { configureTestBed } from '../../unit-test-helper';
 import { ModalComponent } from '../modal/modal.component';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 import { DeletionModalComponent } from './deletion-modal.component';
@@ -99,14 +100,11 @@ describe('DeletionModalComponent', () => {
   let mockFixture: ComponentFixture<MockComponent>;
   let fixture: ComponentFixture<DeletionModalComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ MockComponent, DeletionModalComponent, ModalComponent,
-        SubmitButtonComponent],
-      imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule],
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [ MockComponent, DeletionModalComponent, ModalComponent,
+      SubmitButtonComponent],
+    imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule],
+  });
 
   beforeEach(() => {
     mockFixture = TestBed.createComponent(MockComponent);

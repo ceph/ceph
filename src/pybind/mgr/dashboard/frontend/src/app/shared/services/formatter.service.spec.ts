@@ -1,7 +1,6 @@
-import { TestBed } from '@angular/core/testing';
-
 import { DimlessBinaryPipe } from '../pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../pipes/dimless.pipe';
+import { configureTestBed } from '../unit-test-helper';
 import { FormatterService } from './formatter.service';
 
 describe('FormatterService', () => {
@@ -13,10 +12,11 @@ describe('FormatterService', () => {
     expect(dimlessBinaryPipe.transform(service.toBytes(value))).toBe(newValue || value);
   };
 
+  configureTestBed({
+    providers: [FormatterService, DimlessBinaryPipe]
+  });
+
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [FormatterService, DimlessBinaryPipe]
-    });
     service = new FormatterService();
     dimlessBinaryPipe = new DimlessBinaryPipe(service);
     dimlessPipe = new DimlessPipe(service);

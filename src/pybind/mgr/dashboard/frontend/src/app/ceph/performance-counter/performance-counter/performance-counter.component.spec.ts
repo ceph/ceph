@@ -1,7 +1,8 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 
 import {
   TablePerformanceCounterService
@@ -26,14 +27,10 @@ describe('PerformanceCounterComponent', () => {
     }
   };
 
-  beforeEach(
-    async(() => {
-      TestBed.configureTestingModule({
-        imports: [PerformanceCounterModule, BsDropdownModule.forRoot(), RouterTestingModule],
-        providers: [{ provide: TablePerformanceCounterService, useValue: fakeService }]
-      }).compileComponents();
-    })
-  );
+  configureTestBed({
+    imports: [PerformanceCounterModule, BsDropdownModule.forRoot(), RouterTestingModule],
+    providers: [{ provide: TablePerformanceCounterService, useValue: fakeService }]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(PerformanceCounterComponent);
