@@ -7894,7 +7894,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                bool copy_if_newer,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
-               uint64_t olh_epoch,
+               boost::optional<uint64_t> olh_epoch,
 	       real_time delete_at,
                string *version_id,
                string *ptag,
@@ -7918,7 +7918,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (version_id && *version_id != "null") {
     processor.set_version_id(*version_id);
   }
-  processor.set_olh_epoch(olh_epoch);
+  if (olh_epoch) {
+    processor.set_olh_epoch(*olh_epoch);
+  }
   int ret = processor.prepare(this, NULL);
   if (ret < 0) {
     return ret;
