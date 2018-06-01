@@ -1,20 +1,18 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AlertModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../unit-test-helper';
 import { InfoPanelComponent } from './info-panel.component';
 
 describe('InfoPanelComponent', () => {
   let component: InfoPanelComponent;
   let fixture: ComponentFixture<InfoPanelComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ InfoPanelComponent ],
-      imports: [ AlertModule.forRoot() ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [InfoPanelComponent],
+    imports: [AlertModule.forRoot()]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(InfoPanelComponent);

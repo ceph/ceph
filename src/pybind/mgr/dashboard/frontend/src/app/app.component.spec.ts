@@ -1,11 +1,12 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 
 import { AppComponent } from './app.component';
 import { AuthStorageService } from './shared/services/auth-storage.service';
+import { configureTestBed } from './shared/unit-test-helper';
 
 describe('AppComponent', () => {
   let component: AppComponent;
@@ -17,14 +18,12 @@ describe('AppComponent', () => {
     }
   };
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [RouterTestingModule, ToastModule.forRoot()],
-      declarations: [AppComponent],
-      schemas: [NO_ERRORS_SCHEMA],
-      providers: [{ provide: AuthStorageService, useValue: fakeService }]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [RouterTestingModule, ToastModule.forRoot()],
+    declarations: [AppComponent],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [{ provide: AuthStorageService, useValue: fakeService }]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(AppComponent);

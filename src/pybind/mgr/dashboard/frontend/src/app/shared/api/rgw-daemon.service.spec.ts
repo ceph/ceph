@@ -1,15 +1,14 @@
 import { HttpClientModule } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { inject, TestBed } from '@angular/core/testing';
+import { inject } from '@angular/core/testing';
 
+import { configureTestBed } from '../unit-test-helper';
 import { RgwDaemonService } from './rgw-daemon.service';
 
 describe('RgwDaemonService', () => {
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [RgwDaemonService],
-      imports: [HttpClientTestingModule, HttpClientModule]
-    });
+  configureTestBed({
+    providers: [RgwDaemonService],
+    imports: [HttpClientTestingModule, HttpClientModule]
   });
 
   it(

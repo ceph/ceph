@@ -1,10 +1,11 @@
 import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@angular/core';
-import { async, ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
+import { configureTestBed } from '../../unit-test-helper';
 import { DeletionModalComponent } from './deletion-modal.component';
 
 @NgModule({
@@ -96,13 +97,11 @@ describe('DeletionModalComponent', () => {
   let mockFixture: ComponentFixture<MockComponent>;
   let fixture: ComponentFixture<DeletionModalComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [MockComponent, DeletionModalComponent],
-      schemas: [NO_ERRORS_SCHEMA],
-      imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [MockComponent, DeletionModalComponent],
+    schemas: [NO_ERRORS_SCHEMA],
+    imports: [ModalModule.forRoot(), ReactiveFormsModule, MockModule]
+  });
 
   beforeEach(() => {
     mockFixture = TestBed.createComponent(MockComponent);

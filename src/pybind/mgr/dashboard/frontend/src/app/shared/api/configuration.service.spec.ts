@@ -1,15 +1,14 @@
 import { HttpClientModule } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { inject, TestBed } from '@angular/core/testing';
+import { inject } from '@angular/core/testing';
 
+import { configureTestBed } from '../unit-test-helper';
 import { ConfigurationService } from './configuration.service';
 
 describe('ConfigurationService', () => {
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [ConfigurationService],
-      imports: [HttpClientTestingModule, HttpClientModule]
-    });
+  configureTestBed({
+    providers: [ConfigurationService],
+    imports: [HttpClientTestingModule, HttpClientModule]
   });
 
   it(

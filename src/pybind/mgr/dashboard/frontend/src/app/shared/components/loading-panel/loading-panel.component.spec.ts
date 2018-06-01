@@ -1,20 +1,18 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AlertModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../unit-test-helper';
 import { LoadingPanelComponent } from './loading-panel.component';
 
 describe('LoadingPanelComponent', () => {
   let component: LoadingPanelComponent;
   let fixture: ComponentFixture<LoadingPanelComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ LoadingPanelComponent ],
-      imports: [ AlertModule.forRoot() ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [LoadingPanelComponent],
+    imports: [AlertModule.forRoot()]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(LoadingPanelComponent);
