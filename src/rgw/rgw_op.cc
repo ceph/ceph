@@ -5622,6 +5622,7 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.modify_tail = true;
   obj_op.meta.completeMultipart = true;
+  obj_op.meta.olh_epoch = olh_epoch;
   op_ret = obj_op.write_meta(ofs, accounted_size, attrs);
   if (op_ret < 0)
     return;
