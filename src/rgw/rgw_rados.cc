@@ -7109,7 +7109,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   return 0;
 set_err_state:
   if (copy_if_newer && ret == -ERR_NOT_MODIFIED) {
-    ret = 0;
+    // we may have already fetched during sync of OP_ADD, but were waiting
+    // for OP_LINK_OLH to call set_olh() with a real olh_epoch
+    if (olh_epoch && *olh_epoch > 0) {
+      constexpr bool log_data_change = true;
+      ret = set_olh(obj_ctx, dest_bucket_info, dest_obj, false, nullptr,
+                    *olh_epoch, real_time(), false, log_data_change);
+    } else {
+      // we already have the latest copy
+      ret = 0;
+    }
   }
   if (opstate) {
     RGWOpState::OpState state;
@@ -10047,7 +10056,8 @@ int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instanc
                                     const string& op_tag,
                                     struct rgw_bucket_dir_entry_meta *meta,
                                     uint64_t olh_epoch,
-                                    real_time unmod_since, bool high_precision_time)
+                                    real_time unmod_since, bool high_precision_time,
+                                    bool log_data_change)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -10069,6 +10079,10 @@ int RGWRados::bucket_index_link_olh(RGWObjState& olh_state, rgw_obj& obj_instanc
                                 get_zone().log_data);
   if (ret < 0) {
     return ret;
+  }
+
+  if (log_data_change) {
+    data_log->add_entry(bs.bucket, bs.shard_id);
   }
 
   return 0;
@@ -10350,7 +10364,8 @@ int RGWRados::update_olh(RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInf
 }
 
 int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
-                      uint64_t olh_epoch, real_time unmod_since, bool high_precision_time)
+                      uint64_t olh_epoch, real_time unmod_since, bool high_precision_time,
+                      bool log_data_change)
 {
   string op_tag;
 
@@ -10381,7 +10396,7 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, rgw_obj
       }
       return ret;
     }
-    ret = bucket_index_link_olh(*state, target_obj, delete_marker, op_tag, meta, olh_epoch, unmod_since, high_precision_time);
+    ret = bucket_index_link_olh(*state, target_obj, delete_marker, op_tag, meta, olh_epoch, unmod_since, high_precision_time, log_data_change);
     if (ret < 0) {
       ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
       if (ret == -ECANCELED) {
