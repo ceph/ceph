@@ -4,6 +4,7 @@
 #include "common/config.h"
 
 class CephContext;
+class entity_addrvec_t;
 
 
 #define CEPH_PICK_ADDRESS_PUBLIC      0x01
@@ -35,6 +36,10 @@ class CephContext;
   This function will exit on error.
  */
 void pick_addresses(CephContext *cct, int needs);
+
+int pick_addresses(CephContext *cct, unsigned flags, entity_addrvec_t *addrs);
+int pick_addresses(CephContext *cct, unsigned flags, struct ifaddrs *ifa,
+		   entity_addrvec_t *addrs);
 
 /**
  * Find a network interface whose address matches the address/netmask
