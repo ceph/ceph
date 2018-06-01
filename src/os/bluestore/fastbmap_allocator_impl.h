@@ -132,84 +132,8 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     return CHILD_PER_SLOT;
   }
 
-  uint64_t _get_longest_from_l0(uint64_t pos0, uint64_t pos1,
-    uint64_t* pos0_res) const
-  {
-    uint64_t res = 0;
-    if (pos0 >= pos1) {
-      return res;
-    }
-
-    uint64_t res_candidate = 0;
-
-    auto pos = pos0;
-    uint64_t pos_free_start = 0;
-    bool was_free = false;
-    auto d = slotset_width * 8;
-    slot_t bits = l0[pos / d];
-    bits >>= pos % d;
-    bool end_loop = false;
-    do {
-      if ((pos % d) == 0) {
-        bits = l0[pos / d];
-        if (pos1 - pos >= d) {
-          if (bits == all_slot_set) {
-            // slot is totally free
-            if (was_free) {
-              res_candidate += d;
-            } else {
-              was_free = true;
-              res_candidate = d;
-              pos_free_start = pos;
-            }
-            pos += d;
-            end_loop = pos >= pos1;
-            if (end_loop && res < res_candidate) {
-              *pos0_res = pos_free_start;
-              res = res_candidate;
-              res_candidate = 0;
-            }
-            continue;
-          }
-          if (bits == all_slot_clear) {
-            // slot is totally allocated
-            if (was_free) {
-              if (res < res_candidate) {
-                *pos0_res = pos_free_start;
-                res = res_candidate;
-                res_candidate = 0;
-              }
-              was_free = false;
-            }
-            pos += d;
-            end_loop = pos >= pos1;
-            continue;
-          }
-        }
-      } //if ((pos % d) == 0)
-
-      if ((bits & 1) == 1) {
-        // item is free
-        ++res_candidate;
-        if (!was_free) {
-          pos_free_start = pos;
-          was_free = true;
-        }
-      }
-      end_loop = ++pos >= pos1;
-      if (was_free && (end_loop || !(bits & 1))) {
-        if (res < res_candidate) {
-          *pos0_res = pos_free_start;
-          res = res_candidate;
-        }
-        res_candidate = 0;
-        was_free = false;
-      }
-      bits >>= 1;
-    } while (!end_loop);
-    res *= l0_granularity;
-    return res;
-  }
+  interval_t _get_longest_from_l0(uint64_t pos0, uint64_t pos1,
+    uint64_t min_length, interval_t* tail) const;
 
   inline void _fragment_and_emplace(uint64_t max_length, uint64_t offset,
     uint64_t len,
@@ -359,9 +283,9 @@ protected:
     uint64_t free_l1_pos = 0;
 
     uint64_t min_affordable_len = 0;
-    uint64_t min_affordable_l0_pos_start = 0;
+    uint64_t min_affordable_offs = 0;
     uint64_t affordable_len = 0;
-    uint64_t affordable_l0_pos_start = 0;
+    uint64_t affordable_offs = 0;
 
     bool fully_processed = false;
 
@@ -676,7 +600,7 @@ protected:
     uint64_t prev_allocated = *allocated;
     uint64_t d = CHILD_PER_SLOT;
     assert(ISP2(min_length));
-    assert(min_length <= l1._level_granularity());
+    assert(min_length <= l2_granularity);
     assert(max_length == 0 || max_length >= min_length);
     assert(max_length == 0 || (max_length % min_length) == 0);
     assert(length >= min_length);
