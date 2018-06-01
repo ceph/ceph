@@ -741,7 +741,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
 
   real_time src_mtime;
 
@@ -755,7 +755,7 @@ public:
                          const string& _source_zone,
                          RGWBucketInfo& _bucket_info,
                          const rgw_obj_key& _key,
-                         uint64_t _versioned_epoch,
+                         std::optional<uint64_t> _versioned_epoch,
                          bool _if_newer, rgw_zone_set *_zones_trace) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
@@ -773,7 +773,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
   RGWBucketInfo bucket_info;
 
   rgw_obj_key key;
-  uint64_t versioned_epoch;
+  std::optional<uint64_t> versioned_epoch;
 
   real_time src_mtime;
 
@@ -787,7 +787,7 @@ public:
                       const string& _source_zone,
                       RGWBucketInfo& _bucket_info,
                       const rgw_obj_key& _key,
-                      uint64_t _versioned_epoch,
+                      std::optional<uint64_t> _versioned_epoch,
                       bool _if_newer, rgw_zone_set *_zones_trace) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
