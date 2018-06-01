@@ -1756,6 +1756,10 @@ std::vector<Option> get_global_options() {
     .set_default(500)
     .set_description(""),
 
+    Option("paxos_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1000)
+    .set_description(""),
+
     Option("paxos_trim_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(250)
     .set_description(""),
