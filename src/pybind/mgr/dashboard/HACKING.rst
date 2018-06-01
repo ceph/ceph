@@ -1,73 +1,77 @@
-Dashboard Developer Documentation
-====================================
+    Dashboard Developer Documentation
+    ====================================
 
-Frontend Development
---------------------
+    Frontend Development
+    --------------------
 
-Before you can start the dashboard from within a development environment,  you
-will need to generate the frontend code and either use a compiled and running
-Ceph cluster (e.g. started by ``vstart.sh``) or the standalone development web
-server.
+    Before you can start the dashboard from within a development environment,  you
+    will need to generate the frontend code and either use a compiled and running
+    Ceph cluster (e.g. started by ``vstart.sh``) or the standalone development web
+    server.
 
-The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
-`Node Package Manager <https://www.npmjs.com/>`_ ``npm`` to be installed.
+    The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
+    `Node Package Manager <https://www.npmjs.com/>`_ ``npm`` to be installed.
 
-Prerequisites
-~~~~~~~~~~~~~
+    Prerequisites
+    ~~~~~~~~~~~~~
 
- * Node 6.9.0 or higher
- * NPM 3 or higher
+     * Node 6.9.0 or higher
+     * NPM 3 or higher
 
-nodeenv:
-  During Ceph's build we create a virtualenv with ``node`` and ``npm``
-  installed, which can be used as an alternative to installing node/npm in your
-  system.
+    nodeenv:
+      During Ceph's build we create a virtualenv with ``node`` and ``npm``
+      installed, which can be used as an alternative to installing node/npm in your
+      system.
 
-  If you want to use the node installed in the virtualenv you just need to
-  activate the virtualenv before you run any npm commands. To activate it run
-  ``. build/src/pybind/mgr/dashboard/node-env/bin/activate``.
+      If you want to use the node installed in the virtualenv you just need to
+      activate the virtualenv before you run any npm commands. To activate it run
+      ``. build/src/pybind/mgr/dashboard/node-env/bin/activate``.
 
-  Once you finish, you can simply run ``deactivate`` and exit the virtualenv.
+      Once you finish, you can simply run ``deactivate`` and exit the virtualenv.
 
-Angular CLI:
-  If you do not have the `Angular CLI <https://github.com/angular/angular-cli>`_
-  installed globally, then you need to execute ``ng`` commands with an
-  additional ``npm run`` before it.
+    Angular CLI:
+      If you do not have the `Angular CLI <https://github.com/angular/angular-cli>`_
+      installed globally, then you need to execute ``ng`` commands with an
+      additional ``npm run`` before it.
 
-Package installation
-~~~~~~~~~~~~~~~~~~~~
+    Package installation
+    ~~~~~~~~~~~~~~~~~~~~
 
-Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
-install the required packages locally.
+    Run ``npm install`` in directory ``src/pybind/mgr/dashboard/frontend`` to
+    install the required packages locally.
 
-Setting up a Development Server
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Setting up a Development Server
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Create the ``proxy.conf.json`` file based on ``proxy.conf.json.sample``.
+    Create the ``proxy.conf.json`` file based on ``proxy.conf.json.sample``.
 
-Run ``npm start`` for a dev server.
-Navigate to ``http://localhost:4200/``. The app will automatically
-reload if you change any of the source files.
+    Run ``npm start`` for a dev server.
+    Navigate to ``http://localhost:4200/``. The app will automatically
+    reload if you change any of the source files.
 
-Code Scaffolding
-~~~~~~~~~~~~~~~~
+    Code Scaffolding
+    ~~~~~~~~~~~~~~~~
 
-Run ``ng generate component component-name`` to generate a new
-component. You can also use
-``ng generate directive|pipe|service|class|guard|interface|enum|module``.
+    Run ``ng generate component component-name`` to generate a new
+    component. You can also use
+    ``ng generate directive|pipe|service|class|guard|interface|enum|module``.
 
-Build the Project
-~~~~~~~~~~~~~~~~~
+    Build the Project
+    ~~~~~~~~~~~~~~~~~
 
-Run ``npm run build`` to build the project. The build artifacts will be
-stored in the ``dist/`` directory. Use the ``-prod`` flag for a
-production build. Navigate to ``https://localhost:8443``.
+    Run ``npm run build`` to build the project. The build artifacts will be
+    stored in the ``dist/`` directory. Use the ``-prod`` flag for a
+    production build. Navigate to ``https://localhost:8443``.
 
-Running Unit Tests
-~~~~~~~~~~~~~~~~~~
+    Running Unit Tests
+    ~~~~~~~~~~~~~~~~~~
 
-Run ``npm run test`` to execute the unit tests via `Karma
-<https://karma-runner.github.io>`_.
+    Create ``unit-test-configuration.ts`` file based on
+    ``unit-test-configuration.ts.sample`` in directory
+    ``src/pybind/mgr/dashboard/frontend/src``.
+
+    Run ``npm run test`` to execute the unit tests via `Jest
+    <https://facebook.github.io/jest/>`_.
 
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
