@@ -301,8 +301,18 @@ set with::
 SPDK Usage
 ==================
 
-If you want to use SPDK driver for NVME SSD, you need to specify NVMe serial
-number here with "spdk:" prefix for ``bluestore_block_path``.
+If you want to use SPDK driver for NVME SSD, you need to ready your system.
+Please refer to `SPDK document`__ for more detailes.
+
+.. __: http://www.spdk.io/doc/getting_started.html#getting_started_examples
+
+SPDK offers a script to configure the device automatically. Users can run the
+script as root::
+
+  $ sudo src/spdk/scripts/setup.sh
+
+Then you need to specify NVMe serial number here with "spdk:" prefix for
+``bluestore_block_path``.
 
 For example, users can find the serial number with::
 
