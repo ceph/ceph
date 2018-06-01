@@ -23,8 +23,8 @@ object store and file system designed to provide excellent performance,
 reliability and scalability). If not, please refer to the `project website`_
 and especially the `publications list`_.
 
-.. _`project website`: http://ceph.com
-.. _`publications list`: https://ceph.com/resources/publications/
+.. _`project website`: https://ceph.com
+.. _`publications list`: https://ceph.com/publications/
 
 Since this document is to be consumed by developers, who are assumed to
 have Internet access, topics covered elsewhere, either within the Ceph
@@ -93,7 +93,7 @@ the `Ceph "organization"`_.
 To make a meaningful contribution to the project as a developer, a working
 knowledge of git_ is essential.
 
-.. _git: https://git-scm.com/documentation
+.. _git: https://git-scm.com/doc
 
 Although the `Ceph "organization"`_ includes several software repositories,
 this document covers only one: https://github.com/ceph/ceph.
