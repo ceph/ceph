@@ -3,5 +3,10 @@
     "target": "https://localhost:8080",
     "secure": false,
     "logLevel": "debug"
+  },
+  "/ui-api/": {
+    "target": "https://localhost:8080",
+    "secure": false,
+    "logLevel": "debug"
   }
 }
