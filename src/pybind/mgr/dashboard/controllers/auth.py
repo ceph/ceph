@@ -27,13 +27,17 @@ class Auth(RESTController):
 
     def create(self, username, password, stay_signed_in=False):
         now = time.time()
-        if AuthManager.authenticate(username, password):
+        user_perms = AuthManager.authenticate(username, password)
+        if user_perms is not None:
             cherrypy.session.regenerate()
             cherrypy.session[Session.USERNAME] = username
             cherrypy.session[Session.TS] = now
             cherrypy.session[Session.EXPIRE_AT_BROWSER_CLOSE] = not stay_signed_in
             logger.debug('Login successful')
-            return {'username': username}
+            return {
+                'username': username,
+                'permissions': user_perms
+            }
 
         logger.debug('Login failed')
         raise DashboardException(msg='Invalid credentials',
