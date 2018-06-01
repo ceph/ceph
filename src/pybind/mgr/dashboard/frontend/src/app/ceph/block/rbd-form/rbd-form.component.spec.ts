@@ -1,5 +1,5 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
@@ -12,6 +12,7 @@ import { FormatterService } from '../../../shared/services/formatter.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskManagerMessageService } from '../../../shared/services/task-manager-message.service';
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RbdFormComponent } from './rbd-form.component';
 
 describe('RbdFormComponent', () => {
@@ -30,22 +31,20 @@ describe('RbdFormComponent', () => {
     }
   };
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [ReactiveFormsModule, RouterTestingModule],
-      declarations: [RbdFormComponent],
-      schemas: [NO_ERRORS_SCHEMA],
-      providers: [
-        DimlessBinaryPipe,
-        FormatterService,
-        TaskManagerMessageService,
-        { provide: NotificationService, useValue: fakeService },
-        { provide: PoolService, useValue: fakeService },
-        { provide: RbdService, useValue: fakeService },
-        { provide: TaskManagerService, useValue: fakeService }
-      ]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [ReactiveFormsModule, RouterTestingModule],
+    declarations: [RbdFormComponent],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      DimlessBinaryPipe,
+      FormatterService,
+      TaskManagerMessageService,
+      { provide: NotificationService, useValue: fakeService },
+      { provide: PoolService, useValue: fakeService },
+      { provide: RbdService, useValue: fakeService },
+      { provide: TaskManagerService, useValue: fakeService }
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdFormComponent);

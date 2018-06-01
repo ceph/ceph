@@ -1,10 +1,11 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
 import { ComponentsModule } from '../../components/components.module';
+import { configureTestBed } from '../../unit-test-helper';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -28,12 +29,10 @@ describe('TableComponent', () => {
     component.localStorage.clear();
   };
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [TableComponent],
-      imports: [NgxDatatableModule, FormsModule, ComponentsModule, RouterTestingModule]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [TableComponent],
+    imports: [NgxDatatableModule, FormsModule, ComponentsModule, RouterTestingModule]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(TableComponent);

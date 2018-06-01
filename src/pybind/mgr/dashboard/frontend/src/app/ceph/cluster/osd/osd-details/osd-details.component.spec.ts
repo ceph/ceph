@@ -1,37 +1,30 @@
 import { HttpClientModule } from '@angular/common/http';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap';
 
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../../shared/shared.module';
+import { configureTestBed } from '../../../../shared/unit-test-helper';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
-import {
-  OsdPerformanceHistogramComponent
-} from '../osd-performance-histogram/osd-performance-histogram.component';
+import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
 import { OsdDetailsComponent } from './osd-details.component';
 
 describe('OsdDetailsComponent', () => {
   let component: OsdDetailsComponent;
   let fixture: ComponentFixture<OsdDetailsComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        HttpClientModule,
-        TabsModule.forRoot(),
-        PerformanceCounterModule,
-        DataTableModule,
-        SharedModule
-      ],
-      declarations: [
-        OsdDetailsComponent,
-        OsdPerformanceHistogramComponent
-      ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    imports: [
+      HttpClientModule,
+      TabsModule.forRoot(),
+      PerformanceCounterModule,
+      DataTableModule,
+      SharedModule
+    ],
+    declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdDetailsComponent);

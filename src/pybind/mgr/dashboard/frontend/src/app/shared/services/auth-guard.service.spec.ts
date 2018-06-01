@@ -3,14 +3,15 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { configureTestBed } from '../unit-test-helper';
 import { AuthGuardService } from './auth-guard.service';
 import { AuthStorageService } from './auth-storage.service';
 
 describe('AuthGuardService', () => {
   let service: AuthGuardService;
 
-  @Component({selector: 'cd-login', template: ''})
-  class LoginComponent { }
+  @Component({ selector: 'cd-login', template: '' })
+  class LoginComponent {}
 
   const routes: Routes = [{ path: 'login', component: LoginComponent }];
 
@@ -18,13 +19,13 @@ describe('AuthGuardService', () => {
     isLoggedIn: () => true
   };
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [RouterTestingModule.withRoutes(routes)],
-      providers: [AuthGuardService, { provide: AuthStorageService, useValue: fakeService }],
-      declarations: [LoginComponent]
-    });
+  configureTestBed({
+    imports: [RouterTestingModule.withRoutes(routes)],
+    providers: [AuthGuardService, { provide: AuthStorageService, useValue: fakeService }],
+    declarations: [LoginComponent]
+  });
 
+  beforeEach(() => {
     service = TestBed.get(AuthGuardService);
   });
 

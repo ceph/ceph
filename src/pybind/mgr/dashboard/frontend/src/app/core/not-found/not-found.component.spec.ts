@@ -1,17 +1,15 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { configureTestBed } from '../../shared/unit-test-helper';
 import { NotFoundComponent } from './not-found.component';
 
 describe('NotFoundComponent', () => {
   let component: NotFoundComponent;
   let fixture: ComponentFixture<NotFoundComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ NotFoundComponent ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [NotFoundComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NotFoundComponent);

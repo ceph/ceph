@@ -1,10 +1,11 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalService } from 'ngx-bootstrap';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RgwUserListComponent } from './rgw-user-list.component';
 
 describe('RgwUserListComponent', () => {
@@ -13,17 +14,15 @@ describe('RgwUserListComponent', () => {
 
   const fakeService = {};
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [RgwUserListComponent],
-      imports: [RouterTestingModule],
-      providers: [
-        { provide: RgwUserService, useValue: fakeService },
-        { provide: BsModalService, useValue: fakeService }
-      ],
-      schemas: [NO_ERRORS_SCHEMA]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [RgwUserListComponent],
+    imports: [RouterTestingModule],
+    providers: [
+      { provide: RgwUserService, useValue: fakeService },
+      { provide: BsModalService, useValue: fakeService }
+    ],
+    schemas: [NO_ERRORS_SCHEMA]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserListComponent);

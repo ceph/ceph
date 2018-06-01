@@ -1,5 +1,5 @@
 import { Component, Input } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
@@ -8,6 +8,7 @@ import { Observable } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { CephfsDetailComponent } from './cephfs-detail.component';
 
 @Component({ selector: 'cd-cephfs-chart', template: '' })
@@ -37,20 +38,18 @@ describe('CephfsDetailComponent', () => {
     }
   };
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ChartsModule,
-        RouterTestingModule,
-        BsDropdownModule.forRoot(),
-        ProgressbarModule.forRoot(),
-        TabsModule.forRoot()
-      ],
-      declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent],
-      providers: [{ provide: CephfsService, useValue: fakeFilesystemService }]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ChartsModule,
+      RouterTestingModule,
+      BsDropdownModule.forRoot(),
+      ProgressbarModule.forRoot(),
+      TabsModule.forRoot()
+    ],
+    declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent],
+    providers: [{ provide: CephfsService, useValue: fakeFilesystemService }]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(CephfsDetailComponent);

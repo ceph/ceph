@@ -5,6 +5,7 @@ import { ToastsManager } from 'ng2-toastr';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { FinishedTask } from '../models/finished-task';
+import { configureTestBed } from '../unit-test-helper';
 import { NotificationService } from './notification.service';
 import { TaskManagerMessageService } from './task-manager-message.service';
 
@@ -21,15 +22,15 @@ describe('NotificationService', () => {
     getSuccessMessage: () => true
   };
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [
-        NotificationService,
-        { provide: TaskManagerMessageService, useValue: fakeService },
-        { provide: ToastsManager, useValue: fakeService }
-      ]
-    });
+  configureTestBed({
+    providers: [
+      NotificationService,
+      { provide: TaskManagerMessageService, useValue: fakeService },
+      { provide: ToastsManager, useValue: fakeService }
+    ]
+  });
 
+  beforeEach(() => {
     notificationService = TestBed.get(NotificationService);
     notificationService.removeAll();
   });

@@ -1,26 +1,20 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { PopoverModule } from 'ngx-bootstrap';
 
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { TaskManagerComponent } from './task-manager.component';
 
 describe('TaskManagerComponent', () => {
   let component: TaskManagerComponent;
   let fixture: ComponentFixture<TaskManagerComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        PopoverModule.forRoot(),
-        HttpClientTestingModule
-      ],
-      declarations: [ TaskManagerComponent ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    imports: [SharedModule, PopoverModule.forRoot(), HttpClientTestingModule],
+    declarations: [TaskManagerComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(TaskManagerComponent);
