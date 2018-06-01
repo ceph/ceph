@@ -621,6 +621,21 @@ struct entity_addrvec_t {
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
 
+namespace std {
+  template<> struct hash< entity_addrvec_t >
+  {
+    size_t operator()( const entity_addrvec_t& x ) const
+    {
+      static blobhash H;
+      size_t r = 0;
+      for (auto& i : x.v) {
+	r += H((const char*)&i, sizeof(i));
+      }
+      return r;
+    }
+  };
+} // namespace std
+
 /*
  * a particular entity instance
  */
