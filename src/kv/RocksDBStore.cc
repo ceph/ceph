@@ -1172,7 +1172,11 @@ void RocksDBStore::compact_thread_entry()
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
       compact_queue_lock.Unlock();
       logger->inc(l_rocksdb_compact_range);
-      compact_range(range.first, range.second);
+      if (range.first.empty() && range.second.empty()) {
+        compact();
+      } else {
+        compact_range(range.first, range.second);
+      }
       compact_queue_lock.Lock();
       continue;
     }
