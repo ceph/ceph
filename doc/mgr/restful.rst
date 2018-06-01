@@ -40,15 +40,15 @@ can be generated with a command similar to::
 The ``restful.crt`` should then be signed by your organization's CA
 (certificate authority).  Once that is done, you can set it with::
 
-  ceph config set mgr mgr/restful/$name/crt -i restful.crt
-  ceph config set mgr mgr/restful/$name/key -i restful.key
+  ceph config-key set mgr/restful/$name/crt -i restful.crt
+  ceph config-key set mgr/restful/$name/key -i restful.key
 
 where ``$name`` is the name of the ``ceph-mgr`` instance (usually the
 hostname). If all manager instances are to share the same certificate,
 you can leave off the ``$name`` portion::
 
-  ceph config set mgr mgr/restful/crt -i restful.crt
-  ceph config set mgr mgr/restful/key -i restful.key
+  ceph config-key set mgr/restful/crt -i restful.crt
+  ceph config-key set mgr/restful/key -i restful.key
 
 
 Configuring IP and port
