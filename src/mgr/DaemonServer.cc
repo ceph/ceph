@@ -34,6 +34,7 @@
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
+#include "common/pick_address.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -120,10 +121,15 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
 			      mon_byte_throttler.get(),
 			      mon_msg_throttler.get());
 
-  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
-  int r = msgr->bind(paddr);
+  entity_addrvec_t addrs;
+  int r = pick_addresses(cct, CEPH_PICK_ADDRESS_PUBLIC, &addrs);
   if (r < 0) {
-    derr << "unable to bind mgr to " << paddr << dendl;
+    return r;
+  }
+  dout(20) << __func__ << " will bind to " << addrs << dendl;
+  r = msgr->bindv(addrs);
+  if (r < 0) {
+    derr << "unable to bind mgr to " << addrs << dendl;
     return r;
   }
 
