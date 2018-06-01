@@ -272,12 +272,33 @@ int pick_addresses(
   unsigned msgrv = flags & (CEPH_PICK_ADDRESS_MSGR1 |
 			    CEPH_PICK_ADDRESS_MSGR2);
   if (msgrv == 0) {
-    return -EINVAL;
+    if (cct->_conf->get_val<bool>("ms_bind_msgr1")) {
+      msgrv |= CEPH_PICK_ADDRESS_MSGR1;
+    }
+    if (cct->_conf->get_val<bool>("ms_bind_msgr2")) {
+      msgrv |= CEPH_PICK_ADDRESS_MSGR2;
+    }
+    if (msgrv == 0) {
+      return -EINVAL;
+    }
   }
   unsigned ipv = flags & (CEPH_PICK_ADDRESS_IPV4 |
 			  CEPH_PICK_ADDRESS_IPV6);
   if (ipv == 0) {
-    return -EINVAL;
+    if (cct->_conf->get_val<bool>("ms_bind_ipv4")) {
+      ipv |= CEPH_PICK_ADDRESS_IPV4;
+    }
+    if (cct->_conf->get_val<bool>("ms_bind_ipv6")) {
+      ipv |= CEPH_PICK_ADDRESS_IPV6;
+    }
+    if (ipv == 0) {
+      return -EINVAL;
+    }
+    if (cct->_conf->get_val<bool>("ms_bind_prefer_ipv4")) {
+      flags |= CEPH_PICK_ADDRESS_PREFER_IPV4;
+    } else {
+      flags &= ~CEPH_PICK_ADDRESS_PREFER_IPV4;
+    }
   }
 
   entity_addr_t addr;
