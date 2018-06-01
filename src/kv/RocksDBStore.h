@@ -120,6 +120,10 @@ public:
   bool enable_rmrange;
   void compact() override;
 
+  void compact_async() override {
+    compact_range_async(string(), string());
+  }
+
   int tryInterpret(const string& key, const string& val, rocksdb::Options &opt);
   int ParseOptionsFromString(const string& opt_str, rocksdb::Options &opt);
   static int _test_init(const string& dir);
