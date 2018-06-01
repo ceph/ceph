@@ -319,7 +319,7 @@ private:
 
   void _init_local_connection() {
     assert(lock.is_locked());
-    local_connection->peer_addr = my_addr;
+    local_connection->peer_addrs = entity_addrvec_t(my_addr);
     local_connection->peer_type = my_name.type();
     local_connection->set_features(CEPH_FEATURES_ALL);
     ms_deliver_handle_fast_connect(local_connection.get());
@@ -346,7 +346,7 @@ public:
 
   int accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
-    auto it = conns.find(conn->peer_addr);
+    auto it = conns.find(conn->peer_addrs.legacy_addr());
     if (it != conns.end()) {
       AsyncConnectionRef existing = it->second;
 
@@ -360,7 +360,7 @@ public:
         return -1;
       }
     }
-    conns[conn->peer_addr] = conn;
+    conns[conn->peer_addrs.legacy_addr()] = conn;
     conn->get_perf_counter()->inc(l_msgr_active_connections);
     accepting_conns.erase(conn);
     return 0;
