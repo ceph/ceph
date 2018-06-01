@@ -106,8 +106,8 @@ declarative language for drawing things, and includes:
 - `network diagrams`_: hosts, LANs, IP addresses etc (with `Cisco
   icons`_ if wanted)
 
-.. _Blockdiag: http://blockdiag.com/
-.. _`Cisco icons`: http://pypi.python.org/pypi/blockdiagcontrib-cisco/
+.. _Blockdiag: http://blockdiag.com/en/
+.. _`Cisco icons`: https://pypi.org/project/blockdiagcontrib-cisco/
 .. _`block diagrams`: http://blockdiag.com/en/blockdiag/
 .. _`sequence diagrams`: http://blockdiag.com/en/seqdiag/index.html
 .. _`activity diagrams`: http://blockdiag.com/en/actdiag/index.html
@@ -118,7 +118,7 @@ Inkscape
 --------
 
 You can use Inkscape to generate scalable vector graphics.
-http://inkscape.org for restructedText documents.
+https://inkscape.org/en/ for restructedText documents.
 
 If you generate diagrams with Inkscape, you should
 commit both the Scalable Vector Graphics (SVG) file and export a

@@ -16,7 +16,7 @@ in realtime. The LTTng traces can then be visualized with Twitter's
 Zipkin_.
 
 .. _Dapper: http://static.googleusercontent.com/media/research.google.com/el//pubs/archive/36356.pdf
-.. _Zipkin: http://zipkin.io/
+.. _Zipkin: https://zipkin.io/
 
 
 Installing Blkin
