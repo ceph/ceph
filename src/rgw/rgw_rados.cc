@@ -7123,7 +7123,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     orig_size = state->accounted_size;
   }
 
-  bool versioned_target = (meta.olh_epoch > 0 || !obj.key.instance.empty());
+  bool versioned_target = (meta.olh_epoch && *meta.olh_epoch > 0) ||
+                          !obj.key.instance.empty();
 
   bool versioned_op = (target->versioning_enabled() || is_olh || versioned_target);
 
@@ -7170,8 +7171,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   target->invalidate_state();
   state = NULL;
 
-  if (versioned_op) {
-    r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, meta.olh_epoch, real_time(), false, meta.zones_trace);
+  if (versioned_op && meta.olh_epoch) {
+    r = store->set_olh(target->get_ctx(), target->get_bucket_info(), obj, false, NULL, *meta.olh_epoch, real_time(), false, meta.zones_trace);
     if (r < 0) {
       return r;
     }
