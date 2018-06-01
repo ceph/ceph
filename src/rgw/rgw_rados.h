@@ -3190,7 +3190,7 @@ public:
                        bool copy_if_newer,
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
-                       uint64_t olh_epoch,
+                       std::optional<uint64_t> olh_epoch,
 		       ceph::real_time delete_at,
                        string *version_id,
                        string *ptag,
