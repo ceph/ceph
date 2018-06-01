@@ -361,6 +361,7 @@ public:
    * we can be more specific about the failure.
    */
   virtual int bind(const entity_addr_t& bind_addr) = 0;
+
   /**
    * This function performs a full restart of the Messenger component,
    * whatever that means.  Other entities who connect to this
@@ -379,6 +380,9 @@ public:
    * @return 0 on success, or -1 on error, or -errno if
    */
   virtual int client_bind(const entity_addr_t& bind_addr) = 0;
+
+  virtual int bindv(const entity_addrvec_t& addrs);
+
   /**
    * @} // Configuration
    */
