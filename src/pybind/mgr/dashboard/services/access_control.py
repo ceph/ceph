@@ -177,6 +177,18 @@ class User(object):
                 return True
         return False
 
+    def permissions_dict(self):
+        perms = {}
+        for role in self.roles:
+            for scope, perms_list in role.scopes_permissions.items():
+                if scope in perms:
+                    perms_tmp = set(perms[scope]).union(set(perms_list))
+                    perms[scope] = list(perms_tmp)
+                else:
+                    perms[scope] = perms_list
+
+        return perms
+
     def to_dict(self):
         return {
             'username': self.username,
@@ -654,10 +666,11 @@ class LocalAuthenticator(object):
         try:
             user = ACCESS_CTRL_DB.get_user(username)
             pass_hash = password_hash(password, user.password)
-            return pass_hash == user.password
+            if pass_hash == user.password:
+                return user.permissions_dict()
         except UserDoesNotExist:
             logger.debug("User '%s' does not exist", username)
-            return False
+        return None
 
     def authorize(self, username, scope, permissions):
         user = ACCESS_CTRL_DB.get_user(username)
