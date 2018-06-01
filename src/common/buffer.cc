@@ -1080,6 +1080,16 @@ public:
     return _len + _off;
   }
 
+  unsigned buffer::ptr::append_zeros(unsigned l)
+  {
+    assert(_raw);
+    assert(l <= unused_tail_length());
+    char* c = _raw->data + _off + _len;
+    memset(c, 0, l);
+    _len += l;
+    return _len + _off;
+  }
+
   void buffer::ptr::copy_in(unsigned o, unsigned l, const char *src)
   {
     copy_in(o, l, src, true);
@@ -1815,7 +1825,7 @@ public:
   void buffer::list::reserve(size_t prealloc)
   {
     if (append_buffer.unused_tail_length() < prealloc) {
-      append_buffer = buffer::create_in_mempool(prealloc, get_mempool());
+      append_buffer = buffer::create_page_aligned(prealloc);
       append_buffer.set_length(0);   // unused, so far.
     }
   }
@@ -1994,9 +2004,17 @@ public:
   
   void buffer::list::append_zero(unsigned len)
   {
-    ptr bp(len);
-    bp.zero(false);
-    append(std::move(bp));
+    unsigned need = std::min(append_buffer.unused_tail_length(), len);
+    if (need) {
+      append_buffer.append_zeros(need);
+      append(append_buffer, append_buffer.length() - need, need);
+      len -= need;
+    }
+    if (len) {
+      ptr bp = buffer::create_page_aligned(len);
+      bp.zero(false);
+      append(std::move(bp));
+    }
   }
 
   
