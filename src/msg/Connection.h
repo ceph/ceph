@@ -43,7 +43,7 @@ struct Connection : public RefCountedObject {
   Messenger *msgr;
   RefCountedPtr priv;
   int peer_type;
-  entity_addr_t peer_addr;
+  entity_addrvec_t peer_addrs;
   utime_t last_keepalive, last_keepalive_ack;
 private:
   uint64_t features;
@@ -157,11 +157,16 @@ public:
   bool peer_is_osd() const { return peer_type == CEPH_ENTITY_TYPE_OSD; }
   bool peer_is_client() const { return peer_type == CEPH_ENTITY_TYPE_CLIENT; }
 
-  const entity_addr_t& get_peer_addr() const { return peer_addr; }
-  entity_addrvec_t get_peer_addrs() const {
-    return entity_addrvec_t(peer_addr);
+  entity_addr_t get_peer_addr() const {
+    return peer_addrs.front();
   }
-  void set_peer_addr(const entity_addr_t& a) { peer_addr = a; }
+  const entity_addrvec_t& get_peer_addrs() const {
+    return peer_addrs;
+  }
+  void set_peer_addr(const entity_addr_t& a) {
+    peer_addrs = entity_addrvec_t(a);
+  }
+  void set_peer_addrs(const entity_addrvec_t& av) { peer_addrs = av; }
 
   uint64_t get_features() const { return features; }
   bool has_feature(uint64_t f) const { return features & f; }

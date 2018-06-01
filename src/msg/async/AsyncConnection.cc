@@ -33,7 +33,8 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << async_msgr->get_myaddr() << " >> " << peer_addr << " conn(" << this
+  return *_dout << "-- " << async_msgr->get_myaddr() << " >> "
+		<< peer_addrs << " conn(" << this
                 << " :" << port
                 << " s=" << get_state_name(state)
                 << " pgs=" << peer_global_seq
@@ -954,15 +955,16 @@ ssize_t AsyncConnection::_process_connection()
         }
         ldout(async_msgr->cct, 20) << __func__ <<  " connect read peer addr "
                              << paddr << " on socket " << cs.fd() << dendl;
-        if (peer_addr != paddr) {
-          if (paddr.is_blank_ip() && peer_addr.get_port() == paddr.get_port() &&
-              peer_addr.get_nonce() == paddr.get_nonce()) {
+        if (peer_addrs.legacy_addr() != paddr) {
+          if (paddr.is_blank_ip() &&
+	      peer_addrs.legacy_addr().get_port() == paddr.get_port() &&
+              peer_addrs.legacy_addr().get_nonce() == paddr.get_nonce()) {
             ldout(async_msgr->cct, 0) << __func__ <<  " connect claims to be " << paddr
-                                << " not " << peer_addr
+                                << " not " << peer_addrs
                                 << " - presumably this is the same node!" << dendl;
           } else {
             ldout(async_msgr->cct, 10) << __func__ << " connect claims to be "
-				       << paddr << " not " << peer_addr << dendl;
+				       << paddr << " not " << peer_addrs << dendl;
 	    goto fail;
           }
         }
@@ -1508,7 +1510,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   ldout(async_msgr->cct, 10) << __func__ << " accept setting up session_security." << dendl;
 
   // existing?
-  AsyncConnectionRef existing = async_msgr->lookup_conn(peer_addr);
+  AsyncConnectionRef existing = async_msgr->lookup_conn(peer_addrs.legacy_addr());
 
   inject_delay();
 
@@ -1608,7 +1610,8 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
       }
 
       // connection race?
-      if (peer_addr < async_msgr->get_myaddr() || existing->policy.server) {
+      if (peer_addrs.legacy_addr() < async_msgr->get_myaddrs().legacy_addr() ||
+	  existing->policy.server) {
         // incoming wins
         ldout(async_msgr->cct, 10) << __func__ << " accept connection race, existing " << existing
                              << ".cseq " << existing->connect_seq << " == " << connect.connect_seq
@@ -1619,7 +1622,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
         ldout(async_msgr->cct,10) << __func__ << " accept connection race, existing "
                             << existing << ".cseq " << existing->connect_seq
                             << " == " << connect.connect_seq << ", sending WAIT" << dendl;
-        assert(peer_addr > async_msgr->get_myaddr());
+        assert(peer_addrs.legacy_addr() > async_msgr->get_myaddrs().legacy_addr());
         existing->lock.unlock();
         return _reply_accept(CEPH_MSGR_TAG_WAIT, connect, reply, authorizer_reply);
       }
@@ -1818,7 +1821,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   lock.lock();
   replacing = false;
   if (r < 0) {
-    ldout(async_msgr->cct, 1) << __func__ << " existing race replacing process for addr=" << peer_addr
+    ldout(async_msgr->cct, 1) << __func__ << " existing race replacing process for addr=" << peer_addrs
                               << " just fail later one(this)" << dendl;
     goto fail_registered;
   }
