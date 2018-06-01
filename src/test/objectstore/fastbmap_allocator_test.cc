@@ -582,3 +582,184 @@ TEST(TestAllocatorLevel01, test_l2_unaligned)
 
   std::cout << "Done L2 Unaligned" << std::endl;
 }
+
+TEST(TestAllocatorLevel01, test_l2_contiguous_alignment)
+{
+  {
+    TestAllocatorLevel02 al2;
+    uint64_t num_l2_entries = 3;
+    uint64_t capacity = num_l2_entries * 256 * 512 * 4096; // 3x512 MB
+    al2.init(capacity, 0x1000);
+    std::cout << "Init L2 cont aligned" << std::endl;
+    for (uint64_t i = 0; i < capacity / 2; i += _1m) {
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(_1m, _1m, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 1);
+      ASSERT_EQ(allocated4, _1m);
+      ASSERT_EQ(a4[0].offset, i);
+      ASSERT_EQ(a4[0].length, _1m);
+    }
+    ASSERT_EQ(capacity / 2, al2.debug_get_free());
+
+    {
+      // release 2M + 4K at the beginning
+      interval_vector_t r;
+      r.emplace_back(0, 2 * _1m + 0x1000);
+      al2.free_l2(r);
+    }
+    {
+      // allocate 4K within the deallocated range
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(0x1000, 0x1000, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 1);
+      ASSERT_EQ(allocated4, 0x1000);
+      ASSERT_EQ(a4[0].offset, 0);
+      ASSERT_EQ(a4[0].length, 0x1000);
+    }
+    {
+      // allocate 1M - should go to the second 1M chunk
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(_1m, _1m, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 1);
+      ASSERT_EQ(allocated4, _1m);
+      ASSERT_EQ(a4[0].offset, _1m);
+      ASSERT_EQ(a4[0].length, _1m);
+    }
+    {
+      // and allocate yet another 8K within the deallocated range
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(0x2000, 0x1000, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 1);
+      ASSERT_EQ(allocated4, 0x2000);
+      ASSERT_EQ(a4[0].offset, 0x1000);
+      ASSERT_EQ(a4[0].length, 0x2000);
+    }
+    {
+      // release just allocated 1M
+      interval_vector_t r;
+      r.emplace_back(_1m, _1m);
+      al2.free_l2(r);
+    }
+    {
+      // allocate 3M - should go to the second 1M chunk and @capacity/2
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(3 * _1m, _1m, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 2);
+      ASSERT_EQ(allocated4, 3 * _1m);
+      ASSERT_EQ(a4[0].offset, _1m);
+      ASSERT_EQ(a4[0].length, _1m);
+      ASSERT_EQ(a4[1].offset, capacity / 2);
+      ASSERT_EQ(a4[1].length, 2 * _1m);
+    }
+    {
+      // release allocated 1M in the second meg chunk except
+      // the first 4K chunk
+      interval_vector_t r;
+      r.emplace_back(_1m + 0x1000, _1m);
+      al2.free_l2(r);
+    }
+    {
+      // release 2M @(capacity / 2)
+      interval_vector_t r;
+      r.emplace_back(capacity / 2, 2 * _1m);
+      al2.free_l2(r);
+    }
+    {
+      // allocate 3x512K - should go to the second halves of
+      // the first and second 1M chunks and @(capacity / 2)
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(2 * _1m, _1m / 2, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 3);
+      ASSERT_EQ(allocated4, 2 * _1m);
+      ASSERT_EQ(a4[0].offset, _1m / 2);
+      ASSERT_EQ(a4[0].length, _1m / 2);
+      ASSERT_EQ(a4[1].offset, _1m + _1m / 2);
+      ASSERT_EQ(a4[1].length, _1m / 2);
+      ASSERT_EQ(a4[2].offset, capacity / 2);
+      ASSERT_EQ(a4[2].length, _1m);
+    }
+    {
+      // cleanup first 2M except except the last 4K chunk
+      interval_vector_t r;
+      r.emplace_back(0, 2 * _1m - 0x1000);
+      al2.free_l2(r);
+    }
+    {
+      // release 2M @(capacity / 2)
+      interval_vector_t r;
+      r.emplace_back(capacity / 2, 2 * _1m);
+      al2.free_l2(r);
+    }
+    {
+      // allocate 132M using 4M granularity should go to (capacity / 2)
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(132 * _1m, 4 * _1m , &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 1);
+      ASSERT_EQ(a4[0].offset, capacity / 2);
+      ASSERT_EQ(a4[0].length, 132 * _1m);
+    }
+    {
+      // cleanup left 4K chunk in the first 2M
+      interval_vector_t r;
+      r.emplace_back(2 * _1m - 0x1000, 0x1000);
+      al2.free_l2(r);
+    }
+    {
+      // release 132M @(capacity / 2)
+      interval_vector_t r;
+      r.emplace_back(capacity / 2, 132 * _1m);
+      al2.free_l2(r);
+    }
+    {
+      // allocate 132M using 2M granularity should go to the first chunk and to
+      // (capacity / 2)
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(132 * _1m, 2 * _1m , &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 2);
+      ASSERT_EQ(a4[0].offset, 0);
+      ASSERT_EQ(a4[0].length, 2 * _1m);
+      ASSERT_EQ(a4[1].offset, capacity / 2);
+      ASSERT_EQ(a4[1].length, 130 * _1m);
+    }
+    {
+      // release 130M @(capacity / 2)
+      interval_vector_t r;
+      r.emplace_back(capacity / 2, 132 * _1m);
+      al2.free_l2(r);
+    }
+    {
+      // release 4K~16K
+      // release 28K~32K
+      // release 68K~24K
+      interval_vector_t r;
+      r.emplace_back(0x1000, 0x4000);
+      r.emplace_back(0x7000, 0x8000);
+      r.emplace_back(0x11000, 0x6000);
+      al2.free_l2(r);
+    }
+    {
+      // allocate 32K using 16K granularity - should bypass the first
+      // unaligned extent, use the second free extent partially given
+      // the 16K alignment and then fallback to capacity / 2
+      uint64_t allocated4 = 0;
+      interval_vector_t a4;
+      al2.allocate_l2(0x8000, 0x4000, &allocated4, &a4);
+      ASSERT_EQ(a4.size(), 2);
+      ASSERT_EQ(a4[0].offset, 0x8000);
+      ASSERT_EQ(a4[0].length, 0x4000);
+      ASSERT_EQ(a4[1].offset, capacity / 2);
+      ASSERT_EQ(a4[1].length, 0x4000);
+    }
+
+  }
+
+  std::cout << "Done L2 cont aligned" << std::endl;
+}
