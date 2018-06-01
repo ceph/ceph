@@ -112,6 +112,12 @@ set(librgw_common_srcs
 )
 add_library(rgw_common OBJECT ${librgw_common_srcs})
 
+if(WITH_LTTNG)
+  # rgw/rgw_op.cc includes "tracing/rgw_op.h"
+  # rgw/rgw_rados.cc includes "tracing/rgw_rados.h"
+  add_dependencies(rgw_common rgw_op-tp rgw_rados-tp)
+endif()
+
 set(rgw_a_srcs
   rgw_auth_keystone.cc
   rgw_client_io.cc
@@ -154,10 +160,6 @@ add_library(rgw_a STATIC
 add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
-
-if(WITH_LTTNG)
-  add_dependencies(rgw_a rgw_op-tp rgw_rados-tp)
-endif()
 
 target_link_libraries(rgw_a librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
