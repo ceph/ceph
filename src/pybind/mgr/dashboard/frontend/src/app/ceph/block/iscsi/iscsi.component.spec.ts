@@ -1,5 +1,5 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TcmuIscsiService } from '../../../shared/api/tcmu-iscsi.service';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
@@ -7,6 +7,7 @@ import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { ListPipe } from '../../../shared/pipes/list.pipe';
 import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
 import { FormatterService } from '../../../shared/services/formatter.service';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { IscsiComponent } from './iscsi.component';
 
 describe('IscsiComponent', () => {
@@ -21,21 +22,19 @@ describe('IscsiComponent', () => {
     }
   };
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [],
-      declarations: [IscsiComponent],
-      schemas: [NO_ERRORS_SCHEMA],
-      providers: [
-        CephShortVersionPipe,
-        DimlessPipe,
-        FormatterService,
-        RelativeDatePipe,
-        ListPipe,
-        { provide: TcmuIscsiService, useValue: fakeService }
-      ]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [],
+    declarations: [IscsiComponent],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      CephShortVersionPipe,
+      DimlessPipe,
+      FormatterService,
+      RelativeDatePipe,
+      ListPipe,
+      { provide: TcmuIscsiService, useValue: fakeService }
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiComponent);

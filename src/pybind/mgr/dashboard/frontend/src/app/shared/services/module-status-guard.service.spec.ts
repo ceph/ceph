@@ -6,6 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of as observableOf } from 'rxjs';
 
+import { configureTestBed } from '../unit-test-helper';
 import { ModuleStatusGuardService } from './module-status-guard.service';
 
 describe('ModuleStatusGuardService', () => {
@@ -20,13 +21,13 @@ describe('ModuleStatusGuardService', () => {
 
   const routes: Routes = [{ path: '**', component: FooComponent }];
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [RouterTestingModule.withRoutes(routes)],
-      providers: [ModuleStatusGuardService, { provide: HttpClient, useValue: fakeService }],
-      declarations: [FooComponent]
-    });
+  configureTestBed({
+    imports: [RouterTestingModule.withRoutes(routes)],
+    providers: [ModuleStatusGuardService, { provide: HttpClient, useValue: fakeService }],
+    declarations: [FooComponent]
+  }, true);
 
+  beforeEach(() => {
     service = TestBed.get(ModuleStatusGuardService);
   });
 

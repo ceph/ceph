@@ -1,20 +1,18 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AlertModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../unit-test-helper';
 import { ErrorPanelComponent } from './error-panel.component';
 
 describe('ErrorPanelComponent', () => {
   let component: ErrorPanelComponent;
   let fixture: ComponentFixture<ErrorPanelComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ ErrorPanelComponent ],
-      imports: [ AlertModule.forRoot() ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [ErrorPanelComponent],
+    imports: [AlertModule.forRoot()]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(ErrorPanelComponent);

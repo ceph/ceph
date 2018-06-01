@@ -1,22 +1,21 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RgwUserCapabilityModalComponent } from './rgw-user-capability-modal.component';
 
 describe('RgwUserCapabilityModalComponent', () => {
   let component: RgwUserCapabilityModalComponent;
   let fixture: ComponentFixture<RgwUserCapabilityModalComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [RgwUserCapabilityModalComponent],
-      imports: [ReactiveFormsModule, SharedModule],
-      providers: [BsModalRef]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [RgwUserCapabilityModalComponent],
+    imports: [ReactiveFormsModule, SharedModule],
+    providers: [BsModalRef]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwUserCapabilityModalComponent);

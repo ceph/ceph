@@ -1,7 +1,8 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { MonitorService } from '../../../shared/api/monitor.service';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { MonitorComponent } from './monitor.component';
 
 describe('MonitorComponent', () => {
@@ -10,13 +11,11 @@ describe('MonitorComponent', () => {
 
   const fakeService = {};
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [MonitorComponent],
-      schemas: [NO_ERRORS_SCHEMA],
-      providers: [{ provide: MonitorService, useValue: fakeService }]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    declarations: [MonitorComponent],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [{ provide: MonitorService, useValue: fakeService }]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(MonitorComponent);

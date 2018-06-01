@@ -1,21 +1,20 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { FormatterService } from '../../../shared/services/formatter.service';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { HealthPieComponent } from './health-pie.component';
 
 describe('HealthPieComponent', () => {
   let component: HealthPieComponent;
   let fixture: ComponentFixture<HealthPieComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      schemas: [NO_ERRORS_SCHEMA],
-      declarations: [HealthPieComponent],
-      providers: [DimlessBinaryPipe, FormatterService]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    schemas: [NO_ERRORS_SCHEMA],
+    declarations: [HealthPieComponent],
+    providers: [DimlessBinaryPipe, FormatterService]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(HealthPieComponent);
