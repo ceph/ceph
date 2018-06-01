@@ -2284,7 +2284,7 @@ TEST(BufferList, append_zero) {
   EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)1, bl.length());
   bl.append_zero(1);
-  EXPECT_EQ((unsigned)2, bl.get_num_buffers());
+  EXPECT_EQ((unsigned)1, bl.get_num_buffers());
   EXPECT_EQ((unsigned)2, bl.length());
   EXPECT_EQ('\0', bl[1]);
 }

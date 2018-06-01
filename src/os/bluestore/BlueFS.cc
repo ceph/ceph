@@ -1533,10 +1533,13 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   }
 
   bufferlist bl;
+  bl.reserve(super.block_size);
   encode(log_t, bl);
-
   // pad to block boundary
-  _pad_bl(bl);
+  size_t realign = super.block_size - (bl.length() % super.block_size);
+  if (realign && realign != super.block_size)
+    bl.append_zero(realign);
+
   logger->inc(l_bluefs_logged_bytes, bl.length());
 
   log_writer->append(bl);
