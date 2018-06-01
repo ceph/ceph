@@ -2929,7 +2929,7 @@ int BlueStore::ExtentMap::compress_extent_map(
       }
     }
   }
-  if (removed && onode) {
+  if (removed) {
     onode->c->store->logger->inc(l_bluestore_extent_compress, removed);
   }
   return removed;
