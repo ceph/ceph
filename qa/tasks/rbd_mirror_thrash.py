@@ -145,6 +145,9 @@ class RBDMirrorThrasher(Greenlet):
                 sleep(delay)
 
                 for daemon in killed_daemons:
+                    self.log('waiting for {label}'.format(label=daemon.id_))
+                    daemon.stop()
+                for daemon in killed_daemons:
                     self.log('reviving {label}'.format(label=daemon.id_))
                     daemon.start()
 
