@@ -1979,6 +1979,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       } else {
 	mdcache->request_finish(mdr);
       }
+      m->put();
       return;
     }
   }
