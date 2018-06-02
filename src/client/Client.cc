@@ -901,8 +901,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.seq,
 		   st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags,
 		   request_perms);
-    if (in->auth_cap && in->auth_cap->session == session)
+    if (in->auth_cap && in->auth_cap->session == session) {
       in->max_size = st->max_size;
+      in->rstat = st->rstat;
+    }
   } else
     in->snap_caps |= st->cap.caps;
 
@@ -10824,7 +10826,11 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 
     // Do a force getattr to get the latest quota before returning
     // a value to userspace.
-    r = _getattr(in, 0, perms, true);
+    int flags = 0;
+    if (vxattr->flags & VXATTR_RSTAT) {
+      flags |= CEPH_STAT_RSTAT;
+    }
+    r = _getattr(in, flags, perms, true);
     if (r != 0) {
       // Error from getattr!
       return r;
@@ -11341,6 +11347,16 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   readonly: true,						\
   hidden: false,						\
   exists_cb: NULL,						\
+  flags: 0,                                                     \
+}
+#define XATTR_NAME_CEPH2(_type, _name, _flags)                 \
+{                                                              \
+  name: CEPH_XATTR_NAME(_type, _name),                         \
+  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,     \
+  readonly: true,                                              \
+  hidden: false,                                               \
+  exists_cb: NULL,                                             \
+  flags: _flags,                                               \
 }
 #define XATTR_LAYOUT_FIELD(_type, _name, _field)		\
 {								\
@@ -11349,6 +11365,7 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   readonly: false,						\
   hidden: true,							\
   exists_cb: &Client::_vxattrcb_layout_exists,			\
+  flags: 0,                                                     \
 }
 #define XATTR_QUOTA_FIELD(_type, _name)		                \
 {								\
@@ -11357,6 +11374,7 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   readonly: false,						\
   hidden: true,							\
   exists_cb: &Client::_vxattrcb_quota_exists,			\
+  flags: 0,                                                     \
 }
 
 const Client::VXattr Client::_dir_vxattrs[] = {
@@ -11366,6 +11384,7 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     readonly: false,
     hidden: true,
     exists_cb: &Client::_vxattrcb_layout_exists,
+    flags: 0,
   },
   XATTR_LAYOUT_FIELD(dir, layout, stripe_unit),
   XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
@@ -11375,17 +11394,18 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   XATTR_NAME_CEPH(dir, entries),
   XATTR_NAME_CEPH(dir, files),
   XATTR_NAME_CEPH(dir, subdirs),
-  XATTR_NAME_CEPH(dir, rentries),
-  XATTR_NAME_CEPH(dir, rfiles),
-  XATTR_NAME_CEPH(dir, rsubdirs),
-  XATTR_NAME_CEPH(dir, rbytes),
-  XATTR_NAME_CEPH(dir, rctime),
+  XATTR_NAME_CEPH2(dir, rentries, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rfiles, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rsubdirs, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rbytes, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rctime, VXATTR_RSTAT),
   {
     name: "ceph.quota",
     getxattr_cb: &Client::_vxattrcb_quota,
     readonly: false,
     hidden: true,
     exists_cb: &Client::_vxattrcb_quota_exists,
+    flags: 0,
   },
   XATTR_QUOTA_FIELD(quota, max_bytes),
   XATTR_QUOTA_FIELD(quota, max_files),
@@ -11399,6 +11419,7 @@ const Client::VXattr Client::_file_vxattrs[] = {
     readonly: false,
     hidden: true,
     exists_cb: &Client::_vxattrcb_layout_exists,
+    flags: 0,
   },
   XATTR_LAYOUT_FIELD(file, layout, stripe_unit),
   XATTR_LAYOUT_FIELD(file, layout, stripe_count),
