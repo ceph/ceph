@@ -5111,17 +5111,16 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     else if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_WR))
       in->recall_deleg(true);
 
-    if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
-        && !_flush(in, new C_Client_FlushComplete(this, in))) {
+    if ((used & revoked & CEPH_CAP_FILE_BUFFER) &&
+	!_flush(in, new C_Client_FlushComplete(this, in))) {
       // waitin' for flush
-    } else if ((old_caps & ~new_caps) & CEPH_CAP_FILE_CACHE) {
+    } else if (revoked & CEPH_CAP_FILE_CACHE) {
       if (_release(in))
 	check = true;
     } else {
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check = true;
     }
-
   } else if (old_caps == new_caps) {
     ldout(cct, 10) << "  caps unchanged at " << ccap_string(old_caps) << dendl;
   } else {
