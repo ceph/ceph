@@ -925,18 +925,7 @@ void Monitor::shutdown()
   g_conf->remove_observer(this);
 
   if (admin_hook) {
-    AdminSocket* admin_socket = cct->get_admin_socket();
-    admin_socket->unregister_command("mon_status");
-    admin_socket->unregister_command("quorum_status");
-    admin_socket->unregister_command("sync_force");
-    admin_socket->unregister_command("add_bootstrap_peer_hint");
-    admin_socket->unregister_command("quorum enter");
-    admin_socket->unregister_command("quorum exit");
-    admin_socket->unregister_command("ops");
-    admin_socket->unregister_command("sessions");
-    admin_socket->unregister_command("dump_historic_ops");
-    admin_socket->unregister_command("dump_historic_ops_by_duration");
-    admin_socket->unregister_command("dump_historic_slow_ops");
+    cct->get_admin_socket()->unregister_commands(admin_hook);
     delete admin_hook;
     admin_hook = NULL;
   }

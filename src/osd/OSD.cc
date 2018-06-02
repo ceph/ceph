@@ -3280,44 +3280,11 @@ int OSD::shutdown()
   }
 
   // unregister commands
-  cct->get_admin_socket()->unregister_command("status");
-  cct->get_admin_socket()->unregister_command("flush_journal");
-  cct->get_admin_socket()->unregister_command("dump_ops_in_flight");
-  cct->get_admin_socket()->unregister_command("ops");
-  cct->get_admin_socket()->unregister_command("dump_blocked_ops");
-  cct->get_admin_socket()->unregister_command("dump_historic_ops");
-  cct->get_admin_socket()->unregister_command("dump_historic_ops_by_duration");
-  cct->get_admin_socket()->unregister_command("dump_historic_slow_ops");
-  cct->get_admin_socket()->unregister_command("dump_op_pq_state");
-  cct->get_admin_socket()->unregister_command("dump_blacklist");
-  cct->get_admin_socket()->unregister_command("dump_watchers");
-  cct->get_admin_socket()->unregister_command("dump_reservations");
-  cct->get_admin_socket()->unregister_command("get_latest_osdmap");
-  cct->get_admin_socket()->unregister_command("heap");
-  cct->get_admin_socket()->unregister_command("set_heap_property");
-  cct->get_admin_socket()->unregister_command("get_heap_property");
-  cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
-  cct->get_admin_socket()->unregister_command("dump_scrubs");
-  cct->get_admin_socket()->unregister_command("calc_objectstore_db_histogram");
-  cct->get_admin_socket()->unregister_command("flush_store_cache");
-  cct->get_admin_socket()->unregister_command("dump_pgstate_history");
-  cct->get_admin_socket()->unregister_command("compact");
-  cct->get_admin_socket()->unregister_command("get_mapped_pools");
-  cct->get_admin_socket()->unregister_command("smart");
-  cct->get_admin_socket()->unregister_command("list_devices");
+  cct->get_admin_socket()->unregister_commands(asok_hook);
   delete asok_hook;
   asok_hook = NULL;
 
-  cct->get_admin_socket()->unregister_command("setomapval");
-  cct->get_admin_socket()->unregister_command("rmomapkey");
-  cct->get_admin_socket()->unregister_command("setomapheader");
-  cct->get_admin_socket()->unregister_command("getomap");
-  cct->get_admin_socket()->unregister_command("truncobj");
-  cct->get_admin_socket()->unregister_command("injectdataerr");
-  cct->get_admin_socket()->unregister_command("injectmdataerr");
-  cct->get_admin_socket()->unregister_command("set_recovery_delay");
-  cct->get_admin_socket()->unregister_command("trigger_scrub");
-  cct->get_admin_socket()->unregister_command("injectfull");
+  cct->get_admin_socket()->unregister_commands(test_ops_hook);
   delete test_ops_hook;
   test_ops_hook = NULL;
 

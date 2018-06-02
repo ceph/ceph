@@ -545,12 +545,7 @@ void Client::shutdown()
 
   cct->_conf->remove_observer(this);
 
-  AdminSocket* admin_socket = cct->get_admin_socket();
-  admin_socket->unregister_command("mds_requests");
-  admin_socket->unregister_command("mds_sessions");
-  admin_socket->unregister_command("dump_cache");
-  admin_socket->unregister_command("kick_stale_sessions");
-  admin_socket->unregister_command("status");
+  cct->get_admin_socket()->unregister_commands(&m_command_hook);
 
   if (ino_invalidate_cb) {
     ldout(cct, 10) << "shutdown stopping cache invalidator finisher" << dendl;
