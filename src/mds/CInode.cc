@@ -3442,6 +3442,8 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->ctime = i->ctime;
   m->change_attr = i->change_attr;
   m->time_warp_seq = i->time_warp_seq;
+  m->nfiles = i->dirstat.nfiles;
+  m->nsubdirs = i->dirstat.nsubdirs;
 
   if (cap->client_inline_version < i->inline_data.version) {
     m->inline_version = cap->client_inline_version = i->inline_data.version;
