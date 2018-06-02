@@ -85,6 +85,11 @@ public:
    */
   int unregister_command(std::string_view command);
 
+  /*
+   * unregister all commands belong to hook.
+   */
+  void unregister_commands(const AdminSocketHook *hook);
+
   bool init(const std::string& path);
 
   void chown(uid_t uid, gid_t gid);

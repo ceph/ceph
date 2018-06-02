@@ -626,25 +626,7 @@ CephContext::~CephContext()
 
   delete _plugin_registry;
 
-  _admin_socket->unregister_command("perfcounters_dump");
-  _admin_socket->unregister_command("1");
-  _admin_socket->unregister_command("perf dump");
-  _admin_socket->unregister_command("perfcounters_schema");
-  _admin_socket->unregister_command("perf histogram dump");
-  _admin_socket->unregister_command("2");
-  _admin_socket->unregister_command("perf schema");
-  _admin_socket->unregister_command("perf histogram schema");
-  _admin_socket->unregister_command("perf reset");
-  _admin_socket->unregister_command("config show");
-  _admin_socket->unregister_command("config unset");
-  _admin_socket->unregister_command("config set");
-  _admin_socket->unregister_command("config get");
-  _admin_socket->unregister_command("config help");
-  _admin_socket->unregister_command("config diff");
-  _admin_socket->unregister_command("config diff get");
-  _admin_socket->unregister_command("log flush");
-  _admin_socket->unregister_command("log dump");
-  _admin_socket->unregister_command("log reopen");
+  _admin_socket->unregister_commands(_admin_hook);
   delete _admin_hook;
   delete _admin_socket;
 
