@@ -6,7 +6,7 @@ from collections import defaultdict
 import cherrypy
 
 from ..exceptions import DashboardException
-from . import ApiController, AuthRequired, Endpoint, BaseController
+from . import ApiController, AuthRequired, RESTController
 from .. import mgr
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
@@ -14,7 +14,7 @@ from ..tools import ViewCache
 
 @ApiController('/cephfs')
 @AuthRequired()
-class CephFS(BaseController):
+class CephFS(RESTController):
     def __init__(self):
         super(CephFS, self).__init__()
 
@@ -22,19 +22,22 @@ class CephFS(BaseController):
         # dict is FSCID
         self.cephfs_clients = {}
 
-    @Endpoint()
+    def list(self):
+        fsmap = mgr.get("fs_map")
+        return fsmap['filesystems']
+
+    def get(self, fs_id):
+        fs_id = self.fs_id_to_int(fs_id)
+
+        return self.fs_status(fs_id)
+
+    @RESTController.Resource('GET')
     def clients(self, fs_id):
         fs_id = self.fs_id_to_int(fs_id)
 
         return self._clients(fs_id)
 
-    @Endpoint()
-    def data(self, fs_id):
-        fs_id = self.fs_id_to_int(fs_id)
-
-        return self.fs_status(fs_id)
-
-    @Endpoint()
+    @RESTController.Resource('GET')
     def mds_counters(self, fs_id):
         """
         Result format: map of daemon name to map of counter to list of datapoints
@@ -79,7 +82,7 @@ class CephFS(BaseController):
             return int(fs_id)
         except ValueError:
             raise DashboardException(code='invalid_cephfs_id',
-                                     msg="Invalid cephfs id {}".format(fs_id),
+                                     msg="Invalid cephfs ID {}".format(fs_id),
                                      component='cephfs')
 
     def _get_mds_names(self, filesystem_id=None):
