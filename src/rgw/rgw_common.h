@@ -1099,7 +1099,7 @@ struct rgw_bucket {
 WRITE_CLASS_ENCODER(rgw_bucket)
 
 inline ostream& operator<<(ostream& out, const rgw_bucket &b) {
-  out << b.name << "[" << b.marker << "])";
+  out << b.name << "[" << b.marker << "]";
   return out;
 }
 

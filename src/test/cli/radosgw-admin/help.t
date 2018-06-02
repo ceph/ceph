@@ -160,18 +160,21 @@
      --max-buckets             max number of buckets for a user
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
-     --bucket=<bucket>
-     --pool=<pool>
-     --object=<object>
-     --date=<date>
-     --start-date=<date>
-     --end-date=<date>
-     --bucket-id=<bucket-id>
-     --shard-id=<shard-id>     optional for mdlog list
+     --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
+     --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
+     --object=<object>         object name
+     --date=<date>             date in the format yyyy-mm-dd
+     --start-date=<date>       start date in the format yyyy-mm-dd
+     --end-date=<date>         end date in the format yyyy-mm-dd
+     --bucket-id=<bucket-id>   bucket id
+     --shard-id=<shard-id>     optional for: 
+                                 mdlog list
+                                 data sync status
                                required for: 
                                  mdlog trim
                                  replica mdlog get/delete
                                  replica datalog get/delete
+     --max-entries=<entries>   max entries for listing operations
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
      --period=<id>             period id

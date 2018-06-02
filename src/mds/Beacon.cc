@@ -142,6 +142,7 @@ void Beacon::handle_mds_beacon(MMDSBeacon *m)
     dout(10) << "handle_mds_beacon " << ceph_mds_state_name(m->get_state())
 	     << " seq " << m->get_seq() << " dne" << dendl;
   }
+  m->put();
 }
 
 

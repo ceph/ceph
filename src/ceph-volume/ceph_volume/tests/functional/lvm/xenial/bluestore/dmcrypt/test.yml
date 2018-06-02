@@ -38,3 +38,26 @@
       command: "ceph-volume lvm create --bluestore --data test_group/data-lv1 --osd-id 0"
       environment:
         CEPH_VOLUME_DEBUG: 1
+
+    - name: stop ceph-osd@0 daemon
+      service:
+        name: ceph-osd@0
+        state: stopped
+
+    - name: destroy osd.0
+      command: "ceph osd destroy osd.0 --yes-i-really-mean-it"
+
+    - name: zap test_group/data-lv1
+      command: "ceph-volume lvm zap test_group/data-lv1"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: prepare osd.0 using test_group/data-lv1
+      command: "ceph-volume lvm prepare --bluestore --data test_group/data-lv1 --osd-id 0"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: activate all to start the previously prepared osd.0
+      command: "ceph-volume lvm activate --all"
+      environment:
+        CEPH_VOLUME_DEBUG: 1

@@ -3111,6 +3111,10 @@ int CrushWrapper::_choose_type_stack(
 		   << " w " << w << dendl;
     vector<int> o;
     auto tmpi = i;
+    if (i == orig.end()) {
+      ldout(cct, 10) << __func__ << " end of orig, break 0" << dendl;
+      break;
+    }
     for (auto from : w) {
       ldout(cct, 10) << " from " << from << dendl;
       // identify leaves under each choice.  we use this to check whether any of these
@@ -3154,6 +3158,7 @@ int CrushWrapper::_choose_type_stack(
 	      ldout(cct, 10) << __func__ << " pos " << pos << " replace "
 			     << *i << " -> " << item << dendl;
 	      replaced = true;
+              assert(i != orig.end());
 	      ++i;
 	      break;
 	    }
@@ -3161,6 +3166,7 @@ int CrushWrapper::_choose_type_stack(
 	  if (!replaced) {
 	    ldout(cct, 10) << __func__ << " pos " << pos << " keep " << *i
 			   << dendl;
+            assert(i != orig.end());
 	    o.push_back(*i);
 	    ++i;
 	  }
@@ -3275,7 +3281,8 @@ int CrushWrapper::try_remap_rule(
 	if (numrep <= 0)
 	  numrep += maxout;
 	type_stack.push_back(make_pair(type, numrep));
-	type_stack.push_back(make_pair(0, 1));
+        if (type > 0)
+	  type_stack.push_back(make_pair(0, 1));
 	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
 				   i, used, &w);
 	if (r < 0)

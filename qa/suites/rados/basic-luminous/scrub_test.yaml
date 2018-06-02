@@ -16,13 +16,14 @@ overrides:
     - 'deep-scrub 1 missing, 0 inconsistent objects'
     - 'failed to pick suitable auth object'
     - overall HEALTH_
-    - (OSDMAP_FLAGS)
-    - (OSD_
-    - (PG_
-    - (OSD_SCRUB_ERRORS)
-    - (TOO_FEW_PGS)
+    - \(OSDMAP_FLAGS\)
+    - \(OSD_
+    - \(PG_
+    - \(OSD_SCRUB_ERRORS\)
+    - \(TOO_FEW_PGS\)
     conf:
       osd:
         osd deep scrub update digest min age: 0
+        osd skip data digest: false
 tasks:
 - scrub_test:

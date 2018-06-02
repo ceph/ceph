@@ -136,7 +136,11 @@ rgw_http_errors rgw_http_swift_errors({
 
 int rgw_perf_start(CephContext *cct)
 {
-  PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_rgw_first, l_rgw_last);
+  PerfCountersBuilder plb(cct, "rgw", l_rgw_first, l_rgw_last);
+
+  // RGW emits comparatively few metrics, so let's be generous
+  // and mark them all USEFUL to get transmission to ceph-mgr by default.
+  plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
   plb.add_u64_counter(l_rgw_req, "req", "Requests");
   plb.add_u64_counter(l_rgw_failed_req, "failed_req", "Aborted requests");

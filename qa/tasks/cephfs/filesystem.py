@@ -714,7 +714,17 @@ class Filesystem(MDSCluster):
 
         return result
 
-    def get_rank_names(self):
+    def get_rank(self, rank=0, status=None):
+        if status is None:
+            status = self.getinfo()
+        return status.get_rank(self.id, rank)
+
+    def get_ranks(self, status=None):
+        if status is None:
+            status = self.getinfo()
+        return status.get_ranks(self.id)
+
+    def get_rank_names(self, status=None):
         """
         Return MDS daemon names of those daemons holding a rank,
         sorted by rank.  This includes e.g. up:replay/reconnect
@@ -837,6 +847,10 @@ class Filesystem(MDSCluster):
             mds_id = self.get_lone_mds_id()
 
         return self.json_asok(command, 'mds', mds_id)
+
+    def rank_asok(self, command, rank=0):
+        info = self.get_rank(rank=rank)
+        return self.json_asok(command, 'mds', info['name'])
 
     def read_cache(self, path, depth=None):
         cmd = ["dump", "tree", path]

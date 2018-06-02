@@ -1349,7 +1349,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (p->is_dirty())
 	in->_mark_dirty(logseg);
       if (p->is_dirty_parent())
-	in->_mark_dirty_parent(logseg, p->is_dirty_pool());
+	in->mark_dirty_parent(logseg, p->is_dirty_pool());
       if (p->need_snapflush())
 	logseg->open_files.push_back(&in->item_open_file);
       if (dn->is_auth())
@@ -1857,9 +1857,8 @@ void ESessions::replay(MDSRank *mds)
   } else {
     dout(10) << "ESessions.replay sessionmap " << mds->sessionmap.get_version()
 	     << " < " << cmapv << dendl;
-    mds->sessionmap.open_sessions(client_map);
+    mds->sessionmap.replay_open_sessions(client_map);
     assert(mds->sessionmap.get_version() == cmapv);
-    mds->sessionmap.set_projected(mds->sessionmap.get_version());
   }
   update_segment();
 }
@@ -2132,10 +2131,8 @@ void EUpdate::replay(MDSRank *mds)
       map<client_t,entity_inst_t> cm;
       bufferlist::iterator blp = client_map.begin();
       ::decode(cm, blp);
-      mds->sessionmap.open_sessions(cm);
-
+      mds->sessionmap.replay_open_sessions(cm);
       assert(mds->sessionmap.get_version() == cmapv);
-      mds->sessionmap.set_projected(mds->sessionmap.get_version());
     }
   }
   update_segment();
@@ -2960,7 +2957,7 @@ void EImportStart::replay(MDSRank *mds)
     map<client_t,entity_inst_t> cm;
     bufferlist::iterator blp = client_map.begin();
     ::decode(cm, blp);
-    mds->sessionmap.open_sessions(cm);
+    mds->sessionmap.replay_open_sessions(cm);
     if (mds->sessionmap.get_version() != cmapv)
     {
       derr << "sessionmap version " << mds->sessionmap.get_version()
@@ -2969,7 +2966,6 @@ void EImportStart::replay(MDSRank *mds)
       mds->damaged();
       ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
-    mds->sessionmap.set_projected(mds->sessionmap.get_version());
   }
   update_segment();
 }

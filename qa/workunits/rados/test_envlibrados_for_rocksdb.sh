@@ -71,7 +71,7 @@ git clone https://github.com/facebook/rocksdb.git --depth 1
 
 # compile code
 cd rocksdb
-make env_librados_test ROCKSDB_USE_LIBRADOS=1 -j8
+make env_librados_test ROCKSDB_USE_LIBRADOS=1 DISABLE_WARNING_AS_ERROR=1 -j8
 
 echo "Copy ceph.conf"
 # prepare ceph.conf

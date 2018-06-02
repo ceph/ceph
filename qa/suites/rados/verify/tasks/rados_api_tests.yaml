@@ -9,6 +9,7 @@ overrides:
       - \(REQUEST_SLOW\)
       - \(CACHE_POOL_NEAR_FULL\)
       - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_AVAILABILITY\)
     conf:
       client:
         debug ms: 1

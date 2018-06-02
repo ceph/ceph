@@ -2883,6 +2883,39 @@ void PGMap::get_health_checks(
     checks->add("OSD_SCRUB_ERRORS", HEALTH_ERR, ss.str());
   }
 
+  // LARGE_OMAP_OBJECTS
+  if (pg_sum.stats.sum.num_large_omap_objects) {
+    list<string> detail;
+    for (auto &pool : pools) {
+      const string& pool_name = osdmap.get_pool_name(pool.first);
+      auto it2 = pg_pool_sum.find(pool.first);
+      if (it2 == pg_pool_sum.end()) {
+        continue;
+      }
+      const pool_stat_t *pstat = &it2->second;
+      if (pstat == nullptr) {
+        continue;
+      }
+      const object_stat_sum_t& sum = pstat->stats.sum;
+      if (sum.num_large_omap_objects) {
+        stringstream ss;
+        ss << sum.num_large_omap_objects << " large objects found in pool "
+           << "'" << pool_name << "'";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << pg_sum.stats.sum.num_large_omap_objects << " large omap objects";
+      auto& d = checks->add("LARGE_OMAP_OBJECTS", HEALTH_WARN, ss.str());
+      stringstream tip;
+      tip << "Search the cluster log for 'Large omap object found' for more "
+          << "details.";
+      detail.push_back(tip.str());
+      d.detail.swap(detail);
+    }
+  }
+
   // CACHE_POOL_NEAR_FULL
   {
     list<string> detail;
@@ -3185,14 +3218,11 @@ void PGMap::get_health_checks(
     }
 
     if (!warn_detail.empty()) {
-      ostringstream ss;
-      ss << warn << " slow requests are blocked > "
-	 << cct->_conf->mon_osd_warn_op_age << " sec";
-      auto& d = checks->add("REQUEST_SLOW", HEALTH_WARN, ss.str());
-      d.detail.swap(warn_detail);
       int left = max;
+      set<int> implicated_osds;
       for (auto& p : warn_osd_by_max) {
 	ostringstream ss;
+        implicated_osds.insert(p.second.begin(), p.second.end());
 	if (p.second.size() > 1) {
 	  ss << "osds " << p.second
              << " have blocked requests > " << p.first << " sec";
@@ -3200,21 +3230,24 @@ void PGMap::get_health_checks(
 	  ss << "osd." << *p.second.begin()
              << " has blocked requests > " << p.first << " sec";
 	}
-	d.detail.push_back(ss.str());
+	warn_detail.push_back(ss.str());
 	if (--left == 0) {
 	  break;
 	}
       }
+      ostringstream ss;
+      ss << warn << " slow requests are blocked > "
+	 << cct->_conf->mon_osd_warn_op_age << " sec. Implicated osds "
+         << implicated_osds;
+      auto& d = checks->add("REQUEST_SLOW", HEALTH_WARN, ss.str());
+      d.detail.swap(warn_detail);
     }
     if (!error_detail.empty()) {
-      ostringstream ss;
-      ss << error << " stuck requests are blocked > "
-	 << err_age << " sec";
-      auto& d = checks->add("REQUEST_STUCK", HEALTH_ERR, ss.str());
-      d.detail.swap(error_detail);
       int left = max;
+      set<int> implicated_osds;
       for (auto& p : error_osd_by_max) {
 	ostringstream ss;
+        implicated_osds.insert(p.second.begin(), p.second.end());
 	if (p.second.size() > 1) {
 	  ss << "osds " << p.second
              << " have stuck requests > " << p.first << " sec";
@@ -3222,11 +3255,16 @@ void PGMap::get_health_checks(
 	  ss << "osd." << *p.second.begin()
              << " has stuck requests > " << p.first << " sec";
 	}
-	d.detail.push_back(ss.str());
+	error_detail.push_back(ss.str());
 	if (--left == 0) {
 	  break;
 	}
       }
+      ostringstream ss;
+      ss << error << " stuck requests are blocked > "
+	 << err_age << " sec. Implicated osds " << implicated_osds;
+      auto& d = checks->add("REQUEST_STUCK", HEALTH_ERR, ss.str());
+      d.detail.swap(error_detail);
     }
   }
 

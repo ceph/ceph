@@ -176,7 +176,7 @@ void ECUtil::HashInfo::decode(bufferlist::iterator &bl)
 void ECUtil::HashInfo::dump(Formatter *f) const
 {
   f->dump_unsigned("total_chunk_size", total_chunk_size);
-  f->open_object_section("cumulative_shard_hashes");
+  f->open_array_section("cumulative_shard_hashes");
   for (unsigned i = 0; i != cumulative_shard_hashes.size(); ++i) {
     f->open_object_section("hash");
     f->dump_unsigned("shard", i);
@@ -184,6 +184,16 @@ void ECUtil::HashInfo::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+}
+
+namespace ECUtil {
+std::ostream& operator<<(std::ostream& out, const HashInfo& hi)
+{
+  ostringstream hashes;
+  for (auto hash: hi.cumulative_shard_hashes)
+    hashes << " " << hex << hash;
+  return out << "tcs=" << hi.total_chunk_size << hashes.str();
+}
 }
 
 void ECUtil::HashInfo::generate_test_instances(list<HashInfo*>& o)

@@ -33,6 +33,8 @@ pool_name = None
 IMG_SIZE = 8 << 20 # 8 MiB
 IMG_ORDER = 22 # 4 MiB objects
 
+os.environ["RBD_FORCE_ALLOW_V1"] = "1"
+
 def setup_module():
     global rados
     rados = Rados(conffile='')

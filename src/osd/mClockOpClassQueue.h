@@ -100,7 +100,7 @@ namespace ceph {
 			unsigned priority,
 			unsigned cost,
 			Request item) override final {
-      queue.enqueue(get_osd_op_type(item), priority, cost, item);
+      queue.enqueue(get_osd_op_type(item), priority, 0u, item);
     }
 
     // Enqueue the op in the front of the regular queue
@@ -108,7 +108,7 @@ namespace ceph {
 			      unsigned priority,
 			      unsigned cost,
 			      Request item) override final {
-      queue.enqueue_front(get_osd_op_type(item), priority, cost, item);
+      queue.enqueue_front(get_osd_op_type(item), priority, 0u, item);
     }
 
     // Returns if the queue is empty

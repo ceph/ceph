@@ -298,6 +298,21 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get(data_name)
 
+    def _stattype_to_str(self, stattype):
+        
+        typeonly = stattype & self.PERFCOUNTER_TYPE_MASK
+        if typeonly == 0:
+            return 'gauge'
+        if typeonly == self.PERFCOUNTER_LONGRUNAVG:
+            # this lie matches the DaemonState decoding: only val, no counts
+            return 'counter'
+        if typeonly == self.PERFCOUNTER_COUNTER:
+            return 'counter'
+        if typeonly == self.PERFCOUNTER_HISTOGRAM:
+            return 'histogram'
+        
+        return ''
+
     def get_server(self, hostname):
         """
         Called by the plugin to load information about a particular
@@ -534,7 +549,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         for server in self.list_servers():
             for service in server['services']:
-                if service['type'] not in ("mds", "osd", "mon"):
+                if service['type'] not in ("rgw", "mds", "osd", "mon"):
                     continue
 
                 schema = self.get_perf_schema(service['type'], service['id'])
@@ -573,3 +588,13 @@ class MgrModule(ceph_module.BaseMgrModule):
         :return: a string
         """
         return self._ceph_set_uri(uri)
+
+    def have_mon_connection(self):
+        """
+        Check whether this ceph-mgr daemon has an open connection
+        to a monitor.  If it doesn't, then it's likely that the
+        information we have about the cluster is out of date,
+        and/or the monitor cluster is down.
+        """
+
+        return self._ceph_have_mon_connection()

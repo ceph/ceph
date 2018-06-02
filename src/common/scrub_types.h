@@ -45,14 +45,14 @@ public:
   void set_missing() {
     errors |= err_t::SHARD_MISSING;
   }
-  void set_omap_digest_mismatch_oi() {
-    errors |= err_t::OMAP_DIGEST_MISMATCH_OI;
+  void set_omap_digest_mismatch_info() {
+    errors |= err_t::OMAP_DIGEST_MISMATCH_INFO;
   }
-  void set_size_mismatch_oi() {
-    errors |= err_t::SIZE_MISMATCH_OI;
+  void set_size_mismatch_info() {
+    errors |= err_t::SIZE_MISMATCH_INFO;
   }
-  void set_data_digest_mismatch_oi() {
-    errors |= err_t::DATA_DIGEST_MISMATCH_OI;
+  void set_data_digest_mismatch_info() {
+    errors |= err_t::DATA_DIGEST_MISMATCH_INFO;
   }
   void set_read_error() {
     errors |= err_t::SHARD_READ_ERR;
@@ -66,20 +66,26 @@ public:
   void set_ec_size_mismatch() {
     errors |= err_t::SHARD_EC_SIZE_MISMATCH;
   }
-  void set_oi_attr_missing() {
-    errors |= err_t::OI_ATTR_MISSING;
+  void set_info_missing() {
+    errors |= err_t::INFO_MISSING;
   }
-  void set_oi_attr_corrupted() {
-    errors |= err_t::OI_ATTR_CORRUPTED;
+  void set_info_corrupted() {
+    errors |= err_t::INFO_CORRUPTED;
   }
-  void set_ss_attr_missing() {
-    errors |= err_t::SS_ATTR_MISSING;
+  void set_snapset_missing() {
+    errors |= err_t::SNAPSET_MISSING;
   }
-  void set_ss_attr_corrupted() {
-    errors |= err_t::SS_ATTR_CORRUPTED;
+  void set_snapset_corrupted() {
+    errors |= err_t::SNAPSET_CORRUPTED;
   }
-  void set_obj_size_oi_mismatch() {
-    errors |= err_t::OBJ_SIZE_OI_MISMATCH;
+  void set_obj_size_info_mismatch() {
+    errors |= err_t::OBJ_SIZE_INFO_MISMATCH;
+  }
+  void set_hinfo_missing() {
+    errors |= err_t::HINFO_MISSING;
+  }
+  void set_hinfo_corrupted() {
+    errors |= err_t::HINFO_CORRUPTED;
   }
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bp);
@@ -118,6 +124,9 @@ struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
   void set_snapset_inconsistency() {
     errors |= obj_err_t::SNAPSET_INCONSISTENCY;
   }
+  void set_hinfo_inconsistency() {
+    errors |= obj_err_t::HINFO_INCONSISTENCY;
+  }
   void add_shard(const pg_shard_t& pgs, const shard_info_wrapper& shard);
   void set_auth_missing(const hobject_t& hoid,
                         const map<pg_shard_t, ScrubMap*>&,
@@ -142,16 +151,16 @@ struct inconsistent_snapset_wrapper : public librados::inconsistent_snapset_t {
   void set_headless();
   // soid claims that it is a head or a snapdir, but its SS_ATTR
   // is missing.
-  void set_ss_attr_missing();
-  void set_oi_attr_missing();
-  void set_ss_attr_corrupted();
-  void set_oi_attr_corrupted();
+  void set_snapset_missing();
+  void set_info_missing();
+  void set_snapset_corrupted();
+  void set_info_corrupted();
   // snapset with missing clone
   void set_clone_missing(snapid_t);
   // Clones that are there
   void set_clone(snapid_t);
   // the snapset is not consistent with itself
-  void set_snapset_mismatch();
+  void set_snapset_error();
   // soid.snap inconsistent with snapset
   void set_head_mismatch();
   void set_size_mismatch();

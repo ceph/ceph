@@ -1608,125 +1608,123 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
   OSDMap tmpmap;
   tmpmap.deepish_copy_from(osdmap);
   tmpmap.apply_incremental(*pending_inc);
+  set<pg_t> to_check;
+  set<pg_t> to_cancel;
+  map<int, map<int, float>> rule_weight_map;
 
   for (auto& p : tmpmap.pg_upmap) {
-    ldout(cct, 10) << __func__ << " pg_upmap entry "
-                   << "[" << p.first << ":" << p.second << "]"
-                   << dendl;
-    auto crush_rule = tmpmap.get_pg_pool_crush_rule(p.first);
+    to_check.insert(p.first);
+  }
+  for (auto& p : tmpmap.pg_upmap_items) {
+    to_check.insert(p.first);
+  }
+  for (auto& p : pending_inc->new_pg_upmap) {
+    to_check.insert(p.first);
+  }
+  for (auto& p : pending_inc->new_pg_upmap_items) {
+    to_check.insert(p.first);
+  }
+  for (auto& pg : to_check) {
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
     if (crush_rule < 0) {
       lderr(cct) << __func__ << " unable to load crush-rule of pg "
-                 << p.first << dendl;
+                 << pg << dendl;
       continue;
+    }
+    map<int, float> weight_map;
+    auto it = rule_weight_map.find(crush_rule);
+    if (it == rule_weight_map.end()) {
+      auto r = tmpmap.crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+      if (r < 0) {
+        lderr(cct) << __func__ << " unable to get crush weight_map for "
+                   << "crush_rule " << crush_rule << dendl;
+        continue;
+      }
+      rule_weight_map[crush_rule] = weight_map;
+    } else {
+      weight_map = it->second;
     }
     auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
     if (type < 0) {
       lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
-                 << p.first << dendl;
-      continue;
-    } else if (type == 0) {
-      ldout(cct, 10) << __func__ << " failure-domain of pg " << p.first
-                     << " is osd-level, skipping"
-                     << dendl;
+                 << pg << dendl;
       continue;
     }
-    ldout(cct, 10) << __func__ << " pg " << p.first
+    ldout(cct, 10) << __func__ << " pg " << pg
                    << " crush-rule-id " << crush_rule
+                   << " weight_map " << weight_map
                    << " failure-domain-type " << type
                    << dendl;
     vector<int> raw;
     int primary;
-    tmpmap.pg_to_raw_up(p.first, &raw, &primary);
+    tmpmap.pg_to_raw_up(pg, &raw, &primary);
     set<int> parents;
-    bool error = false;
-    bool collide = false;
     for (auto osd : raw) {
-      auto parent = tmpmap.crush->get_parent_of_type(osd, type);
-      if (parent >= 0) {
-        lderr(cct) << __func__ << " unable to get parent of raw osd." << osd
-                   << ", pg " << p.first
-                   << dendl;
-        error = true;
-        break;
-      }
-      auto r = parents.insert(parent);
-      if (!r.second) {
-        collide = true;
-        break;
-      }
-    }
-    if (!error && collide) {
-      ldout(cct, 10) << __func__ << " removing invalid pg_upmap "
-                     << "[" << p.first << ":" << p.second << "]"
-                     << ", final mapping result will be: " << raw
+      if (type > 0) {
+        auto parent = tmpmap.crush->get_parent_of_type(osd, type);
+        if (parent >= 0) {
+          lderr(cct) << __func__ << " unable to get parent of raw osd."
+                     << osd << " of pg " << pg
                      << dendl;
-      auto it = pending_inc->new_pg_upmap.find(p.first);
-      if (it != pending_inc->new_pg_upmap.end()) {
-        pending_inc->new_pg_upmap.erase(it);
+          break;
+        }
+        auto r = parents.insert(parent);
+        if (!r.second) {
+          // two up-set osds come from same parent
+          to_cancel.insert(pg);
+          break;
+        }
       }
-      if (osdmap.pg_upmap.count(p.first)) {
-        pending_inc->old_pg_upmap.insert(p.first);
+      // the above check validates collision only
+      // below we continue to check against crush-topology changing..
+      auto it = weight_map.find(osd);
+      if (it == weight_map.end()) {
+        // osd is gone or has been moved out of the specific crush-tree
+        to_cancel.insert(pg);
+        break;
+      }
+      auto adjusted_weight = tmpmap.get_weightf(it->first) * it->second;
+      if (adjusted_weight == 0) {
+        // osd is out/crush-out
+        to_cancel.insert(pg);
+        break;
       }
     }
   }
-  for (auto& p : tmpmap.pg_upmap_items) {
-    ldout(cct, 10) << __func__ << " pg_upmap_items entry "
-                   << "[" << p.first << ":" << p.second << "]"
-                   << dendl;
-    auto crush_rule = tmpmap.get_pg_pool_crush_rule(p.first);
-    if (crush_rule < 0) {
-      lderr(cct) << __func__ << " unable to load crush-rule of pg "
-                 << p.first << dendl;
-      continue;
-    }
-    auto type = tmpmap.crush->get_rule_failure_domain(crush_rule);
-    if (type < 0) {
-      lderr(cct) << __func__ << " unable to load failure-domain-type of pg "
-                 << p.first << dendl;
-      continue;
-    } else if (type == 0) {
-      ldout(cct, 10) << __func__ << " failure-domain of pg " << p.first
-                     << " is osd-level, skipping"
-                     << dendl;
-      continue;
-    }
-    ldout(cct, 10) << __func__ << " pg " << p.first
-                   << " crush_rule_id " << crush_rule
-                   << " failure_domain_type " << type
-                   << dendl;
-    vector<int> raw;
-    int primary;
-    tmpmap.pg_to_raw_up(p.first, &raw, &primary);
-    set<int> parents;
-    bool error = false;
-    bool collide = false;
-    for (auto osd : raw) {
-      auto parent = tmpmap.crush->get_parent_of_type(osd, type);
-      if (parent >= 0) {
-        lderr(cct) << __func__ << " unable to get parent of raw osd." << osd
-                   << ", pg " << p.first
-                   << dendl;
-        error = true;
-        break;
+  for (auto &pg: to_cancel) {
+    { // pg_upmap
+      auto it = pending_inc->new_pg_upmap.find(pg);
+      if (it != pending_inc->new_pg_upmap.end()) {
+        ldout(cct, 10) << __func__ << " cancel invalid pending "
+                       << "pg_upmap entry "
+                       << it->first << "->" << it->second
+                       << dendl;
+        pending_inc->new_pg_upmap.erase(it);
       }
-      auto r = parents.insert(parent);
-      if (!r.second) {
-        collide = true;
-        break;
+      if (osdmap.pg_upmap.count(pg)) {
+        ldout(cct, 10) << __func__ << " cancel invalid pg_upmap entry "
+                       << osdmap.pg_upmap.find(pg)->first << "->"
+                       << osdmap.pg_upmap.find(pg)->second
+                       << dendl;
+        pending_inc->old_pg_upmap.insert(pg);
       }
     }
-    if (!error && collide) {
-      ldout(cct, 10) << __func__ << " removing invalid pg_upmap_items "
-                     << "[" << p.first << ":" << p.second << "]"
-                     << ", final mapping result will be: " << raw
-                     << dendl;
-      // This is overkilling, but simpler..
-      auto it = pending_inc->new_pg_upmap_items.find(p.first);
+    { // pg_upmap_items
+      auto it = pending_inc->new_pg_upmap_items.find(pg);
       if (it != pending_inc->new_pg_upmap_items.end()) {
+        ldout(cct, 10) << __func__ << " cancel invalid pending "
+                       << "pg_upmap_items entry "
+                       << it->first << "->" << it->second
+                       << dendl;
         pending_inc->new_pg_upmap_items.erase(it);
       }
-      if (osdmap.pg_upmap_items.count(p.first)) {
-        pending_inc->old_pg_upmap_items.insert(p.first);
+      if (osdmap.pg_upmap_items.count(pg)) {
+        ldout(cct, 10) << __func__ << " cancel invalid "
+                       << "pg_upmap_items entry "
+                       << osdmap.pg_upmap_items.find(pg)->first << "->"
+                       << osdmap.pg_upmap_items.find(pg)->second
+                       << dendl;
+        pending_inc->old_pg_upmap_items.insert(pg);
       }
     }
   }
@@ -4074,6 +4072,8 @@ int OSDMap::calc_pg_upmaps(
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
       int osd = p->second;
       float deviation = p->first;
+      // make sure osd is still there (belongs to this crush-tree)
+      assert(osd_weight.count(osd));
       float target = osd_weight[osd] * pgs_per_weight;
       assert(target > 0);
       if (deviation/target < max_deviation_ratio) {

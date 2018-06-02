@@ -236,8 +236,7 @@ void Server::dispatch(Message *m)
 
     bool wait_for_active = true;
     if (mds->is_stopping()) {
-      if (m->get_source().is_mds())
-	wait_for_active = false;
+      wait_for_active = false;
     } else if (mds->is_clientreplay()) {
       if (req->is_queued_for_replay()) {
 	wait_for_active = false;
@@ -333,7 +332,8 @@ void Server::handle_client_session(MClientSession *m)
     if (session->is_opening() ||
 	session->is_open() ||
 	session->is_stale() ||
-	session->is_killing()) {
+	session->is_killing() ||
+	terminating_sessions) {
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
       // set client metadata for session opened by prepare_force_open_sessions
       if (!m->client_meta.empty())
@@ -356,7 +356,8 @@ void Server::handle_client_session(MClientSession *m)
         });
 
     if (blacklisted) {
-      dout(10) << "ignoring blacklisted client " << session->info.inst.addr << dendl;
+      dout(10) << "rejecting blacklisted client " << session->info.inst.addr << dendl;
+      mds->send_message_client(new MClientSession(CEPH_SESSION_REJECT), session);
       m->put();
       return;
     }
@@ -586,32 +587,48 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
  *  - sessions learned from other MDSs during a cross-MDS rename
  */
 version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
-					      map<client_t,uint64_t>& sseqmap)
+					      map<client_t, pair<Session*,uint64_t> >& smap)
 {
   version_t pv = mds->sessionmap.get_projected();
 
   dout(10) << "prepare_force_open_sessions " << pv 
 	   << " on " << cm.size() << " clients"
 	   << dendl;
-  for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
 
+  mds->objecter->with_osdmap(
+      [this, &cm](const OSDMap &osd_map) {
+	for (auto p = cm.begin(); p != cm.end(); ) {
+	  if (osd_map.is_blacklisted(p->second.addr)) {
+	    dout(10) << " ignoring blacklisted client." << p->first
+		     << " (" <<  p->second.addr << ")" << dendl;
+	    cm.erase(p++);
+	  } else {
+	    ++p;
+	  }
+	}
+      });
+
+  for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
     Session *session = mds->sessionmap.get_or_add_session(p->second);
     pv = mds->sessionmap.mark_projected(session);
+    uint64_t sseq;
     if (session->is_closed() || 
 	session->is_closing() ||
-	session->is_killing())
-      sseqmap[p->first] = mds->sessionmap.set_state(session, Session::STATE_OPENING);
-    else
+	session->is_killing()) {
+      sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
+    } else {
       assert(session->is_open() ||
 	     session->is_opening() ||
 	     session->is_stale());
+      sseq = 0;
+    }
+    smap[p->first] = make_pair(session, sseq);
     session->inc_importing();
   }
   return pv;
 }
 
-void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
-					map<client_t,uint64_t>& sseqmap,
+void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_t> >& smap,
 					bool dec_import)
 {
   /*
@@ -619,17 +636,13 @@ void Server::finish_force_open_sessions(map<client_t,entity_inst_t>& cm,
    * client trying to close a session and an MDS doing an import
    * trying to force open a session...  
    */
-  dout(10) << "finish_force_open_sessions on " << cm.size() << " clients,"
+  dout(10) << "finish_force_open_sessions on " << smap.size() << " clients,"
 	   << " initial v " << mds->sessionmap.get_version() << dendl;
-  
 
-  for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
-
-    Session *session = mds->sessionmap.get_session(p->second.name);
-    assert(session);
-    
-    if (sseqmap.count(p->first)) {
-      uint64_t sseq = sseqmap[p->first];
+  for (auto &it : smap) {
+    Session *session = it.second.first;
+    uint64_t sseq = it.second.second;
+    if (sseq > 0) {
       if (session->get_state_seq() != sseq) {
 	dout(10) << "force_open_sessions skipping changed " << session->info.inst << dendl;
       } else {
@@ -863,7 +876,13 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
 void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 {
   reconnect_done = reconnect_done_;
-  mds->sessionmap.get_client_set(client_reconnect_gather);
+
+  set<Session*> sessions;
+  mds->sessionmap.get_client_session_set(sessions);
+  for (auto session : sessions) {
+    if (session->is_open())
+	client_reconnect_gather.insert(session->get_client());
+  }
 
   if (client_reconnect_gather.empty()) {
     dout(7) << "reconnect_clients -- no sessions, doing nothing." << dendl;
@@ -905,7 +924,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
        << ") from " << m->get_source_inst()
        << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")";
     deny = true;
-  } else if (session->is_closed()) {
+  } else if (!session->is_open()) {
     dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
     mds->clog->info() << "denied reconnect attempt (mds is "
 	<< ceph_mds_state_name(mds->get_state())
@@ -986,6 +1005,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       mdcache->rejoin_recovered_caps(p->first, from, p->second, MDS_RANK_NONE);
     }
   }
+  mdcache->rejoin_recovered_client(session->get_client(), session->info.inst);
 
   // remove from gather set
   client_reconnect_gather.erase(from);
@@ -1959,6 +1979,7 @@ void Server::handle_slave_request(MMDSSlaveRequest *m)
       } else {
 	mdcache->request_finish(mdr);
       }
+      m->put();
       return;
     }
   }
@@ -3004,7 +3025,13 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
     return;
   }
 
-  CInode *ref = rdlock_path_pin_ref(mdr, 0, rdlocks, false, false, NULL, !is_lookup);
+  bool want_auth = false;
+  int mask = req->head.args.getattr.mask;
+  if (mask & CEPH_STAT_RSTAT)
+    want_auth = true; // set want_auth for CEPH_STAT_RSTAT mask
+
+  CInode *ref = rdlock_path_pin_ref(mdr, 0, rdlocks, want_auth, false, NULL, 
+				    !is_lookup);
   if (!ref) return;
 
   /*
@@ -3022,7 +3049,6 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 	      mdr->snapid <= cap->client_follows))
     issued = cap->issued();
 
-  int mask = req->head.args.getattr.mask;
   if ((mask & CEPH_CAP_LINK_SHARED) && !(issued & CEPH_CAP_LINK_EXCL))
     rdlocks.insert(&ref->linklock);
   if ((mask & CEPH_CAP_AUTH_SHARED) && !(issued & CEPH_CAP_AUTH_EXCL))
@@ -3397,7 +3423,7 @@ public:
     // dirty inode, dn, dir
     newi->inode.version--;   // a bit hacky, see C_MDS_mknod_finish
     newi->mark_dirty(newi->inode.version+1, mdr->ls);
-    newi->_mark_dirty_parent(mdr->ls, true);
+    newi->mark_dirty_parent(mdr->ls, true);
 
     mdr->apply();
 
@@ -4143,7 +4169,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   }
 
   pi.inode.version = cur->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   pi.inode.change_attr++;
 
   // log + wait
@@ -4179,7 +4205,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   // prepare
   auto &pi = in->project_inode();
   pi.inode.version = in->pre_dirty();
-  pi.inode.mtime = pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.mtime = pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   pi.inode.change_attr++;
 
   uint64_t old_size = std::max<uint64_t>(pi.inode.size, mdr->client_request->head.args.open.old_size);
@@ -4297,7 +4323,7 @@ void Server::handle_client_setlayout(MDRequestRef& mdr)
   // add the old pool to the inode
   pi.inode.add_old_pool(old_layout.pool_id);
   pi.inode.version = cur->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   pi.inode.change_attr++;
   
   // log + wait
@@ -4650,7 +4676,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     int64_t old_pool = pi.inode.layout.pool_id;
     pi.inode.add_old_pool(old_pool);
     pi.inode.layout = layout;
-    pi.inode.ctime = mdr->get_op_stamp();
     pip = &pi.inode;
   } else if (name.compare(0, 10, "ceph.quota") == 0) { 
     if (!cur->is_dir() || cur->is_root()) {
@@ -4676,6 +4701,9 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 
     mdr->no_early_reply = true;
     pip = &pi.inode;
+
+    client_t exclude_ct = mdr->get_client();
+    mdcache->broadcast_quota_to_client(cur, exclude_ct);
   } else if (name.find("ceph.dir.pin") == 0) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);
@@ -4706,7 +4734,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   }
 
   pip->change_attr++;
-  pip->ctime = mdr->get_op_stamp();
+  pip->ctime = pip->rstat.rctime = mdr->get_op_stamp();
   pip->version = cur->pre_dirty();
   if (cur->is_file())
     pip->update_backtrace();
@@ -4873,7 +4901,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   // project update
   auto &pi = cur->project_inode(true);
   pi.inode.version = cur->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   pi.inode.change_attr++;
   pi.inode.xattr_version++;
   auto &px = *pi.xattrs;
@@ -4940,7 +4968,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   auto &pi = cur->project_inode(true);
   auto &px = *pi.xattrs;
   pi.inode.version = cur->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   pi.inode.change_attr++;
   pi.inode.xattr_version++;
   px.erase(mempool::mds_co::string(boost::string_view(name)));
@@ -4982,7 +5010,7 @@ public:
     // a new version of hte inode since it's just been created)
     newi->inode.version--; 
     newi->mark_dirty(newi->inode.version + 1, mdr->ls);
-    newi->_mark_dirty_parent(mdr->ls, true);
+    newi->mark_dirty_parent(mdr->ls, true);
 
     // mkdir?
     if (newi->inode.is_dir()) { 
@@ -5334,7 +5362,7 @@ void Server::_link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti)
   // project inode update
   auto &pi = targeti->project_inode();
   pi.inode.nlink++;
-  pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   pi.inode.change_attr++;
   pi.inode.version = tipv;
 
@@ -5727,7 +5755,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
   }
 
   // inode
-  pi.inode.ctime = rollback.old_ctime;
+  pi.inode.ctime = pi.inode.rstat.rctime = rollback.old_ctime;
   if (rollback.was_inc)
     pi.inode.nlink--;
   else
@@ -5998,7 +6026,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   }
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi.inode.version = in->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   pi.inode.change_attr++;
   pi.inode.nlink--;
   if (pi.inode.nlink == 0)
@@ -6998,10 +7026,10 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
   bufferlist::iterator blp = mdr->more()->inode_import.begin();
 	  
   // imported caps
-  ::decode(mdr->more()->imported_client_map, blp);
-  ::encode(mdr->more()->imported_client_map, *client_map_bl,
-           mds->mdsmap->get_up_features());
-  prepare_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
+  map<client_t,entity_inst_t> client_map;
+  decode(client_map, blp);
+  prepare_force_open_sessions(client_map, mdr->more()->imported_session_map);
+  encode(client_map, *client_map_bl, mds->mdsmap->get_up_features());
 
   list<ScatterLock*> updated_scatterlocks;
   mdcache->migrator->decode_import_inode(srcdn, blp, srcdn->authority().first, mdr->ls,
@@ -7189,13 +7217,13 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 
   if (!silent) {
     if (spi) {
-      spi->ctime = mdr->get_op_stamp();
+      spi->ctime = spi->rstat.rctime = mdr->get_op_stamp();
       spi->change_attr++;
       if (linkmerge)
 	spi->nlink--;
     }
     if (tpi) {
-      tpi->ctime = mdr->get_op_stamp();
+      tpi->ctime = tpi->rstat.rctime = mdr->get_op_stamp();
       tpi->change_attr++;
       {
         std::string t;
@@ -7437,12 +7465,13 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
       map<client_t,Capability::Import> imported_caps;
       
       // finish cap imports
-      finish_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
+      finish_force_open_sessions(mdr->more()->imported_session_map);
       if (mdr->more()->cap_imports.count(destdnl->get_inode())) {
 	mdcache->migrator->finish_import_inode_caps(destdnl->get_inode(),
-							 mdr->more()->srcdn_auth_mds, true,
-							 mdr->more()->cap_imports[destdnl->get_inode()],
-							 imported_caps);
+						    mdr->more()->srcdn_auth_mds, true,
+						    mdr->more()->imported_session_map,
+						    mdr->more()->cap_imports[destdnl->get_inode()],
+						    imported_caps);
       }
 
       mdr->more()->inode_import.clear();
@@ -8087,7 +8116,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     } else
       pip = in->get_projected_inode();
     if (pip->ctime == rollback.ctime)
-      pip->ctime = rollback.orig_src.old_ctime;
+      pip->ctime = pip->rstat.rctime = rollback.orig_src.old_ctime;
   }
 
   if (srcdn && srcdn->authority().first == whoami) {
@@ -8124,7 +8153,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
     } else 
       ti = target->get_projected_inode();
     if (ti->ctime == rollback.ctime)
-      ti->ctime = rollback.orig_dest.old_ctime;
+      ti->ctime = ti->rstat.rctime = rollback.orig_dest.old_ctime;
     if (MDS_INO_IS_STRAY(rollback.orig_src.dirfrag.ino)) {
       if (MDS_INO_IS_STRAY(rollback.orig_dest.dirfrag.ino))
 	assert(!rollback.orig_dest.ino && !rollback.orig_dest.remote_ino);
@@ -8578,7 +8607,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   info.stamp = mdr->get_op_stamp();
 
   auto &pi = diri->project_inode(false, true);
-  pi.inode.ctime = info.stamp;
+  pi.inode.ctime = pi.inode.rstat.rctime = info.stamp;
   pi.inode.version = diri->pre_dirty();
 
   // project the snaprealm
@@ -8710,7 +8739,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   // journal
   auto &pi = diri->project_inode(false, true);
   pi.inode.version = diri->pre_dirty();
-  pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   
   mdr->ls = mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mdlog, "rmsnap");
@@ -8852,7 +8881,7 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
 
   // journal
   auto &pi = diri->project_inode(false, true);
-  pi.inode.ctime = mdr->get_op_stamp();
+  pi.inode.ctime = pi.inode.rstat.rctime = mdr->get_op_stamp();
   pi.inode.version = diri->pre_dirty();
 
   // project the snaprealm

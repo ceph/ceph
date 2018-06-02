@@ -271,7 +271,7 @@ public:
   Export make_export() {
     return Export(cap_id, _wanted, issued(), pending(), client_follows, last_sent, mseq+1, last_issue_stamp);
   }
-  void merge(Export& other, bool auth_cap) {
+  void merge(const Export& other, bool auth_cap) {
     if (!is_stale()) {
       // issued + pending
       int newpending = other.pending | pending();

@@ -236,7 +236,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     remount_cb(NULL),
     ino_invalidate_cb(NULL),
     dentry_invalidate_cb(NULL),
-    getgroups_cb(NULL),
     umask_cb(NULL),
     can_invalidate_dentries(false),
     async_ino_invalidator(m->cct),
@@ -902,8 +901,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     add_update_cap(in, session, st->cap.cap_id, st->cap.caps, st->cap.seq,
 		   st->cap.mseq, inodeno_t(st->cap.realm), st->cap.flags,
 		   request_perms);
-    if (in->auth_cap && in->auth_cap->session == session)
+    if (in->auth_cap && in->auth_cap->session == session) {
       in->max_size = st->max_size;
+      in->rstat = st->rstat;
+    }
   } else
     in->snap_caps |= st->cap.caps;
 
@@ -3762,7 +3763,7 @@ void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
   if (cct->_conf->client_oc) {
     vector<ObjectExtent> ls;
     Striper::file_to_extents(cct, in->ino, &in->layout, off, len, in->truncate_size, ls);
-    objectcacher->discard_set(&in->oset, ls);
+    objectcacher->discard_writeback(&in->oset, ls, nullptr);
   }
 
   _schedule_invalidate_callback(in, off, len);
@@ -5069,6 +5070,12 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     ::decode(in->xattrs, p);
     in->xattr_version = m->head.xattr_version;
   }
+
+  if ((new_caps & CEPH_CAP_FILE_SHARED) && m->dirstat_is_valid()) {
+    in->dirstat.nfiles = m->get_nfiles();
+    in->dirstat.nsubdirs = m->get_nsubdirs();
+  }
+
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
 			 m->get_change_attr(), m->get_time_warp_seq(), m->get_ctime(),
 			 m->get_mtime(), m->get_atime(),
@@ -5104,17 +5111,16 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     else if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_WR))
       in->recall_deleg(true);
 
-    if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
-        && !_flush(in, new C_Client_FlushComplete(this, in))) {
+    if ((used & revoked & CEPH_CAP_FILE_BUFFER) &&
+	!_flush(in, new C_Client_FlushComplete(this, in))) {
       // waitin' for flush
-    } else if ((old_caps & ~new_caps) & CEPH_CAP_FILE_CACHE) {
+    } else if (revoked & CEPH_CAP_FILE_CACHE) {
       if (_release(in))
 	check = true;
     } else {
       cap->wanted = 0; // don't let check_caps skip sending a response to MDS
       check = true;
     }
-
   } else if (old_caps == new_caps) {
     ldout(cct, 10) << "  caps unchanged at " << ccap_string(old_caps) << dendl;
   } else {
@@ -5147,63 +5153,6 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     _try_to_trim_inode(in, true);
 
   m->put();
-}
-
-int Client::_getgrouplist(gid_t** sgids, uid_t uid, gid_t gid)
-{
-  // cppcheck-suppress variableScope
-  int sgid_count;
-  gid_t *sgid_buf;
-
-  if (getgroups_cb) {
-    sgid_count = getgroups_cb(callback_handle, &sgid_buf);
-    if (sgid_count > 0) {
-      *sgids = sgid_buf;
-      return sgid_count;
-    }
-  }
-
-#if HAVE_GETGROUPLIST
-  struct passwd *pw;
-  pw = getpwuid(uid);
-  if (pw == NULL) {
-    ldout(cct, 3) << "getting user entry failed" << dendl;
-    return -errno;
-  }
-  //use PAM to get the group list
-  // initial number of group entries, defaults to posix standard of 16
-  // PAM implementations may provide more than 16 groups....
-  sgid_count = 16;
-  sgid_buf = (gid_t*)malloc(sgid_count * sizeof(gid_t));
-  if (sgid_buf == NULL) {
-    ldout(cct, 3) << "allocating group memory failed" << dendl;
-    return -ENOMEM;
-  }
-
-  while (1) {
-#if defined(__APPLE__)
-    if (getgrouplist(pw->pw_name, gid, (int*)sgid_buf, &sgid_count) == -1) {
-#else
-    if (getgrouplist(pw->pw_name, gid, sgid_buf, &sgid_count) == -1) {
-#endif
-      // we need to resize the group list and try again
-      void *_realloc = NULL;
-      if ((_realloc = realloc(sgid_buf, sgid_count * sizeof(gid_t))) == NULL) {
-	ldout(cct, 3) << "allocating group memory failed" << dendl;
-	free(sgid_buf);
-	return -ENOMEM;
-      }
-      sgid_buf = (gid_t*)_realloc;
-      continue;
-    }
-    // list was successfully retrieved
-    break;
-  }
-  *sgids = sgid_buf;
-  return sgid_count;
-#else
-  return 0;
-#endif
 }
 
 int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
@@ -7117,7 +7066,22 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   st->st_dev = in->snapid;
   st->st_mode = in->mode;
   st->st_rdev = in->rdev;
-  st->st_nlink = in->nlink;
+  if (in->is_dir()) {
+    switch (in->nlink) {
+      case 0:
+        st->st_nlink = 0; /* dir is unlinked */
+        break;
+      case 1:
+        st->st_nlink = 1 /* parent dentry */
+                       + 1 /* <dir>/. */
+                       + in->dirstat.nsubdirs; /* include <dir>/. self-reference */
+        break;
+      default:
+        ceph_abort();
+    }
+  } else {
+    st->st_nlink = in->nlink;
+  }
   st->st_uid = in->uid;
   st->st_gid = in->gid;
   if (in->ctime > in->mtime) {
@@ -7184,7 +7148,22 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
   }
 
   if (mask & CEPH_CAP_LINK_SHARED) {
-    stx->stx_nlink = in->nlink;
+    if (in->is_dir()) {
+      switch (in->nlink) {
+        case 0:
+          stx->stx_nlink = 0; /* dir is unlinked */
+          break;
+        case 1:
+          stx->stx_nlink = 1 /* parent dentry */
+                           + 1 /* <dir>/. */
+                           + in->dirstat.nsubdirs; /* include <dir>/. self-reference */
+          break;
+        default:
+          ceph_abort();
+      }
+    } else {
+      stx->stx_nlink = in->nlink;
+    }
     stx->stx_mask |= CEPH_STATX_NLINK;
   }
 
@@ -9478,6 +9457,8 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
   if (!syncdataonly && !in->unsafe_ops.empty()) {
+    flush_mdlog_sync();
+
     MetaRequest *req = in->unsafe_ops.back();
     ldout(cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
 
@@ -10058,7 +10039,6 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
   ldout(cct, 10) << "ll_register_callbacks cb " << args->handle
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
-		 << " getgroups_cb" << args->getgroups_cb
 		 << " switch_interrupt_cb " << args->switch_intr_cb
 		 << " remount_cb " << args->remount_cb
 		 << dendl;
@@ -10079,7 +10059,6 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
     remount_cb = args->remount_cb;
     remount_finisher.start();
   }
-  getgroups_cb = args->getgroups_cb;
   umask_cb = args->umask_cb;
 }
 
@@ -10852,7 +10831,11 @@ int Client::_getxattr(Inode *in, const char *name, void *value, size_t size,
 
     // Do a force getattr to get the latest quota before returning
     // a value to userspace.
-    r = _getattr(in, 0, perms, true);
+    int flags = 0;
+    if (vxattr->flags & VXATTR_RSTAT) {
+      flags |= CEPH_STAT_RSTAT;
+    }
+    r = _getattr(in, flags, perms, true);
     if (r != 0) {
       // Error from getattr!
       return r;
@@ -11369,6 +11352,16 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   readonly: true,						\
   hidden: false,						\
   exists_cb: NULL,						\
+  flags: 0,                                                     \
+}
+#define XATTR_NAME_CEPH2(_type, _name, _flags)                 \
+{                                                              \
+  name: CEPH_XATTR_NAME(_type, _name),                         \
+  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,     \
+  readonly: true,                                              \
+  hidden: false,                                               \
+  exists_cb: NULL,                                             \
+  flags: _flags,                                               \
 }
 #define XATTR_LAYOUT_FIELD(_type, _name, _field)		\
 {								\
@@ -11377,6 +11370,7 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   readonly: false,						\
   hidden: true,							\
   exists_cb: &Client::_vxattrcb_layout_exists,			\
+  flags: 0,                                                     \
 }
 #define XATTR_QUOTA_FIELD(_type, _name)		                \
 {								\
@@ -11385,6 +11379,7 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   readonly: false,						\
   hidden: true,							\
   exists_cb: &Client::_vxattrcb_quota_exists,			\
+  flags: 0,                                                     \
 }
 
 const Client::VXattr Client::_dir_vxattrs[] = {
@@ -11394,6 +11389,7 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     readonly: false,
     hidden: true,
     exists_cb: &Client::_vxattrcb_layout_exists,
+    flags: 0,
   },
   XATTR_LAYOUT_FIELD(dir, layout, stripe_unit),
   XATTR_LAYOUT_FIELD(dir, layout, stripe_count),
@@ -11403,17 +11399,18 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   XATTR_NAME_CEPH(dir, entries),
   XATTR_NAME_CEPH(dir, files),
   XATTR_NAME_CEPH(dir, subdirs),
-  XATTR_NAME_CEPH(dir, rentries),
-  XATTR_NAME_CEPH(dir, rfiles),
-  XATTR_NAME_CEPH(dir, rsubdirs),
-  XATTR_NAME_CEPH(dir, rbytes),
-  XATTR_NAME_CEPH(dir, rctime),
+  XATTR_NAME_CEPH2(dir, rentries, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rfiles, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rsubdirs, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rbytes, VXATTR_RSTAT),
+  XATTR_NAME_CEPH2(dir, rctime, VXATTR_RSTAT),
   {
     name: "ceph.quota",
     getxattr_cb: &Client::_vxattrcb_quota,
     readonly: false,
     hidden: true,
     exists_cb: &Client::_vxattrcb_quota_exists,
+    flags: 0,
   },
   XATTR_QUOTA_FIELD(quota, max_bytes),
   XATTR_QUOTA_FIELD(quota, max_files),
@@ -11427,6 +11424,7 @@ const Client::VXattr Client::_file_vxattrs[] = {
     readonly: false,
     hidden: true,
     exists_cb: &Client::_vxattrcb_layout_exists,
+    flags: 0,
   },
   XATTR_LAYOUT_FIELD(file, layout, stripe_unit),
   XATTR_LAYOUT_FIELD(file, layout, stripe_count),
@@ -12395,7 +12393,7 @@ int Client::ll_get_stripe_osd(Inode *in, uint64_t blockno,
 {
   Mutex::Locker lock(client_lock);
 
-  inodeno_t ino = ll_get_inodeno(in);
+  inodeno_t ino = in->ino;
   uint32_t object_size = layout->object_size;
   uint32_t su = layout->stripe_unit;
   uint32_t stripe_count = layout->stripe_count;
@@ -12877,6 +12875,19 @@ int Client::ll_fsync(Fh *fh, bool syncdataonly)
     fh->take_async_err();
   }
   return r;
+}
+
+int Client::ll_sync_inode(Inode *in, bool syncdataonly)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_sync_inode " << *in << " " << dendl;
+  tout(cct) << "ll_sync_inode" << std::endl;
+  tout(cct) << (unsigned long)in << std::endl;
+
+  if (unmounting)
+    return -ENOTCONN;
+
+  return _fsync(in, syncdataonly);
 }
 
 #ifdef FALLOC_FL_PUNCH_HOLE
@@ -13473,6 +13484,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 
 	case MetaSession::STATE_OPEN:
 	  {
+	    objecter->maybe_request_map(); /* to check if we are blacklisted */
 	    const md_config_t *conf = cct->_conf;
 	    if (conf->client_reconnect_stale) {
 	      ldout(cct, 1) << "reset from mds we were open; close mds session for reconnect" << dendl;
@@ -13893,13 +13905,6 @@ void Client::handle_conf_change(const struct md_config_t *conf,
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
   }
-}
-
-void Client::init_groups(UserPerm *perms)
-{
-  gid_t *sgids;
-  int count = _getgrouplist(&sgids, perms->uid(), perms->gid());
-  perms->init_gids(sgids, count);
 }
 
 void intrusive_ptr_add_ref(Inode *in)

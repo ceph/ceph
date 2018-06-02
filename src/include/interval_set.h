@@ -517,8 +517,8 @@ class interval_set {
     erase(val, 1);
   }
 
-  void erase(T start, T len,
-    std::function<bool(T, T)> post_process = {}) {
+  void erase(T start, T len, 
+    std::function<bool(T, T)> claim = {}) {
     typename Map::iterator p = find_inc_m(start);
 
     _size -= len;
@@ -530,13 +530,22 @@ class interval_set {
     T before = start - p->first;
     assert(p->second >= before+len);
     T after = p->second - before - len;
-    if (before && (post_process ? post_process(p->first, before) : true)) {
-      p->second = before;        // shorten bit before
+    if (before) {
+      if (claim && claim(p->first, before)) {
+	_size -= before;
+	m.erase(p);
+      } else {
+	p->second = before;        // shorten bit before
+      }
     } else {
       m.erase(p);
     }
-    if (after && (post_process ? post_process(start + len, after) : true)) {
-      m[start + len] = after;
+    if (after) {
+      if (claim && claim(start + len, after)) {
+	_size -= after;
+      } else {
+	m[start + len] = after;
+      }
     }
   }
 

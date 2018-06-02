@@ -1240,7 +1240,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
           uint32_t match_count = 0;
 
           // CephFS
-          FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
+          const FSMap &pending_fsmap = mon->mdsmon()->get_pending_fsmap();
           if (pending_fsmap.pool_in_use(pool_id)) {
             dout(10) << __func__ << " auto-enabling CephFS on pool '"
                      << pool_name << "'" << dendl;
@@ -4060,7 +4060,7 @@ void OSDMonitor::dump_info(Formatter *f)
 namespace {
   enum osd_pool_get_choices {
     SIZE, MIN_SIZE, CRASH_REPLAY_INTERVAL,
-    PG_NUM, PGP_NUM, CRUSH_RULE, HASHPSPOOL,
+    PG_NUM, PGP_NUM, CRUSH_RULE, HASHPSPOOL, EC_OVERWRITES,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
     WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
     HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
@@ -4661,8 +4661,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"min_size", MIN_SIZE},
       {"crash_replay_interval", CRASH_REPLAY_INTERVAL},
       {"pg_num", PG_NUM}, {"pgp_num", PGP_NUM},
-      {"crush_rule", CRUSH_RULE},
-      {"hashpspool", HASHPSPOOL}, {"nodelete", NODELETE},
+      {"crush_rule", CRUSH_RULE}, {"hashpspool", HASHPSPOOL},
+      {"allow_ec_overwrites", EC_OVERWRITES}, {"nodelete", NODELETE},
       {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
       {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
       {"write_fadvise_dontneed", WRITE_FADVISE_DONTNEED},
@@ -4710,7 +4710,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
     };
     const choices_set_t ONLY_ERASURE_CHOICES = {
-      ERASURE_CODE_PROFILE
+      EC_OVERWRITES, ERASURE_CODE_PROFILE
     };
 
     choices_set_t selected_choices;
@@ -4800,6 +4800,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    } else {
 	      f->dump_string("crush_rule", stringify(p->get_crush_rule()));
 	    }
+	    break;
+	  case EC_OVERWRITES:
+	    f->dump_bool("allow_ec_overwrites",
+                         p->has_flag(pg_pool_t::FLAG_EC_OVERWRITES));
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -5017,6 +5021,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case HIT_SET_SEARCH_LAST_N:
 	    ss << "hit_set_search_last_n: " <<
 	      p->hit_set_search_last_n << "\n";
+	    break;
+	  case EC_OVERWRITES:
+	    ss << "allow_ec_overwrites: " <<
+	      (p->has_flag(pg_pool_t::FLAG_EC_OVERWRITES) ? "true" : "false") <<
+	      "\n";
 	    break;
 	  case HASHPSPOOL:
 	  case NODELETE:
@@ -11703,6 +11712,10 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 
   case POOL_OP_DELETE_UNMANAGED_SNAP:
     if (!pp.is_removed_snap(m->snapid)) {
+      if (m->snapid > pp.get_snap_seq()) {
+        _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+        return false;
+      }
       pp.remove_unmanaged_snap(m->snapid);
       changed = true;
     }
@@ -11744,7 +11757,7 @@ int OSDMonitor::_check_remove_pool(int64_t pool_id, const pg_pool_t& pool,
   const string& poolstr = osdmap.get_pool_name(pool_id);
 
   // If the Pool is in use by CephFS, refuse to delete it
-  FSMap const &pending_fsmap = mon->mdsmon()->get_pending();
+  FSMap const &pending_fsmap = mon->mdsmon()->get_pending_fsmap();
   if (pending_fsmap.pool_in_use(pool_id)) {
     *ss << "pool '" << poolstr << "' is in use by CephFS";
     return -EBUSY;
@@ -11793,7 +11806,7 @@ bool OSDMonitor::_check_become_tier(
   const std::string &tier_pool_name = osdmap.get_pool_name(tier_pool_id);
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
-  const FSMap &pending_fsmap = mon->mdsmon()->get_pending();
+  const FSMap &pending_fsmap = mon->mdsmon()->get_pending_fsmap();
   if (pending_fsmap.pool_in_use(tier_pool_id)) {
     *ss << "pool '" << tier_pool_name << "' is in use by CephFS";
     *err = -EBUSY;
@@ -11853,7 +11866,7 @@ bool OSDMonitor::_check_remove_tier(
   const std::string &base_pool_name = osdmap.get_pool_name(base_pool_id);
 
   // Apply CephFS-specific checks
-  const FSMap &pending_fsmap = mon->mdsmon()->get_pending();
+  const FSMap &pending_fsmap = mon->mdsmon()->get_pending_fsmap();
   if (pending_fsmap.pool_in_use(base_pool_id)) {
     if (base_pool->is_erasure() && !base_pool->allows_ecoverwrites()) {
       // If the underlying pool is erasure coded and does not allow EC

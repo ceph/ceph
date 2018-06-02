@@ -261,7 +261,7 @@ class FuseMount(CephFSMount):
         assert not self.is_mounted()
         self._fuse_conn = None
 
-    def umount_wait(self, force=False, require_clean=False):
+    def umount_wait(self, force=False, require_clean=False, timeout=900):
         """
         :param force: Complete cleanly even if the MDS is offline
         """
@@ -282,7 +282,7 @@ class FuseMount(CephFSMount):
         try:
             if self.fuse_daemon:
                 # Permit a timeout, so that we do not block forever
-                run.wait([self.fuse_daemon], 900)
+                run.wait([self.fuse_daemon], timeout)
         except MaxWhileTries:
             log.error("process failed to terminate after unmount.  This probably"
                       "indicates a bug within ceph-fuse.")
