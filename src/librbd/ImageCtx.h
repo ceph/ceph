@@ -316,6 +316,8 @@ namespace librbd {
     journal::Policy *get_journal_policy() const;
     void set_journal_policy(journal::Policy *policy);
 
+    bool is_writeback_cache_enabled() const;
+
     static void get_thread_pool_instance(CephContext *cct,
                                          ThreadPool **thread_pool,
                                          ContextWQ **op_work_queue);
