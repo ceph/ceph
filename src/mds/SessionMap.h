@@ -330,7 +330,11 @@ public:
     num_trim_flushes_warnings(0),
     num_trim_requests_warnings(0) { }
   ~Session() override {
-    assert(!item_session_list.is_on_list());
+    if (state == STATE_CLOSED) {
+      item_session_list.remove_myself();
+    } else {
+      assert(!item_session_list.is_on_list());
+    }
     while (!preopen_out_queue.empty()) {
       preopen_out_queue.front()->put();
       preopen_out_queue.pop_front();
@@ -542,13 +546,6 @@ public:
 
   void dump();
 
-  void get_client_set(set<client_t>& s) {
-    for (ceph::unordered_map<entity_name_t,Session*>::iterator p = session_map.begin();
-	 p != session_map.end();
-	 ++p)
-      if (p->second->info.inst.name.is_client())
-	s.insert(p->second->info.inst.name.num());
-  }
   void get_client_session_set(set<Session*>& s) const {
     for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
 	 p != session_map.end();

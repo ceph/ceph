@@ -93,6 +93,19 @@ int main(int argc, const char **argv, const char *envp[]) {
       filer_flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
       usage();
+    } else if (ceph_argparse_flag(args, i, "-V", (char*)nullptr)) {
+      const char* tmpargv[] = {
+	"ceph-fuse",
+	"-V"
+      };
+
+      struct fuse_args fargs = FUSE_ARGS_INIT(2, (char**)tmpargv);
+      if (fuse_parse_cmdline(&fargs, nullptr, nullptr, nullptr) == -1) {
+       derr << "fuse_parse_cmdline failed." << dendl;
+      }
+      assert(fargs.allocated);
+      fuse_opt_free_args(&fargs);
+      exit(0);
     } else {
       ++i;
     }
@@ -254,9 +267,11 @@ int main(int argc, const char **argv, const char *envp[]) {
     r = client->mount(g_conf->client_mountpoint.c_str(), perms,
 		      g_ceph_context->_conf->fuse_require_active_mds);
     if (r < 0) {
-      if (r == CEPH_FUSE_NO_MDS_UP)
+      if (r == CEPH_FUSE_NO_MDS_UP) {
         cerr << "ceph-fuse[" << getpid() << "]: probably no MDS server is up?" << std::endl;
-      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+      }
+      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;r = EXIT_FAILURE;
+      r = EXIT_FAILURE;
       goto out_shutdown;
     }
 

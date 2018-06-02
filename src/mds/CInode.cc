@@ -423,7 +423,7 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   inode = front.inode;
 
   if (inode.is_backtrace_updated())
-    _mark_dirty_parent(ls, old_pool != inode.layout.pool_id);
+    mark_dirty_parent(ls, old_pool != inode.layout.pool_id);
 
   if (front.xattrs) {
     --num_projected_xattrs;
@@ -1236,7 +1236,7 @@ void CInode::fetch_backtrace(Context *fin, bufferlist *backtrace)
   mdcache->fetch_backtrace(inode.ino, get_backtrace_pool(), *backtrace, fin);
 }
 
-void CInode::_mark_dirty_parent(LogSegment *ls, bool dirty_pool)
+void CInode::mark_dirty_parent(LogSegment *ls, bool dirty_pool)
 {
   if (!state_test(STATE_DIRTYPARENT)) {
     dout(10) << "mark_dirty_parent" << dendl;
@@ -1283,7 +1283,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
     mds->clog->error() << "bad backtrace on directory inode " << ino();
     assert(!"bad backtrace" == (g_conf->mds_verify_backtrace > 1));
 
-    _mark_dirty_parent(mds->mdlog->get_current_segment(), false);
+    mark_dirty_parent(mds->mdlog->get_current_segment(), false);
     mds->mdlog->flush();
   }
 }
@@ -3442,6 +3442,8 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   m->ctime = i->ctime;
   m->change_attr = i->change_attr;
   m->time_warp_seq = i->time_warp_seq;
+  m->nfiles = i->dirstat.nfiles;
+  m->nsubdirs = i->dirstat.nsubdirs;
 
   if (cap->client_inline_version < i->inline_data.version) {
     m->inline_version = cap->client_inline_version = i->inline_data.version;
@@ -3681,7 +3683,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   }
   if (is_dirty_parent()) {
     get(PIN_DIRTYPARENT);
-    _mark_dirty_parent(ls);
+    mark_dirty_parent(ls);
   }
 
   ::decode(pop, ceph_clock_now(), p);
@@ -3925,7 +3927,7 @@ next:
         in->make_path_string(path);
         in->mdcache->mds->clog->warn() << "bad backtrace on inode " << in->ino()
                                        << "(" << path << "), rewriting it";
-        in->_mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
+        in->mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
                            false);
         // Flag that we repaired this BT so that it won't go into damagetable
         results->backtrace.repaired = true;

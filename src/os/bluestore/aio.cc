@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <algorithm>
 #include "aio.h"
 
 #if defined(HAVE_LIBAIO)
@@ -48,7 +49,7 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
   }
   int done = 0;
   while (left > 0) {
-    int r = io_submit(ctx, left, piocb + done);
+    int r = io_submit(ctx, std::min(left, max_iodepth), piocb + done);
     if (r < 0) {
       if (r == -EAGAIN && attempts-- > 0) {
 	usleep(delay);
@@ -61,6 +62,8 @@ int aio_queue_t::submit_batch(aio_iter begin, aio_iter end,
     assert(r > 0);
     done += r;
     left -= r;
+    attempts = 16;
+    delay = 125;
   }
   return done;
 }

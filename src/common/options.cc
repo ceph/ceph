@@ -1973,6 +1973,10 @@ std::vector<Option> get_global_options() {
     .set_default(8)
     .set_description(""),
 
+    Option("osd_skip_data_digest", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description(""),
+
     Option("osd_op_queue", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("wpq")
     .set_enum_allowed( { "wpq", "prioritized", "mclock_opclass", "mclock_client", "debug_random" } )
@@ -2485,85 +2489,116 @@ std::vector<Option> get_global_options() {
 
     Option("osd_max_scrubs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("Maximum concurrent scrubs on a single OSD"),
 
     Option("osd_scrub_during_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Allow scrubbing when PGs on the OSD are undergoing recovery"),
 
     Option("osd_scrub_begin_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Restrict scrubbing to this hour of the day or later")
+    .add_see_also("osd_scrub_end_hour"),
 
     Option("osd_scrub_end_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(24)
-    .set_description(""),
+    .set_description("Restrict scrubbing to hours of the day earlier than this")
+    .add_see_also("osd_scrub_begin_hour"),
+
+    Option("osd_scrub_begin_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Restrict scrubbing to this day of the week or later")
+    .set_long_description("0 or 7 = Sunday, 1 = Monday, etc.")
+    .add_see_also("osd_scrub_end_week_day"),
+
+    Option("osd_scrub_end_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(7)
+    .set_description("Restrict scrubbing to days of the week earlier than this")
+    .set_long_description("0 or 7 = Sunday, 1 = Monday, etc.")
+    .add_see_also("osd_scrub_begin_week_day"),
 
     Option("osd_scrub_load_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.5)
-    .set_description(""),
+    .set_description("Allow scrubbing when system load divided by number of CPUs is below this value"),
 
     Option("osd_scrub_min_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1_day)
-    .set_description(""),
+    .set_description("Scrub each PG no more often than this interval")
+    .add_see_also("osd_scrub_max_interval"),
 
     Option("osd_scrub_max_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(7_day)
-    .set_description(""),
+    .set_description("Scrub each PG no less often than this interval")
+    .add_see_also("osd_scrub_min_interval"),
 
     Option("osd_scrub_interval_randomize_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.5)
-    .set_description(""),
+    .set_description("Ratio of scrub interval to randomly vary")
+    .set_long_description("This prevents a scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
+    .add_see_also("osd_scrub_min_interval"),
 
-    Option("osd_scrub_backoff_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("osd_scrub_backoff_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.66)
-    .set_description(""),
+    .set_description("Backoff ratio after a failed scrub scheduling attempt"),
 
     Option("osd_scrub_chunk_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Minimum number of objects to scrub in a single chunk")
+    .add_see_also("osd_scrub_chunk_max"),
 
     Option("osd_scrub_chunk_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(25)
-    .set_description(""),
+    .set_description("Maximum number of object to scrub in a single chunk")
+    .add_see_also("osd_scrub_chunk_min"),
 
     Option("osd_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Duration to inject a delay during scrubbing"),
 
     Option("osd_scrub_auto_repair", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Automatically repair damaged objects detected during scrub"),
 
     Option("osd_scrub_auto_repair_num_errors", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Maximum number of detected errors to automatically repair")
+    .add_see_also("osd_scrub_auto_repair"),
+
+    Option("osd_scrub_max_preemptions", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("Set the maximum number of times we will preempt a deep scrub due to a client operation before blocking client IO to complete the scrub"),
 
     Option("osd_deep_scrub_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(7_day)
-    .set_description(""),
+    .set_description("Deep scrub each PG (i.e., verify data checksums) at least this often"),
 
     Option("osd_deep_scrub_randomize_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.15)
-    .set_description(""),
+    .set_description("Ratio of deep scrub interval to randomly vary")
+    .set_long_description("This prevents a deep scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
+    .add_see_also("osd_deep_scrub_interval"),
 
     Option("osd_deep_scrub_stride", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(524288)
-    .set_description(""),
+    .set_description("Number of bytes to read from an object at a time during deep scrub"),
+
+    Option("osd_deep_scrub_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1024)
+    .set_description("Number of keys to read from an object at a time during deep scrub"),
 
     Option("osd_deep_scrub_update_digest_min_age", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2_hr)
-    .set_description(""),
+    .set_description("Update overall object digest only if object was last modified longer ago than this"),
 
     Option("osd_deep_scrub_large_omap_object_key_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2000000)
-    .set_description("threshold for number of keys to determine a large omap object")
+    .set_description("Warn when we encounter an object with more omap keys than this")
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_value_sum_threshold"),
 
     Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1_G)
-    .set_description("threshold for summed size (bytes) of all key values to determine a large omap object")
+    .set_description("Warn when we encounter an object with more omap key bytes than this")
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_key_threshold"),
 
@@ -2757,6 +2792,10 @@ std::vector<Option> get_global_options() {
     Option("osd_debug_verify_cached_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
+
+    Option("osd_debug_deep_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Inject an expensive sleep during deep scrub IO to make it easier to induce preemption"),
 
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -2995,11 +3034,11 @@ std::vector<Option> get_global_options() {
 
     Option("osd_scrub_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Priority for scrub operations in work queue"),
 
     Option("osd_scrub_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50<<20)
-    .set_description(""),
+    .set_description("Cost for scrub operations in work queue"),
 
     Option("osd_requested_scrub_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(120)
@@ -6360,106 +6399,111 @@ std::vector<Option> get_mds_options() {
     Option("mds_hack_allow_loading_invalid_metadata", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk. Allows testing repair tools."),
+
+    Option("mds_inject_migrator_session_race", Option::TYPE_BOOL, Option::LEVEL_DEV)
+     .set_default(false),
   });
 }
 
 std::vector<Option> get_mds_client_options() {
   return std::vector<Option>({
-    Option("client_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("client_cache_size", Option::TYPE_INT, Option::LEVEL_BASIC)
     .set_default(16384)
-    .set_description(""),
+    .set_description("soft maximum number of directory entries in client cache"),
 
     Option("client_cache_mid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.75)
-    .set_description(""),
+    .set_description("mid-point of client cache LRU"),
 
-    Option("client_use_random_mds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("client_use_random_mds", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("issue new requests to a random active MDS"),
 
     Option("client_mount_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(300.0)
-    .set_description(""),
+    .set_description("timeout for mounting CephFS (seconds)"),
 
-    Option("client_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("client_tick_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1.0)
-    .set_description(""),
+    .set_description("seconds between client upkeep ticks"),
 
-    Option("client_trace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("client_trace", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .set_description(""),
+    .set_description("file containing trace of client operations"),
 
     Option("client_readahead_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(128*1024)
-    .set_description(""),
+    .set_description("minimum bytes to readahead in a file"),
 
     Option("client_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("maximum bytes to readahead in a file (zero is unlimited)"),
 
     Option("client_readahead_max_periods", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
-    .set_description(""),
+    .set_description("maximum stripe periods to readahead in a file"),
 
     Option("client_reconnect_stale", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("reconnect when the session becomes stale"),
 
     Option("client_snapdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(".snap")
-    .set_description(""),
+    .set_description("pseudo directory for snapshot access to a directory"),
 
     Option("client_mountpoint", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/")
-    .set_description(""),
+    .set_description("default mount-point"),
 
     Option("client_mount_uid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(-1)
-    .set_description(""),
+    .set_description("uid to mount as"),
 
     Option("client_mount_gid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(-1)
-    .set_description(""),
+    .set_description("gid to mount as"),
 
-    Option("client_notify_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    /* RADOS client option */
+    Option("client_notify_timeout", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(10)
     .set_description(""),
 
-    Option("osd_client_watch_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    /* RADOS client option */
+    Option("osd_client_watch_timeout", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(30)
     .set_description(""),
 
-    Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("client_caps_release_delay", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
     .set_description(""),
 
     Option("client_quota_df", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("show quota usage for statfs (df)"),
 
     Option("client_oc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("enable object caching"),
 
     Option("client_oc_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(200_M)
-    .set_description(""),
+    .set_description("maximum size of object cache"),
 
     Option("client_oc_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(100_M)
-    .set_description(""),
+    .set_description("maximum size of dirty pages in object cache"),
 
     Option("client_oc_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(8_M)
-    .set_description(""),
+    .set_description("target size of dirty pages object cache"),
 
     Option("client_oc_max_dirty_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5.0)
-    .set_description(""),
+    .set_description("maximum age of dirty pages in object cache (seconds)"),
 
     Option("client_oc_max_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
-    .set_description(""),
+    .set_description("maximum number of objects in cache"),
 
     Option("client_debug_getattr_caps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
@@ -6473,7 +6517,7 @@ std::vector<Option> get_mds_client_options() {
     .set_default(0)
     .set_description(""),
 
-    Option("client_max_inline_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("client_max_inline_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(4_K)
     .set_description(""),
 
@@ -6487,19 +6531,20 @@ std::vector<Option> get_mds_client_options() {
 
     Option("client_metadata", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("metadata key=value comma-delimited pairs appended to session metadata"),
 
     Option("client_acl_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("ACL type to enforce (none or \"posix_acl\")"),
 
     Option("client_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("client-enforced permission checking"),
 
     Option("client_dirsize_rbytes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("set the directory size as the number of file bytes recursively used")
+    .set_long_description("This option enables a CephFS feature that stores the recursive directory size (the bytes used by files in the directory and its descendents) in the st_size field of the stat structure."),
 
     Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -6507,15 +6552,15 @@ std::vector<Option> get_mds_client_options() {
 
     Option("fuse_disable_pagecache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("disable page caching in the kernel for this FUSE mount"),
 
     Option("fuse_allow_other", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("pass allow_other to FUSE on mount"),
 
     Option("fuse_default_permissions", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("pass default_permisions to FUSE on mount"),
 
     Option("fuse_big_writes", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -6523,29 +6568,29 @@ std::vector<Option> get_mds_client_options() {
 
     Option("fuse_atomic_o_trunc", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("pass atomic_o_trunc flag to FUSE on mount"),
 
-    Option("fuse_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("fuse_debug", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
     Option("fuse_multithreaded", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("allow parallel processing through FUSE library"),
 
     Option("fuse_require_active_mds", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("require active MDSs in the file system when mounting"),
 
     Option("fuse_syncfs_on_mksnap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("synchronize all local metadata/file changes after snapshot"),
 
     Option("fuse_set_user_groups", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("check for ceph-fuse to consider supplementary groups for permissions"),
 
-    Option("client_try_dentry_invalidate", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("client_try_dentry_invalidate", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
@@ -6560,15 +6605,15 @@ std::vector<Option> get_mds_client_options() {
 
     Option("client_check_pool_perm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("confirm access to inode's data pool/namespace described in file layout"),
 
-    Option("client_use_faked_inos", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("client_use_faked_inos", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
     Option("client_mds_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("CephFS file system name to mount"),
   });
 }
 

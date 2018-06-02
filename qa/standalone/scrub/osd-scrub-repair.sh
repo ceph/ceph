@@ -56,6 +56,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--osd-skip-data-digest=false "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -2719,8 +2720,7 @@ function corrupt_scrub_erasure() {
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -2771,8 +2771,7 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -2846,8 +2845,7 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -2953,8 +2951,7 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3011,8 +3008,7 @@ function corrupt_scrub_erasure() {
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3063,8 +3059,7 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3122,8 +3117,7 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3218,8 +3212,7 @@ function corrupt_scrub_erasure() {
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3375,8 +3368,7 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3430,8 +3422,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3510,8 +3501,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3623,8 +3613,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3685,8 +3674,7 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -3739,8 +3727,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3803,8 +3790,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -3900,8 +3886,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4038,8 +4023,7 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -4093,8 +4077,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4174,8 +4157,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4250,8 +4232,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4363,8 +4344,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4423,8 +4403,7 @@ EOF
             "lost": 0,
             "flags": [
               "dirty",
-              "data_digest",
-              "omap_digest"
+              "data_digest"
             ],
             "truncate_seq": 0,
             "truncate_size": 0,
@@ -4478,8 +4457,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4543,8 +4521,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -4642,8 +4619,7 @@ EOF
         "lost": 0,
         "flags": [
           "dirty",
-          "data_digest",
-          "omap_digest"
+          "data_digest"
         ],
         "truncate_seq": 0,
         "truncate_size": 0,
@@ -5134,6 +5110,6 @@ EOF
 main osd-scrub-repair "$@"
 
 # Local Variables:
-# compile-command: "cd ../.. ; make -j4 && \
-#    test/osd/osd-scrub-repair.sh # TEST_corrupt_and_repair_replicated"
+# compile-command: "cd build ; make -j4 && \
+#    ../qa/run-standalone.sh osd-scrub-repair.sh"
 # End:

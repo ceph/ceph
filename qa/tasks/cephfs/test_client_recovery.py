@@ -479,8 +479,6 @@ class TestClientRecovery(CephFSTestCase):
         if not isinstance(self.mount_a, FuseMount):
             raise SkipTest("Require FUSE client to handle signal STOP/CONT")
 
-        session_timeout = self.fs.get_var("session_timeout")
-
         self.mount_a.run_shell(["mkdir", "testdir"])
         self.mount_a.run_shell(["touch", "testdir/file1"])
         # populate readdir cache
@@ -499,7 +497,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.client_remote.run(args=["sudo", "kill", "-STOP", mount_b_pid])
 
         self.assert_session_state(mount_b_gid, "open")
-        time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
+        time.sleep(self.mds_session_timeout * 1.5)  # Long enough for MDS to consider session stale
         self.assert_session_state(mount_b_gid, "stale")
 
         self.mount_a.run_shell(["touch", "testdir/file2"])
@@ -508,3 +506,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.client_remote.run(args=["sudo", "kill", "-CONT", mount_b_pid])
         # Is the new file visible from mount_b? (caps become invalid after session stale)
         self.mount_b.run_shell(["ls", "testdir/file2"])
+
+    def test_unmount_for_evicted_client(self):
+        """Test if client hangs on unmount after evicting the client."""
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
+
+        self.mount_a.umount_wait(require_clean=True, timeout=30)

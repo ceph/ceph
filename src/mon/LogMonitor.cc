@@ -647,7 +647,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
   }
 
   version_t summary_ver = summary.version;
-  while (sv <= summary_ver) {
+  while (sv && sv <= summary_ver) {
     bufferlist bl;
     int err = get_version(sv, bl);
     assert(err == 0);

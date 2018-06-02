@@ -1437,7 +1437,7 @@ class CephManager:
         # both osd_mon_report_interval_min and mgr_stats_period are 5 seconds
         # by default, and take the faulty injection in ms into consideration,
         # 12 seconds are more than enough
-        delays = [1, 1, 2, 3, 5, 8, 13]
+        delays = [1, 1, 2, 3, 5, 8, 13, 0]
         @wraps(func)
         def wrapper(self, *args, **kwargs):
             exc = None

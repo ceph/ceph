@@ -434,7 +434,10 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
   rootdir->commit(0, gather->new_sub());
 
-  root->store(gather->new_sub());
+  root->mark_clean();
+  root->mark_dirty(root->pre_dirty(), mds->mdlog->get_current_segment());
+  root->mark_dirty_parent(mds->mdlog->get_current_segment(), true);
+  root->flush(gather->new_sub());
 }
 
 void MDCache::create_mydir_hierarchy(MDSGather *gather)
@@ -464,7 +467,7 @@ void MDCache::create_mydir_hierarchy(MDSGather *gather)
     straydir->mark_complete();
     straydir->mark_dirty(straydir->pre_dirty(), ls);
     straydir->commit(0, gather->new_sub());
-    stray->_mark_dirty_parent(ls, true);
+    stray->mark_dirty_parent(ls, true);
     stray->store_backtrace(gather->new_sub());
   }
 
@@ -611,6 +614,24 @@ void MDCache::open_mydir_inode(MDSInternalContextBase *c)
 
   gather.set_finisher(c);
   gather.activate();
+}
+
+void MDCache::open_mydir_frag(MDSInternalContextBase *c)
+{
+  open_mydir_inode(
+      new MDSInternalContextWrapper(mds,
+	new FunctionContext([this, c](int r) {
+	    if (r < 0) {
+	      c->complete(r);
+	      return;
+	    }
+	    CDir *mydir = myin->get_or_open_dirfrag(this, frag_t());
+	    assert(mydir);
+	    adjust_subtree_auth(mydir, mds->get_nodeid());
+	    mydir->fetch(c);
+	  })
+	)
+      );
 }
 
 void MDCache::open_root()
@@ -1963,7 +1984,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   }
 }
 
-void MDCache::broadcast_quota_to_client(CInode *in)
+void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct)
 {
   if (!in->is_auth() || in->is_frozen())
     return;
@@ -1982,6 +2003,10 @@ void MDCache::broadcast_quota_to_client(CInode *in)
       continue;
 
     Capability *cap = it->second;
+
+    if (exclude_ct >= 0 && exclude_ct != it->first)
+      goto update;
+
     if (cap->last_rbytes == i->rstat.rbytes &&
         cap->last_rsize == i->rstat.rsize())
       continue;
@@ -3164,6 +3189,10 @@ void MDCache::handle_resolve(MMDSResolve *m)
 	    im.cap_id = ++last_cap_id; // assign a new cap ID
 	    im.issue_seq = 1;
 	    im.mseq = q->second.mseq;
+
+	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
+	    if (session)
+	      rejoin_client_map.emplace(q->first, session->info.inst);
 	  }
 
 	  // will process these caps in rejoin stage
@@ -3955,12 +3984,11 @@ void MDCache::rejoin_send_rejoins()
   if (mds->is_rejoin()) {
     map<client_t, set<mds_rank_t> > client_exports;
     for (auto p = cap_exports.begin(); p != cap_exports.end(); ++p) {
-      assert(cap_export_targets.count(p->first));
-      mds_rank_t target = cap_export_targets[p->first];
+      mds_rank_t target = p->second.first;
       if (rejoins.count(target) == 0)
 	continue;
-      rejoins[target]->cap_exports[p->first] = p->second;
-      for (auto q = p->second.begin(); q != p->second.end(); ++q)
+      rejoins[target]->cap_exports[p->first] = p->second.second;
+      for (auto q = p->second.second.begin(); q != p->second.second.end(); ++q)
 	client_exports[q->first].insert(target);
     }
     for (map<client_t, set<mds_rank_t> >::iterator p = client_exports.begin();
@@ -4128,7 +4156,7 @@ void MDCache::rejoin_send_rejoins()
   rejoins_pending = false;
 
   // nothing?
-  if (mds->is_rejoin() && rejoins.empty()) {
+  if (mds->is_rejoin() && rejoin_gather.empty()) {
     dout(10) << "nothing to rejoin" << dendl;
     rejoin_gather_finish();
   }
@@ -4484,21 +4512,13 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
     }
   } else {
     // done?
-    if (rejoin_gather.empty()) {
+    if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid())) {
       rejoin_gather_finish();
     } else {
       dout(7) << "still need rejoin from (" << rejoin_gather << ")" << dendl;
     }
   }
 }
-
-class C_MDC_RejoinGatherFinish : public MDCacheContext {
-public:
-  explicit C_MDC_RejoinGatherFinish(MDCache *c) : MDCacheContext(c) {}
-  void finish(int r) override {
-    mdcache->rejoin_gather_finish();
-  }
-};
 
 /*
  * rejoin_scour_survivor_replica - remove source from replica list on unmentioned objects
@@ -4858,7 +4878,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   // done?
   assert(rejoin_gather.count(from));
   rejoin_gather.erase(from);
-  if (rejoin_gather.empty()) {
+  if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid())) {
     rejoin_gather_finish();
   } else {
     dout(7) << "still need rejoin from (" << rejoin_gather << ")" << dendl;
@@ -5062,29 +5082,33 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   for (map<inodeno_t,map<client_t,Capability::Import> >::iterator p = peer_imported.begin();
        p != peer_imported.end();
        ++p) {
-    assert(cap_exports.count(p->first));
-    assert(cap_export_targets.count(p->first));
-    assert(cap_export_targets[p->first] == from);
+    auto& ex = cap_exports.at(p->first);
+    assert(ex.first == from);
     for (map<client_t,Capability::Import>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
-      assert(cap_exports[p->first].count(q->first));
+      auto r = ex.second.find(q->first);
+      assert(r != ex.second.end());
 
       dout(10) << " exporting caps for client." << q->first << " ino " << p->first << dendl;
       Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
-      assert(session);
+      if (!session) {
+	dout(10) << " no session for client." << p->first << dendl;
+	ex.second.erase(r);
+	continue;
+      }
 
       // mark client caps stale.
       MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, p->first, 0,
-				       cap_exports[p->first][q->first].capinfo.cap_id, 0,
+				       r->second.capinfo.cap_id, 0,
                                        mds->get_osd_epoch_barrier());
       m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq,
 		      (q->second.cap_id > 0 ? from : -1), 0);
       mds->send_message_client_counted(m, session);
 
-      cap_exports[p->first].erase(q->first);
+      ex.second.erase(r);
     }
-    assert(cap_exports[p->first].empty());
+    assert(ex.second.empty());
   }
 
   // done?
@@ -5174,6 +5198,7 @@ void MDCache::rejoin_gather_finish()
 {
   dout(10) << "rejoin_gather_finish" << dendl;
   assert(mds->is_rejoin());
+  assert(rejoin_ack_gather.count(mds->get_nodeid()));
 
   if (open_undef_inodes_dirfrags())
     return;
@@ -5187,7 +5212,6 @@ void MDCache::rejoin_gather_finish()
   rejoin_send_acks();
   
   // signal completion of fetches, rejoin_gather_finish, etc.
-  assert(rejoin_ack_gather.count(mds->get_nodeid()));
   rejoin_ack_gather.erase(mds->get_nodeid());
 
   // did we already get our acks too?
@@ -5238,22 +5262,19 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
 
 class C_MDC_RejoinSessionsOpened : public MDCacheLogContext {
 public:
-  map<client_t,entity_inst_t> client_map;
-  map<client_t,uint64_t> sseqmap;
-
-  C_MDC_RejoinSessionsOpened(MDCache *c, map<client_t,entity_inst_t>& cm) :
-    MDCacheLogContext(c), client_map(cm) {}
+  map<client_t,pair<Session*,uint64_t> > session_map;
+  C_MDC_RejoinSessionsOpened(MDCache *c) : MDCacheLogContext(c) {}
   void finish(int r) override {
     assert(r == 0);
-    mdcache->rejoin_open_sessions_finish(client_map, sseqmap);
+    mdcache->rejoin_open_sessions_finish(session_map);
   }
 };
 
-void MDCache::rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map,
-					  map<client_t,uint64_t>& sseqmap)
+void MDCache::rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >& session_map)
 {
   dout(10) << "rejoin_open_sessions_finish" << dendl;
-  mds->server->finish_force_open_sessions(client_map, sseqmap);
+  mds->server->finish_force_open_sessions(session_map);
+  rejoin_session_map.swap(session_map);
   if (rejoin_gather.empty())
     rejoin_gather_finish();
 }
@@ -5284,21 +5305,16 @@ bool MDCache::process_imported_caps()
 
   // called by rejoin_gather_finish() ?
   if (rejoin_gather.count(mds->get_nodeid()) == 0) {
-    // if sessions for imported caps are all open ?
-    for (map<client_t,entity_inst_t>::iterator p = rejoin_client_map.begin();
-	 p != rejoin_client_map.end();
-	 ++p) {
-      if (!mds->sessionmap.have_session(entity_name_t::CLIENT(p->first.v))) {
-	C_MDC_RejoinSessionsOpened *finish = new C_MDC_RejoinSessionsOpened(this, rejoin_client_map);
-	version_t pv = mds->server->prepare_force_open_sessions(rejoin_client_map, finish->sseqmap);
-	ESessions *le = new ESessions(pv, rejoin_client_map);
-	mds->mdlog->start_submit_entry(le, finish);
-	mds->mdlog->flush();
-	rejoin_client_map.clear();
-	return true;
-      }
+    if (!rejoin_client_map.empty() &&
+	rejoin_session_map.empty()) {
+      C_MDC_RejoinSessionsOpened *finish = new C_MDC_RejoinSessionsOpened(this);
+      version_t pv = mds->server->prepare_force_open_sessions(rejoin_client_map,
+							      finish->session_map);
+      mds->mdlog->start_submit_entry(new ESessions(pv, rejoin_client_map), finish);
+      mds->mdlog->flush();
+      rejoin_client_map.clear();
+      return true;
     }
-    rejoin_client_map.clear();
 
     // process caps that were exported by slave rename
     for (map<inodeno_t,pair<mds_rank_t,map<client_t,Capability::Export> > >::iterator p = rejoin_slave_exports.begin();
@@ -5309,9 +5325,11 @@ bool MDCache::process_imported_caps()
       for (map<client_t,Capability::Export>::iterator q = p->second.second.begin();
 	   q != p->second.second.end();
 	   ++q) {
-	Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
-	assert(session);
+	auto r = rejoin_session_map.find(q->first);
+	if (r == rejoin_session_map.end())
+	  continue;
 
+	Session *session = r->second.first;
 	Capability *cap = in->get_client_cap(q->first);
 	if (!cap)
 	  cap = in->add_client_cap(q->first, session);
@@ -5341,9 +5359,19 @@ bool MDCache::process_imported_caps()
       }
       assert(in->is_auth());
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
-	Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
-	assert(session);
+	Session *session;
+	{
+	  auto r = rejoin_session_map.find(q->first);
+	  session = (r != rejoin_session_map.end() ? r->second.first : nullptr);
+	}
+
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
+	  if (!session) {
+	    if (r->first >= 0)
+	      (void)rejoin_imported_caps[r->first][p->first][q->first]; // all are zero
+	    continue;
+	  }
+
 	  Capability *cap = in->reconnect_cap(q->first, r->second, session);
 	  add_reconnected_cap(q->first, in->ino(), r->second);
 	  if (r->first >= 0) {
@@ -5363,11 +5391,10 @@ bool MDCache::process_imported_caps()
   } else {
     trim_non_auth();
 
+    assert(rejoin_gather.count(mds->get_nodeid()));
     rejoin_gather.erase(mds->get_nodeid());
+    assert(!rejoin_ack_gather.count(mds->get_nodeid()));
     maybe_send_pending_rejoins();
-
-    if (rejoin_gather.empty() && rejoin_ack_gather.count(mds->get_nodeid()))
-      rejoin_gather_finish();
   }
   return false;
 }
@@ -5819,7 +5846,15 @@ bool MDCache::open_undef_inodes_dirfrags()
   if (fetch_queue.empty())
     return false;
 
-  MDSGatherBuilder gather(g_ceph_context, new C_MDC_RejoinGatherFinish(this));
+  MDSGatherBuilder gather(g_ceph_context,
+      new MDSInternalContextWrapper(mds,
+	new FunctionContext([this](int r) {
+	    if (rejoin_gather.empty())
+	      rejoin_gather_finish();
+	  })
+	)
+      );
+
   for (set<CDir*>::iterator p = fetch_queue.begin();
        p != fetch_queue.end();
        ++p) {
@@ -6742,8 +6777,9 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, map<mds_rank_t, MCa
     // This is because that unconnected replicas are problematic for
     // subtree migration.
     //
-    if (!in->is_auth() && !in->dirfragtreelock.can_read(-1))
+    if (!in->is_auth() && !mds->locker->rdlock_try(&in->dirfragtreelock, -1, nullptr)) {
       return true;
+    }
 
     // DIR
     list<CDir*> dfls;
@@ -7518,7 +7554,7 @@ bool MDCache::shutdown_pass()
   trim(UINT64_MAX);
   dout(5) << "lru size now " << lru.lru_get_size() << "/" << bottom_lru.lru_get_size() << dendl;
 
-  // SUBTREES
+  // Export all subtrees to another active (usually rank 0) if not rank 0
   int num_auth_subtree = 0;
   if (!subtrees.empty() &&
       mds->get_nodeid() != 0) {
@@ -7558,6 +7594,7 @@ bool MDCache::shutdown_pass()
   }
 
   if (num_auth_subtree > 0) {
+    assert(mds->get_nodeid() > 0);
     dout(7) << "still have " << num_auth_subtree << " auth subtrees" << dendl;
     show_subtrees();
     return false;
@@ -7567,6 +7604,15 @@ bool MDCache::shutdown_pass()
   if (mds->sessionmap.have_unclosed_sessions()) {
     if (!mds->server->terminating_sessions)
       mds->server->terminate_sessions();
+    return false;
+  }
+
+  // Fully trim the log so that all objects in cache are clean and may be
+  // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
+  // trim the log such that the cache eventually becomes clean.
+  mds->mdlog->trim(0);
+  if (mds->mdlog->get_num_segments() > 1) {
+    dout(7) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
   }
 
@@ -7596,13 +7642,6 @@ bool MDCache::shutdown_pass()
   }
   assert(!migrator->is_exporting());
   assert(!migrator->is_importing());
-
-  // flush what we can from the log
-  mds->mdlog->trim(0);
-  if (mds->mdlog->get_num_segments() > 1) {
-    dout(7) << "still >1 segments, waiting for log to trim" << dendl;
-    return false;
-  }
 
   if ((myin && myin->is_auth_pinned()) ||
       (mydir && mydir->is_auth_pinned())) {
