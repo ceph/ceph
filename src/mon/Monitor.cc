@@ -3771,21 +3771,6 @@ void Monitor::handle_forward(MonOpRequestRef op)
   }
 }
 
-void Monitor::try_send_message(Message *m, const entity_inst_t& to)
-{
-  dout(10) << "try_send_message " << *m << " to " << to << dendl;
-
-  bufferlist bl;
-  encode_message(m, quorum_con_features, bl);
-
-  messenger->send_message(m, to);
-
-  for (int i=0; i<(int)monmap->size(); i++) {
-    if (i != rank)
-      send_mon_message(new MRoute(bl, to), i);
-  }
-}
-
 void Monitor::send_reply(MonOpRequestRef op, Message *reply)
 {
   op->mark_event(__func__);
@@ -3855,9 +3840,10 @@ void Monitor::handle_route(MonOpRequestRef op)
     return;
   }
   if (m->msg)
-    dout(10) << "handle_route " << *m->msg << " to " << m->dest << dendl;
+    dout(10) << "handle_route tid " << m->session_mon_tid << " " << *m->msg
+	     << dendl;
   else
-    dout(10) << "handle_route null to " << m->dest << dendl;
+    dout(10) << "handle_route tid " << m->session_mon_tid << " null" << dendl;
   
   // look it up
   if (m->session_mon_tid) {
@@ -3883,11 +3869,7 @@ void Monitor::handle_route(MonOpRequestRef op)
       dout(10) << " don't have routed request tid " << m->session_mon_tid << dendl;
     }
   } else {
-    dout(10) << " not a routed request, trying to send anyway" << dendl;
-    if (m->msg) {
-      messenger->send_message(m->msg, m->dest);
-      m->msg = NULL;
-    }
+    dout(10) << " not a routed request, ignoring" << dendl;
   }
 }
 
@@ -3961,15 +3943,6 @@ void Monitor::remove_all_sessions()
   }
   if (logger)
     logger->set(l_mon_num_sessions, session_map.get_size());
-}
-
-void Monitor::send_command(const entity_inst_t& inst,
-			   const vector<string>& com)
-{
-  dout(10) << "send_command " << inst << "" << com << dendl;
-  MMonCommand *c = new MMonCommand(monmap->fsid);
-  c->cmd = com;
-  try_send_message(c, inst);
 }
 
 void Monitor::send_mon_message(Message *m, int rank)

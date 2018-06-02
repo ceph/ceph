@@ -854,7 +854,7 @@ class OSDStub : public TestStub
     *_dout << dendl;
 
     if (osdmap.is_up(whoami) &&
-	osdmap.get_addr(whoami) == messenger->get_myaddr()) {
+	osdmap.get_addrs(whoami) == messenger->get_myaddrs()) {
       dout(1) << __func__
 	      << " got into the osdmap and we're up!" << dendl;
     }

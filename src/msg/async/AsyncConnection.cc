@@ -33,7 +33,7 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << async_msgr->get_myinst().addr << " >> " << peer_addr << " conn(" << this
+  return *_dout << "-- " << async_msgr->get_myaddr() << " >> " << peer_addr << " conn(" << this
                 << " :" << port
                 << " s=" << get_state_name(state)
                 << " pgs=" << peer_global_seq
@@ -1017,7 +1017,7 @@ ssize_t AsyncConnection::_process_connection()
         bufferlist bl;
 
         connect_msg.features = policy.features_supported;
-        connect_msg.host_type = async_msgr->get_myinst().name.type();
+        connect_msg.host_type = async_msgr->get_myname().type();
         connect_msg.global_seq = global_seq;
         connect_msg.connect_seq = connect_seq;
         connect_msg.protocol_version = async_msgr->get_proto_version(peer_type, true);

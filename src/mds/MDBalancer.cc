@@ -365,8 +365,7 @@ void MDBalancer::send_heartbeat()
       continue;
     MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
-    messenger->send_message(hb,
-                            mds->mdsmap->get_inst(*p));
+    messenger->send_to_mds(hb, mds->mdsmap->get_addrs(*p));
   }
 }
 

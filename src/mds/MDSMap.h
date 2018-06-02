@@ -145,7 +145,9 @@ public:
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
 
-    entity_inst_t get_inst() const { return entity_inst_t(entity_name_t::MDS(rank), addr); }
+    entity_addrvec_t get_addrs() const {
+      return entity_addrvec_t(addr);
+    }
 
     void encode(bufferlist& bl, uint64_t features) const {
       if ((features & CEPH_FEATURE_MDSENC) == 0 ) encode_unversioned(bl);
@@ -617,30 +619,11 @@ public:
    * Get the MDS daemon entity_inst_t for a rank
    * known to be up.
    */
-  const entity_inst_t get_inst(mds_rank_t m) {
+  entity_addrvec_t get_addrs(mds_rank_t m) {
     assert(up.count(m));
-    return mds_info[up[m]].get_inst();
-  }
-  const entity_addr_t get_addr(mds_rank_t m) {
-    assert(up.count(m));
-    return mds_info[up[m]].addr;
+    return mds_info[up[m]].get_addrs();
   }
 
-  /**
-   * Get the MDS daemon entity_inst_t for a rank,
-   * if it is up.
-   * 
-   * @return true if the rank was up and the inst
-   *         was populated, else false.
-   */
-  bool get_inst(mds_rank_t m, entity_inst_t& inst) {
-    if (up.count(m)) {
-      inst = get_inst(m);
-      return true;
-    } 
-    return false;
-  }
-  
   mds_rank_t get_rank_gid(mds_gid_t gid) const {
     if (mds_info.count(gid)) {
       return mds_info.at(gid).rank;

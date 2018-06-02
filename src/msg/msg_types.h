@@ -546,13 +546,58 @@ struct entity_addrvec_t {
     }
     return entity_addr_t();
   }
+  entity_addr_t front() const {
+    if (!v.empty()) {
+      return v.front();
+    }
+    return entity_addr_t();
+  }
 
   bool parse(const char *s, const char **end = 0);
+
+  void get_ports(set<int> *ports) const {
+    for (auto& a : v) {
+      ports->insert(a.get_port());
+    }
+  }
+  set<int> get_ports() const {
+    set<int> r;
+    get_ports(&r);
+    return r;
+  }
 
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
+
+  bool probably_equals(const entity_addrvec_t& o) const {
+    if (o.v.size() != v.size()) {
+      return false;
+    }
+    for (unsigned i = 0; i < v.size(); ++i) {
+      if (!v[i].probably_equals(o.v[i])) {
+	return false;
+      }
+    }
+    return true;
+  }
+  bool contains(const entity_addr_t& a) const {
+    for (auto& i : v) {
+      if (a == i) {
+	return true;
+      }
+    }
+    return false;
+  }
+  bool is_same_host(const entity_addr_t& a) const {
+    for (auto& i : v) {
+      if (i.is_same_host(a)) {
+	return true;
+      }
+    }
+    return false;
+  }
 
   friend ostream& operator<<(ostream& out, const entity_addrvec_t& av) {
     if (av.v.empty()) {

@@ -149,15 +149,13 @@ void MgrClient::reconnect()
     connect_retry_callback = nullptr;
   }
 
-  ldout(cct, 4) << "Starting new session with " << map.get_active_addr()
+  ldout(cct, 4) << "Starting new session with " << map.get_active_addrs()
 		<< dendl;
-  entity_inst_t inst;
-  inst.addr = map.get_active_addr();
-  inst.name = entity_name_t::MGR(map.get_active_gid());
   last_connect_attempt = ceph_clock_now();
 
   session.reset(new MgrSessionState());
-  session->con = msgr->get_connection(inst);
+  session->con = msgr->connect_to(CEPH_ENTITY_TYPE_MGR,
+				  map.get_active_addrs());
 
   if (service_daemon) {
     daemon_dirty_status = true;
@@ -208,11 +206,11 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
   ldout(cct, 4) << "Got map version " << map.epoch << dendl;
   m->put();
 
-  ldout(cct, 4) << "Active mgr is now " << map.get_active_addr() << dendl;
+  ldout(cct, 4) << "Active mgr is now " << map.get_active_addrs() << dendl;
 
   // Reset session?
   if (!session ||
-      session->con->get_peer_addr() != map.get_active_addr()) {
+      session->con->get_peer_addrs() != map.get_active_addrs()) {
     reconnect();
   }
 

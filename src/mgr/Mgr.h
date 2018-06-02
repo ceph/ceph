@@ -78,7 +78,9 @@ public:
   ~Mgr();
 
   bool is_initialized() const {return initialized;}
-  entity_addr_t get_server_addr() const { return server.get_myaddr(); }
+  entity_addrvec_t get_server_addrs() const {
+    return server.get_myaddrs();
+  }
 
   void handle_mgr_digest(MMgrDigest* m);
   void handle_fs_map(MFSMap* m);

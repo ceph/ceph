@@ -16,8 +16,9 @@ void entity_name_t::dump(Formatter *f) const
 
 void entity_addr_t::dump(Formatter *f) const
 {
-  f->dump_unsigned("nonce", nonce);
+  f->dump_string("type", get_type_name(type));
   f->dump_stream("addr") << get_sockaddr();
+  f->dump_unsigned("nonce", nonce);
 }
 
 void entity_inst_t::dump(Formatter *f) const

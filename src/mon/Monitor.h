@@ -801,16 +801,12 @@ public:
   
   void forward_request_leader(MonOpRequestRef op);
   void handle_forward(MonOpRequestRef op);
-  void try_send_message(Message *m, const entity_inst_t& to);
   void send_reply(MonOpRequestRef op, Message *reply);
   void no_reply(MonOpRequestRef op);
   void resend_routed_requests();
   void remove_session(MonSession *s);
   void remove_all_sessions();
   void waitlist_or_zap_client(MonOpRequestRef op);
-
-  void send_command(const entity_inst_t& inst,
-		    const vector<string>& com);
 
   void send_mon_message(Message *m, int rank);
 
