@@ -267,9 +267,11 @@ int main(int argc, const char **argv, const char *envp[]) {
     r = client->mount(g_conf->client_mountpoint.c_str(), perms,
 		      g_ceph_context->_conf->fuse_require_active_mds);
     if (r < 0) {
-      if (r == CEPH_FUSE_NO_MDS_UP)
+      if (r == CEPH_FUSE_NO_MDS_UP) {
         cerr << "ceph-fuse[" << getpid() << "]: probably no MDS server is up?" << std::endl;
-      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;
+      }
+      cerr << "ceph-fuse[" << getpid() << "]: ceph mount failed with " << cpp_strerror(-r) << std::endl;r = EXIT_FAILURE;
+      r = EXIT_FAILURE;
       goto out_shutdown;
     }
 
