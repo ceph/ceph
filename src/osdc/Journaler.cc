@@ -853,6 +853,13 @@ void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
     if (waiting_for_zero_pos > flush_pos) {
       _do_flush(waiting_for_zero_pos - flush_pos);
     }
+
+    if (prezero_pos == prezeroing_pos &&
+	!waitfor_prezero.empty()) {
+      list<Context*> ls;
+      ls.swap(waitfor_prezero);
+      finish_contexts(cct, ls, 0);
+    }
   } else {
     pending_zero.insert(start, len);
   }
@@ -862,6 +869,17 @@ void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
 		 << dendl;
 }
 
+void Journaler::wait_for_prezero(Context *onfinish)
+{
+  assert(onfinish);
+  lock_guard l(lock);
+
+  if (prezero_pos == prezeroing_pos) {
+    finisher->queue(onfinish, 0);
+    return;
+  }
+  waitfor_prezero.push_back(wrap_finisher(onfinish));
+}
 
 
 /***************** READING *******************/
