@@ -149,10 +149,10 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
  */
 void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
 {
-  if (my_inst.addr.is_blank_ip()) {
-    int port = my_inst.addr.get_port();
-    my_inst.addr.u = addr.u;
-    my_inst.addr.set_port(port);
+  if (my_addr.is_blank_ip()) {
+    int port = my_addr.get_port();
+    my_addr.u = addr.u;
+    my_addr.set_port(port);
     init_local_connection();
   }
 }
@@ -167,7 +167,7 @@ void SimpleMessenger::set_addr(const entity_addr_t &addr)
 
 int SimpleMessenger::get_proto_version(int peer_type, bool connect)
 {
-  int my_type = my_inst.name.type();
+  int my_type = my_name.type();
 
   // set reply protocol version
   if (peer_type == my_type) {
@@ -319,7 +319,7 @@ int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    assert(my_inst.addr == bind_addr);
+    assert(my_addr == bind_addr);
     return 0;
   }
   if (started) {
@@ -339,14 +339,14 @@ int SimpleMessenger::start()
   ldout(cct,1) << "messenger.start" << dendl;
 
   // register at least one entity, first!
-  assert(my_inst.name.type() >= 0);
+  assert(my_name.type() >= 0);
 
   assert(!started);
   started = true;
   stopped = false;
 
   if (!did_bind) {
-    my_inst.addr.nonce = nonce;
+    my_addr.nonce = nonce;
     init_local_connection();
   }
 
@@ -380,7 +380,7 @@ Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
 				    Message *first)
 {
   assert(lock.is_locked());
-  assert(addr != my_inst.addr);
+  assert(addr != my_addr);
   
   ldout(cct,10) << "connect_rank to " << addr << ", creating pipe and registering" << dendl;
   
@@ -421,7 +421,7 @@ bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
 ConnectionRef SimpleMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
-  if (my_inst.addr == dest.addr) {
+  if (my_addr == dest.addr) {
     // local
     return local_connection;
   }
@@ -502,7 +502,7 @@ void SimpleMessenger::submit_message(Message *m, PipeConnection *con,
   }
 
   // local?
-  if (my_inst.addr == dest_addr) {
+  if (my_addr == dest_addr) {
     // local
     ldout(cct,20) << "submit_message " << *m << " local" << dendl;
     m->set_connection(local_connection.get());
@@ -723,7 +723,7 @@ void SimpleMessenger::mark_disposable(Connection *con)
 void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
   // be careful here: multiple threads may block here, and readers of
-  // my_inst.addr do NOT hold any lock.
+  // my_addr do NOT hold any lock.
 
   // this always goes from true -> false under the protection of the
   // mutex.  if it is already false, we need not retake the mutex at
@@ -734,12 +734,12 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   lock.Lock();
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
-    t.set_port(my_inst.addr.get_port());
-    t.set_nonce(my_inst.addr.get_nonce());
-    ANNOTATE_BENIGN_RACE_SIZED(&my_inst.addr, sizeof(my_inst.addr),
+    t.set_port(my_addr.get_port());
+    t.set_nonce(my_addr.get_nonce());
+    ANNOTATE_BENIGN_RACE_SIZED(&my_addr, sizeof(my_addr),
                                "SimpleMessenger learned addr");
-    my_inst.addr = t;
-    ldout(cct,1) << "learned my addr " << my_inst.addr << dendl;
+    my_addr = t;
+    ldout(cct,1) << "learned my addr " << my_addr << dendl;
     need_addr = false;
     init_local_connection();
   }
@@ -748,8 +748,8 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 
 void SimpleMessenger::init_local_connection()
 {
-  local_connection->peer_addr = my_inst.addr;
-  local_connection->peer_type = my_inst.name.type();
+  local_connection->peer_addr = my_addr;
+  local_connection->peer_type = my_name.type();
   local_connection->set_features(CEPH_FEATURES_ALL);
   ms_deliver_handle_fast_connect(local_connection.get());
 }

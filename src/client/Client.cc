@@ -1994,17 +1994,17 @@ void Client::update_metadata(std::string const &k, std::string const &v)
 MetaSession *Client::_open_mds_session(mds_rank_t mds)
 {
   ldout(cct, 10) << __func__ << " mds." << mds << dendl;
-  entity_inst_t inst = mdsmap->get_inst(mds);
+  auto addrs = mdsmap->get_addrs(mds);
   auto em = mds_sessions.emplace(std::piecewise_construct,
       std::forward_as_tuple(mds),
-      std::forward_as_tuple(mds, messenger->get_connection(inst), inst));
+      std::forward_as_tuple(mds, messenger->connect_to_mds(addrs), addrs));
   assert(em.second); /* not already present */
   MetaSession *session = &em.first->second;
 
   // Maybe skip sending a request to open if this MDS daemon
   // has previously sent us a REJECT.
   if (rejected_by_mds.count(mds)) {
-    if (rejected_by_mds[mds] == session->inst) {
+    if (rejected_by_mds[mds] == session->addrs) {
       ldout(cct, 4) << __func__ << " mds." << mds << " skipping "
                        "because we were rejected" << dendl;
       return session;
@@ -2096,7 +2096,7 @@ void Client::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_REJECT:
-    rejected_by_mds[session->mds_num] = session->inst;
+    rejected_by_mds[session->mds_num] = session->addrs;
     _closed_mds_session(session);
 
     break;
@@ -2648,9 +2648,9 @@ void Client::handle_mds_map(MMDSMap* m)
     int newstate = mdsmap->get_state(mds);
     if (!mdsmap->is_up(mds)) {
       session->con->mark_down();
-    } else if (mdsmap->get_inst(mds) != session->inst) {
+    } else if (mdsmap->get_addrs(mds) != session->addrs) {
       session->con->mark_down();
-      session->inst = mdsmap->get_inst(mds);
+      session->addrs = mdsmap->get_addrs(mds);
       // When new MDS starts to take over, notify kernel to trim unused entries
       // in its dcache/icache. Hopefully, the kernel will release some unused
       // inodes before the new MDS enters reconnect state.
@@ -2660,7 +2660,7 @@ void Client::handle_mds_map(MMDSMap* m)
     
     session->mds_state = newstate;
     if (newstate == MDSMap::STATE_RECONNECT) {
-      session->con = messenger->get_connection(session->inst);
+      session->con = messenger->connect_to_mds(session->addrs);
       send_reconnect(session);
     } else if (newstate >= MDSMap::STATE_ACTIVE) {
       if (oldstate < MDSMap::STATE_ACTIVE) {
@@ -5580,8 +5580,7 @@ int Client::mds_command(
     const auto info = fsmap->get_info_gid(target_gid);
 
     // Open a connection to the target MDS
-    entity_inst_t inst = info.get_inst();
-    ConnectionRef conn = messenger->get_connection(inst);
+    ConnectionRef conn = messenger->connect_to_mds(info.get_addrs());
 
     // Generate MDSCommandOp state
     auto &op = command_table.start_command();
@@ -12432,7 +12431,7 @@ int Client::ll_osdaddr(int osd, uint32_t *addr)
   bool exists = objecter->with_osdmap([&](const OSDMap& o) {
       if (!o.exists(osd))
 	return false;
-      g = o.get_addr(osd);
+      g = o.get_addrs(osd).front();
       return true;
     });
   if (!exists)
@@ -13450,7 +13449,7 @@ int Client::get_file_stripe_address(int fd, loff_t offset,
       if (osds.empty())
 	return -EINVAL;
       for (unsigned i = 0; i < osds.size(); i++) {
-	entity_addr_t addr = o.get_addr(osds[i]);
+	entity_addr_t addr = o.get_addrs(osds[i]).front();
 	address.push_back(addr);
       }
       return 0;
@@ -13468,7 +13467,7 @@ int Client::get_osd_addr(int osd, entity_addr_t& addr)
       if (!o.exists(osd))
 	return -ENOENT;
 
-      addr = o.get_addr(osd);
+      addr = o.get_addrs(osd).front();
       return 0;
     });
 }
@@ -13540,7 +13539,7 @@ void Client::ms_handle_remote_reset(Connection *con)
       mds_rank_t mds = MDS_RANK_NONE;
       MetaSession *s = NULL;
       for (auto &p : mds_sessions) {
-	if (mdsmap->get_addr(p.first) == con->get_peer_addr()) {
+	if (mdsmap->get_addrs(p.first) == con->get_peer_addrs()) {
 	  mds = p.first;
 	  s = &p.second;
 	}

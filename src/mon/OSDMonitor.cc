@@ -1256,7 +1256,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     if (s & CEPH_OSD_EXISTS)
       dout(2) << " osd." << i->first << " DNE" << dendl;
   }
-  for (map<int32_t,entity_addr_t>::iterator i = pending_inc.new_up_client.begin();
+  for (auto i = pending_inc.new_up_client.begin();
        i != pending_inc.new_up_client.end();
        ++i) {
     //FIXME: insert cluster addresses too
@@ -2116,7 +2116,7 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
   // who is target_osd
-  int badboy = m->get_target().name.num();
+  int badboy = m->get_target_osd();
 
   // check permissions
   if (check_source(m, m->fsid))
@@ -2126,9 +2126,10 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   if (m->get_orig_source().is_osd()) {
     int from = m->get_orig_source().num();
     if (!osdmap.exists(from) ||
-	osdmap.get_addr(from) != m->get_orig_source_inst().addr ||
+	osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
 	(osdmap.is_down(from) && m->if_osd_failed())) {
-      dout(5) << "preprocess_failure from dead osd." << from << ", ignoring" << dendl;
+      dout(5) << "preprocess_failure from dead osd." << from
+	      << ", ignoring" << dendl;
       send_incremental(op, m->get_epoch()+1);
       goto didit;
     }
@@ -2137,14 +2138,18 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
 
   // weird?
   if (osdmap.is_down(badboy)) {
-    dout(5) << "preprocess_failure dne(/dup?): " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure dne(/dup?): osd." << m->get_target_osd()
+	    << " " << m->get_target_addrs()
+	    << ", from " << m->get_orig_source() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
-  if (osdmap.get_inst(badboy) != m->get_target()) {
-    dout(5) << "preprocess_failure wrong osd: report " << m->get_target() << " != map's " << osdmap.get_inst(badboy)
-	    << ", from " << m->get_orig_source_inst() << dendl;
+  if (osdmap.get_addrs(badboy) != m->get_target_addrs()) {
+    dout(5) << "preprocess_failure wrong osd: report osd." << m->get_target_osd()
+	    << " " << m->get_target_addrs()
+	    << " != map's " << osdmap.get_addrs(badboy)
+	    << ", from " << m->get_orig_source() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
     goto didit;
@@ -2153,18 +2158,24 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   // already reported?
   if (osdmap.is_down(badboy) ||
       osdmap.get_up_from(badboy) > m->get_epoch()) {
-    dout(5) << "preprocess_failure dup/old: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure dup/old: osd." << m->get_target_osd()
+	    << " " << m->get_target_addrs()
+	    << ", from " << m->get_orig_source() << dendl;
     if (m->get_epoch() < osdmap.get_epoch())
       send_incremental(op, m->get_epoch()+1);
     goto didit;
   }
 
   if (!can_mark_down(badboy)) {
-    dout(5) << "preprocess_failure ignoring report of " << m->get_target() << " from " << m->get_orig_source_inst() << dendl;
+    dout(5) << "preprocess_failure ignoring report of osd."
+	    << m->get_target_osd() << " " << m->get_target_addrs()
+	    << " from " << m->get_orig_source() << dendl;
     goto didit;
   }
 
-  dout(10) << "preprocess_failure new: " << m->get_target() << ", from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "preprocess_failure new: osd." << m->get_target_osd()
+	   << " " << m->get_target_addrs()
+	   << ", from " << m->get_orig_source() << dendl;
   return false;
 
  didit:
@@ -2186,7 +2197,8 @@ public:
       op,
       new MOSDMarkMeDown(
 	m->fsid,
-	m->get_target(),
+	m->target_osd,
+	m->target_addrs,
 	m->get_epoch(),
 	false));   // ACK itself does not request an ack
   }
@@ -2198,8 +2210,7 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
-  int requesting_down = m->get_target().name.num();
-  int from = m->get_orig_source().num();
+  int from = m->target_osd;
 
   // check permissions
   if (check_source(m, m->fsid))
@@ -2211,7 +2222,7 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
 
   if (!osdmap.exists(from) ||
       osdmap.is_down(from) ||
-      osdmap.get_addr(from) != m->get_target().addr) {
+      osdmap.get_addrs(from) != m->target_addrs) {
     dout(5) << "preprocess_mark_me_down from dead osd."
 	    << from << ", ignoring" << dendl;
     send_incremental(op, m->get_epoch()+1);
@@ -2219,10 +2230,11 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
   }
 
   // no down might be set
-  if (!can_mark_down(requesting_down))
+  if (!can_mark_down(from))
     goto reply;
 
-  dout(10) << "MOSDMarkMeDown for: " << m->get_target() << dendl;
+  dout(10) << "MOSDMarkMeDown for: " << m->get_orig_source()
+	   << " " << m->target_addrs << dendl;
   return false;
 
  reply:
@@ -2237,10 +2249,10 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
-  int target_osd = m->get_target().name.num();
+  int target_osd = m->target_osd;
 
   assert(osdmap.is_up(target_osd));
-  assert(osdmap.get_addr(target_osd) == m->get_target().addr);
+  assert(osdmap.get_addrs(target_osd) == m->target_addrs);
 
   mon->clog->info() << "osd." << target_osd << " marked itself down";
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
@@ -2475,14 +2487,15 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
-  dout(1) << "prepare_failure " << m->get_target()
-	  << " from " << m->get_orig_source_inst()
+  dout(1) << "prepare_failure osd." << m->get_target_osd()
+	  << " " << m->get_target_addrs()
+	  << " from " << m->get_orig_source()
           << " is reporting failure:" << m->if_osd_failed() << dendl;
 
-  int target_osd = m->get_target().name.num();
+  int target_osd = m->get_target_osd();
   int reporter = m->get_orig_source().num();
   assert(osdmap.is_up(target_osd));
-  assert(osdmap.get_addr(target_osd) == m->get_target().addr);
+  assert(osdmap.get_addrs(target_osd) == m->get_target_addrs());
 
   if (m->if_osd_failed()) {
     // calculate failure time
@@ -2492,14 +2505,15 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 
     // add a report
     if (m->is_immediate()) {
-      mon->clog->debug() << m->get_target() << " reported immediately failed by "
-            << m->get_orig_source_inst();
+      mon->clog->debug() << "osd." << m->get_target_osd()
+			 << " reported immediately failed by "
+			 << m->get_orig_source();
       force_failure(target_osd, reporter);
       mon->no_reply(op);
       return true;
     }
-    mon->clog->debug() << m->get_target() << " reported failed by "
-		      << m->get_orig_source_inst();
+    mon->clog->debug() << "osd." << m->get_target_osd() << " reported failed by "
+		      << m->get_orig_source();
 
     failure_info_t& fi = failure_info[target_osd];
     MonOpRequestRef old_op = fi.add_report(reporter, failed_since, op);
@@ -2510,8 +2524,9 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
     return check_failure(now, target_osd, fi);
   } else {
     // remove the report
-    mon->clog->debug() << m->get_target() << " failure report canceled by "
-		       << m->get_orig_source_inst();
+    mon->clog->debug() << "osd." << m->get_target_osd()
+		       << " failure report canceled by "
+		       << m->get_orig_source();
     if (failure_info.count(target_osd)) {
       failure_info_t& fi = failure_info[target_osd];
       MonOpRequestRef report_op = fi.cancel_report(reporter);
@@ -2655,11 +2670,12 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   // already booted?
   if (osdmap.is_up(from) &&
-      osdmap.get_inst(from) == m->get_orig_source_inst() &&
+      osdmap.get_addrs(from) == m->get_orig_source_addrs() &&
       osdmap.get_cluster_addr(from) == m->cluster_addr) {
     // yup.
-    dout(7) << "preprocess_boot dup from " << m->get_orig_source_inst()
-	    << " == " << osdmap.get_inst(from) << dendl;
+    dout(7) << "preprocess_boot dup from " << m->get_orig_source()
+	    << " " << m->get_orig_source_addrs()
+	    << " == " << osdmap.get_addrs(from) << dendl;
     _booted(op, false);
     return true;
   }
@@ -2676,7 +2692,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   if (osdmap.exists(from) &&
       osdmap.get_info(from).up_from > m->version &&
-      osdmap.get_most_recent_inst(from) == m->get_orig_source_inst()) {
+      osdmap.get_most_recent_addrs(from) == m->get_orig_source_addrs()) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
     send_latest(op, m->sb.current_epoch+1);
     return true;
@@ -2722,10 +2738,10 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 
   // already up?  mark down first?
   if (osdmap.is_up(from)) {
-    dout(7) << __func__ << " was up, first marking down "
-	    << osdmap.get_inst(from) << dendl;
+    dout(7) << __func__ << " was up, first marking down osd." << from << " "
+	    << osdmap.get_addrs(from) << dendl;
     // preprocess should have caught these;  if not, assert.
-    assert(osdmap.get_inst(from) != m->get_orig_source_inst() ||
+    assert(osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
            osdmap.get_cluster_addr(from) != m->cluster_addr);
     assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
 
@@ -2742,12 +2758,10 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     wait_for_finished_proposal(op, new C_RetryMessage(this, op));
   } else {
     // mark new guy up.
-    pending_inc.new_up_client[from] = m->get_orig_source_addr();
-    if (!m->cluster_addr.is_blank_ip())
-      pending_inc.new_up_cluster[from] = m->cluster_addr;
+    pending_inc.new_up_client[from] = m->get_orig_source_addrs();
+    pending_inc.new_up_cluster[from] = m->cluster_addr;
     pending_inc.new_hb_back_up[from] = m->hb_back_addr;
-    if (!m->hb_front_addr.is_blank_ip())
-      pending_inc.new_hb_front_up[from] = m->hb_front_addr;
+    pending_inc.new_hb_front_up[from] = m->hb_front_addr;
 
     down_pending_out.erase(from);  // if any
 
@@ -2893,9 +2907,9 @@ bool OSDMonitor::preprocess_full(MonOpRequestRef op)
     goto ignore;
   }
   if ((!osdmap.is_up(from) &&
-       osdmap.get_most_recent_inst(from) == m->get_orig_source_inst()) ||
+       osdmap.get_most_recent_addrs(from) == m->get_orig_source_addrs()) ||
       (osdmap.is_up(from) &&
-       osdmap.get_inst(from) != m->get_orig_source_inst())) {
+       osdmap.get_addrs(from) != m->get_orig_source_addrs())) {
     dout(7) << __func__ << " ignoring full message from down "
 	    << m->get_orig_source_inst() << dendl;
     goto ignore;
@@ -2976,8 +2990,10 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
   }
 
   if (!osdmap.is_up(from) ||
-      osdmap.get_inst(from) != m->get_orig_source_inst()) {
-    dout(7) << "preprocess_alive ignoring alive message from down " << m->get_orig_source_inst() << dendl;
+      osdmap.get_addrs(from) != m->get_orig_source_addrs()) {
+    dout(7) << "preprocess_alive ignoring alive message from down "
+	    << m->get_orig_source() << " " << m->get_orig_source_addrs()
+	    << dendl;
     goto ignore;
   }
 
@@ -3053,7 +3069,7 @@ bool OSDMonitor::prepare_pg_created(MonOpRequestRef op)
   auto from = src.num();
   if (!src.is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
-      m->get_orig_source_inst() != mon->osdmon()->osdmap.get_inst(from)) {
+      m->get_orig_source_addrs() != mon->osdmon()->osdmap.get_addrs(from)) {
     dout(1) << __func__ << " ignoring stats from non-active osd." << dendl;
     return false;
   }
@@ -3083,8 +3099,10 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
   }
 
   if (!osdmap.is_up(from) ||
-      osdmap.get_inst(from) != m->get_orig_source_inst()) {
-    dout(7) << "ignoring pgtemp message from down " << m->get_orig_source_inst() << dendl;
+      osdmap.get_addrs(from) != m->get_orig_source_addrs()) {
+    dout(7) << "ignoring pgtemp message from down "
+	    << m->get_orig_source() << " " << m->get_orig_source_addrs()
+	    << dendl;
     goto ignore;
   }
 
@@ -3322,7 +3340,7 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
 
   if (!src.is_osd() ||
       !osdmap.is_up(from) ||
-      beacon->get_orig_source_inst() != osdmap.get_inst(from)) {
+      beacon->get_orig_source_addrs() != osdmap.get_addrs(from)) {
     dout(1) << " ignoring beacon from non-active osd." << from << dendl;
     return false;
   }
@@ -4481,7 +4499,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("osd_location");
     f->dump_int("osd", osd);
-    f->dump_stream("ip") << osdmap.get_addr(osd);
+    f->dump_object("addrs", osdmap.get_addrs(osd));
     f->open_object_section("crush_location");
     map<string,string> loc = osdmap.crush->get_full_location(osd);
     for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)
@@ -4646,42 +4664,6 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
     goto reply;
 
-  } else if (prefix == "osd scrub" ||
-	     prefix == "osd deep-scrub" ||
-	     prefix == "osd repair") {
-    string whostr;
-    cmd_getval(cct, cmdmap, "who", whostr);
-    vector<string> pvec;
-    get_str_vec(prefix, pvec);
-
-    if (whostr == "*" || whostr == "all" || whostr == "any") {
-      ss << "osds ";
-      int c = 0;
-      for (int i = 0; i < osdmap.get_max_osd(); i++)
-	if (osdmap.is_up(i)) {
-	  ss << (c++ ? "," : "") << i;
-	  mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
-					      pvec.back() == "repair",
-					      pvec.back() == "deep-scrub"),
-				osdmap.get_inst(i));
-	}
-      r = 0;
-      ss << " instructed to " << pvec.back();
-    } else {
-      long osd = parse_osd_id(whostr.c_str(), &ss);
-      if (osd < 0) {
-	r = -EINVAL;
-      } else if (osdmap.is_up(osd)) {
-	mon->try_send_message(new MOSDScrub(osdmap.get_fsid(),
-					    pvec.back() == "repair",
-					    pvec.back() == "deep-scrub"),
-			      osdmap.get_inst(osd));
-	ss << "osd." << osd << " instructed to " << pvec.back();
-      } else {
-	ss << "osd." << osd << " is not up";
-	r = -EAGAIN;
-      }
-    }
   } else if (prefix == "osd lspools") {
     int64_t auid;
     cmd_getval(cct, cmdmap, "auid", auid, int64_t(0));

@@ -386,7 +386,7 @@ int AsyncMessenger::rebind(const set<int>& avoid_ports)
   // adjust the nonce; we want our entity_addr_t to be truly unique.
   nonce += 1000000;
   ldout(cct, 10) << __func__ << " new nonce " << nonce
-		 << " and inst " << get_myinst() << dendl;
+		 << " and addr " << get_myaddr() << dendl;
 
   entity_addr_t bound_addr;
   entity_addr_t bind_addr = get_myaddr();
@@ -417,7 +417,7 @@ int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    assert(my_inst.addr == bind_addr);
+    assert(my_addr == bind_addr);
     return 0;
   }
   if (started) {
@@ -446,7 +446,7 @@ void AsyncMessenger::_finish_bind(const entity_addr_t& bind_addr,
 
   init_local_connection();
 
-  ldout(cct,1) << __func__ << " bind my_inst.addr is " << get_myaddr() << dendl;
+  ldout(cct,1) << __func__ << " bind my_addr is " << get_myaddr() << dendl;
   did_bind = true;
 }
 
@@ -456,14 +456,14 @@ int AsyncMessenger::start()
   ldout(cct,1) << __func__ << " start" << dendl;
 
   // register at least one entity, first!
-  assert(my_inst.name.type() >= 0);
+  assert(my_name.type() >= 0);
 
   assert(!started);
   started = true;
   stopped = false;
 
   if (!did_bind) {
-    my_inst.addr.nonce = nonce;
+    my_addr.nonce = nonce;
     _init_local_connection();
   }
 
@@ -512,7 +512,7 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket, entity_ad
 AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int type)
 {
   assert(lock.is_locked());
-  assert(addr != my_inst.addr);
+  assert(addr != my_addr);
 
   ldout(cct, 10) << __func__ << " " << addr
       << ", creating connection and registering" << dendl;
@@ -531,7 +531,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
 ConnectionRef AsyncMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
-  if (my_inst.addr == dest.addr) {
+  if (my_addr == dest.addr) {
     // local
     return local_connection;
   }
@@ -600,7 +600,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   }
 
   // local?
-  if (my_inst.addr == dest_addr) {
+  if (my_addr == dest_addr) {
     // local
     local_connection->send_message(m);
     return ;
@@ -621,16 +621,16 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
 }
 
 /**
- * If my_inst.addr doesn't have an IP set, this function
+ * If my_addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
 void AsyncMessenger::set_addr_unknowns(const entity_addr_t &addr)
 {
   Mutex::Locker l(lock);
-  if (my_inst.addr.is_blank_ip()) {
-    int port = my_inst.addr.get_port();
-    my_inst.addr.u = addr.u;
-    my_inst.addr.set_port(port);
+  if (my_addr.is_blank_ip()) {
+    int port = my_addr.get_port();
+    my_addr.u = addr.u;
+    my_addr.set_port(port);
     _init_local_connection();
   }
 }
@@ -692,7 +692,7 @@ void AsyncMessenger::mark_down(const entity_addr_t& addr)
 
 int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
 {
-  int my_type = my_inst.name.type();
+  int my_type = my_name.type();
 
   // set reply protocol version
   if (peer_type == my_type) {
@@ -712,7 +712,7 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
 void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
   // be careful here: multiple threads may block here, and readers of
-  // my_inst.addr do NOT hold any lock.
+  // my_addr do NOT hold any lock.
 
   // this always goes from true -> false under the protection of the
   // mutex.  if it is already false, we need not retake the mutex at
@@ -723,10 +723,10 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     need_addr = false;
     entity_addr_t t = peer_addr_for_me;
-    t.set_port(my_inst.addr.get_port());
-    t.set_nonce(my_inst.addr.get_nonce());
-    my_inst.addr = t;
-    ldout(cct, 1) << __func__ << " learned my addr " << my_inst.addr << dendl;
+    t.set_port(my_addr.get_port());
+    t.set_nonce(my_addr.get_nonce());
+    my_addr = t;
+    ldout(cct, 1) << __func__ << " learned my addr " << my_addr << dendl;
     _init_local_connection();
   }
   lock.Unlock();

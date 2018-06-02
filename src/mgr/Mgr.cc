@@ -202,7 +202,7 @@ void Mgr::init()
     // systemd restart us.
     exit(1);
   }
-  dout(4) << "Initialized server at " << server.get_myaddr() << dendl;
+  dout(4) << "Initialized server at " << server.get_myaddrs() << dendl;
 
   // Preload all daemon metadata (will subsequently keep this
   // up to date by watching maps, so do the initial load before
@@ -413,11 +413,11 @@ void Mgr::handle_osd_map()
         auto addr_iter = metadata->metadata.find("front_addr");
         if (addr_iter != metadata->metadata.end()) {
           const std::string &metadata_addr = addr_iter->second;
-          const auto &map_addr = osd_map.get_addr(osd_id);
+          const auto &map_addrs = osd_map.get_addrs(osd_id);
 
-          if (metadata_addr != stringify(map_addr)) {
+          if (metadata_addr != stringify(map_addrs)) {
             dout(4) << "OSD[" << osd_id << "] addr change " << metadata_addr
-                    << " != " << stringify(map_addr) << dendl;
+                    << " != " << stringify(map_addrs) << dendl;
             update_meta = true;
           } else {
             dout(20) << "OSD[" << osd_id << "] addr unchanged: "
