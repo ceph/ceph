@@ -7598,16 +7598,27 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
   PG *pg = context< RecoveryMachine >().pg;
   ldout(pg->cct, 10) << "searching osd." << logevt.from
 		     << " log for unfound items" << dendl;
-  pg->proc_replica_log(
-    logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
-  bool got_missing = pg->search_for_missing(
-    pg->peer_info[logevt.from],
-    pg->peer_missing[logevt.from],
-    logevt.from,
-    context< RecoveryMachine >().get_recovery_ctx());
-  // If there are missing AND we are "fully" active then start recovery now
-  if (got_missing && pg->state_test(PG_STATE_ACTIVE)) {
-    post_event(DoRecovery());
+  if (pg->peer_missing_requested.count(logevt.from)) {
+  	if (logevt.msg->info.is_empty() || logevt.msg->info.dne()) {
+      pg->peer_info[logevt.from] = logevt.msg->info;
+      ldout(pg->cct, 0) << "osd. " << logevt.from << "info is empty or dne "
+                           << logevt.msg->info << " ignoring source" << dendl;
+    } else {
+      pg->proc_replica_log(
+      logevt.msg->info, logevt.msg->log, logevt.msg->missing, logevt.from);
+      bool got_missing = pg->search_for_missing(
+      pg->peer_info[logevt.from],
+      pg->peer_missing[logevt.from],
+      logevt.from,
+      context< RecoveryMachine >().get_recovery_ctx());
+      // If there are missing AND we are "fully" active then start recovery now
+      if (got_missing && pg->state_test(PG_STATE_ACTIVE)) {
+        post_event(DoRecovery());
+      }
+    } 
+  } else {
+    ldout(pg->cct, 0) << " osd. " << logevt.from << ": not in peer_missing_requested"
+                         << " ignoring source" << dendl;
   }
   return discard_event();
 }
