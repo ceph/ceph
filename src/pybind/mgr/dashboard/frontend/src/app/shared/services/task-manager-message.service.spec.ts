@@ -28,6 +28,25 @@ describe('TaskManagerMessageService', () => {
     expect(message).toBe('Unknown Task');
   });
 
+  it('should get default running message', () => {
+    finishedTask.metadata = {};
+    let message = service.getRunningMessage(finishedTask);
+    expect(message).toBe('Executing unknown task');
+    finishedTask.metadata = { component: 'rbd' };
+    message = service.getRunningMessage(finishedTask);
+    expect(message).toBe('Executing RBD');
+  });
+
+  it('should get custom running message', () => {
+    finishedTask.name = 'rbd/create';
+    finishedTask.metadata = {
+      pool_name: 'somePool',
+      image_name: 'someImage'
+    };
+    const message = service.getRunningMessage(finishedTask);
+    expect(message).toBe('Creating RBD \'somePool/someImage\'');
+  });
+
   it('should getErrorMessage', () => {
     finishedTask.exception = _.assign(new TaskException(), {
       code: 1
@@ -46,6 +65,7 @@ describe('TaskManagerMessageService', () => {
       expect(value.descr({})).toBeTruthy();
       expect(value.success({})).toBeTruthy();
       expect(value.error({})).toBeTruthy();
+      expect(value.running({})).toBeTruthy();
     });
   });
 });
