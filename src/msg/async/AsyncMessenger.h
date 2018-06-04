@@ -95,7 +95,7 @@ public:
    * @{
    */
   void set_addr_unknowns(const entity_addr_t &addr) override;
-  void set_addr(const entity_addr_t &addr) override;
+  void set_addrs(const entity_addrvec_t &addrs) override;
 
   int get_dispatch_queue_len() override {
     return dispatch_queue.get_queue_len();
@@ -319,7 +319,7 @@ private:
 
   void _init_local_connection() {
     assert(lock.is_locked());
-    local_connection->peer_addrs = entity_addrvec_t(my_addr);
+    local_connection->peer_addrs = my_addrs;
     local_connection->peer_type = my_name.type();
     local_connection->set_features(CEPH_FEATURES_ALL);
     ms_deliver_handle_fast_connect(local_connection.get());

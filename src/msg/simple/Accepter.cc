@@ -232,18 +232,19 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     return rc;
   }
   
-  msgr->set_myaddr(bind_addr);
-  if (bind_addr != entity_addr_t())
+  msgr->set_myaddrs(entity_addrvec_t(bind_addr));
+  if (bind_addr != entity_addr_t() &&
+      !bind_addr.is_blank_ip())
     msgr->learned_addr(bind_addr);
   else
     assert(msgr->get_need_addr());  // should still be true.
 
   if (msgr->get_myaddr().get_port() == 0) {
-    msgr->set_myaddr(listen_addr);
+    msgr->set_myaddrs(entity_addrvec_t(listen_addr));
   }
   entity_addr_t addr = msgr->get_myaddr();
   addr.nonce = nonce;
-  msgr->set_myaddr(addr);
+  msgr->set_myaddrs(entity_addrvec_t(addr));
 
   msgr->init_local_connection();
 
@@ -254,7 +255,8 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     return rc;
   }
 
-  ldout(msgr->cct,1) <<  __func__ << " my_inst.addr is " << msgr->get_myaddr()
+  ldout(msgr->cct,1) <<  __func__ << " my_addrs " << msgr->my_addrs
+		     << " my_addr " << msgr->my_addr
 		     << " need_addr=" << msgr->get_need_addr() << dendl;
   return 0;
 }

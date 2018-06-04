@@ -742,7 +742,7 @@ int main(int argc, const char **argv)
   // if the public and bind addr are different set the msgr addr
   // to the public one, now that the bind is complete.
   if (public_addr != bind_addr) {
-    msgr->set_addr(public_addr);
+    msgr->set_addrs(entity_addrvec_t(public_addr));
   }
 
   Messenger *mgr_msgr = Messenger::create(g_ceph_context, public_msgr_type,

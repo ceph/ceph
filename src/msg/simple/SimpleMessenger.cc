@@ -149,19 +149,43 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
  */
 void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
 {
+  assert(my_addr == my_addrs.front());
   if (my_addr.is_blank_ip()) {
-    int port = my_addr.get_port();
-    my_addr.u = addr.u;
-    my_addr.set_port(port);
+    ldout(cct,1) << __func__ << " " << addr << dendl;
+    entity_addr_t t = my_addr;
+    int port = t.get_port();
+    t.u = addr.u;
+    t.set_port(port);
+    set_addrs(entity_addrvec_t(t));
     init_local_connection();
+  } else {
+    ldout(cct,1) << __func__ << " " << addr << " no-op" << dendl;
+  }
+  assert(my_addr == my_addrs.front());
+}
+
+void SimpleMessenger::set_myaddrs(const entity_addrvec_t &av)
+{
+  my_addr = av.front();
+  my_addr.set_nonce(nonce);
+  // do this in a slightly paranoid way because we update this value in a
+  // thread-unsafe way.  SimpleMessenger sucks.
+  if (my_addrs.empty()) {
+    Messenger::set_myaddrs(av);
+  } else {
+    assert(my_addrs.v.size() == av.v.size());
+    my_addrs.v[0] = av.front();
+    set_endpoint_addr(av.front(), my_name);
   }
 }
 
-void SimpleMessenger::set_addr(const entity_addr_t &addr)
+void SimpleMessenger::set_addrs(const entity_addrvec_t &av)
 {
-  entity_addr_t t = addr;
-  t.set_nonce(nonce);
-  set_myaddr(t);
+  auto t = av;
+  for (auto& a : t.v) {
+    a.set_nonce(nonce);
+  }
+  set_myaddrs(t);
   init_local_connection();
 }
 
@@ -319,7 +343,7 @@ int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    assert(my_addr == bind_addr);
+    assert(my_addrs == entity_addrvec_t(bind_addr));
     return 0;
   }
   if (started) {
@@ -328,7 +352,7 @@ int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
   }
   ldout(cct,10) << "rank.bind " << bind_addr << dendl;
 
-  set_myaddr(bind_addr);
+  set_myaddrs(entity_addrvec_t(bind_addr));
   return 0;
 }
 
@@ -738,7 +762,7 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     t.set_nonce(my_addr.get_nonce());
     ANNOTATE_BENIGN_RACE_SIZED(&my_addr, sizeof(my_addr),
                                "SimpleMessenger learned addr");
-    my_addr = t;
+    set_myaddrs(entity_addrvec_t(t));
     ldout(cct,1) << "learned my addr " << my_addr << dendl;
     need_addr = false;
     init_local_connection();
@@ -748,7 +772,7 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 
 void SimpleMessenger::init_local_connection()
 {
-  local_connection->peer_addrs = entity_addrvec_t(my_addr);
+  local_connection->peer_addrs = my_addrs;
   local_connection->peer_type = my_name.type();
   local_connection->set_features(CEPH_FEATURES_ALL);
   ms_deliver_handle_fast_connect(local_connection.get());
