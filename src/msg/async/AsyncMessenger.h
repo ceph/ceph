@@ -57,9 +57,9 @@ class Processor {
   ~Processor() { delete listen_handler; };
 
   void stop();
-  int bind(const entity_addr_t &bind_addr,
+  int bind(const entity_addrvec_t &bind_addrs,
 	   const set<int>& avoid_ports,
-	   entity_addr_t* bound_addr);
+	   entity_addrvec_t* bound_addrs);
   void start();
   void accept();
 };
@@ -118,6 +118,8 @@ public:
   int bind(const entity_addr_t& bind_addr) override;
   int rebind(const set<int>& avoid_ports) override;
   int client_bind(const entity_addr_t& bind_addr) override;
+
+  int bindv(const entity_addrvec_t& bind_addrs) override;
 
   /** @} Configuration functions */
 
@@ -211,8 +213,8 @@ private:
                       const entity_addr_t& dest_addr, int dest_type);
 
   int _send_message(Message *m, const entity_inst_t& dest);
-  void _finish_bind(const entity_addr_t& bind_addr,
-		    const entity_addr_t& listen_addr);
+  void _finish_bind(const entity_addrvec_t& bind_addrs,
+		    const entity_addrvec_t& listen_addrs);
 
  private:
   static const uint64_t ReapDeadConnectionThreshold = 5;
@@ -238,10 +240,10 @@ private:
   bool need_addr;
 
   /**
-   * set to bind address if bind was called before NetworkStack was ready to
+   * set to bind addresses if bind was called before NetworkStack was ready to
    * bind
    */
-  entity_addr_t pending_bind_addr;
+  entity_addrvec_t pending_bind_addrs;
 
   /**
    * false; set to true if a pending bind exists
