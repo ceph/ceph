@@ -73,10 +73,17 @@
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   id="pool"
+                   name="pool"
+                   formControlName="pool"
+                   *ngIf="mode === 'editing'">
             <select id="pool"
                     name="pool"
                     class="form-control"
-                    formControlName="pool">
+                    formControlName="pool"
+                    *ngIf="mode !== 'editing'">
               <option *ngIf="pools === null"
                       [ngValue]="null">Loading...
               </option>
@@ -125,11 +132,18 @@
             </cd-helper>
           </label>
           <div class="col-sm-9">
+            <input class="form-control"
+                   type="text"
+                   id="dataPool"
+                   name="dataPool"
+                   formControlName="dataPool"
+                   *ngIf="mode === 'editing'">
             <select id="dataPool"
                     name="dataPool"
                     class="form-control"
                     formControlName="dataPool"
-                    (change)="onDataPoolChange($event.target.value)">
+                    (change)="onDataPoolChange($event.target.value)"
+                    *ngIf="mode !== 'editing'">
               <option *ngIf="dataPools === null"
                       [ngValue]="null">Loading...
               </option>
