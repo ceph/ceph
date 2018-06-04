@@ -990,17 +990,19 @@ ssize_t AsyncConnection::_process_connection()
           return 0;
         }
 
-        encode(async_msgr->get_myaddr(), myaddrbl, 0); // legacy
+        encode(async_msgr->get_myaddrs().legacy_addr(), myaddrbl, 0); // legacy
         r = try_send(myaddrbl);
         if (r == 0) {
           state = STATE_CONNECTING_SEND_CONNECT_MSG;
           ldout(async_msgr->cct, 10) << __func__ << " connect sent my addr "
-              << async_msgr->get_myaddr() << dendl;
+				     << async_msgr->get_myaddrs().legacy_addr()
+				     << dendl;
         } else if (r > 0) {
           state = STATE_WAIT_SEND;
           state_after_send = STATE_CONNECTING_SEND_CONNECT_MSG;
           ldout(async_msgr->cct, 10) << __func__ << " connect send my addr done: "
-              << async_msgr->get_myaddr() << dendl;
+				     << async_msgr->get_myaddrs().legacy_addr()
+				     << dendl;
         } else {
           ldout(async_msgr->cct, 2) << __func__ << " connect couldn't write my addr, "
               << cpp_strerror(r) << dendl;
@@ -1207,8 +1209,9 @@ ssize_t AsyncConnection::_process_connection()
 
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
 
-        encode(async_msgr->get_myaddr(), bl, 0); // legacy
-        port = async_msgr->get_myaddr().get_port();
+	auto legacy = async_msgr->get_myaddrs().legacy_addr();
+        encode(legacy, bl, 0); // legacy
+        port = legacy.get_port();
         encode(socket_addr, bl, 0); // legacy
         ldout(async_msgr->cct, 1) << __func__ << " sd=" << cs.fd() << " " << socket_addr << dendl;
 
