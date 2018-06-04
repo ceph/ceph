@@ -33,7 +33,7 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
-  return *_dout << "-- " << async_msgr->get_myaddr() << " >> "
+  return *_dout << "-- " << async_msgr->get_myaddrs() << " >> "
 		<< peer_addrs << " conn(" << this
                 << " :" << port
                 << " s=" << get_state_name(state)
@@ -1886,8 +1886,8 @@ int AsyncConnection::send_message(Message *m)
 {
   FUNCTRACE(async_msgr->cct);
   lgeneric_subdout(async_msgr->cct, ms,
-		   1) << "-- " << async_msgr->get_myaddr() << " --> "
-		      << get_peer_addr() << " -- "
+		   1) << "-- " << async_msgr->get_myaddrs() << " --> "
+		      << get_peer_addrs() << " -- "
 		      << *m << " -- " << m << " con "
 		      << m->get_connection().get()
 		      << dendl;
@@ -1904,7 +1904,7 @@ int AsyncConnection::send_message(Message *m)
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_BEGIN", true);
 
-  if (async_msgr->get_myaddr() == get_peer_addr()) { //loopback connection
+  if (async_msgr->get_myaddrs() == get_peer_addrs()) { //loopback connection
     ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
     std::lock_guard<std::mutex> l(write_lock);
     if (can_write != WriteStatus::CLOSED) {
