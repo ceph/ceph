@@ -405,6 +405,39 @@ class TestVolumeGroupFree(object):
         assert vg.free == 100
 
 
+class TestCreateLVs(object):
+
+    def test_creates_correct_lv_number_from_parts(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        lvs = api.create_lvs(vg, parts=4)
+        assert len(lvs) == 4
+
+    def test_suffixes_the_size_arg(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g')
+        lvs = api.create_lvs(vg, parts=4)
+        assert lvs[0][1]['size'] == '256g'
+
+    def test_only_uses_free_size(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g', vg_size='99999999g')
+        lvs = api.create_lvs(vg, parts=4)
+        assert lvs[0][1]['size'] == '256g'
+
+    def test_null_tags_are_set_by_default(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g', vg_size='99999999g')
+        kwargs = api.create_lvs(vg, parts=4)[0][1]
+        assert list(kwargs['tags'].values()) == ['null', 'null', 'null', 'null']
+
+    def test_fallback_to_one_part(self, monkeypatch):
+        monkeypatch.setattr('ceph_volume.api.lvm.create_lv', lambda *a, **kw: (a, kw))
+        vg = api.VolumeGroup(vg_name='ceph', vg_free='1024g', vg_size='99999999g')
+        lvs = api.create_lvs(vg)
+        assert len(lvs) == 1
+
+
 class TestVolumeGroupSizing(object):
 
     def test_parts_and_size_errors(self):
