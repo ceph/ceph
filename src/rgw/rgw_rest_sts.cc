@@ -44,7 +44,7 @@ int RGWREST_STS::verify_permission()
     return ret;
   }
   string policy = role.get_assume_role_policy();
-  bufferlist bl = bufferlist::static_from_string(policy);
+  buffer::list bl = buffer::list::static_from_string(policy);
 
   //Parse the policy
   //TODO - This step should be part of Role Creation
@@ -89,9 +89,12 @@ int RGWSTSAssumeRole::get_params()
   }
 
   if (! policy.empty()) {
-    JSONParser p;
-    if (!p.parse(policy.c_str(), policy.length())) {
-      ldout(s->cct, 20) << "ERROR: failed to parse policy doc" << dendl;
+    bufferlist bl = bufferlist::static_from_string(policy);
+    try {
+      const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+    }
+    catch (rgw::IAM::PolicyParseException& e) {
+      ldout(s->cct, 20) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
       return -ERR_MALFORMED_DOC;
     }
   }
