@@ -33,7 +33,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, AsyncMessenger *m) {
-  return *_dout << "-- " << m->get_myaddr() << " ";
+  return *_dout << "-- " << m->get_myaddrs() << " ";
 }
 
 static ostream& _prefix(std::ostream *_dout, Processor *p) {
@@ -290,7 +290,7 @@ AsyncMessenger::~AsyncMessenger()
 
 void AsyncMessenger::ready()
 {
-  ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
+  ldout(cct,10) << __func__ << " " << get_myaddrs() << dendl;
 
   stack->ready();
   if (pending_bind) {
@@ -309,7 +309,7 @@ void AsyncMessenger::ready()
 
 int AsyncMessenger::shutdown()
 {
-  ldout(cct,10) << __func__ << " " << get_myaddr() << dendl;
+  ldout(cct,10) << __func__ << " " << get_myaddrs() << dendl;
 
   // done!  clean up.
   for (auto &&p : processors)
@@ -417,7 +417,7 @@ int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    assert(my_addr == bind_addr);
+    assert(my_addrs.legacy_addr() == bind_addr);
     return 0;
   }
   if (started) {
@@ -426,27 +426,27 @@ int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
   }
   ldout(cct, 10) << __func__ << " " << bind_addr << dendl;
 
-  set_myaddr(bind_addr);
+  set_myaddrs(entity_addrvec_t(bind_addr));
   return 0;
 }
 
 void AsyncMessenger::_finish_bind(const entity_addr_t& bind_addr,
 				  const entity_addr_t& listen_addr)
 {
-  set_myaddr(bind_addr);
+  set_myaddrs(entity_addrvec_t(bind_addr));
   if (bind_addr != entity_addr_t())
     learned_addr(bind_addr);
 
   if (get_myaddr().get_port() == 0) {
-    set_myaddr(listen_addr);
+    set_myaddrs(entity_addrvec_t(listen_addr));
   }
-  entity_addr_t addr = get_myaddr();
-  addr.set_nonce(nonce);
-  set_myaddr(addr);
+  for (auto& a : my_addrs.v) {
+    a.set_nonce(nonce);
+  }
 
   init_local_connection();
 
-  ldout(cct,1) << __func__ << " bind my_addr is " << get_myaddr() << dendl;
+  ldout(cct,1) << __func__ << " bind my_addrs is " << get_myaddrs() << dendl;
   did_bind = true;
 }
 
@@ -463,7 +463,9 @@ int AsyncMessenger::start()
   stopped = false;
 
   if (!did_bind) {
-    my_addr.nonce = nonce;
+    for (auto& a : my_addrs.v) {
+      a.nonce = nonce;
+    }
     _init_local_connection();
   }
 
@@ -512,7 +514,7 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket, entity_ad
 AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int type)
 {
   assert(lock.is_locked());
-  assert(addr != my_addr);
+  assert(addr != my_addrs.legacy_addr());
 
   ldout(cct, 10) << __func__ << " " << addr
       << ", creating connection and registering" << dendl;
@@ -531,7 +533,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int
 ConnectionRef AsyncMessenger::get_connection(const entity_inst_t& dest)
 {
   Mutex::Locker l(lock);
-  if (my_addr == dest.addr) {
+  if (my_addrs.legacy_addr() == dest.addr) {
     // local
     return local_connection;
   }
@@ -600,7 +602,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
   }
 
   // local?
-  if (my_addr == dest_addr) {
+  if (my_addrs.legacy_addr() == dest_addr) {
     // local
     local_connection->send_message(m);
     return ;
@@ -627,20 +629,24 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
 void AsyncMessenger::set_addr_unknowns(const entity_addr_t &addr)
 {
   Mutex::Locker l(lock);
-  if (my_addr.is_blank_ip()) {
-    int port = my_addr.get_port();
-    my_addr.u = addr.u;
-    my_addr.set_port(port);
+  if (my_addrs.legacy_addr().is_blank_ip()) {
+    for (auto& a : my_addrs.v) {
+      int port = a.get_port();
+      a.u = addr.u;
+      a.set_port(port);
+    }
     _init_local_connection();
   }
 }
 
-void AsyncMessenger::set_addr(const entity_addr_t &addr)
+void AsyncMessenger::set_addrs(const entity_addrvec_t &addrs)
 {
   Mutex::Locker l(lock);
-  entity_addr_t t = addr;
-  t.set_nonce(nonce);
-  set_myaddr(t);
+  auto t = addrs;
+  for (auto& a : t.v) {
+    a.set_nonce(nonce);
+  }
+  set_myaddrs(t);
   _init_local_connection();
 }
 
@@ -722,11 +728,26 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   lock.Lock();
   if (need_addr) {
     need_addr = false;
-    entity_addr_t t = peer_addr_for_me;
-    t.set_port(my_addr.get_port());
-    t.set_nonce(my_addr.get_nonce());
-    my_addr = t;
-    ldout(cct, 1) << __func__ << " learned my addr " << my_addr << dendl;
+    if (my_addrs.empty()) {
+      auto a = peer_addr_for_me;
+      a.set_nonce(nonce);
+      set_myaddrs(entity_addrvec_t(a));
+      ldout(cct,10) << __func__ << " had no addrs" << dendl;
+    } else {
+      // fix all addrs of the same family, regardless of type (msgr2 vs legacy)
+      for (auto& a : my_addrs.v) {
+	if (a.get_family() == peer_addr_for_me.get_family()) {
+	  entity_addr_t t = peer_addr_for_me;
+	  t.set_type(a.get_type());
+	  t.set_port(a.get_port());
+	  t.set_nonce(a.get_nonce());
+	  ldout(cct,10) << __func__ << " " << a << " -> " << t << dendl;
+	  a = t;
+	}
+      }
+    }
+    ldout(cct, 1) << __func__ << " learned my addr " << my_addrs
+		  << " (peer_addr_for_me " << peer_addr_for_me << ")" << dendl;
     _init_local_connection();
   }
   lock.Unlock();
