@@ -739,3 +739,9 @@ def getargspec(func):
     except AttributeError:
         pass
     return _getargspec(func)
+
+
+def str_to_bool(var):
+    if isinstance(var, bool):
+        return var
+    return var.lower() in ("true", "yes", "1", 1)
