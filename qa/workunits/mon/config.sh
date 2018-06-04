@@ -74,6 +74,7 @@ do
 done
 ceph config show osd.0 | grep debug_xio | grep 'override mon'
 ceph tell osd.0 config unset debug_xio
+ceph tell osd.0 config unset debug_xio
 
 ceph config rm osd.0 debug_xio
 while ceph config show osd.0 | grep debug_xio | grep mon
