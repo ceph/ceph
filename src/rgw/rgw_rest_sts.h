@@ -25,7 +25,7 @@ public:
   RGWSTSAssumeRole() = default;
   void execute() override;
   int get_params();
-  const string name() override { return "assume_role"; }
+  const char* name() const override { return "assume_role"; }
   RGWOpType get_type() override { return RGW_STS_ASSUME_ROLE; }
 };
 
