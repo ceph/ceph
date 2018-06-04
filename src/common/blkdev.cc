@@ -17,6 +17,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
+#include <libudev.h>
+//#include "common/debug.h"
 #include "include/uuid.h"
 #include "blkdev.h"
 
@@ -30,6 +32,8 @@
 #define UUID_LEN 36
 
 static const char *sandbox_dir = "";
+
+static std::string get_block_device_string_property_wrap(const std::string &devname, const std::string &property);
 
 void set_block_device_sandbox_dir(const char *dir)
 {
@@ -209,9 +213,19 @@ bool block_device_is_rotational(const char *devname)
   return get_block_device_int_property(devname, "queue/rotational") > 0;
 }
 
+int block_device_vendor(const char *devname, char *vendor, size_t max)
+{
+  return get_block_device_string_property(devname, "device/vendor", vendor, max);
+}
+
 int block_device_model(const char *devname, char *model, size_t max)
 {
   return get_block_device_string_property(devname, "device/model", model, max);
+}
+
+int block_device_serial(const char *devname, char *serial, size_t max)
+{
+  return get_block_device_string_property(devname, "device/serial", serial, max);
 }
 
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
@@ -355,6 +369,75 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
   *total = block_size * physical_blocks;
   *avail = block_size * avail_blocks;
   return true;
+}
+
+// trying to use udev first, and if it doesn't work, we fall back to
+// reading /sys/block/$devname/device/(vendor/model/serial).
+std::string get_device_id(const std::string& devname)
+{
+  struct udev_device *dev;
+  static struct udev *udev;
+  const char *data;
+  std::string device_id;
+
+  udev = udev_new();
+  if (!udev) {
+    //derr << "failed to run udev_new(), when calling for device " << devname << dendl;
+    return {};
+  }
+  dev = udev_device_new_from_subsystem_sysname(udev, "block", devname.c_str());
+  if (!dev) {
+    //derr << "failed to run udev_device_new_from_subsystem_sysname() for " << devname << dendl;
+    udev_unref(udev);
+    return {};
+  }
+
+  // "ID_SERIAL_SHORT" returns only the serial number;
+  // "ID_SERIAL" returns vendor model_serial.
+  data = udev_device_get_property_value(dev, "ID_SERIAL");
+  if (data) {
+    device_id = data;
+  }
+
+  udev_device_unref(dev);
+  udev_unref(udev);
+
+  if (!device_id.empty()) {
+    //dout << devname << " serial number: " << data << dendl;
+    std::replace(device_id.begin(), device_id.end(), ' ', '_');
+    return device_id;
+  }
+
+  // either udev_device_get_property_value() failed, or succeeded but returned nothing;
+  // trying to read from files.
+  //derr << "udev could not retrieve serial number of " << devname << dendl;
+
+  std::string vendor, model, serial;
+  vendor = get_block_device_string_property_wrap(devname, "device/vendor");
+  model = get_block_device_string_property_wrap(devname, "device/model");
+  serial = get_block_device_string_property_wrap(devname, "device/serial");
+
+  // "none" is here for indication reasons only, for a start.
+  device_id = (vendor.empty() ? "none" : vendor) + "_"
+    + (model.empty() ? "none" : model) + "_"
+    + (serial.empty() ? "none" : serial);
+
+  std::replace(device_id.begin(), device_id.end(), ' ', '_');
+  return device_id;
+}
+
+std::string get_block_device_string_property_wrap(const std::string &devname,
+						  const std::string &property)
+{
+  char buff[1024] = {0};
+  std::string prop_val;
+  int ret = get_block_device_string_property(devname.c_str(), property.c_str(), buff, sizeof(buff));
+  if (ret < 0) {
+    //derr << "Could not retrieve content of " << property << " file of " << devname << dendl;
+    return {};
+  }
+  prop_val = buff;
+  return prop_val;
 }
 
 #elif defined(__APPLE__)

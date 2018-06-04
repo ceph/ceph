@@ -645,7 +645,8 @@ set(ceph_common_deps
   ${BLKIN_LIBRARIES}
   ${CRYPTO_LIBS}
   ${CMAKE_THREAD_LIBS_INIT}
-  ${CMAKE_DL_LIBS})
+  ${CMAKE_DL_LIBS}
+  ${UDEV_LIBRARIES})
 if(HAVE_RDMA)
   list(APPEND ceph_common_deps ${RDMA_LIBRARY})
 endif()
@@ -1052,7 +1053,7 @@ if(WITH_RBD)
   if(WITH_KRBD)
     add_library(krbd STATIC krbd.cc
       $<TARGET_OBJECTS:parse_secret_objs>)
-    target_link_libraries(krbd ${KEYUTILS_LIBRARIES} ${UDEV_LIBRARIES})
+    target_link_libraries(krbd ${KEYUTILS_LIBRARIES})
   endif()
   add_subdirectory(librbd)
   if(WITH_FUSE)
