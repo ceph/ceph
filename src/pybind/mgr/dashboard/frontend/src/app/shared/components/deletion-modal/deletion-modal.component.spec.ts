@@ -6,7 +6,6 @@ import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 import { Subscriber } from 'rxjs/Subscriber';
 
-import { ModalComponent } from '../modal/modal.component';
 import { DeletionModalComponent } from './deletion-modal.component';
 
 @NgModule({
