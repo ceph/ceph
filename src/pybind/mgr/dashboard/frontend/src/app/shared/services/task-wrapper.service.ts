@@ -56,7 +56,7 @@ export class TaskWrapperService {
   _handleExecutingTasks(task: FinishedTask, tasks?: ExecutingTask[]) {
     this.notificationService.show(
       NotificationType.info,
-      task.name + ' in progress...',
+      this.taskManagerMessageService.getRunningMessage(task),
       this.taskManagerMessageService.getDescription(task)
     );
     const executingTask = new ExecutingTask(task.name, task.metadata);
