@@ -54,7 +54,7 @@ want to configure with something like::
   ./do_cmake -DWITH_BLKIN=ON
 
 Config option for blkin must be set to true in ceph.conf to get
-traces from rbd through OSDC and OSD:
+traces from rbd through OSDC and OSD::
 
   rbd_blkin_trace_all = true
 
