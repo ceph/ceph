@@ -1374,7 +1374,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     } else {
       dout(10) << " existing session " << s << " for " << s->info.inst << " existing con " << s->connection
 	       << ", new/authorizing con " << con << dendl;
-      con->set_priv(RefCountedPtr{s, false});
+      con->set_priv(RefCountedPtr{s});
 
 
 
