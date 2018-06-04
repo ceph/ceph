@@ -11,6 +11,7 @@
 #include "rgw_rados.h"
 #include "auth/Crypto.h"
 #include "include/ceph_fs.h"
+#include "common/iso_8601.h"
 
 #include "include/types.h"
 #include "rgw_string.h"
@@ -34,41 +35,28 @@ void Credentials::dump(Formatter *f) const
   encode_json("SessionToken", sessionToken , f);
 }
 
-int Credentials::generateCredentials(CephContext* cct, const uint64_t& duration)
+int Credentials::generateCredentials(CephContext* cct,
+                          const uint64_t& duration,
+                          const string& policy,
+                          const string& roleId)
 {
   uuid_d accessKey, secretKey;
-  char accessKeyId_str[MAX_ACCESS_KEY_LEN], secretAccessKey_str[MAX_ACCESS_KEY_LEN];
+  char accessKeyId_str[MAX_ACCESS_KEY_LEN], secretAccessKey_str[MAX_SECRET_KEY_LEN];
 
   //AccessKeyId
-  accessKey.generate_random();
-  accessKey.print(accessKeyId_str);
+  gen_rand_alphanumeric_plain(cct, accessKeyId_str, sizeof(accessKeyId_str));
   accessKeyId = accessKeyId_str;
 
   //SecretAccessKey
-  secretKey.generate_random();
-  secretKey.print(secretAccessKey_str);
+  gen_rand_alphanumeric_upper(cct, secretAccessKey_str, sizeof(secretAccessKey_str));
   secretAccessKey = secretAccessKey_str;
 
   //Expiration
   real_clock::time_point t = real_clock::now();
+  real_clock::time_point exp = t + std::chrono::seconds(duration);
+  expiration = ceph::to_iso_8601(exp);
 
-  struct timeval tv;
-  real_clock::to_timeval(t, tv);
-  tv.tv_sec += duration;
-
-  struct tm result;
-  gmtime_r(&tv.tv_sec, &result);
-  int usec = (int)tv.tv_usec/1000;
-  expiration = boost::str(boost::format("%s-%s-%sT%s:%s:%s.%sZ")
-                                         % (result.tm_year + 1900)
-                                         % (result.tm_mon + 1)
-                                         % result.tm_mday
-                                         % result.tm_hour
-                                         % result.tm_min
-                                         % result.tm_sec
-                                         % usec);
-
-  //Session Token - Encrypt using AES & base64 encode the result
+  //Session Token - Encrypt using AES
   auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {
     return -EINVAL;
@@ -77,7 +65,7 @@ int Credentials::generateCredentials(CephContext* cct, const uint64_t& duration)
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
   };
-  bufferptr secret(secret_s, sizeof(secret_s));
+  buffer::ptr secret(secret_s, sizeof(secret_s));
   int ret = 0;
   if (ret = cryptohandler->validate_secret(secret); ret < 0) {
     ldout(cct, 0) << "ERROR: Invalid secret key" << dendl;
@@ -89,21 +77,20 @@ int Credentials::generateCredentials(CephContext* cct, const uint64_t& duration)
     return -EINVAL;
   }
   error.clear();
+  //Storing policy and roleId as part of token, so that they can be extracted
+  // from the token itself for policy evaluation.
   string encrypted_str, input_str = "acess_key_id=" + accessKeyId + "&" +
                      "secret_access_key=" + secretAccessKey + "&" +
-                     "expiration=" + expiration;
-  bufferlist input, enc_output;
+                     "expiration=" + expiration + "&" + "policy=" + policy + "&"
+                     "roleId=" + roleId;
+  buffer::list input, enc_output;
   input.append(input_str);
   if (ret = keyhandler->encrypt(input, enc_output, &error); ret < 0) {
     return ret;
   }
 
-  enc_output.append('\0');
-  encrypted_str = enc_output.c_str();
-
-  bufferlist enc_bp, encoded_op;
-  enc_bp.append(encrypted_str);
-  enc_bp.encode_base64(encoded_op);
+  bufferlist encoded_op;
+  enc_output.encode_base64(encoded_op);
   encoded_op.append('\0');
   sessionToken = encoded_op.c_str();
 
@@ -227,7 +214,7 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
   }
 }
 
-int STSService::_storeARNandPolicy(string& policy, string& arn)
+int STSService::storeARN(string& arn)
 {
   int ret = 0;
   RGWUserInfo info;
@@ -237,32 +224,9 @@ int STSService::_storeARNandPolicy(string& policy, string& arn)
 
   info.assumed_role_arn = arn;
 
-  map<string, bufferlist> uattrs;
-  if (ret = rgw_get_user_attrs_by_uid(store, user_id, uattrs); ret == -ENOENT) {
-    return -ERR_NO_SUCH_ENTITY;
-  }
-  if (! policy.empty()) {
-    bufferlist bl = bufferlist::static_from_string(policy);
-    ldout(cct, 20) << "bufferlist policy: " << bl.c_str() << dendl;
-    try {
-      const rgw::IAM::Policy p(cct, user_id.tenant, bl);
-      map<string, string> policies;
-      if (auto it = uattrs.find(RGW_ATTR_USER_POLICY); it != uattrs.end()) {
-        bufferlist out_bl = uattrs[RGW_ATTR_USER_POLICY];
-        decode(policies, out_bl);
-      }
-      bufferlist in_bl;
-      policies["assumerolepolicy"] = policy;
-      encode(policies, in_bl);
-      uattrs[RGW_ATTR_USER_POLICY] = in_bl;
-    } catch (rgw::IAM::PolicyParseException& e) {
-      ldout(cct, 20) << "failed to parse policy: " << e.what() << dendl;
-      return -ERR_MALFORMED_DOC;
-    }
-  }
   RGWObjVersionTracker objv_tracker;
   if (rgw_store_user_info(store, info, &info, &objv_tracker, real_time(),
-          false, &uattrs); ret < 0) {
+          false); ret < 0) {
     return -ERR_INTERNAL_ERROR;
   }
   return ret;
@@ -301,13 +265,13 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   }
 
   //Generate Credentials
-  if (ret = cred.generateCredentials(cct, req.getDuration()); ret < 0) {
+  if (ret = cred.generateCredentials(cct, req.getDuration(), req.getPolicy(), roleId); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 
-  //Save ARN and Policy with the user
+  //Save ARN with the user
   string arn = user.getARN();
-  if (ret = _storeARNandPolicy(policy, arn); ret < 0) {
+  if (ret = storeARN(arn); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 

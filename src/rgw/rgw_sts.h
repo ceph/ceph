@@ -60,13 +60,17 @@ public:
 };
 
 class Credentials {
-  static constexpr int MAX_ACCESS_KEY_LEN = 64;
+  static constexpr int MAX_ACCESS_KEY_LEN = 20;
+  static constexpr int MAX_SECRET_KEY_LEN = 40;
   string accessKeyId;
   string expiration;
   string secretAccessKey;
   string sessionToken;
 public:
-  int generateCredentials(CephContext* cct, const uint64_t& duration);
+  int generateCredentials(CephContext* cct,
+                          const uint64_t& duration,
+                          const string& policy,
+                          const string& roleId);
   const string& getAccessKeyId() const { return accessKeyId; }
   const string& getExpiration() const { return expiration; }
   const string& getSecretAccessKey() const { return secretAccessKey; }
@@ -82,7 +86,7 @@ class STSService {
   RGWRados *store;
   rgw_user user_id;
   RGWRole role;
-  int _storeARNandPolicy(string& policy, string& arn);
+  int storeARN(string& arn);
 public:
   STSService() = default;
   STSService(CephContext* _cct, RGWRados *_store, rgw_user _user_id) : cct(_cct), store(_store), user_id(_user_id) {}
