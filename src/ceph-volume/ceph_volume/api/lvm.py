@@ -482,7 +482,7 @@ def create_lv(name, group, size=None, tags=None):
     return lv
 
 
-def create_lvs(group, parts=None, size=None, name_prefix='ceph-lv'):
+def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
     """
     Create multiple Logical Volumes from a Volume Group by calculating the
     proper extents from ``parts`` or ``size``. A custom prefix can be used
@@ -490,25 +490,22 @@ def create_lvs(group, parts=None, size=None, name_prefix='ceph-lv'):
 
     LV creation in ceph-volume will require tags, this is expected to be
     pre-computed by callers who know Ceph metadata like OSD IDs and FSIDs. It
-    will probably not be the case when mass-creating LVs, so common/default tags will be
-    set to ``"null"``.
+    will probably not be the case when mass-creating LVs, so common/default
+    tags will be set to ``"null"``.
 
-        ceph.empty dict is
+    .. note:: LVs that are not in use can be detected by querying LVM for tags that are
+              set to ``"null"``.
 
-    LVs that are not in use can be detected by querying LVM for tags that are
-    set to ``"null"``
-
-    :param group: The volume group (vg) to use for LV creation
+    :param volume_group: The volume group (vg) to use for LV creation
     :type group: ``VolumeGroup()`` object
     :param parts: Number of LVs to create *instead of* ``size``.
     :type parts: int
     :param size: Size (in gigabytes) of LVs to create, e.g. "as many 10gb LVs as possible"
     :type size: int
-
-    .. warning:: Only one of ``parts`` or ``size`` is allowed.
     """
     if parts is None and size is None:
-        raise RuntimeError("Unable to create lvs without 'parts' or 'size' being defined")
+        # fallback to just one part (using 100% of the vg)
+        parts = 1
     lvs = []
     tags = {
         "ceph.osd_id": "null",
@@ -516,12 +513,12 @@ def create_lvs(group, parts=None, size=None, name_prefix='ceph-lv'):
         "ceph.cluster_fsid": "null",
         "ceph.osd_fsid": "null",
     }
-    sizing = group.sizing(parts=parts, size=size)
+    sizing = volume_group.sizing(parts=parts, size=size)
     for part in range(0, sizing['parts']):
         size = sizing['sizes']
         lv_name = '%s-%s' % (name_prefix, uuid.uuid4())
         lvs.append(
-            create_lv(lv_name, group.name, size="%sg" % size, tags=tags)
+            create_lv(lv_name, volume_group.name, size="%sg" % size, tags=tags)
         )
     return lvs
 
