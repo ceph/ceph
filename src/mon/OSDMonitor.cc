@@ -2671,7 +2671,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   // already booted?
   if (osdmap.is_up(from) &&
       osdmap.get_addrs(from) == m->get_orig_source_addrs() &&
-      osdmap.get_cluster_addr(from) == m->cluster_addr) {
+      osdmap.get_cluster_addrs(from) == m->cluster_addrs) {
     // yup.
     dout(7) << "preprocess_boot dup from " << m->get_orig_source()
 	    << " " << m->get_orig_source_addrs()
@@ -2716,10 +2716,12 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
-  dout(7) << __func__ << " from " << m->get_orig_source_inst() << " sb " << m->sb
-	  << " cluster_addr " << m->cluster_addr
-	  << " hb_back_addr " << m->hb_back_addr
-	  << " hb_front_addr " << m->hb_front_addr
+  dout(7) << __func__ << " from " << m->get_source()
+	  << " sb " << m->sb
+	  << " client_addrs" << m->get_connection()->get_peer_addrs()
+	  << " cluster_addrs " << m->cluster_addrs
+	  << " hb_back_addrs " << m->hb_back_addrs
+	  << " hb_front_addrs " << m->hb_front_addrs
 	  << dendl;
 
   assert(m->get_orig_source().is_osd());
@@ -2742,7 +2744,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 	    << osdmap.get_addrs(from) << dendl;
     // preprocess should have caught these;  if not, assert.
     assert(osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
-           osdmap.get_cluster_addr(from) != m->cluster_addr);
+           osdmap.get_cluster_addrs(from) != m->cluster_addrs);
     assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
 
     if (pending_inc.new_state.count(from) == 0 ||
@@ -2759,9 +2761,9 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
   } else {
     // mark new guy up.
     pending_inc.new_up_client[from] = m->get_orig_source_addrs();
-    pending_inc.new_up_cluster[from] = m->cluster_addr;
-    pending_inc.new_hb_back_up[from] = m->hb_back_addr;
-    pending_inc.new_hb_front_up[from] = m->hb_front_addr;
+    pending_inc.new_up_cluster[from] = m->cluster_addrs;
+    pending_inc.new_hb_back_up[from] = m->hb_back_addrs;
+    pending_inc.new_hb_front_up[from] = m->hb_front_addrs;
 
     down_pending_out.erase(from);  // if any
 

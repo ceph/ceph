@@ -376,7 +376,7 @@ public:
     mempool::osdmap::map<string,map<string,string> > new_erasure_code_profiles;
     mempool::osdmap::vector<string> old_erasure_code_profiles;
     mempool::osdmap::map<int32_t,entity_addrvec_t> new_up_client;
-    mempool::osdmap::map<int32_t,entity_addr_t> new_up_cluster;
+    mempool::osdmap::map<int32_t,entity_addrvec_t> new_up_cluster;
     mempool::osdmap::map<int32_t,uint32_t> new_state;             // XORed onto previous state.
     mempool::osdmap::map<int32_t,uint32_t> new_weight;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> > new_pg_temp;     // [] to remove
@@ -390,8 +390,8 @@ public:
 
     mempool::osdmap::map<entity_addr_t,utime_t> new_blacklist;
     mempool::osdmap::vector<entity_addr_t> old_blacklist;
-    mempool::osdmap::map<int32_t, entity_addr_t> new_hb_back_up;
-    mempool::osdmap::map<int32_t, entity_addr_t> new_hb_front_up;
+    mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_back_up;
+    mempool::osdmap::map<int32_t, entity_addrvec_t> new_hb_front_up;
 
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> new_pg_upmap;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<pair<int32_t,int32_t>>> new_pg_upmap_items;
@@ -525,13 +525,12 @@ private:
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
-    mempool::osdmap::vector<std::shared_ptr<entity_addr_t> > cluster_addr;
-    mempool::osdmap::vector<std::shared_ptr<entity_addr_t> > hb_back_addr;
-    mempool::osdmap::vector<std::shared_ptr<entity_addr_t> > hb_front_addr;
+    mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > cluster_addrs;
+    mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > hb_back_addrs;
+    mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > hb_front_addrs;
   };
   std::shared_ptr<addrs_s> osd_addrs;
 
-  entity_addr_t _blank_addr;
   entity_addrvec_t _blank_addrvec;
 
   mempool::osdmap::vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
@@ -632,7 +631,7 @@ public:
     if (o.osd_primary_affinity)
       osd_primary_affinity.reset(new mempool::osdmap::vector<__u32>(*o.osd_primary_affinity));
 
-    // NOTE: this still references shared entity_addr_t's.
+    // NOTE: this still references shared entity_addrvec_t's.
     osd_addrs.reset(new addrs_s(*o.osd_addrs));
 
     // NOTE: we do not copy crush.  note that apply_incremental will
@@ -899,40 +898,23 @@ public:
     return osd_addrs->client_addrs[osd] ?
       *osd_addrs->client_addrs[osd] : _blank_addrvec;
   }
-  entity_addrvec_t get_cluster_addrs(int osd) const {
-    assert(exists(osd));
-    if (!osd_addrs->cluster_addr[osd])
-      return entity_addrvec_t();
-    return entity_addrvec_t(*osd_addrs->cluster_addr[osd]);
-  }
-  entity_addrvec_t get_hb_back_addrs(int osd) const {
-    assert(exists(osd));
-    return entity_addrvec_t(osd_addrs->hb_back_addr[osd] ?
-			    *osd_addrs->hb_back_addr[osd] : _blank_addr);
-  }
-  entity_addrvec_t get_hb_front_addrs(int osd) const {
-    assert(exists(osd));
-    return entity_addrvec_t(osd_addrs->hb_front_addr[osd] ?
-			    *osd_addrs->hb_front_addr[osd] : _blank_addr);
-  }
   const entity_addrvec_t& get_most_recent_addrs(int osd) const {
     return get_addrs(osd);
   }
-
-  const entity_addr_t &get_cluster_addr(int osd) const {
+  const entity_addrvec_t &get_cluster_addrs(int osd) const {
     assert(exists(osd));
-    return osd_addrs->cluster_addr[osd] ?
-      *osd_addrs->cluster_addr[osd] : _blank_addr;
+    return osd_addrs->cluster_addrs[osd] ?
+      *osd_addrs->cluster_addrs[osd] : _blank_addrvec;
   }
-  const entity_addr_t &get_hb_back_addr(int osd) const {
+  const entity_addrvec_t &get_hb_back_addrs(int osd) const {
     assert(exists(osd));
-    return osd_addrs->hb_back_addr[osd] ?
-      *osd_addrs->hb_back_addr[osd] : _blank_addr;
+    return osd_addrs->hb_back_addrs[osd] ?
+      *osd_addrs->hb_back_addrs[osd] : _blank_addrvec;
   }
-  const entity_addr_t &get_hb_front_addr(int osd) const {
+  const entity_addrvec_t &get_hb_front_addrs(int osd) const {
     assert(exists(osd));
-    return osd_addrs->hb_front_addr[osd] ?
-      *osd_addrs->hb_front_addr[osd] : _blank_addr;
+    return osd_addrs->hb_front_addrs[osd] ?
+      *osd_addrs->hb_front_addrs[osd] : _blank_addrvec;
   }
 
   const uuid_d& get_uuid(int osd) const {
