@@ -12,13 +12,6 @@ Release Index
 
    Release Schedule <schedule>
 
-Release Candidates
-~~~~~~~~~~~~~~~~~~
-
-.. toctree::
-   :maxdepth: 1
-
-   Mimic <mimic>
 
 Active Releases
 ~~~~~~~~~~~~~~~
@@ -26,6 +19,7 @@ Active Releases
 .. toctree::
    :maxdepth: 1
 
+   Mimic <mimic>
    Luminous <luminous>
    Jewel <jewel>
 
