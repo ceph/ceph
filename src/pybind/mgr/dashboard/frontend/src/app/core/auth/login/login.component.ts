@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewContainerRef } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 
 import { AuthService } from '../../../shared/api/auth.service';
@@ -11,13 +11,13 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   styleUrls: ['./login.component.scss']
 })
 export class LoginComponent implements OnInit {
-
   model = new Credentials();
 
-  constructor(private authService: AuthService,
-              private authStorageService: AuthStorageService,
-              private router: Router) {
-  }
+  constructor(
+    private authService: AuthService,
+    private authStorageService: AuthStorageService,
+    private router: Router
+  ) {}
 
   ngOnInit() {
     if (this.authStorageService.isLoggedIn()) {

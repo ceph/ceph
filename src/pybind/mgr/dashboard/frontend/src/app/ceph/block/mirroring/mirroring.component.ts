@@ -1,7 +1,4 @@
-import { HttpClient } from '@angular/common/http';
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-
-import * as _ from 'lodash';
 
 import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
@@ -43,10 +40,9 @@ export class MirroringComponent implements OnInit {
   };
 
   constructor(
-    private http: HttpClient,
     private rbdMirroringService: RbdMirroringService,
     private cephShortVersionPipe: CephShortVersionPipe
-  ) { }
+  ) {}
 
   ngOnInit() {
     this.daemons.columns = [
