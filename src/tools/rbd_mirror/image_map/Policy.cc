@@ -258,11 +258,13 @@ bool Policy::finish_action(const std::string &global_image_id, int r) {
     assert(start_action);
   }
 
+  // image state may get purged in execute_policy_action()
+  bool pending_action = image_state.transition.action_type != ACTION_TYPE_NONE;
   if (finish_policy_action) {
     execute_policy_action(global_image_id, &image_state, *finish_policy_action);
   }
 
-  return (image_state.transition.action_type != ACTION_TYPE_NONE);
+  return pending_action;
 }
 
 void Policy::execute_policy_action(
