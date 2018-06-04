@@ -5873,6 +5873,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }
+    if (r == -ENOENT) {
+      r = 0;  // make command idempotent
+    }
     osd_lock.Lock();
   }
   else if (prefix == "cluster_log") {
