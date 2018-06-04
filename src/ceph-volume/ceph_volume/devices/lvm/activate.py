@@ -151,7 +151,7 @@ def activate_bluestore(lvs, no_systemd=False):
     process.run([
         'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
         'prime-osd-dir', '--dev', osd_lv_path,
-        '--path', osd_path])
+        '--path', osd_path, '--no-mon-config'])
     # always re-do the symlink regardless if it exists, so that the block,
     # block.wal, and block.db devices that may have changed can be mapped
     # correctly every time
