@@ -2418,7 +2418,8 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     ceph_osd_op& op = osd_op.op;
     if (op.op == CEPH_OSD_OP_SET_REDIRECT ||
 	op.op == CEPH_OSD_OP_SET_CHUNK || 
-	op.op == CEPH_OSD_OP_TIER_PROMOTE) {
+	op.op == CEPH_OSD_OP_TIER_PROMOTE ||
+	op.op == CEPH_OSD_OP_UNSET_MANIFEST) {
       return cache_result_t::NOOP;
     }
   }
@@ -3451,10 +3452,17 @@ void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc
   }                                                     
   
   unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
+  Context *c;
+  if (cb) {
+    c = new C_OnFinisher(cb, osd->objecter_finishers[n]);
+  } else {
+    c = NULL;
+  }
+
   osd->objecter->mutate(
     soid.oid, oloc, obj_op, snapc,
     ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
-    flags, new C_OnFinisher(cb, osd->objecter_finishers[n]));
+    flags, c);
 }  
 
 void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
@@ -6807,6 +6815,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    const string& name = iter->first;
 	    t->rmattr(soid, name);
 	  }
+	  if (!has_reference && need_reference) {
+	    oi.set_flag(object_info_t::FLAG_REDIRECT_HAS_REFERENCE);
+	  }
 	  dout(10) << "set-redirect oid:" << oi.soid << " user_version: " << oi.user_version << dendl;
 	  if (op_finisher) {
 	    ctx->op_finishers.erase(ctx->current_osd_subop_num);
@@ -6905,6 +6916,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    ctx->delta_stats.num_objects_manifest++;
 	  oi.set_flag(object_info_t::FLAG_MANIFEST);
 	  oi.manifest.type = object_manifest_t::TYPE_CHUNKED;
+	  if (!has_reference && need_reference) {
+	    oi.manifest.chunk_map[src_offset].flags |=
+	      chunk_info_t::FLAG_HAS_REFERENCE;
+	  }
 	  ctx->modify = true;
 
 	  dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
@@ -6971,6 +6986,59 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  assert(result == 0);
 	  ctx->op_finishers.erase(ctx->current_osd_subop_num);
 	}
+      }
+
+      break;
+
+    case CEPH_OSD_OP_UNSET_MANIFEST:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (!oi.has_manifest()) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+
+	if (oi.manifest.is_redirect()) {
+	  if ((oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE)) {
+	    ctx->register_on_commit(
+	      [oi, ctx, this](){
+	      object_locator_t target_oloc(oi.manifest.redirect_target);
+	      refcount_manifest(ctx->obc, target_oloc, oi.manifest.redirect_target, 
+				SnapContext(), false, NULL, 0);
+	    });
+	  }
+	} else if (oi.manifest.is_chunked()) {
+	    ctx->register_on_commit(
+	      [oi, ctx, this](){
+	      for (auto p : oi.manifest.chunk_map) {
+		if (p.second.flags & chunk_info_t::FLAG_HAS_REFERENCE) {
+		  object_locator_t target_oloc(p.second.oid);
+		  refcount_manifest(ctx->obc, target_oloc, p.second.oid, 
+				    SnapContext(), false, NULL, p.first);
+		}
+	      }
+	    });
+	} else {
+	  assert(0 == "unrecognized manifest type");
+	}
+
+	oi.clear_flag(object_info_t::FLAG_MANIFEST);
+	oi.manifest = object_manifest_t();
+	ctx->delta_stats.num_objects_manifest--;
+	ctx->delta_stats.num_wr++;
+	ctx->modify = true;
       }
 
       break;

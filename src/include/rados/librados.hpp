@@ -474,6 +474,7 @@ namespace librados
     void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
+    void unset_manifest();
 
 
     friend class IoCtx;
