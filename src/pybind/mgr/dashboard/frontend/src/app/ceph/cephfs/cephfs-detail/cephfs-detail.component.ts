@@ -1,7 +1,6 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
-import { Subscription } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
