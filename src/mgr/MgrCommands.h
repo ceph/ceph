@@ -140,3 +140,16 @@ COMMAND("config show-with-defaults " \
 	"name=who,type=CephString",
 	"Show running configuration (including compiled-in defaults)",
 	"mgr", "r", "cli,rest")
+
+COMMAND("device ls",
+	"Show devices",
+	"mgr", "r", "cli,rest")
+COMMAND("device info name=devid,type=CephString",
+	"Show information about a device",
+	"mgr", "r", "cli,rest")
+COMMAND("device ls-by-daemon name=who,type=CephString",
+	"Show devices associated with a daemon",
+	"mgr", "r", "cli,rest")
+COMMAND("device ls-by-host name=host,type=CephString",
+	"Show devices on a host",
+	"mgr", "r", "cli,rest")
