@@ -70,7 +70,8 @@
           <label class="control-label col-sm-3"
                  for="pool">
             Pool
-            <span class="required"></span>
+            <span class="required"
+                  *ngIf="mode !== 'editing'"></span>
           </label>
           <div class="col-sm-9">
             <input class="form-control"
@@ -126,7 +127,8 @@
           <label class="control-label col-sm-3"
                  for="dataPool">
             Data pool
-            <span class="required"></span>
+            <span class="required"
+                  *ngIf="mode !== 'editing'"></span>
             <cd-helper i18n-html
                        html="Dedicated pool that stores the object-data of the RBD.">
             </cd-helper>
