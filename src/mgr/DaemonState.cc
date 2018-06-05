@@ -14,11 +14,41 @@
 #include "DaemonState.h"
 
 #include "MgrSession.h"
+#include "include/stringify.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
+
+void DeviceState::set_metadata(map<string,string>&& m)
+{
+  metadata = std::move(m);
+  auto p = metadata.find("expected_failure");
+  if (p != metadata.end()) {
+    expected_failure.parse(p->second);
+  }
+  p = metadata.find("expected_failure_stamp");
+  if (p != metadata.end()) {
+    expected_failure_stamp.parse(p->second);
+  }
+}
+
+void DeviceState::set_expected_failure(utime_t when, utime_t now)
+{
+  expected_failure = when;
+  expected_failure_stamp = now;
+  metadata["expected_failure"] = stringify(expected_failure);
+  metadata["expected_failure_stamp"] = stringify(expected_failure_stamp);
+}
+
+void DeviceState::rm_expected_failure()
+{
+  expected_failure = utime_t();
+  expected_failure_stamp = utime_t();
+  metadata.erase("expected_failure");
+  metadata.erase("expected_failure_stamp");
+}
 
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
