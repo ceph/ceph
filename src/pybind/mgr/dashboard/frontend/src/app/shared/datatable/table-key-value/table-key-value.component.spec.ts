@@ -25,11 +25,6 @@ describe('TableKeyValueComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
-    expect(component._convertValue).toBeTruthy();
-    expect(component._makePairs).toBeTruthy();
-    expect(component._makePairsFromObject).toBeTruthy();
-    expect(component._makePairsFromArray).toBeTruthy();
-    expect(component._insertFlattenObjects).toBeTruthy();
   });
 
   it('should make key value object pairs out of arrays with length two', () => {
@@ -127,17 +122,17 @@ describe('TableKeyValueComponent', () => {
       expect(component._convertValue(v(value)).value).toBe(result);
 
     it('should leave a string as it is', () => {
-      testConvertValue('something', 'something')
+      testConvertValue('something', 'something');
     });
 
     it('should leave an int as it is', () => {
-      testConvertValue(29, 29)
+      testConvertValue(29, 29);
     });
 
     it('should convert arrays with any type to string', () => {
-      testConvertValue([1, 2, 3], '1, 2, 3')
-      testConvertValue([{ sth: 'something' }], '{"sth":"something"}')
-      testConvertValue([1, 'two', { 3: 'three' }], '1, two, {"3":"three"}')
+      testConvertValue([1, 2, 3], '1, 2, 3');
+      testConvertValue([{ sth: 'something' }], '{"sth":"something"}');
+      testConvertValue([1, 'two', { 3: 'three' }], '1, two, {"3":"three"}');
     });
 
     it('should convert only allow objects if renderObjects is set to true', () => {
