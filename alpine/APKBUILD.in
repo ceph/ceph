@@ -193,7 +193,6 @@ base() {
 	_pkg $_libdir/ceph/erasure-code libec_*.so*
 	_pkg $_libdir/ceph/compressor libceph_*.so*
 	_pkg $_sysconfdir/logrotate.d ceph
-	_pkg $_python_sitelib ceph_detect_init* ceph_disk*
 	for dir in tmp bootstrap-osd bootstrap-mds bootstrap-rgw; do
     	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
     		$subpkgdir$_localstatedir/lib/ceph/$dir || return 1
