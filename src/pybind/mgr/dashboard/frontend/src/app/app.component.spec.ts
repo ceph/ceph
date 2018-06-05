@@ -12,17 +12,11 @@ describe('AppComponent', () => {
   let component: AppComponent;
   let fixture: ComponentFixture<AppComponent>;
 
-  const fakeService = {
-    isLoggedIn: () => {
-      return true;
-    }
-  };
-
   configureTestBed({
     imports: [RouterTestingModule, ToastModule.forRoot()],
     declarations: [AppComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [{ provide: AuthStorageService, useValue: fakeService }]
+    providers: [AuthStorageService]
   });
 
   beforeEach(() => {

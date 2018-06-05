@@ -1,7 +1,6 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-
-import { of as observableOf } from 'rxjs';
 
 import { DashboardService } from '../../../shared/api/dashboard.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -19,21 +18,9 @@ describe('HealthComponent', () => {
   let component: HealthComponent;
   let fixture: ComponentFixture<HealthComponent>;
 
-  const fakeService = {
-    getHealth: () => {
-      return observableOf({
-        health: {},
-        df: {
-          stats: {}
-        },
-        pools: []
-      });
-    }
-  };
-
   configureTestBed({
-    providers: [{ provide: DashboardService, useValue: fakeService }],
-    imports: [SharedModule],
+    providers: [DashboardService],
+    imports: [SharedModule, HttpClientTestingModule],
     declarations: [
       HealthComponent,
       MonSummaryPipe,
@@ -50,11 +37,6 @@ describe('HealthComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(HealthComponent);
     component = fixture.componentInstance;
-
-    component.contentData = {
-      health: {}
-    };
-
     fixture.detectChanges();
   });
 
