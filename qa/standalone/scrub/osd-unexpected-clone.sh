@@ -47,7 +47,7 @@ function TEST_recover_unexpected() {
     ceph osd pool create foo 1
     rados -p foo put foo /etc/passwd
     rados -p foo mksnap snap
-    rados -p foo put foo /etc/motd
+    rados -p foo put foo /etc/group
 
     wait_for_clean || return 1
 
@@ -55,16 +55,17 @@ function TEST_recover_unexpected() {
 
     JSON=`objectstore_tool $dir $osd --op list foo | grep snapid.:1`
     echo "JSON is $JSON"
-    rm -f _ data
-    objectstore_tool $dir $osd "$JSON" get-attr _ > _
-    objectstore_tool $dir $osd "$JSON" get-bytes data
+    rm -f $dir/_ $dir/data
+    objectstore_tool $dir $osd "$JSON" get-attr _ > $dir/_
+    objectstore_tool $dir $osd "$JSON" get-bytes $dir/data
 
     rados -p foo rmsnap snap
 
     sleep 5
 
-    objectstore_tool $dir $osd "$JSON" set-bytes data
-    objectstore_tool $dir $osd "$JSON" set-attr _ _
+    objectstore_tool $dir $osd "$JSON" set-bytes $dir/data
+    objectstore_tool $dir $osd "$JSON" set-attr _ $dir/_
+    rm -f $dir/_ $dir/data
 
     sleep 5
 
