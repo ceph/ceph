@@ -1,5 +1,6 @@
 import errno
 import json
+import itertools
 import socket
 import time
 from threading import Event
@@ -71,7 +72,6 @@ class Module(MgrModule):
 
     def get_pool_stats(self):
         df = self.get('df')
-        data = []
 
         df_types = [
             'bytes_used',
@@ -90,7 +90,7 @@ class Module(MgrModule):
 
         for df_type in df_types:
             for pool in df['pools']:
-                point = {
+                yield {
                     'measurement': 'ceph_pool_stats',
                     'tags': {
                         'pool_name': pool['name'],
@@ -100,12 +100,8 @@ class Module(MgrModule):
                     },
                     'value': pool['stats'][df_type],
                 }
-                data.append(point)
-        return data
 
     def get_daemon_stats(self):
-        data = []
-
         for daemon, counters in self.get_all_perf_counters().iteritems():
             svc_type, svc_id = daemon.split('.', 1)
             metadata = self.get_metadata(svc_type, svc_id)
@@ -114,7 +110,7 @@ class Module(MgrModule):
                 if counter_info['type'] & self.PERFCOUNTER_HISTOGRAM:
                     continue
 
-                data.append({
+                yield {
                     'measurement': 'ceph_daemon_stats',
                     'tags': {
                         'ceph_daemon': daemon,
@@ -123,9 +119,7 @@ class Module(MgrModule):
                         'fsid': self.get_fsid()
                     },
                     'value': counter_info['value']
-                })
-
-        return data
+                }
 
     def get_cluster_stats(self):
         stats = dict()
@@ -198,18 +192,15 @@ class Module(MgrModule):
             if 'scrubbing' in states:
                 stats['num_pgs_scrubbing'] += state['count']
 
-        data = list()
         for key, value in stats.items():
-            data.append({
+            yield {
                 'measurement': 'ceph_cluster_stats',
                 'tags': {
                     'type_instance': key,
                     'fsid': self.get_fsid()
                 },
                 'value': int(value)
-            })
-
-        return data
+            }
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -239,11 +230,11 @@ class Module(MgrModule):
         return int(round(time.time() * 1000000000))
 
     def gather_measurements(self):
-        measurements = list()
-        measurements += self.get_pool_stats()
-        measurements += self.get_daemon_stats()
-        measurements += self.get_cluster_stats()
-        return measurements
+        return itertools.chain(
+            self.get_pool_stats(),
+            self.get_daemon_stats(),
+            self.get_cluster_stats()
+        )
 
     def send_to_telegraf(self):
         url = urlparse(self.config['address'])
