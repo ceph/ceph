@@ -50,7 +50,7 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
     auto d = _get_or_create_device(devid);
     assert(d->daemons.count(dmk));
     d->daemons.erase(dmk);
-    if (d->daemons.empty()) {
+    if (d->empty()) {
       _erase_device(d);
     }
   }
