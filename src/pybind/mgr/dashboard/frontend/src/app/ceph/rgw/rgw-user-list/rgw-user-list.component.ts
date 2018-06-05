@@ -1,9 +1,7 @@
 import { Component, ViewChild } from '@angular/core';
 
 import { BsModalService } from 'ngx-bootstrap';
-import 'rxjs/add/observable/forkJoin';
-import { Observable } from 'rxjs/Observable';
-import { Subscriber } from 'rxjs/Subscriber';
+import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
@@ -79,7 +77,7 @@ export class RgwUserListComponent {
       deletionObserver: (): Observable<any> => {
         return new Observable((observer: Subscriber<any>) => {
           // Delete all selected data table rows.
-          Observable.forkJoin(
+          observableForkJoin(
             this.selection.selected.map((user: any) => {
               return this.rgwUserService.delete(user.user_id);
             })
