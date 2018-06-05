@@ -191,7 +191,16 @@ struct DeviceState : public RefCountedObject
   std::string server;
   std::set<DaemonKey> daemons;
 
+  std::map<string,string> metadata;  ///< persistent metadata
+
   DeviceState(const std::string& n) : devid(n) {}
+
+  void set_metadata(map<string,string>&& m);
+
+  /// true of we can be safely forgotten/removed from memory
+  bool empty() const {
+    return daemons.empty() && metadata.empty();
+  }
 };
 
 typedef boost::intrusive_ptr<DeviceState> DeviceStateRef;

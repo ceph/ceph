@@ -412,7 +412,7 @@ void PyModuleRegistry::upgrade_config(
     dout(1) << "Upgrading module configuration for Mimic" << dendl;
     // Upgrade luminous->mimic: migrate config-key configuration
     // into main configuration store
-    for(auto &i : old_config) {
+    for (auto &i : old_config) {
       auto last_slash = i.first.rfind('/');
       const std::string module_name = i.first.substr(4, i.first.substr(4).find('/'));
       const std::string key = i.first.substr(last_slash + 1);

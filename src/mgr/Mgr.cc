@@ -174,8 +174,10 @@ std::map<std::string, std::string> Mgr::load_store()
     dout(20) << "saw key '" << key << "'" << dendl;
 
     const std::string config_prefix = PyModule::config_prefix;
+    const std::string device_prefix = "device/";
 
-    if (key.substr(0, config_prefix.size()) == config_prefix) {
+    if (key.substr(0, config_prefix.size()) == config_prefix ||
+	key.substr(0, device_prefix.size()) == device_prefix) {
       dout(20) << "fetching '" << key << "'" << dendl;
       Command get_cmd;
       std::ostringstream cmd_json;
@@ -185,7 +187,26 @@ std::map<std::string, std::string> Mgr::load_store()
       get_cmd.wait();
       lock.Lock();
       if (get_cmd.r == 0) { // tolerate racing config-key change
-	loaded[key] = get_cmd.outbl.to_str();
+	if (key.substr(0, device_prefix.size()) == device_prefix) {
+	  // device/
+	  string devid = key.substr(device_prefix.size());
+	  map<string,string> meta;
+	  ostringstream ss;
+	  string val = get_cmd.outbl.to_str();
+	  int r = get_json_str_map(val, ss, &meta, false);
+	  if (r < 0) {
+	    derr << __func__ << " failed to parse " << val << ": " << ss.str()
+		 << dendl;
+	  } else {
+	    daemon_state.with_device_create(
+	      devid, [&meta] (DeviceState& dev) {
+		dev.set_metadata(std::move(meta));
+	      });
+	  }
+	} else {
+	  // config/
+	  loaded[key] = get_cmd.outbl.to_str();
+	}
       }
     }
   }
