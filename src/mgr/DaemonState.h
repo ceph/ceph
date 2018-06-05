@@ -28,6 +28,9 @@
 // For PerfCounterType
 #include "messages/MMgrReport.h"
 
+namespace ceph {
+  class Formatter;
+}
 
 // Unique reference to a daemon within a cluster
 typedef std::pair<std::string, std::string> DaemonKey;
@@ -207,6 +210,9 @@ struct DeviceState : public RefCountedObject
   bool empty() const {
     return daemons.empty() && metadata.empty();
   }
+
+  void dump(Formatter *f) const;
+  void print(ostream& out) const;
 };
 
 typedef boost::intrusive_ptr<DeviceState> DeviceStateRef;
