@@ -193,9 +193,15 @@ struct DeviceState : public RefCountedObject
 
   std::map<string,string> metadata;  ///< persistent metadata
 
+  utime_t expected_failure;       ///< when device failure is expected
+  utime_t expected_failure_stamp; ///< when expected_failure was recorded
+
   DeviceState(const std::string& n) : devid(n) {}
 
   void set_metadata(map<string,string>&& m);
+
+  void set_expected_failure(utime_t when, utime_t now);
+  void rm_expected_failure();
 
   /// true of we can be safely forgotten/removed from memory
   bool empty() const {
@@ -263,7 +269,7 @@ public:
   }
 
   template<typename Callback, typename...Args>
-  auto with_device(const std::string& dev,
+  bool with_device(const std::string& dev,
 		   Callback&& cb, Args&&... args) const {
     RWLock::RLocker l(lock);
     auto p = devices.find(dev);
@@ -272,6 +278,29 @@ public:
     }
     std::forward<Callback>(cb)(*p->second, std::forward<Args>(args)...);
     return true;
+  }
+
+  template<typename Callback, typename...Args>
+  bool with_device_write(const std::string& dev,
+			 Callback&& cb, Args&&... args) {
+    RWLock::WLocker l(lock);
+    auto p = devices.find(dev);
+    if (p == devices.end()) {
+      return false;
+    }
+    std::forward<Callback>(cb)(*p->second, std::forward<Args>(args)...);
+    if (p->second->empty()) {
+      _erase_device(p->second);
+    }
+    return true;
+  }
+
+  template<typename Callback, typename...Args>
+  void with_device_create(const std::string& dev,
+			  Callback&& cb, Args&&... args) {
+    RWLock::WLocker l(lock);
+    auto d = _get_or_create_device(dev);
+    std::forward<Callback>(cb)(*d, std::forward<Args>(args)...);
   }
 
   template<typename Callback, typename...Args>

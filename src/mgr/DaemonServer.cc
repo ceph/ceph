@@ -1730,7 +1730,8 @@ bool DaemonServer::handle_command(MCommand *m)
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
     int r = 0;
     ostringstream rs;
-    if (!daemon_state.with_device(devid, [&f, &rs] (const DeviceState& dev) {
+    if (!daemon_state.with_device(devid,
+				  [&f, &rs] (const DeviceState& dev) {
 	  if (f) {
 	    f->open_object_section("device");
 	    f->dump_string("devid", dev.devid);
@@ -1740,11 +1741,24 @@ bool DaemonServer::handle_command(MCommand *m)
 	      f->dump_string("daemon", to_string(i));
 	    }
 	    f->close_section();
+	    if (dev.expected_failure != utime_t()) {
+	      f->dump_stream("expected_failure") << dev.expected_failure;
+	      f->dump_stream("expected_failure_stamp")
+		<< dev.expected_failure_stamp;
+	    }
 	    f->close_section();
 	  } else {
 	    rs << "device " << dev.devid << "\n";
 	    rs << "host " << dev.server << "\n";
-	    rs << "daemons " << dev.daemons << "\n";
+	    set<string> d;
+	    for (auto& j : dev.daemons) {
+	      d.insert(to_string(j));
+	    }
+	    rs << "daemons " << d << "\n";
+	    if (dev.expected_failure != utime_t()) {
+	      rs << "expected_failure " << dev.expected_failure
+		 << " (as of " << dev.expected_failure_stamp << ")\n";
+	    }
 	  }
 	})) {
       ss << "device " << devid << " not found";
@@ -1757,6 +1771,71 @@ bool DaemonServer::handle_command(MCommand *m)
       }
     }
     cmdctx->reply(r, ss);
+    return true;
+  } else if (prefix == "device set-predicted-failure") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    string when_str;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "when", when_str);
+    utime_t when;
+    if (!when.parse(when_str)) {
+      ss << "unable to parse datetime '" << when_str << "'";
+      r = -EINVAL;
+      cmdctx->reply(r, ss);
+    } else {
+      map<string,string> meta;
+      daemon_state.with_device_create(devid, [when, &meta] (DeviceState& dev) {
+	  dev.set_expected_failure(when, ceph_clock_now());
+	  meta = dev.metadata;
+	});
+      json_spirit::Object json_object;
+      for (auto& i : meta) {
+	json_spirit::Config::add(json_object, i.first, i.second);
+      }
+      bufferlist json;
+      json.append(json_spirit::write(json_object));
+      const string cmd =
+	"{"
+	"\"prefix\": \"config-key set\", "
+	"\"key\": \"device/" + devid + "\""
+	"}";
+      auto on_finish = new ReplyOnFinish(cmdctx);
+      monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
+    }
+    return true;
+  } else if (prefix == "device rm-predicted-failure") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    map<string,string> meta;
+    if (daemon_state.with_device_write(devid, [&meta] (DeviceState& dev) {
+	  dev.rm_expected_failure();
+	  meta = dev.metadata;
+	})) {
+      string cmd;
+      bufferlist json;
+      if (meta.empty()) {
+	cmd =
+	  "{"
+	  "\"prefix\": \"config-key rm\", "
+	  "\"key\": \"device/" + devid + "\""
+	  "}";
+      } else {
+	json_spirit::Object json_object;
+	for (auto& i : meta) {
+	  json_spirit::Config::add(json_object, i.first, i.second);
+	}
+	json.append(json_spirit::write(json_object));
+	cmd =
+	  "{"
+	  "\"prefix\": \"config-key set\", "
+	  "\"key\": \"device/" + devid + "\""
+	  "}";
+      }
+      auto on_finish = new ReplyOnFinish(cmdctx);
+      monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
+    } else {
+      cmdctx->reply(0, ss);
+    }
     return true;
   } else {
     // fall back to feeding command to PGMap
