@@ -391,7 +391,13 @@ void OSDMap::Incremental::encode_client_old(bufferlist& bl) const
     n = old_pool;
     encode(n, bl);
   }
-  encode(new_up_client, bl, 0);
+  // for encode(new_up_client, bl);
+  n = new_up_client.size();
+  encode(n, bl);
+  for (auto& [osd, addrs] : new_up_client) {
+    encode(osd, bl);
+    encode(addrs.legacy_addr(), bl, 0);
+  }
   {
     // legacy is map<int32_t,uint8_t>
     uint32_t n = new_state.size();
@@ -2451,7 +2457,17 @@ void OSDMap::encode_client_old(bufferlist& bl) const
     }
   }
   encode(osd_weight, bl);
-  encode(osd_addrs->client_addrs, bl, 0);
+
+  // for encode(osd_addrs->client_addrs, bl);
+  n = osd_addrs->client_addrs.size();
+  encode(n, bl);
+  for (auto& addrs : osd_addrs->client_addrs) {
+    entity_addr_t legacy_addr;
+    if (addrs) {
+      legacy_addr = addrs->legacy_addr();
+    }
+    encode(legacy_addr, bl, 0);
+  }
 
   // for encode(pg_temp, bl);
   n = pg_temp->size();
@@ -2500,7 +2516,18 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
     }
   }
   encode(osd_weight, bl);
-  encode(osd_addrs->client_addrs, bl, features);
+
+  {
+    uint32_t n = osd_addrs->client_addrs.size();
+    encode(n, bl);
+    for (auto& addrs : osd_addrs->client_addrs) {
+      entity_addr_t legacy_addr;
+      if (addrs) {
+	legacy_addr = addrs->legacy_addr();
+      }
+      encode(legacy_addr, bl, features);
+    }
+  }
 
   encode(*pg_temp, bl);
 
@@ -2548,11 +2575,13 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t v = 7;
+    uint8_t v = 8;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 6;
+    } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      v = 7;
     }
     ENCODE_START(v, 1, bl); // client-usable data
     // base
@@ -2589,7 +2618,20 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       }
     }
     encode(osd_weight, bl);
-    encode(osd_addrs->client_addrs, bl, features);
+
+    if (v < 8) {
+      uint32_t n = osd_addrs->client_addrs.size();
+      encode(n, bl);
+      for (auto& addrs : osd_addrs->client_addrs) {
+	entity_addr_t legacy_addr;
+	if (addrs) {
+	  legacy_addr = addrs->legacy_addr();
+	}
+	encode(legacy_addr, bl, features);
+      }
+    } else {
+      encode(osd_addrs->client_addrs, bl, features);
+    }
 
     encode(*pg_temp, bl);
     encode(*primary_temp, bl);
@@ -2839,7 +2881,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(7, bl); // client-usable data
+    DECODE_START(8, bl); // client-usable data
     // base
     decode(fsid, bl);
     decode(epoch, bl);
@@ -2864,7 +2906,18 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
       }
     }
     decode(osd_weight, bl);
-    decode(osd_addrs->client_addrs, bl);
+    if (struct_v < 8) {
+      // please note, decode(vector<shared_ptr<entity_addr_t>>, bl) works the
+      // same way as decode(vector<entity_addr_t>, bl)
+      vector<entity_addr_t> addrs;
+      decode(addrs, bl);
+      osd_addrs->client_addrs.clear();
+      for (auto& addr : addrs) {
+	osd_addrs->client_addrs.emplace_back(make_shared<entity_addrvec_t>(addr));
+      }
+    } else {
+      decode(osd_addrs->client_addrs, bl);
+    }
 
     decode(*pg_temp, bl);
     decode(*primary_temp, bl);
