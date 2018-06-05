@@ -7,6 +7,7 @@ from . import ApiController, RESTController, Endpoint, AuthRequired
 from .. import mgr
 from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
+from ..tools import str_to_bool
 
 
 @ApiController('/pool')
@@ -37,17 +38,11 @@ class Pool(RESTController):
         res['pool_name'] = pool['pool_name']
         return res
 
-    @staticmethod
-    def _str_to_bool(var):
-        if isinstance(var, bool):
-            return var
-        return var.lower() in ("true", "yes", "1", 1)
-
     def _pool_list(self, attrs=None, stats=False):
         if attrs:
             attrs = attrs.split(',')
 
-        if self._str_to_bool(stats):
+        if str_to_bool(stats):
             pools = CephService.get_pool_list_with_stats()
         else:
             pools = CephService.get_pool_list()
