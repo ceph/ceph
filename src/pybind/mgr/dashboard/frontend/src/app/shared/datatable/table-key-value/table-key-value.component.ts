@@ -131,7 +131,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
 
   _convertValue(v: any) {
     if (_.isArray(v.value)) {
-      v.value = v.value.join(', ');
+      v.value = v.value.map((v) => (_.isPlainObject(v) ? JSON.stringify(v) : v)).join(', ');
     } else if (_.isPlainObject(v.value) && !this.renderObjects) {
       return;
     }
