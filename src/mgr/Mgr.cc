@@ -104,9 +104,11 @@ void MetadataUpdate::finish(int r)
         }
         daemon_meta.erase("hostname");
         state->metadata.clear();
+	map<string,string> m;
         for (const auto &i : daemon_meta) {
-          state->metadata[i.first] = i.second.get_str();
-        }
+          m[i.first] = i.second.get_str();
+	}
+	state->set_metadata(m);
       } else {
         state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
@@ -119,9 +121,11 @@ void MetadataUpdate::finish(int r)
         }
         daemon_meta.erase("hostname");
 
+	map<string,string> m;
         for (const auto &i : daemon_meta) {
-          state->metadata[i.first] = i.second.get_str();
+          m[i.first] = i.second.get_str();
         }
+	state->set_metadata(m);
 
         daemon_state.insert(state);
       }
@@ -349,9 +353,11 @@ void Mgr::load_all_metadata()
     osd_metadata.erase("id");
     osd_metadata.erase("hostname");
 
+    map<string,string> m;
     for (const auto &i : osd_metadata) {
-      dm->metadata[i.first] = i.second.get_str();
+      m[i.first] = i.second.get_str();
     }
+    dm->set_metadata(m);
 
     daemon_state.insert(dm);
   }

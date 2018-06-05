@@ -387,7 +387,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
     daemon->perf_counters.clear();
 
     if (m->service_daemon) {
-      daemon->metadata = m->daemon_metadata;
+      daemon->set_metadata(m->daemon_metadata);
       daemon->service_status = m->daemon_status;
 
       utime_t now = ceph_clock_now();
@@ -1888,7 +1888,7 @@ void DaemonServer::got_service_map()
       if (!daemon_state.exists(key)) {
 	auto daemon = std::make_shared<DaemonState>(daemon_state.types);
 	daemon->key = key;
-	daemon->metadata = q.second.metadata;
+	daemon->set_metadata(q.second.metadata);
         if (q.second.metadata.count("hostname")) {
           daemon->hostname = q.second.metadata["hostname"];
         }

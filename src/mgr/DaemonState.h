@@ -21,6 +21,7 @@
 #include <boost/circular_buffer.hpp>
 
 #include "common/RWLock.h"
+#include "include/str_map.h"
 
 #include "msg/msg_types.h"
 
@@ -30,6 +31,10 @@
 
 // Unique reference to a daemon within a cluster
 typedef std::pair<std::string, std::string> DaemonKey;
+
+static inline std::string to_string(const DaemonKey& dk) {
+  return dk.first + "." + dk.second;
+}
 
 // An instance of a performance counter type, within
 // a particular daemon.
@@ -121,6 +126,9 @@ class DaemonState
   // The metadata (hostname, version, etc) sent from the daemon
   std::map<std::string, std::string> metadata;
 
+  /// device ids, derived from metadata[device_ids]
+  std::set<std::string> devids;
+
   // TODO: this can be generalized to other daemons
   std::vector<DaemonHealthMetric> daemon_health_metrics;
 
@@ -146,6 +154,18 @@ class DaemonState
   DaemonState(PerfCounterTypes &types_)
     : perf_counters(types_)
   {
+  }
+
+  void set_metadata(const std::map<std::string,std::string>& m) {
+    metadata = m;
+    auto p = m.find("device_ids");
+    if (p != m.end()) {
+      map<std::string,std::string> devs;
+      get_str_map(p->second, &devs, ",; ");
+      for (auto& i : devs) {
+	devids.insert(i.second);
+      }
+    }
   }
 
   const std::map<std::string,std::string>& get_config_defaults() {
