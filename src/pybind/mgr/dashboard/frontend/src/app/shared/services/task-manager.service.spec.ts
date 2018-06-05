@@ -9,6 +9,7 @@ import { TaskManagerService } from './task-manager.service';
 
 describe('TaskManagerService', () => {
   let taskManagerService: TaskManagerService;
+  let called: boolean;
 
   const summaryDataSource = new Subject();
   const fakeService = {
@@ -28,10 +29,12 @@ describe('TaskManagerService', () => {
 
   configureTestBed({
     providers: [TaskManagerService, { provide: SummaryService, useValue: fakeService }]
-  });
+  }, true);
 
   beforeEach(() => {
     taskManagerService = TestBed.get(TaskManagerService);
+    called = false;
+    taskManagerService.subscribe('foo', {}, () => (called = true));
   });
 
   it('should be created', () => {
@@ -41,13 +44,9 @@ describe('TaskManagerService', () => {
   it(
     'should subscribe and be notified when task is finished',
     fakeAsync(() => {
-      let called = false;
-      taskManagerService.subscribe('foo', {}, () => (called = true));
       expect(taskManagerService.subscriptions.length).toBe(1);
-
       summaryDataSource.next(summary);
       tick();
-
       expect(called).toEqual(true);
       expect(taskManagerService.subscriptions).toEqual([]);
     })
@@ -56,8 +55,6 @@ describe('TaskManagerService', () => {
   it(
     'should subscribe and process executing taks',
     fakeAsync(() => {
-      let called = false;
-      taskManagerService.subscribe('foo', {}, () => (called = true));
       const original_subscriptions = _.cloneDeep(taskManagerService.subscriptions);
       _.assign(summary, {
         executing_tasks: [{ name: 'foo', metadata: {} }],

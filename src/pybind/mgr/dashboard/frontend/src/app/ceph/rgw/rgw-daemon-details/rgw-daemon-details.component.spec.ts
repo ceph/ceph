@@ -1,3 +1,4 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -13,18 +14,15 @@ describe('RgwDaemonDetailsComponent', () => {
   let component: RgwDaemonDetailsComponent;
   let fixture: ComponentFixture<RgwDaemonDetailsComponent>;
 
-  const fakeRgwDaemonService = {
-    get: (id: string) => {
-      return new Promise(function(resolve) {
-        resolve([]);
-      });
-    }
-  };
-
   configureTestBed({
     declarations: [RgwDaemonDetailsComponent],
-    imports: [SharedModule, PerformanceCounterModule, TabsModule.forRoot()],
-    providers: [{ provide: RgwDaemonService, useValue: fakeRgwDaemonService }]
+    imports: [
+      SharedModule,
+      PerformanceCounterModule,
+      TabsModule.forRoot(),
+      HttpClientTestingModule
+    ],
+    providers: [RgwDaemonService]
   });
 
   beforeEach(() => {
