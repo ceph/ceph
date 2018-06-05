@@ -249,10 +249,8 @@ public:
 private:
   map<string,ceph_mon_subscribe_item> sub_sent; // my subs, and current versions
   map<string,ceph_mon_subscribe_item> sub_new;  // unsent new subs
-  utime_t sub_renew_sent, sub_renew_after;
 
   void _renew_subs();
-  void handle_subscribe_ack(MMonSubscribeAck* m);
 
   bool _sub_want(const string &what, version_t start, unsigned flags) {
     auto sub = sub_new.find(what);

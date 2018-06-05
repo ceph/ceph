@@ -298,7 +298,8 @@ bool MonClient::ms_dispatch(Message *m)
     handle_auth(static_cast<MAuthReply*>(m));
     break;
   case CEPH_MSG_MON_SUBSCRIBE_ACK:
-    handle_subscribe_ack(static_cast<MMonSubscribeAck*>(m));
+    // the connection should support CEPH_FEATURE_MON_STATEFUL_SUB
+    m->put();
     break;
   case CEPH_MSG_MON_GET_VERSION_REPLY:
     handle_get_version_reply(static_cast<MMonGetVersionReply*>(m));
@@ -787,15 +788,7 @@ void MonClient::tick()
     // just renew as needed
     utime_t now = ceph_clock_now();
     auto cur_con = active_con->get_con();
-    if (!cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB)) {
-      ldout(cct, 10) << "renew subs? (now: " << now
-		     << "; renew after: " << sub_renew_after << ") -- "
-		     << (now > sub_renew_after ? "yes" : "no")
-		     << dendl;
-      if (now > sub_renew_after)
-	_renew_subs();
-    }
-
+    assert(cur_con->has_feature(CEPH_FEATURE_MON_STATEFUL_SUB));
     cur_con->send_keepalive();
 
     if (cct->_conf->mon_client_ping_timeout > 0 &&
@@ -851,9 +844,6 @@ void MonClient::_renew_subs()
   if (!_opened())
     _reopen_session();
   else {
-    if (sub_renew_sent == utime_t())
-      sub_renew_sent = ceph_clock_now();
-
     MMonSubscribe *m = new MMonSubscribe;
     m->what = sub_new;
     _send_mon_message(m);
@@ -863,22 +853,6 @@ void MonClient::_renew_subs()
     std::swap(sub_new, sub_sent);
     sub_new.clear();
   }
-}
-
-void MonClient::handle_subscribe_ack(MMonSubscribeAck *m)
-{
-  if (sub_renew_sent != utime_t()) {
-    // NOTE: this is only needed for legacy (infernalis or older)
-    // mons; see tick().
-    sub_renew_after = sub_renew_sent;
-    sub_renew_after += m->interval / 2.0;
-    ldout(cct, 10) << __func__ << " sent " << sub_renew_sent << " renew after " << sub_renew_after << dendl;
-    sub_renew_sent = utime_t();
-  } else {
-    ldout(cct, 10) << __func__ << " sent " << sub_renew_sent << ", ignoring" << dendl;
-  }
-
-  m->put();
 }
 
 int MonClient::_check_auth_tickets()
