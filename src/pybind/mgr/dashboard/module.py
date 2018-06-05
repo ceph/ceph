@@ -114,7 +114,7 @@ class SSLCherryPyConfig(object):
         :returns our URI
         """
         server_addr = self.get_localized_config('server_addr', '::')
-        server_port = self.get_localized_config('server_port', '8080')
+        server_port = self.get_localized_config('server_port', '8443')
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
