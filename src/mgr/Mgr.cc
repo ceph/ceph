@@ -184,8 +184,9 @@ std::map<std::string, std::string> Mgr::load_store()
       lock.Unlock();
       get_cmd.wait();
       lock.Lock();
-      assert(get_cmd.r == 0);
-      loaded[key] = get_cmd.outbl.to_str();
+      if (get_cmd.r == 0) { // tolerate racing config-key change
+	loaded[key] = get_cmd.outbl.to_str();
+      }
     }
   }
 
