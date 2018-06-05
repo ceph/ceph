@@ -11,6 +11,8 @@ import {
 import { of as observableOf } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
+import { ServicesModule } from './services.module';
+
 /**
  * This service checks if a route can be activated by executing a
  * REST API call to '/api/<apiPath>/status'. If the returned response
@@ -36,7 +38,9 @@ import { catchError, map } from 'rxjs/operators';
  * },
  * ...
  */
-@Injectable()
+@Injectable({
+  providedIn: ServicesModule
+})
 export class ModuleStatusGuardService implements CanActivate, CanActivateChild {
   constructor(private http: HttpClient, private router: Router) {}
 

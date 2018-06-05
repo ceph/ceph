@@ -3,24 +3,28 @@ import { Injectable } from '@angular/core';
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
 import { Task } from '../models/task';
+import { ServicesModule } from './services.module';
 
 class TaskManagerMessage {
   descr: (metadata) => string;
   success: (metadata) => string;
   error: (metadata) => object;
 
-  constructor(descr: (metadata) => string,
-              success: (metadata) => string,
-              error: (metadata) => object) {
+  constructor(
+    descr: (metadata) => string,
+    success: (metadata) => string,
+    error: (metadata) => object
+  ) {
     this.descr = descr;
     this.success = success;
     this.error = error;
   }
 }
 
-@Injectable()
+@Injectable({
+  providedIn: ServicesModule
+})
 export class TaskManagerMessageService {
-
   messages = {
     'rbd/create': new TaskManagerMessage(
       (metadata) => `Create RBD '${metadata.pool_name}/${metadata.image_name}'`,
@@ -82,16 +86,17 @@ export class TaskManagerMessageService {
       (metadata) => `RBD '${metadata.pool_name}/${metadata.image_name}'
                      has been flattened successfully`,
       () => {
-        return {
-        };
+        return {};
       }
     ),
     'rbd/snap/create': new TaskManagerMessage(
-      (metadata) => `Create snapshot ` +
-                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) => `Snapshot ` +
-                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
-                    `has been created successfully`,
+      (metadata) =>
+        `Create snapshot ` +
+        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
+      (metadata) =>
+        `Snapshot ` +
+        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
+        `has been created successfully`,
       (metadata) => {
         return {
           '17': `Name '${metadata.snapshot_name}' is already in use.`
@@ -99,11 +104,13 @@ export class TaskManagerMessageService {
       }
     ),
     'rbd/snap/edit': new TaskManagerMessage(
-      (metadata) => `Update snapshot ` +
-                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) => `Snapshot ` +
-                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
-                    `has been updated successfully`,
+      (metadata) =>
+        `Update snapshot ` +
+        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
+      (metadata) =>
+        `Snapshot ` +
+        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
+        `has been updated successfully`,
       () => {
         return {
           '16': `Cannot unprotect snapshot because it contains child images.`
@@ -111,11 +118,13 @@ export class TaskManagerMessageService {
       }
     ),
     'rbd/snap/delete': new TaskManagerMessage(
-      (metadata) => `Delete snapshot ` +
-                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) => `Snapshot ` +
-                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
-                    `has been deleted successfully`,
+      (metadata) =>
+        `Delete snapshot ` +
+        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
+      (metadata) =>
+        `Snapshot ` +
+        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
+        `has been deleted successfully`,
       () => {
         return {
           '16': `Snapshot is protected.`
@@ -123,14 +132,15 @@ export class TaskManagerMessageService {
       }
     ),
     'rbd/snap/rollback': new TaskManagerMessage(
-      (metadata) => `Rollback snapshot ` +
-                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
-      (metadata) => `Snapshot ` +
-                    `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
-                    `has been rolled back successfully`,
+      (metadata) =>
+        `Rollback snapshot ` +
+        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`,
+      (metadata) =>
+        `Snapshot ` +
+        `'${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}' ` +
+        `has been rolled back successfully`,
       () => {
-        return {
-        };
+        return {};
       }
     )
   };
@@ -141,12 +151,11 @@ export class TaskManagerMessageService {
     },
     (metadata) => 'Task executed successfully',
     () => {
-      return {
-      };
+      return {};
     }
   );
 
-  constructor() { }
+  constructor() {}
 
   getSuccessMessage(finishedTask: FinishedTask) {
     const taskManagerMessage = this.messages[finishedTask.name] || this.defaultMessage;
@@ -155,8 +164,10 @@ export class TaskManagerMessageService {
 
   getErrorMessage(finishedTask: FinishedTask) {
     const taskManagerMessage = this.messages[finishedTask.name] || this.defaultMessage;
-    return taskManagerMessage.error(finishedTask.metadata)[finishedTask.exception.code] ||
-      finishedTask.exception.detail;
+    return (
+      taskManagerMessage.error(finishedTask.metadata)[finishedTask.exception.code] ||
+      finishedTask.exception.detail
+    );
   }
 
   getDescription(task: Task) {
