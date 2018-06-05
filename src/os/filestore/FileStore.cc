@@ -2963,7 +2963,7 @@ void FileStore::_do_transaction(
         const coll_t &ncid = i.get_cid(op->dest_cid);
         const ghobject_t &oid = i.get_oid(op->oid);
 
-	assert(oid.hobj.pool >= -1);
+	assert(oid.hobj().pool >= -1);
 
         // always followed by OP_COLL_REMOVE
         Transaction::Op *op2 = i.decode_op();
@@ -3369,7 +3369,7 @@ int FileStore::read(
   if (cct->_conf->filestore_debug_inject_read_err &&
       debug_data_eio(oid)) {
     return -EIO;
-  } else if (oid.hobj.pool > 0 &&  /* FIXME, see #23029 */
+  } else if (oid.hobj().pool > 0 &&  /* FIXME, see #23029 */
 	     cct->_conf->filestore_debug_random_read_err &&
 	     (rand() % (int)(cct->_conf->filestore_debug_random_read_err *
 			     100.0)) == 0) {
@@ -5078,7 +5078,7 @@ int FileStore::collection_list(const coll_t& c,
 	     << " pgid " << pgid << dendl;
   }
   ghobject_t sep;
-  sep.hobj.pool = -1;
+  sep.hobj_non_const().pool = -1;
   sep.set_shard(shard);
   if (!c.is_temp() && !c.is_meta()) {
     if (start < sep) {
@@ -5115,7 +5115,7 @@ int FileStore::collection_list(const coll_t& c,
 
   // HashIndex doesn't know the pool when constructing a 'next' value
   if (!next->is_max()) {
-    next->hobj.pool = pool;
+    next->hobj_non_const().pool = pool;
     next->set_shard(shard);
     dout(20) << "  next " << *next << dendl;
   }
@@ -6163,7 +6163,7 @@ void FileStore::OpSequencer::_register_apply(Op *o)
   o->registered_apply = true;
   for (auto& t : o->tls) {
     for (auto& i : t.get_object_index()) {
-      uint32_t key = i.first.hobj.get_hash();
+      uint32_t key = i.first.hobj().get_hash();
       applying.emplace(make_pair(key, &i.first));
       dout(20) << __func__ << " " << o << " " << i.first << " ("
 	       << &i.first << ")" << dendl;
@@ -6176,7 +6176,7 @@ void FileStore::OpSequencer::_unregister_apply(Op *o)
   assert(o->registered_apply);
   for (auto& t : o->tls) {
     for (auto& i : t.get_object_index()) {
-      uint32_t key = i.first.hobj.get_hash();
+      uint32_t key = i.first.hobj().get_hash();
       auto p = applying.find(key);
       bool removed = false;
       while (p != applying.end() &&
@@ -6198,7 +6198,7 @@ void FileStore::OpSequencer::_unregister_apply(Op *o)
 void FileStore::OpSequencer::wait_for_apply(const ghobject_t& oid)
 {
   Mutex::Locker l(qlock);
-  uint32_t key = oid.hobj.get_hash();
+  uint32_t key = oid.hobj().get_hash();
 retry:
   while (true) {
     // search all items in hash slot for a matching object

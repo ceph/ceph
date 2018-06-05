@@ -258,37 +258,37 @@ static void get_object_key(CephContext* cct, const ghobject_t& oid,
 {
   key->clear();
 
-  _key_encode_shard(oid.shard_id, key);
-  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
-  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
+  _key_encode_shard(oid.get_shard_id(), key);
+  _key_encode_u64(oid.hobj().pool + 0x8000000000000000ull, key);
+  _key_encode_u32(oid.hobj().get_bitwise_key_u32(), key);
   key->append(".");
 
-  append_escaped(oid.hobj.nspace, key);
+  append_escaped(oid.hobj().nspace, key);
 
-  if (oid.hobj.get_key().length()) {
+  if (oid.hobj().get_key().length()) {
     // is a key... could be < = or >.
     // (ASCII chars < = and > sort in that order, yay)
-    if (oid.hobj.get_key() < oid.hobj.oid.name) {
+    if (oid.hobj().get_key() < oid.hobj().oid.name) {
       key->append("<");
-      append_escaped(oid.hobj.get_key(), key);
-      append_escaped(oid.hobj.oid.name, key);
-    } else if (oid.hobj.get_key() > oid.hobj.oid.name) {
+      append_escaped(oid.hobj().get_key(), key);
+      append_escaped(oid.hobj().oid.name, key);
+    } else if (oid.hobj().get_key() > oid.hobj().oid.name) {
       key->append(">");
-      append_escaped(oid.hobj.get_key(), key);
-      append_escaped(oid.hobj.oid.name, key);
+      append_escaped(oid.hobj().get_key(), key);
+      append_escaped(oid.hobj().oid.name, key);
     } else {
       // same as no key
       key->append("=");
-      append_escaped(oid.hobj.oid.name, key);
+      append_escaped(oid.hobj().oid.name, key);
     }
   } else {
     // no key
     key->append("=");
-    append_escaped(oid.hobj.oid.name, key);
+    append_escaped(oid.hobj().oid.name, key);
   }
 
-  _key_encode_u64(oid.hobj.snap, key);
-  _key_encode_u64(oid.generation, key);
+  _key_encode_u64(oid.hobj().snap, key);
+  _key_encode_u64(oid.get_generation(), key);
 
   // sanity check
   if (true) {
@@ -309,20 +309,22 @@ static int get_key_object(const string& key, ghobject_t *oid)
   int r;
   const char *p = key.c_str();
 
-  p = _key_decode_shard(p, &oid->shard_id);
+  shard_id_t shid;
+  p = _key_decode_shard(p, &shid);
+  oid->set_shard_id(shid);
 
   uint64_t pool;
   p = _key_decode_u64(p, &pool);
-  oid->hobj.pool = pool - 0x8000000000000000ull;
+  oid->hobj_non_const().pool = pool - 0x8000000000000000ull;
 
   unsigned hash;
   p = _key_decode_u32(p, &hash);
-  oid->hobj.set_bitwise_key_u32(hash);
+  oid->hobj_non_const().set_bitwise_key_u32(hash);
   if (*p != '.')
     return -5;
   ++p;
 
-  r = decode_escaped(p, &oid->hobj.nspace);
+  r = decode_escaped(p, &oid->hobj_non_const().nspace);
   if (r < 0)
     return -6;
   p += r + 1;
@@ -330,7 +332,7 @@ static int get_key_object(const string& key, ghobject_t *oid)
   if (*p == '=') {
     // no key
     ++p;
-    r = decode_escaped(p, &oid->hobj.oid.name);
+    r = decode_escaped(p, &oid->hobj_non_const().oid.name);
     if (r < 0)
       return -7;
     p += r + 1;
@@ -342,23 +344,26 @@ static int get_key_object(const string& key, ghobject_t *oid)
     if (r < 0)
       return -8;
     p += r + 1;
-    r = decode_escaped(p, &oid->hobj.oid.name);
+    r = decode_escaped(p, &oid->hobj_non_const().oid.name);
     if (r < 0)
       return -9;
     p += r + 1;
-    oid->hobj.set_key(okey);
+    oid->hobj_non_const().set_key(okey);
   } else {
     // malformed
     return -10;
   }
 
-  p = _key_decode_u64(p, &oid->hobj.snap.val);
-  p = _key_decode_u64(p, &oid->generation);
+  p = _key_decode_u64(p, &oid->hobj_non_const().snap.val);
+
+  gen_t generation;
+  p = _key_decode_u64(p, &generation);
   if (*p) {
     // if we get something other than a null terminator here, 
     // something goes wrong.
     return -12;
   }
+  oid->set_generation(generation);
 
   return 0;
 }
@@ -1492,7 +1497,7 @@ int KStore::_collection_list(
     pnext = &static_next;
 
   if (start == ghobject_t::get_max() ||
-    start.hobj.is_max()) {
+    start.hobj().is_max()) {
     goto out;
   }
   get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
@@ -1510,7 +1515,7 @@ int KStore::_collection_list(
   } else {
     string k;
     get_object_key(cct, start, &k);
-    if (start.hobj.is_temp()) {
+    if (start.hobj().is_temp()) {
       temp = true;
       assert(k >= temp_start_key && k < temp_end_key);
     } else {
@@ -1521,11 +1526,11 @@ int KStore::_collection_list(
 	     << " temp=" << (int)temp << dendl;
     it->lower_bound(k);
   }
-  if (end.hobj.is_max()) {
+  if (end.hobj().is_max()) {
     pend = temp ? temp_end_key : end_key;
   } else {
     get_object_key(cct, end, &end_key);
-    if (end.hobj.is_temp()) {
+    if (end.hobj().is_temp()) {
       if (temp)
 	pend = end_key;
       else
@@ -1543,7 +1548,7 @@ int KStore::_collection_list(
 	dout(20) << __func__ << " key " << pretty_binary_string(it->key())
 		 << " > " << end << dendl;
       if (temp) {
-	if (end.hobj.is_temp()) {
+	if (end.hobj().is_temp()) {
 	  break;
 	}
 	dout(30) << __func__ << " switch to non-temp namespace" << dendl;
@@ -3119,7 +3124,7 @@ int KStore::_clone(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
 	   << newo->oid << dendl;
   int r = 0;
-  if (oldo->oid.hobj.get_hash() != newo->oid.hobj.get_hash()) {
+  if (oldo->oid.hobj().get_hash() != newo->oid.hobj().get_hash()) {
     derr << __func__ << " mismatched hash on " << oldo->oid
 	 << " and " << newo->oid << dendl;
     return -EINVAL;

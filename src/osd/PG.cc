@@ -4353,7 +4353,7 @@ void PG::_scan_rollback_obs(const vector<ghobject_t> &rollback_obs)
   for (vector<ghobject_t>::const_iterator i = rollback_obs.begin();
        i != rollback_obs.end();
        ++i) {
-    if (i->generation < trimmed_to.version) {
+    if (i->get_generation() < trimmed_to.version) {
       osd->clog->error() << "osd." << osd->whoami
 			<< " pg " << info.pgid
 			<< " found obsolete rollback obj "
@@ -6532,7 +6532,7 @@ void PG::_delete_some(ObjectStore::Transaction *t)
     if (oid.is_pgmeta()) {
       continue;
     }
-    int r = snap_mapper.remove_oid(oid.hobj, &_t);
+    int r = snap_mapper.remove_oid(oid.hobj(), &_t);
     if (r != 0 && r != -ENOENT) {
       ceph_abort();
     }

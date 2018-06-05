@@ -173,7 +173,7 @@ private:
   bool _need_temp_object_collection(const coll_t& cid, const ghobject_t& oid) {
     // - normal temp case: cid is pg, object is temp (pool < -1)
     // - hammer temp case: cid is pg (or already temp), object pool is -1
-    return cid.is_pg() && oid.hobj.pool <= -1;
+    return cid.is_pg() && oid.hobj().pool <= -1;
   }
   void init_temp_collections();
 

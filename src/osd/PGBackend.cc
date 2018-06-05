@@ -364,16 +364,16 @@ int PGBackend::objects_list_partial(
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      if (i->is_pgmeta() || i->hobj.is_temp()) {
+      if (i->is_pgmeta() || i->hobj().is_temp()) {
 	continue;
       }
       if (i->is_no_gen()) {
-	ls->push_back(i->hobj);
+	ls->push_back(i->hobj());
       }
     }
   }
   if (r == 0)
-    *next = _next.hobj;
+    *next = _next.hobj();
   return r;
 }
 
@@ -396,11 +396,11 @@ int PGBackend::objects_list_range(
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
-    if (i->is_pgmeta() || i->hobj.is_temp()) {
+    if (i->is_pgmeta() || i->hobj().is_temp()) {
       continue;
     }
     if (i->is_no_gen()) {
-      ls->push_back(i->hobj);
+      ls->push_back(i->hobj());
     } else if (gen_obs) {
       gen_obs->push_back(*i);
     }

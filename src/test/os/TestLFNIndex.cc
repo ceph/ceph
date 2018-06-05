@@ -156,13 +156,13 @@ TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
     std::string name(".XA/B_\\C.D");
     name[1] = '\0';
     ghobject_t hoid(hobject_t(object_t(name), key, CEPH_NOSNAP, hash, pool, ""));
-    hoid.hobj.nspace = "NSPACE";
+    hoid.hobj_non_const().nspace = "NSPACE";
 
     test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB_NSPACE_cdcdcdcd");
   }
   {
     ghobject_t hoid(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, ""));
-    hoid.hobj.nspace = "NSPACE";
+    hoid.hobj_non_const().nspace = "NSPACE";
 
     test_generate_and_parse(hoid, "\\dA_KEY_head_ABABABAB_NSPACE_cdcdcdcd");
   }
@@ -170,13 +170,13 @@ TEST_F(TestHOBJECT_WITH_POOL, generate_and_parse_name) {
     std::string name(".XA/B_\\C.D");
     name[1] = '\0';
     ghobject_t hoid(hobject_t(object_t(name), key, CEPH_NOSNAP, hash, pool, ""), gen, shard_id);
-    hoid.hobj.nspace = "NSPACE";
+    hoid.hobj_non_const().nspace = "NSPACE";
 
     test_generate_and_parse(hoid, "\\.\\nA\\sB\\u\\\\C.D_KEY_head_ABABABAB_NSPACE_cdcdcdcd_efefefefef_b");
   }
   {
     ghobject_t hoid(hobject_t(object_t("DIR_A"), key, CEPH_NOSNAP, hash, pool, ""), gen, shard_id);
-    hoid.hobj.nspace = "NSPACE";
+    hoid.hobj_non_const().nspace = "NSPACE";
 
     test_generate_and_parse(hoid, "\\dA_KEY_head_ABABABAB_NSPACE_cdcdcdcd_efefefefef_b");
   }

@@ -262,10 +262,10 @@ struct lookup_ghobject : public action_on_object_t {
 		  _namespace(nspace), _need_snapset(need_snapset) { }
 
   void call(ObjectStore *store, coll_t coll, ghobject_t &ghobj, object_info_t &oi) override {
-    if (_need_snapset && !ghobj.hobj.has_snapset())
+    if (_need_snapset && !ghobj.hobj().has_snapset())
       return;
-    if ((_name.length() == 0 || ghobj.hobj.oid.name == _name) &&
-        (!_namespace || ghobj.hobj.nspace == _namespace))
+    if ((_name.length() == 0 || ghobj.hobj().oid.name == _name) &&
+        (!_namespace || ghobj.hobj().nspace == _namespace))
       _objects.insert(coll, ghobj);
     return;
   }
@@ -745,8 +745,8 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
     for (vector<ghobject_t>::iterator i = objects.begin();
 	 i != objects.end();
 	 ++i) {
-      assert(!i->hobj.is_meta());
-      if (i->is_pgmeta() || i->hobj.is_temp() || !i->is_no_gen()) {
+      assert(!i->hobj().is_meta());
+      if (i->is_pgmeta() || i->hobj().is_temp() || !i->is_no_gen()) {
 	continue;
       }
       r = export_file(store, coll, *i);
@@ -951,8 +951,8 @@ int dump_attrs(
 
   // This could have been handled in the caller if we didn't need to
   // support exports that didn't include object_info_t in object_begin.
-  if (hoid.generation == ghobject_t::NO_GEN &&
-      hoid.hobj.is_head()) {
+  if (hoid.get_generation() == ghobject_t::NO_GEN &&
+      hoid.hobj().is_head()) {
     map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
     if (mi != as.data.end()) {
       SnapSet snapset;
@@ -1014,8 +1014,8 @@ int get_attrs(
 
   // This could have been handled in the caller if we didn't need to
   // support exports that didn't include object_info_t in object_begin.
-  if (hoid.generation == ghobject_t::NO_GEN &&
-      hoid.hobj.is_head()) {
+  if (hoid.get_generation() == ghobject_t::NO_GEN &&
+      hoid.hobj().is_head()) {
     map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
     if (mi != as.data.end()) {
       SnapSet snapset;
@@ -1024,7 +1024,7 @@ int get_attrs(
       cout << "snapset " << snapset << std::endl;
       for (auto& p : snapset.clone_snaps) {
 	ghobject_t clone = hoid;
-	clone.hobj.snap = p.first;
+	clone.hobj_non_const().snap = p.first;
 	set<snapid_t> snaps(p.second.begin(), p.second.end());
 	if (!store->exists(ch, clone)) {
 	  // no clone, skip.  this is probably a cache pool.  this works
@@ -1036,11 +1036,11 @@ int get_attrs(
 	  continue;
 	}
 	if (debug)
-	  cerr << "\tsetting " << clone.hobj << " snaps " << snaps
+	  cerr << "\tsetting " << clone.hobj() << " snaps " << snaps
 	       << std::endl;
 	OSDriver::OSTransaction _t(driver.get_transaction(t));
 	assert(!snaps.empty());
-	snap_mapper.add_oid(clone.hobj, snaps, &_t);
+	snap_mapper.add_oid(clone.hobj(), snaps, &_t);
       }
     } else {
       cerr << "missing SS_ATTR on " << hoid << std::endl;
@@ -1119,7 +1119,7 @@ int ObjectStoreTool::dump_object(Formatter *formatter,
   object_begin ob;
   ob.decode(ebliter);
 
-  if (ob.hoid.hobj.is_temp()) {
+  if (ob.hoid.hobj().is_temp()) {
     cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
     return -EFAULT;
   }
@@ -1192,16 +1192,16 @@ int ObjectStoreTool::get_object(ObjectStore *store,
   object_begin ob;
   ob.decode(ebliter);
 
-  if (ob.hoid.hobj.is_temp()) {
+  if (ob.hoid.hobj().is_temp()) {
     cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
     return -EFAULT;
   }
   assert(g_ceph_context);
 
   auto ch = store->open_collection(coll);
-  if (ob.hoid.hobj.nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
-    object_t oid = ob.hoid.hobj.oid;
-    object_locator_t loc(ob.hoid.hobj);
+  if (ob.hoid.hobj().nspace != g_ceph_context->_conf->osd_hit_set_namespace) {
+    object_t oid = ob.hoid.hobj().oid;
+    object_locator_t loc(ob.hoid.hobj());
     pg_t raw_pgid = curmap.object_locator_to_pg(oid, loc);
     pg_t pgid = curmap.raw_pg_to_pg(raw_pgid);
 
@@ -1210,9 +1210,9 @@ int ObjectStoreTool::get_object(ObjectStore *store,
       cerr << "INTERNAL ERROR: Bad collection during import" << std::endl;
       return -EFAULT;
     }
-    if (coll_pgid.shard != ob.hoid.shard_id) {
+    if (coll_pgid.shard != ob.hoid.get_shard_id()) {
       cerr << "INTERNAL ERROR: Importing shard " << coll_pgid.shard
-        << " but object shard is " << ob.hoid.shard_id << std::endl;
+        << " but object shard is " << ob.hoid.get_shard_id() << std::endl;
       return -EFAULT;
     }
 
@@ -1986,7 +1986,7 @@ int remove_object(coll_t coll, ghobject_t &ghobj,
   MapCacher::Transaction<std::string, bufferlist> *_t,
   ObjectStore::Transaction *t)
 {
-  int r = mapper.remove_oid(ghobj.hobj, _t);
+  int r = mapper.remove_oid(ghobj.hobj(), _t);
   if (r < 0 && r != -ENOENT) {
     cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
     return r;
@@ -2018,7 +2018,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
   }
 
   SnapSet ss;
-  if (ghobj.hobj.has_snapset()) {
+  if (ghobj.hobj().has_snapset()) {
     r = get_snapset(store, coll, ghobj, ss, false);
     if (r < 0) {
       cerr << "Can't get snapset error " << cpp_strerror(r) << std::endl;
@@ -2027,7 +2027,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
     if (!ss.snaps.empty() && !all) {
       if (force) {
         cout << "WARNING: only removing "
-             << (ghobj.hobj.is_head() ? "head" : "snapdir")
+             << (ghobj.hobj().is_head() ? "head" : "snapdir")
              << " with snapshots present" << std::endl;
         ss.snaps.clear();
       } else {
@@ -2051,7 +2051,7 @@ int do_remove_object(ObjectStore *store, coll_t coll,
   ghobject_t snapobj = ghobj;
   for (vector<snapid_t>::iterator i = ss.snaps.begin() ;
        i != ss.snaps.end() ; ++i) {
-    snapobj.hobj.snap = *i;
+    snapobj.hobj_non_const().snap = *i;
     cout << "remove " << snapobj << std::endl;
     if (!dry_run) {
       r = remove_object(coll, snapobj, mapper, &_t, &t);
@@ -2484,7 +2484,7 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
     formatter->close_section();
   }
 
-  if (ghobj.hobj.has_snapset()) {
+  if (ghobj.hobj().has_snapset()) {
     SnapSet ss;
     int snr = get_snapset(store, coll, ghobj, ss);
     if (snr < 0) {
@@ -2506,7 +2506,7 @@ int set_size(
   bool corrupt)
 {
   auto ch = store->open_collection(coll);
-  if (ghobj.hobj.is_snapdir()) {
+  if (ghobj.hobj().is_snapdir()) {
     cerr << "Can't set the size of a snapdir" << std::endl;
     return -EINVAL;
   }
@@ -2537,9 +2537,9 @@ int set_size(
   SnapSet ss;
   bool found_head = true;
   map<snapid_t, uint64_t>::iterator csi;
-  bool is_snap = ghobj.hobj.is_snap();
+  bool is_snap = ghobj.hobj().is_snap();
   if (is_snap) {
-    head.hobj = head.hobj.get_head();
+    head.hobj_non_const() = head.hobj().get_head();
     r = get_snapset(store, coll, head, ss, true);
     if (r < 0 && r != -ENOENT) {
       // Requested get_snapset() silent, so if not -ENOENT show error
@@ -2548,7 +2548,7 @@ int set_size(
       return r;
     }
     if (r == -ENOENT) {
-      head.hobj = head.hobj.get_snapdir();
+      head.hobj_non_const() = head.hobj().get_snapdir();
       r = get_snapset(store, coll, head, ss);
       if (r < 0)
         return r;
@@ -2556,9 +2556,9 @@ int set_size(
     } else {
       found_head = true;
     }
-    csi = ss.clone_size.find(ghobj.hobj.snap);
+    csi = ss.clone_size.find(ghobj.hobj().snap);
     if (csi == ss.clone_size.end()) {
-      cerr << "SnapSet is missing clone_size for snap " << ghobj.hobj.snap << std::endl;
+      cerr << "SnapSet is missing clone_size for snap " << ghobj.hobj().snap << std::endl;
       return -EINVAL;
     }
   }
@@ -2711,7 +2711,7 @@ int remove_clone(
   if (p != snapset.clones.begin()) {
     // not the oldest... merge overlap into next older clone
     vector<snapid_t>::iterator n = p - 1;
-    hobject_t prev_coid = ghobj.hobj;
+    hobject_t prev_coid = ghobj.hobj();
     prev_coid.snap = *n;
     //bool adjust_prev_bytes = is_present_clone(prev_coid);
 
@@ -3572,7 +3572,7 @@ int main(int argc, char **argv)
 	  ss << "Decode object JSON error: " << e.what();
 	  throw std::runtime_error(ss.str());
 	}
-        if (pgidstr != "meta" && (uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj.pool) {
+        if (pgidstr != "meta" && (uint64_t)pgid.pgid.m_pool != (uint64_t)ghobj.hobj().pool) {
           cerr << "Object pool and pgid pool don't match" << std::endl;
           ret = 1;
           goto out;
@@ -4006,7 +4006,7 @@ int main(int argc, char **argv)
       } else if (objcmd == "clear-snapset") {
         // UNDOCUMENTED: For testing zap SnapSet
         // IGNORE extra args since not in usage anyway
-	if (!ghobj.hobj.has_snapset()) {
+	if (!ghobj.hobj().has_snapset()) {
 	  cerr << "'" << objcmd << "' requires a head or snapdir object" << std::endl;
 	  ret = 1;
 	  goto out;
@@ -4020,7 +4020,7 @@ int main(int argc, char **argv)
           ret = 1;
           goto out;
         }
-	if (!ghobj.hobj.has_snapset()) {
+	if (!ghobj.hobj().has_snapset()) {
 	  cerr << "'" << objcmd << "' requires a head or snapdir object" << std::endl;
 	  ret = 1;
 	  goto out;

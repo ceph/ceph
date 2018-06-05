@@ -148,12 +148,12 @@ public:
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
-	return oid.hobj.pool == -1;
+	return oid.hobj().pool == -1;
       spg_t spgid;
       if (cid.is_pg(&spgid))
 	return
 	  spgid.pgid.contains(cnode.bits, oid) &&
-	  oid.shard_id == spgid.shard;
+	  oid.get_shard_id() == spgid.shard;
       return false;
     }
 

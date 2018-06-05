@@ -3572,7 +3572,7 @@ void OSD::clear_temp_objects()
       vector<ghobject_t>::iterator q;
       for (q = objects.begin(); q != objects.end(); ++q) {
 	// Hammer set pool for temps to -1, so check for clean-up
-	if (q->hobj.is_temp() || (q->hobj.pool == -1)) {
+	if (q->hobj().is_temp() || (q->hobj().pool == -1)) {
 	  temps.push_back(*q);
 	} else {
 	  break;
@@ -3628,7 +3628,7 @@ void OSD::recursive_remove_collection(CephContext* cct,
       break;
     for (auto& p: objects) {
       OSDriver::OSTransaction _t(driver.get_transaction(&t));
-      int r = mapper.remove_oid(p.hobj, &_t);
+      int r = mapper.remove_oid(p.hobj(), &_t);
       if (r != 0 && r != -ENOENT)
         ceph_abort();
       t.remove(tmp, p);

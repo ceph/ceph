@@ -719,11 +719,11 @@ public:
     ghobject_t o;
     switch (type) {
     case TYPE_PG:
-      o.hobj.pool = pgid.pool();
+      o.hobj_non_const().pool = pgid.pool();
       o.set_shard(pgid.shard);
       break;
     case TYPE_META:
-      o.hobj.pool = -1;
+      o.hobj_non_const().pool = -1;
       break;
     default:
       break;

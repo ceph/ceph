@@ -159,33 +159,33 @@ int DBObjectMap::check(std::ostream &out, bool repair, bool force)
 string DBObjectMap::ghobject_key(const ghobject_t &oid)
 {
   string out;
-  append_escaped(oid.hobj.oid.name, &out);
+  append_escaped(oid.hobj().oid.name, &out);
   out.push_back('.');
-  append_escaped(oid.hobj.get_key(), &out);
+  append_escaped(oid.hobj().get_key(), &out);
   out.push_back('.');
-  append_escaped(oid.hobj.nspace, &out);
+  append_escaped(oid.hobj().nspace, &out);
   out.push_back('.');
 
   char snap_with_hash[1000];
   char *t = snap_with_hash;
   char *end = t + sizeof(snap_with_hash);
-  if (oid.hobj.snap == CEPH_NOSNAP)
+  if (oid.hobj().snap == CEPH_NOSNAP)
     t += snprintf(t, end - t, "head");
-  else if (oid.hobj.snap == CEPH_SNAPDIR)
+  else if (oid.hobj().snap == CEPH_SNAPDIR)
     t += snprintf(t, end - t, "snapdir");
   else
-    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj.snap);
+    t += snprintf(t, end - t, "%llx", (long long unsigned)oid.hobj().snap);
 
-  if (oid.hobj.pool == -1)
+  if (oid.hobj().pool == -1)
     t += snprintf(t, end - t, ".none");
   else
-    t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.hobj.pool);
-  t += snprintf(t, end - t, ".%.*X", (int)(sizeof(uint32_t)*2), oid.hobj.get_hash());
+    t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.hobj().pool);
+  t += snprintf(t, end - t, ".%.*X", (int)(sizeof(uint32_t)*2), oid.hobj().get_hash());
 
-  if (oid.generation != ghobject_t::NO_GEN ||
-      oid.shard_id != shard_id_t::NO_SHARD) {
-    t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.generation);
-    t += snprintf(t, end - t, ".%x", (int)oid.shard_id);
+  if (oid.get_generation() != ghobject_t::NO_GEN ||
+      oid.get_shard_id() != shard_id_t::NO_SHARD) {
+    t += snprintf(t, end - t, ".%llx", (long long unsigned)oid.get_generation());
+    t += snprintf(t, end - t, ".%x", (int)oid.get_shard_id());
   }
   out += string(snap_with_hash);
   return out;

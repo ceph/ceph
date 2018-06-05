@@ -353,10 +353,12 @@ static inline int cmp(const T&, const hobject_t&r) {
 typedef version_t gen_t;
 
 struct ghobject_t {
-  hobject_t hobj;
+private:
+  hobject_t m_hobj;
   gen_t generation;
   shard_id_t shard_id;
   bool max;
+  mutable uint64_t hash;
 
 public:
   static const gen_t NO_GEN = UINT64_MAX;
@@ -364,19 +366,22 @@ public:
   ghobject_t()
     : generation(NO_GEN),
       shard_id(shard_id_t::NO_SHARD),
-      max(false) {}
+      max(false),
+      hash(0) {}
 
   explicit ghobject_t(const hobject_t &obj)
-    : hobj(obj),
+    : m_hobj(obj),
       generation(NO_GEN),
       shard_id(shard_id_t::NO_SHARD),
-      max(false) {}
+      max(false),
+      hash(0) {}
 
   ghobject_t(const hobject_t &obj, gen_t gen, shard_id_t shard)
-    : hobj(obj),
+    : m_hobj(obj),
       generation(gen),
       shard_id(shard),
-      max(false) {}
+      max(false),
+      hash(0) {}
 
   static ghobject_t make_pgmeta(int64_t pool, uint32_t hash, shard_id_t shard) {
     hobject_t h(object_t(), string(), CEPH_NOSNAP, hash, pool, string());
@@ -384,27 +389,27 @@ public:
   }
   bool is_pgmeta() const {
     // make sure we are distinct from hobject_t(), which has pool INT64_MIN
-    return hobj.pool >= 0 && hobj.oid.name.empty();
+    return m_hobj.pool >= 0 && m_hobj.oid.name.empty();
   }
 
   bool match(uint32_t bits, uint32_t match) const {
-    return hobj.match_hash(hobj.hash, bits, match);
+    return m_hobj.match_hash(m_hobj.hash, bits, match);
   }
   /// @return min ghobject_t ret s.t. ret.hash == this->hash
-  ghobject_t get_boundary() const {
-    if (hobj.is_max())
+  ghobject_t get_boundary() {
+    if (m_hobj.is_max())
       return *this;
     ghobject_t ret;
-    ret.hobj.set_hash(hobj.hash);
+    ret.m_hobj.set_hash(m_hobj.hash);
     ret.shard_id = shard_id;
-    ret.hobj.pool = hobj.pool;
+    ret.m_hobj.pool = m_hobj.pool;
     return ret;
   }
   uint32_t get_nibblewise_key_u32() const {
-    return hobj.get_nibblewise_key_u32();
+    return m_hobj.get_nibblewise_key_u32();
   }
   uint32_t get_nibblewise_key() const {
-    return hobj.get_nibblewise_key();
+    return m_hobj.get_nibblewise_key();
   }
 
   bool is_degenerate() const {
@@ -421,6 +426,7 @@ public:
 
   void set_shard(shard_id_t s) {
     shard_id = s;
+    hash = 0;
   }
 
   bool parse(const string& s);
@@ -429,7 +435,7 @@ public:
   static ghobject_t get_max() {
     ghobject_t h;
     h.max = true;
-    h.hobj = hobject_t::get_max();  // so that is_max() => hobj.is_max()
+    h.m_hobj = hobject_t::get_max();  // so that is_max() => hobj.is_max()
     return h;
   }
   bool is_max() const {
@@ -443,6 +449,46 @@ public:
     ghobject_t temp(o);
     o = (*this);
     (*this) = temp;
+  }
+
+  void set_shard_id(const shard_id_t& s) {
+    shard_id = s;
+    hash = 0;
+  }
+
+  shard_id_t get_shard_id() const {
+    return shard_id;
+  }
+
+  const hobject_t& hobj() const {
+    return m_hobj;
+  }
+
+  hobject_t& hobj_non_const() {
+    hash = 0;
+    return m_hobj;
+  }
+
+  gen_t get_generation() const {
+    return generation;
+  }
+  void set_generation(gen_t generation) {
+    this->generation = generation;
+    hash = 0;
+  }
+
+  size_t get_hash() const {
+    if (hash == 0) {
+      static std::hash<object_t> H;
+      static rjhash<uint64_t> RJ;
+      size_t tmp_hash;
+      tmp_hash = RJ(H(m_hobj.oid));
+      tmp_hash = RJ(tmp_hash ^ ((uint64_t)shard_id.id << 32 | m_hobj.get_hash()));
+      tmp_hash = RJ(tmp_hash ^ generation);
+      tmp_hash = RJ(tmp_hash ^ m_hobj.snap);
+      hash = tmp_hash;
+    }
+    return hash;
   }
 
   void encode(bufferlist& bl) const;
@@ -466,22 +512,21 @@ public:
   }
   friend bool operator==(const ghobject_t&, const ghobject_t&);
   friend bool operator!=(const ghobject_t&, const ghobject_t&);
-
+  friend ostream& operator<<(ostream& out, const ghobject_t& o);
 };
 WRITE_CLASS_ENCODER(ghobject_t)
 
 namespace std {
   template<> struct hash<ghobject_t> {
     size_t operator()(const ghobject_t &r) const {
-      static rjhash<uint64_t> I;
-      return r.hobj.get_hash() ^ I(r.hobj.snap);
+      return r.get_hash();
     }
   };
 } // namespace std
 
 ostream& operator<<(ostream& out, const ghobject_t& o);
 
-WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, hobj, generation)
+WRITE_EQ_OPERATORS_4(ghobject_t, max, shard_id, m_hobj, generation)
 
 extern int cmp(const ghobject_t& l, const ghobject_t& r);
 

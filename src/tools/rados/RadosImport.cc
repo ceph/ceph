@@ -181,26 +181,26 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
   omap_section os;
 
   assert(g_ceph_context);
-  if (ob.hoid.hobj.nspace == g_ceph_context->_conf->osd_hit_set_namespace) {
+  if (ob.hoid.hobj().nspace == g_ceph_context->_conf->osd_hit_set_namespace) {
     cout << "Skipping internal object " << ob.hoid << std::endl;
     skip_object(bl);
     return 0;
   }
 
-  if (!ob.hoid.hobj.is_head()) {
+  if (!ob.hoid.hobj().is_head()) {
     cout << "Skipping non-head for " << ob.hoid << std::endl;
     skip_object(bl);
     return 0;
   }
 
-  ioctx.set_namespace(ob.hoid.hobj.get_namespace());
+  ioctx.set_namespace(ob.hoid.hobj().get_namespace());
 
   string msg("Write");
   skipping = false;
   if (dry_run) {
     uint64_t psize;
     time_t pmtime;
-    int ret = ioctx.stat(ob.hoid.hobj.oid.name, &psize, &pmtime);
+    int ret = ioctx.stat(ob.hoid.hobj().oid.name, &psize, &pmtime);
     if (ret == 0) {
       if (no_overwrite)
         // Could set skipping, but dry-run doesn't change anything either
@@ -209,7 +209,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         msg = "***Overwrite***";
     }
   } else {
-    int ret = ioctx.create(ob.hoid.hobj.oid.name, true);
+    int ret = ioctx.create(ob.hoid.hobj().oid.name, true);
     if (ret && ret != -EEXIST) {
       cerr << "create failed: " << cpp_strerror(ret) << std::endl;
       return ret;
@@ -220,12 +220,12 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         skipping = true;
       } else {
         msg = "***Overwrite***";
-        ret = ioctx.remove(ob.hoid.hobj.oid.name);
+        ret = ioctx.remove(ob.hoid.hobj().oid.name);
         if (ret < 0) {
           cerr << "remove failed: " << cpp_strerror(ret) << std::endl;
           return ret;
         }
-        ret = ioctx.create(ob.hoid.hobj.oid.name, true);
+        ret = ioctx.create(ob.hoid.hobj().oid.name, true);
         // If object re-appeared after removal, let's just skip it
         if (ret == -EEXIST) {
           skipping = true;
@@ -304,7 +304,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
           uint64_t rndlen = uint64_t(databl.length() / alignment) * alignment;
           dout(10) << "write offset=" << out_offset << " len=" << rndlen << dendl;
           if (!dry_run && !skipping) {
-            ret = ioctx.write(ob.hoid.hobj.oid.name, databl, rndlen, out_offset);
+            ret = ioctx.write(ob.hoid.hobj().oid.name, databl, rndlen, out_offset);
             if (ret) {
               cerr << "write failed: " << cpp_strerror(ret) << std::endl;
               return ret;
@@ -321,7 +321,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         break;
       }
       if (!dry_run && !skipping) {
-        ret = ioctx.write(ob.hoid.hobj.oid.name, ds.databl, ds.len, ds.offset);
+        ret = ioctx.write(ob.hoid.hobj().oid.name, ds.databl, ds.len, ds.offset);
         if (ret) {
           cerr << "write failed: " << cpp_strerror(ret) << std::endl;
           return ret;
@@ -340,7 +340,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         // Drop key "_" and all attributes that do not start with '_'
         if (i->first == "_" || i->first[0] != '_')
           continue;
-        ret = ioctx.setxattr(ob.hoid.hobj.oid.name, i->first.substr(1).c_str(), i->second);
+        ret = ioctx.setxattr(ob.hoid.hobj().oid.name, i->first.substr(1).c_str(), i->second);
         if (ret) {
           cerr << "setxattr failed: " << cpp_strerror(ret) << std::endl;
           if (ret != -EOPNOTSUPP)
@@ -355,7 +355,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         << dendl;
       if (dry_run || skipping)
         break;
-      ret = ioctx.omap_set_header(ob.hoid.hobj.oid.name, oh.hdr);
+      ret = ioctx.omap_set_header(ob.hoid.hobj().oid.name, oh.hdr);
       if (ret) {
         cerr << "omap_set_header failed: " << cpp_strerror(ret) << std::endl;
         if (ret != -EOPNOTSUPP)
@@ -368,7 +368,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
       dout(10) << "\tomap: size " << os.omap.size() << dendl;
       if (dry_run || skipping)
         break;
-      ret = ioctx.omap_set(ob.hoid.hobj.oid.name, os.omap);
+      ret = ioctx.omap_set(ob.hoid.hobj().oid.name, os.omap);
       if (ret) {
         cerr << "omap_set failed: " << cpp_strerror(ret) << std::endl;
         if (ret != -EOPNOTSUPP)
@@ -382,7 +382,7 @@ int RadosImport::get_object_rados(librados::IoCtx &ioctx, bufferlist &bl, bool n
         dout(10) << "END write offset=" << out_offset << " len=" << databl.length() << dendl;
         if (dry_run || skipping)
           break;
-        ret = ioctx.write(ob.hoid.hobj.oid.name, databl, databl.length(), out_offset);
+        ret = ioctx.write(ob.hoid.hobj().oid.name, databl, databl.length(), out_offset);
         if (ret) {
           cerr << "write failed: " << cpp_strerror(ret) << std::endl;
           return ret;
