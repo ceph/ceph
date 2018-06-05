@@ -14,6 +14,10 @@ find_library(LIBOATH_LIBRARY NAMES oath liboath PATHS
   /usr/local/lib
   /usr/lib)
 
+if (NOT(LIBOATH_INCLUDE_DIR AND LIBOATH_LIBRARY))
+  message(FATAL_ERROR "Could NOT find oath")
+endif ()
+
 # handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
 # all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
