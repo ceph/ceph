@@ -31,7 +31,6 @@ export class OsdPerformanceHistogramComponent implements OnChanges {
     if (!this.histogram) {
       return;
     }
-    let sum = 0;
     let max = 0;
 
     _.each(this.histogram.values, (row, i) => {
@@ -42,7 +41,6 @@ export class OsdPerformanceHistogramComponent implements OnChanges {
         } else {
           val = col;
         }
-        sum += val;
         max = Math.max(max, val);
       });
     });
