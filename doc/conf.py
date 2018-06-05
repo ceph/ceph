@@ -16,6 +16,7 @@ if tags.has('man'):
                          'api/*',
                          'cephfs/*',
                          'dev/*',
+                         'governance.rst',
                          'install/*',
                          'mon/*',
                          'rados/*',
