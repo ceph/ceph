@@ -1733,32 +1733,9 @@ bool DaemonServer::handle_command(MCommand *m)
     if (!daemon_state.with_device(devid,
 				  [&f, &rs] (const DeviceState& dev) {
 	  if (f) {
-	    f->open_object_section("device");
-	    f->dump_string("devid", dev.devid);
-	    f->dump_string("host", dev.server);
-	    f->open_array_section("daemons");
-	    for (auto& i : dev.daemons) {
-	      f->dump_string("daemon", to_string(i));
-	    }
-	    f->close_section();
-	    if (dev.expected_failure != utime_t()) {
-	      f->dump_stream("expected_failure") << dev.expected_failure;
-	      f->dump_stream("expected_failure_stamp")
-		<< dev.expected_failure_stamp;
-	    }
-	    f->close_section();
+	    f->dump_object("device", dev);
 	  } else {
-	    rs << "device " << dev.devid << "\n";
-	    rs << "host " << dev.server << "\n";
-	    set<string> d;
-	    for (auto& j : dev.daemons) {
-	      d.insert(to_string(j));
-	    }
-	    rs << "daemons " << d << "\n";
-	    if (dev.expected_failure != utime_t()) {
-	      rs << "expected_failure " << dev.expected_failure
-		 << " (as of " << dev.expected_failure_stamp << ")\n";
-	    }
+	    dev.print(rs);
 	  }
 	})) {
       ss << "device " << devid << " not found";
