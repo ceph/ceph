@@ -2017,9 +2017,11 @@ void librados::IoCtxImpl::C_aio_Complete::finish(int r)
   c->cond.Signal();
 
   if (r == 0 && c->blp && c->blp->length() > 0) {
-    if (c->out_buf && !c->blp->is_provided_buffer(c->out_buf))
-      c->blp->copy(0, c->blp->length(), c->out_buf);
-    c->rval = c->blp->length();
+    if (c->out_buf && !c->blp->is_contiguous()) {
+      c->rval = -ERANGE;
+    } else {
+      c->rval = c->blp->length();
+    }
   }
 
   if (c->callback_complete ||
