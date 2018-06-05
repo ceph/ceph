@@ -185,7 +185,16 @@ typedef std::shared_ptr<DaemonState> DaemonStatePtr;
 typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
 
 
+struct DeviceState : public RefCountedObject
+{
+  std::string devid;
+  std::string server;
+  std::set<DaemonKey> daemons;
 
+  DeviceState(const std::string& n) : devid(n) {}
+};
+
+typedef boost::intrusive_ptr<DeviceState> DeviceStateRef;
 
 /**
  * Fuse the collection of per-daemon metadata from Ceph into
@@ -194,16 +203,30 @@ typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
  */
 class DaemonStateIndex
 {
-  private:
+private:
   mutable RWLock lock = {"DaemonStateIndex", true, true, true};
 
   std::map<std::string, DaemonStateCollection> by_server;
   DaemonStateCollection all;
   std::set<DaemonKey> updating;
 
+  std::map<std::string,DeviceStateRef> devices;
+
   void _erase(const DaemonKey& dmk);
 
-  public:
+  DeviceStateRef _get_or_create_device(const std::string& dev) {
+    auto p = devices.find(dev);
+    if (p != devices.end()) {
+      return p->second;
+    }
+    devices[dev] = new DeviceState(dev);
+    return devices[dev];
+  }
+  void _erase_device(DeviceStateRef d) {
+    devices.erase(d->devid);
+  }
+
+public:
   DaemonStateIndex() {}
 
   // FIXME: shouldn't really be public, maybe construct DaemonState
