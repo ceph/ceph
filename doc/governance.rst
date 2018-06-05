@@ -79,17 +79,29 @@ CLT.  Leads responsibilities include:
  * ensuring that different proposed changes do not conflict
  * ensuring that testing remains robust (new features include tests, changes do not break tests, etc.)
 
-All component leads are included on the CLT.
+All component leads are included on the CLT.  They are expected to
+report progress and status updates to the rest of the leadership team
+and to help facilitate any cross-component coordination of
+development.
+
+
+User Committee
+--------------
+
+The user committee is intended to represent the needs and interests of
+the Ceph user community.  It is currently led by Wido den Hollander
+<wido@42on.com>.  The function of this body is not currently
+well-defined.
 
 
 Ceph Advisory Board
 -------------------
 
-The Ceph Advisory Board is a collection of representatives from
-industry that advise the project on strategy, direction, and resource
+The Ceph Advisory Board is a collection of industry representatives
+that advise the project on strategy, direction, and resource
 allocation, and coordinate industry activities to support the Ceph
 project and community.
 
-Currently the advisory board include representatives from Ceph vendors
-(Red Hat, SUSE, Canonical), academia (CERN), and industry partners
-(Fujitsu, Intel, WD).
+Currently the advisory board includes representatives from Ceph vendors
+(Red Hat, SUSE, Canonical), academia (CERN), industry partners
+(Fujitsu, Intel, WD), and a user committee representative.
