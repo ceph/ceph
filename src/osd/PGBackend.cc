@@ -934,7 +934,8 @@ void PGBackend::be_compare_scrubmaps(
   map<hobject_t, set<pg_shard_t>> &missing,
   map<hobject_t, set<pg_shard_t>> &inconsistent,
   map<hobject_t, list<pg_shard_t>> &authoritative,
-  map<hobject_t, pair<uint32_t,uint32_t>> &missing_digest,
+  map<hobject_t, pair<boost::optional<uint32_t>,
+                      boost::optional<uint32_t>>> &missing_digest,
   int &shallow_errors, int &deep_errors,
   Scrub::Store *store,
   const spg_t& pgid,
@@ -1058,16 +1059,12 @@ void PGBackend::be_compare_scrubmaps(
 	FORCE = 2,
       } update = NO;
 
-      if (auth_object.digest_present && auth_object.omap_digest_present &&
-	  (!auth_oi.is_data_digest() || !auth_oi.is_omap_digest())) {
-	dout(20) << __func__ << " missing digest on " << *k << dendl;
+      if (auth_object.digest_present && !auth_oi.is_data_digest()) {
+	dout(20) << __func__ << " missing data digest on " << *k << dendl;
 	update = MAYBE;
       }
-      if (auth_object.digest_present && auth_object.omap_digest_present &&
-	  cct->_conf->osd_debug_scrub_chance_rewrite_digest &&
-	  (((unsigned)rand() % 100) >
-	   cct->_conf->osd_debug_scrub_chance_rewrite_digest)) {
-	dout(20) << __func__ << " randomly updating digest on " << *k << dendl;
+      if (auth_object.omap_digest_present && !auth_oi.is_omap_digest()) {
+	dout(20) << __func__ << " missing omap digest on " << *k << dendl;
 	update = MAYBE;
       }
 
@@ -1097,9 +1094,16 @@ void PGBackend::be_compare_scrubmaps(
 	utime_t age = now - auth_oi.local_mtime;
 	if (update == FORCE ||
 	    age > cct->_conf->osd_deep_scrub_update_digest_min_age) {
-	  dout(20) << __func__ << " will update digest on " << *k << dendl;
-	  missing_digest[*k] = make_pair(auth_object.digest,
-					 auth_object.omap_digest);
+          boost::optional<uint32_t> data_digest, omap_digest;
+          if (auth_object.digest_present) {
+            data_digest = auth_object.digest;
+	    dout(20) << __func__ << " will update data digest on " << *k << dendl;
+          }
+          if (auth_object.omap_digest_present) {
+            omap_digest = auth_object.omap_digest;
+	    dout(20) << __func__ << " will update omap digest on " << *k << dendl;
+          }
+	  missing_digest[*k] = make_pair(data_digest, omap_digest);
 	} else {
 	  dout(20) << __func__ << " missing digest but age " << age
 		   << " < " << cct->_conf->osd_deep_scrub_update_digest_min_age
