@@ -19,7 +19,6 @@ import { CdTableColumn } from '../../models/cd-table-column';
   styleUrls: ['./table-key-value.component.scss']
 })
 export class TableKeyValueComponent implements OnInit, OnChanges {
-
   columns: Array<CdTableColumn> = [];
 
   @Input() data: any;
@@ -30,8 +29,8 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   @Input() appendParentKey = true;
 
   tableData: {
-    key: string,
-    value: any
+    key: string;
+    value: any;
   }[];
 
   /**
@@ -39,7 +38,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
    */
   @Output() fetchData = new EventEmitter();
 
-  constructor() { }
+  constructor() {}
 
   ngOnInit() {
     this.columns = [
@@ -78,7 +77,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     } else {
       throw new Error('Wrong data format');
     }
-    temp = temp.map((v) => this._convertValue(v)).filter(o => o); // Filters out undefined
+    temp = temp.map((v) => this._convertValue(v)).filter((o) => o); // Filters out undefined
     return this.renderObjects ? this._insertFlattenObjects(temp) : temp;
   }
 
@@ -94,7 +93,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     } else {
       if (_.isArray(first)) {
         if (first.length === 2) {
-          temp = data.map(a => ({
+          temp = data.map((a) => ({
             key: a[0],
             value: a[1]
           }));
@@ -107,7 +106,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   }
 
   _makePairsFromObject(data: object) {
-    return Object.keys(data).map(k => ({
+    return Object.keys(data).map((k) => ({
       key: k,
       value: data[k]
     }));
@@ -117,7 +116,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     temp.forEach((v, i) => {
       if (_.isPlainObject(v.value)) {
         temp.splice(i, 1);
-        this._makePairs(v.value).forEach(item => {
+        this._makePairs(v.value).forEach((item) => {
           if (this.appendParentKey) {
             item.key = v.key + ' ' + item.key;
           }
@@ -131,7 +130,9 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
 
   _convertValue(v: any) {
     if (_.isArray(v.value)) {
-      v.value = v.value.map((v) => (_.isPlainObject(v) ? JSON.stringify(v) : v)).join(', ');
+      v.value = v.value
+        .map((item) => (_.isPlainObject(item) ? JSON.stringify(item) : item))
+        .join(', ');
     } else if (_.isPlainObject(v.value) && !this.renderObjects) {
       return;
     }
