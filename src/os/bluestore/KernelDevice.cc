@@ -48,6 +48,7 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
     discard_thread(this),
     injecting_crash(0)
 {
+  assert(cct);
 }
 
 int KernelDevice::_lock()
@@ -191,23 +192,24 @@ int KernelDevice::get_devices(std::set<std::string> *ls)
 void KernelDevice::close()
 {
   dout(1) << __func__ << dendl;
-  _aio_stop();
-  _discard_stop();
+  if (path != "") {
+    _aio_stop();
+    _discard_stop();
 
-  if (vdo_fd >= 0) {
-    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
-    vdo_fd = -1;
+    if (vdo_fd >= 0) {
+      VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
+      vdo_fd = -1;
+    }
+
+    assert(fd_direct >= 0);
+    VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
+    fd_direct = -1;
+
+    assert(fd_buffered >= 0);
+    VOID_TEMP_FAILURE_RETRY(::close(fd_buffered));
+    fd_buffered = -1;
+    path.clear();
   }
-
-  assert(fd_direct >= 0);
-  VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
-  fd_direct = -1;
-
-  assert(fd_buffered >= 0);
-  VOID_TEMP_FAILURE_RETRY(::close(fd_buffered));
-  fd_buffered = -1;
-
-  path.clear();
 }
 
 static string get_dev_property(const char *dev, const char *property)
@@ -422,6 +424,7 @@ void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
+  assert(cct);
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
     int max = cct->_conf->bdev_aio_reap_max;
