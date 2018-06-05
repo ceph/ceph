@@ -6,5 +6,5 @@ from .. import logger
 class Logging(BaseController):
 
     @Endpoint('POST', path='js-error')
-    def jsError(self, url, message, stack):
+    def jsError(self, url, message, stack=None):
         logger.error('frontend error (%s): %s\n %s\n', url, message, stack)
