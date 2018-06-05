@@ -1,5 +1,6 @@
-Ceph Governance
-===============
+============
+ Governance
+============
 
 The Ceph open source community is guided by a few different groups.
 
