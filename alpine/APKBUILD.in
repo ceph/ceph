@@ -168,10 +168,6 @@ package() {
 
 	# udev rules
 	install -m 0644 -D udev/50-rbd.rules $pkgdir$_udevrulesdir/50-rbd.rules || return 1
-	install -m 0644 -D udev/60-ceph-by-parttypeuuid.rules  \
-		$pkgdir$_udevrulesdir/60-ceph-by-parttypeuuid.rules || return 1
-	install -m 0644 -D udev/95-ceph-osd.rules \
-		$pkgdir$_udevrulesdir/95-ceph-osd.rules
 }
 
 base() {
@@ -298,7 +294,6 @@ osd() {
 	_pkg $_bindir ceph-clsinfo ceph-bluefs-tool ceph-objectstore-tool ceph-osd
 	_pkg $_sbindir ceph-volume
 	_pkg $_libexecdir/ceph ceph-osd-prestart.sh
-	_pkg $_udevrulesdir 60-ceph-by-parttypeuuid.rules 95-ceph-osd.rules
 	install -m 750 -o $_ceph_uid -g $_ceph_gid -d \
 		$subpkgdir$_localstatedir/lib/ceph/osd
 }
