@@ -88,7 +88,7 @@ public:
 	     epoch_t e, epoch_t qe, spg_t p, hobject_t be, hobject_t en)
     : MOSDFastDispatchOp(MSG_OSD_PG_SCAN, HEAD_VERSION, COMPAT_VERSION),
       op(o),
-      map_epoch(e), query_epoch(e),
+      map_epoch(e), query_epoch(qe),
       from(from),
       pgid(p),
       begin(be), end(en) {
