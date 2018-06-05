@@ -36,6 +36,12 @@ struct TestDeepCopy : public TestFixture {
     if (m_src_ictx != nullptr) {
       deep_copy();
       if (m_dst_ictx != nullptr) {
+        if (m_dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
+          bool flags_set;
+          EXPECT_EQ(0, m_dst_ictx->test_flags(RBD_FLAG_OBJECT_MAP_INVALID,
+                                              &flags_set));
+          EXPECT_FALSE(flags_set);
+        }
         compare();
         close_image(m_dst_ictx);
       }
@@ -228,6 +234,32 @@ struct TestDeepCopy : public TestFixture {
     ASSERT_EQ(0, m_src_ictx->operations->resize(new_size, true, no_op));
   }
 
+  void test_clone_expand() {
+    bufferlist bl;
+    bl.append(std::string(100, '1'));
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              m_src_ictx->io_work_queue->write(0, bl.length(), bufferlist{bl},
+                                               0));
+    ASSERT_EQ(0, m_src_ictx->io_work_queue->flush());
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap"));
+    ASSERT_EQ(0, snap_protect(*m_src_ictx, "snap"));
+
+    std::string clone_name = get_temp_image_name();
+    int order = m_src_ictx->order;
+    uint64_t features;
+    ASSERT_EQ(0, librbd::get_features(m_src_ictx, &features));
+    ASSERT_EQ(0, librbd::clone(m_ioctx, m_src_ictx->name.c_str(), "snap",
+                               m_ioctx, clone_name.c_str(), features, &order, 0,
+                               0));
+    close_image(m_src_ictx);
+    ASSERT_EQ(0, open_image(clone_name, &m_src_ictx));
+
+    librbd::NoOpProgressContext no_op;
+    auto new_size = m_src_ictx->size << 1;
+    ASSERT_EQ(0, m_src_ictx->operations->resize(new_size, true, no_op));
+  }
+
   void test_clone() {
     bufferlist bl;
     bl.append(std::string(((1 << m_src_ictx->order) * 2) + 1, '1'));
@@ -397,6 +429,13 @@ TEST_F(TestDeepCopy, CloneShrink)
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   test_clone_shrink();
+}
+
+TEST_F(TestDeepCopy, CloneExpand)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  test_clone_expand();
 }
 
 TEST_F(TestDeepCopy, Clone)
