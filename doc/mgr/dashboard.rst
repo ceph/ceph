@@ -150,7 +150,7 @@ Host name and port
 Like most web applications, dashboard binds to a TCP/IP address and TCP port.
 
 By default, the ``ceph-mgr`` daemon hosting the dashboard (i.e., the currently
-active manager) will bind to TCP port 8080. If no specific address has been
+active manager) will bind to TCP port 8443. If no specific address has been
 configured, the web app will bind to ``::``, which corresponds to all available
 IPv4 and IPv6 addresses.
 
