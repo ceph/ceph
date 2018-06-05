@@ -25,9 +25,8 @@ class Rgw(BaseController):
             if not instance.is_service_online():
                 status['message'] = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
                 raise RequestException(status['message'])
-            # If the API user ID is configured via 'ceph dashboard set-rgw-api-user-id <user_id>'
-            # (which is not mandatory), then ensure it is known by the RGW.
-            if instance.userid and not instance.is_system_user():
+            # Ensure the API user ID is known by the RGW.
+            if not instance.is_system_user():
                 status['message'] = 'The user "{}" is unknown to the Object Gateway.'.format(
                     instance.userid)
                 raise RequestException(status['message'])
