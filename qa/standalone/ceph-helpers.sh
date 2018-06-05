@@ -575,17 +575,46 @@ function run_osd() {
     shift
     local osd_data=$dir/$id
 
-    local ceph_disk_args
-    ceph_disk_args+=" --verbose"
-    ceph_disk_args+=" --statedir=$dir"
-    ceph_disk_args+=" --sysconfdir=$dir"
-    ceph_disk_args+=" --prepend-to-path="
-
+    local ceph_args="$CEPH_ARGS"
+    ceph_args+=" --osd-failsafe-full-ratio=.99"
+    ceph_args+=" --osd-journal-size=100"
+    ceph_args+=" --osd-scrub-load-threshold=2000"
+    ceph_args+=" --osd-data=$osd_data"
+    ceph_args+=" --osd-journal=${osd_data}/journal"
+    ceph_args+=" --chdir="
+    ceph_args+=$EXTRA_OPTS
+    ceph_args+=" --run-dir=$dir"
+    ceph_args+=" --admin-socket=$(get_asok_path)"
+    ceph_args+=" --debug-osd=20"
+    ceph_args+=" --log-file=$dir/\$name.log"
+    ceph_args+=" --pid-file=$dir/\$name.pid"
+    ceph_args+=" --osd-max-object-name-len=460"
+    ceph_args+=" --osd-max-object-namespace-len=64"
+    ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+    ceph_args+=" "
+    ceph_args+="$@"
     mkdir -p $osd_data
-    ceph-disk $ceph_disk_args \
-        prepare --filestore $osd_data || return 1
 
-    activate_osd $dir $id "$@"
+    local uuid=`uuidgen`
+    echo "add osd$id $uuid"
+    OSD_SECRET=$(ceph-authtool --gen-print-key)
+    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $osd_data/new.json
+    ceph osd new $uuid -i $osd_data/new.json
+    rm $osd_data/new.json
+    ceph-osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid
+
+    local key_fn=$osd_data/keyring
+    cat > $key_fn<<EOF
+[osd.$id]
+key = $OSD_SECRET
+EOF
+    echo adding osd$id key to auth repository
+    ceph -i "$key_fn" auth add osd.$id osd "allow *" mon "allow profile osd" mgr "allow profile osd"
+    echo start osd.$id
+    ceph-osd -i $id $ceph_args &
+
+    wait_for_osd up $id || return 1
+
 }
 
 function run_osd_bluestore() {
@@ -595,17 +624,47 @@ function run_osd_bluestore() {
     shift
     local osd_data=$dir/$id
 
-    local ceph_disk_args
-    ceph_disk_args+=" --verbose"
-    ceph_disk_args+=" --statedir=$dir"
-    ceph_disk_args+=" --sysconfdir=$dir"
-    ceph_disk_args+=" --prepend-to-path="
-
+    local ceph_args="$CEPH_ARGS"
+    ceph_args+=" --osd-failsafe-full-ratio=.99"
+    ceph_args+=" --osd-journal-size=100"
+    ceph_args+=" --osd-scrub-load-threshold=2000"
+    ceph_args+=" --osd-data=$osd_data"
+    ceph_args+=" --osd-journal=${osd_data}/journal"
+    ceph_args+=" --chdir="
+    ceph_args+=$EXTRA_OPTS
+    ceph_args+=" --run-dir=$dir"
+    ceph_args+=" --admin-socket=$(get_asok_path)"
+    ceph_args+=" --debug-osd=20"
+    ceph_args+=" --log-file=$dir/\$name.log"
+    ceph_args+=" --pid-file=$dir/\$name.pid"
+    ceph_args+=" --osd-max-object-name-len=460"
+    ceph_args+=" --osd-max-object-namespace-len=64"
+    ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+    ceph_args+=" "
+    ceph_args+="$@"
     mkdir -p $osd_data
-    ceph-disk $ceph_disk_args \
-        prepare --bluestore $osd_data || return 1
 
-    activate_osd $dir $id "$@"
+    local uuid=`uuidgen`
+    echo "add osd$osd $uuid"
+    OSD_SECRET=$(ceph-authtool --gen-print-key)
+    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $osd_data/new.json
+    ceph osd new $uuid -i $osd_data/new.json
+    rm $osd_data/new.json
+    ceph-osd -i $id $ceph_args --mkfs --key $OSD_SECRET --osd-uuid $uuid --osd-objectstore=bluestore
+
+    local key_fn=$osd_data/keyring
+    cat > $key_fn<<EOF
+[osd.$osd]
+key = $OSD_SECRET
+EOF
+    echo adding osd$id key to auth repository
+    ceph -i "$key_fn" auth add osd.$id osd "allow *" mon "allow profile osd" mgr "allow profile osd"
+    echo start osd.$id
+    ceph-osd -i $id $ceph_args &
+
+    wait_for_osd up $id || return 1
+
+
 }
 
 function test_run_osd() {
@@ -1877,8 +1936,7 @@ function main() {
     shopt -s -o xtrace
     PS4='${BASH_SOURCE[0]}:$LINENO: ${FUNCNAME[0]}:  '
 
-    export PATH=${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv/bin:${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are preferred
-    #export PATH=$CEPH_ROOT/src/ceph-disk/virtualenv/bin:$CEPH_ROOT/src/ceph-detect-init/virtualenv/bin:.:$PATH # make sure program from sources are preferred
+    export PATH=.:$PATH # make sure program from sources are preferred
     export PYTHONWARNINGS=ignore
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
