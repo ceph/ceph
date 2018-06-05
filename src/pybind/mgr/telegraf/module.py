@@ -251,7 +251,7 @@ class Module(MgrModule):
                                 measurement['tags'], now)
                     self.log.debug(line.to_line_protocol())
                     s.send(line.to_line_protocol())
-            except (socket.error, RuntimeError, errno, IOError):
+            except (socket.error, RuntimeError, IOError, OSError):
                 self.log.exception('Failed to send statistics to Telegraf:')
 
     def shutdown(self):
@@ -283,7 +283,7 @@ class Module(MgrModule):
                 "Command not found '{0}'".format(cmd['prefix']))
 
     def self_test(self):
-        measurements = self.gather_measurements()
+        measurements = list(self.gather_measurements())
         if len(measurements) == 0:
             raise RuntimeError('No measurements found')
 
