@@ -30,6 +30,12 @@ void DaemonStateIndex::insert(DaemonStatePtr dm)
 
   by_server[dm->hostname][dm->key] = dm;
   all[dm->key] = dm;
+
+  for (auto& devid : dm->devids) {
+    auto d = _get_or_create_device(devid);
+    d->daemons.insert(dm->key);
+    d->server = dm->hostname;
+  }
 }
 
 void DaemonStateIndex::_erase(const DaemonKey& dmk)
@@ -39,6 +45,16 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
   const auto to_erase = all.find(dmk);
   assert(to_erase != all.end());
   const auto dm = to_erase->second;
+
+  for (auto& devid : dm->devids) {
+    auto d = _get_or_create_device(devid);
+    assert(d->daemons.count(dmk));
+    d->daemons.erase(dmk);
+    if (d->daemons.empty()) {
+      _erase_device(d);
+    }
+  }
+
   auto &server_collection = by_server[dm->hostname];
   server_collection.erase(dm->key);
   if (server_collection.empty()) {
