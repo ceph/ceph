@@ -3009,7 +3009,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
           set_status() << "squashed operation, skipping";
           tn->log(20, SSTR("skipping object: "
               << bucket_shard_str{bs} << "/" << key << ": squashed operation"));
-          /* not updating high marker though */
+          marker_tracker.try_update_high_marker(cur_id, 0, entry->timestamp);
           continue;
         }
         tn->set_flag(RGW_SNS_FLAG_ACTIVE);
