@@ -15,6 +15,7 @@
 
 #include "MgrSession.h"
 #include "include/stringify.h"
+#include "common/Formatter.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -48,6 +49,37 @@ void DeviceState::rm_expected_failure()
   expected_failure_stamp = utime_t();
   metadata.erase("expected_failure");
   metadata.erase("expected_failure_stamp");
+}
+
+void DeviceState::dump(Formatter *f) const
+{
+  f->dump_string("devid", devid);
+  f->dump_string("host", server);
+  f->open_array_section("daemons");
+  for (auto& i : daemons) {
+    f->dump_string("daemon", to_string(i));
+  }
+  f->close_section();
+  if (expected_failure != utime_t()) {
+    f->dump_stream("expected_failure") << expected_failure;
+    f->dump_stream("expected_failure_stamp")
+      << expected_failure_stamp;
+  }
+}
+
+void DeviceState::print(ostream& out) const
+{
+  out << "device " << devid << "\n";
+  out << "host " << server << "\n";
+  set<string> d;
+  for (auto& j : daemons) {
+    d.insert(to_string(j));
+  }
+  out << "daemons " << d << "\n";
+  if (expected_failure != utime_t()) {
+    out << "expected_failure " << expected_failure
+	<< " (as of " << expected_failure_stamp << ")\n";
+  }
 }
 
 void DaemonStateIndex::insert(DaemonStatePtr dm)
