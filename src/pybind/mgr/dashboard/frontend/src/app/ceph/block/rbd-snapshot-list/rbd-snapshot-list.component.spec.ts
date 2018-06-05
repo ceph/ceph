@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, ModalModule } from 'ngx-bootstrap';
-import { Observable } from 'rxjs/Observable';
+import { throwError as observableThrowError } from 'rxjs';
 
 import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
@@ -21,7 +21,7 @@ describe('RbdSnapshotListComponent', () => {
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
-      declarations: [ RbdSnapshotListComponent ],
+      declarations: [RbdSnapshotListComponent],
       imports: [
         DataTableModule,
         ComponentsModule,
@@ -32,9 +32,8 @@ describe('RbdSnapshotListComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule
       ],
-      providers: [ AuthStorageService ]
-    })
-    .compileComponents();
+      providers: [AuthStorageService]
+    }).compileComponents();
   }));
 
   beforeEach(() => {
@@ -56,13 +55,20 @@ describe('RbdSnapshotListComponent', () => {
       called = false;
       rbdService = new RbdService(null);
       notificationService = new NotificationService(null, null);
-      component = new RbdSnapshotListComponent(null, null, null, rbdService, null, null,
-                                               notificationService);
-      spyOn(rbdService, 'deleteSnapshot').and.returnValue(Observable.throw({status: 500}));
+      component = new RbdSnapshotListComponent(
+        null,
+        null,
+        null,
+        rbdService,
+        null,
+        null,
+        notificationService
+      );
+      spyOn(rbdService, 'deleteSnapshot').and.returnValue(observableThrowError({ status: 500 }));
       spyOn(notificationService, 'notifyTask').and.stub();
       component.modalRef = new BsModalRef();
       component.modalRef.content = {
-        stopLoadingSpinner: () => called = true
+        stopLoadingSpinner: () => (called = true)
       };
     });
 

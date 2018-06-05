@@ -2,7 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap';
-import { Observable } from 'rxjs/Observable';
+import { Observable } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { SharedModule } from '../../../shared/shared.module';

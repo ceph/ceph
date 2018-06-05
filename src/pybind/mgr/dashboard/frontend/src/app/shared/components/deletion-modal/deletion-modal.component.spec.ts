@@ -3,8 +3,7 @@ import { async, ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core
 import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap';
-import { Observable } from 'rxjs/Observable';
-import { Subscriber } from 'rxjs/Subscriber';
+import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
 import { DeletionModalComponent } from './deletion-modal.component';
 
@@ -75,7 +74,7 @@ class MockComponent {
   fakeDelete() {
     return (): Observable<any> => {
       return new Observable((observer: Subscriber<any>) => {
-        Observable.timer(100).subscribe(() => {
+        observableTimer(100).subscribe(() => {
           observer.next(this.finish());
           observer.complete();
         });
@@ -84,7 +83,7 @@ class MockComponent {
   }
 
   fakeDeleteController() {
-    Observable.timer(100).subscribe(() => {
+    observableTimer(100).subscribe(() => {
       this.finish();
       this.ctrlRef.hide();
     });
