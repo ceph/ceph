@@ -110,14 +110,36 @@ class CBT(Task):
             self.first_mon.run(args=install_cmd + cosbench_depends)
             testdir = misc.get_testdir(self.ctx)
             cosbench_version = '0.4.2.c3'
-            self.first_mon.run(
-                args=[
-                    'cd', testdir, run.Raw('&&'),
-                    'wget',
-                    'https://github.com/intel-cloud/cosbench/releases/download/v0.4.2.c3/0.4.2.c3.zip', run.Raw('&&'),
-                    'unzip', '0.4.2.c3.zip',
-                ]
-            )
+            cosbench_location = 'https://github.com/intel-cloud/cosbench/releases/download/v0.4.2.c3/0.4.2.c3.zip'
+            os_version = misc.get_system_type(self.first_mon, False, True)
+
+            # additional requirements for bionic
+            if os_version == '18.04':
+                self.first_mon.run(
+                    args=['sudo', 'apt-get', '-y', 'purge', 'openjdk-11*'])
+                # use our own version of cosbench
+                cosbench_version = 'cosbench-0.4.2.c3.1'
+                # contains additonal parameter "-N" to nc
+                cosbench_location = 'http://drop.ceph.com/qa/cosbench-0.4.2.c3.1.zip'
+                cosbench_dir = os.path.join(testdir, cosbench_version)
+                self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', cosbench_dir])
+                self.first_mon.run(
+                    args=[
+                        'cd', testdir, run.Raw('&&'),
+                        'wget',
+                        cosbench_location, run.Raw('&&'),
+                        'unzip', '{name}.zip'.format(name=cosbench_version), '-d', cosbench_version
+                    ]
+                )
+            else:
+                self.first_mon.run(
+                    args=[
+                        'cd', testdir, run.Raw('&&'),
+                        'wget',
+                        cosbench_location, run.Raw('&&'),
+                        'unzip', '{name}.zip'.format(name=cosbench_version)
+                    ]
+                )
             self.first_mon.run(
                 args=[
                     'cd', testdir, run.Raw('&&'),
@@ -213,6 +235,11 @@ class CBT(Task):
             )
 
         if benchmark_type == 'cosbench':
+            os_version = misc.get_system_type(self.first_mon, False, True)
+            if os_version == '18.04':
+                cosbench_version = 'cosbench-0.4.2.c3.1'
+            else:
+                cosbench_version = '0.4.2.c3'
             self.first_mon.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
@@ -222,13 +249,13 @@ class CBT(Task):
             self.first_mon.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
-                    '{tdir}/0.4.2.c3'.format(tdir=testdir),
+                    '{tdir}/{version}'.format(tdir=testdir, version=cosbench_version),
                 ]
             )
             self.first_mon.run(
                 args=[
                     'rm', '--one-file-system', '-rf', '--',
-                    '{tdir}/0.4.2.c3.zip'.format(tdir=testdir),
+                    '{tdir}/{version}.zip'.format(tdir=testdir, version=cosbench_version),
                 ]
             )
             self.first_mon.run(
