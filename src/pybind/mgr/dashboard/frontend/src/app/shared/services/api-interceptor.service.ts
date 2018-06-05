@@ -16,8 +16,11 @@ import { NotificationType } from '../enum/notification-type.enum';
 import { FinishedTask } from '../models/finished-task';
 import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
+import { ServicesModule } from './services.module';
 
-@Injectable()
+@Injectable({
+  providedIn: ServicesModule
+})
 export class ApiInterceptorService implements HttpInterceptor {
   constructor(
     private router: Router,

@@ -4,7 +4,11 @@ import { Injectable } from '@angular/core';
 import { of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
-@Injectable()
+import { ApiModule } from './api.module';
+
+@Injectable({
+  providedIn: ApiModule
+})
 export class PerformanceCounterService {
   private url = 'api/perf_counters';
 
