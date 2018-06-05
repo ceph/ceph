@@ -355,6 +355,19 @@ static DaemonKey key_from_service(
   }
 }
 
+static bool key_from_string(
+  const std::string& name,
+  DaemonKey *out)
+{
+  auto p = name.find('.');
+  if (p == std::string::npos) {
+    return false;
+  }
+  out->first = name.substr(0, p);
+  out->second = name.substr(p + 1);
+  return true;
+}
+
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
   Mutex::Locker l(lock);
@@ -1643,6 +1656,108 @@ bool DaemonServer::handle_command(MCommand *m)
 	f->flush(cmdctx->odata);
       } else {
 	cmdctx->odata.append(stringify(tbl));
+      }
+    }
+    cmdctx->reply(r, ss);
+    return true;
+  } else if (prefix == "device ls") {
+    set<string> devids;
+    if (f) {
+      f->open_array_section("devices");
+      daemon_state.with_devices([&f](const DeviceState& dev) {
+	  f->dump_string("device", dev.devid);
+	});
+      f->close_section();
+      f->flush(cmdctx->odata);
+    } else {
+      ostringstream rs;
+      daemon_state.with_devices([&rs](const DeviceState& dev) {
+	  rs << dev.devid << "\n";
+	});
+      cmdctx->odata.append(rs.str());
+    }
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "device ls-by-daemon") {
+    string who;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
+    DaemonKey k;
+    if (!key_from_string(who, &k)) {
+      ss << who << " is not a valid daemon name";
+      r = -EINVAL;
+    } else {
+      auto dm = daemon_state.get(k);
+      if (dm) {
+	if (f) {
+	  f->open_array_section("devices");
+	  for (auto& i : dm->devids) {
+	    f->dump_string("device", i);
+	  }
+	  f->close_section();
+	  f->flush(cmdctx->odata);
+	} else {
+	  ostringstream rs;
+	  for (auto& i : dm->devids) {
+	    rs << i << "\n";
+	  }
+	  cmdctx->odata.append(rs.str());
+	}
+      } else {
+	r = -ENOENT;
+	ss << "daemon " << who << " not found";
+      }
+      cmdctx->reply(r, ss);
+    }
+  } else if (prefix == "device ls-by-host") {
+    string host;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "host", host);
+    set<string> devids;
+    daemon_state.list_devids_by_server(host, &devids);
+    if (f) {
+      f->open_array_section("devices");
+      for (auto& i : devids) {
+	f->dump_string("device", i);
+      }
+      f->close_section();
+      f->flush(cmdctx->odata);
+    } else {
+      ostringstream rs;
+      for (auto& i : devids) {
+	rs << i << "\n";
+      }
+      cmdctx->odata.append(rs.str());
+    }
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "device info") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    int r = 0;
+    ostringstream rs;
+    if (!daemon_state.with_device(devid, [&f, &rs] (const DeviceState& dev) {
+	  if (f) {
+	    f->open_object_section("device");
+	    f->dump_string("devid", dev.devid);
+	    f->dump_string("host", dev.server);
+	    f->open_array_section("daemons");
+	    for (auto& i : dev.daemons) {
+	      f->dump_string("daemon", to_string(i));
+	    }
+	    f->close_section();
+	    f->close_section();
+	  } else {
+	    rs << "device " << dev.devid << "\n";
+	    rs << "host " << dev.server << "\n";
+	    rs << "daemons " << dev.daemons << "\n";
+	  }
+	})) {
+      ss << "device " << devid << " not found";
+      r = -ENOENT;
+    } else {
+      if (f) {
+	f->flush(cmdctx->odata);
+      } else {
+	cmdctx->odata.append(rs.str());
       }
     }
     cmdctx->reply(r, ss);

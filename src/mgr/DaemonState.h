@@ -253,6 +253,36 @@ public:
     return std::forward<Callback>(cb)(by_server, std::forward<Args>(args)...);
   }
 
+  template<typename Callback, typename...Args>
+  auto with_device(const std::string& dev,
+		   Callback&& cb, Args&&... args) const {
+    RWLock::RLocker l(lock);
+    auto p = devices.find(dev);
+    if (p == devices.end()) {
+      return false;
+    }
+    std::forward<Callback>(cb)(*p->second, std::forward<Args>(args)...);
+    return true;
+  }
+
+  template<typename Callback, typename...Args>
+  void with_devices(Callback&& cb, Args&&... args) const {
+    RWLock::RLocker l(lock);
+    for (auto& i : devices) {
+      std::forward<Callback>(cb)(*i.second, std::forward<Args>(args)...);
+    }
+  }
+
+  void list_devids_by_server(const std::string& server,
+			     std::set<std::string> *ls) {
+    auto m = get_by_server(server);
+    for (auto& i : m) {
+      Mutex::Locker l(i.second->lock);
+      ls->insert(i.second->devids.begin(),
+		 i.second->devids.end());
+    }
+  }
+
   void notify_updating(const DaemonKey &k) {
     RWLock::WLocker l(lock);
     updating.insert(k);
