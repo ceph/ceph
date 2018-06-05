@@ -435,6 +435,16 @@ public:
 
     return 0;
   }
+
+  bool parse(const string& s) {
+    uint64_t epoch, nsec;
+    int r = parse_date(s, &epoch, &nsec);
+    if (r < 0) {
+      return false;
+    }
+    *this = utime_t(epoch, nsec);
+    return true;
+  }
 };
 WRITE_CLASS_ENCODER(utime_t)
 WRITE_CLASS_DENC(utime_t)
