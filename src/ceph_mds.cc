@@ -131,7 +131,8 @@ int main(int argc, const char **argv)
 
   Preforker forker;
 
-  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
+  entity_addrvec_t addrs;
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &addrs);
 
   // Normal startup
   if (g_conf->name.has_default_id()) {
@@ -188,7 +189,7 @@ int main(int argc, const char **argv)
   msgr->set_policy(entity_name_t::TYPE_CLIENT,
                    Messenger::Policy::stateful_server(0));
 
-  int r = msgr->bind(g_conf->public_addr);
+  int r = msgr->bindv(addrs);
   if (r < 0)
     forker.exit(1);
 
