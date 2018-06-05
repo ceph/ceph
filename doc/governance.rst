@@ -40,7 +40,7 @@ although voting may be used if necessary.
 
 The CLT meets weekly via video chat to discuss any pending issues or
 decisions.  Minutes for the CLT meetings are published at
-`http://pad.ceph.com/p/clt-weekly-minutes`_.
+`https://pad.ceph.com/p/clt-weekly-minutes <https://pad.ceph.com/p/clt-weekly-minutes>`_.
 
 Committers are added to or removed from the CLT at the discretion of
 the CLT itself.
