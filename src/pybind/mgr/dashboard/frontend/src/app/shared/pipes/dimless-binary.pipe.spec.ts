@@ -11,46 +11,46 @@ describe('DimlessBinaryPipe', () => {
 
   it('transforms 1024^0', () => {
     const value = Math.pow(1024, 0);
-    expect(pipe.transform(value)).toBe('1B');
+    expect(pipe.transform(value)).toBe('1 B');
   });
 
   it('transforms 1024^1', () => {
     const value = Math.pow(1024, 1);
-    expect(pipe.transform(value)).toBe('1KiB');
+    expect(pipe.transform(value)).toBe('1 KiB');
   });
 
   it('transforms 1024^2', () => {
     const value = Math.pow(1024, 2);
-    expect(pipe.transform(value)).toBe('1MiB');
+    expect(pipe.transform(value)).toBe('1 MiB');
   });
 
   it('transforms 1024^3', () => {
     const value = Math.pow(1024, 3);
-    expect(pipe.transform(value)).toBe('1GiB');
+    expect(pipe.transform(value)).toBe('1 GiB');
   });
 
   it('transforms 1024^4', () => {
     const value = Math.pow(1024, 4);
-    expect(pipe.transform(value)).toBe('1TiB');
+    expect(pipe.transform(value)).toBe('1 TiB');
   });
 
   it('transforms 1024^5', () => {
     const value = Math.pow(1024, 5);
-    expect(pipe.transform(value)).toBe('1PiB');
+    expect(pipe.transform(value)).toBe('1 PiB');
   });
 
   it('transforms 1024^6', () => {
     const value = Math.pow(1024, 6);
-    expect(pipe.transform(value)).toBe('1EiB');
+    expect(pipe.transform(value)).toBe('1 EiB');
   });
 
   it('transforms 1024^7', () => {
     const value = Math.pow(1024, 7);
-    expect(pipe.transform(value)).toBe('1ZiB');
+    expect(pipe.transform(value)).toBe('1 ZiB');
   });
 
   it('transforms 1024^8', () => {
     const value = Math.pow(1024, 8);
-    expect(pipe.transform(value)).toBe('1YiB');
+    expect(pipe.transform(value)).toBe('1 YiB');
   });
 });
