@@ -13,4 +13,4 @@ overrides:
 tasks:
 - thrashosds:
     timeout: 1200
-    default_thrasher: False
+    chance_test_min_size: 3 

@@ -111,7 +111,6 @@ class Thrasher:
         self.stopping = False
         self.logger = logger
         self.config = config
-        self.default_thrasher = self.config.get("default_thrasher", True)
         self.revive_timeout = self.config.get("revive_timeout", 360)
         self.pools_to_fix_pgp_num = set()
         if self.config.get('powercycle'):
@@ -173,10 +172,7 @@ class Thrasher:
             self.ceph_objectstore_tool = \
                 self.config.get('ceph_objectstore_tool', True)
         # spawn do_thrash
-        if self.default_thrasher:
-            self.thread = gevent.spawn(self.do_thrash)
-        else:
-            self.thread = gevent.spawn(self.do_minsize_thrash)
+        self.thread = gevent.spawn(self.do_thrash)
         if self.sighup_delay:
             self.sighup_thread = gevent.spawn(self.do_sighup)
         if self.optrack_toggle_delay:
@@ -683,27 +679,97 @@ class Thrasher:
 
     def test_pool_min_size(self):
         """
-        Kill and revive all osds except one.
+        Loop to selectively push PGs below their min_size and test that recovery
+        still occurs.
         """
         self.log("test_pool_min_size")
         self.all_up()
         self.ceph_manager.wait_for_recovery(
             timeout=self.config.get('timeout')
             )
-        the_one = random.choice(self.in_osds)
-        self.log("Killing everyone but %s", the_one)
-        to_kill = filter(lambda x: x != the_one, self.in_osds)
-        [self.kill_osd(i) for i in to_kill]
-        [self.out_osd(i) for i in to_kill]
-        time.sleep(self.config.get("test_pool_min_size_time", 10))
-        self.log("Killing %s" % (the_one,))
-        self.kill_osd(the_one)
-        self.out_osd(the_one)
-        self.log("Reviving everyone but %s" % (the_one,))
-        [self.revive_osd(i) for i in to_kill]
-        [self.in_osd(i) for i in to_kill]
-        self.log("Revived everyone but %s" % (the_one,))
-        self.log("Waiting for clean")
+
+        minout = int(self.config.get("min_out", 1))
+        minlive = int(self.config.get("min_live", 2))
+        mindead = int(self.config.get("min_dead", 1))
+        self.log("doing min_size thrashing")
+        assert self.ceph_manager.is_clean(), \
+            'not clean before minsize thrashing starts'
+        while not self.stopping:
+            # look up k and m from all the pools on each loop, in case it
+            # changes as the cluster runs
+            k = 0
+            m = 99
+            has_pools = False
+            pools_json = self.ceph_manager.get_osd_dump_json()['pools']
+
+            for pool_json in pools_json:
+                pool = pool_json['pool_name']
+                has_pools = True
+                pool_type = pool_json['type']  # 1 for rep, 3 for ec
+                min_size = pool_json['min_size']
+                self.log("pool {pool} min_size is {min_size}".format(pool=pool,min_size=min_size))
+                ec_profile = self.ceph_manager.get_pool_property(pool, "erasure_code_profile")
+                if pool_type == 3:
+                    ec_profile = pool_json['erasure_code_profile']
+                    ec_profile_json = self.ceph_manager.raw_cluster_cmd(
+                        'osd',
+                        'erasure-code-profile',
+                        'get',
+                        ec_profile,
+                        '--format=json')
+                    ec_json = json.loads(ec_profile_json)
+                    local_k = int(ec_json['k'])
+                    local_m = int(ec_json['m'])
+                    self.log("pool {pool} local_k={k} local_m={m}".format(pool=pool,
+                                                                      k=local_k, m=local_m))
+                    if local_k > k:
+                        self.log("setting k={local_k} from previous {k}".format(local_k=local_k, k=k))
+                        k = local_k
+                    if local_m < m:
+                        self.log("setting m={local_m} from previous {m}".format(local_m=local_m, m=m))
+                        m = local_m
+
+            if has_pools :
+                self.log("using k={k}, m={m}".format(k=k,m=m))
+            else:
+                self.log("No pools yet, waiting")
+                time.sleep(5)
+                continue
+                
+            if minout > len(self.out_osds): # kill OSDs and mark out
+                self.log("forced to out an osd")
+                self.kill_osd(mark_out=True)
+                continue
+            elif mindead > len(self.dead_osds): # kill OSDs but force timeout
+                self.log("forced to kill an osd")
+                self.kill_osd()
+                continue
+            else: # make mostly-random choice to kill or revive OSDs
+                minup = max(minlive, k)
+                rand_val = random.uniform(0, 1)
+                self.log("choosing based on number of live OSDs and rand val {rand}".\
+                         format(rand=rand_val))
+                if len(self.live_osds) > minup+1 and rand_val < 0.5:
+                    # chose to knock out as many OSDs as we can w/out downing PGs
+                    
+                    most_killable = min(len(self.live_osds) - minup, m)
+                    self.log("chose to kill {n} OSDs".format(n=most_killable))
+                    for i in range(1, most_killable):
+                        self.kill_osd(mark_out=True)
+                    time.sleep(5)
+                    assert self.ceph_manager.all_active_or_peered(), \
+                            'not all PGs are active or peered 5 seconds after marking out OSDs'
+                else: # chose to revive OSDs, bring up a random fraction of the dead ones
+                    self.log("chose to revive osds")
+                    for i in range(1, int(rand_val * len(self.dead_osds))):
+                        revive_osd()
+
+            # let PGs repair themselves or our next knockout might kill one
+            self.ceph_manager.wait_for_clean(timeout=self.config.get('timeout'))
+ 
+        # / while not self.stopping
+        self.all_up_in()
+ 
         self.ceph_manager.wait_for_recovery(
             timeout=self.config.get('timeout')
             )
@@ -817,9 +883,9 @@ class Thrasher:
         if isinstance(chance_down, int):
             chance_down = float(chance_down) / 100
         minin = self.minin
-        minout = self.config.get("min_out", 0)
-        minlive = self.config.get("min_live", 2)
-        mindead = self.config.get("min_dead", 0)
+        minout = int(self.config.get("min_out", 0))
+        minlive = int(self.config.get("min_live", 2))
+        mindead = int(self.config.get("min_dead", 0))
 
         self.log('choose_action: min_in %d min_out '
                  '%d min_live %d min_dead %d' %
@@ -844,7 +910,7 @@ class Thrasher:
         actions.append((self.fix_pgp_num,
                         self.config.get('chance_pgpnum_fix', 0),))
         actions.append((self.test_pool_min_size,
-                        chance_test_min_size,))
+                        self.config.get('chance_test_min_size', 0),))
         actions.append((self.test_backfill_full,
                         chance_test_backfill_full,))
         if self.chance_thrash_cluster_full > 0:
@@ -1031,89 +1097,6 @@ class Thrasher:
         self.saved_options = []
         self.all_up_in()
 
-
-    @log_exc
-    def do_minsize_thrash(self):
-        """
-        Loop to selectively push PGs below their min_size and test that recovery
-        still occurs.
-        """
-        minout = int(self.config.get("min_out", 1))
-        minlive = int(self.config.get("min_live", 2))
-        mindead = int(self.config.get("min_dead", 1))
-        self.log("doing min_size thrashing")
-        assert self.ceph_manager.is_clean(), \
-            'not clean before minsize thrashing starts'
-        while not self.stopping:
-            # look up k and m from all the pools on each loop, in case it
-            # changes as the cluster runs
-            k = 0
-            m = 99
-            has_pools = False
-            for pool in self.ceph_manager.list_pools():
-                has_pools = True
-                min_size = self.ceph_manager.get_pool_int_property(pool, "min_size")
-                self.log("pool {pool} min_size is {min_size}".format(pool=pool,min_size=min_size))
-                ec_profile = self.ceph_manager.get_pool_property(pool, "erasure_code_profile")
-                ec_profile_json = self.ceph_manager.raw_cluster_cmd(
-                    'osd',
-                    'erasure-code-profile',
-                    'get',
-                    ec_profile,
-                    '--format=json')
-                ec_json = json.loads(ec_profile_json)
-                local_k = ec_json['k']
-                local_m = ec_json['m']
-                self.log("pool {pool} local_k={k} local_m={m}".format(pool=pool,
-                                                                      k=local_k, m=local_m))
-                if local_k > k:
-                    self.log("setting k={local_k} from previous {k}".format(local_k=local_k, k=k))
-                    k = local_k
-                if local_m < m:
-                    self.log("setting m={local_m} from previous {m}".format(local_m=local_m, m=m))
-                    m = local_m
-
-            if has_pools :
-                self.log("using k={k}, m={m}".format(k=k,m=m))
-            else:
-                self.log("No pools yet, waiting")
-                time.sleep(5)
-                continue
-                
-            if minout > len(self.out_osds): # kill OSDs and mark out
-                self.log("forced to out an osd")
-                self.kill_osd(mark_out=True)
-                continue
-            elif mindead > len(self.dead_osds): # kill OSDs but force timeout
-                self.log("forced to kill an osd")
-                self.kill_osd()
-                continue
-            else: # make mostly-random choice to kill or revive OSDs
-                minup = max(minlive, k)
-                rand_val = random.uniform(0, 1)
-                self.log("choosing based on number of live OSDs and rand val {rand}".\
-                         format(rand=rand_val))
-                if (len(self.live_osds) > minup+1 and rand_val < 0.5):
-                    # chose to knock out as many OSDs as we can w/out downing PGs
-                    
-                    most_killable = min(len(self.live_osds) - minup, m)
-                    self.log("chose to kill {n} OSDs".format(n=most_killable))
-                    for i in range(1, most_killable):
-                        self.kill_osd(mark_out=True)
-                    time.sleep(5)
-                    assert self.ceph_manager.all_active_or_peered(), \
-                            'not all PGs are active or peered 5 seconds after marking out OSDs'
-                else: # chose to revive OSDs, bring up a random fraction of the dead ones
-                    self.log("chose to revive osds")
-                    for i in range(1, int(rand_val * len(self.dead_osds))):
-                        revive_osd()
-
-            # let PGs repair themselves or our next knockout might kill one
-            self.ceph_manager.wait_for_clean(timeout=self.config.get('timeout'))
-        # / while not self.stopping
-        
-        self.all_up_in()
-            
 
 class ObjectStoreTool:
 
