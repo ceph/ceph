@@ -1858,7 +1858,6 @@ protected:
 
     /// requeue an old item (at the front of the line)
     void _enqueue_front(OpQueueItem&& item) override;
-      
 
     void set_suspend(bool sus) {
       bool need_sig = false;
@@ -1869,11 +1868,13 @@ protected:
 	  need_sig = true;
 
 	suspended = sus;
-	for(uint32_t i = 0; i < num_shards; i++) {
-	  ShardData* sdata = shard_list[i];
+#if 0
+	for(uint32_t i = 0; i < osd->num_shards; i++) {
+	  OSDShard* sdata = osd->shards[i];
 	  assert (NULL != sdata); 
 	  sdata->pqueue->set_suspend(sus);
         }
+#endif
       }
 
       if (need_sig)

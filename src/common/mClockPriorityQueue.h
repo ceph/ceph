@@ -311,9 +311,12 @@ namespace ceph {
       queue.add_request(std::move(item), cl, cost);
     }
 
+#if 0
     void set_suspend(bool sus) {
       queue.set_suspend(sus);
     }
+#endif
+
     void enqueue_front(K cl,
 		       unsigned priority,
 		       unsigned cost,
