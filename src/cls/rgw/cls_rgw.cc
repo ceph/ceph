@@ -317,12 +317,20 @@ static void split_key(const string& key, list<string>& vals)
   }
 }
 
+static string escape_str(const string& s)
+{
+  int len = escape_json_attr_len(s.c_str(), s.size());
+  std::string escaped(len, 0);
+  escape_json_attr(s.c_str(), s.size(), escaped.data());
+  return escaped;
+}
+
 /*
  * list index key structure:
  *
  * <obj name>\0[v<ver>\0i<instance id>]
  */
-static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, uint64_t *ver)
+static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, uint64_t *ver)
 {
   size_t len = strlen(index_key.c_str());
 
@@ -331,19 +339,25 @@ static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key,
 
   if (len == index_key.size()) {
     key->name = index_key;
-    return;
+    return 0;
   }
 
   list<string> vals;
   split_key(index_key, vals);
 
-  assert(!vals.empty());
+  if (vals.empty()) {
+    CLS_LOG(0, "ERROR: %s(): bad index_key (%s): split_key() returned empty vals", __func__, escape_str(index_key).c_str());
+    return -EIO;
+  }
 
   list<string>::iterator iter = vals.begin();
   key->name = *iter;
   ++iter;
 
-  assert(iter != vals.end());
+  if (iter == vals.end()) {
+    CLS_LOG(0, "ERROR: %s(): bad index_key (%s): no vals", __func__, escape_str(index_key).c_str());
+    return -EIO;
+  }
 
   for (; iter != vals.end(); ++iter) {
     string& val = *iter;
@@ -353,9 +367,14 @@ static void decode_list_index_key(const string& index_key, cls_rgw_obj_key *key,
       string err;
       const char *s = val.c_str() + 1;
       *ver = strict_strtoll(s, 10, &err);
-      assert(err.empty());
+      if (!err.empty()) {
+        CLS_LOG(0, "ERROR: %s(): bad index_key (%s): could not parse val (v=%s)", __func__, escape_str(index_key).c_str(), s);
+        return -EIO;
+      }
     }
   }
+
+  return 0;
 }
 
 static int read_bucket_header(cls_method_context_t hctx, struct rgw_bucket_dir_header *header)
@@ -436,10 +455,15 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
       cls_rgw_obj_key key;
       uint64_t ver;
-      decode_list_index_key(kiter->first, &key, &ver);
 
       start_key = kiter->first;
       CLS_LOG(20, "start_key=%s len=%zu", start_key.c_str(), start_key.size());
+
+      int ret = decode_list_index_key(kiter->first, &key, &ver);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: failed to decode list index key (%s)\n", escape_str(kiter->first).c_str());
+        continue;
+      }
 
       if (!entry.is_valid()) {
         CLS_LOG(20, "entry %s[%s] is not valid\n", key.name.c_str(), key.instance.c_str());
