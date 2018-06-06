@@ -134,6 +134,8 @@ RGWSyncTraceManager::~RGWSyncTraceManager()
 
   service_map_thread->stop();
   delete service_map_thread;
+
+  nodes.clear();
 }
 
 int RGWSyncTraceManager::hook_to_admin_command()
