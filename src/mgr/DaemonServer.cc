@@ -1686,15 +1686,15 @@ bool DaemonServer::handle_command(MCommand *m)
       if (dm) {
 	if (f) {
 	  f->open_array_section("devices");
-	  for (auto& i : dm->devids) {
-	    f->dump_string("device", i);
+	  for (auto& i : dm->devices) {
+	    f->dump_string("device", i.first);
 	  }
 	  f->close_section();
 	  f->flush(cmdctx->odata);
 	} else {
 	  ostringstream rs;
-	  for (auto& i : dm->devids) {
-	    rs << i << "\n";
+	  for (auto& i : dm->devices) {
+	    rs << i.first << "\n";
 	  }
 	  cmdctx->odata.append(rs.str());
 	}
