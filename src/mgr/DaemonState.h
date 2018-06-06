@@ -129,8 +129,8 @@ class DaemonState
   // The metadata (hostname, version, etc) sent from the daemon
   std::map<std::string, std::string> metadata;
 
-  /// device ids, derived from metadata[device_ids]
-  std::set<std::string> devids;
+  /// device ids -> devname, derived from metadata[device_ids]
+  std::map<std::string,std::string> devices;
 
   // TODO: this can be generalized to other daemons
   std::vector<DaemonHealthMetric> daemon_health_metrics;
@@ -166,7 +166,7 @@ class DaemonState
       map<std::string,std::string> devs;
       get_str_map(p->second, &devs, ",; ");
       for (auto& i : devs) {
-	devids.insert(i.second);
+	devices[i.second] = i.first;
       }
     }
   }
@@ -191,7 +191,7 @@ typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
 struct DeviceState : public RefCountedObject
 {
   std::string devid;
-  std::string server;
+  std::set<pair<std::string,std::string>> devnames; ///< (server,devname)
   std::set<DaemonKey> daemons;
 
   std::map<string,string> metadata;  ///< persistent metadata
@@ -322,8 +322,9 @@ public:
     auto m = get_by_server(server);
     for (auto& i : m) {
       Mutex::Locker l(i.second->lock);
-      ls->insert(i.second->devids.begin(),
-		 i.second->devids.end());
+      for (auto& j : i.second->devices) {
+	ls->insert(j.first);
+      }
     }
   }
 
