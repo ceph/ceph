@@ -100,9 +100,8 @@ Where:
 
 :Type: String
 :Required: No.
-:Default:
 
- ``directory={directory}``
+``directory={directory}``
 
 :Description: Set the **directory** name from which the erasure code
               plugin is loaded.
