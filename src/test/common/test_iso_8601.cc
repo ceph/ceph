@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2017 Red Hat <contact@redhat.com>
  *
- * LGPL2.1 (see COPYING-LGPL2.1) or later
+ * LGPL-2.1 (see COPYING-LGPL2.1) or later
  */
 
 #include <chrono>

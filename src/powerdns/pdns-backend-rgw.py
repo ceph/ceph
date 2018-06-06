@@ -47,7 +47,7 @@ Should return something like:
 '''
 
 # Copyright: Wido den Hollander <wido@42on.com> 2014
-# License:   LGPL2.1
+# License:   LGPL-2.1 or LGPL-3.0
 
 from ConfigParser import SafeConfigParser, NoSectionError
 from flask import abort, Flask, request, Response

@@ -78,9 +78,9 @@ Licensing
 
 Ceph is free software.
 
-Unless stated otherwise, the Ceph source code is distributed under the terms of
-the LGPL2.1. For full details, see the file `COPYING`_ in the top-level
-directory of the source-code tree.
+Unless stated otherwise, the Ceph source code is distributed under the
+terms of the LGPL2.1 or LGPL3.0. For full details, see the file
+`COPYING`_ in the top-level directory of the source-code tree.
 
 .. _`COPYING`:
   https://github.com/ceph/ceph/blob/master/COPYING

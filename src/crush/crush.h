@@ -17,7 +17,7 @@
  *
  *     http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
  *
- * LGPL2.1
+ * LGPL-2.1 or LGPL-3.0
  */
 
 
