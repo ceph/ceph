@@ -16,6 +16,11 @@ class TestVolumeClient(CephFSTestCase):
     CLIENTS_REQUIRED = 4
     py_version = 'python'
 
+    def setUp(self):
+        CephFSTestCase.setUp(self)
+        self.py_version = self.ctx.config.get('overrides', {}).get('python', 'python')
+        log.info("using python version: %s".format(self.py_version))
+
     def _volume_client_python(self, client, script, vol_prefix=None, ns_prefix=None):
         # Can't dedent this *and* the script we pass in, because they might have different
         # levels of indentation to begin with, so leave this string zero-indented
