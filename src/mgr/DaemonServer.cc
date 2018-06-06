@@ -1658,19 +1658,41 @@ bool DaemonServer::handle_command(MCommand *m)
     return true;
   } else if (prefix == "device ls") {
     set<string> devids;
+    TextTable tbl;
     if (f) {
       f->open_array_section("devices");
       daemon_state.with_devices([&f](const DeviceState& dev) {
-	  f->dump_string("device", dev.devid);
+	  f->dump_object("device", dev);
 	});
       f->close_section();
       f->flush(cmdctx->odata);
     } else {
-      ostringstream rs;
-      daemon_state.with_devices([&rs](const DeviceState& dev) {
-	  rs << dev.devid << "\n";
+      tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DAEMONS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("EXPECTED FAILURE", TextTable::LEFT, TextTable::LEFT);
+      daemon_state.with_devices([&tbl](const DeviceState& dev) {
+	  string h;
+	  for (auto& i : dev.devnames) {
+	    if (h.size()) {
+	      h += " ";
+	    }
+	    h += i.first + ":" + i.second;
+	  }
+	  string d;
+	  for (auto& i : dev.daemons) {
+	    if (d.size()) {
+	      d += " ";
+	    }
+	    d += to_string(i);
+	  }
+	  tbl << dev.devid
+	      << h
+	      << d
+	      << stringify(dev.expected_failure)
+	      << TextTable::endrow;
 	});
-      cmdctx->odata.append(rs.str());
+      cmdctx->odata.append(stringify(tbl));
     }
     cmdctx->reply(0, ss);
     return true;
@@ -1687,16 +1709,34 @@ bool DaemonServer::handle_command(MCommand *m)
 	if (f) {
 	  f->open_array_section("devices");
 	  for (auto& i : dm->devices) {
-	    f->dump_string("device", i.first);
+	    daemon_state.with_device(i.first, [&f] (const DeviceState& dev) {
+		f->dump_object("device", dev);
+	      });
 	  }
 	  f->close_section();
 	  f->flush(cmdctx->odata);
 	} else {
-	  ostringstream rs;
+	  TextTable tbl;
+	  tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+	  tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
+	  tbl.define_column("EXPECTED FAILURE", TextTable::LEFT,
+			    TextTable::LEFT);
 	  for (auto& i : dm->devices) {
-	    rs << i.first << "\n";
+	    daemon_state.with_device(i.first, [&tbl] (const DeviceState& dev) {
+		string h;
+		for (auto& i : dev.devnames) {
+		  if (h.size()) {
+		    h += " ";
+		  }
+		  h += i.first + ":" + i.second;
+		}
+		tbl << dev.devid
+		    << h
+		    << stringify(dev.expected_failure)
+		    << TextTable::endrow;
+	      });
 	  }
-	  cmdctx->odata.append(rs.str());
+	  cmdctx->odata.append(stringify(tbl));
 	}
       } else {
 	r = -ENOENT;
@@ -1711,17 +1751,47 @@ bool DaemonServer::handle_command(MCommand *m)
     daemon_state.list_devids_by_server(host, &devids);
     if (f) {
       f->open_array_section("devices");
-      for (auto& i : devids) {
-	f->dump_string("device", i);
+      for (auto& devid : devids) {
+	daemon_state.with_device(
+	  devid, [&f, &host] (const DeviceState& dev) {
+	    f->dump_object("device", dev);
+	  });
       }
       f->close_section();
       f->flush(cmdctx->odata);
     } else {
-      ostringstream rs;
-      for (auto& i : devids) {
-	rs << i << "\n";
+      TextTable tbl;
+      tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DEV", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DAEMONS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("EXPECTED FAILURE", TextTable::LEFT, TextTable::LEFT);
+      for (auto& devid : devids) {
+	daemon_state.with_device(
+	  devid, [&tbl, &host] (const DeviceState& dev) {
+	    string n;
+	    for (auto& j : dev.devnames) {
+	      if (j.first == host) {
+		if (n.size()) {
+		  n += " ";
+		}
+		n += j.second;
+	      }
+	    }
+	    string d;
+	    for (auto& i : dev.daemons) {
+	      if (d.size()) {
+		d += " ";
+	      }
+	      d += to_string(i);
+	    }
+	    tbl << dev.devid
+		<< n
+		<< d
+		<< stringify(dev.expected_failure)
+		<< TextTable::endrow;
+	  });
       }
-      cmdctx->odata.append(rs.str());
+      cmdctx->odata.append(stringify(tbl));
     }
     cmdctx->reply(0, ss);
     return true;
