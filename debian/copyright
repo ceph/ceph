@@ -5,7 +5,7 @@ Source: http://ceph.com/
 
 Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
-License: LGPL-2.1 (see COPYING-LGPL2.1)
+License: LGPL-2.1 or LGPL-3 (see COPYING-LGPL2.1 and COPYING-LGPL3)
 
 Files: cmake/modules/FindLTTngUST.cmake
 Copyright:
@@ -158,7 +158,7 @@ License:
 Packaging:
     Copyright (C) 2004-2009 by Sage Weil <sage@newdream.net>
     Copyright (C) 2010 Canonical, Ltd.
-    Licensed under LGPL-2.1
+    Licensed under LGPL-2.1 or LGPL-3.0
 
 Files: src/test/perf_local.cc
 Copyright:
