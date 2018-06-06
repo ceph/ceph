@@ -166,7 +166,9 @@ class DaemonState
       map<std::string,std::string> devs;
       get_str_map(p->second, &devs, ",; ");
       for (auto& i : devs) {
-	devices[i.second] = i.first;
+	if (i.second.size()) {  // skip blank ids
+	  devices[i.second] = i.first;
+	}
       }
     }
   }
