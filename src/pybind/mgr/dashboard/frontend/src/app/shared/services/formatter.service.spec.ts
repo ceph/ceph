@@ -36,22 +36,22 @@ describe('FormatterService', () => {
     });
 
     it('should test some values', () => {
-      expect(service.format_number('0', 1024, formats)).toBe('0B');
-      expect(service.format_number('0.1', 1024, formats)).toBe('0.1B');
-      expect(service.format_number('1.2', 1024, formats)).toBe('1.2B');
-      expect(service.format_number('1', 1024, formats)).toBe('1B');
-      expect(service.format_number('1024', 1024, formats)).toBe('1KiB');
-      expect(service.format_number(23.45678 * Math.pow(1024, 3), 1024, formats)).toBe('23.5GiB');
+      expect(service.format_number('0', 1024, formats)).toBe('0 B');
+      expect(service.format_number('0.1', 1024, formats)).toBe('0.1 B');
+      expect(service.format_number('1.2', 1024, formats)).toBe('1.2 B');
+      expect(service.format_number('1', 1024, formats)).toBe('1 B');
+      expect(service.format_number('1024', 1024, formats)).toBe('1 KiB');
+      expect(service.format_number(23.45678 * Math.pow(1024, 3), 1024, formats)).toBe('23.5 GiB');
       expect(service.format_number(23.45678 * Math.pow(1024, 3), 1024, formats, 2)).toBe(
-        '23.46GiB'
+        '23.46 GiB'
       );
     });
 
     it('should test some dimless values', () => {
       expect(dimlessPipe.transform(0.6)).toBe('0.6');
-      expect(dimlessPipe.transform(1000.608)).toBe('1k');
-      expect(dimlessPipe.transform(1e10)).toBe('10G');
-      expect(dimlessPipe.transform(2.37e16)).toBe('23.7P');
+      expect(dimlessPipe.transform(1000.608)).toBe('1 k');
+      expect(dimlessPipe.transform(1e10)).toBe('10 G');
+      expect(dimlessPipe.transform(2.37e16)).toBe('23.7 P');
     });
   });
 
@@ -77,10 +77,10 @@ describe('FormatterService', () => {
     });
 
     it('should convert values to human readable again', () => {
-      convertToBytesAndBack('1.1MiB');
-      convertToBytesAndBack('1.0MiB', '1MiB');
-      convertToBytesAndBack('8.9GiB');
-      convertToBytesAndBack('123.5EiB');
+      convertToBytesAndBack('1.1 MiB');
+      convertToBytesAndBack('1.0MiB', '1 MiB');
+      convertToBytesAndBack('8.9 GiB');
+      convertToBytesAndBack('123.5 EiB');
     });
   });
 });
