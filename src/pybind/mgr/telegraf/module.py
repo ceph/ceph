@@ -127,6 +127,32 @@ class Module(MgrModule):
 
         return data
 
+    def get_pg_stats(self):
+        stats = dict()
+
+        pg_status = self.get('pg_status')
+        for key in ['bytes_total', 'data_bytes', 'bytes_used', 'bytes_avail',
+                    'num_pgs', 'num_objects', 'num_pools']:
+            stats[key] = pg_status[key]
+
+        pg_states = ['active', 'peering', 'clean', 'scrubbing', 'undersized',
+                     'backfilling', 'recovering', 'degraded', 'inconsistent',
+                     'remapped', 'backfill_toofull', 'wait_backfill',
+                     'recovery_wait']
+
+        for state in pg_states:
+            stats['num_pgs_{0}'.format(state)] = 0
+
+        stats['num_pgs'] = pg_status['num_pgs']
+        for state in pg_status['pgs_by_state']:
+            states = state['state_name'].split('+')
+            for s in pg_states:
+                key = 'num_pgs_{0}'.format(s)
+                if s in states:
+                    stats[key] += state['count']
+
+        return stats
+
     def get_cluster_stats(self):
         stats = dict()
 
@@ -174,29 +200,7 @@ class Module(MgrModule):
         stats['num_mds_up'] = num_mds_up
         stats['num_mds'] = num_mds_up + stats['num_mds_standby']
 
-        pg_status = self.get('pg_status')
-        for key in ['bytes_total', 'data_bytes', 'bytes_used', 'bytes_avail',
-                    'num_pgs', 'num_objects', 'num_pools']:
-            stats[key] = pg_status[key]
-
-        stats['num_pgs_active'] = 0
-        stats['num_pgs_clean'] = 0
-        stats['num_pgs_scrubbing'] = 0
-        stats['num_pgs_peering'] = 0
-        for state in pg_status['pgs_by_state']:
-            states = state['state_name'].split('+')
-
-            if 'active' in states:
-                stats['num_pgs_active'] += state['count']
-
-            if 'clean' in states:
-                stats['num_pgs_clean'] += state['count']
-
-            if 'peering' in states:
-                stats['num_pgs_peering'] += state['count']
-
-            if 'scrubbing' in states:
-                stats['num_pgs_scrubbing'] += state['count']
+        stats.update(self.get_pg_stats())
 
         data = list()
         for key, value in stats.items():
