@@ -54,7 +54,14 @@ void DeviceState::rm_expected_failure()
 void DeviceState::dump(Formatter *f) const
 {
   f->dump_string("devid", devid);
-  f->dump_string("host", server);
+  f->open_array_section("location");
+  for (auto& i : devnames) {
+    f->open_object_section("attachment");
+    f->dump_string("host", i.first);
+    f->dump_string("dev", i.second);
+    f->close_section();
+  }
+  f->close_section();
   f->open_array_section("daemons");
   for (auto& i : daemons) {
     f->dump_string("daemon", to_string(i));
@@ -70,7 +77,9 @@ void DeviceState::dump(Formatter *f) const
 void DeviceState::print(ostream& out) const
 {
   out << "device " << devid << "\n";
-  out << "host " << server << "\n";
+  for (auto& i : devnames) {
+    out << "attachment " << i.first << ":" << i.second << "\n";
+  }
   set<string> d;
   for (auto& j : daemons) {
     d.insert(to_string(j));
@@ -93,10 +102,10 @@ void DaemonStateIndex::insert(DaemonStatePtr dm)
   by_server[dm->hostname][dm->key] = dm;
   all[dm->key] = dm;
 
-  for (auto& devid : dm->devids) {
-    auto d = _get_or_create_device(devid);
+  for (auto& i : dm->devices) {
+    auto d = _get_or_create_device(i.first);
     d->daemons.insert(dm->key);
-    d->server = dm->hostname;
+    d->devnames.insert(make_pair(dm->hostname, i.second));
   }
 }
 
@@ -108,10 +117,11 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
   assert(to_erase != all.end());
   const auto dm = to_erase->second;
 
-  for (auto& devid : dm->devids) {
-    auto d = _get_or_create_device(devid);
+  for (auto& i : dm->devices) {
+    auto d = _get_or_create_device(i.first);
     assert(d->daemons.count(dmk));
     d->daemons.erase(dmk);
+    d->devnames.erase(make_pair(dm->hostname, i.second));
     if (d->empty()) {
       _erase_device(d);
     }
