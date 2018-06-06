@@ -41,6 +41,12 @@ Copyright:
     Copyright 2012-2013 Intel Corporation All Rights Reserved.
 License: BSD 3-clause
 
+Files: src/common/deleter.h
+Copyright:
+    Copyright (C) 2014 Cloudius Systems, Ltd.
+License:
+    Apache-2.0
+
 Files: src/common/sctp_crc32.c: 
 Copyright:
     Copyright (c) 2001-2007, by Cisco Systems, Inc. All rights reserved.
@@ -71,6 +77,18 @@ License:
   CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
   THE POSSIBILITY OF SUCH DAMAGE.
+
+Files: src/common/sstring.hh
+Copyright:
+    Copyright 2014 Cloudius Systems
+License:
+    Apache-2.0
+
+Files: src/include/cpp-btree
+Copyright:
+    Copyright 2013 Google Inc. All Rights Reserved.
+License:
+    Apache-2.0
 
 Files: src/json_spirit
 Copyright:
