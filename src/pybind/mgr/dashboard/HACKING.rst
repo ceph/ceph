@@ -61,7 +61,7 @@ Build the Project
 
 Run ``npm run build`` to build the project. The build artifacts will be
 stored in the ``dist/`` directory. Use the ``-prod`` flag for a
-production build. Navigate to ``https://localhost:8080``.
+production build. Navigate to ``https://localhost:8443``.
 
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
@@ -292,12 +292,12 @@ following code:
       return {'msg': "Hello"}
 
 The ``hello`` endpoint of the ``Ping`` controller can be reached by the
-following URL: https://mgr_hostname:8080/ping/hello using HTTP GET requests.
+following URL: https://mgr_hostname:8443/ping/hello using HTTP GET requests.
 As you can see the controller URL path ``/ping`` is concatenated to the
 method name ``hello`` to generate the endpoint's URL.
 
 In the case of the ``ApiPing`` controller, the ``hello`` endpoint can be
-reached by the following URL: https://mgr_hostname:8080/api/ping/hello using a
+reached by the following URL: https://mgr_hostname:8443/api/ping/hello using a
 HTTP GET request.
 The API controller URL path ``/ping`` is prefixed by the ``/api`` path and then
 concatenated to the method name ``hello`` to generate the endpoint's URL.
@@ -307,7 +307,7 @@ decorator by passing an additional decorator parameter called ``base_url``::
   @ApiController('/ping') <=> @Controller('/ping', base_url="/api")
 
 ``UiApiPing`` works in a similar way than the ``ApiPing``, but the URL will be
-prefixed by ``/ui-api``: https://mgr_hostname:8080/ui-api/ping/hello. ``UiApiPing`` is
+prefixed by ``/ui-api``: https://mgr_hostname:8443/ui-api/ping/hello. ``UiApiPing`` is
 also a ``@Controller`` extension::
 
   @UiApiController('/ping') <=> @Controller('/ping', base_url="/ui-api")
@@ -408,7 +408,7 @@ Consider the following example:
 In this example we explicitly declare a path parameter ``{node}`` in the
 controller URL path, and a path parameter ``{date}`` in the ``latency``
 method. The endpoint for the ``latency`` method is then accessible through
-the URL: https://mgr_hostname:8080/ping/{node}/stats/{date}/latency .
+the URL: https://mgr_hostname:8443/ping/{node}/stats/{date}/latency .
 
 For a full set of examples on how to use the ``@Endpoint``
 decorator please check the unit test file: ``tests/test_controllers.py``.

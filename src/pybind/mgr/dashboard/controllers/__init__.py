@@ -540,9 +540,9 @@ class RESTController(BaseController):
     Test with curl:
 
     curl -H "Content-Type: application/json" -X POST \
-         -d '{"username":"xyz","password":"xyz"}'  http://127.0.0.1:8080/foo
-    curl http://127.0.0.1:8080/foo
-    curl http://127.0.0.1:8080/foo/0
+         -d '{"username":"xyz","password":"xyz"}'  https://127.0.0.1:8443/foo
+    curl https://127.0.0.1:8443/foo
+    curl https://127.0.0.1:8443/foo/0
 
     """
 
