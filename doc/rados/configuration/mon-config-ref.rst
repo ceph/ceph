@@ -520,6 +520,9 @@ you expect to fail to arrive at a reasonable full ratio. Repeat the foregoing
 process with a higher number of OSD failures (e.g., a rack of OSDs) to arrive at
 a reasonable number for a near full ratio.
 
+The following settings only apply on cluster creation and are then stored in
+the OSDMap.
+
 .. code-block:: ini
 
 	[global]
@@ -558,6 +561,10 @@ a reasonable number for a near full ratio.
 
 .. tip:: If some OSDs are nearfull, but others have plenty of capacity, you 
          may have a problem with the CRUSH weight for the nearfull OSDs.
+
+.. tip:: These settings only apply during cluster creation. Afterwards they need
+         to be changed in the OSDMap using ``ceph osd set-nearfull-ratio`` and
+         ``ceph osd set-full-ratio``
 
 .. index:: heartbeat
 
