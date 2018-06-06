@@ -269,8 +269,8 @@ public:
    *   sobject_encoding detects an older/simpler version of oid
    *   present in pre-bobtail versions of ceph.  use_pool_override
    *   also detects a situation where the pool of an oid can be
-   *   override for legacy operations/buffers.  For non-legacy
-   *   implementation of ObjectStore, neither of these fields is
+   *   overriden for legacy operations/buffers.  For non-legacy
+   *   implementations of ObjectStore, neither of these fields are
    *   relevant.
    *
    *
