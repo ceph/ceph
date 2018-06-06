@@ -7,6 +7,12 @@ Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
 License: LGPL2.1 (see COPYING-LGPL2.1)
 
+Files: cmake/modules/FindLTTngUST.cmake
+Copyright:
+    Copyright 2016 Kitware, Inc.
+    Copyright 2016 Philippe Proulx <pproulx@efficios.com>
+License: BSD 3-clause
+
 Files: doc/*
 Copyright: (c) 2010-2012 New Dream Network and contributors
 License: Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)
@@ -95,6 +101,10 @@ License:
   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
   OTHER DEALINGS IN THE SOFTWARE.
 
+Files: src/test/common/Throttle.cc src/test/filestore/chain_xattr.cc
+Copyright: Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
+License: LGPL2.1 or later
+
 Files: src/osd/ErasureCodePluginJerasure/*.{c,h}
 Copyright: Copyright (c) 2011, James S. Plank <plank@cs.utk.edu>
 License:
@@ -131,6 +141,13 @@ Packaging:
     Copyright (C) 2004-2009 by Sage Weil <sage@newdream.net>
     Copyright (C) 2010 Canonical, Ltd.
     Licensed under LGPL-2.1
+
+Files: src/test/perf_local.cc
+Copyright:
+  (c) 2011-2014 Stanford University
+  (c) 2011 Facebook
+License:
+  The MIT License
 
 File: qa/workunits/erasure-code/jquery.js
   Copyright 2012 jQuery Foundation and other contributors
