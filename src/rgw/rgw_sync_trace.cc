@@ -130,6 +130,8 @@ RGWSyncTraceManager::~RGWSyncTraceManager()
   cct->get_admin_socket()->unregister_commands(this);
   service_map_thread->stop();
   delete service_map_thread;
+
+  nodes.clear();
 }
 
 int RGWSyncTraceManager::hook_to_admin_command()
