@@ -5422,7 +5422,12 @@ void OSD::_collect_metadata(map<string,string> *pm)
     if (!devids.empty()) {
       devids += ",";
     }
-    devids += dev + "=" + get_device_id(dev);
+    string id = get_device_id(dev);
+    if (id.size()) {
+      devids += dev + "=" + id;
+    } else {
+      dout(10) << __func__ << " no unique device id for " << dev << dendl;
+    }
   }
   (*pm)["device_ids"] = devids;
 
