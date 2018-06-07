@@ -1,4 +1,5 @@
 set(crimson_thread_srcs
+  ThreadPool.cc
   Throttle.cc)
 add_library(crimson_thread_objs OBJECT ${crimson_thread_srcs})
 target_compile_definitions(crimson_thread_objs
