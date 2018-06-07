@@ -235,7 +235,30 @@ public:
 
   void encode(bufferlist& bl, uint64_t features) const
   {
-    ENCODE_START(5, 1, bl);
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      ENCODE_START(5, 1, bl);
+      encode(epoch, bl);
+      encode(active_addrs.legacy_addr(), bl, features);
+      encode(active_gid, bl);
+      encode(available, bl);
+      encode(active_name, bl);
+      encode(standbys, bl);
+      encode(modules, bl);
+
+      // Pre-version 4 string list of available modules
+      // (replaced by direct encode of ModuleInfo below)
+      std::set<std::string> old_available_modules;
+      for (const auto &i : available_modules) {
+	old_available_modules.insert(i.name);
+      }
+      encode(old_available_modules, bl);
+
+      encode(services, bl);
+      encode(available_modules, bl);
+      ENCODE_FINISH(bl);
+      return;
+    }
+    ENCODE_START(6, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -243,23 +266,15 @@ public:
     encode(active_name, bl);
     encode(standbys, bl);
     encode(modules, bl);
-
-    // Pre-version 4 string list of available modules
-    // (replaced by direct encode of ModuleInfo below)
-    std::set<std::string> old_available_modules;
-    for (const auto &i : available_modules) {
-      old_available_modules.insert(i.name);
-    }
-    encode(old_available_modules, bl);
-
     encode(services, bl);
     encode(available_modules, bl);
     ENCODE_FINISH(bl);
+    return;
   }
 
   void decode(bufferlist::const_iterator& p)
   {
-    DECODE_START(5, p);
+    DECODE_START(6, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -269,17 +284,19 @@ public:
     if (struct_v >= 2) {
       decode(modules, p);
 
-      // Reconstitute ModuleInfos from names
-      std::set<std::string> module_name_list;
-      decode(module_name_list, p);
-      // Only need to unpack this field if we won't have the full
-      // MgrMap::ModuleInfo structures added in v4
-      if (struct_v < 4) {
-        for (const auto &i : module_name_list) {
-          MgrMap::ModuleInfo info;
-          info.name = i;
-          available_modules.push_back(std::move(info));
-        }
+      if (struct_v < 6) {
+	// Reconstitute ModuleInfos from names
+	std::set<std::string> module_name_list;
+	decode(module_name_list, p);
+	// Only need to unpack this field if we won't have the full
+	// MgrMap::ModuleInfo structures added in v4
+	if (struct_v < 4) {
+	  for (const auto &i : module_name_list) {
+	    MgrMap::ModuleInfo info;
+	    info.name = i;
+	    available_modules.push_back(std::move(info));
+	  }
+	}
       }
     }
     if (struct_v >= 3) {
