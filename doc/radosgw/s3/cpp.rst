@@ -240,6 +240,7 @@ This creates a file ``hello.txt``.
 	};
 
 	S3_put_object(&bucketContext, sample_key, contentLength, NULL, NULL, 0, &putObjectHandler, &data);
+	fclose(data.infile);
 
 
 Download an Object (to a file)
