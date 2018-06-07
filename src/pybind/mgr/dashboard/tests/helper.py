@@ -155,3 +155,10 @@ class ControllerTestCase(helper.CPWebCase):
                 msg = 'expected body:\n%r\n\nactual body:\n%r' % (
                     data, json_body)
             self._handlewebError(msg)
+
+    def assertInJsonBody(self, data, msg=None):
+        json_body = self.jsonBody()
+        if data not in json_body:
+            if msg is None:
+                msg = 'expected %r to be in %r' % (data, json_body)
+            self._handlewebError(msg)

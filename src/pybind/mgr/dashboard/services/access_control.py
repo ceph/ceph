@@ -94,6 +94,7 @@ ADMIN_ROLE = Role('administrator', 'Administrator', dict([
 # read-only role provides read-only permission for all scopes
 READ_ONLY_ROLE = Role('read-only', 'Read-Only', dict([
     (scope_name, [_P.READ]) for scope_name in Scope.all_scopes()
+    if scope_name != Scope.DASHBOARD_SETTINGS
 ]))
 
 
