@@ -22,11 +22,10 @@
 #include "include/types.h"
 
 
-
 class MMgrBeacon : public PaxosServiceMessage {
 
-  static const int HEAD_VERSION = 7;
-  static const int COMPAT_VERSION = 1;
+  static const int HEAD_VERSION = 8;
+  static const int COMPAT_VERSION = 8;
 
 protected:
   uint64_t gid;
@@ -111,10 +110,18 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    header.version = HEAD_VERSION;
+    header.compat_version = COMPAT_VERSION;
     using ceph::encode;
     paxos_encode();
 
-    encode(server_addrs, payload, features);
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      header.version = 7;
+      header.compat_version = 1;
+      encode(server_addrs.legacy_addr(), payload, features);
+    } else {
+      encode(server_addrs, payload, features);
+    }
     encode(gid, payload);
     encode(available, payload);
     encode(name, payload);
@@ -137,7 +144,7 @@ public:
   void decode_payload() override {
     auto p = payload.cbegin();
     paxos_decode(p);
-    decode(server_addrs, p);
+    decode(server_addrs, p);  // entity_addr_t for version < 8
     decode(gid, p);
     decode(available, p);
     decode(name, p);
