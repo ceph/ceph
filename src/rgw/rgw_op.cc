@@ -7015,3 +7015,10 @@ void RGWDeleteBucketPolicy::execute()
       return op_ret;
     });
 }
+
+void RGWGetClusterStat::execute()
+{
+  op_ret = this->store->get_rados_handle()->cluster_stat(stats_op);
+}
+
+
