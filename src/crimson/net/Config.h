@@ -20,6 +20,7 @@ constexpr struct simple_md_config_t {
   bool ms_die_on_skipped_message = true;
   std::chrono::milliseconds ms_initial_backoff = 200ms;
   std::chrono::milliseconds ms_max_backoff = 15000ms;
+  std::chrono::milliseconds threadpool_empty_queue_max_wait = 100ms;
   size_t osd_client_message_size_cap = 500ULL << 20;
 } conf;
 }

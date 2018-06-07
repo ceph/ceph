@@ -29,3 +29,9 @@ set(test_alien_echo_srcs
 add_executable(unittest_seastar_echo ${test_alien_echo_srcs})
 add_ceph_unittest(unittest_seastar_echo)
 target_link_libraries(unittest_seastar_echo ceph-common global Seastar::seastar)
+
+add_executable(unittest_seastar_thread_pool
+  test_thread_pool.cc
+  $<TARGET_OBJECTS:crimson_thread_objs>)
+add_ceph_unittest(unittest_seastar_thread_pool)
+target_link_libraries(unittest_seastar_thread_pool Seastar::seastar)
