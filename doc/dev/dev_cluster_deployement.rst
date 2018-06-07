@@ -113,7 +113,7 @@ the following way::
 
 For eg::
 
-  ./mstart.sh cluster1 -n -r
+  ./mstart.sh cluster1 -n
 
 
 For stopping the cluster, you do::
