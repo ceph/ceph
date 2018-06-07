@@ -346,8 +346,8 @@ These changes occurred between the Luminous and Mimic releases.
     previous max_mds" step in above URL to fail. To re-enable the feature,
     either delete all old snapshots or scrub the whole filesystem:
 
-      - ``ceph daemon <mds of rank 0> scrub_path /``
-      - ``ceph daemon <mds of rank 0> scrub_path '~mdsdir'``
+      - ``ceph daemon <mds of rank 0> scrub_path / force recursive repair``
+      - ``ceph daemon <mds of rank 0> scrub_path '~mdsdir' force recursive repair``
 
   - Support has been added in Mimic for quotas in the Linux kernel client as of v4.17.
 
