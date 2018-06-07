@@ -130,7 +130,8 @@ def options_command_list():
 
 def handle_option_command(cmd):
     if cmd['prefix'] not in _OPTIONS_COMMAND_MAP:
-        return (-errno.ENOSYS, '', "Command not found '{}'".format(cmd['prefix']))
+        return -errno.ENOSYS, '', "Command not found '{}'".format(cmd['prefix'])
+
     opt = _OPTIONS_COMMAND_MAP[cmd['prefix']]
 
     if cmd['prefix'].startswith('dashboard reset'):
