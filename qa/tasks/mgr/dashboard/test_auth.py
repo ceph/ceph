@@ -47,8 +47,12 @@ class AuthTest(DashboardTestCase):
 
     def test_login_invalid(self):
         self._post("/api/auth", {'username': 'admin', 'password': 'inval'})
-        self.assertStatus(403)
-        self.assertJsonBody({"detail": "Invalid credentials"})
+        self.assertStatus(400)
+        self.assertJsonBody({
+            "component": "auth",
+            "code": "invalid_credentials",
+            "detail": "Invalid credentials"
+        })
 
     def test_logout(self):
         self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
