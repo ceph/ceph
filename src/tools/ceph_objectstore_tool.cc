@@ -1892,25 +1892,36 @@ int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug,
   return 0;
 }
 
+enum rmtype {
+  BOTH,
+  SNAPMAP,
+  NOSNAPMAP
+};
+
 int remove_object(coll_t coll, ghobject_t &ghobj,
   SnapMapper &mapper,
   MapCacher::Transaction<std::string, bufferlist> *_t,
-  ObjectStore::Transaction *t)
+  ObjectStore::Transaction *t,
+  enum rmtype type)
 {
-  int r = mapper.remove_oid(ghobj.hobj, _t);
-  if (r < 0 && r != -ENOENT) {
-    cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
-    return r;
+  if (type == BOTH || type == SNAPMAP) {
+    int r = mapper.remove_oid(ghobj.hobj, _t);
+    if (r < 0 && r != -ENOENT) {
+      cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
+      return r;
+    }
   }
 
-  t->remove(coll, ghobj);
+  if (type == BOTH || type == NOSNAPMAP) {
+    t->remove(coll, ghobj);
+  }
   return 0;
 }
 
 int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss, bool silent);
 
 int do_remove_object(ObjectStore *store, coll_t coll,
-		     ghobject_t &ghobj, bool all, bool force)
+		     ghobject_t &ghobj, bool all, bool force, enum rmtype type)
 {
   auto ch = store->open_collection(coll);
   spg_t pg;
@@ -1951,24 +1962,24 @@ int do_remove_object(ObjectStore *store, coll_t coll,
   ObjectStore::Transaction t;
   OSDriver::OSTransaction _t(driver.get_transaction(&t));
 
-  cout << "remove " << ghobj << std::endl;
-
-  if (!dry_run) {
-    r = remove_object(coll, ghobj, mapper, &_t, &t);
-    if (r < 0)
-      return r;
-  }
-
   ghobject_t snapobj = ghobj;
   for (vector<snapid_t>::iterator i = ss.snaps.begin() ;
        i != ss.snaps.end() ; ++i) {
     snapobj.hobj.snap = *i;
     cout << "remove " << snapobj << std::endl;
     if (!dry_run) {
-      r = remove_object(coll, snapobj, mapper, &_t, &t);
+      r = remove_object(coll, snapobj, mapper, &_t, &t, type);
       if (r < 0)
         return r;
     }
+  }
+
+  cout << "remove " << ghobj << std::endl;
+
+  if (!dry_run) {
+    r = remove_object(coll, ghobj, mapper, &_t, &t, type);
+    if (r < 0)
+      return r;
   }
 
   if (!dry_run) {
@@ -2983,7 +2994,7 @@ int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, mountpoint, mon_store_path, object;
   string target_data_path, fsid;
-  string objcmd, arg1, arg2, type, format, argnspace, pool;
+  string objcmd, arg1, arg2, type, format, argnspace, pool, rmtypestr;
   boost::optional<std::string> nspace;
   spg_t pgid;
   unsigned epoch = 0;
@@ -3029,6 +3040,7 @@ int main(int argc, char **argv)
     ("head", "Find head/snapdir when searching for objects by name")
     ("dry-run", "Don't modify the objectstore")
     ("namespace", po::value<string>(&argnspace), "Specify namespace when searching for objects")
+    ("rmtype", po::value<string>(&rmtypestr), "Specify corrupting object removal 'snapmap' or 'nosnapmap' - TESTING USE ONLY")
     ;
 
   po::options_description positional("Positional options");
@@ -3761,7 +3773,12 @@ int main(int argc, char **argv)
       ret = 0;
       if (objcmd == "remove" || objcmd == "removeall") {
         bool all = (objcmd == "removeall");
-        ret = do_remove_object(fs, coll, ghobj, all, force);
+        enum rmtype type = BOTH;
+        if (rmtypestr == "nosnapmap")
+          type = NOSNAPMAP;
+        else if (rmtypestr == "snapmap")
+          type = SNAPMAP;
+        ret = do_remove_object(fs, coll, ghobj, all, force, type);
         goto out;
       } else if (objcmd == "list-attrs") {
         ret = do_list_attrs(fs, coll, ghobj);
