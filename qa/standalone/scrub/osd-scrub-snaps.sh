@@ -83,6 +83,7 @@ function create_scenario() {
     rados -p $poolname mksnap snap${SNAP}
 
     rados -p $poolname rm obj4
+    rados -p $poolname rm obj16
     rados -p $poolname rm obj2
 
     kill_daemons $dir TERM osd || return 1
@@ -97,7 +98,14 @@ function create_scenario() {
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":1)"
     OBJ5SAVE="$JSON"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove || return 1
+    # Starts with a snapmap
+    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
+    grep "_USER_[0-9]*_USER_,MAP_.*[.]1[.]obj5[.][.]" $dir/drk.log || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} --rmtype nosnapmap "$JSON" remove || return 1
+    # Check that snapmap is stil there
+    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
+    grep "_USER_[0-9]*_USER_,MAP_.*[.]1[.]obj5[.][.]" $dir/drk.log || return 1
+    rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":4)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=18
@@ -109,6 +117,16 @@ function create_scenario() {
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj4 | grep \"snapid\":7)"
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove || return 1
+
+    # Starts with a snapmap
+    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
+    grep "_USER_[0-9]*_USER_,MAP_.*[.]7[.]obj16[.][.]" $dir/drk.log || return 1
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj16 | grep \"snapid\":7)"
+    ceph-objectstore-tool --data-path $dir/${osd} --rmtype snapmap "$JSON" remove || return 1
+    # Check that snapmap is now removed
+    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
+    ! grep "_USER_[0-9]*_USER_,MAP_.*[.]7[.]obj16[.][.]" $dir/drk.log || return 1
+    rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj2)"
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" rm-attr snapset || return 1
@@ -147,7 +165,7 @@ function create_scenario() {
 function TEST_scrub_snaps() {
     local dir=$1
     local poolname=test
-    local OBJS=15
+    local OBJS=16
     local OSDS=1
 
     TESTDATA="testdata.$$"
@@ -711,6 +729,7 @@ EOF
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 : size 1032 != clone_size 1033"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 20 errors"
     err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head : can't decode 'snapset' attr buffer"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : osd[.][0-9]* found snap mapper error on pg 1.0 oid 1:461f8b5e:::obj16:7 snaps missing in mapper, should be: 1,2,3,4,5,6,7 was  r -2...repaired"
 
     for err_string in "${err_strings[@]}"
     do
@@ -734,7 +753,7 @@ EOF
 function _scrub_snaps_multi() {
     local dir=$1
     local poolname=test
-    local OBJS=15
+    local OBJS=16
     local OSDS=2
     local which=$2
 
@@ -1153,6 +1172,19 @@ fi
     for err_string in "${err_strings[@]}"
     do
         if ! grep "$err_string" $dir/osd.${primary}.log > /dev/null;
+        then
+            echo "Missing log message '$err_string'"
+            ERRORS=$(expr $ERRORS + 1)
+        fi
+    done
+
+    # Check replica specific messages
+    declare -a rep_err_strings
+    osd=$(eval echo \$$which)
+    rep_err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : osd[.][0-9]* found snap mapper error on pg 1.0 oid 1:461f8b5e:::obj16:7 snaps missing in mapper, should be: 1,2,3,4,5,6,7 was  r -2...repaired"
+    for err_string in "${rep_err_strings[@]}"
+    do
+        if ! grep "$err_string" $dir/osd.${osd}.log > /dev/null;
         then
             echo "Missing log message '$err_string'"
             ERRORS=$(expr $ERRORS + 1)
