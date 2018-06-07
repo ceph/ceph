@@ -1033,6 +1033,12 @@ public:
 	ovec.insert(ovec.end(), i->second.begin(), i->second.end());
       }
     }
+
+    void send_notify(pg_shard_t to,
+		     const pg_notify_t &info, const PastIntervals &pi) {
+      assert(notify_list);
+      (*notify_list)[to.osd].push_back(make_pair(info, pi));
+    }
   };
 protected:
 
@@ -1994,8 +2000,7 @@ protected:
       void send_notify(pg_shard_t to,
 		       const pg_notify_t &info, const PastIntervals &pi) {
 	assert(state->rctx);
-	assert(state->rctx->notify_list);
-	(*state->rctx->notify_list)[to.osd].push_back(make_pair(info, pi));
+	state->rctx->send_notify(to, info, pi);
       }
     };
     friend class RecoveryMachine;
