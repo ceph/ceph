@@ -236,7 +236,7 @@ struct bluefs_transaction_t {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
-  static void generate_test_instance(list<bluefs_transaction_t*>& ls);
+  static void generate_test_instances(list<bluefs_transaction_t*>& ls);
 };
 WRITE_CLASS_ENCODER(bluefs_transaction_t)
 
