@@ -5765,9 +5765,12 @@ bool PG::should_restart_peering(
     dout(20) << "new interval newup " << newup
 	     << " newacting " << newacting << dendl;
     return true;
-  } else {
-    return false;
   }
+  if (!lastmap->is_up(osd->whoami) && osdmap->is_up(osd->whoami)) {
+    dout(10) << __func__ << " osd transitioned from down -> up" << dendl;
+    return true;
+  }
+  return false;
 }
 
 bool PG::old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch)
