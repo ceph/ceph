@@ -487,11 +487,13 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 6;
+    uint8_t v = 7;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 5;
+    } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      v = 6;
     }
     ENCODE_START(v, 1, bl); // client-usable data
     encode(fsid, bl);
@@ -506,7 +508,16 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
     encode(new_pools, bl, features);
     encode(new_pool_names, bl);
     encode(old_pools, bl);
-    encode(new_up_client, bl, features);
+    if (v >= 7) {
+      encode(new_up_client, bl, features);
+    } else {
+      uint32_t n = new_up_client.size();
+      encode(n, bl);
+      for (auto& i : new_up_client) {
+	encode(i.first, bl);
+	encode(i.second.legacy_addr(), bl, features);
+      }
+    }
     if (v >= 5) {
       encode(new_state, bl);
     } else {
@@ -716,7 +727,7 @@ void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
     return;
   }
   {
-    DECODE_START(6, bl); // client-usable data
+    DECODE_START(7, bl); // client-usable data
     decode(fsid, bl);
     decode(epoch, bl);
     decode(modified, bl);
@@ -2548,11 +2559,13 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t v = 7;
+    uint8_t v = 8;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
       v = 6;
+    } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      v = 7;
     }
     ENCODE_START(v, 1, bl); // client-usable data
     // base
@@ -2589,7 +2602,19 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
       }
     }
     encode(osd_weight, bl);
-    encode(osd_addrs->client_addrs, bl, features);
+    if (v >= 8) {
+      encode(osd_addrs->client_addrs, bl, features);
+    } else {
+      uint32_t n = osd_addrs->client_addrs.size();
+      encode(n, bl);
+      for (auto& i : osd_addrs->client_addrs) {
+	if (i) {
+	  encode(i->legacy_addr(), bl, features);
+	} else {
+	  encode(entity_addr_t(), bl, features);
+	}
+      }
+    }
 
     encode(*pg_temp, bl);
     encode(*primary_temp, bl);
@@ -2839,7 +2864,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(7, bl); // client-usable data
+    DECODE_START(8, bl); // client-usable data
     // base
     decode(fsid, bl);
     decode(epoch, bl);
