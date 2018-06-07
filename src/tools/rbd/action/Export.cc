@@ -156,10 +156,23 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
       ::encode(tag, bl);
       std::string to(endsnapname);
       if (export_format == 2) {
-	len = to.length() + 4;
-	::encode(len, bl);
+        len = to.length() + 4;
+        ::encode(len, bl);
       }
       ::encode(to, bl);
+    }
+
+    if (endsnapname && export_format == 2) {
+      tag = RBD_SNAP_PROTECTION_STATUS;
+      encode(tag, bl);
+      bool is_protected = false;
+      r = image.snap_is_protected(endsnapname, &is_protected);
+      if (r < 0) {
+        return r;
+      }
+      len = 8;
+      encode(len, bl);
+      encode(is_protected, bl);
     }
 
     tag = RBD_DIFF_IMAGE_SIZE;
@@ -371,6 +384,8 @@ private:
   int m_fd;
 };
 
+const uint32_t MAX_KEYS = 64;
+
 static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd,
 		        uint64_t period, int max_concurrent_ops, utils::ProgressContext &pc)
 {
@@ -413,6 +428,45 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   ::encode(tag, bl);
   ::encode(length, bl);
   ::encode(stripe_count, bl);
+
+  //retrieve metadata of image
+  std::map<std::string, string> imagemetas;
+  std::string last_key;
+  bool more_results = true;
+  while (more_results) {
+    std::map<std::string, bufferlist> pairs;
+    r = image.metadata_list(last_key, MAX_KEYS, &pairs);
+    if (r < 0) {
+      std::cerr << "failed to retrieve metadata of image : " << cpp_strerror(r)
+                << std::endl;
+      return r;
+    }
+
+    if (!pairs.empty()) {
+      last_key = pairs.rbegin()->first;
+
+      for (auto kv : pairs) {
+        std::string key = kv.first;
+        std::string val(kv.second.c_str(), kv.second.length());
+        imagemetas[key] = val;
+      }
+    }
+    more_results = (pairs.size() == MAX_KEYS);
+  }
+
+  //encode imageMeta key and value
+  for (std::map<std::string, string>::iterator it = imagemetas.begin();
+       it != imagemetas.end(); ++it) {
+    string key = it->first;
+    string value = it->second;
+
+    tag = RBD_EXPORT_IMAGE_META;
+    length = key.length() + value.length() + 4 * 2;
+    ::encode(tag, bl);
+    ::encode(length, bl);
+    ::encode(key, bl);
+    ::encode(value, bl);
+  }
 
   // encode end tag
   tag = RBD_EXPORT_IMAGE_END;

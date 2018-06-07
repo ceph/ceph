@@ -139,12 +139,14 @@ static int do_image_snap_from(ImportDiffContext *idiffctx)
   string from;
   r = utils::read_string(idiffctx->fd, 4096, &from);   // 4k limit to make sure we don't get a garbage string
   if (r < 0) {
+    std::cerr << "rbd: failed to decode start snap name" << std::endl;
     return r;
   }
 
   bool exists;
   r = idiffctx->image->snap_exists2(from.c_str(), &exists);
   if (r < 0) {
+    std::cerr << "rbd: failed to query start snap state" << std::endl;
     return r;
   }
 
@@ -164,21 +166,41 @@ static int do_image_snap_to(ImportDiffContext *idiffctx, std::string *tosnap)
   string to;
   r = utils::read_string(idiffctx->fd, 4096, &to);   // 4k limit to make sure we don't get a garbage string
   if (r < 0) {
+    std::cerr << "rbd: failed to decode end snap name" << std::endl;
     return r;
   }
 
   bool exists;
   r = idiffctx->image->snap_exists2(to.c_str(), &exists);
   if (r < 0) {
+    std::cerr << "rbd: failed to query end snap state" << std::endl;
     return r;
   }
 
   if (exists) {
-    std::cerr << "end snapshot '" << to << "' already exists, aborting" << std::endl;
+    std::cerr << "end snapshot '" << to << "' already exists, aborting"
+              << std::endl;
     return -EEXIST;
   }
 
   *tosnap = to;
+  idiffctx->update_progress();
+
+  return 0;
+}
+
+static int get_snap_protection_status(ImportDiffContext *idiffctx,
+                                      bool *is_protected)
+{
+  int r;
+  char buf[sizeof(__u8)];
+  r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode snap protection status" << std::endl;
+    return r;
+  }
+
+  *is_protected = (buf[0] != 0);
   idiffctx->update_progress();
 
   return 0;
@@ -191,6 +213,7 @@ static int do_image_resize(ImportDiffContext *idiffctx)
   uint64_t end_size;
   r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode image size" << std::endl;
     return r;
   }
 
@@ -216,6 +239,7 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
   char buf[16];
   r = safe_read_exact(idiffctx->fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode IO length" << std::endl;
     return r;
   }
 
@@ -231,6 +255,7 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
     bufferptr bp = buffer::create(buffer_length);
     r = safe_read_exact(idiffctx->fd, bp.c_str(), buffer_length);
     if (r < 0) {
+      std::cerr << "rbd: failed to decode write data" << std::endl;
       return r;
     }
 
@@ -272,14 +297,16 @@ static int validate_banner(int fd, std::string banner)
 {
   int r;
   char buf[banner.size() + 1];
+  memset(buf, 0, sizeof(buf));
   r = safe_read_exact(fd, buf, banner.size());
   if (r < 0) {
+    std::cerr << "rbd: failed to decode diff banner" << std::endl;
     return r;
   }
 
   buf[banner.size()] = '\0';
   if (strcmp(buf, banner.c_str())) {
-    std::cerr << "invalid banner '" << buf << "', expected '" << banner << "'" << std::endl;
+    std::cerr << "rbd: invalid or unexpected diff banner" << std::endl;
     return -EINVAL;
   }
 
@@ -296,8 +323,10 @@ static int skip_tag(int fd, uint64_t length)
     uint64_t len = min<uint64_t>(length, sizeof(buf));
     while (len > 0) {
       r = safe_read_exact(fd, buf, len);
-      if (r < 0)
+      if (r < 0) {
+        std::cerr << "rbd: failed to decode skipped tag data" << std::endl;
         return r;
+      }
       length -= len;
       len = min<uint64_t>(length, sizeof(buf));
     }
@@ -319,6 +348,7 @@ static int read_tag(int fd, __u8 end_tag, int format, __u8 *tag, uint64_t *readl
 
   r = safe_read_exact(fd, &read_tag, sizeof(read_tag));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode tag" << std::endl;
     return r;
   }
 
@@ -327,6 +357,7 @@ static int read_tag(int fd, __u8 end_tag, int format, __u8 *tag, uint64_t *readl
     char buf[sizeof(uint64_t)];
     r = safe_read_exact(fd, buf, sizeof(buf));
     if (r < 0) {
+      std::cerr << "rbd: failed to decode tag length" << std::endl;
       return r;
     }
 
@@ -350,6 +381,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
     struct stat stat_buf;
     r = ::fstat(fd, &stat_buf);
     if (r < 0) {
+      std::cerr << "rbd: failed to stat specified diff file" << std::endl;
       return r;
     }
     size = (uint64_t)stat_buf.st_size;
@@ -371,6 +403,7 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
 
   // begin image import
   std::string tosnap;
+  bool is_protected = false;
   ImportDiffContext idiffctx(&image, fd, size, no_progress);
   while (r == 0) {
     __u8 tag;
@@ -385,6 +418,8 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
       r = do_image_snap_from(&idiffctx);
     } else if (tag == RBD_DIFF_TO_SNAP) {
       r = do_image_snap_to(&idiffctx, &tosnap);
+    } else if (tag == RBD_SNAP_PROTECTION_STATUS) {
+      r = get_snap_protection_status(&idiffctx, &is_protected);
     } else if (tag == RBD_DIFF_IMAGE_SIZE) {
       r = do_image_resize(&idiffctx);
     } else if (tag == RBD_DIFF_WRITE || tag == RBD_DIFF_ZERO) {
@@ -399,7 +434,10 @@ int do_import_diff_fd(librados::Rados &rados, librbd::Image &image, int fd,
   int temp_r = idiffctx.throttle.wait_for_ret();
   r = (r < 0) ? r : temp_r; // preserve original error
   if (r == 0 && tosnap.length()) {
-    idiffctx.image->snap_create(tosnap.c_str());
+    r = idiffctx.image->snap_create(tosnap.c_str());
+    if (r == 0 && is_protected) {
+      r = idiffctx.image->snap_protect(tosnap.c_str());
+    }
   }
 
   idiffctx.finish(r);
@@ -475,6 +513,9 @@ int execute_diff(const po::variables_map &vm) {
 
   r = do_import_diff(rados, image, path.c_str(),
 		     vm[at::NO_PROGRESS].as<bool>(), sparse_size);
+  if (r == -EDOM) {
+    r = -EBADMSG;
+  }
   if (r < 0) {
     cerr << "rbd: import-diff failed: " << cpp_strerror(r) << std::endl;
     return r;
@@ -537,6 +578,7 @@ static int decode_and_set_image_option(int fd, uint64_t imageopt, librbd::ImageO
 
   r = safe_read_exact(fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode image option" << std::endl;
     return r;
   }
 
@@ -555,7 +597,50 @@ static int decode_and_set_image_option(int fd, uint64_t imageopt, librbd::ImageO
   return 0;
 }
 
-static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts)
+static int do_import_metadata(int import_format, librbd::Image& image,
+                              const std::map<std::string, std::string> &imagemetas)
+{
+  int r = 0;
+
+  //v1 format
+  if (import_format == 1) {
+    return 0;
+  }
+
+  for (std::map<std::string, std::string>::const_iterator it = imagemetas.begin();
+       it != imagemetas.end(); ++it) {
+    r = image.metadata_set(it->first, it->second);
+    if (r < 0)
+      return r;
+  }
+
+  return 0;
+}
+
+static int decode_imagemeta(int fd, uint64_t length, std::map<std::string, std::string>* imagemetas)
+{
+  int r;
+  string key;
+  string value;
+
+  r = utils::read_string(fd, length, &key);
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode metadata key" << std::endl;
+    return r;
+  }
+
+  r = utils::read_string(fd, length, &value);
+  if (r < 0) {
+    std::cerr << "rbd: failed to decode metadata value" << std::endl;
+    return r;
+  }
+
+  (*imagemetas)[key] = value;
+  return 0;
+}
+
+static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts,
+                            std::map<std::string, std::string>* imagemetas)
 {
   // There is no header in v1 image.
   if (import_format == 1) {
@@ -594,6 +679,8 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
       r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_STRIPE_UNIT, opts);
     } else if (tag == RBD_EXPORT_IMAGE_STRIPE_COUNT) {
       r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_STRIPE_COUNT, opts);
+    } else if (tag == RBD_EXPORT_IMAGE_META) {
+      r = decode_imagemeta(fd, length, imagemetas);
     } else {
       std::cerr << "rbd: invalid tag in image properties zone: " << tag << "Skip it."
                 << std::endl;
@@ -617,6 +704,7 @@ static int do_import_v2(librados::Rados &rados, int fd, librbd::Image &image,
   char buf[sizeof(uint64_t)];
   r = safe_read_exact(fd, buf, sizeof(buf));
   if (r < 0) {
+    std::cerr << "rbd: failed to decode diff count" << std::endl;
     return r;
   }
   bufferlist bl;
@@ -743,6 +831,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   int fd, r;
   struct stat stat_buf;
   utils::ProgressContext pc("Importing image", no_progress);
+  std::map<std::string, std::string> imagemetas;
 
   assert(imgname);
 
@@ -796,7 +885,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 #endif
   }
 
-  r = do_import_header(fd, import_format, size, opts);
+  r = do_import_header(fd, import_format, size, opts, &imagemetas);
   if (r < 0) {
     std::cerr << "rbd: import header failed." << std::endl;
     goto done;
@@ -811,6 +900,12 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     std::cerr << "rbd: failed to open image" << std::endl;
+    goto err;
+  }
+
+  r = do_import_metadata(import_format, image, imagemetas);
+  if (r < 0) {
+    std::cerr << "rbd: failed to import image-meta" << std::endl;
     goto err;
   }
 
