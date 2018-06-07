@@ -323,3 +323,11 @@ class DB_API(object):
         result['health'] = self.get_health_status()
         result['mon_status'] = self.get_mon_status()
         return result
+
+    def get_osd_hostname(self, osd_id):
+        result = ""
+        osd_metadata = self.get_osd_metadata(osd_id)
+        if osd_metadata:
+            osd_host = osd_metadata.get("hostname", "None")
+            result = osd_host
+        return result

@@ -1,8 +1,9 @@
-==================
+=====================
 DiskPrediction plugin
-==================
+=====================
 
-The Disk Prediction Plugin actively sends information to a DiskPrediction server like:
+Disk Prediction plugin is used to collect disk information from Ceph OSD and
+send DiskPrediction server. The disk information includes the following.
 
 - Ceph status
 - I/O operations
@@ -14,66 +15,65 @@ The Disk Prediction Plugin actively sends information to a DiskPrediction server
 Enabling
 ========
 
-You can enable the *diskprediction* module with:
+Run the following command to enable *diskprediction* module in the Ceph
+environment:
 
 ::
 
     ceph mgr module enable diskprediction
 
-Configuration
--------------
+Connection settings
+-------------------
 
-Below configuration keys are vital for the module to work:
-
-- diskprediction_server
-- diskprediction_user
-- diskprediction_password
-
-The parameter *diskprediction_server* controls the hostname of the DiskPrediction
-server to which the plugin will send the items. This can be a IP-Address if 
-required by your installation.
-
-The parameter *diskprediction_user* and *diskprediction_password* controls the user
-of the DiskPrediction that can fetch each physical disk predicted health state.
-
-Configuration keys
-^^^^^^^^^^^^^^^^^^
-
-Configuration keys can be set on any machine with the proper cephx credentials,
-these are usually Monitors where the *client.admin* key is present.
+The connection settings can be configured on any machine with the proper cephx
+credentials; they are usually the monitor node with client.admin keyring.
+Run the following command to set up connection betweet Ceph system and
+DiskPrediction server.
 
 ::
 
     ceph diskprediction config-set <diskprediction_server> <diskprediction_user> <diskprediction_password>
+	
 
-The current configuration of the module can also be shown:
+The <diskprediction_server> parameter is DiskPrediction server name, and it
+could be an IP address if required.
+
+The <diskprediction_user> and <diskprediction_password> parameters are the user
+id and password logging in to DiskPrediction server.
+
+
+
+The connection settings can be shown using the following command:
 
 ::
 
     ceph diskprediction config-show
 
-Fetch physical disk of the osd predicted health status
-======================================================
 
-User can use command to fetch each physical disk of the osd predicted health status.
+Receiving predicted health status from Ceph OSD disk drive
+==========================================================
+
+You can receive predicted health status from Ceph OSD disk drive by using the
+following command.
 
 ::
 
     ceph diskprediction get-predicted-status <osd id>
 
 get-predicted-status response
+-----------------------------
+
 ::
+
     {
         "osd.0": {
             "prediction": {
-                "sdb": {
-                    "replacment_time": null,
-                    "near_failure": "Good",
-                    "disk_wwn": "5000039ff9eb609c",
-                    "serial_number": "44T2E4LAS",
-                    "life_expectancy_day": 682,
-                    "predicted": "2018-05-30 18:33:12",
-                    "device": "sdb"
+            "sdb": {
+                "near_failure": "Good",
+                "disk_wwn": "5000011111111111",
+                "serial_number": "111111111",
+                "predicted": "2018-05-30 18:33:12",
+                "device": "sdb"
                 }
             }
         }
@@ -81,30 +81,26 @@ get-predicted-status response
 
 
 +--------------------+-----------------------------------------------------+
-|Key                 | Description                                         |
+|Attribute           | Description                                         |
 +====================+=====================================================+
-|replacment_time     | recommend replace physical device time              |
-+--------------------+-----------------------------------------------------+
-|near_failure        | predicted physical disk result,                     |
+|near_failure        | The disk failure prediction state:                  |
 |                    | Good/Warning/Bad/Unknown                            |
 +--------------------+-----------------------------------------------------+
-|disk_wwn            | disk wwn number                                     |
+|disk_wwn            | Disk wwn number                                     |
 +--------------------+-----------------------------------------------------+
-|serial_number       | disk serial number                                  |
+|serial_number       | Disk serial number                                  |
 +--------------------+-----------------------------------------------------+
-|life_expectancy_day | predicted life remaining day of a disk              |
+|predicted           | Predicted date                                      |
 +--------------------+-----------------------------------------------------+
-|predicted           | predicted date                                      |
-+--------------------+-----------------------------------------------------+
-|device              | device name of the local system                     |
+|device              | device name on the local system                     |
 +--------------------+-----------------------------------------------------+
 
 
 Debugging
 ---------
 
-Should you want to debug the Disk Prediction module increase the logging level for
-ceph-mgr and check the logs.
+If you want to debug the DiskPrediction module mapping to Ceph logging level,
+use the following command.
 
 ::
 
@@ -112,6 +108,6 @@ ceph-mgr and check the logs.
 
         debug mgr = 20
 
-With logging set to debug for the manager the plugin will print various logging
-lines prefixed with *mgr[diskprediction]* for easy filtering.
+With logging set to debug for the manager the plugin will print out logging
+message with prefix *mgr[diskprediction]* for easy filtering.
 

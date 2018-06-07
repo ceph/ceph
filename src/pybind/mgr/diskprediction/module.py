@@ -156,8 +156,6 @@ class Module(MgrModule):
                             d_data = {
                                 'device': dev.get("diskName"),
                                 'near_failure': p_data.get('near_failure'),
-                                'life_expectancy_day': p_data.get('life_expectancy_day'),
-                                'replacment_time': p_data.get('replacement_time'),
                                 'predicted': str(predicted),
                                 'serial_number': dev.get('serialNumber'),
                                 'disk_wwn': dev.get('diskWWN')
