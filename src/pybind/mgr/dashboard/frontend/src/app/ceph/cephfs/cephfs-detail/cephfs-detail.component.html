@@ -25,7 +25,6 @@
                     [columns]="pools.columns"
                     [toolHeader]="false">
           </cd-table>
-
         </fieldset>
       </div>
     </div>
@@ -36,25 +35,26 @@
         <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
       </div>
     </div>
-
-    <!-- templates -->
-    <ng-template #poolUsageTpl
-                 let-row="row">
-      <cd-usage-bar [totalBytes]="row.size"
-                    [usedBytes]="row.used"></cd-usage-bar>
-    </ng-template>
-
-    <ng-template #activityTmpl
-                 let-row="row"
-                 let-value="value">
-      {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
-    </ng-template>
   </tab>
   <tab i18n-heading
        heading="Clients: {{ clientCount }}"
        (select)="clientsSelect=true"
        (deselect)="clientsSelect=false">
     <cd-cephfs-clients [id]="id"
-                *ngIf="clientsSelect"></cd-cephfs-clients>
+                       *ngIf="clientsSelect">
+    </cd-cephfs-clients>
   </tab>
 </tabset>
+
+<!-- templates -->
+<ng-template #poolUsageTpl
+             let-row="row">
+  <cd-usage-bar [totalBytes]="row.size"
+                [usedBytes]="row.used"></cd-usage-bar>
+</ng-template>
+
+<ng-template #activityTmpl
+             let-row="row"
+             let-value="value">
+  {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
+</ng-template>
