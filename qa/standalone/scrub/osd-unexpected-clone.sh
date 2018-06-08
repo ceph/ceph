@@ -65,7 +65,6 @@ function TEST_recover_unexpected() {
 
     objectstore_tool $dir $osd "$JSON" set-bytes $dir/data
     objectstore_tool $dir $osd "$JSON" set-attr _ $dir/_
-    rm -f $dir/_ $dir/data
 
     sleep 5
 
