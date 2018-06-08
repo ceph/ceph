@@ -2208,7 +2208,7 @@ private:
 
   float get_osd_recovery_sleep();
 
-  void probe_smart(ostream& ss);
+  void probe_smart(const string& devid, ostream& ss);
   int probe_smart_device(const char *device, int timeout, std::string *result);
 
 public:
