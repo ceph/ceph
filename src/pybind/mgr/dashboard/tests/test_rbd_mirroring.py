@@ -59,6 +59,9 @@ class RbdMirroringControllerTest(ControllerTestCase):
         mgr.url_prefix = ''
         mgr.get_mgr_id.return_value = 0
         mgr.have_mon_connection.return_value = True
+        mgr.version = 'ceph version 13.1.0-534-g23d3751b89 ' \
+                      '(23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) ' \
+                      'nautilus (dev)'
 
         RbdMirror._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 

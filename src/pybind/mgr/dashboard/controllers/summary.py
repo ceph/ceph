@@ -49,5 +49,6 @@ class Summary(BaseController):
             'mgr_id': mgr.get_mgr_id(),
             'have_mon_connection': mgr.have_mon_connection(),
             'executing_tasks': executing_t,
-            'finished_tasks': finished_t
+            'finished_tasks': finished_t,
+            'version': mgr.version
         }
