@@ -181,6 +181,15 @@ public:
   void assimilate_dirty_rstat_inodes();
   void assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob);
 
+  void mark_exporting() {
+    state_set(CDir::STATE_EXPORTING);
+    inode->num_exporting_dirs++;
+  }
+  void clear_exporting() {
+    state_clear(CDir::STATE_EXPORTING);
+    inode->num_exporting_dirs--;
+  }
+
 protected:
   version_t projected_version;
   mempool::mds_co::list<fnode_t> projected_fnode;
