@@ -208,7 +208,7 @@ struct DeviceState : public RefCountedObject
   void set_life_expectancy(utime_t from, utime_t to, utime_t now);
   void rm_life_expectancy();
 
-  string get_life_expectancy_str() const;
+  string get_life_expectancy_str(utime_t now) const;
 
   /// true of we can be safely forgotten/removed from memory
   bool empty() const {

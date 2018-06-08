@@ -57,13 +57,25 @@ void DeviceState::rm_life_expectancy()
   metadata.erase("life_expectancy_stamp");
 }
 
-string DeviceState::get_life_expectancy_str() const
+string DeviceState::get_life_expectancy_str(utime_t now) const
 {
   if (life_expectancy.first == utime_t()) {
     return string();
   }
-  return stringify(life_expectancy.first) + " to " +
-    stringify(life_expectancy.second);
+  if (now >= life_expectancy.first) {
+    return "now";
+  }
+  utime_t min = life_expectancy.first - now;
+  utime_t max = life_expectancy.second - now;
+  if (life_expectancy.second == utime_t()) {
+    return string(">") + timespan_str(make_timespan(min));
+  }
+  string a = timespan_str(make_timespan(min));
+  string b = timespan_str(make_timespan(max));
+  if (a == b) {
+    return a;
+  }
+  return a + " to " + b;
 }
 
 void DeviceState::dump(Formatter *f) const
