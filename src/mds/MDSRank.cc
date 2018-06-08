@@ -184,7 +184,7 @@ void MDSRankDispatcher::init()
   finisher->start();
 }
 
-void MDSRank::update_targets(utime_t now)
+void MDSRank::update_targets()
 {
   // get MonMap's idea of my export_targets
   const set<mds_rank_t>& map_targets = mdsmap->get_mds_info(get_nodeid()).export_targets;
@@ -197,9 +197,10 @@ void MDSRank::update_targets(utime_t now)
   auto it = export_targets.begin();
   while (it != export_targets.end()) {
     mds_rank_t rank = it->first;
-    double val = it->second.get(now);
-    dout(20) << "export target mds." << rank << " value is " << val << " @ " << now << dendl;
+    auto &counter = it->second;
+    dout(20) << "export target mds." << rank << " is " << counter << dendl;
 
+    double val = counter.get();
     if (val <= 0.01) {
       dout(15) << "export target mds." << rank << " is no longer an export target" << dendl;
       export_targets.erase(it++);
@@ -225,19 +226,20 @@ void MDSRank::update_targets(utime_t now)
   }
 }
 
-void MDSRank::hit_export_target(utime_t now, mds_rank_t rank, double amount)
+void MDSRank::hit_export_target(mds_rank_t rank, double amount)
 {
   double rate = g_conf->mds_bal_target_decay;
   if (amount < 0.0) {
     amount = 100.0/g_conf->mds_bal_target_decay; /* a good default for "i am trying to keep this export_target active" */
   }
-  auto em = export_targets.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple(now, DecayRate(rate)));
+  auto em = export_targets.emplace(std::piecewise_construct, std::forward_as_tuple(rank), std::forward_as_tuple(DecayRate(rate)));
+  auto &counter = em.first->second;
+  counter.hit(amount);
   if (em.second) {
-    dout(15) << "hit export target (new) " << amount << " @ " << now << dendl;
+    dout(15) << "hit export target (new) is " << counter << dendl;
   } else {
-    dout(15) << "hit export target " << amount << " @ " << now << dendl;
+    dout(15) << "hit export target is " << counter << dendl;
   }
-  em.first->second.hit(now, amount);
 }
 
 class C_MDS_MonCommand : public MDSInternalContext {
@@ -345,7 +347,7 @@ void MDSRankDispatcher::tick()
   }
 
   if (is_active() || is_stopping()) {
-    update_targets(ceph_clock_now());
+    update_targets();
   }
 
   // shut down?

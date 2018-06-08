@@ -280,6 +280,14 @@ namespace ceph {
 #endif
 	return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
       }
+
+      static bool is_zero(const time_point& t) {
+        return (t == time_point::min());
+      }
+
+      static time_point zero() {
+        return time_point::min();
+      }
     };
 
     // So that our subtractions produce negative spans rather than
