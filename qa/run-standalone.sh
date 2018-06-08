@@ -94,6 +94,15 @@ if [ "$precore" = "$COREPATTERN" ]; then
 else
     sudo sysctl -w ${KERNCORE}=${COREPATTERN}
 fi
+# Clean out any cores in core target directory (currently .)
+if ls $(dirname $(sysctl -n $KERNCORE)) | grep -q '^core\|core$' ; then
+    mkdir found.cores.$$ 2> /dev/null || true
+    for i in $(ls $(dirname $(sysctl -n $KERNCORE)) | grep '^core\|core$'); do
+	mv $i found.cores.$$
+    done
+    echo "Stray cores put in $(pwd)/found.cores.$$"
+fi
+
 ulimit -c unlimited
 for f in $(cd $location ; find . -perm $exec_mode -type f)
 do
