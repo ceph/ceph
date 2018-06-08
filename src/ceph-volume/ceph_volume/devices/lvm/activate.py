@@ -162,10 +162,12 @@ def activate_bluestore(lvs, no_systemd=False):
         destination = os.path.join(osd_path, 'block.db')
         process.run(['ln', '-snf', db_device_path, destination])
         system.chown(db_device_path)
+        system.chown(destination)
     if wal_device_path:
         destination = os.path.join(osd_path, 'block.wal')
         process.run(['ln', '-snf', wal_device_path, destination])
         system.chown(wal_device_path)
+        system.chown(destination)
 
     if no_systemd is False:
         # enable the ceph-volume unit for this OSD
