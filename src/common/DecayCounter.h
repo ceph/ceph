@@ -68,7 +68,7 @@ public:
 
   double get() const {
     decay(rate);
-    return val+delta;
+    return val;
   }
 
   double get_last() const {
@@ -89,8 +89,8 @@ public:
 
   double hit(double v = 1.0) {
     decay(rate);
-    delta += v;
-    return val+delta;
+    val += v;
+    return val;
   }
 
   void adjust(double a) {
@@ -102,7 +102,6 @@ public:
 
   void scale(double f) {
     val *= f;
-    delta *= f;    
     vel *= f;
   }
 
@@ -112,7 +111,7 @@ public:
 
   void reset() {
     last_decay = clock::now();
-    val = delta = 0;
+    val = vel = 0;
   }
 
 protected:
@@ -120,7 +119,6 @@ protected:
 
 private:
   mutable double val = 0.0;           // value
-  mutable double delta = 0.0;         // delta since last decay
   mutable double vel = 0.0;           // recent velocity
   mutable time last_decay = clock::zero();   // time of last decay
   DecayRate rate;
