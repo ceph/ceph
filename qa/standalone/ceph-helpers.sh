@@ -145,6 +145,7 @@ function test_setup() {
 # subvolumes that relate to it.
 #
 # @param dir path name of the environment
+# @param dumplogs pass "1" to dump logs otherwise it will only if cores found
 # @return 0 on success, 1 on error
 #
 function teardown() {
@@ -1453,10 +1454,11 @@ function test_wait_for_clean() {
 #######################################################################
 
 ##
-# Wait until the cluster becomes HEALTH_OK again or if it does not make progress
-# for $TIMEOUT seconds.
+# Wait until the cluster has health condition passed as arg
+# again for $TIMEOUT seconds.
 #
-# @return 0 if the cluster is HEALTHY, 1 otherwise
+# @param string to grep for in health detail
+# @return 0 if the cluster health matches request, 1 otherwise
 #
 function wait_for_health() {
     local grepstr=$1
@@ -1473,6 +1475,12 @@ function wait_for_health() {
     done
 }
 
+##
+# Wait until the cluster becomes HEALTH_OK again or if it does not make progress
+# for $TIMEOUT seconds.
+#
+# @return 0 if the cluster is HEALTHY, 1 otherwise
+#
 function wait_for_health_ok() {
      wait_for_health "HEALTH_OK" || return 1
 }
