@@ -1834,7 +1834,7 @@ bool DaemonServer::handle_command(MCommand *m)
       ss << "unable to parse datetime '" << from_str << "'";
       r = -EINVAL;
       cmdctx->reply(r, ss);
-    } else if (!to.parse(to_str)) {
+    } else if (to_str.size() && !to.parse(to_str)) {
       ss << "unable to parse datetime '" << to_str << "'";
       r = -EINVAL;
       cmdctx->reply(r, ss);
