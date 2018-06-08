@@ -442,9 +442,11 @@ export class RgwUserFormComponent implements OnInit, OnDestroy {
     if (_.isNumber(index)) { // Modify
       // Nothing to do here at the moment.
     } else { // Add
+      // Split the key's user name into its user and subuser parts.
+      const userMatches = key.user.match(/([^:]+)(:(.+))?/);
       // Create an observable to add the S3 key when the form is submitted.
       this.submitObservables.push(this.rgwUserService.addS3Key(
-        this.userForm.get('user_id').value, key.user, key.access_key,
+        userMatches[1], userMatches[2] ? userMatches[3] : '', key.access_key,
         key.secret_key, key.generate_key));
       // If the access and the secret key are auto-generated, then visualize
       // this to the user by displaying a notification instead of the key.

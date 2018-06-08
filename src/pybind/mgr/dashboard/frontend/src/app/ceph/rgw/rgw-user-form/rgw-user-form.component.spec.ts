@@ -9,6 +9,7 @@ import { Observable } from 'rxjs/Observable';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
 
 describe('RgwUserFormComponent', () => {
@@ -47,6 +48,51 @@ describe('RgwUserFormComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('s3 key management', () => {
+    let rgwUserService: RgwUserService;
+
+    beforeEach(() => {
+      rgwUserService = TestBed.get(RgwUserService);
+      spyOn(rgwUserService, 'addS3Key').and.stub();
+    });
+
+    it('should not update key', () => {
+      component.setS3Key(new RgwUserS3Key(), 3);
+      expect(component.s3Keys.length).toBe(0);
+      expect(rgwUserService.addS3Key).not.toHaveBeenCalled();
+    });
+
+    it('should set key', () => {
+      const key = new RgwUserS3Key();
+      key.user = 'test1:subuser2';
+      component.setS3Key(key);
+      expect(component.s3Keys.length).toBe(1);
+      expect(component.s3Keys[0].user).toBe('test1:subuser2');
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith(
+        'test1',
+        'subuser2',
+        undefined,
+        undefined,
+        undefined
+      );
+    });
+
+    it('should set key w/o subuser', () => {
+      const key = new RgwUserS3Key();
+      key.user = 'test1';
+      component.setS3Key(key);
+      expect(component.s3Keys.length).toBe(1);
+      expect(component.s3Keys[0].user).toBe('test1');
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith(
+        'test1',
+        '',
+        undefined,
+        undefined,
+        undefined
+      );
+    });
   });
 
   describe('quotaMaxSizeValidator', () => {

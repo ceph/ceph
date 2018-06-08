@@ -132,7 +132,9 @@ export class RgwUserService {
       params = params.append('access-key', accessKey);
       params = params.append('secret-key', secretKey);
     }
-    params = params.append('subuser', subuser);
+    if (!_.isEmpty(subuser)) {
+      params = params.append('subuser', subuser);
+    }
     return this.http.put(`${this.url}?key`, null, {params: params});
   }
 
