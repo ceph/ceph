@@ -198,15 +198,17 @@ struct DeviceState : public RefCountedObject
 
   std::map<string,string> metadata;  ///< persistent metadata
 
-  utime_t expected_failure;       ///< when device failure is expected
-  utime_t expected_failure_stamp; ///< when expected_failure was recorded
+  pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
+  utime_t life_expectancy_stamp;          ///< when life expectency was recorded
 
   DeviceState(const std::string& n) : devid(n) {}
 
   void set_metadata(map<string,string>&& m);
 
-  void set_expected_failure(utime_t when, utime_t now);
-  void rm_expected_failure();
+  void set_life_expectancy(utime_t from, utime_t to, utime_t now);
+  void rm_life_expectancy();
+
+  string get_life_expectancy_str() const;
 
   /// true of we can be safely forgotten/removed from memory
   bool empty() const {

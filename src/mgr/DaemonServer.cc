@@ -1670,7 +1670,7 @@ bool DaemonServer::handle_command(MCommand *m)
       tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("DAEMONS", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("EXPECTED FAILURE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("LIFE EXPECTANCY", TextTable::LEFT, TextTable::LEFT);
       daemon_state.with_devices([&tbl](const DeviceState& dev) {
 	  string h;
 	  for (auto& i : dev.devnames) {
@@ -1689,7 +1689,7 @@ bool DaemonServer::handle_command(MCommand *m)
 	  tbl << dev.devid
 	      << h
 	      << d
-	      << stringify(dev.expected_failure)
+	      << dev.get_life_expectancy_str()
 	      << TextTable::endrow;
 	});
       cmdctx->odata.append(stringify(tbl));
@@ -1732,7 +1732,7 @@ bool DaemonServer::handle_command(MCommand *m)
 		}
 		tbl << dev.devid
 		    << h
-		    << stringify(dev.expected_failure)
+		    << dev.get_life_expectancy_str()
 		    << TextTable::endrow;
 	      });
 	  }
@@ -1787,7 +1787,7 @@ bool DaemonServer::handle_command(MCommand *m)
 	    tbl << dev.devid
 		<< n
 		<< d
-		<< stringify(dev.expected_failure)
+		<< dev.get_life_expectancy_str()
 		<< TextTable::endrow;
 	  });
       }
@@ -1819,20 +1819,27 @@ bool DaemonServer::handle_command(MCommand *m)
     }
     cmdctx->reply(r, ss);
     return true;
-  } else if (prefix == "device set-predicted-failure") {
+  } else if (prefix == "device set-life-expectancy") {
     string devid;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
-    string when_str;
-    cmd_getval(g_ceph_context, cmdctx->cmdmap, "when", when_str);
-    utime_t when;
-    if (!when.parse(when_str)) {
-      ss << "unable to parse datetime '" << when_str << "'";
+    string from_str, to_str;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "from", from_str);
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "to", to_str);
+    utime_t from, to;
+    if (!from.parse(from_str)) {
+      ss << "unable to parse datetime '" << from_str << "'";
+      r = -EINVAL;
+      cmdctx->reply(r, ss);
+    } else if (!to.parse(to_str)) {
+      ss << "unable to parse datetime '" << to_str << "'";
       r = -EINVAL;
       cmdctx->reply(r, ss);
     } else {
       map<string,string> meta;
-      daemon_state.with_device_create(devid, [when, &meta] (DeviceState& dev) {
-	  dev.set_expected_failure(when, ceph_clock_now());
+      daemon_state.with_device_create(
+	devid,
+	[from, to, &meta] (DeviceState& dev) {
+	  dev.set_life_expectancy(from, to, ceph_clock_now());
 	  meta = dev.metadata;
 	});
       json_spirit::Object json_object;
@@ -1850,12 +1857,12 @@ bool DaemonServer::handle_command(MCommand *m)
       monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
     }
     return true;
-  } else if (prefix == "device rm-predicted-failure") {
+  } else if (prefix == "device rm-life-expectancy") {
     string devid;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
     map<string,string> meta;
     if (daemon_state.with_device_write(devid, [&meta] (DeviceState& dev) {
-	  dev.rm_expected_failure();
+	  dev.rm_life_expectancy();
 	  meta = dev.metadata;
 	})) {
       string cmd;
