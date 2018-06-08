@@ -423,7 +423,7 @@ function TEST_recovery_erasure_remapped() {
     kill_daemons $dir || return 1
 }
 
-main recout "$@"
+main osd-recovery-stats "$@"
 
 # Local Variables:
 # compile-command: "make -j4 && ../qa/run-standalone.sh osd-recovery-stats.sh"
