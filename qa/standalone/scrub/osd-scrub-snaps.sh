@@ -688,12 +688,28 @@ EOF
         pids+="$(cat $pidfile) "
     done
 
+    ERRORS=0
+
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
     done
-
-    ERRORS=0
+    sleep 5
+    local -i loop=0
+    while ceph pg dump pgs | grep -q snaptrim;
+    do
+        if ceph pg dump pgs | grep -q snaptrim_error;
+        then
+            break
+        fi
+        sleep 2
+        loop+=1
+        if (( $loop >= 10 )) ; then
+            ERRORS=$(expr $ERRORS + 1)
+            break
+        fi
+    done
+    ceph pg dump pgs
 
     for pid in $pids
     do
@@ -1136,6 +1152,8 @@ fi
         pids+="$(cat $pidfile) "
     done
 
+    ERRORS=0
+
     # When removing snapshots with a corrupt replica, it crashes.
     # See http://tracker.ceph.com/issues/23875
     if [ $which = "primary" ];
@@ -1144,9 +1162,23 @@ fi
         do
             rados -p $poolname rmsnap snap$i
         done
+        sleep 5
+        local -i loop=0
+        while ceph pg dump pgs | grep -q snaptrim;
+        do
+            if ceph pg dump pgs | grep -q snaptrim_error;
+            then
+                break
+            fi
+            sleep 2
+            loop+=1
+            if (( $loop >= 10 )) ; then
+                ERRORS=$(expr $ERRORS + 1)
+                break
+            fi
+        done
     fi
-
-    ERRORS=0
+    ceph pg dump pgs
 
     for pid in $pids
     do
