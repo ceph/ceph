@@ -170,6 +170,10 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
     EXPECT_CALL(image_request_wq, queue(_));
   }
 
+  void expect_requeue(MockImageRequestWQ &image_request_wq) {
+    EXPECT_CALL(image_request_wq, requeue(_));
+  }
+
   void expect_front(MockImageRequestWQ &image_request_wq,
                     MockImageDispatchSpec *image_request) {
     EXPECT_CALL(image_request_wq, front()).WillOnce(Return(image_request));
@@ -223,6 +227,26 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
                     *on_finish = ctx;
                   }));
   }
+
+  void expect_set_throttled(MockImageDispatchSpec &mock_image_request) {
+    EXPECT_CALL(mock_image_request, set_throttled(_)).Times(6);
+  }
+
+  void expect_was_throttled(MockImageDispatchSpec &mock_image_request, bool value) {
+    EXPECT_CALL(mock_image_request, was_throttled(_)).Times(6).WillRepeatedly(Return(value));
+  }
+
+  void expect_tokens_requested(MockImageDispatchSpec &mock_image_request, uint64_t value) {
+    EXPECT_CALL(mock_image_request, tokens_requested(_)).WillOnce(Return(value));
+  }
+
+  void expect_all_throttled(MockImageDispatchSpec &mock_image_request, bool value) {
+    EXPECT_CALL(mock_image_request, were_all_throttled()).WillOnce(Return(value));
+  }
+
+  void expect_start_op(MockImageDispatchSpec &mock_image_request) {
+    EXPECT_CALL(mock_image_request, start_op()).Times(1);
+  }
 };
 
 TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
@@ -275,10 +299,13 @@ TEST_F(TestMockIoImageRequestWQ, RefreshError) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
 
+  auto mock_queued_image_request = new MockImageDispatchSpec();
+  expect_was_throttled(*mock_queued_image_request, false);
+  expect_set_throttled(*mock_queued_image_request);
+
   InSequence seq;
   MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
 
-  auto mock_queued_image_request = new MockImageDispatchSpec();
   expect_is_write_op(*mock_queued_image_request, true);
   expect_queue(mock_image_request_wq);
   auto *aio_comp = new librbd::io::AioCompletion();
@@ -302,6 +329,53 @@ TEST_F(TestMockIoImageRequestWQ, RefreshError) {
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   ASSERT_EQ(-EPERM, aio_comp->get_return_value());
   aio_comp->release();
+}
+
+TEST_F(TestMockIoImageRequestWQ, QosNoLimit) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  MockImageDispatchSpec mock_queued_image_request;
+  expect_was_throttled(mock_queued_image_request, false);
+  expect_set_throttled(mock_queued_image_request);
+
+  InSequence seq;
+  MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
+
+  mock_image_request_wq.apply_qos_limit(0, RBD_QOS_BPS_THROTTLE);
+
+  expect_front(mock_image_request_wq, &mock_queued_image_request);
+  expect_is_refresh_request(mock_image_ctx, false);
+  expect_is_write_op(mock_queued_image_request, true);
+  expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
+  expect_start_op(mock_queued_image_request);
+  ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == &mock_queued_image_request);
+}
+
+TEST_F(TestMockIoImageRequestWQ, BPSQos) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+
+  MockImageDispatchSpec mock_queued_image_request;
+  expect_was_throttled(mock_queued_image_request, false);
+  expect_set_throttled(mock_queued_image_request);
+
+  InSequence seq;
+  MockImageRequestWQ mock_image_request_wq(&mock_image_ctx, "io", 60, nullptr);
+
+  mock_image_request_wq.apply_qos_limit(1, RBD_QOS_BPS_THROTTLE);
+
+  expect_front(mock_image_request_wq, &mock_queued_image_request);
+  expect_tokens_requested(mock_queued_image_request, 2);
+  expect_dequeue(mock_image_request_wq, &mock_queued_image_request);
+  expect_all_throttled(mock_queued_image_request, true);
+  expect_requeue(mock_image_request_wq);
+  expect_signal(mock_image_request_wq);
+  ASSERT_TRUE(mock_image_request_wq.invoke_dequeue() == nullptr);
 }
 
 } // namespace io
