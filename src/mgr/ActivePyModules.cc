@@ -281,10 +281,10 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     return f.get();
   } else if (what == "pg_dump") {
     PyFormatter f;
-        cluster_state.with_pgmap(
-        [&f](const PGMap &pg_map) {
-	  pg_map.dump(&f);
-        }
+    cluster_state.with_pgmap(
+      [&f](const PGMap &pg_map) {
+	pg_map.dump(&f);
+      }
     );
     return f.get();
   } else if (what == "devices") {
@@ -294,6 +294,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
 	f.dump_object("device", dev);
       });
     f.close_section();
+    return f.get();
+  } else if (what.size() > 7 &&
+	     what.substr(0, 7) == "device ") {
+    string devid = what.substr(7);
+    PyFormatter f;
+    daemon_state.with_device(devid, [&f] (const DeviceState& dev) {
+	f.dump_object("device", dev);
+      });
     return f.get();
   } else if (what == "io_rate") {
     PyFormatter f;
