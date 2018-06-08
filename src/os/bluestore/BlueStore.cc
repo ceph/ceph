@@ -4754,13 +4754,16 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       }
       bluefs_shared_bdev = BlueFS::BDEV_SLOW;
       bluefs_single_shared_device = false;
-    } else if (::lstat(bfn.c_str(), &st) == -1) {
-      bluefs_shared_bdev = BlueFS::BDEV_DB;
     } else {
-      //symlink exist is bug
-      derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
       r = -errno;
-      goto free_bluefs;
+      if (::lstat(bfn.c_str(), &st) == -1) {
+	r = 0;
+	bluefs_shared_bdev = BlueFS::BDEV_DB;
+      } else {
+	derr << __func__ << " " << bfn << " symlink exists but target unusable: "
+	     << cpp_strerror(r) << dendl;
+	goto free_bluefs;
+      }
     }
 
     // shared device
@@ -4824,13 +4827,16 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       }
       kv_options["separate_wal_dir"] = "1";
       bluefs_single_shared_device = false;
-    } else if (::lstat(bfn.c_str(), &st) == -1) {
-      kv_options.erase("separate_wal_dir");
     } else {
-      //symlink exist is bug
-      derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
       r = -errno;
-      goto free_bluefs;
+      if (::lstat(bfn.c_str(), &st) == -1) {
+	kv_options.erase("separate_wal_dir");
+	r = 0;
+      } else {
+	derr << __func__ << " " << bfn << " symlink exists but target unusable: "
+	     << cpp_strerror(r) << dendl;
+	goto free_bluefs;
+      }
     }
 
     if (create) {
