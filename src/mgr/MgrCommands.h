@@ -155,7 +155,7 @@ COMMAND("device ls-by-host name=host,type=CephString",
 	"mgr", "r", "cli,rest")
 COMMAND("device set-life-expectancy name=devid,type=CephString "\
 	"name=from,type=CephString "\
-	"name=to,type=CephString",
+	"name=to,type=CephString,req=False",
 	"Set predicted device life expectancy",
 	"mgr", "rw", "cli,rest")
 COMMAND("device rm-life-expectancy name=devid,type=CephString",
