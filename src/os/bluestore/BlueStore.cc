@@ -8955,8 +8955,7 @@ void BlueStore::_kv_sync_thread()
       if (bluefs_single_shared_device && bluefs) {
 	if (aios) {
 	  force_flush = true;
-	} else if (kv_committing.empty() && kv_submitting.empty() &&
-		   deferred_stable.empty()) {
+	} else if (kv_committing.empty() && deferred_stable.empty()) {
 	  force_flush = true;  // there's nothing else to commit!
 	} else if (deferred_aggressive) {
 	  force_flush = true;
