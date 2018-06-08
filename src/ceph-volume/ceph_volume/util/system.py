@@ -100,6 +100,7 @@ def chown(path, recursive=True):
     """
     uid, gid = get_ceph_user_ids()
     if os.path.islink(path):
+        process.run(['chown', '-h', 'ceph:ceph', path])
         path = os.path.realpath(path)
     if recursive:
         process.run(['chown', '-R', 'ceph:ceph', path])
