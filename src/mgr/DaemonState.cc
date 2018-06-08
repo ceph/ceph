@@ -25,30 +25,45 @@
 void DeviceState::set_metadata(map<string,string>&& m)
 {
   metadata = std::move(m);
-  auto p = metadata.find("expected_failure");
+  auto p = metadata.find("life_expectancy_min");
   if (p != metadata.end()) {
-    expected_failure.parse(p->second);
+    life_expectancy.first.parse(p->second);
   }
-  p = metadata.find("expected_failure_stamp");
+  p = metadata.find("life_expectancy_max");
   if (p != metadata.end()) {
-    expected_failure_stamp.parse(p->second);
+    life_expectancy.second.parse(p->second);
+  }
+  p = metadata.find("life_expectancy_stamp");
+  if (p != metadata.end()) {
+    life_expectancy_stamp.parse(p->second);
   }
 }
 
-void DeviceState::set_expected_failure(utime_t when, utime_t now)
+void DeviceState::set_life_expectancy(utime_t from, utime_t to, utime_t now)
 {
-  expected_failure = when;
-  expected_failure_stamp = now;
-  metadata["expected_failure"] = stringify(expected_failure);
-  metadata["expected_failure_stamp"] = stringify(expected_failure_stamp);
+  life_expectancy = make_pair(from, to);
+  life_expectancy_stamp = now;
+  metadata["life_expectancy_min"] = stringify(life_expectancy.first);
+  metadata["life_expectancy_max"] = stringify(life_expectancy.second);
+  metadata["life_expectancy_stamp"] = stringify(life_expectancy_stamp);
 }
 
-void DeviceState::rm_expected_failure()
+void DeviceState::rm_life_expectancy()
 {
-  expected_failure = utime_t();
-  expected_failure_stamp = utime_t();
-  metadata.erase("expected_failure");
-  metadata.erase("expected_failure_stamp");
+  life_expectancy = make_pair(utime_t(), utime_t());
+  life_expectancy_stamp = utime_t();
+  metadata.erase("life_expectancy_min");
+  metadata.erase("life_expectancy_max");
+  metadata.erase("life_expectancy_stamp");
+}
+
+string DeviceState::get_life_expectancy_str() const
+{
+  if (life_expectancy.first == utime_t()) {
+    return string();
+  }
+  return stringify(life_expectancy.first) + " to " +
+    stringify(life_expectancy.second);
 }
 
 void DeviceState::dump(Formatter *f) const
@@ -67,10 +82,11 @@ void DeviceState::dump(Formatter *f) const
     f->dump_string("daemon", to_string(i));
   }
   f->close_section();
-  if (expected_failure != utime_t()) {
-    f->dump_stream("expected_failure") << expected_failure;
-    f->dump_stream("expected_failure_stamp")
-      << expected_failure_stamp;
+  if (life_expectancy.first != utime_t()) {
+    f->dump_stream("life_expectancy_min") << life_expectancy.first;
+    f->dump_stream("life_expectancy_max") << life_expectancy.second;
+    f->dump_stream("life_expectancy_stamp")
+      << life_expectancy_stamp;
   }
 }
 
@@ -85,9 +101,10 @@ void DeviceState::print(ostream& out) const
     d.insert(to_string(j));
   }
   out << "daemons " << d << "\n";
-  if (expected_failure != utime_t()) {
-    out << "expected_failure " << expected_failure
-	<< " (as of " << expected_failure_stamp << ")\n";
+  if (life_expectancy.first != utime_t()) {
+    out << "life_expectancy " << life_expectancy.first << " to "
+	<< life_expectancy.second
+	<< " (as of " << life_expectancy_stamp << ")\n";
   }
 }
 

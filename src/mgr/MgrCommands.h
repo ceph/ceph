@@ -153,9 +153,11 @@ COMMAND("device ls-by-daemon name=who,type=CephString",
 COMMAND("device ls-by-host name=host,type=CephString",
 	"Show devices on a host",
 	"mgr", "r", "cli,rest")
-COMMAND("device set-predicted-failure name=devid,type=CephString name=when,type=CephString",
-	"Set predicted device failure time",
+COMMAND("device set-life-expectancy name=devid,type=CephString "\
+	"name=from,type=CephString "\
+	"name=to,type=CephString",
+	"Set predicted device life expectancy",
 	"mgr", "rw", "cli,rest")
-COMMAND("device rm-predicted-failure name=devid,type=CephString",
-	"Clear predicted device failure time",
+COMMAND("device rm-life-expectancy name=devid,type=CephString",
+	"Clear predicted device life expectancy",
 	"mgr", "rw", "cli,rest")
