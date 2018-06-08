@@ -35,8 +35,11 @@ class Messenger;
 class MonClient;
 
 class MDBalancer {
-  friend class C_Bal_SendHeartbeat;
 public:
+  using clock = ceph::coarse_mono_clock;
+  using time = ceph::coarse_mono_time;
+  friend class C_Bal_SendHeartbeat;
+
   MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc) : 
     mds(m), messenger(msgr), mon_client(monc) { }
 
@@ -49,12 +52,12 @@ public:
    */
   void tick();
 
-  void subtract_export(CDir *ex, utime_t now);
-  void add_import(CDir *im, utime_t now);
-  void adjust_pop_for_rename(CDir *pdir, CDir *dir, utime_t now, bool inc);
+  void subtract_export(CDir *ex);
+  void add_import(CDir *im);
+  void adjust_pop_for_rename(CDir *pdir, CDir *dir, bool inc);
 
-  void hit_inode(const utime_t& now, CInode *in, int type, int who=-1);
-  void hit_dir(const utime_t& now, CDir *dir, int type, int who=-1, double amount=1.0);
+  void hit_inode(CInode *in, int type, int who=-1);
+  void hit_dir(CDir *dir, int type, int who=-1, double amount=1.0);
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
@@ -85,7 +88,7 @@ private:
 
   void handle_export_pins(void);
 
-  mds_load_t get_load(utime_t now);
+  mds_load_t get_load();
   int localize_balancer();
   void send_heartbeat();
   void handle_heartbeat(MHeartbeat *m);
@@ -123,11 +126,11 @@ private:
   string bal_code;
   string bal_version;
 
-  mono_time last_heartbeat = mono_clock::zero();
-  mono_time last_sample = mono_clock::zero();
-  utime_t rebalance_time; //ensure a consistent view of load for rebalance
+  time last_heartbeat = clock::zero();
+  time last_sample = clock::zero();
+  time rebalance_time = clock::zero(); //ensure a consistent view of load for rebalance
 
-  utime_t last_get_load;
+  time last_get_load = clock::zero();
   uint64_t last_num_requests = 0;
 
   // Dirfrags which are marked to be passed on to MDCache::[split|merge]_dir

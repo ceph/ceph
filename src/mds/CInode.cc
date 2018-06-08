@@ -263,14 +263,36 @@ ostream& operator<<(ostream& out, const CInode::scrub_stamp_info_t& si)
   return out;
 }
 
-
+CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l)
+  :
+    mdcache(c),
+    first(f), last(l),
+    item_dirty(this),
+    item_caps(this),
+    item_open_file(this),
+    item_dirty_parent(this),
+    item_dirty_dirfrag_dir(this),
+    item_dirty_dirfrag_nest(this),
+    item_dirty_dirfrag_dirfragtree(this),
+    pop(c->decayrate),
+    versionlock(this, &versionlock_type),
+    authlock(this, &authlock_type),
+    linklock(this, &linklock_type),
+    dirfragtreelock(this, &dirfragtreelock_type),
+    filelock(this, &filelock_type),
+    xattrlock(this, &xattrlock_type),
+    snaplock(this, &snaplock_type),
+    nestlock(this, &nestlock_type),
+    flocklock(this, &flocklock_type),
+    policylock(this, &policylock_type)
+{
+  if (auth) state_set(STATE_AUTH);
+}
 
 void CInode::print(ostream& out)
 {
   out << *this;
 }
-
-
 
 void CInode::add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client)
 {
@@ -3843,11 +3865,11 @@ void CInode::encode_export(bufferlist& bl)
   get(PIN_TEMPEXPORTING);
 }
 
-void CInode::finish_export(utime_t now)
+void CInode::finish_export()
 {
   state &= MASK_STATE_EXPORT_KEPT;
 
-  pop.zero(now);
+  pop.zero();
 
   // just in case!
   //dirlock.clear_updated();
@@ -3877,7 +3899,7 @@ void CInode::decode_import(bufferlist::const_iterator& p,
     mark_dirty_parent(ls);
   }
 
-  decode(pop, ceph_clock_now(), p);
+  decode(pop, p);
 
   decode(get_replicas(), p);
   if (is_replicated())

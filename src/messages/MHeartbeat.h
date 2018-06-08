@@ -18,6 +18,7 @@
 
 #include "include/types.h"
 #include "msg/Message.h"
+#include "common/DecayCounter.h"
 
 class MHeartbeat : public Message {
   mds_load_t load;
@@ -32,8 +33,7 @@ class MHeartbeat : public Message {
     return import_map;
   }
 
-  MHeartbeat()
-    : Message(MSG_MDS_HEARTBEAT), load(utime_t()) { }
+  MHeartbeat() : Message(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
   MHeartbeat(mds_load_t& load, int beat)
     : Message(MSG_MDS_HEARTBEAT),
       load(load) {
@@ -53,8 +53,7 @@ public:
   }
   void decode_payload() override {
     auto p = payload.cbegin();
-    utime_t now(ceph_clock_now());
-    decode(load, now, p);
+    decode(load, p);
     decode(beat, p);
     decode(import_map, p);
   }
