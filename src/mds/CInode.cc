@@ -675,6 +675,9 @@ void CInode::close_dirfrag(frag_t fg)
     dir->state_clear(CDir::STATE_STICKY);
     dir->put(CDir::PIN_STICKY);
   }
+
+  if (dir->is_subtree_root())
+    num_subtree_roots--;
   
   // dump any remaining dentries, for debugging purposes
   for (const auto &p : dir->items)
@@ -693,21 +696,22 @@ void CInode::close_dirfrags()
 
 bool CInode::has_subtree_root_dirfrag(int auth)
 {
-  for (const auto &p : dirfrags) {
-    if (p.second->is_subtree_root() &&
-	(auth == -1 || p.second->dir_auth.first == auth))
+  if (num_subtree_roots > 0) {
+    if (auth == -1)
       return true;
+    for (const auto &p : dirfrags) {
+      if (p.second->is_subtree_root() &&
+	  p.second->dir_auth.first == auth)
+	return true;
+    }
   }
   return false;
 }
 
 bool CInode::has_subtree_or_exporting_dirfrag()
 {
-  for (const auto &p : dirfrags) {
-    if (p.second->is_subtree_root() ||
-	p.second->state_test(CDir::STATE_EXPORTING))
-      return true;
-  }
+  if (num_subtree_roots > 0 || num_exporting_dirs > 0)
+    return true;
   return false;
 }
 
