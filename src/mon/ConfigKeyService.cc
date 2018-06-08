@@ -108,6 +108,17 @@ bool ConfigKeyService::store_has_prefix(const string &prefix)
   return false;
 }
 
+static bool is_binary_string(const string& s)
+{
+  for (auto c : s) {
+    // \n and \t are escaped in JSON; other control characters are not.
+    if ((c < 0x20 && c != '\n' && c != '\t') || c >= 0x7f) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void ConfigKeyService::store_dump(stringstream &ss)
 {
   KeyValueDB::Iterator iter =
@@ -117,7 +128,14 @@ void ConfigKeyService::store_dump(stringstream &ss)
   f.open_object_section("config-key store");
 
   while (iter->valid()) {
-    f.dump_string(iter->key().c_str(), iter->value().to_str());
+    string s = iter->value().to_str();
+    if (is_binary_string(s)) {
+      ostringstream ss;
+      ss << "<<< binary blob of length " << s.size() << " >>>";
+      f.dump_string(iter->key().c_str(), ss.str());
+    } else {
+      f.dump_string(iter->key().c_str(), s);
+    }
     iter->next();
   }
   f.close_section();
