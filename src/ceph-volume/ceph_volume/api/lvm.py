@@ -5,8 +5,13 @@ set of utilities for interacting with LVM.
 """
 import logging
 import os
+import uuid
+from math import floor
 from ceph_volume import process
-from ceph_volume.exceptions import MultipleLVsError, MultipleVGsError, MultiplePVsError
+from ceph_volume.exceptions import (
+    MultipleLVsError, MultipleVGsError,
+    MultiplePVsError, SizeAllocationError
+)
 
 logger = logging.getLogger(__name__)
 
@@ -233,15 +238,17 @@ def get_api_vgs():
 
     Command and sample delimited output should look like::
 
-        $ vgs --noheadings --readonly --separator=';' \
+        $ vgs --noheadings --units=g --readonly --separator=';' \
           -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
           ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
           osd_vg;3;1;0;wz--n-;29.21g;9.21g
 
+    To normalize sizing, the units are forced in 'g' which is equivalent to
+    gigabytes, which uses multiples of 1024 (as opposed to 1000)
     """
     fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free'
     stdout, stderr, returncode = process.call(
-        ['vgs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
+        ['vgs', '--noheadings', '--readonly', '--units=g', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
@@ -258,7 +265,7 @@ def get_api_lvs():
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
-    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid'
+    fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid,lv_size'
     stdout, stderr, returncode = process.call(
         ['lvs', '--noheadings', '--readonly', '--separator=";"', '-o', fields]
     )
@@ -473,6 +480,47 @@ def create_lv(name, group, size=None, tags=None):
             {path_tag: lv.lv_path}
         )
     return lv
+
+
+def create_lvs(volume_group, parts=None, size=None, name_prefix='ceph-lv'):
+    """
+    Create multiple Logical Volumes from a Volume Group by calculating the
+    proper extents from ``parts`` or ``size``. A custom prefix can be used
+    (defaults to ``ceph-lv``), these names are always suffixed with a uuid.
+
+    LV creation in ceph-volume will require tags, this is expected to be
+    pre-computed by callers who know Ceph metadata like OSD IDs and FSIDs. It
+    will probably not be the case when mass-creating LVs, so common/default
+    tags will be set to ``"null"``.
+
+    .. note:: LVs that are not in use can be detected by querying LVM for tags that are
+              set to ``"null"``.
+
+    :param volume_group: The volume group (vg) to use for LV creation
+    :type group: ``VolumeGroup()`` object
+    :param parts: Number of LVs to create *instead of* ``size``.
+    :type parts: int
+    :param size: Size (in gigabytes) of LVs to create, e.g. "as many 10gb LVs as possible"
+    :type size: int
+    """
+    if parts is None and size is None:
+        # fallback to just one part (using 100% of the vg)
+        parts = 1
+    lvs = []
+    tags = {
+        "ceph.osd_id": "null",
+        "ceph.type": "null",
+        "ceph.cluster_fsid": "null",
+        "ceph.osd_fsid": "null",
+    }
+    sizing = volume_group.sizing(parts=parts, size=size)
+    for part in range(0, sizing['parts']):
+        size = sizing['sizes']
+        lv_name = '%s-%s' % (name_prefix, uuid.uuid4())
+        lvs.append(
+            create_lv(lv_name, volume_group.name, size="%sg" % size, tags=tags)
+        )
+    return lvs
 
 
 def get_vg(vg_name=None, vg_tags=None):
@@ -806,6 +854,105 @@ class VolumeGroup(object):
 
     def __repr__(self):
         return self.__str__()
+
+    def _parse_size(self, size):
+        error_msg = "Unable to convert vg size to integer: '%s'" % str(size)
+        try:
+            integer, _ = size.split('g')
+        except ValueError:
+            logger.exception(error_msg)
+            raise RuntimeError(error_msg)
+
+        try:
+            integer = float(integer)
+        except (TypeError, ValueError):
+            logger.exception(error_msg)
+            raise RuntimeError(error_msg)
+
+        # round down the float, convert to an integer
+        return int(floor(integer))
+
+    @property
+    def free(self):
+        """
+        Parse the available size in gigabytes from the ``vg_free`` attribute, that
+        will be a string with a character ('g') to indicate gigabytes in size.
+        Returns a rounded down integer to ease internal operations::
+
+        >>> data_vg.vg_free
+        '0.01g'
+        >>> data_vg.size
+        0
+        """
+        return self._parse_size(self.vg_free)
+
+    @property
+    def size(self):
+        """
+        Parse the size in gigabytes from the ``vg_size`` attribute, that
+        will be a string with a character ('g') to indicate gigabytes in size.
+        Returns a rounded down integer to ease internal operations::
+
+        >>> data_vg.vg_size
+        '1024.9g'
+        >>> data_vg.size
+        1024
+        """
+        return self._parse_size(self.vg_size)
+
+    def sizing(self, parts=None, size=None):
+        """
+        Calculate proper sizing to fully utilize the volume group in the most
+        efficient way possible. To prevent situations where LVM might accept
+        a percentage that is beyond the vg's capabilities, it will refuse with
+        an error when requesting a larger-than-possible parameter, in addition
+        to rounding down calculations.
+
+        A dictionary with different sizing parameters is returned, to make it
+        easier for others to choose what they need in order to create logical
+        volumes::
+
+        >>> data_vg.free
+        1024
+        >>> data_vg.sizing(parts=4)
+        {'parts': 4, 'sizes': 256, 'percentages': 25}
+        >>> data_vg.sizing(size=512)
+        {'parts': 2, 'sizes': 512, 'percentages': 50}
+
+
+        :param parts: Number of parts to create LVs from
+        :param size: Size in gigabytes to divide the VG into
+
+        :raises SizeAllocationError: When requested size cannot be allocated with
+        :raises ValueError: If both ``parts`` and ``size`` are given
+        """
+        if parts is not None and size is not None:
+            raise ValueError(
+                "Cannot process sizing with both parts (%s) and size (%s)" % (parts, size)
+            )
+
+        if size and size > self.free:
+            raise SizeAllocationError(size, self.free)
+
+        def get_percentage(parts):
+            return int(floor(100 / float(parts)))
+
+        if parts is not None:
+            # Prevent parts being 0, falling back to 1 (100% usage)
+            parts = parts or 1
+            percentages = get_percentage(parts)
+
+        if size:
+            parts = int(floor(self.free / size)) or 1
+            percentages = get_percentage(parts)
+
+        sizes = int(floor(self.free / parts)) if parts else int(floor(self.free))
+
+        return {
+            'parts': parts,
+            'percentages': percentages,
+            'sizes': sizes
+        }
 
 
 class Volume(object):
