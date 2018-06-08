@@ -19,16 +19,16 @@
 
 void DecayCounter::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 4, bl);
+  decay(rate);
+  ENCODE_START(5, 4, bl);
   encode(val, bl);
-  encode(delta, bl);
   encode(vel, bl);
   ENCODE_FINISH(bl);
 }
 
 void DecayCounter::decode(bufferlist::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, p);
   if (struct_v < 2) {
     double half_life = 0.0;
     decode(half_life, p);
@@ -38,7 +38,11 @@ void DecayCounter::decode(bufferlist::const_iterator &p)
     decode(k, p);
   }
   decode(val, p);
-  decode(delta, p);
+  if (struct_v < 5) {
+    double delta;
+    decode(delta, p);
+    val += delta;
+  }
   decode(vel, p);
   last_decay = clock::now();
   DECODE_FINISH(p);
@@ -48,7 +52,6 @@ void DecayCounter::dump(Formatter *f) const
 {
   decay(rate);
   f->dump_float("value", val);
-  f->dump_float("delta", delta);
   f->dump_float("velocity", vel);
 }
 
@@ -56,7 +59,6 @@ void DecayCounter::generate_test_instances(std::list<DecayCounter*>& ls)
 {
   DecayCounter *counter = new DecayCounter();
   counter->val = 3.0;
-  counter->delta = 2.0;
   counter->vel = 1.0;
   ls.push_back(counter);
   counter = new DecayCounter();
@@ -72,7 +74,7 @@ void DecayCounter::decay(const DecayRate &rate) const
       return; /* no need to decay for small differences */
 
     // calculate new value
-    double newval = (val+delta) * exp(el * rate.k);
+    double newval = val * exp(el * rate.k);
     if (newval < .01) {
       newval = 0.0;
     }
@@ -82,7 +84,6 @@ void DecayCounter::decay(const DecayRate &rate) const
     vel *= exp(el * rate.k);
 
     val = newval;
-    delta = 0;
     last_decay = now;
   }
 }
