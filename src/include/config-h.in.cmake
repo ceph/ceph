@@ -345,4 +345,7 @@
 /* Defined if Intel QAT compress/decompress is supported */
 #cmakedefine HAVE_QATZIP
 
+/* Define if seastar is available. */
+#cmakedefine HAVE_SEASTAR
+
 #endif /* CONFIG_H */

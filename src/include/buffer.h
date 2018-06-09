@@ -72,6 +72,14 @@
 struct xio_reg_mem;
 class XioDispatchHook;
 #endif
+#ifdef HAVE_SEASTAR
+namespace seastar {
+template <typename T> class temporary_buffer;
+namespace net {
+class packet;
+}
+}
+#endif // HAVE_SEASTAR
 class deleter;
 
 namespace ceph {
@@ -168,6 +176,15 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_static(unsigned len, char *buf);
   raw* claim_buffer(unsigned len, char *buf, deleter del);
 
+#ifdef HAVE_SEASTAR
+  /// create a raw buffer to wrap seastar cpu-local memory, using foreign_ptr to
+  /// make it safe to share between cpus
+  raw* create_foreign(seastar::temporary_buffer<char>&& buf);
+  /// create a raw buffer to wrap seastar cpu-local memory, without the safety
+  /// of foreign_ptr. the caller must otherwise guarantee that the buffer ptr is
+  /// destructed on this cpu
+  raw* create(seastar::temporary_buffer<char>&& buf);
+#endif
 #if defined(HAVE_XIO)
   raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
@@ -350,6 +367,13 @@ namespace buffer CEPH_BUFFER_API {
     void zero(unsigned o, unsigned l);
     void zero(unsigned o, unsigned l, bool crc_reset);
     unsigned append_zeros(unsigned l);
+
+#ifdef HAVE_SEASTAR
+    /// create a temporary_buffer, copying the ptr as its deleter
+    operator seastar::temporary_buffer<char>() &;
+    /// convert to temporary_buffer, stealing the ptr as its deleter
+    operator seastar::temporary_buffer<char>() &&;
+#endif // HAVE_SEASTAR
 
   };
 
@@ -813,6 +837,11 @@ namespace buffer CEPH_BUFFER_API {
       }
     }
 
+#ifdef HAVE_SEASTAR
+    /// convert the bufferlist into a network packet
+    operator seastar::net::packet() &&;
+#endif
+
     iterator begin() {
       return iterator(this, 0);
     }
@@ -987,12 +1016,12 @@ inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
   return l;
 }
 
-}
+} // namespace buffer
 
 #if defined(HAVE_XIO)
 xio_reg_mem* get_xio_mp(const buffer::ptr& bp);
 #endif
 
-}
+} // namespace ceph
 
 #endif

@@ -581,12 +581,16 @@ if (WITH_SYSTEM_ROCKSDB)
   find_package(rocksdb 5.8 REQUIRED)
 endif()
 
+option(WITH_SEASTAR "Build seastar components")
+set(HAVE_SEASTAR ${WITH_SEASTAR})
+
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
-  atomic chrono thread system regex random program_options date_time iostreams)
+  atomic chrono filesystem thread system regex random program_options date_time
+  iostreams unit_test_framework)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
@@ -595,6 +599,7 @@ endif()
 if(WITH_BOOST_CONTEXT)
   list(APPEND BOOST_COMPONENTS context coroutine)
 endif()
+list(APPEND BOOST_COMPONENTS test timer)
 
 set(Boost_USE_MULTITHREADED ON)
 # require minimally the bundled version

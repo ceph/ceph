@@ -52,3 +52,6 @@
 [submodule "src/dmclock"]
 	path = src/dmclock
 	url = https://github.com/ceph/dmclock.git
+[submodule "src/seastar"]
+	path = src/seastar
+	url = https://github.com/ceph/seastar.git
