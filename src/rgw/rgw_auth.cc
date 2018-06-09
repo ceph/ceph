@@ -403,6 +403,7 @@ void rgw::auth::RemoteApplier::create_account(const rgw_user& acct_user,
 
   user_info.user_id = new_acct_user;
   user_info.display_name = info.acct_name;
+  user_info.max_buckets = store->ctx()->_conf->rgw_user_max_buckets;
 
   int ret = rgw_store_user_info(store, user_info, nullptr, nullptr,
                                 real_time(), true);
