@@ -7,8 +7,10 @@
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "librbd/ExclusiveLock.h"
+#include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "osdc/Striper.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -546,6 +548,54 @@ void SnapshotCopyRequest<I>::handle_set_head(int r) {
     return;
   }
 
+  if (handle_cancellation()) {
+    return;
+  }
+
+  send_resize_object_map();
+}
+
+template <typename I>
+void SnapshotCopyRequest<I>::send_resize_object_map() {
+  int r = 0;
+
+  if (m_snap_id_end == CEPH_NOSNAP &&
+      m_dst_image_ctx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    RWLock::RLocker owner_locker(m_dst_image_ctx->owner_lock);
+    RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+
+    if (m_dst_image_ctx->object_map != nullptr &&
+        Striper::get_num_objects(m_dst_image_ctx->layout,
+                                 m_dst_image_ctx->size) !=
+          m_dst_image_ctx->object_map->size()) {
+
+      ldout(m_cct, 20) << dendl;
+
+      auto finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock);
+      if (finish_op_ctx != nullptr) {
+        auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+            handle_resize_object_map(r);
+            finish_op_ctx->complete(0);
+          });
+
+        m_dst_image_ctx->object_map->aio_resize(m_dst_image_ctx->size,
+                                                OBJECT_NONEXISTENT, ctx);
+        return;
+      }
+
+      lderr(m_cct) << "lost exclusive lock" << dendl;
+      r = -EROFS;
+    }
+  }
+
+  finish(r);
+}
+
+template <typename I>
+void SnapshotCopyRequest<I>::handle_resize_object_map(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  assert(r == 0);
   finish(0);
 }
 
@@ -596,6 +646,12 @@ int SnapshotCopyRequest<I>::validate_parent(I *image_ctx,
 template <typename I>
 Context *SnapshotCopyRequest<I>::start_lock_op() {
   RWLock::RLocker owner_locker(m_dst_image_ctx->owner_lock);
+  return start_lock_op(m_dst_image_ctx->owner_lock);
+}
+
+template <typename I>
+Context *SnapshotCopyRequest<I>::start_lock_op(RWLock &owner_lock) {
+  assert(m_dst_image_ctx->owner_lock.is_locked());
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
     return new FunctionContext([](int r) {});
   }
