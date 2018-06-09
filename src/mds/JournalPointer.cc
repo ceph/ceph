@@ -18,6 +18,7 @@
 #include "common/Cond.h"
 #include "osdc/Objecter.h"
 #include "mds/mdstypes.h"
+#include "msg/Messenger.h"
 
 #include "mds/JournalPointer.h"
 

@@ -15,7 +15,6 @@
 #ifndef REPBACKEND_H
 #define REPBACKEND_H
 
-#include "OSD.h"
 #include "PGBackend.h"
 #include "include/memory.h"
 

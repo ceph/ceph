@@ -16,8 +16,7 @@
 
 #include "include/memory.h"
 #include <set>
-
-#include "msg/Messenger.h"
+#include "msg/Connection.h"
 #include "include/Context.h"
 
 enum WatcherState {

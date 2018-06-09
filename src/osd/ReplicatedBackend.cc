@@ -21,6 +21,7 @@
 #include "messages/MOSDPGPushReply.h"
 #include "common/EventTrace.h"
 #include "include/random.h"
+#include "OSD.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
