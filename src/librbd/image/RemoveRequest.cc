@@ -11,6 +11,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/image/DetachChildRequest.h"
+#include "librbd/image/ListWatchersRequest.h"
 #include "librbd/journal/DisabledPolicy.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/mirror/DisableRequest.h"
@@ -229,26 +230,21 @@ template<typename I>
 void RemoveRequest<I>::list_image_watchers() {
   ldout(m_cct, 20) << dendl;
 
-  librados::ObjectReadOperation op;
-  op.list_watchers(&m_watchers, &m_ret_val);
-
+  int flags = LIST_WATCHERS_FILTER_OUT_MY_INSTANCE |
+              LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES;
   using klass = RemoveRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_list_image_watchers>(this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_list_image_watchers>(this);
 
-  int r = m_image_ctx->md_ctx.aio_operate(m_header_oid, rados_completion,
-                                          &op, &m_out_bl);
-  assert(r == 0);
-  rados_completion->release();
+  auto req = ListWatchersRequest<I>::create(*m_image_ctx, flags, &m_watchers,
+                                            ctx);
+  req->send();
 }
 
 template<typename I>
 void RemoveRequest<I>::handle_list_image_watchers(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  if (r == 0 && m_ret_val < 0) {
-    r = m_ret_val;
-  }
   if (r < 0) {
     lderr(m_cct) << "error listing image watchers: " << cpp_strerror(r)
                  << dendl;
@@ -256,86 +252,12 @@ void RemoveRequest<I>::handle_list_image_watchers(int r) {
     return;
   }
 
-  get_mirror_image();
-}
-
-template<typename I>
-void RemoveRequest<I>::get_mirror_image() {
-  ldout(m_cct, 20) << dendl;
-  if ((m_watchers.empty()) ||
-      ((m_image_ctx->features & RBD_FEATURE_JOURNALING) == 0)) {
-    check_image_watchers();
-    return;
-  }
-
-  librados::ObjectReadOperation op;
-  cls_client::mirror_image_get_start(&op, m_image_id);
-
-  using klass = RemoveRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
-  comp->release();
-}
-
-template<typename I>
-void RemoveRequest<I>::handle_get_mirror_image(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r == -ENOENT || r == -EOPNOTSUPP) {
-    check_image_watchers();
-    return;
-  } else if (r < 0) {
-    ldout(m_cct, 5) << "error retrieving mirror image: " << cpp_strerror(r)
-                    << dendl;
-  }
-
-  list_mirror_watchers();
-}
-
-template<typename I>
-void RemoveRequest<I>::list_mirror_watchers() {
-  ldout(m_cct, 20) << dendl;
-
-  librados::ObjectReadOperation op;
-  op.list_watchers(&m_mirror_watchers, &m_ret_val);
-
-  using klass = RemoveRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_list_mirror_watchers>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, rados_completion,
-                                          &op, &m_out_bl);
-  assert(r == 0);
-  rados_completion->release();
-}
-
-template<typename I>
-void RemoveRequest<I>::handle_list_mirror_watchers(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r == 0 && m_ret_val < 0) {
-    r = m_ret_val;
-  }
-  if (r < 0 && r != -ENOENT) {
-    ldout(m_cct, 5) << "error listing mirror watchers: " << cpp_strerror(r)
-                    << dendl;
-  }
-
-  for (auto &watcher : m_mirror_watchers) {
-    m_watchers.remove_if([watcher] (obj_watch_t &w) {
-        return (strncmp(w.addr, watcher.addr, sizeof(w.addr)) == 0);
-      });
-  }
-
   check_image_watchers();
 }
 
 template<typename I>
 void RemoveRequest<I>::check_image_watchers() {
-  if (m_watchers.size() > 1) {
+  if (!m_watchers.empty()) {
     lderr(m_cct) << "image has watchers - not removing" << dendl;
     send_close_image(-EBUSY);
     return;
