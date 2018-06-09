@@ -133,6 +133,12 @@ TYPE(bluestore_pextent_t)
 TYPE(bluestore_onode_t)
 TYPE(bluestore_deferred_op_t)
 TYPE(bluestore_deferred_transaction_t)
+
+#include "os/bluestore/bluefs_types.h"
+TYPE(bluefs_extent_t)
+TYPE(bluefs_fnode_t)
+TYPE(bluefs_super_t)
+TYPE(bluefs_transaction_t)
 #endif
 
 #include "common/hobject.h"
