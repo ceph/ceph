@@ -9131,8 +9131,9 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // check quota
   uint64_t endoff = offset + size;
-  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
-						   f->actor_perms)) {
+  std::list<InodeRef> quota_roots;
+  if (endoff > in->size &&
+      is_quota_bytes_exceeded(in, endoff - in->size, f->actor_perms, &quota_roots)) {
     return -EDQUOT;
   }
 
@@ -9309,7 +9310,7 @@ success:
     in->size = totalwritten + offset;
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
-    if (is_quota_bytes_approaching(in, f->actor_perms)) {
+    if (is_quota_bytes_approaching(in, quota_roots)) {
       check_caps(in, CHECK_CAPS_NODELAY);
     } else if (is_max_size_approaching(in)) {
       check_caps(in, 0);
@@ -12913,9 +12914,10 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     return -EBADF;
 
   uint64_t size = offset + length;
+  std::list<InodeRef> quota_roots;
   if (!(mode & (FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE)) &&
       size > in->size &&
-      is_quota_bytes_exceeded(in, size - in->size, fh->actor_perms)) {
+      is_quota_bytes_exceeded(in, size - in->size, fh->actor_perms, &quota_roots)) {
     return -EDQUOT;
   }
 
@@ -12994,7 +12996,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
-      if (is_quota_bytes_approaching(in, fh->actor_perms)) {
+      if (is_quota_bytes_approaching(in, quota_roots)) {
         check_caps(in, CHECK_CAPS_NODELAY);
       } else if (is_max_size_approaching(in)) {
 	check_caps(in, 0);
@@ -13623,32 +13625,34 @@ bool Client::is_quota_files_exceeded(Inode *in, const UserPerm& perms)
 }
 
 bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
-				     const UserPerm& perms)
+				     const UserPerm& perms,
+				     std::list<InodeRef>* quota_roots)
 {
   return check_quota_condition(in, perms,
-      [&new_bytes](const Inode &in) {
+      [&new_bytes, quota_roots](const Inode &in) {
+	if (quota_roots)
+	  quota_roots->emplace_back(const_cast<Inode*>(&in));
         return in.quota.max_bytes && (in.rstat.rbytes + new_bytes)
                > in.quota.max_bytes;
       });
 }
 
-bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
+bool Client::is_quota_bytes_approaching(Inode *in, std::list<InodeRef>& quota_roots)
 {
-  return check_quota_condition(in, perms,
-      [](const Inode &in) {
-        if (in.quota.max_bytes) {
-          if (in.rstat.rbytes >= in.quota.max_bytes) {
-            return true;
-          }
+  assert(in->size >= in->reported_size);
+  const uint64_t size = in->size - in->reported_size;
 
-          assert(in.size >= in.reported_size);
-          const uint64_t space = in.quota.max_bytes - in.rstat.rbytes;
-          const uint64_t size = in.size - in.reported_size;
-          return (space >> 4) < size;
-        } else {
-          return false;
-        }
-      });
+  for (auto& diri : quota_roots) {
+    if (diri->quota.max_bytes) {
+      if (diri->rstat.rbytes >= diri->quota.max_bytes)
+	return true;
+
+      uint64_t space = diri->quota.max_bytes - diri->rstat.rbytes;
+      if ((space >> 4) < size)
+	return true;
+    }
+  }
+  return false;
 }
 
 enum {
