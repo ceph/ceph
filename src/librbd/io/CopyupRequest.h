@@ -105,7 +105,7 @@ private:
 
   void complete_requests(int r);
 
-  bool should_complete(int r);
+  bool should_complete(int *r);
 
   void remove_from_list();
 
@@ -113,7 +113,7 @@ private:
   bool send_object_map();
   bool send_copyup();
   bool is_copyup_required();
-  bool is_update_object_map_required();
+  bool is_update_object_map_required(int r);
   bool is_deep_copy() const;
 };
 

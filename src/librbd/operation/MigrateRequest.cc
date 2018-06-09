@@ -141,6 +141,10 @@ private:
     CephContext *cct = this->m_image_ctx.cct;
     ldout(cct, 10) << "r=" << r << dendl;
 
+    if (r == -ENOENT) {
+      r = 0;
+    }
+
     m_async_op.finish_op();
     this->complete(r);
   }

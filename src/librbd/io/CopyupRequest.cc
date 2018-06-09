@@ -205,7 +205,11 @@ bool CopyupRequest<I>::is_copyup_required() {
 }
 
 template <typename I>
-bool CopyupRequest<I>::is_update_object_map_required() {
+bool CopyupRequest<I>::is_update_object_map_required(int r) {
+  if (r < 0) {
+    return false;
+  }
+
   RWLock::RLocker owner_locker(m_ictx->owner_lock);
   RWLock::RLocker snap_locker(m_ictx->snap_lock);
   if (m_ictx->object_map == nullptr) {
@@ -259,26 +263,28 @@ void CopyupRequest<I>::send()
 template <typename I>
 void CopyupRequest<I>::complete(int r)
 {
-  if (should_complete(r)) {
+  if (should_complete(&r)) {
     complete_requests(r);
     delete this;
   }
 }
 
 template <typename I>
-bool CopyupRequest<I>::should_complete(int r)
-{
+bool CopyupRequest<I>::should_complete(int *r) {
   CephContext *cct = m_ictx->cct;
   ldout(cct, 20) << "oid " << m_oid
-                 << ", r " << r << dendl;
+                 << ", r " << *r << dendl;
 
   uint64_t pending_copyups;
   switch (m_state) {
   case STATE_READ_FROM_PARENT:
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
     remove_from_list();
-    if (r >= 0 || r == -ENOENT) {
-      if (!is_copyup_required() && !is_update_object_map_required()) {
+    if (*r >= 0 || *r == -ENOENT) {
+      if (!is_copyup_required() && !is_update_object_map_required(*r)) {
+        if (*r == -ENOENT && is_deep_copy()) {
+          *r = 0;
+        }
         ldout(cct, 20) << "skipping" << dendl;
         return true;
       }
@@ -289,12 +295,12 @@ bool CopyupRequest<I>::should_complete(int r)
 
   case STATE_OBJECT_MAP_HEAD:
     ldout(cct, 20) << "OBJECT_MAP_HEAD" << dendl;
-    assert(r == 0);
+    assert(*r == 0);
     return send_object_map();
 
   case STATE_OBJECT_MAP:
     ldout(cct, 20) << "OBJECT_MAP" << dendl;
-    assert(r == 0);
+    assert(*r == 0);
     if (!is_copyup_required()) {
       ldout(cct, 20) << "skipping copyup" << dendl;
       return true;
@@ -309,13 +315,14 @@ bool CopyupRequest<I>::should_complete(int r)
     }
     ldout(cct, 20) << "COPYUP (" << pending_copyups << " pending)"
                    << dendl;
-    if (r == -ENOENT) {
+    if (*r == -ENOENT) {
       // hide the -ENOENT error if this is the last op
       if (pending_copyups == 0) {
+        *r = 0;
         complete_requests(0);
       }
-    } else if (r < 0) {
-      complete_requests(r);
+    } else if (*r < 0) {
+      complete_requests(*r);
     }
     return (pending_copyups == 0);
 
@@ -324,7 +331,7 @@ bool CopyupRequest<I>::should_complete(int r)
     ceph_abort();
     break;
   }
-  return (r < 0);
+  return (*r < 0);
 }
 
 template <typename I>
