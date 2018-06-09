@@ -175,7 +175,7 @@ void bluefs_transaction_t::dump(Formatter *f) const
   f->dump_unsigned("crc", op_bl.crc32c(-1));
 }
 
-void bluefs_transaction_t::generate_test_instance(
+void bluefs_transaction_t::generate_test_instances(
   list<bluefs_transaction_t*>& ls)
 {
   ls.push_back(new bluefs_transaction_t);
