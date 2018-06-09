@@ -200,7 +200,7 @@ void ImageCopyRequest<I>::handle_object_copy(uint64_t object_no, int r) {
     assert(m_current_ops > 0);
     --m_current_ops;
 
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       lderr(m_cct) << "object copy failed: " << cpp_strerror(r) << dendl;
       if (m_ret_val == 0) {
         m_ret_val = r;

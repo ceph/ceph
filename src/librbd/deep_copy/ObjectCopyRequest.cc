@@ -284,7 +284,7 @@ void ObjectCopyRequest<I>::handle_read_from_parent(int r) {
 
   if (m_write_ops.empty()) {
     // nothing to copy
-    finish(0);
+    finish(-ENOENT);
     return;
   }
 
