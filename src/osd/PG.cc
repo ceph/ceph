@@ -1914,7 +1914,8 @@ void PG::activate(ObjectStore::Transaction& t,
 	  dout(10) << "activate peer osd." << peer << " is up to date, but sending pg_log anyway" << dendl;
 	  m = new MOSDPGLog(
 	    i->shard, pg_whoami.shard,
-	    get_osdmap()->get_epoch(), info);
+	    get_osdmap()->get_epoch(), info,
+	    last_peering_reset);
 	}
       } else if (
 	pg_log.get_tail() > pi.last_update ||

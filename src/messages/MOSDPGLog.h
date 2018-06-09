@@ -69,13 +69,6 @@ public:
   MOSDPGLog() : MOSDPeeringOp(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) {
     set_priority(CEPH_MSG_PRIO_HIGH); 
   }
-  MOSDPGLog(shard_id_t to, shard_id_t from, version_t mv, pg_info_t& i)
-    : MOSDPeeringOp(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
-      epoch(mv), query_epoch(mv),
-      to(to), from(from),
-      info(i)  {
-    set_priority(CEPH_MSG_PRIO_HIGH); 
-  }
   MOSDPGLog(shard_id_t to, shard_id_t from,
 	    version_t mv, pg_info_t& i, epoch_t query_epoch)
     : MOSDPeeringOp(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),

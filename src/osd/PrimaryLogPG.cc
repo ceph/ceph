@@ -10564,7 +10564,7 @@ void PrimaryLogPG::submit_log_entries(
 	  MOSDPGLog *m = new MOSDPGLog(
 	    peer.shard, pg_whoami.shard,
 	    info.last_update.epoch,
-	    info);
+	    info, last_peering_reset);
 	  m->log.log = entries;
 	  m->log.tail = old_last_update;
 	  m->log.head = info.last_update;
