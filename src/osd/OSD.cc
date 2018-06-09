@@ -893,6 +893,10 @@ pair<ConnectionRef,ConnectionRef> OSDService::get_con_osd_hb(int peer, epoch_t f
   return ret;
 }
 
+entity_name_t OSDService::get_cluster_msgr_name() const
+{
+  return cluster_messenger->get_myname();
+}
 
 void OSDService::queue_want_pg_temp(pg_t pgid,
 				    const vector<int>& want,
