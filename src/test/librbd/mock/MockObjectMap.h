@@ -13,6 +13,8 @@ namespace librbd {
 struct MockObjectMap {
   MOCK_CONST_METHOD1(enabled, bool(const RWLock &object_map_lock));
 
+  MOCK_CONST_METHOD0(size, uint64_t());
+
   MOCK_METHOD1(open, void(Context *on_finish));
   MOCK_METHOD1(close, void(Context *on_finish));
 

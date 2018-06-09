@@ -70,6 +70,9 @@ private:
    * SET_HEAD (skip if not needed)
    *    |
    *    v
+   * RESIZE_OBJECT_MAP (skip if not needed)
+   *    |
+   *    v
    * <finish>
    *
    * @endverbatim
@@ -114,6 +117,9 @@ private:
   void send_set_head();
   void handle_set_head(int r);
 
+  void send_resize_object_map();
+  void handle_resize_object_map(int r);
+
   bool handle_cancellation();
 
   void error(int r);
@@ -121,6 +127,7 @@ private:
   int validate_parent(ImageCtxT *image_ctx, librbd::ParentSpec *spec);
 
   Context *start_lock_op();
+  Context *start_lock_op(RWLock &owner_lock);
 
   void finish(int r);
 };
