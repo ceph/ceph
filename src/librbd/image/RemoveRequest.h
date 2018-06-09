@@ -8,6 +8,8 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/image/TypeTraits.h"
 
+#include <list>
+
 class Context;
 class ContextWQ;
 class SafeTimer;
@@ -142,7 +144,6 @@ private:
   int m_ret_val = 0;
   bufferlist m_out_bl;
   std::list<obj_watch_t> m_watchers;
-  std::list<obj_watch_t> m_mirror_watchers;
 
   std::map<uint64_t, SnapInfo> m_snap_infos;
 
@@ -169,12 +170,6 @@ private:
 
   void list_image_watchers();
   void handle_list_image_watchers(int r);
-
-  void get_mirror_image();
-  void handle_get_mirror_image(int r);
-
-  void list_mirror_watchers();
-  void handle_list_mirror_watchers(int r);
 
   void check_image_watchers();
 
