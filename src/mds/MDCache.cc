@@ -830,7 +830,7 @@ void MDCache::list_subtrees(list<CDir*>& ls)
  * merge with parent and/or child subtrees, if is it appropriate.
  * merge can ONLY happen if both parent and child have unambiguous auth.
  */
-void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth)
+void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_pop)
 {
   dout(7) << "adjust_subtree_auth " << dir->get_dir_auth() << " -> " << auth
 	  << " on " << *dir << dendl;
@@ -885,7 +885,7 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth)
     root = dir;
 
     // adjust recursive pop counters
-    if (dir->is_auth()) {
+    if (adjust_pop && dir->is_auth()) {
       utime_t now = ceph_clock_now();
       CDir *p = dir->get_parent_dir();
       while (p) {
@@ -930,7 +930,7 @@ public:
   }
 };
 
-void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval)
+void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust_pop)
 {
   dout(10) << "try_subtree_merge_at " << *dir << dendl;
 
@@ -962,12 +962,15 @@ void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval)
     subtrees[parent].erase(dir);
 
     // adjust popularity?
-    if (dir->is_auth()) {
+    if (adjust_pop && dir->is_auth()) {
       utime_t now = ceph_clock_now();
+      CDir *cur = dir;
       CDir *p = dir->get_parent_dir();
       while (p) {
 	p->pop_auth_subtree.add(now, decayrate, dir->pop_auth_subtree);
+	p->pop_lru_subdirs.push_front(&cur->get_inode()->item_pop_lru);
 	if (p->is_subtree_root()) break;
+	cur = p;
 	p = p->inode->get_parent_dir();
       }
     }
@@ -1346,6 +1349,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << dendl;
 
   //show_subtrees();
+  utime_t now = ceph_clock_now();
 
   CDir *newdir = diri->get_parent_dir();
 
@@ -1374,12 +1378,12 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
     CDir *newparent = get_subtree_root(newdir);
     dout(10) << " new parent " << *newparent << dendl;
 
+    if (olddir != newdir)
+      mds->balancer->adjust_pop_for_rename(olddir, dir, now, false);
+
     if (oldparent == newparent) {
       dout(10) << "parent unchanged for " << *dir << " at " << *oldparent << dendl;
-      continue;
-    }
-
-    if (dir->is_subtree_root()) {
+    } else if (dir->is_subtree_root()) {
       // children are fine.  change parent.
       dout(10) << "moving " << *dir << " from " << *oldparent << " to " << *newparent << dendl;
       assert(subtrees[oldparent].count(dir));
@@ -1387,7 +1391,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
       assert(subtrees.count(newparent));
       subtrees[newparent].insert(dir);
       // caller is responsible for 'eval diri'
-      try_subtree_merge_at(dir, NULL);
+      try_subtree_merge_at(dir, NULL, false);
     } else {
       // mid-subtree.
 
@@ -1412,11 +1416,14 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
 
       // did auth change?
       if (oldparent->authority() != newparent->authority()) {
-	adjust_subtree_auth(dir, oldparent->authority());
+	adjust_subtree_auth(dir, oldparent->authority(), false);
 	// caller is responsible for 'eval diri'
-	try_subtree_merge_at(dir, NULL);
+	try_subtree_merge_at(dir, NULL, false);
       }
     }
+
+    if (olddir != newdir)
+      mds->balancer->adjust_pop_for_rename(newdir, dir, now, true);
   }
 
   show_subtrees();

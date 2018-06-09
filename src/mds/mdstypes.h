@@ -1466,6 +1466,7 @@ public:
     decode(sample, p);
   }
   void dump(Formatter *f) const;
+  void dump(Formatter *f, utime_t now, const DecayRate& rate);
   static void generate_test_instances(list<dirfrag_load_vec_t*>& ls);
 
   DecayCounter &get(int t) { 
@@ -1490,7 +1491,7 @@ public:
       2*vec[META_POP_FETCH].get(now, rate) +
       4*vec[META_POP_STORE].get(now, rate);
   }
-  double meta_load() {
+  double meta_load() const {
     return 
       1*vec[META_POP_IRD].get_last() + 
       2*vec[META_POP_IWR].get_last() +
@@ -1523,14 +1524,10 @@ inline void decode(dirfrag_load_vec_t& c, bufferlist::iterator &p) {
   c.decode(sample, p);
 }
 
-inline std::ostream& operator<<(std::ostream& out, dirfrag_load_vec_t& dl)
+inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
 {
-  // ugliness!
-  utime_t now = ceph_clock_now();
-  DecayRate rate(g_conf->mds_decay_halflife);
-  return out << "[" << dl.vec[0].get(now, rate) << "," << dl.vec[1].get(now, rate) 
-	     << " " << dl.meta_load(now, rate)
-	     << "]";
+  return out << "[" << dl.vec[0].get_last() << "," << dl.vec[1].get_last()
+	     << " " << dl.meta_load() << "]";
 }
 
 
@@ -1574,7 +1571,7 @@ inline void decode(mds_load_t &c, bufferlist::iterator &p) {
   c.decode(sample, p);
 }
 
-inline std::ostream& operator<<( std::ostream& out, mds_load_t& load )
+inline std::ostream& operator<<(std::ostream& out, const mds_load_t& load)
 {
   return out << "mdsload<" << load.auth << "/" << load.all
              << ", req " << load.req_rate 

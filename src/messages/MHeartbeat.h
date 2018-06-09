@@ -21,7 +21,7 @@
 
 class MHeartbeat : public Message {
   mds_load_t load;
-  __s32        beat;
+  __s32        beat = 0;
   map<mds_rank_t, float> import_map;
 
  public:
