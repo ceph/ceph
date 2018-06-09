@@ -74,7 +74,12 @@ public:
     using ceph::encode;
     encode(op, payload);
     encode(map_epoch, payload);
-    encode(query_epoch, payload);
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      // pre-nautilus OSDs do not set last_peering_reset properly
+      encode(map_epoch, payload);
+    } else {
+      encode(query_epoch, payload);
+    }
     encode(pgid.pgid, payload);
     encode(begin, payload);
     encode(end, payload);

@@ -1948,7 +1948,8 @@ void PG::activate(ObjectStore::Transaction& t,
 
 	m = new MOSDPGLog(
 	  i->shard, pg_whoami.shard,
-	  get_osdmap()->get_epoch(), pi);
+	  get_osdmap()->get_epoch(), pi,
+	  last_peering_reset /* epoch to create pg at */);
 
 	// send some recent log, so that op dup detection works well.
 	m->log.copy_up_to(pg_log.get_log(), cct->_conf->osd_min_pg_log_entries);
@@ -1961,7 +1962,8 @@ void PG::activate(ObjectStore::Transaction& t,
 	assert(pg_log.get_tail() <= pi.last_update);
 	m = new MOSDPGLog(
 	  i->shard, pg_whoami.shard,
-	  get_osdmap()->get_epoch(), info);
+	  get_osdmap()->get_epoch(), info,
+	  last_peering_reset /* epoch to create pg at */);
 	// send new stuff to append to replicas log
 	m->log.copy_after(pg_log.get_log(), pi.last_update);
       }
