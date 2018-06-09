@@ -19,10 +19,9 @@
 
 void DecayCounter::encode(bufferlist& bl) const
 {
-  decay(rate);
+  decay();
   ENCODE_START(5, 4, bl);
   encode(val, bl);
-  encode(vel, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -39,51 +38,43 @@ void DecayCounter::decode(bufferlist::const_iterator &p)
   }
   decode(val, p);
   if (struct_v < 5) {
-    double delta;
+    double delta, _;
     decode(delta, p);
     val += delta;
+    decode(_, p); /* velocity */
   }
-  decode(vel, p);
   last_decay = clock::now();
   DECODE_FINISH(p);
 }
 
 void DecayCounter::dump(Formatter *f) const
 {
-  decay(rate);
+  decay();
   f->dump_float("value", val);
-  f->dump_float("velocity", vel);
+  f->dump_float("halflife", rate.k);
 }
 
 void DecayCounter::generate_test_instances(std::list<DecayCounter*>& ls)
 {
   DecayCounter *counter = new DecayCounter();
   counter->val = 3.0;
-  counter->vel = 1.0;
+  counter->rate = DecayRate(2.0);
   ls.push_back(counter);
   counter = new DecayCounter();
   ls.push_back(counter);
 }
 
-void DecayCounter::decay(const DecayRate &rate) const
+void DecayCounter::decay(double delta) const
 {
   auto now = clock::now();
-  if (now > last_decay) {
-    double el = std::chrono::duration<double>(now - last_decay).count();
-    if (el <= 0.1)
-      return; /* no need to decay for small differences */
+  double el = std::chrono::duration<double>(now - last_decay).count();
 
-    // calculate new value
-    double newval = val * exp(el * rate.k);
-    if (newval < .01) {
-      newval = 0.0;
-    }
-
-    // calculate velocity approx
-    vel += (newval - val) * el;
-    vel *= exp(el * rate.k);
-
-    val = newval;
-    last_decay = now;
+  // calculate new value
+  double newval = val * exp(el * rate.k) + delta;
+  if (newval < .01) {
+    newval = 0.0;
   }
+
+  val = newval;
+  last_decay = now;
 }
