@@ -1527,8 +1527,16 @@ inline void decode(dirfrag_load_vec_t& c, bufferlist::const_iterator &p) {
 
 inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
 {
-  return out << "[" << dl.vec[0].get_last() << "," << dl.vec[1].get_last()
-	     << " " << dl.meta_load() << "]";
+  std::ostringstream ss;
+  ss << std::setprecision(1) << std::fixed
+     << "[pop"
+        " IRD:" << dl.vec[0]
+     << " IWR:" << dl.vec[1]
+     << " RDR:" << dl.vec[2]
+     << " FET:" << dl.vec[3]
+     << " STR:" << dl.vec[4]
+     << " *LOAD:" << dl.meta_load() << "]";
+  return out << ss.str() << std::endl;
 }
 
 

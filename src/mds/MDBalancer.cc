@@ -1152,7 +1152,7 @@ void MDBalancer::hit_dir(CDir *dir, int type, int who, double amount)
                    (v > g_conf->mds_bal_split_wr && type == META_POP_IWR);
 
   dout(20) << "hit_dir " << type << " pop is " << v << ", frag " << dir->get_frag()
-           << " size " << dir->get_frag_size() << dendl;
+           << " size " << dir->get_frag_size() << " " << dir->pop_me << dendl;
 
   maybe_fragment(dir, hot);
 
