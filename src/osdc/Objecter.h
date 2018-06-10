@@ -38,6 +38,7 @@
 #include "common/zipkin_trace.h"
 
 #include "messages/MOSDOp.h"
+#include "msg/Dispatcher.h"
 #include "osd/OSDMap.h"
 
 

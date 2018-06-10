@@ -16,6 +16,7 @@
 #include "include/str_map.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
+#include "msg/Messenger.h"
 #include "mon/MonMap.h"
 #include "common/Graylog.h"
 
