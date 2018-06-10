@@ -15,6 +15,7 @@
 #include "librbd/io/Utils.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
+#include "common/perf_counters.h"
 #include "common/WorkQueue.h"
 #include "osdc/Striper.h"
 
