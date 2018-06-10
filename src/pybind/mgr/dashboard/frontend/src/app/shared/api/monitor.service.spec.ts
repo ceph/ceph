@@ -1,20 +1,34 @@
-import { HttpClientModule } from '@angular/common/http';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { inject } from '@angular/core/testing';
+import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
+import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../unit-test-helper';
 import { MonitorService } from './monitor.service';
 
 describe('MonitorService', () => {
+  let service: MonitorService;
+  let httpTesting: HttpTestingController;
+
   configureTestBed({
     providers: [MonitorService],
-    imports: [HttpClientTestingModule, HttpClientModule]
+    imports: [HttpClientTestingModule]
   });
 
-  it(
-    'should be created',
-    inject([MonitorService], (service: MonitorService) => {
-      expect(service).toBeTruthy();
-    })
-  );
+  beforeEach(() => {
+    service = TestBed.get(MonitorService);
+    httpTesting = TestBed.get(HttpTestingController);
+  });
+
+  afterEach(() => {
+    httpTesting.verify();
+  });
+
+  it('should be created', () => {
+    expect(service).toBeTruthy();
+  });
+
+  it('should call getMonitor', () => {
+    service.getMonitor().subscribe();
+    const req = httpTesting.expectOne('api/monitor');
+    expect(req.request.method).toBe('GET');
+  });
 });
