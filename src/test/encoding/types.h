@@ -52,14 +52,14 @@ TYPE_FEATUREFUL(entity_addr_t)
 TYPE_FEATUREFUL(entity_addrvec_t)
 TYPE_FEATUREFUL(entity_inst_t)
 
+#include "crush/CrushWrapper.h"
+TYPE_FEATUREFUL_NOCOPY(CrushWrapper)
+
 #include "osd/OSDMap.h"
 TYPE(osd_info_t)
 TYPE(osd_xinfo_t)
 TYPE_FEATUREFUL_NOCOPY(OSDMap)
 TYPE_FEATUREFUL_STRAYDATA(OSDMap::Incremental)
-
-#include "crush/CrushWrapper.h"
-TYPE_FEATUREFUL_NOCOPY(CrushWrapper)
 
 #include "osd/osd_types.h"
 TYPE(osd_reqid_t)
@@ -76,34 +76,42 @@ TYPE(object_stat_sum_t)
 TYPE(object_stat_collection_t)
 TYPE(pg_stat_t)
 TYPE_FEATUREFUL(pool_stat_t)
+TYPE(pg_hit_set_info_t)
+TYPE(pg_hit_set_history_t)
 TYPE(pg_history_t)
 TYPE(pg_info_t)
+TYPE(PastIntervals)
 TYPE_FEATUREFUL(pg_query_t)
+TYPE(ObjectModDesc)
 TYPE(pg_log_entry_t)
+TYPE(pg_log_dup_t)
 TYPE(pg_log_t)
 TYPE_FEATUREFUL(pg_missing_item)
 TYPE(pg_missing_t)
-TYPE(pg_ls_response_t)
 TYPE(pg_nls_response_t)
+TYPE(pg_ls_response_t)
 TYPE(object_copy_cursor_t)
 TYPE_FEATUREFUL(object_copy_data_t)
 TYPE(pg_create_t)
+TYPE(OSDSuperblock)
+TYPE(SnapSet)
 TYPE_FEATUREFUL(watch_info_t)
+TYPE(object_manifest_t)
 TYPE_FEATUREFUL(object_info_t)
 TYPE(SnapSet)
 TYPE_FEATUREFUL(ObjectRecoveryInfo)
 TYPE(ObjectRecoveryProgress)
-TYPE(ScrubMap::object)
-TYPE(ScrubMap)
-TYPE(pg_hit_set_info_t)
-TYPE(pg_hit_set_history_t)
-TYPE(clone_info)
-TYPE(obj_list_snap_response_t)
+TYPE(PushReplyOp)
 TYPE_FEATUREFUL(PullOp)
 TYPE_FEATUREFUL(PushOp)
-TYPE(PushReplyOp)
+TYPE(ScrubMap::object)
+TYPE(ScrubMap)
+TYPE_FEATUREFUL(obj_list_watch_response_t)
+TYPE(clone_info)
+TYPE(obj_list_snap_response_t)
 
 #include "osd/ECUtil.h"
+// TYPE(stripe_info_t) non-standard encoding/decoding functions
 TYPE(ECUtil::HashInfo)
 
 #include "osd/ECMsgTypes.h"
