@@ -337,13 +337,13 @@ TYPE(rbd::mirror::image_map::PolicyData)
 #ifdef WITH_RADOSGW
 
 #include "rgw/rgw_rados.h"
+TYPE(RGWOLHInfo)
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
-TYPE(RGWOLHInfo)
-TYPE(RGWZoneGroup)
+TYPE(RGWZoneParams)
 TYPE(RGWZone)
-TYPE(RGWZoneParams)     
-   
+TYPE(RGWZoneGroup)
+
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
 TYPE(ACLGranteeType)
@@ -443,7 +443,7 @@ TYPE(rgw_obj)
 #include "rgw/rgw_log.h"
 TYPE(rgw_log_entry)
 
-#include "rgw/rgw_sync.h"
+#include "rgw/rgw_meta_sync_status.h"
 TYPE(rgw_meta_sync_info)
 TYPE(rgw_meta_sync_marker)
 TYPE(rgw_meta_sync_status)
