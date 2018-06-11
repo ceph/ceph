@@ -8051,9 +8051,11 @@ void OSD::consume_map()
   {
     // FIXME (as part of seastar rewrite): move to OSDShard
     [[gnu::unused]] auto&& pending_create_locker = guardedly_lock(pending_creates_lock);
-    for (auto pg = pending_creates_from_osd.cbegin();
-	 pg != pending_creates_from_osd.cend();) {
+    for (auto pg = pending_creates_from_osd.begin();
+	 pg != pending_creates_from_osd.end();) {
       if (osdmap->get_pg_acting_rank(pg->first, whoami) < 0) {
+	dout(10) << __func__ << " pg " << pg->first << " doesn't map here, "
+		 << "discarding pending_create_from_osd" << dendl;
 	pg = pending_creates_from_osd.erase(pg);
       } else {
 	++pg;
