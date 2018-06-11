@@ -1,3 +1,10 @@
+14.0.1
+------
+
+* The 'ceph osd rm' command has been deprecated.  Users should use
+  'ceph osd destroy' or 'ceph osd purge' (but after first confirming it is
+  safe to do so via the 'ceph osd safe-to-destroy' command).
+
 >=13.1.0
 --------
 
