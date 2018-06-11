@@ -774,11 +774,12 @@ COMMAND("osd in " \
 	"set osd(s) <id> [<id>...] in, "
         "can use <any|all> to automatically set all previously out osds in", \
         "osd", "rw", "cli,rest")
-COMMAND("osd rm " \
+COMMAND_WITH_FLAG("osd rm " \
 	"name=ids,type=CephString,n=N", \
 	"remove osd(s) <id> [<id>...], "
         "or use <any|all> to remove all osds", \
-        "osd", "rw", "cli,rest")
+	"osd", "rw", "cli,rest",
+	FLAG(DEPRECATED))
 COMMAND("osd add-noup " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noup, " \
