@@ -25,12 +25,15 @@ TYPE(BitVector<2>)
 TYPE(bloom_filter)
 TYPE(compressible_bloom_filter)
 
-#include "common/snap_types.h"
-TYPE(SnapContext)
-TYPE(SnapRealmInfo)
-
 #include "common/DecayCounter.h"
 TYPE(DecayCounter)
+
+#include "common/histogram.h"
+TYPE(pow2_hist_t)
+
+#include "common/hobject.h"
+TYPE(hobject_t)
+TYPE(ghobject_t)
 
 #include "common/LogEntry.h"
 TYPE_FEATUREFUL(LogEntry)
@@ -38,6 +41,10 @@ TYPE_FEATUREFUL(LogSummary)
 
 #include "common/SloppyCRCMap.h"
 TYPE(SloppyCRCMap)
+
+#include "common/snap_types.h"
+TYPE(SnapContext)
+TYPE(SnapRealmInfo)
 
 #include "msg/msg_types.h"
 TYPE(entity_name_t)
@@ -53,9 +60,6 @@ TYPE_FEATUREFUL_STRAYDATA(OSDMap::Incremental)
 
 #include "crush/CrushWrapper.h"
 TYPE_FEATUREFUL_NOCOPY(CrushWrapper)
-
-#include "common/histogram.h"
-TYPE(pow2_hist_t)
 
 #include "osd/osd_types.h"
 TYPE(osd_reqid_t)
@@ -143,10 +147,6 @@ TYPE(bluefs_fnode_t)
 TYPE(bluefs_super_t)
 TYPE(bluefs_transaction_t)
 #endif
-
-#include "common/hobject.h"
-TYPE(hobject_t)
-TYPE(ghobject_t)
 
 #include "mon/AuthMonitor.h"
 TYPE_FEATUREFUL(AuthMonitor::Incremental)
