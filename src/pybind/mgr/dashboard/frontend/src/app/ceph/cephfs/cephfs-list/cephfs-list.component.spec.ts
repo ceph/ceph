@@ -1,11 +1,12 @@
 import { Component, Input } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { Observable } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../shared/unit-test-helper';
 import { CephfsListComponent } from './cephfs-list.component';
 
 @Component({ selector: 'cd-cephfs-detail', template: '' })
@@ -25,13 +26,11 @@ describe('CephfsListComponent', () => {
     }
   };
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [SharedModule],
-      declarations: [CephfsListComponent, CephfsDetailStubComponent],
-      providers: [{ provide: CephfsService, useValue: fakeService }]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [SharedModule],
+    declarations: [CephfsListComponent, CephfsDetailStubComponent],
+    providers: [{ provide: CephfsService, useValue: fakeService }]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(CephfsListComponent);

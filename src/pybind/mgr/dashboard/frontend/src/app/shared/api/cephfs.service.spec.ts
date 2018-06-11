@@ -1,14 +1,13 @@
 import { HttpClientModule } from '@angular/common/http';
-import { inject, TestBed } from '@angular/core/testing';
+import { inject } from '@angular/core/testing';
 
+import { configureTestBed } from '../unit-test-helper';
 import { CephfsService } from './cephfs.service';
 
 describe('CephfsService', () => {
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      imports: [HttpClientModule],
-      providers: [CephfsService]
-    });
+  configureTestBed({
+    imports: [HttpClientModule],
+    providers: [CephfsService]
   });
 
   it(
