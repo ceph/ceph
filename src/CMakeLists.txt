@@ -556,6 +556,7 @@ set(libcommon_files
   common/dns_resolve.cc
   common/hostname.cc
   common/util.cc
+  common/PriorityCache.cc
   librbd/Features.cc
   arch/probe.cc
   ${auth_files}
