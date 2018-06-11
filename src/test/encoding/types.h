@@ -164,8 +164,8 @@ TYPE(bluefs_transaction_t)
 TYPE_FEATUREFUL(AuthMonitor::Incremental)
 
 #include "mon/PGMap.h"
-TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
 TYPE_FEATUREFUL_NONDETERMINISTIC(PGMapDigest)
+TYPE_FEATUREFUL_NONDETERMINISTIC(PGMap)
 
 #include "mon/MonitorDBStore.h"
 TYPE(MonitorDBStore::Transaction)
@@ -182,6 +182,7 @@ TYPE_FEATUREFUL(MgrMap)
 
 #include "mon/mon_types.h"
 TYPE(LevelDBStoreStats)
+TYPE(ScrubResult)
 
 #include "mon/CreatingPGs.h"
 TYPE(creating_pgs_t)
