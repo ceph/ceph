@@ -18,6 +18,7 @@
 
 #include <sys/uio.h>
 
+#include "include/types.h"
 #include "include/buffer_raw.h"
 #include "include/compat.h"
 #include "include/mempool.h"
@@ -30,7 +31,6 @@
 #include "common/valgrind.h"
 #include "common/deleter.h"
 #include "common/RWLock.h"
-#include "include/types.h"
 #include "include/spinlock.h"
 #include "include/scope_guard.h"
 
