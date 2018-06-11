@@ -410,20 +410,19 @@ std::string get_device_id(const std::string& devname)
     return device_id;
   }
 
-  // either udev_device_get_property_value() failed, or succeeded but returned nothing;
-  // trying to read from files.
+  // either udev_device_get_property_value() failed, or succeeded but
+  // returned nothing; trying to read from files.  note that the 'vendor'
+  // file rarely contains the actual vendor; it's usually 'ATA'.
   //derr << "udev could not retrieve serial number of " << devname << dendl;
-
-  std::string vendor, model, serial;
-  vendor = get_block_device_string_property_wrap(devname, "device/vendor");
+  std::string model, serial;
   model = get_block_device_string_property_wrap(devname, "device/model");
   serial = get_block_device_string_property_wrap(devname, "device/serial");
 
-  // "none" is here for indication reasons only, for a start.
-  device_id = (vendor.empty() ? "none" : vendor) + "_"
-    + (model.empty() ? "none" : model) + "_"
-    + (serial.empty() ? "none" : serial);
+  if (!model.size() || serial.size()) {
+    return {};
+  }
 
+  device_id = model + "_" + serial;
   std::replace(device_id.begin(), device_id.end(), ' ', '_');
   return device_id;
 }
