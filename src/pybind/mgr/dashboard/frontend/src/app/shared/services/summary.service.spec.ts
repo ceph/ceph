@@ -3,6 +3,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { of as observableOf } from 'rxjs';
 
+import { configureTestBed } from '../unit-test-helper';
 import { AuthStorageService } from './auth-storage.service';
 import { SummaryService } from './summary.service';
 
@@ -24,15 +25,15 @@ describe('SummaryService', () => {
       })
   };
 
-  beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [
-        SummaryService,
-        AuthStorageService,
-        { provide: HttpClient, useValue: httpClientSpy }
-      ]
-    });
+  configureTestBed({
+    providers: [
+      SummaryService,
+      AuthStorageService,
+      { provide: HttpClient, useValue: httpClientSpy }
+    ]
+  });
 
+  beforeEach(() => {
     summaryService = TestBed.get(SummaryService);
     authStorageService = TestBed.get(AuthStorageService);
   });

@@ -1,17 +1,15 @@
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { configureTestBed } from '../../../../shared/unit-test-helper';
 import { OsdPerformanceHistogramComponent } from './osd-performance-histogram.component';
 
 describe('OsdPerformanceHistogramComponent', () => {
   let component: OsdPerformanceHistogramComponent;
   let fixture: ComponentFixture<OsdPerformanceHistogramComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      declarations: [ OsdPerformanceHistogramComponent ]
-    })
-    .compileComponents();
-  }));
+  configureTestBed({
+    declarations: [OsdPerformanceHistogramComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdPerformanceHistogramComponent);

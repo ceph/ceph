@@ -1,11 +1,12 @@
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationService } from '../../../../shared/services/notification.service';
+import { configureTestBed } from '../../../../shared/unit-test-helper';
 import { OsdScrubModalComponent } from './osd-scrub-modal.component';
 
 describe('OsdScrubModalComponent', () => {
@@ -30,18 +31,16 @@ describe('OsdScrubModalComponent', () => {
     }
   };
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [ReactiveFormsModule],
-      declarations: [OsdScrubModalComponent],
-      schemas: [NO_ERRORS_SCHEMA],
-      providers: [
-        BsModalRef,
-        { provide: OsdService, useValue: fakeService },
-        { provide: NotificationService, useValue: fakeService }
-      ]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [ReactiveFormsModule],
+    declarations: [OsdScrubModalComponent],
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      BsModalRef,
+      { provide: OsdService, useValue: fakeService },
+      { provide: NotificationService, useValue: fakeService }
+    ]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdScrubModalComponent);
