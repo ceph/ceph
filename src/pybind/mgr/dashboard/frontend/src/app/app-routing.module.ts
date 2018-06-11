@@ -244,6 +244,7 @@ const routes: Routes = [
   },
   // System
   { path: 'login', component: LoginComponent },
+  { path: 'logout', children: [] },
   { path: '403', component: ForbiddenComponent },
   { path: '404', component: NotFoundComponent },
   { path: '**', redirectTo: '/404' }

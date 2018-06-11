@@ -68,8 +68,11 @@ class AuthTest(DashboardTestCase):
         data = self.jsonBody()
         self._validate_jwt_token(data['token'], "admin", data['permissions'])
         self.set_jwt_token(data['token'])
-        self._delete("/api/auth")
-        self.assertStatus(204)
+        self._post("/api/auth/logout")
+        self.assertStatus(200)
+        self.assertJsonBody({
+            "redirect_url": "#/login"
+        })
         self._get("/api/host")
         self.assertStatus(401)
         self.set_jwt_token(None)
@@ -93,8 +96,8 @@ class AuthTest(DashboardTestCase):
         self.assertStatus(201)
         self.set_jwt_token(self.jsonBody()['token'])
         # the following call adds the token to the blacklist
-        self._delete("/api/auth")
-        self.assertStatus(204)
+        self._post("/api/auth/logout")
+        self.assertStatus(200)
         self._get("/api/host")
         self.assertStatus(401)
         time.sleep(6)
@@ -104,8 +107,8 @@ class AuthTest(DashboardTestCase):
         self.assertStatus(201)
         self.set_jwt_token(self.jsonBody()['token'])
         # the following call removes expired tokens from the blacklist
-        self._delete("/api/auth")
-        self.assertStatus(204)
+        self._post("/api/auth/logout")
+        self.assertStatus(200)
 
     def test_unauthorized(self):
         self._get("/api/host")

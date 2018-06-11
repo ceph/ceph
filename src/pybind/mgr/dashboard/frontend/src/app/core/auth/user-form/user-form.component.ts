@@ -194,7 +194,6 @@ export class UserFormComponent implements OnInit {
               NotificationType.info,
               'You were automatically logged out because your roles have been changed.'
             );
-            this.router.navigate(['/login']);
           });
         } else {
           this.notificationService.show(
