@@ -4,6 +4,9 @@ TYPE(CompatSet)
 #include "include/filepath.h"
 TYPE(filepath)
 
+#include "include/fs_types.h"
+TYPE_FEATUREFUL(file_layout_t)
+
 #include "include/util.h"
 TYPE(ceph_data_stats)
 
@@ -210,9 +213,6 @@ TYPE(cap_reconnect_t)
 TYPE(inode_backtrace_t)
 TYPE(inode_backpointer_t)
 TYPE(quota_info_t)
-
-#include "include/fs_types.h"
-TYPE_FEATUREFUL(file_layout_t)
 
 #include "mds/CInode.h"
 TYPE_FEATUREFUL(InodeStore)
