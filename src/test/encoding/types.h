@@ -363,6 +363,7 @@ TYPE(RGWLifecycleConfiguration)
 #include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
 TYPE(rgw_bucket_dir_entry_meta)
+TYPE(rgw_bucket_entry_ver)
 TYPE(rgw_bucket_dir_entry)
 TYPE(rgw_bucket_category_stats)
 TYPE(rgw_bucket_dir_header)
@@ -429,6 +430,7 @@ TYPE(cls_user_complete_stats_sync_op)
 TYPE(cls::journal::ObjectPosition)
 TYPE(cls::journal::ObjectSetPosition)
 TYPE(cls::journal::Client)
+TYPE(cls::journal::Tag)
 
 #include "rgw/rgw_common.h"
 TYPE(RGWAccessKey)
@@ -493,9 +495,9 @@ TYPE(cls_lock_set_cookie_op)
 #include "cls/refcount/cls_refcount_ops.h"
 TYPE(cls_refcount_get_op)
 TYPE(cls_refcount_put_op)
+TYPE(cls_refcount_set_op)
 TYPE(cls_refcount_read_op)
 TYPE(cls_refcount_read_ret)
-TYPE(cls_refcount_set_op)
 
 #include "journal/Entry.h"
 TYPE(journal::Entry)
