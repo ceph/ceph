@@ -3506,6 +3506,7 @@ struct pg_log_t {
 protected:
   // We can rollback rollback-able entries > can_rollback_to
   eversion_t can_rollback_to;
+  bool rollback_invalidate = false;
 
   // always <= can_rollback_to, indicates how far stashed rollback
   // data can be found
@@ -3524,8 +3525,10 @@ public:
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
 	   mempool::osd_pglog::list<pg_log_entry_t> &&entries,
-	   mempool::osd_pglog::list<pg_log_dup_t> &&dup_entries)
+	   mempool::osd_pglog::list<pg_log_dup_t> &&dup_entries,
+	   const bool &rollback_invalidate = false)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
+      rollback_invalidate(rollback_invalidate), 
       rollback_info_trimmed_to(rollback_info_trimmed_to),
       log(std::move(entries)), dups(std::move(dup_entries)) {}
   pg_log_t(const eversion_t &last_update,
@@ -3533,8 +3536,10 @@ public:
 	   const eversion_t &can_rollback_to,
 	   const eversion_t &rollback_info_trimmed_to,
 	   const std::list<pg_log_entry_t> &entries,
-	   const std::list<pg_log_dup_t> &dup_entries)
+	   const std::list<pg_log_dup_t> &dup_entries,
+	   const bool &rollback_invalidate = false)
     : head(last_update), tail(log_tail), can_rollback_to(can_rollback_to),
+      rollback_invalidate(rollback_invalidate), 
       rollback_info_trimmed_to(rollback_info_trimmed_to) {
     for (auto &&entry: entries) {
       log.push_back(entry);
@@ -3547,6 +3552,7 @@ public:
   void clear() {
     eversion_t z;
     rollback_info_trimmed_to = can_rollback_to = head = tail = z;
+    rollback_invalidate = false;
     log.clear();
     dups.clear();
   }
@@ -3557,6 +3563,10 @@ public:
   eversion_t get_can_rollback_to() const {
     return can_rollback_to;
   }
+
+  bool rollback_invalidated() const {
+    return rollback_invalidate;
+  }  
 
 
   pg_log_t split_out_child(pg_t child_pgid, unsigned split_bits) {
@@ -3587,7 +3597,8 @@ public:
       can_rollback_to,
       rollback_info_trimmed_to,
       std::move(childlog),
-      std::move(childdups));
+      std::move(childdups),
+      rollback_invalidate);
     }
 
   mempool::osd_pglog::list<pg_log_entry_t> rewind_from_head(eversion_t newhead) {
@@ -3620,8 +3631,10 @@ public:
     }
     head = newhead;
 
-    if (can_rollback_to > newhead)
+    if (can_rollback_to > newhead) {
       can_rollback_to = newhead;
+      rollback_invalidate = true;
+    }
 
     if (rollback_info_trimmed_to > newhead)
       rollback_info_trimmed_to = newhead;

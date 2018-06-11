@@ -103,8 +103,10 @@ public:
 
     template <typename F>
     void advance_can_rollback_to(eversion_t to, F &&f) {
-      if (to > can_rollback_to)
+      if (to > can_rollback_to) {
 	can_rollback_to = to;
+	rollback_invalidate = false;
+      }
 
       if (to > rollback_info_trimmed_to)
 	rollback_info_trimmed_to = to;
@@ -1296,6 +1298,7 @@ public:
     // will get overridden below if it had been recorded
     eversion_t on_disk_can_rollback_to = info.last_update;
     eversion_t on_disk_rollback_info_trimmed_to = eversion_t();
+    bool on_disk_rollback_invalidate = false; 
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch,
 							      pgmeta_oid);
     map<eversion_t, hobject_t> divergent_priors;
@@ -1318,6 +1321,8 @@ public:
 	  debug_verify_stored_missing = false;
 	} else if (p->key() == "can_rollback_to") {
 	  decode(on_disk_can_rollback_to, bp);
+	} else if (p->key() == "rollback_invalidate") {
+	  decode(on_disk_rollback_invalidate, bp);
 	} else if (p->key() == "rollback_info_trimmed_to") {
 	  decode(on_disk_rollback_info_trimmed_to, bp);
 	} else if (p->key() == "may_include_deletes_in_missing") {
@@ -1359,7 +1364,8 @@ public:
       on_disk_can_rollback_to,
       on_disk_rollback_info_trimmed_to,
       std::move(entries),
-      std::move(dups));
+      std::move(dups),
+      on_disk_rollback_invalidate);
 
     if (must_rebuild || debug_verify_stored_missing) {
       // build missing

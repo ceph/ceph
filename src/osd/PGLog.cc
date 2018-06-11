@@ -248,7 +248,7 @@ void PGLog::proc_replica_log(
     folog,
     divergent,
     oinfo,
-    olog.get_can_rollback_to(),
+    olog.rollback_invalidated() ? eversion_t::max() : olog.get_can_rollback_to(),
     omissing,
     0,
     this);
@@ -308,7 +308,7 @@ void PGLog::rewind_divergent_log(eversion_t newhead,
     log,
     divergent,
     info,
-    log.get_can_rollback_to(),
+    log.rollback_invalidated() ? eversion_t::max() : log.get_can_rollback_to(),
     missing,
     rollbacker,
     this);
@@ -429,7 +429,7 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
       log,
       divergent,
       info,
-      log.get_can_rollback_to(),
+      log.rollback_invalidated() ? eversion_t::max() : log.get_can_rollback_to(),
       missing,
       rollbacker,
       this);
@@ -760,6 +760,8 @@ void PGLog::_write_log_and_missing_wo_missing(
     encode(
       log.get_can_rollback_to(),
       (*km)["can_rollback_to"]);
+    if (log.rollback_invalidated()) 
+      encode(true, (*km)["rollback_invalidate"]);
     encode(
       log.get_rollback_info_trimmed_to(),
       (*km)["rollback_info_trimmed_to"]);
@@ -906,6 +908,8 @@ void PGLog::_write_log_and_missing(
     encode(
       log.get_can_rollback_to(),
       (*km)["can_rollback_to"]);
+    if (log.rollback_invalidated())
+      encode(true, (*km)["rollback_invalidate"]);
     encode(
       log.get_rollback_info_trimmed_to(),
       (*km)["rollback_info_trimmed_to"]);

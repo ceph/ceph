@@ -4143,19 +4143,20 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(7, 3, bl);
+  ENCODE_START(8, 3, bl);
   encode(head, bl);
   encode(tail, bl);
   encode(log, bl);
   encode(can_rollback_to, bl);
   encode(rollback_info_trimmed_to, bl);
   encode(dups, bl);
+  encode(rollback_invalidate, bl);
   ENCODE_FINISH(bl);
 }
  
 void pg_log_t::decode(bufferlist::const_iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
   decode(head, bl);
   decode(tail, bl);
   if (struct_v < 2) {
@@ -4173,6 +4174,11 @@ void pg_log_t::decode(bufferlist::const_iterator &bl, int64_t pool)
 
   if (struct_v >= 7)
     decode(dups, bl);
+
+  if (struct_v >= 8)
+    decode(rollback_invalidate, bl);
+  else
+    rollback_invalidate = false;
 
   DECODE_FINISH(bl);
 
@@ -4224,6 +4230,7 @@ void pg_log_t::generate_test_instances(list<pg_log_t*>& o)
 void pg_log_t::copy_after(const pg_log_t &other, eversion_t v) 
 {
   can_rollback_to = other.can_rollback_to;
+  rollback_invalidate = other.rollback_invalidate;
   head = other.head;
   tail = other.tail;
   for (list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
@@ -4242,6 +4249,7 @@ void pg_log_t::copy_after(const pg_log_t &other, eversion_t v)
 void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
 {
   can_rollback_to = other.can_rollback_to;
+  rollback_invalidate = other.rollback_invalidate;
   list<pg_log_entry_t>::const_reverse_iterator i = other.log.rbegin();
   assert(i != other.log.rend());
   while (i->version > to) {
@@ -4262,6 +4270,7 @@ void pg_log_t::copy_range(const pg_log_t &other, eversion_t from, eversion_t to)
 void pg_log_t::copy_up_to(const pg_log_t &other, int max)
 {
   can_rollback_to = other.can_rollback_to;
+  rollback_invalidate = other.rollback_invalidate;
   int n = 0;
   head = other.head;
   tail = other.tail;
