@@ -17,6 +17,7 @@ class SettingsTest(unittest.TestCase):
         # pylint: disable=protected-access
         settings.Options.GRAFANA_API_HOST = ('localhost', str)
         settings.Options.GRAFANA_API_PORT = (3000, int)
+        settings.Options.GRAFANA_ENABLED = (False, bool)
         settings._OPTIONS_COMMAND_MAP = settings._options_command_map()
 
     @classmethod
@@ -38,10 +39,18 @@ class SettingsTest(unittest.TestCase):
 
     def test_get_setting(self):
         self.assertEqual(Settings.GRAFANA_API_HOST, 'localhost')
+        self.assertEqual(Settings.GRAFANA_API_PORT, 3000)
+        self.assertEqual(Settings.GRAFANA_ENABLED, False)
 
     def test_set_setting(self):
         Settings.GRAFANA_API_HOST = 'grafanahost'
         self.assertEqual(Settings.GRAFANA_API_HOST, 'grafanahost')
+
+        Settings.GRAFANA_API_PORT = 50
+        self.assertEqual(Settings.GRAFANA_API_PORT, 50)
+
+        Settings.GRAFANA_ENABLED = True
+        self.assertEqual(Settings.GRAFANA_ENABLED, True)
 
     def test_get_cmd(self):
         r, out, err = handle_option_command(
@@ -56,6 +65,15 @@ class SettingsTest(unittest.TestCase):
              'value': '4000'})
         self.assertEqual(r, 0)
         self.assertEqual(out, 'Option GRAFANA_API_PORT updated')
+        self.assertEqual(err, '')
+
+    def test_reset_cmd(self):
+        r, out, err = handle_option_command(
+            {'prefix': 'dashboard reset-grafana-enabled'}
+        )
+        self.assertEqual(r, 0)
+        self.assertEqual(out, 'Option {} reset to default value "{}"'.format(
+            'GRAFANA_ENABLED', Settings.GRAFANA_ENABLED))
         self.assertEqual(err, '')
 
     def test_inv_cmd(self):
