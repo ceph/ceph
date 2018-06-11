@@ -19,12 +19,12 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <dirent.h>
-#include <libudev.h>
 //#include "common/debug.h"
 #include "include/uuid.h"
 #include "blkdev.h"
 
 #ifdef __linux__
+#include <libudev.h>
 #include <linux/fs.h>
 #include <blkid/blkid.h>
 
@@ -543,6 +543,12 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
   return false;
 }
 
+std::string get_device_id(const std::string& devname)
+{
+  // FIXME: implement me for freebsd
+  return std::string();
+}
+
 #else
 int get_block_device_size(int fd, int64_t *psize)
 {
@@ -586,4 +592,11 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
 {
   return false;
 }
+
+std::string get_device_id(const std::string& devname)
+{
+  // not implemented
+  return std::string();
+}
+
 #endif
