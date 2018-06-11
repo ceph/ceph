@@ -96,7 +96,12 @@ public:
     encode(info, payload);
     encode(log, payload);
     encode(missing, payload);
-    encode(query_epoch, payload);
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      // pre-nautilus OSDs do not set last_peering_reset properly
+      encode(epoch, payload);
+    } else {
+      encode(query_epoch, payload);
+    }
     encode(past_intervals, payload);
     encode(to, payload);
     encode(from, payload);
