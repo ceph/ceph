@@ -645,8 +645,10 @@ set(ceph_common_deps
   ${BLKIN_LIBRARIES}
   ${CRYPTO_LIBS}
   ${CMAKE_THREAD_LIBS_INIT}
-  ${CMAKE_DL_LIBS}
-  ${UDEV_LIBRARIES})
+  ${CMAKE_DL_LIBS})
+if(HAVE_UDEV)
+  list(APPEND ceph_common_deps ${UDEV_LIBRARIES})
+endif()
 if(HAVE_RDMA)
   list(APPEND ceph_common_deps ${RDMA_LIBRARY})
 endif()
