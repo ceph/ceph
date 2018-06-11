@@ -135,19 +135,23 @@ TYPE(SequencerPosition)
 
 #ifdef WITH_BLUESTORE
 #include "os/bluestore/bluestore_types.h"
+TYPE(bluestore_bdev_label_t)
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_compression_header_t)
 TYPE(bluestore_extent_ref_map_t)
 TYPE(bluestore_pextent_t)
+TYPE(bluestore_blob_use_tracker_t)
 // TODO: bluestore_blob_t repurposes the "feature" param of encode() for its
 // struct_v. at a higher level, BlueStore::ExtentMap encodes the extends using
 // a different interface than the normal ones. see
 // BlueStore::ExtentMap::encode_some(). maybe we can test it using another
 // approach.
 // TYPE_FEATUREFUL(bluestore_blob_t)
+// TYPE(bluestore_shared_blob_t) there is no encode here
 TYPE(bluestore_onode_t)
 TYPE(bluestore_deferred_op_t)
 TYPE(bluestore_deferred_transaction_t)
+// TYPE(bluestore_compression_header_t) there is no encode here
 
 #include "os/bluestore/bluefs_types.h"
 TYPE(bluefs_extent_t)
@@ -190,6 +194,13 @@ TYPE_FEATUREFUL(ServiceMap::Daemon)
 #include "os/filestore/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
+
+#include "os/filestore/FileStore.h"
+TYPE(FSSuperblock)
+
+#include "os/kstore/kstore_types.h"
+TYPE(kstore_cnode_t)
+TYPE(kstore_onode_t)
 
 #include "mds/JournalPointer.h"
 TYPE(JournalPointer)
