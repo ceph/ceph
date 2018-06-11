@@ -22,8 +22,9 @@
 #include "include/assert.h"
 #include "common/Formatter.h"
 #include "common/Cond.h"
-
 #include "common/ceph_context.h"
+#include "common/PriorityCache.h"
+
 class PerfCounters;
 
 enum {
@@ -119,6 +120,7 @@ public:
   bool disableWAL;
   bool enable_rmrange;
   void compact() override;
+  int64_t high_pri_watermark;
 
   void compact_async() override {
     compact_range_async(string(), string());
@@ -157,7 +159,8 @@ public:
     compact_thread(this),
     compact_on_mount(false),
     disableWAL(false),
-    enable_rmrange(cct->_conf->rocksdb_enable_rmrange)
+    enable_rmrange(cct->_conf->rocksdb_enable_rmrange),
+    high_pri_watermark(0)
   {}
 
   ~RocksDBStore() override;
@@ -473,11 +476,24 @@ err:
     return total_size;
   }
 
+  virtual int64_t request_cache_bytes(
+      PriorityCache::Priority pri, uint64_t cache_bytes) const override;
+  virtual int64_t commit_cache_size() override;
+  virtual std::string get_cache_name() const override {
+    return "RocksDB Block Cache";
+  }
+  virtual int64_t get_cache_usage() const override;
+
+
   int set_cache_size(uint64_t s) override {
     cache_size = s;
     set_cache_flag = true;
     return 0;
   }
+
+  int set_cache_capacity(int64_t capacity);
+  int set_cache_high_pri_pool_ratio(double ratio);
+  int64_t get_cache_capacity();
 
   WholeSpaceIterator get_wholespace_iterator() override;
 };
