@@ -537,9 +537,15 @@ void InstanceWatcher<I>::notify_sync_start(const std::string &instance_id,
 
 template <typename I>
 void InstanceWatcher<I>::notify_sync_complete(const std::string &sync_id) {
-  dout(20) << "sync_id=" << sync_id << dendl;
-
   Mutex::Locker locker(m_lock);
+  notify_sync_complete(m_lock, sync_id);
+}
+
+template <typename I>
+void InstanceWatcher<I>::notify_sync_complete(const Mutex&,
+                                              const std::string &sync_id) {
+  dout(10) << "sync_id=" << sync_id << dendl;
+  assert(m_lock.is_locked());
 
   auto it = m_inflight_sync_reqs.find(sync_id);
   assert(it != m_inflight_sync_reqs.end());
@@ -559,7 +565,6 @@ void InstanceWatcher<I>::handle_notify_sync_request(C_SyncRequest *sync_ctx,
   Context *on_start = nullptr;
   {
     Mutex::Locker locker(m_lock);
-
     assert(sync_ctx->req != nullptr);
     assert(sync_ctx->on_start != nullptr);
 
@@ -569,13 +574,13 @@ void InstanceWatcher<I>::handle_notify_sync_request(C_SyncRequest *sync_ctx,
 
     std::swap(sync_ctx->on_start, on_start);
     sync_ctx->req = nullptr;
+
+    if (r == -ECANCELED) {
+      notify_sync_complete(m_lock, sync_ctx->sync_id);
+    }
   }
 
   on_start->complete(r == -ECANCELED ? r : 0);
-
-  if (r == -ECANCELED) {
-    notify_sync_complete(sync_ctx->sync_id);
-  }
 }
 
 template <typename I>

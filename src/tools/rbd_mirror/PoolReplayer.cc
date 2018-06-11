@@ -360,16 +360,17 @@ void PoolReplayer::shut_down() {
   }
   if (m_leader_watcher) {
     m_leader_watcher->shut_down();
-    m_leader_watcher.reset();
   }
   if (m_instance_watcher) {
     m_instance_watcher->shut_down();
-    m_instance_watcher.reset();
   }
   if (m_instance_replayer) {
     m_instance_replayer->shut_down();
-    m_instance_replayer.reset();
   }
+
+  m_leader_watcher.reset();
+  m_instance_watcher.reset();
+  m_instance_replayer.reset();
 
   assert(!m_local_pool_watcher);
   assert(!m_remote_pool_watcher);
@@ -508,6 +509,8 @@ void PoolReplayer::run()
       m_cond.WaitInterval(m_lock, utime_t(1, 0));
     }
   }
+
+  m_instance_replayer->stop();
 }
 
 void PoolReplayer::print_status(Formatter *f, stringstream *ss)
