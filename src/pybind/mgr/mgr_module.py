@@ -312,7 +312,8 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         :param str data_name: Valid things to fetch are osd_crush_map_text, 
                 osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
-                osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats, health, mon_status.
+                osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats,
+                health, mon_status, devices, device <devid>.
 
         Note:
             All these structures have their own JSON representations: experiment
