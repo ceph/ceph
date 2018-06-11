@@ -92,6 +92,33 @@
                  [loadingIndicator]="loadingIndicator"
                  [rowIdentity]="rowIdentity()"
                  [rowHeight]="'auto'">
+    <ngx-datatable-footer>
+      <ng-template ngx-datatable-footer-template
+                   let-rowCount="rowCount"
+                   let-pageSize="pageSize"
+                   let-selectedCount="selectedCount"
+                   let-curPage="curPage"
+                   let-offset="offset"
+                   let-isVisible="isVisible">
+        <div class="page-count">
+          <span *ngIf="selectionType"
+                i18n>{{ selectedCount }} selected / </span>
+          <span *ngIf="rowCount != data?.length"
+                i18n>{{ rowCount }} found / </span>
+          <span i18n>{{ data?.length || 0 }} total</span>
+        </div>
+        <datatable-pager [pagerLeftArrowIcon]="paginationClasses.pagerLeftArrow"
+                         [pagerRightArrowIcon]="paginationClasses.pagerRightArrow"
+                         [pagerPreviousIcon]="paginationClasses.pagerPrevious"
+                         [pagerNextIcon]="paginationClasses.pagerNext"
+                         [page]="curPage"
+                         [size]="pageSize"
+                         [count]="rowCount"
+                         [hidden]="!((rowCount / pageSize) > 1)"
+                         (change)="table.onFooterPage($event)">
+        </datatable-pager>
+      </ng-template>
+    </ngx-datatable-footer>
   </ngx-datatable>
 </div>
 
