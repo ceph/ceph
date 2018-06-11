@@ -1,3 +1,11 @@
+#include "test_ceph_time.h"
+TYPE(real_time_wrapper)
+TYPE(coarse_real_time_wrapper)
+TYPE(timespan_wrapper)
+
+#include "test_sstring.h"
+TYPE(sstring_wrapper)
+
 #include "include/CompatSet.h"
 TYPE(CompatSet)
 
@@ -16,14 +24,6 @@ TYPE(BitVector<2>)
 #include "common/bloom_filter.hpp"
 TYPE(bloom_filter)
 TYPE(compressible_bloom_filter)
-
-#include "test_ceph_time.h"
-TYPE(real_time_wrapper)
-TYPE(coarse_real_time_wrapper)
-TYPE(timespan_wrapper)
-
-#include "test_sstring.h"
-TYPE(sstring_wrapper)
 
 #include "common/snap_types.h"
 TYPE(SnapContext)
