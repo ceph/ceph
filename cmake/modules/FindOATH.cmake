@@ -5,11 +5,10 @@
 # OATH_INCLUDE_DIRS
 # OATH_LIBRARIES
 find_path(OATH_INCLUDE_DIR
-  oath.h
+  liboath/oath.h
   PATHS
   /usr/include
-  /usr/local/include
-  /usr/include/liboath)
+  /usr/local/include)
 find_library(OATH_LIBRARY NAMES oath liboath PATHS
   /usr/local/lib
   /usr/lib)
