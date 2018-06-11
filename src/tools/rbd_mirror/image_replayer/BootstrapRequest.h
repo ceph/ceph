@@ -8,6 +8,7 @@
 #include "include/rados/librados.hpp"
 #include "common/Mutex.h"
 #include "cls/journal/cls_journal_types.h"
+#include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 #include "tools/rbd_mirror/BaseRequest.h"
 #include "tools/rbd_mirror/types.h"
@@ -173,6 +174,9 @@ private:
   bool m_primary = false;
   int m_ret_val = 0;
   ImageSync<ImageCtxT> *m_image_sync = nullptr;
+
+  uint64_t m_local_tag_tid = 0;
+  librbd::journal::TagData m_local_tag_data;
 
   bufferlist m_out_bl;
 
