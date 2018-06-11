@@ -10680,9 +10680,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string sure;
     if (!cmd_getval(cct, cmdmap, "sure", sure) ||
         sure != "--yes-i-really-mean-it") {
-      ss << "Are you SURE? This will mean real, permanent data loss, as well "
-         << "as cephx and lockbox keys. Pass --yes-i-really-mean-it if you "
-         << "really do.";
+      ss << "Are you SURE?  Did you verify with 'ceph osd safe-to-destroy'?  "
+	 << "This will mean real, permanent data loss, as well "
+         << "as deletion of cephx and lockbox keys. "
+	 << "Pass --yes-i-really-mean-it if you really do.";
       err = -EPERM;
       goto reply;
     } else if (!osdmap.exists(id)) {
