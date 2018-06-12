@@ -77,7 +77,8 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->dump_int("incarnation", inc);
   f->dump_stream("state") << ceph_mds_state_name(state);
   f->dump_int("state_seq", state_seq);
-  f->dump_stream("addr") << addr;
+  f->dump_stream("addr") << addrs.legacy_addr();
+  f->dump_object("addrs", addrs);
   if (laggy_since != utime_t())
     f->dump_stream("laggy_since") << laggy_since;
   
@@ -97,7 +98,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
 void MDSMap::mds_info_t::print_summary(ostream &out) const
 {
   out << global_id << ":\t"
-      << addr
+      << addrs
       << " '" << name << "'"
       << " mds." << rank
       << "." << inc
@@ -369,13 +370,17 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
 	map<mds_gid_t,mds_info_t>::const_iterator info = mds_info.find(gid);
 	stringstream ss;
 	if (is_resolve(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is resolving";
+	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	     << " rank " << i << " is resolving";
 	if (is_replay(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is replaying journal";
+	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	     << " rank " << i << " is replaying journal";
 	if (is_rejoin(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is rejoining";
+	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	     << " rank " << i << " is rejoining";
 	if (is_reconnect(i))
-	  ss << "mds." << info->second.name << " at " << info->second.addr << " rank " << i << " is reconnecting to clients";
+	  ss << "mds." << info->second.name << " at " << info->second.addrs
+	     << " rank " << i << " is reconnecting to clients";
 	if (ss.str().length())
 	  detail->push_back(make_pair(HEALTH_WARN, ss.str()));
       }
@@ -408,7 +413,8 @@ void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
       laggy.insert(mds_info.name);
       if (detail) {
 	std::ostringstream oss;
-	oss << "mds." << mds_info.name << " at " << mds_info.addr << " is laggy/unresponsive";
+	oss << "mds." << mds_info.name << " at " << mds_info.addrs
+	    << " is laggy/unresponsive";
 	detail->push_back(make_pair(HEALTH_WARN, oss.str()));
       }
     }
@@ -460,7 +466,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
       map<mds_gid_t,mds_info_t>::const_iterator info = mds_info.find(gid);
       stringstream ss;
       ss << "fs " << fs_name << " mds." << info->second.name << " at "
-	 << info->second.addr << " rank " << i;
+	 << info->second.addrs << " rank " << i;
       if (is_resolve(i))
 	ss << " is resolving";
       if (is_replay(i))
@@ -508,14 +514,22 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(7, 4, bl);
+  __u8 v = 8;
+  if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    v = 7;
+  }
+  ENCODE_START(v, 4, bl);
   encode(global_id, bl);
   encode(name, bl);
   encode(rank, bl);
   encode(inc, bl);
   encode((int32_t)state, bl);
   encode(state_seq, bl);
-  encode(addr, bl, features);
+  if (v < 8) {
+    encode(addrs.legacy_addr(), bl, features);
+  } else {
+    encode(addrs, bl, features);
+  }
   encode(laggy_since, bl);
   encode(standby_for_rank, bl);
   encode(standby_for_name, bl);
@@ -537,7 +551,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
   encode(inc, bl);
   encode((int32_t)state, bl);
   encode(state_seq, bl);
-  encode(addr, bl, 0);
+  encode(addrs.legacy_addr(), bl, 0);
   encode(laggy_since, bl);
   encode(standby_for_rank, bl);
   encode(standby_for_name, bl);
@@ -546,14 +560,14 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
 
 void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
   decode(global_id, bl);
   decode(name, bl);
   decode(rank, bl);
   decode(inc, bl);
   decode((int32_t&)(state), bl);
   decode(state_seq, bl);
-  decode(addr, bl);
+  decode(addrs, bl);
   decode(laggy_since, bl);
   decode(standby_for_rank, bl);
   decode(standby_for_name, bl);

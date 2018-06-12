@@ -881,7 +881,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
     return;
   }
 
-  entity_addr_t addr;
+  entity_addrvec_t addrs;
 
   // keep old map, for a moment
   MDSMap *oldmap = mdsmap;
@@ -916,7 +916,7 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
        ++p) {
     if (mdsmap->get_mds_info().count(p->first) == 0) {
       dout(10) << " peer mds gid " << p->first << " removed from map" << dendl;
-      messenger->mark_down(p->second.addr);
+      messenger->mark_down_addrs(p->second.addrs);
     }
   }
 
@@ -926,8 +926,9 @@ void MDSDaemon::handle_mds_map(MMDSMap *m)
   }
 
   // see who i am
-  addr = messenger->get_myaddr();
-  dout(10) << "map says I am " << addr << " mds." << whoami << "." << incarnation
+  addrs = messenger->get_myaddrs();
+  dout(10) << "map says I am " << addrs
+	   << " mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(new_state) << dendl;
 
   if (whoami == MDS_RANK_NONE) {
