@@ -48,6 +48,7 @@
 #include "common/version.h"
 #include "common/pick_address.h"
 #include "common/SubProcess.h"
+#include "common/blkdev.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -5420,6 +5421,19 @@ void OSD::_collect_metadata(map<string,string> *pm)
   set<string> devnames;
   store->get_devices(&devnames);
   (*pm)["devices"] = stringify(devnames);
+  string devids;
+  for (auto& dev : devnames) {
+    if (!devids.empty()) {
+      devids += ",";
+    }
+    string id = get_device_id(dev);
+    if (id.size()) {
+      devids += dev + "=" + id;
+    } else {
+      dout(10) << __func__ << " no unique device id for " << dev << dendl;
+    }
+  }
+  (*pm)["device_ids"] = devids;
 
   dout(10) << __func__ << " " << *pm << dendl;
 }

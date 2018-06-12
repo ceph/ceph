@@ -21,15 +21,23 @@
 #include <boost/circular_buffer.hpp>
 
 #include "common/RWLock.h"
+#include "include/str_map.h"
 
 #include "msg/msg_types.h"
 
 // For PerfCounterType
 #include "messages/MMgrReport.h"
 
+namespace ceph {
+  class Formatter;
+}
 
 // Unique reference to a daemon within a cluster
 typedef std::pair<std::string, std::string> DaemonKey;
+
+static inline std::string to_string(const DaemonKey& dk) {
+  return dk.first + "." + dk.second;
+}
 
 // An instance of a performance counter type, within
 // a particular daemon.
@@ -121,6 +129,9 @@ class DaemonState
   // The metadata (hostname, version, etc) sent from the daemon
   std::map<std::string, std::string> metadata;
 
+  /// device ids -> devname, derived from metadata[device_ids]
+  std::map<std::string,std::string> devices;
+
   // TODO: this can be generalized to other daemons
   std::vector<DaemonHealthMetric> daemon_health_metrics;
 
@@ -148,6 +159,20 @@ class DaemonState
   {
   }
 
+  void set_metadata(const std::map<std::string,std::string>& m) {
+    metadata = m;
+    auto p = m.find("device_ids");
+    if (p != m.end()) {
+      map<std::string,std::string> devs;
+      get_str_map(p->second, &devs, ",; ");
+      for (auto& i : devs) {
+	if (i.second.size()) {  // skip blank ids
+	  devices[i.second] = i.first;
+	}
+      }
+    }
+  }
+
   const std::map<std::string,std::string>& get_config_defaults() {
     if (config_defaults.empty() &&
 	config_defaults_bl.length()) {
@@ -165,7 +190,36 @@ typedef std::shared_ptr<DaemonState> DaemonStatePtr;
 typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
 
 
+struct DeviceState : public RefCountedObject
+{
+  std::string devid;
+  std::set<pair<std::string,std::string>> devnames; ///< (server,devname)
+  std::set<DaemonKey> daemons;
 
+  std::map<string,string> metadata;  ///< persistent metadata
+
+  pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
+  utime_t life_expectancy_stamp;          ///< when life expectency was recorded
+
+  DeviceState(const std::string& n) : devid(n) {}
+
+  void set_metadata(map<string,string>&& m);
+
+  void set_life_expectancy(utime_t from, utime_t to, utime_t now);
+  void rm_life_expectancy();
+
+  string get_life_expectancy_str(utime_t now) const;
+
+  /// true of we can be safely forgotten/removed from memory
+  bool empty() const {
+    return daemons.empty() && metadata.empty();
+  }
+
+  void dump(Formatter *f) const;
+  void print(ostream& out) const;
+};
+
+typedef boost::intrusive_ptr<DeviceState> DeviceStateRef;
 
 /**
  * Fuse the collection of per-daemon metadata from Ceph into
@@ -174,16 +228,30 @@ typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
  */
 class DaemonStateIndex
 {
-  private:
+private:
   mutable RWLock lock = {"DaemonStateIndex", true, true, true};
 
   std::map<std::string, DaemonStateCollection> by_server;
   DaemonStateCollection all;
   std::set<DaemonKey> updating;
 
+  std::map<std::string,DeviceStateRef> devices;
+
   void _erase(const DaemonKey& dmk);
 
-  public:
+  DeviceStateRef _get_or_create_device(const std::string& dev) {
+    auto p = devices.find(dev);
+    if (p != devices.end()) {
+      return p->second;
+    }
+    devices[dev] = new DeviceState(dev);
+    return devices[dev];
+  }
+  void _erase_device(DeviceStateRef d) {
+    devices.erase(d->devid);
+  }
+
+public:
   DaemonStateIndex() {}
 
   // FIXME: shouldn't really be public, maybe construct DaemonState
@@ -208,6 +276,60 @@ class DaemonStateIndex
     RWLock::RLocker l(lock);
     
     return std::forward<Callback>(cb)(by_server, std::forward<Args>(args)...);
+  }
+
+  template<typename Callback, typename...Args>
+  bool with_device(const std::string& dev,
+		   Callback&& cb, Args&&... args) const {
+    RWLock::RLocker l(lock);
+    auto p = devices.find(dev);
+    if (p == devices.end()) {
+      return false;
+    }
+    std::forward<Callback>(cb)(*p->second, std::forward<Args>(args)...);
+    return true;
+  }
+
+  template<typename Callback, typename...Args>
+  bool with_device_write(const std::string& dev,
+			 Callback&& cb, Args&&... args) {
+    RWLock::WLocker l(lock);
+    auto p = devices.find(dev);
+    if (p == devices.end()) {
+      return false;
+    }
+    std::forward<Callback>(cb)(*p->second, std::forward<Args>(args)...);
+    if (p->second->empty()) {
+      _erase_device(p->second);
+    }
+    return true;
+  }
+
+  template<typename Callback, typename...Args>
+  void with_device_create(const std::string& dev,
+			  Callback&& cb, Args&&... args) {
+    RWLock::WLocker l(lock);
+    auto d = _get_or_create_device(dev);
+    std::forward<Callback>(cb)(*d, std::forward<Args>(args)...);
+  }
+
+  template<typename Callback, typename...Args>
+  void with_devices(Callback&& cb, Args&&... args) const {
+    RWLock::RLocker l(lock);
+    for (auto& i : devices) {
+      std::forward<Callback>(cb)(*i.second, std::forward<Args>(args)...);
+    }
+  }
+
+  void list_devids_by_server(const std::string& server,
+			     std::set<std::string> *ls) {
+    auto m = get_by_server(server);
+    for (auto& i : m) {
+      Mutex::Locker l(i.second->lock);
+      for (auto& j : i.second->devices) {
+	ls->insert(j.first);
+      }
+    }
   }
 
   void notify_updating(const DaemonKey &k) {

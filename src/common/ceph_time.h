@@ -17,6 +17,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <string>
 #include <sys/time.h>
 
 #include "include/assert.h"
@@ -468,6 +469,8 @@ inline timespan to_timespan(signedspan z) {
   ceph_assert(z >= signedspan::zero());
   return std::chrono::duration_cast<timespan>(z);
 }
+
+std::string timespan_str(timespan t);
 
 // detects presence of Clock::to_timespec() and from_timespec()
 template <typename Clock, typename = std::void_t<>>

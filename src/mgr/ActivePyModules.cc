@@ -287,6 +287,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
         }
     );
     return f.get();
+  } else if (what == "devices") {
+    PyFormatter f;
+    f.open_array_section("devices");
+    daemon_state.with_devices([&f] (const DeviceState& dev) {
+	f.dump_object("device", dev);
+      });
+    f.close_section();
+    return f.get();
   } else if (what == "io_rate") {
     PyFormatter f;
     cluster_state.with_pgmap(
