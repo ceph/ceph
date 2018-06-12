@@ -94,7 +94,7 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(const entity_addr_t &addr) override;
+  bool set_addr_unknowns(const entity_addrvec_t &addr) override;
   void set_addrs(const entity_addrvec_t &addrs) override;
 
   int get_dispatch_queue_len() override {

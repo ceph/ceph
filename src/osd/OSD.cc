@@ -5350,64 +5350,30 @@ void OSD::_send_boot()
 	   << ", hb_back_addrs " << hb_back_addrs
 	   << ", hb_front_addrs " << hb_front_addrs
 	   << dendl;
-
-  for (auto& a : cluster_addrs.v) {
-    if (a.is_blank_ip()) {
-      int port = a.get_port();
-      for (auto& b : client_addrs.v) {
-	if (a.get_type() == b.get_type() &&
-	    a.get_family() == b.get_family()) {
-	  dout(10) << " assuming cluster_addr " << a
-		   << " matches client_addr " << b << dendl;
-	  a = b;
-	  a.set_port(port);
-	  cluster_messenger->set_addr_unknowns(a);
-	  break;
-	}
-      }
-    }
+  if (cluster_messenger->set_addr_unknowns(client_addrs)) {
+    dout(10) << " assuming cluster_addrs match client_addrs "
+	     << client_addrs << dendl;
+    cluster_addrs = cluster_messenger->get_myaddrs();
   }
   if (auto session = local_connection->get_priv(); !session) {
     cluster_messenger->ms_deliver_handle_fast_connect(local_connection);
   }
 
   local_connection = hb_back_server_messenger->get_loopback_connection().get();
-  for (auto& a : hb_back_addrs.v) {
-    if (a.is_blank_ip()) {
-      int port = a.get_port();
-      for (auto& b : cluster_addrs.v) {
-	if (a.get_type() == b.get_type() &&
-	    a.get_family() == b.get_family()) {
-	  dout(10) << " assuming hb_back_addr " << a
-		   << " matches cluster_addr " << b << dendl;
-	  a = b;
-	  a.set_port(port);
-	  hb_back_server_messenger->set_addr_unknowns(a);
-	  break;
-	}
-      }
-    }
+  if (hb_back_server_messenger->set_addr_unknowns(cluster_addrs)) {
+    dout(10) << " assuming hb_back_addrs match cluster_addrs "
+	     << cluster_addrs << dendl;
+    hb_back_addrs = hb_back_server_messenger->get_myaddrs();
   }
   if (auto session = local_connection->get_priv(); !session) {
     hb_back_server_messenger->ms_deliver_handle_fast_connect(local_connection);
   }
 
   local_connection = hb_front_server_messenger->get_loopback_connection().get();
-  for (auto& a : hb_front_addrs.v) {
-    if (a.is_blank_ip()) {
-      int port = a.get_port();
-      for (auto& b : client_addrs.v) {
-	if (a.get_type() == b.get_type() &&
-	    a.get_family() == b.get_family()) {
-	  dout(10) << " assuming hb_front_addr " << a
-		   << " matches client_addr " << b << dendl;
-	  a = b;
-	  a.set_port(port);
-	  hb_front_server_messenger->set_addr_unknowns(a);
-	  break;
-	}
-      }
-    }
+  if (hb_front_server_messenger->set_addr_unknowns(client_addrs)) {
+    dout(10) << " assuming hb_front_addrs match client_addrs "
+	     << client_addrs << dendl;
+    hb_front_addrs = hb_front_server_messenger->get_myaddrs();
   }
   if (auto session = local_connection->get_priv(); !session) {
     hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);

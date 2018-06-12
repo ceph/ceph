@@ -93,7 +93,7 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(const entity_addr_t& addr) override;
+  bool set_addr_unknowns(const entity_addrvec_t& addr) override;
   void set_addrs(const entity_addrvec_t &addr) override;
   void set_myaddrs(const entity_addrvec_t& a) override;
 
