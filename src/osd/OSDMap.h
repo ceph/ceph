@@ -656,6 +656,7 @@ public:
   const utime_t& get_modified() const { return modified; }
 
   bool is_blacklisted(const entity_addr_t& a) const;
+  bool is_blacklisted(const entity_addrvec_t& a) const;
   void get_blacklist(list<pair<entity_addr_t,utime_t > > *bl) const;
   void get_blacklist(std::set<entity_addr_t> *bl) const;
 
