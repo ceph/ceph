@@ -685,7 +685,7 @@ uint64_t TokenBucketThrottle::Bucket::put(uint64_t c) {
 }
 
 void TokenBucketThrottle::Bucket::set_max(uint64_t m) {
-  if (remain > m)
+  if (remain > m || max == 0)
     remain = m;
   max = m;
 }
