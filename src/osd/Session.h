@@ -177,7 +177,7 @@ struct Session : public RefCountedObject {
     }
     auto p = i->second.lower_bound(oid);
     if (p != i->second.begin() &&
-	p->first > oid) {
+	(p == i->second.end() || p->first > oid)) {
       --p;
     }
     if (p != i->second.end()) {
