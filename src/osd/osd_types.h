@@ -2098,12 +2098,21 @@ struct pg_stat_t {
       snaptrimq_len = f;
   }
 
+  void add_sub_invalid_flags(const pg_stat_t& o) {
+    // adding (or subtracting!) invalid stats render our stats invalid too
+    stats_invalid |= o.stats_invalid;
+    dirty_stats_invalid |= o.dirty_stats_invalid;
+    hitset_stats_invalid |= o.hitset_stats_invalid;
+    pin_stats_invalid |= o.pin_stats_invalid;
+    manifest_stats_invalid |= o.manifest_stats_invalid;
+  }
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
     snaptrimq_len = std::min((uint64_t)snaptrimq_len + o.snaptrimq_len,
                              (uint64_t)(1ull << 31));
+    add_sub_invalid_flags(o);
   }
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
@@ -2114,6 +2123,7 @@ struct pg_stat_t {
     } else {
       snaptrimq_len = 0;
     }
+    add_sub_invalid_flags(o);
   }
 
   bool is_acting_osd(int32_t osd, bool primary) const;
