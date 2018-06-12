@@ -16,7 +16,7 @@ describe('CdValidators', () => {
 
     it('should error on invalid email address', () => {
       const control = new FormControl('xyz');
-      expect(CdValidators.email(control)).toEqual({'email': true});
+      expect(CdValidators.email(control)).toEqual({ email: true });
     });
   });
 
@@ -34,8 +34,8 @@ describe('CdValidators', () => {
     it('should not error because all conditions are fulfilled', () => {
       form.get('z').setValue('zyx');
       const validatorFn = CdValidators.requiredIf({
-        'x': true,
-        'y': 'abc'
+        x: true,
+        y: 'abc'
       });
       expect(validatorFn(form.controls['z'])).toBeNull();
     });
@@ -43,8 +43,8 @@ describe('CdValidators', () => {
     it('should not error because of unmet prerequisites', () => {
       // Define prereqs that do not match the current values of the form fields.
       const validatorFn = CdValidators.requiredIf({
-        'x': false,
-        'y': 'xyz'
+        x: false,
+        y: 'xyz'
       });
       // The validator must succeed because the prereqs do not match, so the
       // validation of the 'z' control will be skipped.
@@ -55,21 +55,24 @@ describe('CdValidators', () => {
       // Define prereqs that force the validator to validate the value of
       // the 'z' control.
       const validatorFn = CdValidators.requiredIf({
-        'x': true,
-        'y': 'abc'
+        x: true,
+        y: 'abc'
       });
       // The validator must fail because the value of control 'z' is empty.
-      expect(validatorFn(form.controls['z'])).toEqual({'required': true});
+      expect(validatorFn(form.controls['z'])).toEqual({ required: true });
     });
 
     it('should not error because of unsuccessful condition', () => {
       form.get('z').setValue('zyx');
       // Define prereqs that force the validator to validate the value of
       // the 'z' control.
-      const validatorFn = CdValidators.requiredIf({
-        'x': true,
-        'z': 'zyx'
-      }, () => false);
+      const validatorFn = CdValidators.requiredIf(
+        {
+          x: true,
+          z: 'zyx'
+        },
+        () => false
+      );
       expect(validatorFn(form.controls['z'])).toBeNull();
     });
 
@@ -79,11 +82,14 @@ describe('CdValidators', () => {
       };
       // Define prereqs that force the validator to validate the value of
       // the 'y' control.
-      const validatorFn = CdValidators.requiredIf({
-        'x': true,
-        'z': ''
-      }, conditionFn);
-      expect(validatorFn(form.controls['y'])).toEqual({'required': true});
+      const validatorFn = CdValidators.requiredIf(
+        {
+          x: true,
+          z: ''
+        },
+        conditionFn
+      );
+      expect(validatorFn(form.controls['y'])).toEqual({ required: true });
     });
   });
 });
