@@ -134,7 +134,7 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
   }
 
   msgr->set_myname(entity_name_t::MGR(gid));
-  msgr->set_addr_unknowns(client_addr);
+  msgr->set_addr_unknowns(entity_addrvec_t(client_addr));
 
   msgr->start();
   msgr->add_dispatcher_tail(this);

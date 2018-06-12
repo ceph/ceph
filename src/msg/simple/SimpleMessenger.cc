@@ -147,8 +147,10 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
  * If my_inst.addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
-void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
+bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 {
+  bool ret = false;
+  auto addr = addrs.legacy_addr();
   assert(my_addr == my_addrs.front());
   if (my_addr.is_blank_ip()) {
     ldout(cct,1) << __func__ << " " << addr << dendl;
@@ -158,10 +160,12 @@ void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
     t.set_port(port);
     set_addrs(entity_addrvec_t(t));
     init_local_connection();
+    ret = true;
   } else {
     ldout(cct,1) << __func__ << " " << addr << " no-op" << dendl;
   }
   assert(my_addr == my_addrs.front());
+  return ret;
 }
 
 void SimpleMessenger::set_myaddrs(const entity_addrvec_t &av)

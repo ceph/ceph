@@ -657,17 +657,31 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
  * If my_addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
-void AsyncMessenger::set_addr_unknowns(const entity_addr_t &addr)
+bool AsyncMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 {
+  bool ret = false;
   Mutex::Locker l(lock);
-  if (my_addrs.legacy_addr().is_blank_ip()) {
-    for (auto& a : my_addrs.v) {
+
+  for (auto& a : my_addrs.v) {
+    if (a.is_blank_ip()) {
       int port = a.get_port();
-      a.u = addr.u;
-      a.set_port(port);
+      for (auto& b : addrs.v) {
+	if (a.get_type() == b.get_type() &&
+	    a.get_family() == b.get_family()) {
+	  ldout(cct,1) << __func__ << " assuming my addr " << a
+		       << " matches provided addr " << b << dendl;
+	  a = b;
+	  a.set_port(port);
+	  ret = true;
+	  break;
+	}
+      }
     }
+  }
+  if (ret) {
     _init_local_connection();
   }
+  return ret;
 }
 
 void AsyncMessenger::set_addrs(const entity_addrvec_t &addrs)
