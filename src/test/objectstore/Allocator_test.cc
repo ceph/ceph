@@ -14,37 +14,39 @@
 #include "include/stringify.h"
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
-#include "os/bluestore/BitAllocator.h"
 
+#include <boost/random/uniform_int.hpp>
+typedef boost::mt11213b gen_type;
 
 #if GTEST_HAS_PARAM_TEST
 
 class AllocTest : public ::testing::TestWithParam<const char*> {
-public:
-    boost::scoped_ptr<Allocator> alloc;
-    AllocTest(): alloc(0) { }
-    void init_alloc(int64_t size, uint64_t min_alloc_size) {
-      std::cout << "Creating alloc type " << string(GetParam()) << " \n";
-      alloc.reset(Allocator::create(g_ceph_context, string(GetParam()), size,
-				    min_alloc_size));
-    }
 
-    void init_close() {
-      alloc.reset(0);
-    }
+public:
+  boost::scoped_ptr<Allocator> alloc;
+  AllocTest(): alloc(0) { }
+  void init_alloc(int64_t size, uint64_t min_alloc_size) {
+    std::cout << "Creating alloc type " << string(GetParam()) << " \n";
+    alloc.reset(Allocator::create(g_ceph_context, string(GetParam()), size,
+				  min_alloc_size));
+  }
+
+  void init_close() {
+    alloc.reset(0);
+  }
 };
 
 TEST_P(AllocTest, test_alloc_init)
 {
-  int64_t blocks = BmapEntry::size();
+  int64_t blocks = 64;
   init_alloc(blocks, 1);
   ASSERT_EQ(0U, alloc->get_free());
   alloc->shutdown(); 
-  blocks = BitMapZone::get_total_blocks() * 2 + 16;
+  blocks = 1024 * 2 + 16;
   init_alloc(blocks, 1);
   ASSERT_EQ(0U, alloc->get_free());
   alloc->shutdown(); 
-  blocks = BitMapZone::get_total_blocks() * 2;
+  blocks = 1024 * 2;
   init_alloc(blocks, 1);
   ASSERT_EQ(alloc->get_free(), (uint64_t) 0);
 }
@@ -52,10 +54,11 @@ TEST_P(AllocTest, test_alloc_init)
 TEST_P(AllocTest, test_alloc_min_alloc)
 {
   int64_t block_size = 1024;
-  int64_t blocks = BitMapZone::get_total_blocks() * 2 * block_size;
+  int64_t capacity = 4 * 1024 * block_size;
 
   {
-    init_alloc(blocks, block_size);
+    init_alloc(capacity, block_size);
+
     alloc->init_add_free(block_size, block_size);
     PExtentVector extents;
     EXPECT_EQ(block_size, alloc->allocate(block_size, block_size,
@@ -96,9 +99,9 @@ TEST_P(AllocTest, test_alloc_min_alloc)
 TEST_P(AllocTest, test_alloc_min_max_alloc)
 {
   int64_t block_size = 1024;
-  int64_t blocks = BitMapZone::get_total_blocks() * 2 * block_size;
 
-  init_alloc(blocks, block_size);
+  int64_t capacity = 4 * 1024 * block_size;
+  init_alloc(capacity, block_size);
 
   /*
    * Make sure we get all extents different when
@@ -169,9 +172,9 @@ TEST_P(AllocTest, test_alloc_min_max_alloc)
 TEST_P(AllocTest, test_alloc_failure)
 {
   int64_t block_size = 1024;
-  int64_t blocks = BitMapZone::get_total_blocks() * block_size;
+  int64_t capacity = 4 * 1024 * block_size;
 
-  init_alloc(blocks, block_size);
+  init_alloc(capacity, block_size);
   {
     alloc->init_add_free(0, block_size * 256);
     alloc->init_add_free(block_size * 512, block_size * 256);
@@ -204,62 +207,6 @@ TEST_P(AllocTest, test_alloc_big)
     EXPECT_EQ(big,
 	      alloc->allocate(big, mas, 0, &extents));
   }
-}
-
-TEST_P(AllocTest, test_alloc_hint_bmap)
-{
-  if (GetParam() == std::string("stupid")) {
-    return;
-  }
-  int64_t blocks = BitMapArea::get_level_factor(g_ceph_context, 2) * 4;
-  int64_t allocated = 0;
-  int64_t zone_size = 1024;
-  g_conf->set_val("bluestore_bitmapallocator_blocks_per_zone",
-		  std::to_string(zone_size));
-
-  init_alloc(blocks, 1);
-  alloc->init_add_free(0, blocks);
-
-  PExtentVector extents;
-
-  allocated = alloc->allocate(1, 1, 1, zone_size, &extents);
-  ASSERT_EQ(1, allocated);
-  ASSERT_EQ(1u, extents.size());
-  ASSERT_EQ(extents[0].offset, (uint64_t) zone_size);
-
-  extents.clear();
-  allocated = alloc->allocate(1, 1, 1, zone_size * 2 - 1, &extents);
-  EXPECT_EQ(1, allocated);
-  ASSERT_EQ(1u, extents.size());
-  EXPECT_EQ((int64_t) extents[0].offset, zone_size * 2 - 1);
-
-  /*
-   * Wrap around with hint
-   */
-  extents.clear();
-  allocated = alloc->allocate(zone_size * 2, 1, 1,  blocks - zone_size * 2,
-			      &extents);
-  ASSERT_EQ(zone_size * 2, allocated);
-  EXPECT_EQ(zone_size * 2, (int)extents.size());
-  EXPECT_EQ((int64_t)extents[0].offset, blocks - zone_size * 2);
-
-  extents.clear();
-  allocated = alloc->allocate(zone_size, 1, 1, blocks - zone_size, &extents);
-  ASSERT_EQ(zone_size, allocated);
-  EXPECT_EQ(zone_size, (int)extents.size());
-  EXPECT_EQ(extents[0].offset, (uint64_t) 0);
-  /*
-   * Verify out-of-bound hint
-   */
-  extents.clear();
-  allocated = alloc->allocate(1, 1, 1, blocks, &extents);
-  ASSERT_EQ(1, allocated);
-  EXPECT_EQ(1, (int)extents.size());
-
-  extents.clear();
-  allocated = alloc->allocate(1, 1, 1, blocks * 3 + 1 , &extents);
-  ASSERT_EQ(1, allocated);
-  EXPECT_EQ(1, (int)extents.size());
 }
 
 TEST_P(AllocTest, test_alloc_non_aligned_len)
