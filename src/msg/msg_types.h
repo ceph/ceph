@@ -268,6 +268,8 @@ struct entity_addr_t {
 
   uint32_t get_type() const { return type; }
   void set_type(uint32_t t) { type = t; }
+  bool is_legacy() const { return type == TYPE_LEGACY; }
+  bool is_msgr2() const { return type == TYPE_MSGR2; }
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }

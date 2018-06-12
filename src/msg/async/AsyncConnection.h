@@ -183,7 +183,8 @@ class AsyncConnection : public Connection {
   } *delay_state;
 
  public:
-  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q, Worker *w);
+  AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
+		  Worker *w, bool is_msgr2);
   ~AsyncConnection() override;
   void maybe_start_delay_thread();
 
@@ -350,6 +351,7 @@ class AsyncConnection : public Connection {
   bufferlist authorizer_buf;
   ceph_msg_connect_reply connect_reply;
   // Accepting state
+  bool msgr2 = false;
   entity_addr_t socket_addr;
   CryptoKey session_key;
   bool replacing;    // when replacing process happened, we will reply connect
