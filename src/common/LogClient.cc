@@ -343,7 +343,7 @@ uint64_t LogClient::get_next_seq()
 
 entity_addrvec_t LogClient::get_myaddrs()
 {
-  return entity_addrvec_t(messenger->get_myaddr());
+  return messenger->get_myaddrs();
 }
 
 entity_name_t LogClient::get_myrank()
