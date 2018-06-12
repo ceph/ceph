@@ -1673,6 +1673,7 @@ void OSDService::_send_ready_to_merge()
 void OSDService::clear_ready_to_merge(PG *pg)
 {
   Mutex::Locker l(merge_lock);
+  dout(10) << __func__ << " " << pg->pg_id << dendl;
   ready_to_merge_source.erase(pg->pg_id.pgid);
   ready_to_merge_target.erase(pg->pg_id.pgid);
 }
