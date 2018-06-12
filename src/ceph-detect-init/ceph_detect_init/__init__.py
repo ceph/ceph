@@ -28,6 +28,7 @@ from ceph_detect_init import oraclevms
 import os
 import logging
 import platform
+import distro as linuxdistro
 
 
 def get(use_rhceph=False):
@@ -123,9 +124,8 @@ def platform_information():
         return ('docker', 'docker', 'docker')
 
     if platform.system() == 'Linux':
-        linux_distro = platform.linux_distribution(
-            supported_dists=platform._supported_dists + ('alpine', 'arch'))
-        logging.debug('platform_information: linux_distribution = ' +
+        linux_distro = linuxdistro.linux_distribution()
+        logging.debug('distro_information: linux_distribution = ' +
                       str(linux_distro))
         distro, release, codename = linux_distro
     elif platform.system() == 'FreeBSD':
