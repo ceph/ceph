@@ -2417,8 +2417,17 @@ void Client::handle_osd_map(MOSDMap *m)
   std::set<entity_addr_t> new_blacklists;
   objecter->consume_blacklist_events(&new_blacklists);
 
-  const auto myaddr = messenger->get_myaddr();
-  if (!blacklisted && new_blacklists.count(myaddr)) {
+  const auto myaddrs = messenger->get_myaddrs();
+  bool new_blacklist = false;
+  if (!blacklisted) {
+    for (auto& a : myaddrs.v) {
+      if (new_blacklists.count(a)) {
+	new_blacklist = true;
+	break;
+      }
+    }
+  }
+  if (new_blacklist) {
     auto epoch = objecter->with_osdmap([](const OSDMap &o){
         return o.get_epoch();
         });
@@ -2455,8 +2464,8 @@ void Client::handle_osd_map(MOSDMap *m)
 
   } else if (blacklisted) {
     // Handle case where we were blacklisted but no longer are
-    blacklisted = objecter->with_osdmap([myaddr](const OSDMap &o){
-        return o.is_blacklisted(myaddr);});
+    blacklisted = objecter->with_osdmap([myaddrs](const OSDMap &o){
+        return o.is_blacklisted(myaddrs);});
   }
 
   if (objecter->osdmap_full_flag()) {
@@ -13520,7 +13529,7 @@ int Client::get_local_osd()
 
   objecter->with_osdmap([this](const OSDMap& o) {
       if (o.get_epoch() != local_osd_epoch) {
-	local_osd = o.find_osd_on_ip(messenger->get_myaddr());
+	local_osd = o.find_osd_on_ip(messenger->get_myaddrs().front());
 	local_osd_epoch = o.get_epoch();
       }
     });
