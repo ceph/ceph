@@ -126,4 +126,46 @@ describe('CdValidators', () => {
       expect(y.valid).toBeTruthy();
     });
   });
+
+  describe('validate if condition', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl(3),
+        y: new FormControl(5)
+      });
+      CdValidators.validateIf(form.get('x'), () => ((form && form.get('y').value) || 0) > 10, [
+        CdValidators.custom('min', (x) => x < 7),
+        CdValidators.custom('max', (x) => x > 12)
+      ]);
+    });
+
+    it('should test min error', () => {
+      const x = form.get('x');
+      const y = form.get('y');
+      expect(x.valid).toBeTruthy();
+      y.setValue(11);
+      x.updateValueAndValidity();
+      expect(x.hasError('min')).toBeTruthy();
+    });
+
+    it('should test max error', () => {
+      const x = form.get('x');
+      const y = form.get('y');
+      expect(x.valid).toBeTruthy();
+      y.setValue(11);
+      x.setValue(13);
+      expect(x.hasError('max')).toBeTruthy();
+    });
+
+    it('should test valid number with validation', () => {
+      const x = form.get('x');
+      const y = form.get('y');
+      expect(x.valid).toBeTruthy();
+      y.setValue(11);
+      x.setValue(12);
+      expect(x.valid).toBeTruthy();
+    });
+  });
 });
