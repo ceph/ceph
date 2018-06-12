@@ -433,6 +433,7 @@ public:
 
   void set_messenger(Messenger *m) { messenger = m; }
   entity_addr_t get_myaddr() const { return messenger->get_myaddr(); }
+  entity_addrvec_t get_myaddrs() const { return messenger->get_myaddrs(); }
   AuthAuthorizer* build_authorizer(int service_id) const;
 
   void set_want_keys(uint32_t want) {
