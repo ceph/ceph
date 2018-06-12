@@ -11955,6 +11955,10 @@ void PrimaryLogPG::on_shutdown()
 
   clear_primary_state();
   cancel_recovery();
+
+  if (is_primary()) {
+    osd->clear_ready_to_merge(this);
+  }
 }
 
 void PrimaryLogPG::on_activate()
