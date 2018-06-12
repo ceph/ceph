@@ -175,7 +175,7 @@ int main(int argc, const char **argv)
     forker.exit(1);
   msgr->set_cluster_protocol(CEPH_MDS_PROTOCOL);
 
-  cout << "starting " << g_conf->name << " at " << msgr->get_myaddr()
+  cout << "starting " << g_conf->name << " at " << msgr->get_myaddrs()
        << std::endl;
   uint64_t required =
     CEPH_FEATURE_OSDREPLYMUX;

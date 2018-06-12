@@ -126,7 +126,7 @@ public:
     int32_t inc;
     MDSMap::DaemonState state;
     version_t state_seq;
-    entity_addr_t addr;
+    entity_addrvec_t addrs;
     utime_t laggy_since;
     mds_rank_t standby_for_rank;
     std::string standby_for_name;
@@ -146,7 +146,7 @@ public:
     void clear_laggy() { laggy_since = utime_t(); }
 
     entity_addrvec_t get_addrs() const {
-      return entity_addrvec_t(addr);
+      return addrs;
     }
 
     void encode(bufferlist& bl, uint64_t features) const {
