@@ -2719,7 +2719,8 @@ void RGWCreateBucket::execute()
   if (op_ret < 0)
     return;
 
-  if (!location_constraint.empty() &&
+  if (!relaxed_region_enforcement &&
+      !location_constraint.empty() &&
       !store->has_zonegroup_api(location_constraint)) {
       ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
                        << " can't be found." << dendl;
@@ -2728,7 +2729,7 @@ void RGWCreateBucket::execute()
       return;
   }
 
-  if (!store->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
+  if (!relaxed_region_enforcement && !store->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
       store->get_zonegroup().api_name != location_constraint) {
     ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
                      << " doesn't match zonegroup" << " (" << store->get_zonegroup().api_name << ")"
