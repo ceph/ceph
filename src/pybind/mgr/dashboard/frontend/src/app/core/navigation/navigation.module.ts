@@ -7,6 +7,7 @@ import { BsDropdownModule, CollapseModule, PopoverModule } from 'ngx-bootstrap';
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
 import { AuthModule } from '../auth/auth.module';
+import { DashboardHelpComponent } from './dashboard-help/dashboard-help.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 import { TaskManagerComponent } from './task-manager/task-manager.component';
@@ -22,7 +23,12 @@ import { TaskManagerComponent } from './task-manager/task-manager.component';
     SharedModule,
     RouterModule
   ],
-  declarations: [NavigationComponent, NotificationsComponent, TaskManagerComponent],
+  declarations: [
+    NavigationComponent,
+    NotificationsComponent,
+    TaskManagerComponent,
+    DashboardHelpComponent
+  ],
   exports: [NavigationComponent]
 })
 export class NavigationModule {}
