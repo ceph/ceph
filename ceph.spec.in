@@ -297,6 +297,7 @@ Requires:      parted
 Requires:      psmisc
 Requires:      python%{_python_buildid}-requests
 Requires:      python%{_python_buildid}-setuptools
+Requires:      python%{_python_buildid}-distro
 Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
