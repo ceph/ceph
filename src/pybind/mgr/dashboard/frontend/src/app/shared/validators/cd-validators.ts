@@ -73,4 +73,27 @@ export class CdValidators {
       return null;
     };
   }
+
+  /**
+   * Validate form control if condition is true with validators.
+   *
+   * @param {AbstractControl} formControl
+   * @param {Function} condition
+   * @param {ValidatorFn[]} validators
+   */
+  static validateIf(
+    formControl: AbstractControl,
+    condition: Function,
+    validators: ValidatorFn[]
+  ) {
+    formControl.setValidators((control: AbstractControl): {
+      [key: string]: any;
+    } => {
+      const value = condition.call(this);
+      if (value) {
+        return Validators.compose(validators)(control);
+      }
+      return null;
+    });
+  }
 }
