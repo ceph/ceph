@@ -34,7 +34,7 @@
 #define dout_prefix _conn_prefix(_dout)
 ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
   return *_dout << "-- " << async_msgr->get_myaddrs() << " >> "
-		<< peer_addrs << " conn(" << this
+		<< target_addr << " conn(" << this
 		<< (msgr2 ? " msgr2" : " legacy")
                 << " :" << port
                 << " s=" << get_state_name(state)
@@ -1272,6 +1272,7 @@ ssize_t AsyncConnection::_process_connection()
                              << " (socket is " << socket_addr << ")" << dendl;
         }
         set_peer_addr(peer_addr);  // so that connection_state gets set up
+	target_addr = peer_addr;
         state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
         break;
       }
@@ -1884,6 +1885,7 @@ void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
   std::lock_guard<std::mutex> l(lock);
   cs = std::move(socket);
   socket_addr = addr;
+  target_addr = addr; // until we know better
   state = STATE_ACCEPTING;
   // rescheduler connection in order to avoid lock dep
   center->dispatch_event_external(read_handler);

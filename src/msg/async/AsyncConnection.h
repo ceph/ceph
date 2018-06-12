@@ -195,10 +195,11 @@ class AsyncConnection : public Connection {
   }
 
   // Only call when AsyncConnection first construct
-  void connect(const entity_addrvec_t& addrs, int type) {
+  void connect(const entity_addrvec_t& addrs, int type, entity_addr_t& target) {
     set_peer_type(type);
     set_peer_addrs(addrs);
     policy = msgr->get_policy(type);
+    target_addr = target;
     _connect();
   }
   // Only call when AsyncConnection first construct
@@ -353,6 +354,7 @@ class AsyncConnection : public Connection {
   // Accepting state
   bool msgr2 = false;
   entity_addr_t socket_addr;
+  entity_addr_t target_addr;  // which of the peer_addrs we're using
   CryptoKey session_key;
   bool replacing;    // when replacing process happened, we will reply connect
                      // side with RETRY tag and accept side will clear replaced

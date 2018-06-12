@@ -553,11 +553,23 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   ldout(cct, 10) << __func__ << " " << addrs
       << ", creating connection and registering" << dendl;
 
+  // here is where we decide which of the addrs to connect to.  always prefer
+  // the first one, if we support it.
+  entity_addr_t target;
+  for (auto& a : addrs.v) {
+    if (!a.is_msgr2() && !a.is_legacy()) {
+      continue;
+    }
+    // FIXME: for ipv4 vs ipv6, check whether local host can handle ipv6 before
+    // trying it?  for now, just pick whichever is listed first.
+    target = a;
+  }
+
   // create connection
   Worker *w = stack->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w,
-						addrs.front().is_msgr2());
-  conn->connect(addrs, type);
+						target.is_msgr2());
+  conn->connect(addrs, type, target);
   assert(!conns.count(addrs));
   conns[addrs] = conn;
   w->get_perf_counter()->inc(l_msgr_active_connections);
