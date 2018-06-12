@@ -1513,7 +1513,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   ldout(async_msgr->cct, 10) << __func__ << " accept setting up session_security." << dendl;
 
   // existing?
-  AsyncConnectionRef existing = async_msgr->lookup_conn(peer_addrs.legacy_addr());
+  AsyncConnectionRef existing = async_msgr->lookup_conn(peer_addrs);
 
   inject_delay();
 
@@ -1874,7 +1874,8 @@ void AsyncConnection::_connect()
 
 void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 {
-  ldout(async_msgr->cct, 10) << __func__ << " sd=" << socket.fd() << dendl;
+  ldout(async_msgr->cct, 10) << __func__ << " sd=" << socket.fd()
+			     << " on " << addr << dendl;
   assert(socket.fd() >= 0);
 
   std::lock_guard<std::mutex> l(lock);

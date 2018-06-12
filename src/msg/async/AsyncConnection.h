@@ -194,9 +194,9 @@ class AsyncConnection : public Connection {
   }
 
   // Only call when AsyncConnection first construct
-  void connect(const entity_addr_t& addr, int type) {
+  void connect(const entity_addrvec_t& addrs, int type) {
     set_peer_type(type);
-    set_peer_addr(addr);
+    set_peer_addrs(addrs);
     policy = msgr->get_policy(type);
     _connect();
   }

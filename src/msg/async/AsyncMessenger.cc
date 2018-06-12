@@ -542,20 +542,21 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket, entity_ad
   lock.Unlock();
 }
 
-AsyncConnectionRef AsyncMessenger::create_connect(const entity_addr_t& addr, int type)
+AsyncConnectionRef AsyncMessenger::create_connect(
+  const entity_addrvec_t& addrs, int type)
 {
   assert(lock.is_locked());
-  assert(addr != my_addrs.legacy_addr());
+  assert(addrs != my_addrs);
 
-  ldout(cct, 10) << __func__ << " " << addr
+  ldout(cct, 10) << __func__ << " " << addrs
       << ", creating connection and registering" << dendl;
 
   // create connection
   Worker *w = stack->get_worker();
   AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w);
-  conn->connect(addr, type);
-  assert(!conns.count(addr));
-  conns[addr] = conn;
+  conn->connect(addrs, type);
+  assert(!conns.count(addrs));
+  conns[addrs] = conn;
   w->get_perf_counter()->inc(l_msgr_active_connections);
 
   return conn;
@@ -569,11 +570,11 @@ ConnectionRef AsyncMessenger::get_connection(const entity_inst_t& dest)
     return local_connection;
   }
 
-  AsyncConnectionRef conn = _lookup_conn(dest.addr);
+  AsyncConnectionRef conn = _lookup_conn(entity_addrvec_t(dest.addr));
   if (conn) {
     ldout(cct, 10) << __func__ << " " << dest << " existing " << conn << dendl;
   } else {
-    conn = create_connect(dest.addr, dest.name.type());
+    conn = create_connect(entity_addrvec_t(dest.addr), dest.name.type());
     ldout(cct, 10) << __func__ << " " << dest << " new " << conn << dendl;
   }
 
@@ -606,7 +607,7 @@ int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
     return -EINVAL;
   }
 
-  AsyncConnectionRef conn = _lookup_conn(dest.addr);
+  AsyncConnectionRef conn = _lookup_conn(entity_addrvec_t(dest.addr));
   submit_message(m, conn, dest.addr, dest.name.type());
   return 0;
 }
@@ -648,7 +649,7 @@ void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
     m->put();
   } else {
     ldout(cct,20) << __func__ << " " << *m << " remote, " << dest_addr << ", new connection." << dendl;
-    con = create_connect(dest_addr, dest_type);
+    con = create_connect(entity_addrvec_t(dest_addr), dest_type);
     con->send_message(m);
   }
 }
@@ -708,7 +709,7 @@ void AsyncMessenger::shutdown_connections(bool queue_reset)
   accepting_conns.clear();
 
   while (!conns.empty()) {
-    ceph::unordered_map<entity_addr_t, AsyncConnectionRef>::iterator it = conns.begin();
+    auto it = conns.begin();
     AsyncConnectionRef p = it->second;
     ldout(cct, 5) << __func__ << " mark down " << it->first << " " << p << dendl;
     conns.erase(it);
@@ -728,15 +729,15 @@ void AsyncMessenger::shutdown_connections(bool queue_reset)
   lock.Unlock();
 }
 
-void AsyncMessenger::mark_down(const entity_addr_t& addr)
+void AsyncMessenger::mark_down_addrs(const entity_addrvec_t& addrs)
 {
   lock.Lock();
-  AsyncConnectionRef p = _lookup_conn(addr);
+  AsyncConnectionRef p = _lookup_conn(addrs);
   if (p) {
-    ldout(cct, 1) << __func__ << " " << addr << " -- " << p << dendl;
+    ldout(cct, 1) << __func__ << " " << addrs << " -- " << p << dendl;
     p->stop(true);
   } else {
-    ldout(cct, 1) << __func__ << " " << addr << " -- connection dne" << dendl;
+    ldout(cct, 1) << __func__ << " " << addrs << " -- connection dne" << dendl;
   }
   lock.Unlock();
 }
@@ -810,7 +811,7 @@ int AsyncMessenger::reap_dead()
     auto it = deleted_conns.begin();
     AsyncConnectionRef p = *it;
     ldout(cct, 5) << __func__ << " delete " << p << dendl;
-    auto conns_it = conns.find(p->peer_addrs.legacy_addr());
+    auto conns_it = conns.find(p->peer_addrs);
     if (conns_it != conns.end() && conns_it->second == p)
       conns.erase(conns_it);
     accepting_conns.erase(p);
