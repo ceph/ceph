@@ -8990,6 +8990,7 @@ void BlueStore::_kv_stop()
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
+  deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
   std::unique_lock<std::mutex> l(kv_lock);
   assert(!kv_sync_started);
   kv_sync_started = true;
