@@ -1,14 +1,14 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "BitmapFastAllocator.h"
+#include "BitmapAllocator.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
 #define dout_prefix *_dout << "fbmap_alloc 0x" << this << " "
 
-BitmapFastAllocator::BitmapFastAllocator(CephContext* _cct,
+BitmapAllocator::BitmapAllocator(CephContext* _cct,
 					 int64_t capacity,
 					 int64_t alloc_unit) :
     cct(_cct)
@@ -18,7 +18,7 @@ BitmapFastAllocator::BitmapFastAllocator(CephContext* _cct,
   _init(capacity, alloc_unit, false);
 }
 
-int64_t BitmapFastAllocator::allocate(
+int64_t BitmapAllocator::allocate(
   uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,
   int64_t hint, PExtentVector *extents)
 {
@@ -43,7 +43,7 @@ int64_t BitmapFastAllocator::allocate(
   return int64_t(allocated);
 }
 
-void BitmapFastAllocator::release(
+void BitmapAllocator::release(
   const interval_set<uint64_t>& release_set)
 {
   for (auto r : release_set) {
@@ -55,7 +55,7 @@ void BitmapFastAllocator::release(
 }
 
 
-void BitmapFastAllocator::init_add_free(uint64_t offset, uint64_t length)
+void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 		  << std::dec << dendl;
@@ -67,7 +67,7 @@ void BitmapFastAllocator::init_add_free(uint64_t offset, uint64_t length)
   _mark_free(offs, l);
   ldout(cct, 10) << __func__ << " done" << dendl;
 }
-void BitmapFastAllocator::init_rm_free(uint64_t offset, uint64_t length)
+void BitmapAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 		 << std::dec << dendl;
@@ -78,7 +78,7 @@ void BitmapFastAllocator::init_rm_free(uint64_t offset, uint64_t length)
   ldout(cct, 10) << __func__ << " done" << dendl;
 }
 
-void BitmapFastAllocator::shutdown()
+void BitmapAllocator::shutdown()
 {
   ldout(cct, 1) << __func__ << dendl;
   _shutdown();

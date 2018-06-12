@@ -12,13 +12,13 @@
 #include "include/mempool.h"
 #include "common/debug.h"
 
-class BitmapFastAllocator : public Allocator,
+class BitmapAllocator : public Allocator,
   public AllocatorLevel02<AllocatorLevel01Loose> {
   CephContext* cct;
 
 public:
-  BitmapFastAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit);
-  ~BitmapFastAllocator() override
+  BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit);
+  ~BitmapAllocator() override
   {
   }
 
