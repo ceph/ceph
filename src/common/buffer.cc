@@ -17,8 +17,6 @@
 #include <limits.h>
 #include <thread>
 
-#include <boost/container/flat_map.hpp>
-
 #include <sys/uio.h>
 
 #include "include/types.h"
@@ -28,6 +26,7 @@
 #include "armor.h"
 #include "common/environment.h"
 #include "common/errno.h"
+#include "common/huge_page_pool.h"
 #include "common/safe_io.h"
 #include "common/strtol.h"
 #include "common/likely.h"
@@ -42,10 +41,6 @@
 #endif
 
 using namespace ceph;
-
-constexpr unsigned long long operator"" _M (unsigned long long n) {
-  return n << 20;
-}
 
 #define CEPH_BUFFER_ALLOC_UNIT  (std::min(CEPH_PAGE_SIZE, 4096u))
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
@@ -280,92 +275,15 @@ constexpr unsigned long long operator"" _M (unsigned long long n) {
     }
   };
 
-  template <std::size_t N>
-  class huge_page_pool {
-    static constexpr std::size_t huge_page_size { 2_M };
-  public:
-    // TOOD: align to cache line boundary
-    // TODO: this should a vector of atomic address for the sake
-    // of correctness.
-    std::array<std::atomic<void*>, N> pages;
-    boost::container::flat_map<void*, std::uint8_t> page2owner;
-
-    static huge_page_pool& get_instance() {
-      static huge_page_pool page_pool;
-      return page_pool;
-    }
-
-    huge_page_pool() {
-      for (std::size_t i = 0; i < pages.size(); i++) {
-        pages[i] = ::mmap(nullptr, huge_page_size, PROT_READ | PROT_WRITE,
-			  MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE |
-			  MAP_HUGETLB, -1, 0);
-        if (pages[i] == MAP_FAILED) {
-          // let's fallback-allocate in a way that stil allows the kernel
-	  // to give us a THP (transparent huge page).
-          const int r = \
-	    ::posix_memalign((void**)(void*)&pages[i],
-			     huge_page_size, huge_page_size);
-          if (r) {
-	    // there is no jumbo, sorry.
-	    pages[i] = nullptr;
-          }
-        }
-
-	if (pages[i] != nullptr) {
-	  page2owner[pages[i]] = i;
-	}
-      }
-    }
-
-    ~huge_page_pool() {
-      // move this to ptr's deleter, handle free()
-      for (const auto& p : pages) {
-        if (p) {
-	  ::munmap(p, huge_page_size);
-        }
-      }
-    }
-
-    void* get_page() {
-      // let's check our slot own slot first
-      // TODO: cache the id calculation in TLS?
-      const std::uint8_t tidx = \
-        std::hash<std::thread::id>()(std::this_thread::get_id()) % pages.size();
-      void* const tval = pages[tidx].exchange(nullptr);
-      if (nullptr != tval) {
-        return tval;
-      }
-
-      // oops, it's not available. Let's iterate through the pool
-      // keeping in mind this can cause a cacheline ping-pong
-      // between CPUs.
-      for (std::size_t idx = 0; idx < pages.size(); idx++) {
-        void* const val = pages[idx].exchange(nullptr);
-        if (nullptr != val) {
-	  return val;
-        }
-      }
-
-      // sorry, pool depleted.
-      return nullptr;
-    }
-
-    void put_page(void* p) {
-      const std::uint8_t owner_idx = page2owner.at(p);
-      const void* const oldval = pages[owner_idx].exchange(p);
-      assert(oldval == nullptr);
-    }
-  };
 
   class buffer::raw_huge_pages : public buffer::raw {
     bool is_hugepage = true;
   public:
-    static constexpr std::size_t huge_page_size { 2_M };
     MEMPOOL_CLASS_HELPERS();
 
-    raw_huge_pages(const unsigned l) : raw(p2roundup(l, huge_page_size)) {
-      data = (char*)huge_page_pool<64>::get_instance().get_page();
+    raw_huge_pages(const unsigned l)
+      : raw(p2roundup(l, ceph::huge_page_pool<64>::huge_page_size)) {
+      data = (char*)ceph::huge_page_pool<64>::get_instance().get_page();
       if (!data) {
         const int r = ::posix_memalign((void**)(void*)&data,
 				       CEPH_PAGE_SIZE, len);
@@ -380,13 +298,14 @@ constexpr unsigned long long operator"" _M (unsigned long long n) {
       inc_history_alloc(len);
 
       bdout << "raw_huge_pages " << this << " alloc " << (void *)data
-	    << " l=" << l << ", align=" << huge_page_size
+	    << " l=" << l << ", align="
+	    << ceph::huge_page_pool<64>::huge_page_size
 	    << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
 
     ~raw_huge_pages() override {
       if (is_hugepage) {
-        huge_page_pool<64>::get_instance().put_page(data);
+        ceph::huge_page_pool<64>::get_instance().put_page(data);
       } else {
 	free(data);
       }
