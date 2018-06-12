@@ -22,6 +22,10 @@ export class AuthStorageService {
     return localStorage.getItem('dashboard_username') !== null;
   }
 
+  getUsername() {
+    return localStorage.getItem('dashboard_username');
+  }
+
   getPermissions(): Permissions {
     return JSON.parse(
       localStorage.getItem('dashboard_permissions') || JSON.stringify(new Permissions({}))

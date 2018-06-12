@@ -20,12 +20,12 @@ export class AuthService {
       });
   }
 
-  logout() {
-    return this.http
-      .delete('api/auth')
-      .toPromise()
-      .then(() => {
-        this.authStorageService.remove();
-      });
+  logout(callback: Function) {
+    return this.http.delete('api/auth').subscribe(() => {
+      this.authStorageService.remove();
+      if (callback) {
+        callback();
+      }
+    });
   }
 }
