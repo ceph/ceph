@@ -47,6 +47,8 @@ struct SocketOptions {
 /// \cond internal
 class ServerSocketImpl {
  public:
+  int addr_type = 0;
+  ServerSocketImpl(int t) : addr_type(t) {}
   virtual ~ServerSocketImpl() {}
   virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) = 0;
   virtual void abort_accept() = 0;
