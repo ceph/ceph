@@ -92,4 +92,38 @@ describe('CdValidators', () => {
       expect(validatorFn(form.controls['y'])).toEqual({ required: true });
     });
   });
+
+  describe('custom validation', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl(3, CdValidators.custom('odd', (x) => x % 2 === 1)),
+        y: new FormControl(
+          5,
+          CdValidators.custom('not-dividable-by-x', (y) => {
+            const x = (form && form.get('x').value) || 1;
+            return y % x !== 0;
+          })
+        )
+      });
+    });
+
+    it('should test error and valid condition for odd x', () => {
+      const x = form.get('x');
+      x.updateValueAndValidity();
+      expect(x.hasError('odd')).toBeTruthy();
+      x.setValue(4);
+      expect(x.valid).toBeTruthy();
+    });
+
+    it('should test error and valid condition for y if its dividable by x', () => {
+      const y = form.get('y');
+      y.updateValueAndValidity();
+      expect(y.hasError('not-dividable-by-x')).toBeTruthy();
+      y.setValue(6);
+      y.updateValueAndValidity();
+      expect(y.valid).toBeTruthy();
+    });
+  });
 });

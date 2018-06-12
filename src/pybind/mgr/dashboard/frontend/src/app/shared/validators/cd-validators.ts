@@ -56,4 +56,21 @@ export class CdValidators {
       return success ? { required: true } : null;
     };
   }
+
+  /**
+   * Custom validation by passing a name for the error and a function as error condition.
+   *
+   * @param {string} error
+   * @param {Function} condition - a truthy return value will trigger the error
+   * @returns {ValidatorFn}
+   */
+  static custom(error: string, condition: Function): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: any } => {
+      const value = condition.call(this, control.value);
+      if (value) {
+        return { [error]: value };
+      }
+      return null;
+    };
+  }
 }
