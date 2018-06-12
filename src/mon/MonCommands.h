@@ -492,6 +492,12 @@ COMMAND("osd repair " \
 COMMAND("osd lspools " \
 	"name=auid,type=CephInt,req=false", \
 	"list pools", "osd", "r", "cli,rest")
+COMMAND("osd blacklist " \
+	"name=blacklistop,type=CephChoices,strings=add|rm " \
+	"name=addr,type=CephEntityAddr " \
+	"name=expire,type=CephFloat,range=0.0,req=false", \
+	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist", \
+	"osd", "rw", "cli,rest")
 COMMAND("osd blacklist ls", "show blacklisted clients", "osd", "r", "cli,rest")
 COMMAND("osd blacklist clear", "clear all blacklisted clients", "osd", "rw",
         "cli,rest")
@@ -675,12 +681,6 @@ COMMAND("osd create " \
 	"name=uuid,type=CephUUID,req=false " \
 	"name=id,type=CephInt,range=0,req=false", \
 	"create new osd (with optional UUID and ID)", "osd", "rw", "cli,rest")
-COMMAND("osd blacklist " \
-	"name=blacklistop,type=CephChoices,strings=add|rm " \
-	"name=addr,type=CephEntityAddr " \
-	"name=expire,type=CephFloat,range=0.0,req=false", \
-	"add (optionally until <expire> seconds from now) or remove <addr> from blacklist", \
-	"osd", "rw", "cli,rest")
 COMMAND("osd pool mksnap " \
 	"name=pool,type=CephPoolname " \
 	"name=snap,type=CephString", \
