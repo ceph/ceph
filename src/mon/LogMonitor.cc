@@ -64,7 +64,7 @@ void LogMonitor::create_initial()
   LogEntry e;
   e.name = g_conf->name;
   e.rank = entity_name_t::MON(mon->rank);
-  e.addrs.v.push_back(mon->messenger->get_myaddr());
+  e.addrs = mon->messenger->get_myaddrs();
   e.stamp = ceph_clock_now();
   e.prio = CLOG_INFO;
   std::stringstream ss;
