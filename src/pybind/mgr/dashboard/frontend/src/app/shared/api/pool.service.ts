@@ -1,7 +1,11 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-@Injectable()
+import { ApiModule } from './api.module';
+
+@Injectable({
+  providedIn: ApiModule
+})
 export class PoolService {
 
   constructor(private http: HttpClient) {

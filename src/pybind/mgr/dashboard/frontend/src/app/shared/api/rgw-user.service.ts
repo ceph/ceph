@@ -5,7 +5,11 @@ import * as _ from 'lodash';
 import {forkJoin as observableForkJoin, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
-@Injectable()
+import { ApiModule } from './api.module';
+
+@Injectable({
+  providedIn: ApiModule
+})
 export class RgwUserService {
   private url = '/api/rgw/proxy/user';
 
