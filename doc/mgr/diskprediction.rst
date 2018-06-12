@@ -27,7 +27,7 @@ Connection settings
 
 The connection settings can be configured on any machine with the proper cephx
 credentials; they are usually the monitor node with client.admin keyring.
-Run the following command to set up connection betweet Ceph system and
+Run the following command to set up connection between Ceph system and
 DiskPrediction server.
 
 ::
