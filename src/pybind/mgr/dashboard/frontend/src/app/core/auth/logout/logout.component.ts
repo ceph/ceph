@@ -9,15 +9,12 @@ import { AuthService } from '../../../shared/api/auth.service';
   styleUrls: ['./logout.component.scss']
 })
 export class LogoutComponent implements OnInit {
+  constructor(private authService: AuthService, private router: Router) {}
 
-  constructor(private authService: AuthService,
-              private router: Router) { }
-
-  ngOnInit() {
-  }
+  ngOnInit() {}
 
   logout() {
-    this.authService.logout().then(() => {
+    this.authService.logout(() => {
       this.router.navigate(['/login']);
     });
   }
