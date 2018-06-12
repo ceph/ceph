@@ -164,6 +164,7 @@ weight).
  Note that this practice will no longer be necessary in Bobtail and
  subsequent releases.
 
+.. _rados-replacing-an-osd:
 
 Replacing an OSD
 ----------------
