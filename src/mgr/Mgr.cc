@@ -221,7 +221,7 @@ void Mgr::init()
   assert(!initialized);
 
   // Start communicating with daemons to learn statistics etc
-  int r = server.init(monc->get_global_id(), client_messenger->get_myaddr());
+  int r = server.init(monc->get_global_id(), client_messenger->get_myaddrs());
   if (r < 0) {
     derr << "Initialize server fail: " << cpp_strerror(r) << dendl;
     // This is typically due to a bind() failure, so let's let
