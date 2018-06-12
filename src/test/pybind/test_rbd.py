@@ -729,6 +729,7 @@ class TestImage(object):
         self.image.set_snap('snap1')
         read = self.image.read(0, 256)
         eq(read, b'\0' * 256)
+        assert_raises(ReadOnlyImage, self.image.write, data, 0)
         self.image.remove_snap('snap1')
 
     def test_set_no_snap(self):
@@ -743,6 +744,7 @@ class TestImage(object):
         self.image.set_snap('snap1')
         read = self.image.read(0, 256)
         eq(read, b'\0' * 256)
+        assert_raises(ReadOnlyImage, self.image.write, data, 0)
         self.image.set_snap(None)
         read = self.image.read(0, 256)
         eq(read, data)
@@ -761,6 +763,7 @@ class TestImage(object):
         self.image.set_snap_by_id(snaps[0]['id'])
         read = self.image.read(0, 256)
         eq(read, b'\0' * 256)
+        assert_raises(ReadOnlyImage, self.image.write, data, 0)
         self.image.set_snap_by_id(None)
         read = self.image.read(0, 256)
         eq(read, data)
@@ -777,6 +780,7 @@ class TestImage(object):
         self.image.set_snap('snap1')
         read = self.image.read(0, 256)
         eq(read, b'\0' * 256)
+        assert_raises(ReadOnlyImage, self.image.write, data, 0)
         self.image.remove_snap('snap1')
 
     def test_many_snaps(self):
