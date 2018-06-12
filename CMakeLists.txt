@@ -589,8 +589,8 @@ option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
-  atomic chrono filesystem thread system regex random program_options date_time
-  iostreams unit_test_framework)
+  atomic chrono thread system regex random program_options date_time
+  iostreams)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
@@ -599,7 +599,9 @@ endif()
 if(WITH_BOOST_CONTEXT)
   list(APPEND BOOST_COMPONENTS context coroutine)
 endif()
-list(APPEND BOOST_COMPONENTS test timer)
+if(WITH_SEASTAR)
+  list(APPEND BOOST_COMPONENTS filesystem timer)
+endif()
 
 set(Boost_USE_MULTITHREADED ON)
 # require minimally the bundled version
