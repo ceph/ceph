@@ -1867,7 +1867,6 @@ private:
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
-  deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
 
   KVFinalizeThread kv_finalize_thread;
   std::mutex kv_finalize_lock;
