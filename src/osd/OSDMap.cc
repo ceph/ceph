@@ -3427,9 +3427,7 @@ void OSDMap::print(ostream& out) const
 	out << " primary_affinity " << get_primary_affinityf(i);
       const osd_info_t& info(get_info(i));
       out << " " << info;
-      out << " " << get_addrs(i) << " " << get_cluster_addrs(i)
-	  << " " << get_hb_back_addrs(i)
-	  << " " << get_hb_front_addrs(i);
+      out << " " << get_addrs(i) << " " << get_cluster_addrs(i);
       set<string> st;
       get_state(i, st);
       out << " " << st;
