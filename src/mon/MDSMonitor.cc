@@ -1477,15 +1477,14 @@ void MDSMonitor::check_sub(Subscription *sub)
       return;
     }
 
-    const bool is_mds = sub->session->inst.name.is_mds();
+    const bool is_mds = sub->session->name.is_mds();
     mds_gid_t mds_gid = MDS_GID_NONE;
     fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
     if (is_mds) {
       // What (if any) namespace are you assigned to?
       auto mds_info = fsmap.get_mds_info();
       for (const auto &p : mds_info) {
-#warning fixme
-        if (p.second.addrs.legacy_addr() == sub->session->inst.addr) {
+        if (p.second.addrs == sub->session->addrs) {
           mds_gid = p.first;
           fscid = fsmap.mds_roles.at(mds_gid);
         }
@@ -1552,7 +1551,7 @@ void MDSMonitor::check_sub(Subscription *sub)
     assert(mds_map != nullptr);
     dout(10) << __func__ << " selected MDS map epoch " <<
       mds_map->epoch << " for namespace " << fscid << " for subscriber "
-      << sub->session->inst.name << " who wants epoch " << sub->next << dendl;
+      << sub->session->name << " who wants epoch " << sub->next << dendl;
 
     if (sub->next > mds_map->epoch) {
       return;
