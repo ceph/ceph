@@ -104,7 +104,7 @@ private:
   void maybe_ready(int32_t osd_id);
 
 public:
-  int init(uint64_t gid, entity_addr_t client_addr);
+  int init(uint64_t gid, entity_addrvec_t client_addrs);
   void shutdown();
 
   entity_addrvec_t get_myaddrs() const;

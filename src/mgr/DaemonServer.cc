@@ -94,7 +94,7 @@ DaemonServer::~DaemonServer() {
   g_conf->remove_observer(this);
 }
 
-int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
+int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 {
   // Initialize Messenger
   std::string public_msgr_type = g_conf->ms_public_type.empty() ?
@@ -134,7 +134,7 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
   }
 
   msgr->set_myname(entity_name_t::MGR(gid));
-  msgr->set_addr_unknowns(entity_addrvec_t(client_addr));
+  msgr->set_addr_unknowns(client_addrs);
 
   msgr->start();
   msgr->add_dispatcher_tail(this);
