@@ -3747,6 +3747,15 @@ int OSDMonitor::get_version_full(version_t ver, uint64_t features,
   return 0;
 }
 
+epoch_t OSDMonitor::blacklist(const entity_addrvec_t& av, utime_t until)
+{
+  dout(10) << "blacklist " << av << " until " << until << dendl;
+  for (auto& a : av.v) {
+    pending_inc.new_blacklist[a] = until;
+  }
+  return pending_inc.epoch;
+}
+
 epoch_t OSDMonitor::blacklist(const entity_addr_t& a, utime_t until)
 {
   dout(10) << "blacklist " << a << " until " << until << dendl;
