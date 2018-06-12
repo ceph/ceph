@@ -342,24 +342,21 @@ class Run(object):
             filter_in = self.args.filter_in
             if filter_in:
                 if not any([x in description for x in filter_in]):
-                    all_filt = []
                     for filt_samp in filter_in:
-                        all_filt.extend(
-                            [x.find(filt_samp) < 0 for x in base_frag_paths]
-                        )
-                    if all(all_filt):
+                        if any(x.find(filt_samp) >= 0 for x in base_frag_paths):
+                            break
+                    else:
                         continue
             filter_out = self.args.filter_out
             if filter_out:
                 if any([x in description for x in filter_out]):
                     continue
-                all_filt_val = False
+                is_collected = True
                 for filt_samp in filter_out:
-                    flist = [filt_samp in x for x in base_frag_paths]
-                    if any(flist):
-                        all_filt_val = True
-                        continue
-                if all_filt_val:
+                    if any(filt_samp in x for x in base_frag_paths):
+                        is_collected = False
+                        break
+                if not is_collected:
                     continue
 
             raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
