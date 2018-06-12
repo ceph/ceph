@@ -1503,7 +1503,8 @@ void OSDMonitor::share_map_with_random_osd()
     return;
   }
 
-  dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
+  dout(10) << "committed, telling random " << s->name
+	   << " all about it" << dendl;
 
   // get feature of the peer
   // use quorum_con_features, if it's an anonymous connection.
@@ -3448,7 +3449,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 				  MonOpRequestRef req)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
-	  << " to " << session->inst << dendl;
+	  << " to " << session->name << dendl;
 
   // get feature of the peer
   // use quorum_con_features, if it's an anonymous connection.
@@ -3456,7 +3457,7 @@ void OSDMonitor::send_incremental(epoch_t first,
     mon->get_quorum_con_features();
 
   if (first <= session->osd_epoch) {
-    dout(10) << __func__ << " " << session->inst << " should already have epoch "
+    dout(10) << __func__ << " " << session->name << " should already have epoch "
 	     << session->osd_epoch << dendl;
     first = session->osd_epoch + 1;
   }
@@ -3817,13 +3818,13 @@ void OSDMonitor::check_pg_creates_subs()
 
 void OSDMonitor::check_pg_creates_sub(Subscription *sub)
 {
-  dout(20) << __func__ << " .. " << sub->session->inst << dendl;
+  dout(20) << __func__ << " .. " << sub->session->name << dendl;
   assert(sub->type == "osd_pg_creates");
   // only send these if the OSD is up.  we will check_subs() when they do
   // come up so they will get the creates then.
-  if (sub->session->inst.name.is_osd() &&
-      mon->osdmon()->osdmap.is_up(sub->session->inst.name.num())) {
-    sub->next = send_pg_creates(sub->session->inst.name.num(),
+  if (sub->session->name.is_osd() &&
+      mon->osdmon()->osdmap.is_up(sub->session->name.num())) {
+    sub->next = send_pg_creates(sub->session->name.num(),
 				sub->session->con.get(),
 				sub->next);
   }
