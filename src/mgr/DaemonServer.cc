@@ -351,6 +351,19 @@ static DaemonKey key_from_service(
   }
 }
 
+static bool key_from_string(
+  const std::string& name,
+  DaemonKey *out)
+{
+  auto p = name.find('.');
+  if (p == std::string::npos) {
+    return false;
+  }
+  out->first = name.substr(0, p);
+  out->second = name.substr(p + 1);
+  return true;
+}
+
 bool DaemonServer::handle_open(MMgrOpen *m)
 {
   Mutex::Locker l(lock);
@@ -383,7 +396,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
     daemon->perf_counters.clear();
 
     if (m->service_daemon) {
-      daemon->metadata = m->daemon_metadata;
+      daemon->set_metadata(m->daemon_metadata);
       daemon->service_status = m->daemon_status;
 
       utime_t now = ceph_clock_now();
@@ -1643,6 +1656,245 @@ bool DaemonServer::handle_command(MCommand *m)
     }
     cmdctx->reply(r, ss);
     return true;
+  } else if (prefix == "device ls") {
+    set<string> devids;
+    TextTable tbl;
+    if (f) {
+      f->open_array_section("devices");
+      daemon_state.with_devices([&f](const DeviceState& dev) {
+	  f->dump_object("device", dev);
+	});
+      f->close_section();
+      f->flush(cmdctx->odata);
+    } else {
+      tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DAEMONS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("LIFE EXPECTANCY", TextTable::LEFT, TextTable::LEFT);
+      auto now = ceph_clock_now();
+      daemon_state.with_devices([&tbl, now](const DeviceState& dev) {
+	  string h;
+	  for (auto& i : dev.devnames) {
+	    if (h.size()) {
+	      h += " ";
+	    }
+	    h += i.first + ":" + i.second;
+	  }
+	  string d;
+	  for (auto& i : dev.daemons) {
+	    if (d.size()) {
+	      d += " ";
+	    }
+	    d += to_string(i);
+	  }
+	  tbl << dev.devid
+	      << h
+	      << d
+	      << dev.get_life_expectancy_str(now)
+	      << TextTable::endrow;
+	});
+      cmdctx->odata.append(stringify(tbl));
+    }
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "device ls-by-daemon") {
+    string who;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
+    DaemonKey k;
+    if (!key_from_string(who, &k)) {
+      ss << who << " is not a valid daemon name";
+      r = -EINVAL;
+    } else {
+      auto dm = daemon_state.get(k);
+      if (dm) {
+	if (f) {
+	  f->open_array_section("devices");
+	  for (auto& i : dm->devices) {
+	    daemon_state.with_device(i.first, [&f] (const DeviceState& dev) {
+		f->dump_object("device", dev);
+	      });
+	  }
+	  f->close_section();
+	  f->flush(cmdctx->odata);
+	} else {
+	  TextTable tbl;
+	  tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+	  tbl.define_column("HOST:DEV", TextTable::LEFT, TextTable::LEFT);
+	  tbl.define_column("EXPECTED FAILURE", TextTable::LEFT,
+			    TextTable::LEFT);
+	  auto now = ceph_clock_now();
+	  for (auto& i : dm->devices) {
+	    daemon_state.with_device(
+	      i.first, [&tbl, now] (const DeviceState& dev) {
+		string h;
+		for (auto& i : dev.devnames) {
+		  if (h.size()) {
+		    h += " ";
+		  }
+		  h += i.first + ":" + i.second;
+		}
+		tbl << dev.devid
+		    << h
+		    << dev.get_life_expectancy_str(now)
+		    << TextTable::endrow;
+	      });
+	  }
+	  cmdctx->odata.append(stringify(tbl));
+	}
+      } else {
+	r = -ENOENT;
+	ss << "daemon " << who << " not found";
+      }
+      cmdctx->reply(r, ss);
+    }
+  } else if (prefix == "device ls-by-host") {
+    string host;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "host", host);
+    set<string> devids;
+    daemon_state.list_devids_by_server(host, &devids);
+    if (f) {
+      f->open_array_section("devices");
+      for (auto& devid : devids) {
+	daemon_state.with_device(
+	  devid, [&f, &host] (const DeviceState& dev) {
+	    f->dump_object("device", dev);
+	  });
+      }
+      f->close_section();
+      f->flush(cmdctx->odata);
+    } else {
+      TextTable tbl;
+      tbl.define_column("DEVICE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DEV", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("DAEMONS", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("EXPECTED FAILURE", TextTable::LEFT, TextTable::LEFT);
+      auto now = ceph_clock_now();
+      for (auto& devid : devids) {
+	daemon_state.with_device(
+	  devid, [&tbl, &host, now] (const DeviceState& dev) {
+	    string n;
+	    for (auto& j : dev.devnames) {
+	      if (j.first == host) {
+		if (n.size()) {
+		  n += " ";
+		}
+		n += j.second;
+	      }
+	    }
+	    string d;
+	    for (auto& i : dev.daemons) {
+	      if (d.size()) {
+		d += " ";
+	      }
+	      d += to_string(i);
+	    }
+	    tbl << dev.devid
+		<< n
+		<< d
+		<< dev.get_life_expectancy_str(now)
+		<< TextTable::endrow;
+	  });
+      }
+      cmdctx->odata.append(stringify(tbl));
+    }
+    cmdctx->reply(0, ss);
+    return true;
+  } else if (prefix == "device info") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    int r = 0;
+    ostringstream rs;
+    if (!daemon_state.with_device(devid,
+				  [&f, &rs] (const DeviceState& dev) {
+	  if (f) {
+	    f->dump_object("device", dev);
+	  } else {
+	    dev.print(rs);
+	  }
+	})) {
+      ss << "device " << devid << " not found";
+      r = -ENOENT;
+    } else {
+      if (f) {
+	f->flush(cmdctx->odata);
+      } else {
+	cmdctx->odata.append(rs.str());
+      }
+    }
+    cmdctx->reply(r, ss);
+    return true;
+  } else if (prefix == "device set-life-expectancy") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    string from_str, to_str;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "from", from_str);
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "to", to_str);
+    utime_t from, to;
+    if (!from.parse(from_str)) {
+      ss << "unable to parse datetime '" << from_str << "'";
+      r = -EINVAL;
+      cmdctx->reply(r, ss);
+    } else if (to_str.size() && !to.parse(to_str)) {
+      ss << "unable to parse datetime '" << to_str << "'";
+      r = -EINVAL;
+      cmdctx->reply(r, ss);
+    } else {
+      map<string,string> meta;
+      daemon_state.with_device_create(
+	devid,
+	[from, to, &meta] (DeviceState& dev) {
+	  dev.set_life_expectancy(from, to, ceph_clock_now());
+	  meta = dev.metadata;
+	});
+      json_spirit::Object json_object;
+      for (auto& i : meta) {
+	json_spirit::Config::add(json_object, i.first, i.second);
+      }
+      bufferlist json;
+      json.append(json_spirit::write(json_object));
+      const string cmd =
+	"{"
+	"\"prefix\": \"config-key set\", "
+	"\"key\": \"device/" + devid + "\""
+	"}";
+      auto on_finish = new ReplyOnFinish(cmdctx);
+      monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
+    }
+    return true;
+  } else if (prefix == "device rm-life-expectancy") {
+    string devid;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "devid", devid);
+    map<string,string> meta;
+    if (daemon_state.with_device_write(devid, [&meta] (DeviceState& dev) {
+	  dev.rm_life_expectancy();
+	  meta = dev.metadata;
+	})) {
+      string cmd;
+      bufferlist json;
+      if (meta.empty()) {
+	cmd =
+	  "{"
+	  "\"prefix\": \"config-key rm\", "
+	  "\"key\": \"device/" + devid + "\""
+	  "}";
+      } else {
+	json_spirit::Object json_object;
+	for (auto& i : meta) {
+	  json_spirit::Config::add(json_object, i.first, i.second);
+	}
+	json.append(json_spirit::write(json_object));
+	cmd =
+	  "{"
+	  "\"prefix\": \"config-key set\", "
+	  "\"key\": \"device/" + devid + "\""
+	  "}";
+      }
+      auto on_finish = new ReplyOnFinish(cmdctx);
+      monc->start_mon_command({cmd}, json, nullptr, nullptr, on_finish);
+    } else {
+      cmdctx->reply(0, ss);
+    }
+    return true;
   } else {
     // fall back to feeding command to PGMap
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
@@ -1885,7 +2137,7 @@ void DaemonServer::got_service_map()
       if (!daemon_state.exists(key)) {
 	auto daemon = std::make_shared<DaemonState>(daemon_state.types);
 	daemon->key = key;
-	daemon->metadata = q.second.metadata;
+	daemon->set_metadata(q.second.metadata);
         if (q.second.metadata.count("hostname")) {
           daemon->hostname = q.second.metadata["hostname"];
         }
