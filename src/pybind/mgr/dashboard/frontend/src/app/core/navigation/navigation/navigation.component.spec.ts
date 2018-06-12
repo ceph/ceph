@@ -8,6 +8,7 @@ import { NotificationService } from '../../../shared/services/notification.servi
 import { SharedModule } from '../../../shared/shared.module';
 import { configureTestBed } from '../../../shared/unit-test-helper';
 import { LogoutComponent } from '../../auth/logout/logout.component';
+import { DashboardHelpComponent } from '../dashboard-help/dashboard-help.component';
 import { NotificationsComponent } from '../notifications/notifications.component';
 import { TaskManagerComponent } from '../task-manager/task-manager.component';
 import { NavigationComponent } from './navigation.component';
@@ -30,7 +31,8 @@ describe('NavigationComponent', () => {
       NavigationComponent,
       NotificationsComponent,
       LogoutComponent,
-      TaskManagerComponent
+      TaskManagerComponent,
+      DashboardHelpComponent
     ],
     providers: [{ provide: NotificationService, useValue: fakeService }]
   });
