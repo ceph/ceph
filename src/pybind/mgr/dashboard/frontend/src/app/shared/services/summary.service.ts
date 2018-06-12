@@ -4,8 +4,11 @@ import { Injectable, NgZone } from '@angular/core';
 import { Subject } from 'rxjs';
 
 import { AuthStorageService } from './auth-storage.service';
+import { ServicesModule } from './services.module';
 
-@Injectable()
+@Injectable({
+  providedIn: ServicesModule
+})
 export class SummaryService {
   // Observable sources
   private summaryDataSource = new Subject();
