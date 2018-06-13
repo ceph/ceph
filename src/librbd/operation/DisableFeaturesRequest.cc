@@ -193,12 +193,6 @@ Context *DisableFeaturesRequest<I>::handle_acquire_exclusive_lock(int *result) {
       m_disable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
     }
     if ((m_features & RBD_FEATURE_OBJECT_MAP) != 0) {
-      if ((m_new_features & RBD_FEATURE_FAST_DIFF) != 0) {
-        lderr(cct) << "cannot disable object-map. fast-diff must be "
-                      "disabled before disabling object-map." << dendl;
-        *result = -EINVAL;
-        break;
-      }
       m_disable_flags |= RBD_FLAG_OBJECT_MAP_INVALID;
     }
   } while (false);
