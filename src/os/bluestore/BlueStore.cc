@@ -4446,15 +4446,13 @@ int BlueStore::_open_bdev(bool create)
 {
   assert(bdev == NULL);
   string p = path + "/block";
-  uint64_t dev_size;
   bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
   int r = bdev->open(p);
   if (r < 0)
     goto fail;
 
-  dev_size = bdev->get_size();
   if (create && cct->_conf->bdev_enable_discard) {
-    bdev->discard(0, dev_size);
+    bdev->discard(0, bdev->get_size());
   }
 
   if (bdev->supported_bdev_label()) {
@@ -4473,13 +4471,6 @@ int BlueStore::_open_bdev(bool create)
   if (r < 0) {
     goto fail_close;
   }
-  if (dev_size < cct->_conf->bluestore_bluefs_min) {
-    dout(1) << __func__ << " main device size " << byte_u_t(dev_size)
-            << " is too small, disable bluestore_bluefs_min for now"
-            << dendl;
-    int r = cct->_conf.set_val("bluestore_bluefs_min", "0");
-    assert(r == 0);
-  }
   return 0;
 
  fail_close:
@@ -4488,6 +4479,23 @@ int BlueStore::_open_bdev(bool create)
   delete bdev;
   bdev = NULL;
   return r;
+}
+
+void BlueStore::_validate_bdev()
+{
+  assert(bdev);
+  assert(min_alloc_size); // _get_odisk_reserved depends on that
+  uint64_t dev_size = bdev->get_size();
+  if (dev_size < 
+    _get_ondisk_reserved() + cct->_conf->bluestore_bluefs_min) {
+    dout(1) << __func__ << " main device size " << byte_u_t(dev_size)
+            << " is too small, disable bluestore_bluefs_min for now"
+            << dendl;
+    assert(dev_size >= _get_ondisk_reserved());
+
+    int r = cct->_conf.set_val("bluestore_bluefs_min", "0");
+    assert(r == 0);
+  }
 }
 
 void BlueStore::_close_bdev()
@@ -4520,9 +4528,7 @@ int BlueStore::_open_fm(bool create)
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
     // bluefs_extents.
-    uint64_t reserved = round_up_to(
-      std::max<uint64_t>(SUPER_RESERVED, min_alloc_size),
-      min_alloc_size);
+    auto reserved = _get_ondisk_reserved();
     fm->allocate(0, reserved, t);
 
     if (cct->_conf->bluestore_bluefs) {
@@ -5560,6 +5566,7 @@ int BlueStore::mkfs()
       min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
     }
   }
+  _validate_bdev();
 
   // make sure min_alloc_size is power of 2 aligned.
   if (!isp2(min_alloc_size)) {
@@ -8205,6 +8212,11 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
 // -----------------
 // write helpers
 
+uint64_t BlueStore::_get_ondisk_reserved() const {
+  return round_up_to(
+    std::max<uint64_t>(SUPER_RESERVED, min_alloc_size), min_alloc_size);
+}
+
 void BlueStore::_prepare_ondisk_format_super(KeyValueDB::Transaction& t)
 {
   dout(10) << __func__ << " ondisk_format " << ondisk_format
@@ -8367,6 +8379,7 @@ int BlueStore::_open_super_meta()
 
   _set_finisher_num();
 
+  _validate_bdev();
   return 0;
 }
 
