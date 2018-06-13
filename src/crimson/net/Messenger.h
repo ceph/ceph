@@ -60,10 +60,8 @@ class Messenger {
     }
     return ++global_seq;
   }
-  ConnectionRef lookup_conn(const entity_addr_t&) {
-    // TODO: replace handling
-    return nullptr;
-  }
+  virtual ConnectionRef lookup_conn(const entity_addr_t&) = 0;
+  virtual void unregister_conn(ConnectionRef) = 0;
 
   // @returns a tuple of <is_valid, auth_reply, session_key>
   virtual seastar::future<msgr_tag_t,    /// tag for error, 0 if authorized

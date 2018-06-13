@@ -139,6 +139,11 @@ void SocketConnection::read_tags_until_next_message()
           return seastar::make_ready_future<seastar::stop_iteration>(
               seastar::stop_iteration::no);
         });
+    }).handle_exception_type([this] (const std::system_error& e) {
+      if (e.code() == error::read_eof) {
+        close();
+      }
+      throw e;
     }).then_wrapped([this] (auto fut) {
       // satisfy the message promise
       fut.forward_to(std::move(on_message));
@@ -296,6 +301,7 @@ seastar::future<> SocketConnection::send(MessageRef msg)
 
 seastar::future<> SocketConnection::close()
 {
+  get_messenger()->unregister_conn(this);
   return seastar::when_all(in.close(), out.close()).discard_result();
 }
 
@@ -819,6 +825,9 @@ seastar::future<> SocketConnection::server_handshake()
 
 seastar::future<> SocketConnection::fault()
 {
+  if (policy.lossy) {
+    get_messenger()->unregister_conn(this);
+  }
   if (h.backoff.count()) {
     h.backoff += h.backoff;
   } else {

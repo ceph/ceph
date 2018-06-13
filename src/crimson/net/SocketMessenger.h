@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <list>
+#include <map>
 #include <boost/optional.hpp>
 #include <core/reactor.hh>
 
@@ -26,8 +26,7 @@ class SocketMessenger final : public Messenger {
   boost::optional<seastar::server_socket> listener;
   Dispatcher *dispatcher = nullptr;
   uint32_t global_seq = 0;
-
-  std::list<ConnectionRef> connections;
+  std::map<entity_addr_t, ConnectionRef> connections;
 
   seastar::future<> dispatch(ConnectionRef conn);
 
@@ -47,6 +46,8 @@ class SocketMessenger final : public Messenger {
 					 entity_type_t host_type) override;
 
   seastar::future<> shutdown() override;
+  ConnectionRef lookup_conn(const entity_addr_t& addr) override;
+  void unregister_conn(ConnectionRef) override;
   seastar::future<msgr_tag_t, bufferlist>
   verify_authorizer(peer_type_t peer_type,
 		    auth_proto_t protocol,
