@@ -3834,6 +3834,7 @@ void RGWPostObj::execute()
       ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
 
+
     rgw_obj obj(s->bucket, get_current_filename());
     if (s->bucket_info.versioning_enabled()) {
       store->gen_rand_obj_instance_name(&obj);
@@ -3842,6 +3843,7 @@ void RGWPostObj::execute()
     rgw::AioThrottle aio(s->cct->_conf->rgw_put_obj_min_window_size);
     using namespace rgw::putobj;
     AtomicObjectProcessor processor(&aio, store, s->bucket_info,
+                                    nullptr,
                                     s->bucket_owner.get_id(),
                                     *static_cast<RGWObjectCtx*>(s->obj_ctx),
                                     obj, 0, s->req_id);
@@ -4707,6 +4709,7 @@ void RGWCopyObj::execute()
 			   src_obj,
 			   dest_bucket_info,
 			   src_bucket_info,
+                           nullptr, /* dest placement rule */
 			   &src_mtime,
 			   &mtime,
 			   mod_ptr,
@@ -6569,7 +6572,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
 
-  AtomicObjectProcessor processor(&aio, store, binfo, bowner.get_id(),
+  AtomicObjectProcessor processor(&aio, store, binfo, nullptr, bowner.get_id(),
                                   obj_ctx, obj, 0, s->req_id);
 
   op_ret = processor.prepare();
