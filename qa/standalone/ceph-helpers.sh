@@ -1442,8 +1442,7 @@ function test_wait_for_clean() {
 #######################################################################
 
 ##
-# Wait until the cluster becomes HEALTH_OK again or if it does not make progress
-# for $TIMEOUT seconds.
+# Wait until the cluster becomes HEALTH_OK again for $TIMEOUT seconds.
 #
 # @return 0 if the cluster is HEALTHY, 1 otherwise
 #
