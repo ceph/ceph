@@ -61,7 +61,7 @@ function test_fast_kill() {
    create_rbd_pool || return 1
 
    # make some objects so osds to ensure connectivity between osds
-   rados -p rbd bench 10 write -b 4096 --max-objects 128 --no-cleanup
+   timeout 20 rados -p rbd bench 10 write -b 4096 --max-objects 128 --no-cleanup || return 1
    sleep 1
 
    killid=0
