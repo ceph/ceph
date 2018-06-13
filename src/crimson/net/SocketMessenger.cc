@@ -12,6 +12,7 @@
  *
  */
 
+#include <tuple>
 #include "auth/Auth.h"
 #include "SocketMessenger.h"
 #include "SocketConnection.h"
@@ -40,7 +41,9 @@ void SocketMessenger::bind(const entity_addr_t& addr)
 
 seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
 {
-  connections.push_back(conn);
+  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
+  std::ignore = i;
+  assert(added);
 
   return seastar::repeat([=] {
       return conn->read_message()
@@ -118,13 +121,8 @@ seastar::future<ceph::net::ConnectionRef>
 SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type,
 			 const entity_addr_t& myaddr, entity_type_t host_type)
 {
-  if (auto found = std::find_if(connections.begin(),
-				connections.end(),
-				[&addr](auto conn) {
-				  return conn->get_peer_addr() == addr;
-				});
-      found != connections.end()) {
-    return seastar::make_ready_future<ceph::net::ConnectionRef>(*found);
+  if (auto found = lookup_conn(addr); found) {
+    return seastar::make_ready_future<ceph::net::ConnectionRef>(found);
   }
   return seastar::connect(addr.in4_addr())
     .then([=] (seastar::connected_socket socket) {
@@ -153,9 +151,28 @@ seastar::future<> SocketMessenger::shutdown()
     listener->abort_accept();
   }
   return seastar::parallel_for_each(connections.begin(), connections.end(),
-    [this] (ConnectionRef conn) {
-      return conn->close();
+    [this] (auto conn) {
+      return conn.second->close();
     }).finally([this] { connections.clear(); });
+}
+
+ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
+{
+  if (auto found = connections.find(addr);
+      found != connections.end()) {
+    return found->second;
+  } else {
+    return nullptr;
+  }
+}
+
+void SocketMessenger::unregister_conn(ConnectionRef conn)
+{
+  assert(conn);
+  auto found = connections.find(conn->get_peer_addr());
+  assert(found != connections.end());
+  assert(found->second == conn);
+  connections.erase(found);
 }
 
 seastar::future<msgr_tag_t, bufferlist>
