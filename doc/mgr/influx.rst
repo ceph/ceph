@@ -53,7 +53,8 @@ Additional optional configuration settings are:
 :interval: Time between reports to InfluxDB.  Default 5 seconds.
 :database: InfluxDB database name.  Default "ceph".  You will need to create this database and grant write privileges to the configured username or the username must have admin privileges to create it.  
 :port: InfluxDB server port.  Default 8086
-    
+:ssl: Use https connection for InfluxDB server. Use "true" or "false". Default false
+:verify_ssl: Verify https cert for InfluxDB server. Use "true" or "false". Default true
 
 ---------
 Debugging 
