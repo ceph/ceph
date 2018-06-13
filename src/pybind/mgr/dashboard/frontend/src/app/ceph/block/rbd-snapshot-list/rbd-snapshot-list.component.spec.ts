@@ -10,6 +10,7 @@ import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { DataTableModule } from '../../../shared/datatable/datatable.module';
+import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ServicesModule } from '../../../shared/services/services.module';
@@ -19,6 +20,15 @@ import { RbdSnapshotListComponent } from './rbd-snapshot-list.component';
 describe('RbdSnapshotListComponent', () => {
   let component: RbdSnapshotListComponent;
   let fixture: ComponentFixture<RbdSnapshotListComponent>;
+
+  const fakeAuthStorageService = {
+    isLoggedIn: () => {
+      return true;
+    },
+    getPermissions: () => {
+      return new Permissions({ 'rbd-image': ['read', 'update', 'create', 'delete'] });
+    }
+  };
 
   configureTestBed({
     declarations: [RbdSnapshotListComponent],
@@ -32,7 +42,7 @@ describe('RbdSnapshotListComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule
     ],
-    providers: [AuthStorageService]
+    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }]
   });
 
   beforeEach(() => {
@@ -49,12 +59,16 @@ describe('RbdSnapshotListComponent', () => {
     let called;
     let rbdService: RbdService;
     let notificationService: NotificationService;
+    let authStorageService: AuthStorageService;
 
     beforeEach(() => {
       called = false;
       rbdService = new RbdService(null);
       notificationService = new NotificationService(null, null);
+      authStorageService = new AuthStorageService();
+      authStorageService.set('user', { 'rbd-image': ['create', 'read', 'update', 'delete'] });
       component = new RbdSnapshotListComponent(
+        authStorageService,
         null,
         null,
         null,

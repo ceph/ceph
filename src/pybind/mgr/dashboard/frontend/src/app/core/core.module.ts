@@ -2,16 +2,13 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
 import { AuthModule } from './auth/auth.module';
+import { ForbiddenComponent } from './forbidden/forbidden.component';
 import { NavigationModule } from './navigation/navigation.module';
 import { NotFoundComponent } from './not-found/not-found.component';
 
 @NgModule({
-  imports: [
-    CommonModule,
-    NavigationModule,
-    AuthModule
-  ],
+  imports: [CommonModule, NavigationModule, AuthModule],
   exports: [NavigationModule],
-  declarations: [NotFoundComponent]
+  declarations: [NotFoundComponent, ForbiddenComponent]
 })
-export class CoreModule { }
+export class CoreModule {}

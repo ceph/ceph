@@ -7,7 +7,9 @@ import { TableComponent } from '../../../../shared/datatable/table/table.compone
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { Permission } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
 
 @Component({
@@ -20,16 +22,20 @@ export class OsdListComponent implements OnInit {
   @ViewChild('osdUsageTpl') osdUsageTpl: TemplateRef<any>;
   @ViewChild(TableComponent) tableComponent: TableComponent;
 
+  permission: Permission;
   bsModalRef: BsModalRef;
   osds = [];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
 
   constructor(
+    private authStorageService: AuthStorageService,
     private osdService: OsdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private modalService: BsModalService
-  ) {}
+  ) {
+    this.permission = this.authStorageService.getPermissions().osd;
+  }
 
   ngOnInit() {
     this.columns = [
