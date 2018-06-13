@@ -2086,6 +2086,11 @@ private:
   void _set_finisher_num();
 
   int _open_bdev(bool create);
+  // Verifies if disk space is enough for reserved + min bluefs
+  // and alters the latter if needed.
+  // Depends on min_alloc_size hence should be called after
+  // its initialization (and outside of _open_bdev)
+  void _validate_bdev();
   void _close_bdev();
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
@@ -2228,6 +2233,7 @@ private:
   int32_t ondisk_format = 0;  ///< value detected on mount
 
   int _upgrade_super();  ///< upgrade (called during open_super)
+  uint64_t _get_ondisk_reserved() const;
   void _prepare_ondisk_format_super(KeyValueDB::Transaction& t);
 
   // --- public interface ---
