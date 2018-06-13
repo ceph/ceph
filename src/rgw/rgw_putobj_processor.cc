@@ -211,6 +211,7 @@ int AtomicObjectProcessor::prepare()
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
                                 bucket_info.placement_rule,
+                                ptail_placement_rule,
                                 head_obj.bucket, head_obj);
   if (r < 0) {
     return r;
@@ -330,6 +331,7 @@ int MultipartObjectProcessor::prepare_head()
 {
   int r = manifest_gen.create_begin(store->ctx(), &manifest,
                                     bucket_info.placement_rule,
+                                    ptail_placement_rule,
                                     target_obj.bucket, target_obj);
   if (r < 0) {
     return r;
