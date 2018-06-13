@@ -789,6 +789,11 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
+    Option("huge_page_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(2_M)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("Size (in bytes) of huge page in the system"),
+
     Option("huge_page_pool_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64)
     .set_flag(Option::FLAG_STARTUP)

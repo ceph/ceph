@@ -22,7 +22,8 @@ static std::optional<ceph::huge_page_pool> hp_pool;
  
 void ceph_init_huge_page_pools(class md_config_t* conf) {
   assert(conf);
-  hp_pool.emplace(conf->get_val<std::size_t>("huge_page_pool_size"));
+  hp_pool.emplace(conf->get_val<std::size_t>("huge_page_pool_size"),
+		  conf->get_val<std::size_t>("huge_page_size"));
 }
 
 ceph::huge_page_pool& ceph_get_huge_page_pool() {

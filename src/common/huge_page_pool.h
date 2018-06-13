@@ -27,8 +27,8 @@ constexpr unsigned long long operator"" _M (unsigned long long n) {
 namespace ceph {
 
 class huge_page_pool {
-public:
-  static constexpr std::size_t huge_page_size { 2_M };
+  std::size_t huge_page_size;
+
   // TOOD: align to cache line boundary
   struct page_info_entry_t {
     std::uint8_t index;
@@ -38,8 +38,11 @@ public:
   boost::container::flat_map<void*, page_info_entry_t> page_info;
   ceph::containers::tiny_vector<std::atomic<void*>, 64> pages;
 
-  huge_page_pool(const std::size_t pool_size)
-    : pages(pool_size, [&](const std::uint8_t idx, auto emplacer) {
+public:
+  huge_page_pool(const std::size_t pool_size,
+		 const std::size_t huge_page_size)
+    : huge_page_size(huge_page_size),
+      pages(pool_size, [&](const std::uint8_t idx, auto emplacer) {
         void* page;
         page = ::mmap(nullptr, huge_page_size, PROT_READ | PROT_WRITE,
       		      MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE |
@@ -73,6 +76,10 @@ public:
 	}
       }
     }
+  }
+
+  std::size_t get_size() const {
+    return huge_page_size;
   }
 
   void* get_page() {
