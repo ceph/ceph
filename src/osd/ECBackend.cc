@@ -1257,6 +1257,13 @@ void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
       reqiter->second.cb = nullptr;
     }
   }
+  // if the read op is over. clean all the data of this tid.
+  for (set<pg_shard_t>::iterator iter = rop.in_progress.begin();
+    iter != rop.in_progress.end();
+    iter++) {
+    shard_to_read_map[*iter].erase(rop.tid);
+  }
+  rop.in_progress.clear();
   tid_to_read_map.erase(rop.tid);
 }
 
