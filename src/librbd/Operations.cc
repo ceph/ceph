@@ -342,14 +342,6 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
     return -EROFS;
   }
 
-  {
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
-    if (m_image_ctx.parent_md.spec.pool_id == -1) {
-      lderr(cct) << "image has no parent" << dendl;
-      return -EINVAL;
-    }
-  }
-
   uint64_t request_id = ++m_async_request_seq;
   r = invoke_async_request("flatten", false,
                            boost::bind(&Operations<I>::execute_flatten, this,
@@ -358,7 +350,7 @@ int Operations<I>::flatten(ProgressContext &prog_ctx) {
                                        m_image_ctx.image_watcher, request_id,
                                        boost::ref(prog_ctx), _1));
 
-  if (r < 0 && r != -EINVAL) {
+  if (r < 0) {
     return r;
   }
   ldout(cct, 20) << "flatten finished" << dendl;
