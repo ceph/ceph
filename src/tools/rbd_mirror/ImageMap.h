@@ -98,6 +98,8 @@ private:
 
   std::set<std::string> m_global_image_ids;
 
+  Context *m_rebalance_task = nullptr;
+
   struct C_LoadMap : Context {
     ImageMap *image_map;
     Context *on_finish;
@@ -145,9 +147,13 @@ private:
   void schedule_action(const std::string &global_image_id);
 
   void schedule_update_task();
+  void schedule_update_task(const Mutex &timer_lock);
   void process_updates();
   void update_image_mapping(Updates&& map_updates,
                             std::set<std::string>&& map_removals);
+
+  void rebalance();
+  void schedule_rebalance_task();
 
   void notify_listener_acquire_release_images(const Updates &acquire, const Updates &release);
   void notify_listener_remove_images(const std::string &peer_uuid, const Updates &remove);
