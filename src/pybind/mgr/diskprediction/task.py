@@ -15,6 +15,12 @@ from .agent.metrics.sai_disk_smart import SAI_DiskSmartAgent
 from .agent.metrics.sai_host import SAI_HostAgent
 from .agent.predict.prediction import Prediction_Agent
 
+DP_MGR_STAT_OK ='OK'
+DP_MGR_STAT_WARNING = 'WARNING'
+DP_MGR_STAT_FAILED = 'FAILED'
+DP_MGR_STAT_DISABLED = 'DISABLED'
+DP_MGR_STAT_ENABLED = 'ENABLED'
+
 
 class DP_Task(object):
 
@@ -80,13 +86,17 @@ class DP_Task(object):
                 password=self._context.get_configuration("diskprediction_password"))
             if not self._obj_sender:
                 self._log.error("invalid diskprediction sender")
+                self._context.status = DP_MGR_STAT_FAILED
                 return
             if self._obj_sender.test_connection():
                 self._log.debug("succeed to test connection")
                 self._run()
+                self._context.status = DP_MGR_STAT_OK
             else:
                 self._log.error("failed to test connection")
+                self._context.status = DP_MGR_STAT_FAILED
         except Exception as e:
+            self._context.status = DP_MGR_STAT_FAILED
             self._log.error(
                 "failed to start %s agents, %s" % (self._task_name, str(e)))
 
@@ -108,7 +118,10 @@ class Metrics_Task(DP_Task):
                 obj_agent = agent(
                     self._context, self._obj_sender, self._agent_timeout)
                 obj_agent.run()
-            except Exception:
+            except Exception as e:
+                self._context.status = DP_MGR_STAT_WARNING
+                self._log.warning(
+                    "failed to execute %s, %s" % (agent.measurement, str(e)))
                 continue
 
 
@@ -125,7 +138,10 @@ class Prediction_Task(DP_Task):
                 obj_agent = agent(
                     self._context, self._obj_sender, self._agent_timeout)
                 obj_agent.run()
-            except Exception:
+            except Exception as e:
+                self._context.status = DP_MGR_STAT_WARNING
+                self._log.warning(
+                    "failed to execute %s, %s" % (agent.measurement, str(e)))
                 continue
 
 
@@ -142,5 +158,8 @@ class Smart_Task(DP_Task):
                 obj_agent = agent(
                     self._context, self._obj_sender, self._agent_timeout)
                 obj_agent.run()
-            except Exception:
+            except Exception as e:
+                self._context.status = DP_MGR_STAT_WARNING
+                self._log.warning(
+                    "failed to execute %s, %s" % (agent.measurement, str(e)))
                 continue

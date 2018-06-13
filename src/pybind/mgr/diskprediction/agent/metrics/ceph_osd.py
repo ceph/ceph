@@ -22,6 +22,8 @@ class CephOSD_Agent(MetricsAgent):
             if not n_name[0:3].lower() == 'osd':
                 continue
             d_osd = Ceph_OSD()
+            stat_bytes = 0
+            stat_bytes_used = 0
             d_osd.tags['cluster_id'] = cluster_id
             d_osd.tags['osd_id'] = n_name[4:]
             d_osd.tags['agenthost'] = socket.gethostname()
@@ -36,4 +38,13 @@ class CephOSD_Agent(MetricsAgent):
                 else:
                     key_name = i_key
                 d_osd.fields[key_name] = i_val.get('value', 0)
+                if key_name == 'stat_bytes':
+                    stat_bytes = i_val.get('value', 0)
+                if key_name == 'stat_bytes_used':
+                    stat_bytes_used = i_val.get('value', 0)
+            if stat_bytes and stat_bytes_used:
+                d_osd.fields['stat_bytes_used_percentage'] = \
+                    round(float(stat_bytes_used) / float(stat_bytes) * 100, 4)
+            else:
+                d_osd.fields['stat_bytes_used_percentage'] = 0.0000
             self.data.append(d_osd)

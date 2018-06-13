@@ -8,9 +8,11 @@ import json
 from mgr_module import MgrModule
 from threading import Event
 
-from .task import Metrics_Task, Prediction_Task, Smart_Task
+from .task import Metrics_Task, Prediction_Task, Smart_Task, \
+    DP_MGR_STAT_ENABLED, DP_MGR_STAT_DISABLED
 
 DP_TASK = [Metrics_Task, Prediction_Task, Smart_Task]
+
 
 
 class Module(MgrModule):
@@ -83,24 +85,30 @@ class Module(MgrModule):
             'perm': 'rw'
         },
         {
-            'cmd': 'diskprediction run-metrics-forcely',
+            'cmd': 'diskprediction run-metrics-forced',
             'desc': 'Run metrics agent forcely',
             'perm': 'r'
         },
         {
-            'cmd': 'diskprediction run-prediction-forcely',
+            'cmd': 'diskprediction run-prediction-forced',
             'desc': 'Run prediction agent forcely',
             'perm': 'r'
         },
         {
-            'cmd': 'diskprediction run-smart-forcely',
+            'cmd': 'diskprediction run-smart-forced',
             'desc': 'Run smart agent forcely',
+            'perm': 'r'
+        },
+        {
+            'cmd': 'diskprediction status',
+            'desc': 'Check diskprediction status',
             'perm': 'r'
         },
     ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
+        self.status = DP_MGR_STAT_DISABLED
         self.event = Event()
         self.run = True
         self._tasks = []
@@ -132,75 +140,93 @@ class Module(MgrModule):
     def get_configuration(self, key):
         return self.get_config(key, self.config_keys[key])
 
+    def _config_show(self, cmd):
+        self.show_module_config()
+        return 0, json.dumps(self.config, indent=4), ''
+
+    def _get_predicted_status(self, cmd):
+        osd_data = dict()
+        physical_data = dict()
+        from .agent.predict.prediction import PREDICTION_FILE
+        try:
+            with open(PREDICTION_FILE, "r+") as fd:
+                pre_data = json.load(fd)
+            fsid = self.get('mon_map')['fsid']
+            for d_host, d_val in pre_data.get(fsid, {}).iteritems():
+                if "osd.%s" % cmd['osd_id'] in d_val.get("osd", {}).keys():
+                    s_data = d_val['osd']['osd.%s' % cmd['osd_id']]
+                    for dev in s_data.get("physicalDisks", []):
+                        p_data = dev.get('prediction', {})
+                        if not p_data.get('predicted'):
+                            predicted = None
+                        else:
+                            predicted = datetime.fromtimestamp(int(
+                                p_data.get('predicted')) / 1000 / 1000 / 1000)
+                        d_data = {
+                            'device': dev.get("diskName"),
+                            'near_failure': p_data.get('near_failure'),
+                            'predicted': str(predicted),
+                            'serial_number': dev.get('serialNumber'),
+                            'disk_wwn': dev.get('diskWWN')
+                        }
+                        physical_data[dev.get('diskName')] = d_data
+                    osd_data['osd.%s' % cmd['osd_id']] = dict(
+                        prediction=physical_data)
+                    break
+            if not osd_data:
+                msg = 'not found osd %s predicted data' % cmd['osd_id']
+            else:
+                msg = json.dumps(osd_data, indent=4)
+        except Exception as e:
+            msg = 'unable to get osd %s predicted data, %s' % (cmd['osd_id'], str(e))
+            self.log.error(msg)
+        return 0, msg, ''
+
+    def _config_set(self, cmd):
+        self.set_config('diskprediction_server', cmd['server'])
+        self.set_config('diskprediction_user', cmd['user'])
+        self.set_config('diskprediction_password', cmd['password'])
+        if cmd.get('port'):
+            self.set_config('diskprediction_port', cmd['port'])
+        self.show_module_config()
+        return 0, json.dumps(self.config, indent=4), ''
+
+    def _run_prediction_forced(self, cmd):
+        msg = ''
+        for _task in self._tasks:
+            if isinstance(_task, Prediction_Task):
+                msg = 'run prediction agent successfully'
+                _task.event.set()
+        return 0, msg, ''
+
+    def _run_metrics_forced(self, cmd):
+        msg = ''
+        for _task in self._tasks:
+            if isinstance(_task, Metrics_Task):
+                msg = 'run metrics agent successfully'
+                _task.event.set()
+        return 0, msg, ''
+
+    def _run_smart_forced(self, cmd):
+        msg = ' '
+        for _task in self._tasks:
+            if isinstance(_task, Smart_Task):
+                msg = 'run smart agent successfully'
+                _task.event.set()
+        return 0, msg, ''
+
+    def _status(self, cmd):
+        msg = 'diskprediction plugin status: %s' % self.status
+        return 0, msg, ''
+
     def handle_command(self, cmd):
-        if cmd['prefix'] == 'diskprediction config-show':
-            self.show_module_config()
-            return 0, json.dumps(self.config, indent=4), ''
-        if cmd['prefix'] == 'diskprediction get-predicted-status':
-            osd_data = dict()
-            physical_data = dict()
-            from .agent.predict.prediction import PREDICTION_FILE
-            try:
-                with open(PREDICTION_FILE, "r+") as fd:
-                    pre_data = json.load(fd)
-                fsid = self.get('mon_map')['fsid']
-                for d_host, d_val in pre_data.get(fsid, {}).iteritems():
-                    if "osd.%s" % cmd['osd_id'] in d_val.get("osd", {}).keys():
-                        s_data = d_val['osd']['osd.%s' % cmd['osd_id']]
-                        for dev in s_data.get("physicalDisks", []):
-                            p_data = dev.get('prediction', {})
-                            if not p_data.get('predicted'):
-                                predicted = None
-                            else:
-                                predicted = datetime.fromtimestamp(int(p_data.get('predicted'))/1000/1000/1000)
-                            d_data = {
-                                'device': dev.get("diskName"),
-                                'near_failure': p_data.get('near_failure'),
-                                'predicted': str(predicted),
-                                'serial_number': dev.get('serialNumber'),
-                                'disk_wwn': dev.get('diskWWN')
-                            }
-                            physical_data[dev.get('diskName')] = d_data
-                        osd_data['osd.%s' % cmd['osd_id']] = dict(
-                                prediction=physical_data)
-                        break
-                if not osd_data:
-                    msg = 'not found osd %s predicted data' % cmd['osd_id']
-                else:
-                    msg = json.dumps(osd_data, indent=4)
-            except Exception as e:
-                msg = 'unable to get osd %s predicted data' % cmd['osd_id']
-                self.log.error(msg)
-            return 0, msg, ''
-        if cmd['prefix'] == 'diskprediction config-set':
-            self.set_config('diskprediction_server', cmd['server'])
-            self.set_config('diskprediction_user', cmd['user'])
-            self.set_config('diskprediction_password', cmd['password'])
-            if cmd.get('port'):
-                self.set_config('diskprediction_port', cmd['port'])
-            self.show_module_config()
-            return 0, json.dumps(self.config, indent=4), ''
-        if cmd['prefix'] == 'diskprediction run-metrics-forcely':
-            msg = ''
-            for _task in self._tasks:
-                if isinstance(_task, Metrics_Task):
-                    msg = 'run metrics agent successfully'
-                    _task.event.set()
-            return 0, msg, ''
-        if cmd['prefix'] == 'diskprediction run-prediction-forcely':
-            msg = ''
-            for _task in self._tasks:
-                if isinstance(_task, Prediction_Task):
-                    msg = 'run prediction agent successfully'
-                    _task.event.set()
-            return 0, msg, ''
-        if cmd['prefix'] == 'diskprediction run-smart-forcely':
-            msg = ''
-            for _task in self._tasks:
-                if isinstance(_task, Smart_Task):
-                    msg = 'run smart agent successfully'
-                    _task.event.set()
-            return 0, msg, ''
+        for o_cmd in self.COMMANDS:
+            if cmd['prefix'] == o_cmd['cmd']:
+                fun = getattr(
+                    self, '_%s' % o_cmd['cmd'].split(' ')[1].replace('-', '_'))
+                if fun:
+                    return fun(cmd)
+        return 0, 'cmd not found', ''
 
     def show_module_config(self):
         self.fsid = self.get('mon_map')['fsid']
@@ -212,16 +238,16 @@ class Module(MgrModule):
     def serve(self):
         self.log.info('Starting diskprediction module')
         self.run = True
-
+        self.status = DP_MGR_STAT_ENABLED
         try:
-            self.send_to_diskprophet()
+            self.send_to_diskprediction()
         except Exception as e:
             self.log.error(' %s Unexpected error during send function.', str(e))
 
         while self.run:
             self.event.wait(60)
 
-    def send_to_diskprophet(self):
+    def send_to_diskprediction(self):
         for dp_task in DP_TASK:
             obj_task = dp_task(self)
             obj_task.run()
@@ -229,6 +255,7 @@ class Module(MgrModule):
 
     def shutdown(self):
         self.run = False
+        self.status = DP_MGR_STAT_DISABLED
         for dp_task in self._tasks:
             dp_task.terminate()
         self.event.set()

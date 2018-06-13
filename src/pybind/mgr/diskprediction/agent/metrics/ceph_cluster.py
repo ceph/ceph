@@ -39,9 +39,17 @@ class CephCluster_Agent(MetricsAgent):
         c_data.fields['num_pool'] = len(obj_api.get_osd_pools())
 
         df_stats = obj_api.get_df_stats()
-        c_data.fields['osd_bytes'] = df_stats.get('total_bytes', 0)
-        c_data.fields['osd_bytes_used'] = df_stats.get('total_used_bytes', 0)
-        c_data.fields['osd_bytes_avail'] = df_stats.get('total_avail_bytes', 0)
+        total_bytes = df_stats.get('total_bytes', 0)
+        total_used_bytes = df_stats.get('total_used_bytes', 0)
+        total_avail_bytes = df_stats.get('total_avail_bytes', 0)
+        c_data.fields['osd_bytes'] = total_bytes
+        c_data.fields['osd_bytes_used'] = total_used_bytes
+        c_data.fields['osd_bytes_avail'] = total_avail_bytes
+        if total_bytes and total_avail_bytes:
+            c_data.fields['osd_bytes_used_percentage'] = \
+                round(float(total_used_bytes) / float(total_bytes) * 100, 4)
+        else:
+            c_data.fields['osd_bytes_used_percentage'] = 0.0000
 
         pg_stats = obj_api.get_pg_stats()
         num_bytes = 0
