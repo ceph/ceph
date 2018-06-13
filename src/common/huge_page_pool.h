@@ -18,6 +18,8 @@
 
 #include <boost/container/flat_map.hpp>
 
+#include "common/containers.h"
+
 constexpr unsigned long long operator"" _M (unsigned long long n) {
   return n << 20;
 }
@@ -28,38 +30,37 @@ class huge_page_pool {
 public:
   static constexpr std::size_t huge_page_size { 2_M };
   // TOOD: align to cache line boundary
-  // TODO: this should a vector of atomic address for the sake
-  // of correctness.
-  std::array<std::atomic<void*>, 64> pages;
   struct page_info_entry_t {
     std::uint8_t index;
     bool is_mmaped;
   };
-  boost::container::flat_map<void*, page_info_entry_t> page_info;
 
-  huge_page_pool(const std::size_t pool_size) {
-    assert(pool_size == pages.size());
-    for (std::uint8_t i = 0; i < pages.size(); i++) {
-      pages[i] = ::mmap(nullptr, huge_page_size, PROT_READ | PROT_WRITE,
-      		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE |
-      		  MAP_HUGETLB, -1, 0);
-      if (pages[i] == MAP_FAILED) {
-        // let's fallback-allocate in a way that stil allows the kernel
-        // to give us a THP (transparent huge page).
-        const int r = \
-          ::posix_memalign((void**)(void*)&pages[i],
-      		     huge_page_size, huge_page_size);
-        if (r) {
-          // there is no jumbo, sorry.
-          pages[i] = nullptr;
-        } else {
-	  page_info[pages[i]] = { i, false };
-	}
-      } else {
-        page_info[pages[i]] = { i, true };
-      }
-    }
-  }
+  boost::container::flat_map<void*, page_info_entry_t> page_info;
+  ceph::containers::tiny_vector<std::atomic<void*>, 64> pages;
+
+  huge_page_pool(const std::size_t pool_size)
+    : pages(pool_size, [&](const std::uint8_t idx, auto emplacer) {
+        void* page;
+        page = ::mmap(nullptr, huge_page_size, PROT_READ | PROT_WRITE,
+      		      MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE |
+      		      MAP_HUGETLB, -1, 0);
+        if (page == MAP_FAILED) {
+          // let's fallback-allocate in a way that stil allows the kernel
+          // to give us a THP (transparent huge page).
+          const int r = ::posix_memalign((void**)(void*)&page,
+					 huge_page_size, huge_page_size);
+	  if (r) {
+	    // there is no jumbo, sorry.
+            page = nullptr;
+	  } else {
+	    page_info[page] = { idx, false };
+	  }
+	} else {
+          page_info[page] = { idx, true };
+        }
+	emplacer.emplace(page);
+      }) {
+   }
 
   ~huge_page_pool() {
     // move this to ptr's deleter, handle free()
