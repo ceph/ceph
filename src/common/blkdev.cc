@@ -384,12 +384,10 @@ std::string get_device_id(const std::string& devname)
 
   udev = udev_new();
   if (!udev) {
-    //derr << "failed to run udev_new(), when calling for device " << devname << dendl;
     return {};
   }
   dev = udev_device_new_from_subsystem_sysname(udev, "block", devname.c_str());
   if (!dev) {
-    //derr << "failed to run udev_device_new_from_subsystem_sysname() for " << devname << dendl;
     udev_unref(udev);
     return {};
   }
@@ -405,7 +403,6 @@ std::string get_device_id(const std::string& devname)
   udev_unref(udev);
 
   if (!device_id.empty()) {
-    //dout << devname << " serial number: " << data << dendl;
     std::replace(device_id.begin(), device_id.end(), ' ', '_');
     return device_id;
   }
@@ -413,7 +410,6 @@ std::string get_device_id(const std::string& devname)
   // either udev_device_get_property_value() failed, or succeeded but
   // returned nothing; trying to read from files.  note that the 'vendor'
   // file rarely contains the actual vendor; it's usually 'ATA'.
-  //derr << "udev could not retrieve serial number of " << devname << dendl;
   std::string model, serial;
   model = get_block_device_string_property_wrap(devname, "device/model");
   serial = get_block_device_string_property_wrap(devname, "device/serial");
@@ -434,7 +430,6 @@ std::string get_block_device_string_property_wrap(const std::string &devname,
   std::string prop_val;
   int ret = get_block_device_string_property(devname.c_str(), property.c_str(), buff, sizeof(buff));
   if (ret < 0) {
-    //derr << "Could not retrieve content of " << property << " file of " << devname << dendl;
     return {};
   }
   prop_val = buff;
