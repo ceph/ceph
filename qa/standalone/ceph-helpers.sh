@@ -120,6 +120,9 @@ function setup() {
     teardown $dir || return 1
     mkdir -p $dir
     mkdir -p $(get_asok_dir)
+    if [ $(ulimit -n) -le 1024 ]; then
+        ulimit -n 4096 || return 1
+    fi
 }
 
 function test_setup() {
