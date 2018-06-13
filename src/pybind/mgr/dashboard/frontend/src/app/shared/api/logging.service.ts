@@ -7,9 +7,7 @@ import { ApiModule } from './api.module';
   providedIn: ApiModule
 })
 export class LoggingService {
-
-  constructor(private http: HttpClient) {
-  }
+  constructor(private http: HttpClient) {}
 
   jsError(url, message, stack) {
     const request = {
@@ -19,5 +17,4 @@ export class LoggingService {
     };
     return this.http.post('ui-api/logging/js-error', request);
   }
-
 }

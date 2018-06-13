@@ -2,19 +2,19 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../unit-test-helper';
-import { RbdMirroringService } from './rbd-mirroring.service';
+import { LoggingService } from './logging.service';
 
-describe('RbdMirroringService', () => {
-  let service: RbdMirroringService;
+describe('LoggingService', () => {
+  let service: LoggingService;
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    providers: [RbdMirroringService],
+    providers: [LoggingService],
     imports: [HttpClientTestingModule]
   });
 
   beforeEach(() => {
-    service = TestBed.get(RbdMirroringService);
+    service = TestBed.get(LoggingService);
     httpTesting = TestBed.get(HttpTestingController);
   });
 
@@ -26,9 +26,14 @@ describe('RbdMirroringService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call get', () => {
-    service.get().subscribe();
-    const req = httpTesting.expectOne('api/rbdmirror');
-    expect(req.request.method).toBe('GET');
+  it('should call jsError', () => {
+    service.jsError('foo', 'bar', 'baz').subscribe();
+    const req = httpTesting.expectOne('ui-api/logging/js-error');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({
+      url: 'foo',
+      message: 'bar',
+      stack: 'baz'
+    });
   });
 });
