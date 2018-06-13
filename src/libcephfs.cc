@@ -147,6 +147,14 @@ public:
     shutdown();
     return 0;
   }
+  int abort_conn()
+  {
+    if (mounted) {
+      client->abort_conn();
+      mounted = false;
+    }
+    return 0;
+  }
 
   void shutdown()
   {
@@ -347,6 +355,11 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
 extern "C" int ceph_unmount(struct ceph_mount_info *cmount)
 {
   return cmount->unmount();
+}
+
+extern "C" int ceph_abort_conn(struct ceph_mount_info *cmount)
+{
+  return cmount->abort_conn();
 }
 
 extern "C" int ceph_release(struct ceph_mount_info *cmount)
