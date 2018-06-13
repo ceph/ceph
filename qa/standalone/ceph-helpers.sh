@@ -18,6 +18,7 @@
 # GNU Library Public License for more details.
 #
 TIMEOUT=300
+WAIT_FOR_CLEAN_TIMEOUT=90
 PG_NUM=4
 CEPH_BUILD_VIRTUALENV=${TMPDIR:-/tmp}
 
@@ -1387,7 +1388,7 @@ function test_get_timeout_delays() {
 
 ##
 # Wait until the cluster becomes clean or if it does not make progress
-# for $TIMEOUT seconds.
+# for $WAIT_FOR_CLEAN_TIMEOUT seconds.
 # Progress is measured either via the **get_is_making_recovery_progress**
 # predicate or if the number of clean PGs changes (as returned by get_num_active_clean)
 #
@@ -1396,7 +1397,7 @@ function test_get_timeout_delays() {
 function wait_for_clean() {
     local num_active_clean=-1
     local cur_active_clean
-    local -a delays=($(get_timeout_delays $TIMEOUT .1))
+    local -a delays=($(get_timeout_delays $WAIT_FOR_CLEAN_TIMEOUT .1))
     local -i loop=0
 
     flush_pg_stats || return 1
@@ -1432,7 +1433,7 @@ function test_wait_for_clean() {
     run_mon $dir a --osd_pool_default_size=1 || return 1
     run_mgr $dir x || return 1
     create_rbd_pool || return 1
-    ! TIMEOUT=1 wait_for_clean || return 1
+    ! WAIT_FOR_CLEAN_TIMEOUT=1 wait_for_clean || return 1
     run_osd $dir 0 || return 1
     wait_for_clean || return 1
     teardown $dir || return 1
