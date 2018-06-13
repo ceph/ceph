@@ -6,6 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ModalModule } from 'ngx-bootstrap';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { SharedModule } from '../../../shared/shared.module';
 import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RgwUserListComponent } from './rgw-user-list.component';
 
@@ -15,7 +16,7 @@ describe('RgwUserListComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserListComponent],
-    imports: [RouterTestingModule, HttpClientTestingModule, ModalModule.forRoot()],
+    imports: [RouterTestingModule, HttpClientTestingModule, ModalModule.forRoot(), SharedModule],
     providers: [RgwUserService],
     schemas: [NO_ERRORS_SCHEMA]
   });

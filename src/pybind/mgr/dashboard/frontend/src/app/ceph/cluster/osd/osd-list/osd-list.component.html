@@ -10,7 +10,8 @@
           selectionType="single"
           (updateSelection)="updateSelection($event)"
           [updateSelectionOnRefresh]="false">
-  <div class="table-actions">
+  <div class="table-actions"
+       *ngIf="permission.update">
     <div class="btn-group"
          dropdown>
       <button dropdownToggle

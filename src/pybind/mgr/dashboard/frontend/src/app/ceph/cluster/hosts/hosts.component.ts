@@ -2,7 +2,9 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { HostService } from '../../../shared/api/host.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { Permissions } from '../../../shared/models/permissions';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-hosts',
@@ -10,15 +12,20 @@ import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.p
   styleUrls: ['./hosts.component.scss']
 })
 export class HostsComponent implements OnInit {
-
+  permissions: Permissions;
   columns: Array<CdTableColumn> = [];
   hosts: Array<object> = [];
   isLoadingHosts = false;
 
   @ViewChild('servicesTpl') public servicesTpl: TemplateRef<any>;
 
-  constructor(private hostService: HostService,
-              private cephShortVersionPipe: CephShortVersionPipe) { }
+  constructor(
+    private authStorageService: AuthStorageService,
+    private hostService: HostService,
+    private cephShortVersionPipe: CephShortVersionPipe
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit() {
     this.columns = [
@@ -46,19 +53,32 @@ export class HostsComponent implements OnInit {
     if (this.isLoadingHosts) {
       return;
     }
+    const typeToPermissionKey = {
+      mds: 'cephfs',
+      mon: 'monitor',
+      osd: 'osd',
+      rgw: 'rgw',
+      'rbd-mirror': 'rbdMirroring',
+      mgr: 'manager'
+    };
     this.isLoadingHosts = true;
-    this.hostService.list().then((resp) => {
-      resp.map((host) => {
-        host.services.map((service) => {
-          service.cdLink = `/perf_counters/${service.type}/${service.id}`;
-          return service;
+    this.hostService
+      .list()
+      .then((resp) => {
+        resp.map((host) => {
+          host.services.map((service) => {
+            service.cdLink = `/perf_counters/${service.type}/${service.id}`;
+            const permissionKey = typeToPermissionKey[service.type];
+            service.canRead = this.permissions[permissionKey].read;
+            return service;
+          });
+          return host;
         });
-        return host;
+        this.hosts = resp;
+        this.isLoadingHosts = false;
+      })
+      .catch(() => {
+        this.isLoadingHosts = false;
       });
-      this.hosts = resp;
-      this.isLoadingHosts = false;
-    }).catch(() => {
-      this.isLoadingHosts = false;
-    });
   }
 }

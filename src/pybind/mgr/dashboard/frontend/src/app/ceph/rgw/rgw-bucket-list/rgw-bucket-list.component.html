@@ -20,27 +20,34 @@
     <div class="btn-group" dropdown>
       <button type="button"
               class="btn btn-sm btn-primary"
-              *ngIf="!selection.hasSelection"
+              *ngIf="permission.create && (
+                       permission.update && permission.delete && !selection.hasSelection ||
+                       !permission.update && !permission.delete ||
+                       !permission.update && permission.delete && !selection.hasMultiSelection ||
+                       permission.update && !selection.hasSingleSelection && !permission.delete)"
               routerLink="/rgw/bucket/add">
         <i class="fa fa-fw fa-plus"></i>
         <ng-container i18n>Add</ng-container>
       </button>
       <button type="button"
               class="btn btn-sm btn-primary"
-              *ngIf="selection.hasSingleSelection"
+              [ngClass]="{'disabled': !selection.hasSelection}"
+              *ngIf="permission.update && (!permission.create && !selection.hasMultiSelection || selection.hasSingleSelection)"
               routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket }}">
         <i class="fa fa-fw fa-pencil"></i>
         <ng-container i18n>Edit</ng-container>
       </button>
       <button type="button"
               class="btn btn-sm btn-primary"
-              *ngIf="selection.hasMultiSelection"
+              [ngClass]="{'disabled': !selection.hasSelection}"
+              *ngIf="permission.delete && (!permission.update && !permission.create || selection.hasMultiSelection)"
               (click)="deleteAction()">
         <i class="fa fa-fw fa-trash-o"></i>
         <ng-container i18n>Delete</ng-container>
       </button>
       <button type="button"
               class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split"
+              *ngIf="((permission.create?1:0) + (permission.update?1:0) + (permission.delete?1:0)) > 1"
               dropdownToggle>
         <span class="caret"></span>
         <span class="sr-only"></span>
@@ -48,7 +55,8 @@
       <ul class="dropdown-menu"
           *dropdownMenu
           role="menu">
-        <li role="menuitem">
+        <li role="menuitem"
+            *ngIf="permission.create">
           <a class="dropdown-item"
              routerLink="/rgw/bucket/add"
              i18n>
@@ -57,6 +65,7 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.update"
             [ngClass]="{'disabled': !selection.hasSingleSelection}">
           <a class="dropdown-item"
              routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket }}"
@@ -66,6 +75,7 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.delete"
             [ngClass]="{'disabled': !selection.hasSelection}">
           <a class="dropdown-item"
              (click)="deleteAction()"
