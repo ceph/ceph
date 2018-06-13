@@ -20,6 +20,7 @@ import { RgwDaemonListComponent } from './ceph/rgw/rgw-daemon-list/rgw-daemon-li
 import { RgwUserFormComponent } from './ceph/rgw/rgw-user-form/rgw-user-form.component';
 import { RgwUserListComponent } from './ceph/rgw/rgw-user-list/rgw-user-list.component';
 import { LoginComponent } from './core/auth/login/login.component';
+import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
@@ -107,6 +108,7 @@ const routes: Routes = [
   { path: 'cephfs', component: CephfsListComponent, canActivate: [AuthGuardService] },
   { path: 'configuration', component: ConfigurationComponent, canActivate: [AuthGuardService] },
   { path: 'mirroring', component: MirroringComponent, canActivate: [AuthGuardService] },
+  { path: '403', component: ForbiddenComponent },
   { path: '404', component: NotFoundComponent },
   { path: 'osd', component: OsdListComponent, canActivate: [AuthGuardService] },
   { path: '**', redirectTo: '/404' }

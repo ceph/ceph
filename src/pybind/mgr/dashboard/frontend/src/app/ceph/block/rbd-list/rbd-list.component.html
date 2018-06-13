@@ -24,29 +24,36 @@
          dropdown>
       <button type="button"
               class="btn btn-sm btn-primary"
-              *ngIf="!selection.hasSingleSelection"
+              *ngIf="permission.create && (!permission.update || !selection.hasSingleSelection)"
               routerLink="/rbd/add">
-        <i class="fa fa-fw fa-plus"></i>
-        <span i18n>Add</span>
+        <i class="fa fa-fw fa-plus"></i><span i18n>Add</span>
       </button>
       <button type="button"
               class="btn btn-sm btn-primary"
-              *ngIf="selection.hasSingleSelection"
-              [ngClass]="{'disabled': selection.first().executing}"
+              *ngIf="permission.update && (!permission.create || permission.create && selection.hasSingleSelection)"
+              [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}"
               routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}">
-        <i class="fa fa-fw fa-pencil"></i>
-        <span i18n>Edit</span>
+        <i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span>
+      </button>
+      <button type="button"
+              class="btn btn-sm btn-primary"
+              *ngIf="permission.delete && !permission.update && !permission.create"
+              [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}"
+              (click)="deleteRbdModal()">
+        <i class="fa fa-fw fa-trash-o"></i><span i18n>Delete</span>
       </button>
       <button type="button"
               dropdownToggle
-              class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split">
+              class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split"
+              *ngIf="permission.create || permission.update">
         <span class="caret"></span>
         <span class="sr-only"></span>
       </button>
       <ul *dropdownMenu
           class="dropdown-menu"
           role="menu">
-        <li role="menuitem">
+        <li role="menuitem"
+            *ngIf="permission.create">
           <a class="dropdown-item"
              routerLink="/rbd/add">
             <i class="fa fa-fw fa-plus"></i>
@@ -54,6 +61,7 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.update"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
              routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}">
@@ -62,6 +70,7 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.create"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
              routerLink="/rbd/copy/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}">
@@ -70,6 +79,7 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.update"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing || !selection.first().parent}">
           <a class="dropdown-item"
              (click)="flattenRbdModal()">
@@ -78,6 +88,7 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.delete"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
              (click)="deleteRbdModal()">

@@ -40,7 +40,8 @@
       <!-- Cluster -->
       <li dropdown
           routerLinkActive="active"
-          class="dropdown tc_menuitem tc_menuitem_cluster">
+          class="dropdown tc_menuitem tc_menuitem_cluster"
+          *ngIf="permissions.hosts.read || permissions.monitor.read || permissions.osd.read || permissions.configOpt.read">
         <a dropdownToggle
            class="dropdown-toggle"
            data-toggle="dropdown">
@@ -50,28 +51,32 @@
         <ul *dropdownMenu
             class="dropdown-menu">
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_hosts">
+              class="tc_submenuitem tc_submenuitem_hosts"
+              *ngIf="permissions.hosts.read">
             <a i18n
                class="dropdown-item"
                routerLink="/hosts">Hosts
             </a>
           </li>
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_monitor">
+              class="tc_submenuitem tc_submenuitem_cluster_monitor"
+              *ngIf="permissions.monitor.read">
             <a i18n
                class="dropdown-item"
                routerLink="/monitor/"> Monitors
             </a>
           </li>
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_hosts">
+              class="tc_submenuitem tc_submenuitem_hosts"
+              *ngIf="permissions.osd.read">
             <a i18n
                class="dropdown-item"
                routerLink="/osd">OSDs
             </a>
           </li>
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_configuration">
+              class="tc_submenuitem tc_submenuitem_configuration"
+              *ngIf="permissions.configOpt.read">
             <a i18n
                class="dropdown-item"
                routerLink="/configuration">Configuration Doc.
@@ -82,7 +87,8 @@
 
       <!-- Pools -->
       <li routerLinkActive="active"
-          class="tc_menuitem tc_menuitem_pool">
+          class="tc_menuitem tc_menuitem_pool"
+          *ngIf="permissions.pool.read">
         <a i18n
            routerLink="/pool">Pool
         </a>
@@ -91,7 +97,8 @@
       <!-- Block -->
       <li dropdown
           routerLinkActive="active"
-          class="dropdown tc_menuitem tc_menuitem_block">
+          class="dropdown tc_menuitem tc_menuitem_block"
+          *ngIf="permissions.rbdImage.read || permissions.rbdMirroring.read || permissions.iscsi.read">
         <a dropdownToggle
            class="dropdown-toggle"
            data-toggle="dropdown"
@@ -101,14 +108,16 @@
         </a>
 
         <ul class="dropdown-menu">
-          <li routerLinkActive="active">
+          <li routerLinkActive="active"
+              *ngIf="permissions.rbdImage.read">
             <a i18n
                class="dropdown-item"
                routerLink="/block/rbd">Images</a>
           </li>
 
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_block_mirroring">
+              class="tc_submenuitem tc_submenuitem_block_mirroring"
+              *ngIf="permissions.rbdMirroring.read">
             <a i18n
                class="dropdown-item"
                routerLink="/mirroring/"> Mirroring
@@ -119,7 +128,8 @@
             </a>
           </li>
 
-          <li routerLinkActive="active">
+          <li routerLinkActive="active"
+              *ngIf="permissions.iscsi.read">
             <a i18n
                class="dropdown-item"
                routerLink="/block/iscsi">iSCSI</a>
@@ -130,7 +140,8 @@
 
       <!-- Filesystem -->
       <li routerLinkActive="active"
-          class="tc_menuitem tc_menuitem_cephs">
+          class="tc_menuitem tc_menuitem_cephs"
+          *ngIf="permissions.cephfs.read">
         <a i18n
            routerLink="/cephfs">Filesystems
         </a>
@@ -153,7 +164,8 @@
       <!-- Object Gateway -->
       <li dropdown
           routerLinkActive="active"
-          class="dropdown tc_menuitem tc_menuitem_rgw">
+          class="dropdown tc_menuitem tc_menuitem_rgw"
+          *ngIf="permissions.rgw.read">
         <a dropdownToggle
            class="dropdown-toggle"
            data-toggle="dropdown">
