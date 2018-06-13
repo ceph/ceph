@@ -31,11 +31,15 @@ public:
   // TODO: this should a vector of atomic address for the sake
   // of correctness.
   std::array<std::atomic<void*>, 64> pages;
-  boost::container::flat_map<void*, std::uint8_t> page2owner;
+  struct page_info_entry_t {
+    std::uint8_t index;
+    bool is_mmaped;
+  };
+  boost::container::flat_map<void*, page_info_entry_t> page_info;
 
   huge_page_pool(const std::size_t pool_size) {
     assert(pool_size == pages.size());
-    for (std::size_t i = 0; i < pages.size(); i++) {
+    for (std::uint8_t i = 0; i < pages.size(); i++) {
       pages[i] = ::mmap(nullptr, huge_page_size, PROT_READ | PROT_WRITE,
       		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE |
       		  MAP_HUGETLB, -1, 0);
@@ -48,11 +52,11 @@ public:
         if (r) {
           // there is no jumbo, sorry.
           pages[i] = nullptr;
-        }
-      }
-
-      if (pages[i] != nullptr) {
-        page2owner[pages[i]] = i;
+        } else {
+	  page_info[pages[i]] = { i, false };
+	}
+      } else {
+        page_info[pages[i]] = { i, true };
       }
     }
   }
@@ -61,7 +65,11 @@ public:
     // move this to ptr's deleter, handle free()
     for (const auto& p : pages) {
       if (p) {
-        ::munmap(p, huge_page_size);
+	if (page_info.at(p).is_mmaped) {
+          ::munmap(p, huge_page_size);
+	} else {
+	  free(p);
+	}
       }
     }
   }
@@ -91,7 +99,7 @@ public:
   }
 
   void put_page(void* p) {
-    const std::uint8_t owner_idx = page2owner.at(p);
+    const std::uint8_t owner_idx = page_info.at(p).index;
     const void* const oldval = pages[owner_idx].exchange(p);
     assert(oldval == nullptr);
   }
