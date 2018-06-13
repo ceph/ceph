@@ -189,12 +189,6 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
       m_features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
     }
     if ((m_features & RBD_FEATURE_FAST_DIFF) != 0) {
-      if ((m_new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
-	lderr(cct) << "cannot enable fast-diff. object-map must be "
-                      "enabled before enabling fast-diff." << dendl;
-	*result = -EINVAL;
-	break;
-      }
       m_enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
       m_features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
     }
