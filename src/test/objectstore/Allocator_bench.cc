@@ -68,7 +68,7 @@ class AllocTracker
 
 public:
   AllocTracker(uint64_t capacity, uint64_t alloc_unit)
-    : u1(capacity, alloc_unit)
+    : u1(0, capacity)
   {
     assert(alloc_unit >= 0x100);
     assert(capacity <= (uint64_t(1) << 48)); // we use 5 octets (bytes 1 - 5) to store
