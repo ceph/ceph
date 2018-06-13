@@ -557,6 +557,7 @@ set(libcommon_files
   common/hostname.cc
   common/util.cc
   common/PriorityCache.cc
+  common/huge_page_pool.cc
   librbd/Features.cc
   arch/probe.cc
   ${auth_files}

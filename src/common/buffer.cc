@@ -282,8 +282,8 @@ using namespace ceph;
     MEMPOOL_CLASS_HELPERS();
 
     raw_huge_pages(const unsigned l)
-      : raw(p2roundup(l, ceph::huge_page_pool<64>::huge_page_size)) {
-      data = (char*)ceph::huge_page_pool<64>::get_instance().get_page();
+      : raw(p2roundup(l, ceph::huge_page_pool::huge_page_size)) {
+      data = (char*)ceph_get_huge_page_pool().get_page();
       if (!data) {
         const int r = ::posix_memalign((void**)(void*)&data,
 				       CEPH_PAGE_SIZE, len);
@@ -299,13 +299,13 @@ using namespace ceph;
 
       bdout << "raw_huge_pages " << this << " alloc " << (void *)data
 	    << " l=" << l << ", align="
-	    << ceph::huge_page_pool<64>::huge_page_size
+	    << ceph::huge_page_pool::huge_page_size
 	    << " total_alloc=" << buffer::get_total_alloc() << bendl;
     }
 
     ~raw_huge_pages() override {
       if (is_hugepage) {
-        ceph::huge_page_pool<64>::get_instance().put_page(data);
+        ceph_get_huge_page_pool().put_page(data);
       } else {
 	free(data);
       }

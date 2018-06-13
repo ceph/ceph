@@ -12,6 +12,10 @@
  * 
  */
 
+#include <array>
+#include <atomic>
+#include <thread>
+
 #include <boost/container/flat_map.hpp>
 
 constexpr unsigned long long operator"" _M (unsigned long long n) {
@@ -20,22 +24,17 @@ constexpr unsigned long long operator"" _M (unsigned long long n) {
 
 namespace ceph {
 
-template <std::size_t N>
 class huge_page_pool {
 public:
   static constexpr std::size_t huge_page_size { 2_M };
   // TOOD: align to cache line boundary
   // TODO: this should a vector of atomic address for the sake
   // of correctness.
-  std::array<std::atomic<void*>, N> pages;
+  std::array<std::atomic<void*>, 64> pages;
   boost::container::flat_map<void*, std::uint8_t> page2owner;
 
-  static huge_page_pool& get_instance() {
-    static huge_page_pool page_pool;
-    return page_pool;
-  }
-
-  huge_page_pool() {
+  huge_page_pool(const std::size_t pool_size) {
+    assert(pool_size == pages.size());
     for (std::size_t i = 0; i < pages.size(); i++) {
       pages[i] = ::mmap(nullptr, huge_page_size, PROT_READ | PROT_WRITE,
       		  MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE |
@@ -99,3 +98,6 @@ public:
 };
 
 }
+
+extern void ceph_init_huge_page_pools(class md_config_t* cct);
+extern ceph::huge_page_pool& ceph_get_huge_page_pool();

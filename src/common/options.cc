@@ -789,6 +789,11 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
+    Option("huge_page_pool_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(64)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("Number of huge pages to preallocate for each HP pool"),
+
     Option("key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Authentication key")

@@ -34,6 +34,7 @@
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
 #include "common/ceph_argparse.h"
+#include "common/huge_page_pool.h"
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -246,6 +247,8 @@ int main(int argc, const char **argv)
     }
     forker.exit(0);
   }
+
+  ceph_init_huge_page_pools(g_conf);
 
   // whoami
   char *end;
