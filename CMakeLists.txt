@@ -594,6 +594,13 @@ set(Boost_USE_MULTITHREADED ON)
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
+option(WITH_SYSTEM_NPM "Assume that dashboard build tools already installed through packages" OFF)
+if(WITH_SYSTEM_NPM)
+  find_program(NPM npm)
+  if(NOT NPM)
+    message(FATAL_ERROR "Can't find npm.")
+  endif()
+endif()
 
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 

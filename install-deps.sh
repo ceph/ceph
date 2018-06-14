@@ -107,6 +107,8 @@ if [ x`uname`x = xFreeBSDx ]; then
         devel/py-prettytable \
 	www/py-routes \
         www/py-flask \
+	www/node \
+	www/npm \
         www/fcgi \
 	security/oath-toolkit \
         sysutils/flock \

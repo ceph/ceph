@@ -15,7 +15,7 @@ function(add_npm_command)
   cmake_parse_arguments(NC "${options}" "${single_kw}" "${multi_kw}" ${ARGN})
   string(REPLACE ";" " " command "${NC_COMMAND}")
   if(NC_NODEENV)
-    string(REGEX REPLACE "^(npm .*)$" ". ${mgr-dashboard-nodeenv}/bin/activate && \\1 && deactivate" command ${command})
+    string(REGEX REPLACE "^(npm .*)$" ". ${mgr-dashboard-nodeenv-dir}/bin/activate && \\1 && deactivate" command ${command})
   endif()
   string(REPLACE " " ";" command "${command}")
   add_custom_command(
@@ -28,20 +28,34 @@ endfunction(add_npm_command)
 
 if(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
 
-set(mgr-dashboard-nodeenv ${CMAKE_CURRENT_BINARY_DIR}/node-env)
+if(WITH_SYSTEM_NPM)
+  set(mgr-dashboard-nodeenv-dir )
+  set(nodeenv "")
+  add_custom_target(mgr-dashboard-frontend-deps
+    DEPENDS frontend/node_modules 
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
+  )
+else()
+  set(mgr-dashboard-nodeenv-dir ${CMAKE_CURRENT_BINARY_DIR}/node-env)
+  set(nodeenv NODEENV)
 
-add_custom_command(
-  OUTPUT "${mgr-dashboard-nodeenv}/bin/npm"
-  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${mgr-dashboard-nodeenv}
-  COMMAND ${mgr-dashboard-nodeenv}/bin/pip install nodeenv
-  COMMAND ${mgr-dashboard-nodeenv}/bin/nodeenv -p --node=8.11.3
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-  COMMENT "dashboard nodeenv is being installed"
-)
-add_custom_target(mgr-dashboard-nodeenv
-  DEPENDS ${mgr-dashboard-nodeenv}/bin/npm
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-)
+  add_custom_command(
+    OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
+    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${mgr-dashboard-nodeenv-dir}
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=8.11.3
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "dashboard nodeenv is being installed"
+  )
+  add_custom_target(mgr-dashboard-nodeenv
+    DEPENDS ${mgr-dashboard-nodeenv-dir}/bin/npm
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+  )
+  add_custom_target(mgr-dashboard-frontend-deps
+    DEPENDS frontend/node_modules mgr-dashboard-nodeenv
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
+  )
+endif()
 
 add_npm_command(
   OUTPUT "${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend/node_modules"
@@ -49,12 +63,7 @@ add_npm_command(
   DEPENDS frontend/package.json
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend dependencies are being installed"
-  NODEENV
-)
-
-add_custom_target(mgr-dashboard-frontend-deps
-  DEPENDS frontend/node_modules mgr-dashboard-nodeenv
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
+  ${nodeenv}
 )
 
 # Glob some frontend files. With CMake 3.6, this can be simplified
@@ -87,7 +96,7 @@ add_npm_command(
   DEPENDS ${frontend_src} frontend/node_modules
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   COMMENT "dashboard frontend is being created"
-  NODEENV
+  ${nodeenv}
 )
 add_custom_target(mgr-dashboard-frontend-build
   ALL
