@@ -294,6 +294,14 @@ class DB_API(object):
             self.module.log.error("error: %s" % str(e))
         return data_jaon
 
+    def get_osd_hostname(self, osd_id):
+        result = ""
+        osd_metadata = self.get_osd_metadata(osd_id)
+        if osd_metadata:
+            osd_host = osd_metadata.get("hostname", "None")
+            result = osd_host
+        return result
+
     def get_file_systems(self):
         return self.module.get('fs_map').get('filesystems', [])
 
@@ -322,12 +330,4 @@ class DB_API(object):
         result['osd_stats'] = self.module.get('osd_stats')
         result['health'] = self.get_health_status()
         result['mon_status'] = self.get_mon_status()
-        return result
-
-    def get_osd_hostname(self, osd_id):
-        result = ""
-        osd_metadata = self.get_osd_metadata(osd_id)
-        if osd_metadata:
-            osd_host = osd_metadata.get("hostname", "None")
-            result = osd_host
         return result

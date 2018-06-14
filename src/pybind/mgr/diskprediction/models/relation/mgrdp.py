@@ -50,6 +50,4 @@ class MGRDpPG(BaseDP):
 
 
 class MGRDpDisk(BaseDP):
-    _fields = [
-        'fsid', 'osd_id', 'serial_number', 'disk_name'
-    ]
+    _fields = ['host_domain_id', 'model', 'size']

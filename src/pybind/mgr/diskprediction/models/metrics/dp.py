@@ -264,6 +264,7 @@ class Ceph_OSD(MetricsField):
         self.tags['osd_id'] = None
         self.tags['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
+        self.tags['host_domain_id'] = None
         self.fields['op_w'] = None
         self.fields['op_in_bytes'] = None
         self.fields['op_r'] = None
