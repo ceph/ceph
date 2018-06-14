@@ -18,7 +18,6 @@ class StupidAllocator2 : public Allocator {
   std::mutex lock;
 
   int64_t num_free;     ///< total bytes in freelist
-  int64_t num_reserved; ///< reserved bytes
 
   struct region;
   typedef mempool::bluestore_alloc::pool_allocator<
@@ -57,9 +56,6 @@ class StupidAllocator2 : public Allocator {
 public:
   StupidAllocator2(CephContext* cct);
   ~StupidAllocator2() override;
-
-  int reserve(uint64_t need) override;
-  void unreserve(uint64_t unused) override;
 
   int64_t allocate(
     uint64_t want_size, uint64_t alloc_unit, uint64_t max_alloc_size,

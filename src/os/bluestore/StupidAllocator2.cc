@@ -12,7 +12,6 @@
 
 StupidAllocator2::StupidAllocator2(CephContext* cct)
   : cct(cct), num_free(0),
-    num_reserved(0),
     bins(bins_count),
     last_alloc(0)
 {
@@ -134,28 +133,6 @@ void StupidAllocator2::_remove_free(uint64_t offset, uint64_t length)
     length -= len;
   }
   assert(length == 0);
-}
-
-int StupidAllocator2::reserve(uint64_t need)
-{
-  std::lock_guard<std::mutex> l(lock);
-  ldout(cct, 10) << __func__ << " need 0x" << std::hex << need
-	   	 << " num_free 0x" << num_free
-	   	 << " num_reserved 0x" << num_reserved << std::dec << dendl;
-  if ((int64_t)need > num_free - num_reserved)
-    return -ENOSPC;
-  num_reserved += need;
-  return 0;
-}
-
-void StupidAllocator2::unreserve(uint64_t unused)
-{
-  std::lock_guard<std::mutex> l(lock);
-  ldout(cct, 10) << __func__ << " unused 0x" << std::hex << unused
-	   	 << " num_free 0x" << num_free
-	   	 << " num_reserved 0x" << num_reserved << std::dec << dendl;
-  assert(num_reserved >= (int64_t)unused);
-  num_reserved -= unused;
 }
 
 /*
@@ -368,9 +345,7 @@ int64_t StupidAllocator2::allocate_int(
   *offset = off;
 
   num_free -= len;
-  num_reserved -= len;
   assert(num_free >= 0);
-  assert(num_reserved >= 0);
   last_alloc = off + len;
   return 0;
 }
