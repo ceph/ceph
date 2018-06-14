@@ -110,4 +110,23 @@ on the filesystem cephfs_a, but client.1 cannot.
         caps: [osd] allow rw tag cephfs data=cephfs_a
 
 
+Snapshot restriction (the 's' flag)
+===========================================
+
+To create or delete snapshots, clients require the 's' flag in addition to 'rw'.
+Note that when capability string also contains the 'p' flag, the 's' flag must
+appear after it (all flags except 'rw' must be specified in alphabetical order).
+
+For example, in the following snippet client.0 can create or delete snapshots
+in the ``bar`` directory of filesystem ``cephfs_a``.
+
+::
+
+    client.0
+        key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
+        caps: [mds] allow rw, allow rws path=/bar
+        caps: [mon] allow r
+        caps: [osd] allow rw tag cephfs data=cephfs_a
+
+
 .. _User Management - Add a User to a Keyring: ../../rados/operations/user-management/#add-a-user-to-a-keyring
