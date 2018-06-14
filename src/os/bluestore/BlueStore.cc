@@ -4930,6 +4930,10 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       // put bluefs in the middle of the device in case it is an HDD
       uint64_t start = p2align((bdev->get_size() - initial) / 2,
 			       cct->_conf->bluefs_alloc_size);
+      //avoiding superblock overwrite
+      assert(cct->_conf->bluefs_alloc_size > _get_ondisk_reserved());
+      start = std::max(cct->_conf->bluefs_alloc_size, start);
+
       bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
       bluefs_extents.insert(start, initial);
     }
