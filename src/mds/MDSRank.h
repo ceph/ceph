@@ -485,6 +485,7 @@ class MDSRank {
         std::ostream &ss);
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
+    void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
 
     void cache_drop_send_reply(Formatter *f, C_MDS_Send_Command_Reply *reply, int r);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);

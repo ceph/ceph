@@ -328,6 +328,12 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "List the opening files and their caps");
   assert(r == 0);
+  r = admin_socket->register_command("dump inode",
+				     "dump inode " 
+                                     "name=number,type=CephInt,req=true",
+				     asok_hook,
+				     "dump inode by inode number");
+  assert(r == 0);
 }
 
 void MDSDaemon::clean_up_admin_socket()

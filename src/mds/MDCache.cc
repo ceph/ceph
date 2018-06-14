@@ -13078,3 +13078,13 @@ void MDCache::clear_dirty_bits_for_stray(CInode* diri) {
   }
 }
 
+bool MDCache::dump_inode(Formatter *f, uint64_t number) {
+  CInode *in = get_inode(number);
+  if (!in) {
+    return false;
+  }
+  f->open_object_section("inode");
+  in->dump(f, CInode::DUMP_DEFAULT | CInode::DUMP_PATH);
+  f->close_section();
+  return true;
+}
