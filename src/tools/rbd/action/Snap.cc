@@ -44,9 +44,9 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
   if (f) {
     f->open_array_section("snapshots");
   } else {
-    t.define_column("SNAPID", TextTable::RIGHT, TextTable::RIGHT);
+    t.define_column("SNAPID", TextTable::LEFT, TextTable::RIGHT);
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    t.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
+    t.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
     t.define_column("TIMESTAMP", TextTable::LEFT, TextTable::LEFT);
     if (all_snaps) {
       t.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
