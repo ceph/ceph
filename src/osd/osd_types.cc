@@ -558,8 +558,10 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
     return p - 1;
 }
 
-bool pg_t::is_merge(unsigned old_pg_num, unsigned new_pg_num,
-		    pg_t *parent) const
+bool pg_t::is_merge_source(
+  unsigned old_pg_num,
+  unsigned new_pg_num,
+  pg_t *parent) const
 {
   if (m_seed < old_pg_num &&
       m_seed >= new_pg_num) {
@@ -3465,9 +3467,9 @@ bool PastIntervals::is_new_interval(
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
     // pre-merge source
-    pgid.is_merge(old_pg_num_pending, new_pg_num_pending, 0) ||
+    pgid.is_merge_source(old_pg_num_pending, new_pg_num_pending, 0) ||
     // merge source
-    pgid.is_merge(old_pg_num, new_pg_num, 0) ||
+    pgid.is_merge_source(old_pg_num, new_pg_num, 0) ||
     // pre-merge target
     (pgid.ps() < new_pg_num_pending &&
      pgid.is_split(new_pg_num_pending, old_pg_num_pending, 0)) ||
