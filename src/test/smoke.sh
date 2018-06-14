@@ -52,7 +52,7 @@ function TEST_multimon() {
     ceph osd out 0
     wait_for_clean
 
-    rados -p foo bench 4 write -b 4096 --no-cleanup
+    timeout 8 rados -p foo bench 4 write -b 4096 --no-cleanup || return 1
     wait_for_clean
 
     ceph osd in 0
