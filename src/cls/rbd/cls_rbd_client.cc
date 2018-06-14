@@ -1254,6 +1254,40 @@ namespace librbd {
       return ioctx->operate(oid, &op);
     }
 
+    void dir_state_assert(librados::ObjectOperation *op,
+                          cls::rbd::DirectoryState directory_state)
+    {
+      bufferlist bl;
+      encode(directory_state, bl);
+      op->exec("rbd", "dir_state_assert", bl);
+    }
+
+    int dir_state_assert(librados::IoCtx *ioctx, const std::string &oid,
+                         cls::rbd::DirectoryState directory_state)
+    {
+      librados::ObjectWriteOperation op;
+      dir_state_assert(&op, directory_state);
+
+      return ioctx->operate(oid, &op);
+    }
+
+    void dir_state_set(librados::ObjectWriteOperation *op,
+                       cls::rbd::DirectoryState directory_state)
+    {
+      bufferlist bl;
+      encode(directory_state, bl);
+      op->exec("rbd", "dir_state_set", bl);
+    }
+
+    int dir_state_set(librados::IoCtx *ioctx, const std::string &oid,
+                      cls::rbd::DirectoryState directory_state)
+    {
+      librados::ObjectWriteOperation op;
+      dir_state_set(&op, directory_state);
+
+      return ioctx->operate(oid, &op);
+    }
+
     void dir_remove_image(librados::ObjectWriteOperation *op,
 			  const std::string &name, const std::string &id)
     {

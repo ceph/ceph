@@ -2538,6 +2538,96 @@ int dir_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return dir_remove_image_helper(hctx, name, id);
 }
 
+/**
+ * Verify the current state of the directory
+ *
+ * Input:
+ * @param state the DirectoryState of the directory
+ *
+ * Output:
+ * @returns -ENOENT if the state does not match
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_state_assert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::DirectoryState directory_state;
+  try {
+    auto iter = in->cbegin();
+    decode(directory_state, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::DirectoryState on_disk_directory_state;
+  int r = read_key(hctx, "state", &on_disk_directory_state);
+  if (r < 0) {
+    return r;
+  }
+
+  if (directory_state != on_disk_directory_state) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+/**
+ * Set the current state of the directory
+ *
+ * Input:
+ * @param state the DirectoryState of the directory
+ *
+ * Output:
+ * @returns -ENOENT if the state does not match
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_state_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::DirectoryState directory_state;
+  try {
+    auto iter = in->cbegin();
+    decode(directory_state, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  switch (directory_state) {
+  case cls::rbd::DIRECTORY_STATE_READY:
+    break;
+  case cls::rbd::DIRECTORY_STATE_ADD_DISABLED:
+    {
+      if (r == -ENOENT) {
+        return r;
+      }
+
+      // verify that the directory is empty
+      std::map<std::string, bufferlist> vals;
+      bool more;
+      r = cls_cxx_map_get_vals(hctx, RBD_DIR_NAME_KEY_PREFIX,
+                               RBD_DIR_NAME_KEY_PREFIX, 1, &vals, &more);
+      if (r < 0) {
+        return r;
+      } else if (!vals.empty()) {
+        return -EBUSY;
+      }
+    }
+    break;
+  default:
+    return -EINVAL;
+  }
+
+  r = write_key(hctx, "state", directory_state);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int object_map_read(cls_method_context_t hctx, BitVector<2> &object_map)
 {
   uint64_t size;
@@ -6122,6 +6212,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_dir_add_image;
   cls_method_handle_t h_dir_remove_image;
   cls_method_handle_t h_dir_rename_image;
+  cls_method_handle_t h_dir_state_assert;
+  cls_method_handle_t h_dir_state_set;
   cls_method_handle_t h_object_map_load;
   cls_method_handle_t h_object_map_save;
   cls_method_handle_t h_object_map_resize;
@@ -6338,6 +6430,11 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "dir_rename_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_rename_image, &h_dir_rename_image);
+  cls_register_cxx_method(h_class, "dir_state_assert", CLS_METHOD_RD,
+                          dir_state_assert, &h_dir_state_assert);
+  cls_register_cxx_method(h_class, "dir_state_set",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+                          dir_state_set, &h_dir_state_set);
 
   /* methods for the rbd_object_map.$image_id object */
   cls_register_cxx_method(h_class, "object_map_load",

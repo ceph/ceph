@@ -13,8 +13,9 @@
 
 class Context;
 namespace librados {
-  class ObjectReadOperation;
   class IoCtx;
+  class ObjectOperation;
+  class ObjectReadOperation;
   class ObjectWriteOperation;
 }
 
@@ -289,6 +290,14 @@ namespace librbd {
     void dir_rename_image(librados::ObjectWriteOperation *op,
 			  const std::string &src, const std::string &dest,
 			  const std::string &id);
+    void dir_state_assert(librados::ObjectOperation *op,
+                          cls::rbd::DirectoryState directory_state);
+    int dir_state_assert(librados::IoCtx *ioctx, const std::string &oid,
+                         cls::rbd::DirectoryState directory_state);
+    void dir_state_set(librados::ObjectWriteOperation *op,
+                       cls::rbd::DirectoryState directory_state);
+    int dir_state_set(librados::IoCtx *ioctx, const std::string &oid,
+                      cls::rbd::DirectoryState directory_state);
 
     // operations on the rbd_object_map.$image_id object
     void object_map_load_start(librados::ObjectReadOperation *op);

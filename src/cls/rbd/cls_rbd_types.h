@@ -24,6 +24,24 @@ namespace rbd {
 static const uint32_t MAX_OBJECT_MAP_OBJECT_COUNT = 256000000;
 static const string RBD_GROUP_IMAGE_KEY_PREFIX = "image_";
 
+enum DirectoryState {
+  DIRECTORY_STATE_READY         = 0,
+  DIRECTORY_STATE_ADD_DISABLED  = 1
+};
+
+inline void encode(DirectoryState state, bufferlist& bl,
+		   uint64_t features=0)
+{
+  ceph::encode(static_cast<uint8_t>(state), bl);
+}
+
+inline void decode(DirectoryState &state, bufferlist::const_iterator& it)
+{
+  uint8_t int_state;
+  ceph::decode(int_state, it);
+  state = static_cast<DirectoryState>(int_state);
+}
+
 enum MirrorMode {
   MIRROR_MODE_DISABLED = 0,
   MIRROR_MODE_IMAGE    = 1,
