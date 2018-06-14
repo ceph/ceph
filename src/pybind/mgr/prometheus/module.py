@@ -44,6 +44,21 @@ def health_status_to_number(status):
     elif status == 'HEALTH_ERR':
         return 2
 
+def get_summary(checks):
+    summary = ""
+    for key in checks.keys():
+        if type(checks[key]) == dict:
+            if key == "summary" and checks[key].has_key('message'):
+                summary += "; " + checks['summary']['message']
+            else:
+                summary += get_summary(checks[key])
+    return summary
+
+def health_status_checks(checks):
+    summary = get_summary(checks)
+    if len(summary) != 0:
+        return summary[1:] + '.'
+
 PG_STATES = [
         "active",
         "clean",
@@ -95,6 +110,8 @@ OSD_METADATA = ('ceph_daemon', 'cluster_addr', 'device_class', 'hostname',
                 'public_addr', 'ceph_version')
 
 OSD_STATUS = ['weight', 'up', 'in']
+
+HEALTH_STATUS = ('checks',)
 
 OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
@@ -149,7 +166,8 @@ class Metrics(object):
         metrics['health_status'] = Metric(
             'untyped',
             'health_status',
-            'Cluster health status'
+            'Cluster health status',
+            HEALTH_STATUS
         )
         metrics['mon_quorum_status'] = Metric(
             'gauge',
@@ -367,8 +385,9 @@ class Module(MgrModule):
 
     def get_health(self):
         health = json.loads(self.get('health')['json'])
-        self.metrics.set('health_status',
-                         health_status_to_number(health['status'])
+        self.metrics.append('health_status',
+                         health_status_to_number(health['status']),
+                         (health_status_checks(health['checks']),)
         )
 
     def get_df(self):
