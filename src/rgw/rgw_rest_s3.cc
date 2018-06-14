@@ -11,9 +11,11 @@
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
 #include "common/backport14.h"
+#include "auth/Crypto.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
+#include <boost/tokenizer.hpp>
 
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
@@ -43,6 +45,8 @@
 #include "rgw_crypt_sanitize.h"
 
 #include "include/assert.h"
+#include "rgw_role.h"
+#include "rgw_sts.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1777,6 +1781,8 @@ int RGWPostObj_ObjStore_S3::get_policy()
         return -EINVAL;
       }
     }
+
+    part_str(parts, "x-amz-security-token", &s->auth.s3_postobj_creds.x_amz_security_token);
 
     /* FIXME: this is a makeshift solution. The browser upload authentication will be
      * handled by an instance of rgw::auth::Completer spawned in Handler's authorize()
@@ -3735,6 +3741,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   boost::string_view date;
   boost::string_view credential_scope;
   boost::string_view client_signature;
+  boost::string_view session_token;
 
   int ret = rgw::auth::s3::parse_credentials(s->info,
                                              access_key_id,
@@ -3742,6 +3749,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                              signed_hdrs,
                                              client_signature,
                                              date,
+                                             session_token,
                                              using_qs);
   if (ret < 0) {
     throw ret;
@@ -3805,6 +3813,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     return {
       access_key_id,
       client_signature,
+      session_token,
       std::move(string_to_sign),
       sig_factory,
       null_completer_factory
@@ -3848,6 +3857,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       return {
         access_key_id,
         client_signature,
+        session_token,
         std::move(string_to_sign),
         sig_factory,
         cmpl_factory
@@ -3890,6 +3900,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
       return {
         access_key_id,
         client_signature,
+        session_token,
         std::move(string_to_sign),
         sig_factory,
         cmpl_factory
@@ -3915,6 +3926,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
 {
   boost::string_view access_key_id;
   boost::string_view signature;
+  boost::string_view session_token;
   bool qsr = false;
 
   const char* http_auth = s->info.env->get("HTTP_AUTHORIZATION");
@@ -3939,6 +3951,13 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     if (now >= exp) {
       throw -EPERM;
     }
+    if (s->info.args.exists("X-Amz-Security-Token")) {
+      session_token = s->info.args.get("X-Amz-Security-Token");
+      if (session_token.size() == 0) {
+        throw -EPERM;
+      }
+    }
+
   } else {
     /* The "Authorization" HTTP header is being used. */
     const boost::string_view auth_str(http_auth + strlen("AWS "));
@@ -3946,6 +3965,13 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     if (pos != boost::string_view::npos) {
       access_key_id = auth_str.substr(0, pos);
       signature = auth_str.substr(pos + 1);
+    }
+
+    if (s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+      session_token = s->info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+      if (session_token.size() == 0) {
+        throw -EPERM;
+      }
     }
   }
 
@@ -3969,6 +3995,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   return {
     std::move(access_key_id),
     std::move(signature),
+    std::move(session_token),
     std::move(string_to_sign),
     rgw::auth::s3::get_v2_signature,
     null_completer_factory
@@ -3982,6 +4009,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v2(const req_state* const s) const
   return {
     s->auth.s3_postobj_creds.access_key,
     s->auth.s3_postobj_creds.signature,
+    s->auth.s3_postobj_creds.x_amz_security_token,
     s->auth.s3_postobj_creds.encoded_policy.to_str(),
     rgw::auth::s3::get_v2_signature,
     null_completer_factory
@@ -4011,6 +4039,7 @@ AWSBrowserUploadAbstractor::get_auth_data_v4(const req_state* const s) const
   return {
     access_key_id,
     s->auth.s3_postobj_creds.signature,
+    s->auth.s3_postobj_creds.x_amz_security_token,
     s->auth.s3_postobj_creds.encoded_policy.to_str(),
     sig_factory,
     null_completer_factory
@@ -4030,7 +4059,6 @@ AWSBrowserUploadAbstractor::get_auth_data(const req_state* const s) const
   }
 }
 
-
 AWSEngine::result_t
 AWSEngine::authenticate(const req_state* const s) const
 {
@@ -4042,6 +4070,7 @@ AWSEngine::authenticate(const req_state* const s) const
   } else {
     return authenticate(auth_data.access_key_id,
 		        auth_data.client_signature,
+            auth_data.session_token,
 			auth_data.string_to_sign,
                         auth_data.signature_factory,
 			auth_data.completer_factory,
@@ -4106,11 +4135,18 @@ rgw::auth::Engine::result_t
 rgw::auth::s3::LDAPEngine::authenticate(
   const boost::string_view& access_key_id,
   const boost::string_view& signature,
+  const boost::string_view& session_token,
   const string_to_sign_t& string_to_sign,
   const signature_factory_t&,
   const completer_factory_t& completer_factory,
   const req_state* const s) const
 {
+  //If LDAP is enabled and the request has a session token, then LDAP shouldn't authenticate it.
+  if (s->info.args.exists("X-Amz-Security-Token") ||
+      s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+    return result_t::deny();
+  }
+
   /* boost filters and/or string_ref may throw on invalid input */
   rgw::RGWToken base64_token;
   try {
@@ -4150,11 +4186,18 @@ rgw::auth::Engine::result_t
 rgw::auth::s3::LocalEngine::authenticate(
   const boost::string_view& _access_key_id,
   const boost::string_view& signature,
+  const boost::string_view& session_token,
   const string_to_sign_t& string_to_sign,
   const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
   const req_state* const s) const
 {
+  //If LocalAuth is enabled and the request has a session token, then LocalEngine shouldn't authenticate it.
+  if (s->info.args.exists("X-Amz-Security-Token") ||
+      s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+    return result_t::deny();
+  }
+
   /* get the user info */
   RGWUserInfo user_info;
   /* TODO(rzarzynski): we need to have string-view taking variant. */
@@ -4194,8 +4237,149 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser);
+  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser, boost::none);
   return result_t::grant(std::move(apl), completer_factory(k.key));
+}
+
+rgw::auth::RemoteApplier::AuthInfo
+rgw::auth::s3::STSEngine::get_creds_info(const STS::SessionToken& token) const noexcept
+{
+  using acct_privilege_t = \
+    rgw::auth::RemoteApplier::AuthInfo::acct_privilege_t;
+
+  return rgw::auth::RemoteApplier::AuthInfo {
+    token.user,
+    token.acct_name,
+    token.perm_mask,
+    (token.is_admin) ? acct_privilege_t::IS_ADMIN_ACCT: acct_privilege_t::IS_PLAIN_ACCT,
+    token.acct_type
+  };
+}
+
+int
+rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_token,
+                                            STS::SessionToken& token) const
+{
+  string decodedSessionToken = rgw::from_base64(session_token);
+
+  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  if (! cryptohandler) {
+    return -EINVAL;
+  }
+  string secret_s = cct->_conf->rgw_sts_key;
+  buffer::ptr secret(secret_s.c_str(), secret_s.length());
+  int ret = 0;
+  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
+    ldout(cct, 0) << "ERROR: Invalid secret key" << dendl;
+    return -EINVAL;
+  }
+  string error;
+  auto* keyhandler = cryptohandler->get_key_handler(secret, error);
+  if (! keyhandler) {
+    return -EINVAL;
+  }
+  error.clear();
+
+  string decrypted_str;
+  buffer::list en_input, dec_output;
+  en_input = buffer::list::static_from_string(decodedSessionToken);
+
+  ret = keyhandler->decrypt(en_input, dec_output, &error);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: Decryption failed: " << error << dendl;
+    return -EPERM;
+  } else {
+    dec_output.append('\0');
+    auto iter = dec_output.begin();
+    decode(token, iter);
+  }
+  return 0;
+}
+
+rgw::auth::Engine::result_t
+rgw::auth::s3::STSEngine::authenticate(
+  const boost::string_view& _access_key_id,
+  const boost::string_view& signature,
+  const boost::string_view& session_token,
+  const string_to_sign_t& string_to_sign,
+  const signature_factory_t& signature_factory,
+  const completer_factory_t& completer_factory,
+  const req_state* const s) const
+{
+  STS::SessionToken token;
+  if (int ret = get_session_token(session_token, token); ret < 0) {
+    return result_t::deny(ret);
+  }
+  //Authentication
+  //Check if the token has expired
+  if (! token.expiration.empty()) {
+    std::string expiration = token.expiration;
+    if (! expiration.empty()) {
+      boost::optional<real_clock::time_point> exp = ceph::from_iso_8601(expiration, false);
+      if (exp) {
+        real_clock::time_point now = real_clock::now();
+        if (now >= *exp) {
+          ldout(cct, 0) << "ERROR: Token expired" << dendl;
+          return result_t::deny(-EPERM);
+        }
+      } else {
+        ldout(cct, 0) << "ERROR: Invalid expiration: " << expiration << dendl;
+        return result_t::deny(-EPERM);
+      }
+    }
+  }
+  //Check for signature mismatch
+  const VersionAbstractor::server_signature_t server_signature = \
+    signature_factory(cct, token.secret_access_key, string_to_sign);
+  auto compare = signature.compare(server_signature);
+
+  ldout(cct, 15) << "string_to_sign="
+                 << rgw::crypt_sanitize::log_content{string_to_sign}
+                 << dendl;
+  ldout(cct, 15) << "server signature=" << server_signature << dendl;
+  ldout(cct, 15) << "client signature=" << signature << dendl;
+  ldout(cct, 15) << "compare=" << compare << dendl;
+
+  if (compare != 0) {
+    return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
+  }
+
+  // Get all the authorization info
+  RGWUserInfo user_info;
+  vector<string> role_policies;
+  if (! token.roleId.empty()) {
+    RGWRole role(s->cct, store, token.roleId);
+    if (role.get_by_id() < 0) {
+      return result_t::deny(-EPERM);
+    }
+    vector<string> role_policy_names = role.get_role_policy_names();
+    for (auto& policy_name : role_policy_names) {
+      string perm_policy;
+      if (int ret = role.get_role_policy(policy_name, perm_policy); ret == 0) {
+        role_policies.push_back(std::move(perm_policy));
+      }
+    }
+    role_policies.push_back(std::move(token.policy));
+  }
+  if (! token.user.empty()) {
+    // get user info
+    int ret = rgw_get_user_info_by_uid(store, token.user, user_info, NULL);
+    if (ret < 0) {
+      ldout(cct, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
+      return result_t::deny(-EPERM);
+    }
+  }
+  if (token.acct_type == TYPE_RGW) {
+    string subuser;
+    auto apl = local_apl_factory->create_apl_local(cct, s, user_info, subuser, role_policies);
+    return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
+  } else if (token.acct_type == TYPE_KEYSTONE || token.acct_type == TYPE_LDAP) {
+    auto apl = remote_apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
+                                            get_creds_info(token));
+    return result_t::grant(std::move(apl), completer_factory(boost::none));
+  }
+
+  return result_t::deny(-EPERM);
 }
 
 bool rgw::auth::s3::S3AnonymousEngine::is_applicable(

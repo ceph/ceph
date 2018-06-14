@@ -495,6 +495,7 @@ class LocalApplier : public IdentityApplier {
 protected:
   const RGWUserInfo user_info;
   const std::string subuser;
+  vector<std::string> role_policies;
 
   uint32_t get_perm_mask(const std::string& subuser_name,
                          const RGWUserInfo &uinfo) const;
@@ -504,9 +505,13 @@ public:
 
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
-               std::string subuser)
+               std::string subuser,
+               const boost::optional<vector<std::string> >& role_policies)
     : user_info(user_info),
-      subuser(std::move(subuser)) {
+      subuser(std::move(subuser)){
+    if (role_policies) {
+      this->role_policies = role_policies.get();
+    }
   }
 
 
@@ -521,13 +526,15 @@ public:
   void load_acct_info(RGWUserInfo& user_info) const override; /* out */
   uint32_t get_identity_type() const override { return TYPE_RGW; }
   string get_acct_name() const override { return {}; }
+  void modify_request_state(req_state* s) const override;
 
   struct Factory {
     virtual ~Factory() {}
     virtual aplptr_t create_apl_local(CephContext* cct,
                                       const req_state* s,
                                       const RGWUserInfo& user_info,
-                                      const std::string& subuser) const = 0;
+                                      const std::string& subuser,
+                                      const boost::optional<vector<std::string> >& role_policies) const = 0;
     };
 };
 

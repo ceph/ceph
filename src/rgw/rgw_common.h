@@ -1840,6 +1840,7 @@ struct req_state {
       std::string x_amz_algorithm;
       std::string x_amz_credential;
       std::string x_amz_date;
+      std::string x_amz_security_token;
       ceph::bufferlist encoded_policy;
     } s3_postobj_creds;
   } auth;
@@ -1850,6 +1851,7 @@ struct req_state {
 
   rgw::IAM::Environment env;
   boost::optional<rgw::IAM::Policy> iam_policy;
+  vector<rgw::IAM::Policy> iam_user_policies;
 
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */

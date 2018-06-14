@@ -585,6 +585,21 @@ void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* ou
   user_info = this->user_info;
 }
 
+void rgw::auth::LocalApplier::modify_request_state(req_state* s) const
+{
+  for (auto it : role_policies) {
+    try {
+      bufferlist bl = bufferlist::static_from_string(it);
+      const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+      s->iam_user_policies.push_back(std::move(p));
+    } catch (rgw::IAM::PolicyParseException& e) {
+      //Control shouldn't reach here as the policy has already been
+      //verified earlier
+      ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
+    }
+  }
+}
+
 rgw::auth::Engine::result_t
 rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
 {
@@ -596,7 +611,8 @@ rgw::auth::AnonymousEngine::authenticate(const req_state* const s) const
 
     auto apl = \
       apl_factory->create_apl_local(cct, s, user_info,
-                                    rgw::auth::LocalApplier::NO_SUBUSER);
+                                    rgw::auth::LocalApplier::NO_SUBUSER,
+                                    boost::none);
     return result_t::grant(std::move(apl));
   }
 }
