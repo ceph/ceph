@@ -230,7 +230,7 @@ struct nest_info_t : public scatter_info_t {
   int64_t rsubdirs = 0;
   int64_t rsize() const { return rfiles + rsubdirs; }
 
-  int64_t rsnaprealms = 0;
+  int64_t rsnaps = 0;
 
   nest_info_t() {}
 
@@ -247,7 +247,7 @@ struct nest_info_t : public scatter_info_t {
     rbytes += fac*other.rbytes;
     rfiles += fac*other.rfiles;
     rsubdirs += fac*other.rsubdirs;
-    rsnaprealms += fac*other.rsnaprealms;
+    rsnaps += fac*other.rsnaps;
   }
 
   // *this += cur - acc;
@@ -257,7 +257,7 @@ struct nest_info_t : public scatter_info_t {
     rbytes += cur.rbytes - acc.rbytes;
     rfiles += cur.rfiles - acc.rfiles;
     rsubdirs += cur.rsubdirs - acc.rsubdirs;
-    rsnaprealms += cur.rsnaprealms - acc.rsnaprealms;
+    rsnaps += cur.rsnaps - acc.rsnaps;
   }
 
   bool same_sums(const nest_info_t &o) const {
@@ -265,7 +265,7 @@ struct nest_info_t : public scatter_info_t {
         rbytes == o.rbytes &&
         rfiles == o.rfiles &&
         rsubdirs == o.rsubdirs &&
-        rsnaprealms == o.rsnaprealms;
+        rsnaps == o.rsnaps;
   }
 
   void encode(bufferlist &bl) const;
