@@ -1547,3 +1547,4 @@ OPTION(rgw_delete_multi_obj_max_num, OPT_INT) // According to AWS S3(https://doc
 OPTION(rgw_website_routing_rules_max_num, OPT_INT) // According to AWS S3, An website routing config can have up to 50 rules.
 OPTION(rgw_sts_entry, OPT_STR)
 OPTION(rgw_sts_key, OPT_STR)
+OPTION(rgw_s3_auth_use_sts, OPT_BOOL)  // should we try to use sts for s3?
