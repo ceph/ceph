@@ -9116,7 +9116,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
 
   // make sure name is unique
@@ -9273,7 +9273,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
 
   // prepare
@@ -9420,7 +9420,7 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
     return;
 
-  if (!check_access(mdr, diri, MAY_WRITE))
+  if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
 
     // prepare
