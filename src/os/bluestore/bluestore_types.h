@@ -64,6 +64,8 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_DENC(bluestore_cnode_t)
 
+ostream& operator<<(ostream& out, const bluestore_cnode_t& l);
+
 /// pextent: physical extent
 struct bluestore_pextent_t {
   static const uint64_t INVALID_OFFSET = ~0ull;
