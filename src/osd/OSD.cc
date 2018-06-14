@@ -3897,7 +3897,8 @@ void OSD::load_pgs()
     spg_t pgid;
     if (it->is_temp(&pgid) ||
        (it->is_pg(&pgid) && PG::_has_removal_flag(store, pgid))) {
-      dout(10) << "load_pgs " << *it << " clearing temp" << dendl;
+      dout(10) << "load_pgs " << *it
+	       << " removing, legacy or flagged for removal pg" << dendl;
       recursive_remove_collection(cct, store, pgid, *it);
       continue;
     }
