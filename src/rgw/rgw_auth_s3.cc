@@ -243,7 +243,8 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
                                         boost::string_view& credential,    /* out */
                                         boost::string_view& signedheaders, /* out */
                                         boost::string_view& signature,     /* out */
-                                        boost::string_view& date)          /* out */
+                                        boost::string_view& date,          /* out */
+                                        boost::string_view& sessiontoken)  /* out */
 {
   /* auth ships with req params ... */
 
@@ -287,6 +288,13 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
   signature = info.args.get("X-Amz-Signature");
   if (signature.size() == 0) {
     return -EPERM;
+  }
+
+  if (info.args.exists("X-Amz-Security-Token")) {
+    sessiontoken = info.args.get("X-Amz-Security-Token");
+    if (sessiontoken.size() == 0) {
+      return -EPERM;
+    }
   }
 
   return 0;
@@ -345,7 +353,8 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
                                        boost::string_view& credential,     /* out */
                                        boost::string_view& signedheaders,  /* out */
                                        boost::string_view& signature,      /* out */
-                                       boost::string_view& date)           /* out */
+                                       boost::string_view& date,           /* out */
+                                       boost::string_view& sessiontoken)   /* out */
 {
   boost::string_view input(info.env->get("HTTP_AUTHORIZATION", ""));
   try {
@@ -406,6 +415,10 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
     return -ERR_REQUEST_TIME_SKEWED;
   }
 
+  if (info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
+    sessiontoken = info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+  }
+
   return 0;
 }
 
@@ -415,16 +428,17 @@ int parse_credentials(const req_info& info,                     /* in */
                       boost::string_view& signedheaders,        /* out */
                       boost::string_view& signature,            /* out */
                       boost::string_view& date,                 /* out */
+                      boost::string_view& session_token,        /* out */
                       const bool using_qs)                      /* in */
 {
   boost::string_view credential;
   int ret;
   if (using_qs) {
     ret = parse_v4_query_string(info, credential, signedheaders,
-                                signature, date);
+                                signature, date, session_token);
   } else {
     ret = parse_v4_auth_header(info, credential, signedheaders,
-                               signature, date);
+                               signature, date, session_token);
   }
 
   if (ret < 0) {

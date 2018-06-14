@@ -258,6 +258,7 @@ void SysReqApplier<T>::modify_request_state(req_state* const s) const
     s->info.args.set_system();
     s->system_request = true;
   }
+  DecoratedApplier<T>::modify_request_state(s);
 }
 
 template <typename T> static inline

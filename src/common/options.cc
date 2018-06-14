@@ -5372,7 +5372,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("Should S3 authentication use Keystone."),
 
     Option("rgw_s3_auth_order", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-     .set_default("external, local")
+     .set_default("external, local, sts")
      .set_description("Authentication strategy order to use for s3 authentication")
      .set_long_description(
 	  "Order of authentication strategies to try for s3 authentication, the allowed "
@@ -6356,7 +6356,11 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_sts_key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("sts")
     .set_description("STS Key")
-    .set_long_description("Key used for encrypting/ decrypting session token.")
+    .set_long_description("Key used for encrypting/ decrypting session token."),
+
+    Option("rgw_s3_auth_use_sts", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Should S3 authentication use STS."),
 
   });
 }
