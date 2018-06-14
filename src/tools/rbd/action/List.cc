@@ -192,9 +192,9 @@ int do_list(std::string &pool_name, bool lflag, int threads, Formatter *f) {
     f->open_array_section("images");
   } else {
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("PARENT", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("FMT", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("FMT", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("PROT", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("LOCK", TextTable::LEFT, TextTable::LEFT);
   }
