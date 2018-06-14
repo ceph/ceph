@@ -235,7 +235,7 @@ TEST(MDSAuthCaps, OutputParsed) {
   };
   CapsTest test_values[] = {
     {"allow",
-     "MDSAuthCaps[allow rw]"},
+     "MDSAuthCaps[allow rwps]"},
     {"allow *",
      "MDSAuthCaps[allow *]"},
     {"allow r",

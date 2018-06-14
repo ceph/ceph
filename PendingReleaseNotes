@@ -18,3 +18,10 @@
 * The JSON output of the ``osd find`` command has replaced the ``ip``
   field with an ``addrs`` section to reflect that OSDs may bind to
   multiple addresses.
+
+* CephFS clients without the 's' flag in their authentication capability
+  string will no longer be able to create/delete snapshots. To allow
+  ``client.foo`` to create/delete snapshots in the ``bar`` directory of
+  filesystem ``cephfs_a``, use command:
+
+    - ``ceph auth caps client.foo mon 'allow r' osd 'allow rw tag cephfs data=cephfs_a' mds 'allow rw, allow rws path=/bar'``
