@@ -113,7 +113,7 @@ add_executable(unittest_throttle
   Throttle.cc
   $<TARGET_OBJECTS:unit-main>
   )
-add_ceph_unittest(unittest_throttle)
+add_ceph_unittest(unittest_throttle parallel)
 target_link_libraries(unittest_throttle global) 
 
 # unittest_lru
