@@ -245,6 +245,11 @@ TEST_F(TestClsRbd, directory_methods)
   string invalid_id = ".abc";
   string empty;
 
+  ASSERT_EQ(-ENOENT, dir_state_assert(&ioctx, oid,
+                                      cls::rbd::DIRECTORY_STATE_READY));
+  ASSERT_EQ(-ENOENT, dir_state_set(&ioctx, oid,
+                                   cls::rbd::DIRECTORY_STATE_ADD_DISABLED));
+
   ASSERT_EQ(-ENOENT, dir_get_id(&ioctx, oid, imgname, &id));
   ASSERT_EQ(-ENOENT, dir_get_name(&ioctx, oid, valid_id, &name));
   ASSERT_EQ(-ENOENT, dir_remove_image(&ioctx, oid, imgname, valid_id));
@@ -261,7 +266,13 @@ TEST_F(TestClsRbd, directory_methods)
   ASSERT_EQ(0u, images.size());
   ASSERT_EQ(0, ioctx.remove(oid));
 
+  ASSERT_EQ(0, dir_state_set(&ioctx, oid, cls::rbd::DIRECTORY_STATE_READY));
+  ASSERT_EQ(0, dir_state_assert(&ioctx, oid, cls::rbd::DIRECTORY_STATE_READY));
+
   ASSERT_EQ(0, dir_add_image(&ioctx, oid, imgname, valid_id));
+  ASSERT_EQ(-EBUSY, dir_state_set(&ioctx, oid,
+                                  cls::rbd::DIRECTORY_STATE_ADD_DISABLED));
+
   ASSERT_EQ(-EEXIST, dir_add_image(&ioctx, oid, imgname, valid_id2));
   ASSERT_EQ(-EBADF, dir_add_image(&ioctx, oid, imgname2, valid_id));
   ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
