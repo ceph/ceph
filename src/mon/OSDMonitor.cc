@@ -542,7 +542,7 @@ void OSDMonitor::update_msgr_features()
     uint64_t features = osdmap.get_features(*q, &mask);
     if ((mon->messenger->get_policy(*q).features_required & mask) != features) {
       dout(0) << "crush map has features " << features << ", adjusting msgr requires" << dendl;
-      Messenger::Policy p = mon->messenger->get_policy(*q);
+      ceph::net::Policy p = mon->messenger->get_policy(*q);
       p.features_required = (p.features_required & ~mask) | features;
       mon->messenger->set_policy(*q, p);
     }
