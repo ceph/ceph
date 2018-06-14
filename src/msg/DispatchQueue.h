@@ -20,6 +20,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include "include/assert.h"
 #include "include/xlist.h"
+#include "common/Throttle.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"

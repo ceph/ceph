@@ -21,8 +21,10 @@
 
 #include "Message.h"
 #include "Dispatcher.h"
-#include "common/Mutex.h"
+#include "Policy.h"
 #include "common/Cond.h"
+#include "common/Mutex.h"
+#include "common/Throttle.h"
 #include "include/Context.h"
 #include "include/types.h"
 #include "include/ceph_features.h"
@@ -35,7 +37,6 @@
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
 class Timer;
-
 
 class Messenger {
 private:
@@ -75,69 +76,7 @@ public:
   CephContext *cct;
   int crcflags;
 
-  /**
-   * A Policy describes the rules of a Connection. Is there a limit on how
-   * much data this Connection can have locally? When the underlying connection
-   * experiences an error, does the Connection disappear? Can this Messenger
-   * re-establish the underlying connection?
-   */
-  struct Policy {
-    /// If true, the Connection is tossed out on errors.
-    bool lossy;
-    /// If true, the underlying connection can't be re-established from this end.
-    bool server;
-    /// If true, we will standby when idle
-    bool standby;
-    /// If true, we will try to detect session resets
-    bool resetcheck;
-    /**
-     *  The throttler is used to limit how much data is held by Messages from
-     *  the associated Connection(s). When reading in a new Message, the Messenger
-     *  will call throttler->throttle() for the size of the new Message.
-     */
-    Throttle *throttler_bytes;
-    Throttle *throttler_messages;
-
-    /// Specify features supported locally by the endpoint.
-    uint64_t features_supported;
-    /// Specify features any remotes must have to talk to this endpoint.
-    uint64_t features_required;
-
-    Policy()
-      : lossy(false), server(false), standby(false), resetcheck(true),
-	throttler_bytes(NULL),
-	throttler_messages(NULL),
-	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
-	features_required(0) {}
-  private:
-    Policy(bool l, bool s, bool st, bool r, uint64_t req)
-      : lossy(l), server(s), standby(st), resetcheck(r),
-	throttler_bytes(NULL),
-	throttler_messages(NULL),
-	features_supported(CEPH_FEATURES_SUPPORTED_DEFAULT),
-	features_required(req) {}
-
-  public:
-    static Policy stateful_server(uint64_t req) {
-      return Policy(false, true, true, true, req);
-    }
-    static Policy stateless_server(uint64_t req) {
-      return Policy(true, true, false, false, req);
-    }
-    static Policy lossless_peer(uint64_t req) {
-      return Policy(false, false, true, false, req);
-    }
-    static Policy lossless_peer_reuse(uint64_t req) {
-      return Policy(false, false, true, true, req);
-    }
-    static Policy lossy_client(uint64_t req) {
-      return Policy(true, false, false, false, req);
-    }
-    static Policy lossless_client(uint64_t req) {
-      return Policy(false, false, false, true, req);
-    }
-  };
-
+  using Policy = ceph::net::Policy<Throttle>;
   /**
    * Messenger constructor. Call this from your implementation.
    * Messenger users should construct full implementations directly,

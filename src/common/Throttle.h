@@ -13,6 +13,7 @@
 #include <mutex>
 
 #include "include/Context.h"
+#include "common/ThrottleInterface.h"
 #include "common/Timer.h"
 #include "common/convenience.h"
 #include "common/perf_counters.h"
@@ -25,7 +26,7 @@
  * excessive requests for more of them are delayed, until some slots are put
  * back, so @p get_current() drops below the limit after fulfills the requests.
  */
-class Throttle {
+class Throttle final : public ThrottleInterface {
   CephContext *cct;
   const std::string name;
   PerfCountersRef logger;
@@ -36,7 +37,7 @@ class Throttle {
 
 public:
   Throttle(CephContext *cct, const std::string& n, int64_t m = 0, bool _use_perf = true);
-  ~Throttle();
+  ~Throttle() override;
 
 private:
   void _reset_max(int64_t m);
@@ -87,7 +88,7 @@ public:
    * @param c number of slots to take
    * @returns the total number of taken slots
    */
-  int64_t take(int64_t c = 1);
+  int64_t take(int64_t c = 1) override;
 
   /**
    * get the specified amount of slots from the stock, but will wait if the
@@ -111,7 +112,7 @@ public:
    * @param c number of slots to return
    * @returns number of requests being hold after this
    */
-  int64_t put(int64_t c = 1);
+  int64_t put(int64_t c = 1) override;
    /**
    * reset the zero to the stock
    */
