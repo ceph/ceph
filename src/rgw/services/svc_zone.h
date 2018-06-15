@@ -103,12 +103,14 @@ public:
   RGWRESTConn *get_zone_conn_by_name(const string& name);
   bool find_zone_id_by_name(const string& name, string *id);
 
-  int select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
-                              string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
+  int select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id,
+                              const rgw_placement_rule& rule,
+                              rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info);
   int select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info);
-  int select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
-                                 string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
-  int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
+  int select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id,
+                                 const rgw_placement_rule& rule,
+                                 rgw_placement_rule *pselected_rule_name, RGWZonePlacementInfo *rule_info);
+  int select_bucket_location_by_rule(const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info);
 
   int add_bucket_placement(const rgw_pool& new_pool);
   int remove_bucket_placement(const rgw_pool& old_pool);

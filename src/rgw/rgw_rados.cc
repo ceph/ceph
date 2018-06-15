@@ -108,16 +108,18 @@ static RGWObjCategory main_category = RGWObjCategory::Main;
 
 
 static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
-                                  const string& placement_id, const rgw_obj& obj, rgw_pool *pool)
+                                  const rgw_placement_rule& head_placement_rule,
+                                  const rgw_obj& obj, rgw_pool *pool)
 {
-  if (!zone_params.get_head_data_pool(placement_id, obj, pool)) {
+  if (!zone_params.get_head_data_pool(head_placement_rule, obj, pool)) {
     RGWZonePlacementInfo placement;
-    if (!zone_params.get_placement(zonegroup.default_placement, &placement)) {
+    if (!zone_params.get_placement(zonegroup.default_placement.name, &placement)) {
       return false;
     }
 
     if (!obj.in_extra_data) {
-      *pool = placement.data_pool;
+#warning zonegroup default placement backward compatibility json decode/encode
+      *pool = placement.get_data_pool(zonegroup.default_placement.storage_class);
     } else {
       *pool = placement.get_data_extra_pool();
     }
@@ -127,11 +129,12 @@ static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZonePa
 }
 
 static bool rgw_obj_to_raw(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
-                           const string& placement_id, const rgw_obj& obj, rgw_raw_obj *raw_obj)
+                           const rgw_placement_rule& head_placement_rule,
+                           const rgw_obj& obj, rgw_raw_obj *raw_obj)
 {
   get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
 
-  return rgw_get_obj_data_pool(zonegroup, zone_params, placement_id, obj, &raw_obj->pool);
+  return rgw_get_obj_data_pool(zonegroup, zone_params, head_placement_rule, obj, &raw_obj->pool);
 }
 
 rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params) const
@@ -221,11 +224,6 @@ void RGWObjManifest::obj_iterator::operator++()
   if (manifest->explicit_objs) {
     ++explicit_iter;
 
-    if (explicit_iter == manifest->objs.end()) {
-      ofs = manifest->obj_size;
-      return;
-    }
-
     update_explicit_pos();
 
     update_location();
@@ -308,8 +306,8 @@ void RGWObjManifest::obj_iterator::operator++()
 }
 
 int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m,
-                                            const string& head_placement_rule,
-                                            const string *tail_placement_rule,
+                                            const rgw_placement_rule& head_placement_rule,
+                                            const rgw_placement_rule *tail_placement_rule,
                                             const rgw_bucket& _b, const rgw_obj& _obj)
 {
   manifest = _m;
@@ -1029,7 +1027,7 @@ int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size)
   return 0;
 }
 
-int RGWRados::get_max_chunk_size(const string& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size)
+int RGWRados::get_max_chunk_size(const rgw_placement_rule& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size)
 {
   rgw_pool pool;
   if (!get_obj_data_pool(placement_rule, obj, &pool)) {
@@ -1746,11 +1744,11 @@ int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::
   auto& zonegroup = svc.zone->get_zonegroup();
   auto& zone_params = svc.zone->get_zone_params();
 
-  const string *rule = &bucket_info.placement_rule;
+  const rgw_placement_rule *rule = &bucket_info.placement_rule;
   if (rule->empty()) {
     rule = &zonegroup.default_placement;
   }
-  auto iter = zone_params.placement_pools.find(*rule);
+  auto iter = zone_params.placement_pools.find(rule->name);
   if (iter == zone_params.placement_pools.end()) {
     ldout(cct, 0) << "could not find placement rule " << *rule << " within zonegroup " << dendl;
     return -EINVAL;
@@ -2781,7 +2779,7 @@ void RGWRados::create_bucket_id(string *bucket_id)
 
 int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
-                            const string& placement_rule,
+                            const rgw_placement_rule& placement_rule,
                             const string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
 			    map<std::string, bufferlist>& attrs,
@@ -2794,13 +2792,13 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 			    bool exclusive)
 {
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
-  string selected_placement_rule_name;
+  rgw_placement_rule selected_placement_rule;
   RGWZonePlacementInfo rule_info;
 
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
     int ret = 0;
     ret = svc.zone->select_bucket_placement(owner, zonegroup_id, placement_rule,
-                                            &selected_placement_rule_name, &rule_info);
+                                            &selected_placement_rule, &rule_info);
     if (ret < 0)
       return ret;
 
@@ -2823,7 +2821,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     info.bucket = bucket;
     info.owner = owner.user_id;
     info.zonegroup = zonegroup_id;
-    info.placement_rule = selected_placement_rule_name;
+    info.placement_rule = selected_placement_rule;
     info.index_type = rule_info.index_type;
     info.swift_ver_location = swift_ver_location;
     info.swift_versioning = (!swift_ver_location.empty());
@@ -2898,7 +2896,7 @@ bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& ob
   return rgw_get_obj_data_pool(svc.zone->get_zonegroup(), svc.zone->get_zone_params(), placement_rule, obj, pool);
 }
 
-bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj)
+bool RGWRados::obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj)
 {
   get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
 
@@ -4224,7 +4222,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  string *ptail_rule{nullptr};
+  rgw_placement_rule *ptail_rule{nullptr};
 #warning FIXME ptail_rule
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
                                   obj_ctx, dest_obj, olh_epoch, tag);
@@ -4262,8 +4260,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
 
+#warning compression type
   const auto& compression_type = svc.zone->get_zone_params().get_compression_type(
-      dest_bucket_info.placement_rule);
+      dest_bucket_info.placement_rule.name);
   if (compression_type != "none") {
     plugin = Compressor::create(cct, compression_type);
     if (!plugin) {
@@ -4481,7 +4480,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
-               const string *ptail_rule,
+               const rgw_placement_rule *ptail_rule,
                real_time *src_mtime,
                real_time *mtime,
                const real_time *mod_ptr,
@@ -4595,7 +4594,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   rgw_pool src_pool;
   rgw_pool dest_pool;
 
-  const string *src_rule{nullptr};
+  const rgw_placement_rule *src_rule{nullptr};
 
   if (astate->has_manifest) {
     src_rule = &astate->manifest.get_tail_placement().placement_rule;
@@ -4764,7 +4763,7 @@ done_ret:
 
 int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
-               const string *ptail_rule,
+               const rgw_placement_rule *ptail_rule,
 	       RGWRados::Object::Read& read_op, off_t end,
                const rgw_obj& dest_obj,
 	       real_time *mtime,

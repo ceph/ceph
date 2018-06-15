@@ -136,15 +136,16 @@ static inline bool rgw_raw_obj_to_obj(const rgw_bucket& bucket, const rgw_raw_ob
   return true;
 }
 
+
 struct rgw_bucket_placement {
-  string placement_rule;
+  rgw_placement_rule placement_rule;
   rgw_bucket bucket;
 
   void dump(Formatter *f) const;
 };
 
 class rgw_obj_select {
-  string placement_rule;
+  rgw_placement_rule placement_rule;
   rgw_obj obj;
   rgw_raw_obj raw_obj;
   bool is_raw;
@@ -178,7 +179,7 @@ public:
     return *this;
   }
 
-  void set_placement_rule(const string& rule) {
+  void set_placement_rule(const rgw_placement_rule& rule) {
     placement_rule = rule;
   }
   void dump(Formatter *f) const;
@@ -403,7 +404,7 @@ protected:
 
   rgw_obj obj;
   uint64_t head_size;
-  string head_placement_rule;
+  rgw_placement_rule head_placement_rule;
 
   uint64_t max_head_size;
   string prefix;
@@ -604,7 +605,7 @@ public:
     return (obj_size > head_size);
   }
 
-  void set_head(const string& placement_rule, const rgw_obj& _o, uint64_t _s) {
+  void set_head(const rgw_placement_rule& placement_rule, const rgw_obj& _o, uint64_t _s) {
     head_placement_rule = placement_rule;
     obj = _o;
     head_size = _s;
@@ -619,7 +620,7 @@ public:
     return obj;
   }
 
-  void set_tail_placement(const string& placement_rule, const rgw_bucket& _b) {
+  void set_tail_placement(const rgw_placement_rule& placement_rule, const rgw_bucket& _b) {
     tail_placement.placement_rule = placement_rule;
     tail_placement.bucket = _b;
   }
@@ -628,7 +629,7 @@ public:
     return tail_placement;
   }
 
-  const string& get_head_placement_rule() {
+  const rgw_placement_rule& get_head_placement_rule() {
     return head_placement_rule;
   }
 
@@ -808,8 +809,8 @@ public:
     generator() : manifest(NULL), last_ofs(0), cur_part_ofs(0), cur_part_id(0), 
 		  cur_stripe(0), cur_stripe_size(0) {}
     int create_begin(CephContext *cct, RGWObjManifest *manifest,
-                     const string& head_placement_rule,
-                     const string *tail_placement_rule,
+                     const rgw_placement_rule& head_placement_rule,
+                     const rgw_placement_rule *tail_placement_rule,
                      const rgw_bucket& bucket,
                      const rgw_obj& obj);
 
@@ -1397,7 +1398,7 @@ public:
 
   int get_required_alignment(const rgw_pool& pool, uint64_t *alignment);
   int get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size);
-  int get_max_chunk_size(const string& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size);
+  int get_max_chunk_size(const rgw_placement_rule& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size);
 
   uint32_t get_max_bucket_shards() {
     return rgw_shards_max();
@@ -1456,12 +1457,12 @@ public:
   int clean_bucket_index(RGWBucketInfo& bucket_info, int num_shards);
   void create_bucket_id(string *bucket_id);
 
-  bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
-  bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
+  bool get_obj_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool);
+  bool obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
 
   int create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
-                            const string& placement_rule,
+                            const rgw_placement_rule& placement_rule,
                             const string& swift_ver_location,
                             const RGWQuotaInfo * pquota_info,
                             map<std::string,bufferlist>& attrs,
@@ -1938,7 +1939,7 @@ public:
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
-               const string *ptail_rule,
+               const rgw_placement_rule *ptail_rule,
                ceph::real_time *src_mtime,
                ceph::real_time *mtime,
                const ceph::real_time *mod_ptr,
@@ -1960,7 +1961,7 @@ public:
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
-               const string *ptail_rule,
+               const rgw_placement_rule *ptail_rule,
 	       RGWRados::Object::Read& read_op, off_t end,
                const rgw_obj& dest_obj,
 	       ceph::real_time *mtime,
