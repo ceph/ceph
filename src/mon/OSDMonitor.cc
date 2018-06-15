@@ -10586,7 +10586,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd destroy" ||
 	     prefix == "osd purge" ||
-	     prefix == "osd destroy-new") {
+	     prefix == "osd purge-new") {
     /* Destroying an OSD means that we don't expect to further make use of
      * the OSDs data (which may even become unreadable after this operation),
      * and that we are okay with scrubbing all its cephx keys and config-key
@@ -10615,10 +10615,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    bool is_destroy = (prefix == "osd destroy" ||
-		       prefix == "osd destroy-new");
+    bool is_destroy = (prefix == "osd destroy");
     if (!is_destroy) {
-      assert("osd purge" == prefix);
+      assert("osd purge" == prefix ||
+	     "osd purge-new" == prefix);
     }
 
     string sure;
@@ -10643,7 +10643,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    if (prefix == "osd destroy-new" &&
+    if (prefix == "osd purge-new" &&
 	(osdmap.get_state(id) & CEPH_OSD_NEW) == 0) {
       ss << "osd." << id << " is not new";
       err = -EPERM;

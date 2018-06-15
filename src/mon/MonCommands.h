@@ -869,12 +869,11 @@ COMMAND("osd destroy " \
         "but removes cephx keys, config-key data and lockbox keys, "\
         "rendering data permanently unreadable.", \
         "osd", "rw", "cli,rest")
-COMMAND("osd destroy-new " \
+COMMAND("osd purge-new " \
         "name=id,type=CephOsdName " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
-        "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
-        "but removes cephx keys, config-key data and lockbox keys, "\
-        "rendering data permanently unreadable.  Only works on new, unbooted osd ids.", \
+        "purge all traces of an OSD that was partially created but never " \
+	"started", \
         "osd", "rw", "cli,rest")
 COMMAND("osd purge " \
         "name=id,type=CephOsdName " \
