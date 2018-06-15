@@ -227,9 +227,6 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
 
 TEST_P(AllocTest, test_alloc_fragmentation)
 {
-  if (GetParam() == std::string("bitmap")) {
-    return;
-  }
   uint64_t capacity = 4 * 1024 * 1024;
   uint64_t alloc_unit = 4096;
   uint64_t want_size = alloc_unit;
@@ -237,14 +234,21 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   
   init_alloc(capacity, alloc_unit);
   alloc->init_add_free(0, capacity);
+  bool bitmap_alloc = GetParam() == std::string("bitmap");
   
   EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+
   for (size_t i = 0; i < capacity / alloc_unit; ++i)
   {
     tmp.clear();
     EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
     allocated.insert(allocated.end(), tmp.begin(), tmp.end());
-    EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+
+    // bitmap fragmentation calculation doesn't provide such constant
+    // estimate
+    if (!bitmap_alloc) {
+      EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+    }
   }
   EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
 
@@ -261,8 +265,13 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     release_set.insert(allocated[i].offset, allocated[i].length);
     alloc->release(release_set);
   }
-  // fragmentation approx = 257 intervals / 768 max intervals
-  EXPECT_EQ(33, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  if (bitmap_alloc) {
+    // fragmentation = one l1 slot is free + one l1 slot is partial
+    EXPECT_EQ(50, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  } else {
+    // fragmentation approx = 257 intervals / 768 max intervals
+    EXPECT_EQ(33, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  }
 
   for (size_t i = allocated.size() / 2 + 1; i < allocated.size(); i += 2)
   {
@@ -276,7 +285,6 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   // digits after decimal point due to this.
   EXPECT_EQ(0, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
 }
-
 INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,
