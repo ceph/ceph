@@ -157,6 +157,15 @@ class ControllersTest(ControllerTestCase):
         self.assertStatus(200)
         self.assertJsonBody({'key': '300', 'data1': 20, 'data2': True})
 
+        self._put('/test/api/rtest/{}'.format(400),
+                  {'data1': 20, 'data2': ['one', 'two', 'three']})
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'key': '400',
+            'data1': 20,
+            'data2': ['one', 'two', 'three'],
+        })
+
     def test_rest_bulk_delete(self):
         self._delete('/test/api/rtest/{}?opt=2'.format(300))
         self.assertStatus(204)
