@@ -1672,9 +1672,16 @@ void BlueStore::SharedBlob::put()
 			     << " removing self from set " << get_parent()
 			     << dendl;
     if (get_parent()) {
-      get_parent()->remove_last(this);
+      if (get_parent()->try_remove(this)) {
+	delete this;
+      } else {
+	ldout(coll->store->cct, 20)
+	  << __func__ << " " << this << " lost race to remove myself from set"
+	  << dendl;
+      }
+    } else {
+      delete this;
     }
-    delete this;
   }
 }
 

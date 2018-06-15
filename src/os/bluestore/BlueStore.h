@@ -437,8 +437,7 @@ public:
     SharedBlobRef lookup(uint64_t sbid) {
       std::lock_guard<std::mutex> l(lock);
       auto p = sb_map.find(sbid);
-      if (p == sb_map.end() ||
-	  p->second->nref == 0) {
+      if (p == sb_map.end()) {
         return nullptr;
       }
       return p->second;
@@ -450,11 +449,14 @@ public:
       sb->coll = coll;
     }
 
-    void remove_last(SharedBlob *sb) {
+    bool try_remove(SharedBlob *sb) {
       std::lock_guard<std::mutex> l(lock);
-      assert(sb->nref == 0);
-      assert(sb->get_parent() == this);
-      sb_map.erase(sb->get_sbid());
+      if (sb->nref == 0) {
+	assert(sb->get_parent() == this);
+	sb_map.erase(sb->get_sbid());
+	return true;
+      }
+      return false;
     }
 
     void remove(SharedBlob *sb) {
