@@ -334,6 +334,12 @@ class Thrasher:
             elif proc.exitstatus == 11:
                 self.log("Attempt to import an incompatible export"
                          "...ignored")
+            elif proc.exitstatus == 12:
+                # this should be safe to ignore because we only ever move 1
+                # copy of the pg at a time, and merge is only initiated when
+                # all replicas are peered and happy.  /me crosses fingers
+                self.log("PG merged on target"
+                         "...ignored")
             elif proc.exitstatus:
                 raise Exception("ceph-objectstore-tool: "
                                 "import failure with status {ret}".
