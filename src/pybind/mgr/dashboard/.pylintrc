@@ -117,7 +117,8 @@ disable=import-star-module-level,
         too-few-public-methods,
         no-member,
         too-many-arguments,
-        too-many-locals
+        too-many-locals,
+        too-many-statements
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
