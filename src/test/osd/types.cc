@@ -811,21 +811,26 @@ TEST(pg_t, merge)
   b = pgid.is_merge_source(8, 7, &parent);
   ASSERT_TRUE(b);
   ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 7));
 
   b = pgid.is_merge_source(8, 5, &parent);
   ASSERT_TRUE(b);
   ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 5));
 
   b = pgid.is_merge_source(8, 4, &parent);
   ASSERT_TRUE(b);
   ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 4));
 
   b = pgid.is_merge_source(8, 3, &parent);
   ASSERT_TRUE(b);
   ASSERT_EQ(parent, pg_t(1, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 4));
 
   b = pgid.is_merge_source(9, 8, &parent);
   ASSERT_FALSE(b);
+  ASSERT_FALSE(parent.is_merge_target(9, 8));
 }
 
 TEST(pg_missing_t, constructor)

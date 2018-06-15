@@ -413,6 +413,9 @@ struct pg_t {
   bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *pchildren) const;
 
   bool is_merge_source(unsigned old_pg_num, unsigned new_pg_num, pg_t *parent) const;
+  bool is_merge_target(unsigned old_pg_num, unsigned new_pg_num) const {
+    return ps() < new_pg_num && is_split(new_pg_num, old_pg_num, nullptr);
+  }
 
   /**
    * Returns b such that for all object o:
@@ -540,6 +543,9 @@ struct spg_t {
       }
     }
     return is_split;
+  }
+  bool is_merge_target(unsigned old_pg_num, unsigned new_pg_num) const {
+    return pgid.is_merge_target(old_pg_num, new_pg_num);
   }
   bool is_merge_source(unsigned old_pg_num, unsigned new_pg_num,
 		       spg_t *parent) const {

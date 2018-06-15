@@ -3471,11 +3471,9 @@ bool PastIntervals::is_new_interval(
     // merge source
     pgid.is_merge_source(old_pg_num, new_pg_num, 0) ||
     // pre-merge target
-    (pgid.ps() < new_pg_num_pending &&
-     pgid.is_split(new_pg_num_pending, old_pg_num_pending, 0)) ||
+    pgid.is_merge_target(old_pg_num_pending, new_pg_num_pending) ||
     // merge target
-    (pgid.ps() < new_pg_num &&
-     pgid.is_split(new_pg_num, old_pg_num, 0)) ||
+    pgid.is_merge_target(old_pg_num, new_pg_num) ||
     old_sort_bitwise != new_sort_bitwise ||
     old_recovery_deletes != new_recovery_deletes;
 }
