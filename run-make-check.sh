@@ -74,7 +74,7 @@ function run() {
         CMAKE_PYTHON_OPTS="-DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
     fi
 
-    $DRY_RUN ./do_cmake.sh -DWITH_FIO=ON $CMAKE_PYTHON_OPTS $@ || return 1
+    $DRY_RUN ./do_cmake.sh -DWITH_FIO=ON -DWITH_GTEST_PARALLEL=ON $CMAKE_PYTHON_OPTS $@ || return 1
     $DRY_RUN cd build
     $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
     # prevent OSD EMFILE death on tests, make sure large than 1024
