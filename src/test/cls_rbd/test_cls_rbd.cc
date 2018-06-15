@@ -2490,6 +2490,7 @@ TEST_F(TestClsRbd, group_snap_get_by_id) {
   ASSERT_EQ(snap.name, received_snap.name);
   ASSERT_EQ(snap.state, received_snap.state);
 }
+
 TEST_F(TestClsRbd, trash_methods)
 {
   librados::IoCtx ioctx;
@@ -2729,3 +2730,37 @@ TEST_F(TestClsRbd, clone_child)
   ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_CHILD) == 0ULL);
 }
 
+TEST_F(TestClsRbd, namespace_methods)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string name1 = "123456789";
+  string name2 = "123456780";
+
+  std::list<std::string> entries;
+  ASSERT_EQ(-ENOENT, namespace_list(&ioctx, "", 1024, &entries));
+
+  ASSERT_EQ(0, namespace_add(&ioctx, name1));
+  ASSERT_EQ(-EEXIST, namespace_add(&ioctx, name1));
+
+  ASSERT_EQ(0, namespace_remove(&ioctx, name1));
+  ASSERT_EQ(-ENOENT, namespace_remove(&ioctx, name1));
+
+  ASSERT_EQ(0, namespace_list(&ioctx, "", 1024, &entries));
+  ASSERT_TRUE(entries.empty());
+
+  ASSERT_EQ(0, namespace_add(&ioctx, name1));
+  ASSERT_EQ(0, namespace_add(&ioctx, name2));
+
+  ASSERT_EQ(0, namespace_list(&ioctx, "", 1, &entries));
+  ASSERT_EQ(1U, entries.size());
+  ASSERT_EQ(name2, entries.front());
+
+  ASSERT_EQ(0, namespace_list(&ioctx, name2, 1, &entries));
+  ASSERT_EQ(1U, entries.size());
+  ASSERT_EQ(name1, entries.front());
+
+  ASSERT_EQ(0, namespace_list(&ioctx, name1, 1, &entries));
+  ASSERT_TRUE(entries.empty());
+}

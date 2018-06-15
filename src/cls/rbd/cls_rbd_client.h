@@ -519,6 +519,21 @@ namespace librbd {
     int trash_get(librados::IoCtx *ioctx, const std::string &id,
                   cls::rbd::TrashImageSpec *trash_spec);
 
+    // operations on rbd_namespace object
+    void namespace_add(librados::ObjectWriteOperation *op,
+                       const std::string &name);
+    int namespace_add(librados::IoCtx *ioctx, const std::string &name);
+    void namespace_remove(librados::ObjectWriteOperation *op,
+                          const std::string &name);
+    int namespace_remove(librados::IoCtx *ioctx, const std::string &name);
+    void namespace_list_start(librados::ObjectReadOperation *op,
+                              const std::string &start, uint64_t max_return);
+    int namespace_list_finish(bufferlist::const_iterator *it,
+                              std::list<std::string> *entries);
+    int namespace_list(librados::IoCtx *ioctx,
+                       const std::string &start, uint64_t max_return,
+                       std::list<std::string> *entries);
+
   } // namespace cls_client
 } // namespace librbd
 #endif // CEPH_LIBRBD_CLS_RBD_CLIENT_H
