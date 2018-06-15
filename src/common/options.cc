@@ -537,6 +537,10 @@ std::vector<Option> get_global_options() {
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service"),
 
+    Option("crash_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/var/lib/ceph/crash")
+    .set_description("Directory where crash reports are archived"),
+
     // restapi
     Option("restapi_log_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("default set by python code"),
