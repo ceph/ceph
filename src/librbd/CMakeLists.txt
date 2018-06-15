@@ -28,6 +28,7 @@ set(librbd_internal_srcs
   api/Group.cc
   api/Image.cc
   api/Mirror.cc
+  api/Namespace.cc
   api/Snapshot.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc

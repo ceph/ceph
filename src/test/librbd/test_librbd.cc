@@ -6623,6 +6623,57 @@ TEST_F(TestLibRBD, TestSetSnapById) {
   ASSERT_EQ(0, image.snap_set_by_id(CEPH_NOSNAP));
 }
 
+TEST_F(TestLibRBD, Namespaces) {
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+  rados_remove(ioctx, RBD_NAMESPACE);
+
+  ASSERT_EQ(0, rbd_namespace_create(ioctx, "name1"));
+  ASSERT_EQ(0, rbd_namespace_create(ioctx, "name2"));
+  ASSERT_EQ(0, rbd_namespace_create(ioctx, "name3"));
+  ASSERT_EQ(0, rbd_namespace_remove(ioctx, "name2"));
+
+  char names[1024];
+  size_t max_size = sizeof(names);
+  int len = rbd_namespace_list(ioctx, names, &max_size);
+
+  std::vector<std::string> cpp_names;
+  for (char* cur_name = names; cur_name < names + len; ) {
+    cpp_names.push_back(cur_name);
+    cur_name += strlen(cur_name) + 1;
+  }
+  ASSERT_EQ(2U, cpp_names.size());
+  ASSERT_EQ("name1", cpp_names[0]);
+  ASSERT_EQ("name3", cpp_names[1]);
+
+  rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, NamespacesPP) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+  ioctx.remove(RBD_NAMESPACE);
+
+  librbd::RBD rbd;
+  ASSERT_EQ(-EINVAL, rbd.namespace_create(ioctx, ""));
+  ASSERT_EQ(-EINVAL, rbd.namespace_remove(ioctx, ""));
+
+  ASSERT_EQ(0, rbd.namespace_create(ioctx, "name1"));
+  ASSERT_EQ(-EEXIST, rbd.namespace_create(ioctx, "name1"));
+  ASSERT_EQ(0, rbd.namespace_create(ioctx, "name2"));
+  ASSERT_EQ(0, rbd.namespace_create(ioctx, "name3"));
+  ASSERT_EQ(0, rbd.namespace_remove(ioctx, "name2"));
+  ASSERT_EQ(-ENOENT, rbd.namespace_remove(ioctx, "name2"));
+
+  std::vector<std::string> names;
+  ASSERT_EQ(0, rbd.namespace_list(ioctx, &names));
+  ASSERT_EQ(2U, names.size());
+
+  ASSERT_EQ(2U, names.size());
+  ASSERT_EQ("name1", names[0]);
+  ASSERT_EQ("name3", names[1]);
+}
+
 // poorman's assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
