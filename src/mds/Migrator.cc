@@ -1256,11 +1256,9 @@ void Migrator::check_export_size(CDir *dir, export_state_t& stat, set<client_t>&
 	  }
 	}
       }
-      for (map<client_t, Capability*>::iterator q = in->client_caps.begin();
-	   q != in->client_caps.end();
-	   ++q) {
+      for (const auto &q : in->get_client_caps()) {
 	approx_size += cap_size;
-	client_set.insert(q->first);
+	client_set.insert(q.first);
       }
     }
 
@@ -1288,10 +1286,9 @@ void Migrator::check_export_size(CDir *dir, export_state_t& stat, set<client_t>&
 
 void Migrator::get_export_client_set(CInode *in, set<client_t>& client_set)
 {
-  for (map<client_t, Capability*>::iterator q = in->client_caps.begin();
-      q != in->client_caps.end();
-      ++q)
-    client_set.insert(q->first);
+  for (const auto &p : in->get_client_caps()) {
+    client_set.insert(p.first);
+  }
 }
 
 /* This function DOES put the passed message before returning*/
@@ -1494,10 +1491,9 @@ void Migrator::encode_export_inode_caps(CInode *in, bool auth_cap, bufferlist& b
   }
 
   // make note of clients named by exported capabilities
-  for (map<client_t, Capability*>::iterator it = in->client_caps.begin();
-       it != in->client_caps.end();
-       ++it) 
-    exported_client_map[it->first] = mds->sessionmap.get_inst(entity_name_t::CLIENT(it->first.v));
+  for (const auto &p : in->get_client_caps()) {
+    exported_client_map[p.first] = mds->sessionmap.get_inst(entity_name_t::CLIENT(p.first.v));
+  }
 }
 
 void Migrator::finish_export_inode_caps(CInode *in, mds_rank_t peer,
@@ -1509,20 +1505,18 @@ void Migrator::finish_export_inode_caps(CInode *in, mds_rank_t peer,
   in->put(CInode::PIN_EXPORTINGCAPS);
 
   // tell (all) clients about migrating caps.. 
-  for (map<client_t, Capability*>::iterator it = in->client_caps.begin();
-       it != in->client_caps.end();
-       ++it) {
-    Capability *cap = it->second;
-    dout(7) << "finish_export_inode_caps telling client." << it->first
+  for (const auto &p : in->get_client_caps()) {
+    const Capability *cap = &p.second;
+    dout(7) << "finish_export_inode_caps telling client." << p.first
 	    << " exported caps on " << *in << dendl;
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_EXPORT, in->ino(), 0,
 				     cap->get_cap_id(), cap->get_mseq(), mds->get_osd_epoch_barrier());
 
-    map<client_t,Capability::Import>::iterator q = peer_imported.find(it->first);
+    map<client_t,Capability::Import>::iterator q = peer_imported.find(p.first);
     assert(q != peer_imported.end());
     m->set_cap_peer(q->second.cap_id, q->second.issue_seq, q->second.mseq,
 		    (q->second.cap_id > 0 ? peer : -1), 0);
-    mds->send_message_client_counted(m, it->first);
+    mds->send_message_client_counted(m, p.first);
   }
   in->clear_client_caps_after_export();
   mds->locker->eval(in, CEPH_CAP_LOCKS);
@@ -1871,8 +1865,8 @@ void Migrator::export_reverse(CDir *dir, export_state_t& stat)
   // revoke/resume stale caps
   for (auto in : to_eval) {
     bool need_issue = false;
-    for (auto& p : in->get_client_caps()) {
-      Capability *cap = p.second;
+    for (auto &p : in->client_caps) {
+      Capability *cap = &p.second;
       if (cap->is_stale()) {
 	mds->locker->revoke_stale_caps(cap);
       } else {
