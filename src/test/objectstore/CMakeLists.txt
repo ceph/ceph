@@ -108,7 +108,6 @@ if(WITH_BLUESTORE)
     Allocator_bench.cc
     $<TARGET_OBJECTS:unit-main>
     )
-  add_ceph_unittest(unittest_alloc_bench)
   target_link_libraries(unittest_alloc_bench os global)
 
   add_executable(unittest_fastbmap_allocator
