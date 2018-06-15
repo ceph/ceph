@@ -59,6 +59,15 @@ void RGWOp_Metadata_Get::execute() {
   http_ret = 0;
 }
 
+void RGWOp_Metadata_Get_Myself::execute() {
+  string owner_id;
+
+  owner_id = s->owner.get_id().to_str();
+  s->info.args.append("key", owner_id);
+
+  return RGWOp_Metadata_Get::execute();
+}
+
 void RGWOp_Metadata_List::execute() {
   string marker = s->info.args.get("marker");
   bool max_entries_specified;
@@ -301,6 +310,8 @@ void RGWOp_Metadata_Unlock::execute() {
 }
 
 RGWOp *RGWHandler_Metadata::op_get() {
+  if (s->info.args.exists("myself"))
+    return new RGWOp_Metadata_Get_Myself;
   if (s->info.args.exists("key"))
     return new RGWOp_Metadata_Get;
   else
