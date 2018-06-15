@@ -886,10 +886,9 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth, bool adjust_p
 
     // adjust recursive pop counters
     if (adjust_pop && dir->is_auth()) {
-      utime_t now = ceph_clock_now();
       CDir *p = dir->get_parent_dir();
       while (p) {
-	p->pop_auth_subtree.sub(now, decayrate, dir->pop_auth_subtree);
+	p->pop_auth_subtree.sub(dir->pop_auth_subtree);
 	if (p->is_subtree_root()) break;
 	p = p->inode->get_parent_dir();
       }
@@ -963,11 +962,10 @@ void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust
 
     // adjust popularity?
     if (adjust_pop && dir->is_auth()) {
-      utime_t now = ceph_clock_now();
       CDir *cur = dir;
       CDir *p = dir->get_parent_dir();
       while (p) {
-	p->pop_auth_subtree.add(now, decayrate, dir->pop_auth_subtree);
+	p->pop_auth_subtree.add(dir->pop_auth_subtree);
 	p->pop_lru_subdirs.push_front(&cur->get_inode()->item_pop_lru);
 	if (p->is_subtree_root()) break;
 	cur = p;
@@ -1348,9 +1346,6 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
 {
   dout(10) << "adjust_subtree_after_rename " << *diri << " from " << *olddir << dendl;
 
-  //show_subtrees();
-  utime_t now = ceph_clock_now();
-
   CDir *newdir = diri->get_parent_dir();
 
   if (pop) {
@@ -1379,7 +1374,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
     dout(10) << " new parent " << *newparent << dendl;
 
     if (olddir != newdir)
-      mds->balancer->adjust_pop_for_rename(olddir, dir, now, false);
+      mds->balancer->adjust_pop_for_rename(olddir, dir, false);
 
     if (oldparent == newparent) {
       dout(10) << "parent unchanged for " << *dir << " at " << *oldparent << dendl;
@@ -1423,7 +1418,7 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
     }
 
     if (olddir != newdir)
-      mds->balancer->adjust_pop_for_rename(newdir, dir, now, true);
+      mds->balancer->adjust_pop_for_rename(newdir, dir, true);
   }
 
   show_subtrees();

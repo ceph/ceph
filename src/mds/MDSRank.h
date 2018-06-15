@@ -426,7 +426,7 @@ class MDSRank {
 
     void dump_status(Formatter *f) const;
 
-    void hit_export_target(utime_t now, mds_rank_t rank, double amount=-1.0);
+    void hit_export_target(mds_rank_t rank, double amount=-1.0);
     bool is_export_target(mds_rank_t rank) {
       const set<mds_rank_t>& map_targets = mdsmap->get_mds_info(get_nodeid()).export_targets;
       return map_targets.count(rank);
@@ -532,7 +532,7 @@ class MDSRank {
     // <<<
 
     /* Update MDSMap export_targets for this rank. Called on ::tick(). */
-    void update_targets(utime_t now);
+    void update_targets();
 
     friend class C_MDS_MonCommand;
     void _mon_command_finish(int r, std::string_view cmd, std::string_view outs);

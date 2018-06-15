@@ -1903,8 +1903,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
   }
   issue_caps_set(need_issue);
 
-  utime_t now = ceph_clock_now();
-  mds->balancer->hit_inode(now, in, META_POP_IWR);
+  mds->balancer->hit_inode(in, META_POP_IWR);
 
   // auth unpin after issuing caps
   mut->cleanup();

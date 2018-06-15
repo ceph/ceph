@@ -1408,54 +1408,55 @@ namespace std {
 #define META_NPOP        5
 
 class inode_load_vec_t {
-  static const int NUM = 2;
-  std::array<DecayCounter, NUM> vec;
 public:
-  explicit inode_load_vec_t(const utime_t &now)
-     : vec{DecayCounter(now), DecayCounter(now)}
-  {}
-  // for dencoder infrastructure
-  inode_load_vec_t() {}
+  using time = DecayCounter::time;
+  using clock = DecayCounter::clock;
+  static const size_t NUM = 2;
+
+  inode_load_vec_t() : vec{DecayCounter(DecayRate()), DecayCounter(DecayRate())} {}
+  inode_load_vec_t(const DecayRate &rate) : vec{DecayCounter(rate), DecayCounter(rate)} {}
+
   DecayCounter &get(int t) { 
-    assert(t < NUM);
     return vec[t]; 
   }
-  void zero(utime_t now) {
-    for (int i=0; i<NUM; i++) 
-      vec[i].reset(now);
+  void zero() {
+    for (auto &d : vec) {
+      d.reset();
+    }
   }
   void encode(bufferlist &bl) const;
-  void decode(const utime_t &t, bufferlist::const_iterator &p);
-  // for dencoder
-  void decode(bufferlist::const_iterator& p) { utime_t sample; decode(sample, p); }
-  void dump(Formatter *f);
+  void decode(bufferlist::const_iterator& p);
+  void dump(Formatter *f) const;
   static void generate_test_instances(list<inode_load_vec_t*>& ls);
+
+private:
+  std::array<DecayCounter, NUM> vec;
 };
-inline void encode(const inode_load_vec_t &c, bufferlist &bl) { c.encode(bl); }
-inline void decode(inode_load_vec_t & c, const utime_t &t, bufferlist::const_iterator &p) {
-  c.decode(t, p);
+inline void encode(const inode_load_vec_t &c, bufferlist &bl) {
+  c.encode(bl);
 }
-// for dencoder
 inline void decode(inode_load_vec_t & c, bufferlist::const_iterator &p) {
-  utime_t sample;
-  c.decode(sample, p);
+  c.decode(p);
 }
 
 class dirfrag_load_vec_t {
 public:
-  static const int NUM = 5;
-  std::array<DecayCounter, NUM> vec;
-  explicit dirfrag_load_vec_t(const utime_t &now)
-     : vec{
-         DecayCounter(now),
-         DecayCounter(now),
-         DecayCounter(now),
-         DecayCounter(now),
-         DecayCounter(now)
-       }
+  using time = DecayCounter::time;
+  using clock = DecayCounter::clock;
+  static const size_t NUM = 5;
+
+  dirfrag_load_vec_t() :
+      vec{DecayCounter(DecayRate()),
+          DecayCounter(DecayRate()),
+          DecayCounter(DecayRate()),
+          DecayCounter(DecayRate()),
+          DecayCounter(DecayRate())
+         }
   {}
-  // for dencoder infrastructure
-  dirfrag_load_vec_t() {}
+  dirfrag_load_vec_t(const DecayRate &rate) : 
+      vec{DecayCounter(rate), DecayCounter(rate), DecayCounter(rate), DecayCounter(rate), DecayCounter(rate)}
+  {}
+
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
     for (const auto &i : vec) {
@@ -1463,86 +1464,80 @@ public:
     }
     ENCODE_FINISH(bl);
   }
-  void decode(const utime_t &t, bufferlist::const_iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
     for (auto &i : vec) {
-      decode(i, t, p);
+      decode(i, p);
     }
     DECODE_FINISH(p);
   }
-  // for dencoder infrastructure
-  void decode(bufferlist::const_iterator& p) {
-    utime_t sample;
-    decode(sample, p);
-  }
   void dump(Formatter *f) const;
-  void dump(Formatter *f, utime_t now, const DecayRate& rate);
-  static void generate_test_instances(list<dirfrag_load_vec_t*>& ls);
+  void dump(Formatter *f, const DecayRate& rate) const;
+  static void generate_test_instances(std::list<dirfrag_load_vec_t*>& ls);
 
-  DecayCounter &get(int t) { 
-    assert(t < NUM);
-    return vec[t]; 
+  const DecayCounter &get(int t) const {
+    return vec[t];
   }
-  void adjust(utime_t now, const DecayRate& rate, double d) {
+  DecayCounter &get(int t) {
+    return vec[t];
+  }
+  void adjust(double d) {
     for (auto &i : vec) {
-      i.adjust(now, rate, d);
+      i.adjust(d);
     }
   }
-  void zero(utime_t now) {
+  void zero() {
     for (auto &i : vec) {
-      i.reset(now);
+      i.reset();
     }
-  }
-  double meta_load(utime_t now, const DecayRate& rate) {
-    return 
-      1*vec[META_POP_IRD].get(now, rate) + 
-      2*vec[META_POP_IWR].get(now, rate) +
-      1*vec[META_POP_READDIR].get(now, rate) +
-      2*vec[META_POP_FETCH].get(now, rate) +
-      4*vec[META_POP_STORE].get(now, rate);
   }
   double meta_load() const {
     return 
-      1*vec[META_POP_IRD].get_last() + 
-      2*vec[META_POP_IWR].get_last() +
-      1*vec[META_POP_READDIR].get_last() +
-      2*vec[META_POP_FETCH].get_last() +
-      4*vec[META_POP_STORE].get_last();
+      1*vec[META_POP_IRD].get() + 
+      2*vec[META_POP_IWR].get() +
+      1*vec[META_POP_READDIR].get() +
+      2*vec[META_POP_FETCH].get() +
+      4*vec[META_POP_STORE].get();
   }
 
-  void add(utime_t now, DecayRate& rate, dirfrag_load_vec_t& r) {
-    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-      vec[i].adjust(r.vec[i].get(now, rate));
+  void add(dirfrag_load_vec_t& r) {
+    for (size_t i=0; i<dirfrag_load_vec_t::NUM; i++)
+      vec[i].adjust(r.vec[i].get());
   }
-  void sub(utime_t now, DecayRate& rate, dirfrag_load_vec_t& r) {
-    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
-      vec[i].adjust(-r.vec[i].get(now, rate));
+  void sub(dirfrag_load_vec_t& r) {
+    for (size_t i=0; i<dirfrag_load_vec_t::NUM; i++)
+      vec[i].adjust(-r.vec[i].get());
   }
   void scale(double f) {
-    for (int i=0; i<dirfrag_load_vec_t::NUM; i++)
+    for (size_t i=0; i<dirfrag_load_vec_t::NUM; i++)
       vec[i].scale(f);
   }
+
+private:
+  friend inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl);
+  std::array<DecayCounter, NUM> vec;
 };
 
-inline void encode(const dirfrag_load_vec_t &c, bufferlist &bl) { c.encode(bl); }
-inline void decode(dirfrag_load_vec_t& c, const utime_t &t, bufferlist::const_iterator &p) {
-  c.decode(t, p);
+inline void encode(const dirfrag_load_vec_t &c, bufferlist &bl) {
+  c.encode(bl);
 }
-// this for dencoder
 inline void decode(dirfrag_load_vec_t& c, bufferlist::const_iterator &p) {
-  utime_t sample;
-  c.decode(sample, p);
+  c.decode(p);
 }
 
 inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
 {
-  return out << "[" << dl.vec[0].get_last() << "," << dl.vec[1].get_last()
-	     << " " << dl.meta_load() << "]";
+  std::ostringstream ss;
+  ss << std::setprecision(1) << std::fixed
+     << "[pop"
+        " IRD:" << dl.vec[0]
+     << " IWR:" << dl.vec[1]
+     << " RDR:" << dl.vec[2]
+     << " FET:" << dl.vec[3]
+     << " STR:" << dl.vec[4]
+     << " *LOAD:" << dl.meta_load() << "]";
+  return out << ss.str() << std::endl;
 }
-
-
-
-
 
 
 /* mds_load_t
@@ -1550,8 +1545,14 @@ inline std::ostream& operator<<(std::ostream& out, const dirfrag_load_vec_t& dl)
  */
 
 struct mds_load_t {
+  using clock = dirfrag_load_vec_t::clock;
+  using time = dirfrag_load_vec_t::time;
+
   dirfrag_load_vec_t auth;
   dirfrag_load_vec_t all;
+
+  mds_load_t() : auth(DecayRate()), all(DecayRate()) {}
+  mds_load_t(const DecayRate &rate) : auth(rate), all(rate) {}
 
   double req_rate = 0.0;
   double cache_hit_rate = 0.0;
@@ -1559,26 +1560,17 @@ struct mds_load_t {
 
   double cpu_load_avg = 0.0;
 
-  explicit mds_load_t(const utime_t &t) : auth(t), all(t) {}
-  // mostly for the dencoder infrastructure
-  mds_load_t() : auth(), all() {}
-  
-  double mds_load();  // defiend in MDBalancer.cc
+  double mds_load() const;  // defiend in MDBalancer.cc
   void encode(bufferlist& bl) const;
-  void decode(const utime_t& now, bufferlist::const_iterator& bl);
-  //this one is for dencoder infrastructure
-  void decode(bufferlist::const_iterator& bl) { utime_t sample; decode(sample, bl); }
+  void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<mds_load_t*>& ls);
+  static void generate_test_instances(std::list<mds_load_t*>& ls);
 };
-inline void encode(const mds_load_t &c, bufferlist &bl) { c.encode(bl); }
-inline void decode(mds_load_t &c, const utime_t &t, bufferlist::const_iterator &p) {
-  c.decode(t, p);
+inline void encode(const mds_load_t &c, bufferlist &bl) {
+  c.encode(bl);
 }
-// this one is for dencoder
 inline void decode(mds_load_t &c, bufferlist::const_iterator &p) {
-  utime_t sample;
-  c.decode(sample, p);
+  c.decode(p);
 }
 
 inline std::ostream& operator<<(std::ostream& out, const mds_load_t& load)
@@ -1593,19 +1585,22 @@ inline std::ostream& operator<<(std::ostream& out, const mds_load_t& load)
 
 class load_spread_t {
 public:
+  using time = DecayCounter::time;
+  using clock = DecayCounter::clock;
   static const int MAX = 4;
   int last[MAX];
   int p = 0, n = 0;
   DecayCounter count;
 
 public:
-  load_spread_t() : count(ceph_clock_now())
+  load_spread_t() = delete;
+  load_spread_t(const DecayRate &rate) : count(rate)
   {
     for (int i=0; i<MAX; i++)
       last[i] = -1;
   } 
 
-  double hit(utime_t now, const DecayRate& rate, int who) {
+  double hit(int who) {
     for (int i=0; i<n; i++)
       if (last[i] == who) 
 	return count.get_last();
@@ -1617,10 +1612,10 @@ public:
 
     if (p == MAX) p = 0;
 
-    return count.hit(now, rate);
+    return count.hit();
   }
-  double get(utime_t now, const DecayRate& rate) {
-    return count.get(now, rate);
+  double get() const {
+    return count.get();
   }
 };
 
