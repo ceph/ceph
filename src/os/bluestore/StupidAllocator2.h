@@ -33,7 +33,7 @@ class StupidAllocator2 : public Allocator {
   std::vector<region_map_t> bins;
   free_map_t all;
   uint64_t last_alloc;
-  static constexpr size_t bins_count = 21;
+  static constexpr size_t bins_count = 8 * 10 + 1;
 
   size_t _choose_bin(uint64_t len);
   void _insert_free(uint64_t offset, uint64_t len);
