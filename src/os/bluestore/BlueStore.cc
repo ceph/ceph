@@ -1672,7 +1672,7 @@ void BlueStore::SharedBlob::put()
 			     << " removing self from set " << get_parent()
 			     << dendl;
     if (get_parent()) {
-      get_parent()->remove(this);
+      get_parent()->remove_last(this);
     }
     delete this;
   }
