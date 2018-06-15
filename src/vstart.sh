@@ -458,6 +458,7 @@ prepare_conf() {
         plugin dir = $CEPH_LIB
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
+	crash dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
 	osd_crush_chooseleaf_type = 0
 $extra_conf
