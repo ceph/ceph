@@ -461,6 +461,7 @@ prepare_conf() {
 	crash dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
 	osd_crush_chooseleaf_type = 0
+	debug asok assert abort = true
 $extra_conf
 EOF
 	if [ "$lockdep" -eq 1 ] ; then
