@@ -600,16 +600,16 @@ void inode_load_vec_t::encode(bufferlist &bl) const
   ENCODE_FINISH(bl);
 }
 
-void inode_load_vec_t::decode(const utime_t &t, bufferlist::const_iterator &p)
+void inode_load_vec_t::decode(bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
   for (auto &i : vec) {
-    decode(i, t, p);
+    decode(i, p);
   }
   DECODE_FINISH(p);
 }
 
-void inode_load_vec_t::dump(Formatter *f)
+void inode_load_vec_t::dump(Formatter *f) const
 {
   f->open_array_section("Decay Counters");
   for (const auto &i : vec) {
@@ -622,8 +622,7 @@ void inode_load_vec_t::dump(Formatter *f)
 
 void inode_load_vec_t::generate_test_instances(list<inode_load_vec_t*>& ls)
 {
-  utime_t sample;
-  ls.push_back(new inode_load_vec_t(sample));
+  ls.push_back(new inode_load_vec_t(DecayRate()));
 }
 
 
@@ -641,20 +640,19 @@ void dirfrag_load_vec_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void dirfrag_load_vec_t::dump(Formatter *f, utime_t now, const DecayRate& rate)
+void dirfrag_load_vec_t::dump(Formatter *f, const DecayRate& rate) const
 {
-  f->dump_float("meta_load", meta_load(now, rate));
-  f->dump_float("IRD", get(META_POP_IRD).get(now, rate));
-  f->dump_float("IWR", get(META_POP_IWR).get(now, rate));
-  f->dump_float("READDIR", get(META_POP_READDIR).get(now, rate));
-  f->dump_float("FETCH", get(META_POP_FETCH).get(now, rate));
-  f->dump_float("STORE", get(META_POP_STORE).get(now, rate));
+  f->dump_float("meta_load", meta_load());
+  f->dump_float("IRD", get(META_POP_IRD).get());
+  f->dump_float("IWR", get(META_POP_IWR).get());
+  f->dump_float("READDIR", get(META_POP_READDIR).get());
+  f->dump_float("FETCH", get(META_POP_FETCH).get());
+  f->dump_float("STORE", get(META_POP_STORE).get());
 }
 
-void dirfrag_load_vec_t::generate_test_instances(list<dirfrag_load_vec_t*>& ls)
+void dirfrag_load_vec_t::generate_test_instances(std::list<dirfrag_load_vec_t*>& ls)
 {
-  utime_t sample;
-  ls.push_back(new dirfrag_load_vec_t(sample));
+  ls.push_back(new dirfrag_load_vec_t(DecayRate()));
 }
 
 /*
@@ -671,10 +669,10 @@ void mds_load_t::encode(bufferlist &bl) const {
   ENCODE_FINISH(bl);
 }
 
-void mds_load_t::decode(const utime_t &t, bufferlist::const_iterator &bl) {
+void mds_load_t::decode(bufferlist::const_iterator &bl) {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  decode(auth, t, bl);
-  decode(all, t, bl);
+  decode(auth, bl);
+  decode(all, bl);
   decode(req_rate, bl);
   decode(cache_hit_rate, bl);
   decode(queue_len, bl);
@@ -696,10 +694,9 @@ void mds_load_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void mds_load_t::generate_test_instances(list<mds_load_t*>& ls)
+void mds_load_t::generate_test_instances(std::list<mds_load_t*>& ls)
 {
-  utime_t sample;
-  ls.push_back(new mds_load_t(sample));
+  ls.push_back(new mds_load_t(DecayRate()));
 }
 
 /*

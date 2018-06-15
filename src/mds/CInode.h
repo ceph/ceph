@@ -681,30 +681,7 @@ public:
 
   // ---------------------------
   CInode() = delete;
-  CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP) : 
-    mdcache(c),
-    first(f), last(l),
-    item_dirty(this),
-    item_caps(this),
-    item_open_file(this),
-    item_dirty_parent(this),
-    item_dirty_dirfrag_dir(this), 
-    item_dirty_dirfrag_nest(this), 
-    item_dirty_dirfrag_dirfragtree(this), 
-    pop(ceph_clock_now()),
-    versionlock(this, &versionlock_type),
-    authlock(this, &authlock_type),
-    linklock(this, &linklock_type),
-    dirfragtreelock(this, &dirfragtreelock_type),
-    filelock(this, &filelock_type),
-    xattrlock(this, &xattrlock_type),
-    snaplock(this, &snaplock_type),
-    nestlock(this, &nestlock_type),
-    flocklock(this, &flocklock_type),
-    policylock(this, &policylock_type)
-  {
-    if (auth) state_set(STATE_AUTH);
-  }
+  CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
   ~CInode() override {
     close_dirfrags();
     close_snaprealm();
@@ -867,7 +844,7 @@ public:
 
   // -- import/export --
   void encode_export(bufferlist& bl);
-  void finish_export(utime_t now);
+  void finish_export();
   void abort_export() {
     put(PIN_TEMPEXPORTING);
     assert(state_test(STATE_EXPORTINGCAPS));
