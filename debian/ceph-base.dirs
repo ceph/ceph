@@ -4,3 +4,4 @@ var/lib/ceph/bootstrap-osd
 var/lib/ceph/bootstrap-rgw
 var/lib/ceph/bootstrap-rbd
 var/lib/ceph/tmp
+var/lib/ceph/crash
