@@ -51,16 +51,14 @@ namespace ceph {
     oss << BackTrace(1);
     dout_emergency(oss.str());
 
-    dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-		   "is needed to interpret this.\n");
-
     if (g_assert_context) {
       lderr(g_assert_context) << buf << std::endl;
-      *_dout << oss.str();
-      *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-	     << "is needed to interpret this.\n" << dendl;
+      *_dout << oss.str() << dendl;
 
-      g_assert_context->_log->dump_recent();
+      // dump recent only if the abort signal handler won't do it for us
+      if (!g_assert_context->_conf->fatal_signal_handlers) {
+	g_assert_context->_log->dump_recent();
+      }
     }
 
     abort();
@@ -126,16 +124,14 @@ namespace ceph {
     oss << *bt;
     dout_emergency(oss.str());
 
-    dout_emergency(" NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-		   "is needed to interpret this.\n");
-
     if (g_assert_context) {
       lderr(g_assert_context) << buf << std::endl;
-      *_dout << oss.str();
-      *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
-	     << "is needed to interpret this.\n" << dendl;
+      *_dout << oss.str() << dendl;
 
-      g_assert_context->_log->dump_recent();
+      // dump recent only if the abort signal handler won't do it for us
+      if (!g_assert_context->_conf->fatal_signal_handlers) {
+	g_assert_context->_log->dump_recent();
+      }
     }
 
     abort();
