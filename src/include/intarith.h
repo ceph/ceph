@@ -15,6 +15,7 @@
 #ifndef CEPH_INTARITH_H
 #define CEPH_INTARITH_H
 
+#include <stdint.h>
 #include <limits>
 #include <type_traits>
 
