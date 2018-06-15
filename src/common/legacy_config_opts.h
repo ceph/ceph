@@ -1513,6 +1513,7 @@ OPTION(rgw_torrent_sha_unit, OPT_INT)    // torrent field piece length 512K
 OPTION(event_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
 
 OPTION(debug_deliberately_leak_memory, OPT_BOOL)
+OPTION(debug_asok_assert_abort, OPT_BOOL)
 
 OPTION(rgw_swift_custom_header, OPT_STR) // option to enable swift custom headers
 
