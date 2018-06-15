@@ -9,7 +9,13 @@ meta:
    Setup rgw on client.0
 
 roles:
-- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+- [mon.a, mgr.x]
+- [mon.b, mgr.y]
+- [mon.c, mgr.z]
+- [osd.0, osd.1, osd.2]
+- [osd.3, osd.4, osd.5]
+- [osd.6, osd.7, osd.8]
+- [client.0]
 tasks:
 - install:
 - ceph:
