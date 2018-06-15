@@ -6000,7 +6000,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  continue;
 	}
 	c->cid.is_pg(&pgid);
-	dout(20) << __func__ << "  collection " << c->cid << dendl;
+	dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
+		 << dendl;
       }
 
       if (!expecting_shards.empty()) {
