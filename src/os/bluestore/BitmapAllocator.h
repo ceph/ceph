@@ -38,6 +38,10 @@ public:
   void dump() override
   {
   }
+  double get_fragmentation(uint64_t) override
+  {
+    return _get_fragmentation();
+  }
 
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
