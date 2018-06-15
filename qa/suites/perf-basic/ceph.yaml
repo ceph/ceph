@@ -18,6 +18,7 @@ roles:
 - [client.0]
 tasks:
 - install:
+- ssh-keys:
 - ceph:
     fs: xfs
     wait-for-scrub: false
