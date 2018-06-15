@@ -34,6 +34,7 @@ OPTION(chdir, OPT_STR)
 OPTION(restapi_log_level, OPT_STR) 	// default set by Python code
 OPTION(restapi_base_url, OPT_STR)	// "
 OPTION(fatal_signal_handlers, OPT_BOOL)
+OPTION(crash_dir, OPT_STR)
 SAFE_OPTION(erasure_code_dir, OPT_STR) // default location for erasure-code plugins
 
 OPTION(log_file, OPT_STR) // default changed by common_preinit()
