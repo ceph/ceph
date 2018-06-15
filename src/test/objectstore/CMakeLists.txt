@@ -108,7 +108,8 @@ if(WITH_BLUESTORE)
     Allocator_bench.cc
     $<TARGET_OBJECTS:unit-main>
     )
-  target_link_libraries(unittest_alloc_bench os global)
+  set_target_properties(unittest_alloc_bench PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
+  target_link_libraries(unittest_alloc_bench ${UNITTEST_LIBS} os global)
 
   add_executable(unittest_fastbmap_allocator
     fastbmap_allocator_test.cc
