@@ -18,6 +18,7 @@ tasks:
         - \(MDS_DAMAGE\)
         - \(MDS_ALL_DOWN\)
         - \(MDS_UP_LESS_THAN_MAX\)
+        - pauserd,pausewr flag\(s\) set
   - rgw: [client.0]
   - cephfs_test_runner:
       fail_on_skip: false
