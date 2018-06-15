@@ -978,6 +978,13 @@ CEPH_RBD_API int rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
                                              size_t group_snap_info_size,
                                              size_t num_entries);
 
+CEPH_RBD_API int rbd_namespace_create(rados_ioctx_t io,
+                                      const char *namespace_name);
+CEPH_RBD_API int rbd_namespace_remove(rados_ioctx_t io,
+                                      const char *namespace_name);
+CEPH_RBD_API int rbd_namespace_list(rados_ioctx_t io, char *namespace_names,
+                                    size_t *size);
+
 #ifdef __cplusplus
 }
 #endif
