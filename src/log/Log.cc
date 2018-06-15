@@ -341,8 +341,31 @@ void Log::_write_and_copy(char* what, size_t len)
 
 void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 {
-  Entry *e;
-  while ((e = t->dequeue()) != NULL) {
+  Entry *e = nullptr;
+  long len = 0;
+  if (crash) {
+    len = t->m_len;
+  }
+  if (!requeue) {
+    e = t->m_head;
+    if (!e) {
+      return;
+    }
+  }
+  while (true) {
+    if (requeue) {
+      e = t->dequeue();
+      if (!e) {
+	break;
+      }
+      requeue->enqueue(e);
+    } else {
+      e = e->m_next;
+      if (!e) {
+	break;
+      }
+    }
+
     unsigned sub = e->m_subsys;
 
     bool should_log = crash || m_subs->get_log_level(sub) >= e->m_prio;
@@ -370,8 +393,9 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
         line = &m_log_buf[m_log_buf_pos];
       }
 
-      if (crash)
-        line_used += snprintf(line, line_size, "%6d> ", -t->m_len);
+      if (crash) {
+        line_used += snprintf(line, line_size, "%6ld> ", -(--len));
+      }
       line_used += append_time(e->m_stamp, line + line_used, line_size - line_used);
       line_used += snprintf(line + line_used, line_size - line_used, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
@@ -408,7 +432,6 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       m_graylog->log_entry(e);
     }
 
-    requeue->enqueue(e);
   }
 
   _flush_logbuf();
@@ -452,9 +475,8 @@ void Log::dump_recent()
   _flush(&t, &m_recent, false);
   _flush_logbuf();
 
-  EntryQueue old;
   _log_message("--- begin dump of recent events ---", true);
-  _flush(&m_recent, &old, true);
+  _flush(&m_recent, nullptr, true);
 
   char buf[4096];
   _log_message("--- logging levels ---", true);
