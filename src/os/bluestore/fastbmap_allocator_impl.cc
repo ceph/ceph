@@ -218,51 +218,63 @@ void AllocatorLevel01Loose::_mark_l1_on_l0(int64_t l0_pos, int64_t l0_pos_end)
 
   int64_t idx = l0_pos / bits_per_slot;
   int64_t idx_end = l0_pos_end / bits_per_slot;
-  bool was_all_free = true;
-  bool was_all_allocated = true;
+  slot_t mask_to_apply = L1_ENTRY_NOT_USED;
 
   auto l1_pos = l0_pos / d0;
 
   while (idx < idx_end) {
     if (l0[idx] == all_slot_clear) {
-      was_all_free = false;
-
       // if not all prev slots are allocated then no need to check the
       // current slot set, it's partial
       ++idx;
-      idx =
-        was_all_allocated ? idx : p2roundup(idx, int64_t(slotset_width));
+      if (mask_to_apply == L1_ENTRY_NOT_USED) {
+	mask_to_apply = L1_ENTRY_FULL;
+      } else if (mask_to_apply != L1_ENTRY_FULL) {
+	idx = p2roundup(idx, int64_t(slotset_width));
+        mask_to_apply = L1_ENTRY_PARTIAL;
+      }
     } else if (l0[idx] == all_slot_set) {
-      // all free
-      was_all_allocated = false;
       // if not all prev slots are free then no need to check the
       // current slot set, it's partial
       ++idx;
-      idx = was_all_free ? idx : p2roundup(idx, int64_t(slotset_width));
+      if (mask_to_apply == L1_ENTRY_NOT_USED) {
+	mask_to_apply = L1_ENTRY_FREE;
+      } else if (mask_to_apply != L1_ENTRY_FREE) {
+	idx = p2roundup(idx, int64_t(slotset_width));
+        mask_to_apply = L1_ENTRY_PARTIAL;
+      }
     } else {
       // no need to check the current slot set, it's partial
-      was_all_free = false;
-      was_all_allocated = false;
+      mask_to_apply = L1_ENTRY_PARTIAL;
       ++idx;
       idx = p2roundup(idx, int64_t(slotset_width));
     }
     if ((idx % slotset_width) == 0) {
-
+      assert(mask_to_apply != L1_ENTRY_NOT_USED);
       uint64_t shift = (l1_pos % l1_w) * L1_ENTRY_WIDTH;
       slot_t& slot_val = l1[l1_pos / l1_w];
-        slot_val &= ~(uint64_t(L1_ENTRY_MASK) << shift);
+      auto mask = slot_t(L1_ENTRY_MASK) << shift;
 
-      if (was_all_allocated) {
-        assert(!was_all_free);
-        slot_val |= uint64_t(L1_ENTRY_FULL) << shift;
-      } else if (was_all_free) {
-        assert(!was_all_allocated);
-        slot_val |= uint64_t(L1_ENTRY_FREE) << shift;
-      } else {
-        slot_val |= uint64_t(L1_ENTRY_PARTIAL) << shift;
+      slot_t old_mask = (slot_val & mask) >> shift;
+      switch(old_mask) {
+      case L1_ENTRY_FREE:
+	unalloc_l1_count--;
+	break;
+      case L1_ENTRY_PARTIAL:
+	partial_l1_count--;
+	break;
       }
-      was_all_free = true;
-      was_all_allocated = true;
+      slot_val &= ~mask;
+      slot_val |= slot_t(mask_to_apply) << shift;
+      switch(mask_to_apply) {
+      case L1_ENTRY_FREE:
+	unalloc_l1_count++;
+	break;
+      case L1_ENTRY_PARTIAL:
+	partial_l1_count++;
+	break;
+      }
+      mask_to_apply = L1_ENTRY_NOT_USED;
       ++l1_pos;
     }
   }
@@ -465,7 +477,19 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
           (idx * d1 + free_pos / L1_ENTRY_WIDTH + 1) * l0_w,
           allocated,
           res);
-        slot_val &= (~slot_t(L1_ENTRY_MASK)) << free_pos;
+
+	auto mask = slot_t(L1_ENTRY_MASK) << free_pos;
+
+	slot_t old_mask = (slot_val & mask) >> free_pos;
+	switch(old_mask) {
+	case L1_ENTRY_FREE:
+	  unalloc_l1_count--;
+	  break;
+	case L1_ENTRY_PARTIAL:
+	  partial_l1_count--;
+	  break;
+	}
+        slot_val &= ~mask;
         if (empty) {
           // the next line is no op with the current L1_ENTRY_FULL but left
           // as-is for the sake of uniformity and to avoid potential errors
@@ -473,6 +497,7 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
           slot_val |= slot_t(L1_ENTRY_FULL) << free_pos;
         } else {
           slot_val |= slot_t(L1_ENTRY_PARTIAL) << free_pos;
+	  partial_l1_count++;
         }
         if (length <= *allocated || slot_val == all_slot_clear) {
           break;
