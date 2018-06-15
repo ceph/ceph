@@ -6,6 +6,7 @@ from __future__ import absolute_import
 
 import errno
 from distutils.version import StrictVersion
+from distutils.util import strtobool
 import os
 import socket
 import tempfile
@@ -116,7 +117,12 @@ class SSLCherryPyConfig(object):
         :returns our URI
         """
         server_addr = self.get_localized_config('server_addr', '::')
-        server_port = self.get_localized_config('server_port', '8443')
+        ssl = strtobool(self.get_localized_config('ssl', 'True'))
+        def_server_port = 8443
+        if not ssl:
+            def_server_port = 8080
+
+        server_port = self.get_localized_config('server_port', def_server_port)
         if server_addr is None:
             raise ServerConfigException(
                 'no server_addr configured; '
@@ -163,18 +169,22 @@ class SSLCherryPyConfig(object):
             'engine.autoreload.on': False,
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
-            'server.ssl_module': 'builtin',
-            'server.ssl_certificate': cert_fname,
-            'server.ssl_private_key': pkey_fname,
             'error_page.default': json_error_page,
             'tools.request_logging.on': True
         }
+
+        if ssl:
+            config['server.ssl_module'] = 'builtin'
+            config['server.ssl_certificate'] = cert_fname
+            config['server.ssl_private_key'] = pkey_fname
+
         cherrypy.config.update(config)
 
         self._url_prefix = prepare_url_prefix(self.get_config('url_prefix',
                                                               default=''))
 
-        uri = "https://{0}:{1}{2}/".format(
+        uri = "{0}://{1}:{2}{3}/".format(
+            'https' if ssl else 'http',
             socket.getfqdn() if server_addr == "::" else server_addr,
             server_port,
             self.url_prefix
