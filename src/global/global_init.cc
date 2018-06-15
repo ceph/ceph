@@ -191,8 +191,10 @@ global_init(const std::map<std::string,std::string> *defaults,
   int siglist[] = { SIGPIPE, 0 };
   block_signals(siglist, NULL);
 
-  if (g_conf->fatal_signal_handlers)
+  if (g_conf->fatal_signal_handlers) {
     install_standard_sighandlers();
+  }
+  register_assert_context(g_ceph_context);
 
   if (g_conf->log_flush_on_exit)
     g_ceph_context->_log->set_flush_on_exit();
@@ -314,8 +316,6 @@ global_init(const std::map<std::string,std::string> *defaults,
       cerr << "warning: unable to create " << g_conf->run_dir << ": " << cpp_strerror(errno) << std::endl;
     }
   }
-
-  register_assert_context(g_ceph_context);
 
   // call all observers now.  this has the side-effect of configuring
   // and opening the log file immediately.
