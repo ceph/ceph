@@ -4791,7 +4791,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_thread_pool_size", Option::TYPE_INT, Option::LEVEL_BASIC)
-    .set_default(100)
+    .set_default(512)
     .set_description("RGW requests handling thread pool size.")
     .set_long_description(
         "This parameter determines the number of concurrent requests RGW can process "
