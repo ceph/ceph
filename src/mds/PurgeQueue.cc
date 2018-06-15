@@ -359,6 +359,12 @@ bool PurgeQueue::_consume()
       delayed_flush = nullptr;
     }
 
+    if (int r = journaler.get_error()) {
+      derr << "Error " << r << " recovering write_pos" << dendl;
+      on_error->complete(r);
+      return could_consume;
+    }
+
     if (!journaler.is_readable()) {
       dout(10) << " not readable right now" << dendl;
       // Because we are the writer and the reader of the journal
@@ -368,6 +374,8 @@ bool PurgeQueue::_consume()
           Mutex::Locker l(lock);
           if (r == 0) {
             _consume();
+          } else if (r != -EAGAIN) {
+            on_error->complete(r);
           }
         }));
       }
