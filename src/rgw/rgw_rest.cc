@@ -92,6 +92,7 @@ static const struct rgw_http_attr base_rgw_to_http_attrs[] = {
   { RGW_ATTR_CONTENT_ENC,       "Content-Encoding" },
   { RGW_ATTR_USER_MANIFEST,     "X-Object-Manifest" },
   { RGW_ATTR_X_ROBOTS_TAG ,     "X-Robots-Tag" },
+  { RGW_ATTR_STORAGE_CLASS ,    "X-Amz-Storage-Class" },
   /* RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION header depends on access mode:
    * S3 endpoint: x-amz-website-redirect-location
    * S3Website endpoint: Location
@@ -116,6 +117,7 @@ static const struct generic_attr generic_attrs[] = {
   { "HTTP_CONTENT_DISPOSITION", RGW_ATTR_CONTENT_DISP },
   { "HTTP_CONTENT_ENCODING",    RGW_ATTR_CONTENT_ENC },
   { "HTTP_X_ROBOTS_TAG",        RGW_ATTR_X_ROBOTS_TAG },
+  { "HTTP_X_AMZ_STORAGE_CLASS", RGW_ATTR_STORAGE_CLASS },
 };
 
 map<string, string> rgw_to_http_attrs;

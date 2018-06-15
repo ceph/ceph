@@ -2086,7 +2086,7 @@ void RGWListBuckets::execute()
 
       /* operator[] still can create a new entry for storage policy seen
        * for first time. */
-      auto& policy_stats = policies_stats[bucket.placement_rule];
+      auto& policy_stats = policies_stats[bucket.placement_rule.to_str()];
       policy_stats.bytes_used += bucket.size;
       policy_stats.bytes_used_rounded += bucket.size_rounded;
       policy_stats.buckets_count++;
@@ -2228,7 +2228,7 @@ void RGWStatAccount::execute()
 
         /* operator[] still can create a new entry for storage policy seen
          * for first time. */
-        auto& policy_stats = policies_stats[bucket.placement_rule];
+        auto& policy_stats = policies_stats[bucket.placement_rule.to_str()];
         policy_stats.bytes_used += bucket.size;
         policy_stats.bytes_used_rounded += bucket.size_rounded;
         policy_stats.buckets_count++;
@@ -2833,9 +2833,9 @@ void RGWCreateBucket::execute()
   }
 
   const auto& zonegroup = store->svc.zone->get_zonegroup();
-  if (!placement_rule.empty() &&
-      !zonegroup.placement_targets.count(placement_rule)) {
-    ldpp_dout(this, 0) << "placement target (" << placement_rule << ")"
+  if (!placement_rule.name.empty() &&
+      !zonegroup.placement_targets.count(placement_rule.name)) {
+    ldpp_dout(this, 0) << "placement target (" << placement_rule.name << ")"
                      << " doesn't exist in the placement targets of zonegroup"
                      << " (" << store->svc.zone->get_zonegroup().api_name << ")" << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
@@ -2902,7 +2902,7 @@ void RGWCreateBucket::execute()
   }
 
   if (s->bucket_exists) {
-    string selected_placement_rule;
+    rgw_placement_rule selected_placement_rule;
     rgw_bucket bucket;
     bucket.tenant = s->bucket_tenant;
     bucket.name = s->bucket_name;
@@ -3388,6 +3388,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 static CompressorRef get_compressor_plugin(const req_state *s,
                                            const std::string& compression_type)
 {
+#warning FIXME different compression types per placement rule + storage_class
   if (compression_type != "random") {
     return Compressor::create(s->cct, compression_type);
   }
@@ -3864,7 +3865,7 @@ void RGWPostObj::execute()
       filter = encrypt.get();
     } else {
       const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(
-          s->bucket_info.placement_rule);
+          s->bucket_info.placement_rule.name);
       if (compression_type != "none") {
         plugin = Compressor::create(s->cct, compression_type);
         if (!plugin) {
@@ -6395,9 +6396,10 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
   }
 
 
-  std::string placement_rule;
+  rgw_placement_rule placement_rule;
+  placement_rule.storage_class = s->info.storage_class;
   if (bucket_exists) {
-    std::string selected_placement_rule;
+    rgw_placement_rule selected_placement_rule;
     rgw_bucket bucket;
     bucket.tenant = s->bucket_tenant;
     bucket.name = s->bucket_name;
@@ -6584,8 +6586,9 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   /* No filters by default. */
   DataProcessor *filter = &processor;
 
+#warning add storage_class compression
   const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(
-      binfo.placement_rule);
+      binfo.placement_rule.name);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
   if (compression_type != "none") {

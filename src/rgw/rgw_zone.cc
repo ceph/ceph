@@ -76,7 +76,7 @@ int RGWZoneGroup::create_default(bool old_format)
   RGWZoneGroupPlacementTarget placement_target;
   placement_target.name = "default-placement";
   placement_targets[placement_target.name] = placement_target;
-  default_placement = "default-placement";
+  default_placement.name = "default-placement";
 
   RGWZoneParams zone_params(default_zone_name);
 
@@ -290,7 +290,7 @@ void RGWZoneGroup::post_process_params()
   }
 
   if (default_placement.empty() && !placement_targets.empty()) {
-    default_placement = placement_targets.begin()->first;
+    default_placement.init(placement_targets.begin()->first, RGW_STORAGE_CLASS_STANDARD);
   }
 }
 
@@ -1547,7 +1547,9 @@ int get_zones_pool_set(CephContext* cct,
       pool_names.insert(zone.reshard_pool);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
-	pool_names.insert(iter.second.data_pool);
+        for (auto& pi : iter.second.data_pools) {
+          pool_names.insert(pi.second);
+        }
 	pool_names.insert(iter.second.data_extra_pool);
       }
     }
@@ -1621,8 +1623,10 @@ int RGWZoneParams::fix_pool_names()
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
                                                iter.second.index_pool);
-    iter.second.data_pool = fix_zone_pool_dup(pools, name, "." + default_storage_pool_suffix,
-                                              iter.second.data_pool);
+    for (auto& pi : iter.second.data_pools) {
+      pi.second = fix_zone_pool_dup(pools, name, "." + default_storage_pool_suffix,
+                                                pi.second);
+    }
     iter.second.data_extra_pool= fix_zone_pool_dup(pools, name, "." + default_storage_extra_pool_suffix,
                                                    iter.second.data_extra_pool);
   }
@@ -1642,7 +1646,7 @@ int RGWZoneParams::create(bool exclusive)
     /* a new system, let's set new placement info */
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
-    default_placement.data_pool =  name + "." + default_storage_pool_suffix;
+    default_placement.data_pools[RGW_STORAGE_CLASS_STANDARD] =  name + "." + default_storage_pool_suffix;
     default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
     placement_pools["default-placement"] = default_placement;
   }

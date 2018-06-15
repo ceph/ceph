@@ -289,6 +289,7 @@ void usage()
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
   cout << "   --redirect-zone           specify zone id to redirect when response is 404 (not found)\n";
   cout << "   --placement-id            placement id for zonegroup placement commands\n";
+  cout << "   --storage-class           storage class for zonegroup placement commands\n";
   cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
@@ -2800,6 +2801,7 @@ int main(int argc, const char **argv)
   string quota_scope;
   string object_version;
   string placement_id;
+  string storage_class;
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
@@ -3112,6 +3114,8 @@ int main(int argc, const char **argv)
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
       placement_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
+      storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
       get_str_list(val, tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
@@ -4289,6 +4293,17 @@ int main(int argc, const char **argv)
           return EINVAL;
         }
 
+        rgw_placement_rule rule;
+        rule.from_str(placement_id);
+
+        if (!rule.storage_class.empty() && !storage_class.empty() &&
+            rule.storage_class != storage_class) {
+          cerr << "ERROR: provided contradicting storage class configuration" << std::endl;
+          return EINVAL;
+        } else if (rule.storage_class.empty()) {
+          rule.storage_class = storage_class;
+        }
+
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store->svc.sysobj);
 	if (ret < 0) {
@@ -4296,14 +4311,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD) {
-          RGWZoneGroupPlacementTarget target;
-          target.name = placement_id;
-          for (auto& t : tags) {
-            target.tags.insert(t);
-          }
-          zonegroup.placement_targets[placement_id] = target;
-        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_MODIFY) {
+        if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD ||
+            opt_cmd == OPT_ZONEGROUP_PLACEMENT_MODIFY) {
           RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
           if (!tags.empty()) {
             target.tags.clear();
@@ -4318,6 +4327,7 @@ int main(int argc, const char **argv)
           for (auto& t : tags_add) {
             target.tags.insert(t);
           }
+          target.storage_classes.insert(rule.get_storage_class());
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_RM) {
           zonegroup.placement_targets.erase(placement_id);
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_DEFAULT) {
@@ -4326,7 +4336,7 @@ int main(int argc, const char **argv)
                 << placement_id << "'" << std::endl;
             return -ENOENT;
           }
-          zonegroup.default_placement = placement_id;
+          zonegroup.default_placement = rule;
         }
 
         zonegroup.post_process_params();
@@ -4770,7 +4780,11 @@ int main(int argc, const char **argv)
           RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
 
           info.index_pool = *index_pool;
-          info.data_pool = *data_pool;
+          if (storage_class.empty()) {
+            info.data_pools[RGW_STORAGE_CLASS_STANDARD] = *data_pool;
+          } else {
+            info.data_pools[storage_class] = *data_pool;
+          }
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
           }
@@ -4799,7 +4813,11 @@ int main(int argc, const char **argv)
             info.index_pool = *index_pool;
           }
           if (data_pool && !data_pool->empty()) {
-            info.data_pool = *data_pool;
+            if (storage_class.empty()) {
+              info.data_pools[RGW_STORAGE_CLASS_STANDARD] = *data_pool;
+            } else {
+              info.data_pools[storage_class] = *data_pool;
+            }
           }
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
