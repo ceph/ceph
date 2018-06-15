@@ -1140,6 +1140,7 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
     }
     if (!i->second.is_incomplete() &&
 	max_last_epoch_started_found < i->second.last_epoch_started) {
+      *history_les_bound = false;
       max_last_epoch_started_found = i->second.last_epoch_started;
     }
   }
