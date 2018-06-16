@@ -35,6 +35,14 @@ namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
 			  const char *func)
   {
+    g_assert_condition = assertion;
+    g_assert_file = file;
+    g_assert_line = line;
+    g_assert_func = func;
+    g_assert_thread = (unsigned long long)pthread_self();
+    pthread_getname_np(pthread_self(), g_assert_thread_name,
+		       sizeof(g_assert_thread_name));
+
     ostringstream tss;
     tss << ceph_clock_now();
 
@@ -74,6 +82,14 @@ namespace ceph {
   {
     ostringstream tss;
     tss << ceph_clock_now();
+
+    g_assert_condition = assertion;
+    g_assert_file = file;
+    g_assert_line = line;
+    g_assert_func = func;
+    g_assert_thread = (unsigned long long)pthread_self();
+    pthread_getname_np(pthread_self(), g_assert_thread_name,
+		       sizeof(g_assert_thread_name));
 
     class BufAppender {
     public:
