@@ -4,6 +4,7 @@
 
 import logging
 import os
+import random
 import time
 
 import teuthology
@@ -82,6 +83,9 @@ def main(args):
             return
         conf.filter_in.extend(rerun_filters['descriptions'])
         conf.suite = normalize_suite_name(rerun_filters['suite'])
+    if conf.seed is None:
+        conf.seed = random.randint(0, 9999)
+        log.info('Using random seed=%s', conf.seed)
 
     run = Run(conf)
     name = run.name

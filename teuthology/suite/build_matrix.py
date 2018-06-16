@@ -1,12 +1,13 @@
 import logging
 import os
+import random
 
 from . import matrix
 
 log = logging.getLogger(__name__)
 
 
-def build_matrix(path, subset=None):
+def build_matrix(path, subset=None, seed=None):
     """
     Return a list of items descibed by path such that if the list of
     items is chunked into mincyclicity pieces, each piece is still a
@@ -45,12 +46,14 @@ def build_matrix(path, subset=None):
 
     :param path:        The path to search for yaml fragments
     :param subset:	(index, outof)
+    :param seed:        The seed for repeatable random test
     """
     if subset:
         log.info(
             'Subset=%s/%s' %
             (str(subset[0]), str(subset[1]))
         )
+    random.seed(seed)
     mat, first, matlimit = _get_matrix(path, subset)
     return generate_combinations(path, mat, first, matlimit)
 

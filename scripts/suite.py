@@ -117,12 +117,17 @@ Scheduler arguments:
                               the original run, the resulting one will only
                               inherit the suite value. Any others must be
                               passed as normal while scheduling with this
-                              feature.
+                              feature. For random tests involving facet whose
+                              path ends with '$' operator, you might want to
+                              use --seed argument to repeat them.
  -R, --rerun-statuses <statuses>
                               A comma-separated list of statuses to be used
                               with --rerun. Supported statuses are: 'dead',
                               'fail', 'pass', 'queued', 'running', 'waiting'
                               [default: fail,dead]
+ --seed SEED                  An random number mostly useful when used along
+                              with --rerun argument. This number can be found
+                              in the output of teuthology-suite command.
 
 """.format(
     default_machine_type=config.default_machine_type,
