@@ -816,42 +816,46 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
 
   bool fast_diff = m_dst_image_ctx->test_features(RBD_FEATURE_FAST_DIFF);
   uint64_t prev_end_size = 0;
-  bool hide_parent = false;
-  if (m_src_parent_image_ctx != nullptr) {
-    RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
-    RWLock::RLocker parent_locker(m_dst_image_ctx->parent_lock);
-    auto dst_snap_seq = m_snap_map.begin()->second.front();
-    uint64_t parent_overlap = 0;
-    int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &parent_overlap);
-    if (r < 0) {
-      ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
-                      << dst_snap_seq << ": " << cpp_strerror(r) << dendl;
-    }
-    if (parent_overlap == 0) {
-      ldout(m_cct, 20) << "no parent overlap" << dendl;
-    } else {
-      std::vector<std::pair<uint64_t, uint64_t>> image_extents;
-      Striper::extent_to_file(m_cct, &m_dst_image_ctx->layout,
-                              m_dst_object_number, 0,
-                              m_dst_image_ctx->layout.object_size,
-                              image_extents);
-      uint64_t overlap = m_dst_image_ctx->prune_parent_extents(image_extents,
-                                                               parent_overlap);
-      if (overlap == 0) {
-        ldout(m_cct, 20) << "no parent overlap" << dendl;
-      } else {
-        for (auto e : image_extents) {
-          prev_end_size += e.second;
-        }
-        assert(prev_end_size <= m_dst_image_ctx->layout.object_size);
-        hide_parent = true;
-      }
-    }
-  }
+  bool hide_parent = m_src_parent_image_ctx != nullptr;
 
   for (auto &it : m_dst_zero_interval) {
     auto src_snap_seq = it.first;
     auto &zero_interval = it.second;
+
+    if (hide_parent) {
+      RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+      RWLock::RLocker parent_locker(m_dst_image_ctx->parent_lock);
+      auto snap_map_it = m_snap_map.find(src_snap_seq);
+      assert(snap_map_it != m_snap_map.end());
+      auto dst_snap_seq = snap_map_it->second.front();
+      uint64_t parent_overlap = 0;
+      int r = m_dst_image_ctx->get_parent_overlap(dst_snap_seq, &parent_overlap);
+      if (r < 0) {
+        ldout(m_cct, 5) << "failed getting parent overlap for snap_id: "
+                        << dst_snap_seq << ": " << cpp_strerror(r) << dendl;
+      }
+      if (parent_overlap == 0) {
+        ldout(m_cct, 20) << "no parent overlap" << dendl;
+        hide_parent = false;
+      } else {
+        std::vector<std::pair<uint64_t, uint64_t>> image_extents;
+        Striper::extent_to_file(m_cct, &m_dst_image_ctx->layout,
+                                m_dst_object_number, 0,
+                                m_dst_image_ctx->layout.object_size,
+                                image_extents);
+        uint64_t overlap = m_dst_image_ctx->prune_parent_extents(image_extents,
+                                                                 parent_overlap);
+        if (overlap == 0) {
+          ldout(m_cct, 20) << "no parent overlap" << dendl;
+          hide_parent = false;
+        } else if (src_snap_seq == m_dst_zero_interval.begin()->first) {
+          for (auto e : image_extents) {
+            prev_end_size += e.second;
+          }
+          assert(prev_end_size <= m_dst_image_ctx->layout.object_size);
+        }
+      }
+    }
 
     uint64_t end_size = prev_end_size;
 
