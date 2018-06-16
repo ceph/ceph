@@ -146,3 +146,8 @@ class TestMisc(CephFSTestCase):
 
         ratio = raw_avail / fs_avail
         assert 0.9 < ratio < 1.1
+
+    def test_dump_inode(self):
+        info = self.fs.mds_asok(['dump', 'inode', '1'])
+        assert(info['path'] == "/")
+
