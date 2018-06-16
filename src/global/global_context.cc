@@ -20,3 +20,10 @@
  */
 CephContext *g_ceph_context = NULL;
 md_config_t *g_conf = NULL;
+
+const char *g_assert_file = 0;
+int g_assert_line = 0;
+const char *g_assert_func = 0;
+const char *g_assert_condition = 0;
+unsigned long long g_assert_thread = 0;
+char g_assert_thread_name[4096];
