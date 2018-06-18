@@ -1,0 +1,40 @@
+<ng-template #popTemplate>
+  <div *ngFor="let option of options"
+       class="select-menu-item"
+       (click)="selectOption(option)">
+    <div class="select-menu-item-icon">
+      <i class="fa fa-check" aria-hidden="true"
+         *ngIf="option.selected"></i>
+      &nbsp;
+    </div>
+    <div class="select-menu-item-content">
+      {{ option.name }}
+      <br>
+      <small class="text-muted">
+        {{ option.description }}&nbsp;
+      </small>
+    </div>
+  </div>
+</ng-template>
+
+<a  class="margin-right-sm select-menu-edit"
+    [popover]="popTemplate"
+    placement="bottom"
+    container="body"
+    outsideClick="true">
+  <i class="fa fa-fw fa-pencil"></i>
+</a>
+<span class="text-muted"
+      *ngIf="data.length === 0"
+      i18n>
+  {{ emptyMessage }}
+</span>
+<span *ngFor="let dataItem of data">
+  <span class="badge badge-pill badge-primary margin-right-sm">
+    <span class="margin-right-sm">{{ dataItem }}</span>
+    <a class="badge-remove"
+       (click)="removeItem(dataItem)">
+      <i class="fa fa-times" aria-hidden="true"></i>
+    </a>
+  </span>
+</span>
