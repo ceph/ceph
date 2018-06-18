@@ -24,7 +24,7 @@
 
         <!-- Parent -->
         <div class="form-group"
-             *ngIf="rbdForm.controls.parent.value">
+             *ngIf="rbdForm.getValue('parent')">
           <label i18n
                  class="control-label col-sm-3"
                  for="name">{mode, select, cloning {Clone from} copying {Copy from} other {Parent}}
@@ -41,7 +41,7 @@
 
         <!-- Name -->
         <div class="form-group"
-             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.name.dirty) && rbdForm.controls.name.invalid}">
+             [ngClass]="{'has-error': rbdForm.showError('name', formDir)}">
           <label i18n
                  class="control-label col-sm-3"
                  for="name">Name
@@ -57,7 +57,7 @@
                    autofocus>
             <span i18n
                   class="help-block"
-                  *ngIf="(formDir.submitted || rbdForm.controls.name.dirty) && rbdForm.controls.name.hasError('required')">
+                  *ngIf="rbdForm.showError('name', formDir, 'required')">
               This field is required.
             </span>
           </div>
@@ -65,7 +65,7 @@
 
         <!-- Pool -->
         <div class="form-group"
-             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.pool.dirty) && rbdForm.controls.pool.invalid}"
+             [ngClass]="{'has-error': rbdForm.showError('pool', formDir)}"
              (change)="onPoolChange($event.target.value)">
           <label class="control-label col-sm-3"
                  for="pool">
@@ -100,7 +100,7 @@
             </select>
             <span i18n
                   class="help-block"
-                  *ngIf="(formDir.submitted || rbdForm.controls.pool.dirty) && rbdForm.controls.pool.hasError('required')">
+                  *ngIf="rbdForm.showError('pool', formDir, 'required')">
               This field is required.
             </span>
           </div>
@@ -123,8 +123,8 @@
 
         <!-- Data Pool -->
         <div class="form-group"
-             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.dataPool.dirty) && rbdForm.controls.dataPool.invalid}"
-             *ngIf="rbdForm.controls.useDataPool.value">
+             [ngClass]="{'has-error': rbdForm.showError('dataPool', formDir)}"
+             *ngIf="rbdForm.getValue('useDataPool')">
           <label class="control-label col-sm-3"
                  for="dataPool">
             Data pool
@@ -162,7 +162,7 @@
             </select>
             <span i18n
                   class="help-block"
-                  *ngIf="(formDir.submitted || rbdForm.controls.dataPool.dirty) && rbdForm.controls.dataPool.hasError('required')">
+                  *ngIf="rbdForm.showError('dataPool', formDir, 'required')">
               This field is required.
             </span>
           </div>
@@ -170,7 +170,7 @@
 
         <!-- Size -->
         <div class="form-group"
-             [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.size.dirty) && rbdForm.controls.size.invalid}">
+             [ngClass]="{'has-error': rbdForm.showError('size', formDir)}">
           <label i18n
                  class="control-label col-sm-3"
                  for="size">Size
@@ -188,12 +188,12 @@
                    cdDimlessBinary>
             <span i18n
                   class="help-block"
-                  *ngIf="(formDir.submitted || rbdForm.controls.size.dirty) && rbdForm.controls.size.hasError('required')">
+                  *ngIf="rbdForm.showError('size', formDir, 'required')">
               This field is required.
             </span>
             <span i18n
                   class="help-block"
-                  *ngIf="(formDir.submitted || rbdForm.controls.size.dirty) && rbdForm.controls.size.hasError('invalidSizeObject')">
+                  *ngIf="rbdForm.showError('size', formDir, 'invalidSizeObject')">
               You have to increase the size.
             </span>
           </div>
@@ -241,7 +241,7 @@
 
           <!-- Object Size -->
           <div class="form-group"
-               [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.obj_size.dirty) && rbdForm.controls.obj_size.invalid}">
+               [ngClass]="{'has-error': rbdForm.showError('obj_size', formDir)}">
             <label i18n
                    class="control-label col-sm-3"
                    for="size">Object size
@@ -259,11 +259,11 @@
 
           <!-- Strippe Unit -->
           <div class="form-group"
-               [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.stripingUnit.dirty) && rbdForm.controls.stripingUnit.invalid}">
+               [ngClass]="{'has-error': rbdForm.showError('stripingUnit', formDir)}">
             <label class="control-label col-sm-3"
                    for="stripingUnit">
               <span i18n>Stripe unit</span><span class="required"
-                                 *ngIf="rbdForm.controls.stripingCount.value !== null"></span>
+                                 *ngIf="rbdForm.getValue('stripingCount')"></span>
             </label>
             <div class="col-sm-9">
               <select id="stripingUnit"
@@ -276,12 +276,12 @@
               </select>
               <span i18n
                     class="help-block"
-                    *ngIf="(formDir.submitted || rbdForm.controls.stripingUnit.dirty) && rbdForm.controls.stripingUnit.hasError('required')">
+                    *ngIf="rbdForm.showError('stripingUnit', formDir, 'required')">
                 This field is required because stripe count is defined!
               </span>
               <span i18n
                   class="help-block"
-                  *ngIf="(formDir.submitted || rbdForm.controls.stripingUnit.dirty) && rbdForm.controls.stripingUnit.hasError('invalidStripingUnit')">
+                  *ngIf="rbdForm.showError('stripingUnit', formDir, 'invalidStripingUnit')">
               Stripe unit is greater than object size.
             </span>
             </div>
@@ -289,11 +289,11 @@
 
           <!-- Strippe Count -->
           <div class="form-group"
-               [ngClass]="{'has-error': (formDir.submitted || rbdForm.controls.stripingCount.dirty) && rbdForm.controls.stripingCount.invalid}">
+               [ngClass]="{'has-error': rbdForm.showError('stripingCount', formDir)}">
             <label class="control-label col-sm-3"
                    for="stripingCount">
               <span i18n>Stripe count</span><span class="required"
-                                  *ngIf="rbdForm.controls.stripingUnit.value !== null"></span>
+                                  *ngIf="rbdForm.getValue('stripingUnit')"></span>
             </label>
             <div class="col-sm-9">
               <input id="stripingCount"
@@ -303,12 +303,12 @@
                      type="number">
               <span i18n
                     class="help-block"
-                    *ngIf="(formDir.submitted || rbdForm.controls.stripingCount.dirty) && rbdForm.controls.stripingCount.hasError('required')">
+                    *ngIf="rbdForm.showError('stripingCount', formDir, 'required')">
                 This field is required because stripe unit is defined!
               </span>
               <span i18n
                     class="help-block"
-                    *ngIf="(formDir.submitted || rbdForm.controls.stripingCount.dirty) && rbdForm.controls.stripingCount.hasError('min')">
+                    *ngIf="rbdForm.showError('stripingCount', formDir, 'min')">
                 Stripe count must be greater than 0.
               </span>
             </div>
