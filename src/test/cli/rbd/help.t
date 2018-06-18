@@ -82,6 +82,9 @@
                                           pool.
       mirror pool status                  Show status for all mirrored images in
                                           the pool.
+      namespace create                    Create an RBD image namespace.
+      namespace list (namespace ls)       List RBD image namespaces.
+      namespace remove (namespace rm)     Remove an RBD image namespace.
       object-map check                    Verify the object map is correct.
       object-map rebuild                  Rebuild an invalid object map.
       pool init                           Initialize pool for use by RBD.
@@ -1302,6 +1305,51 @@
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     --verbose            be verbose
+  
+  rbd help namespace create
+  usage: rbd namespace create [--pool <pool>] [--namespace <namespace>] 
+                              <pool-name> <namespace-name> 
+  
+  Create an RBD image namespace.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <namespace-name>     namespace name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+  
+  rbd help namespace list
+  usage: rbd namespace list [--pool <pool>] [--namespace <namespace>] 
+                            [--format <format>] [--pretty-format] 
+                            <pool-name> <namespace-name> 
+  
+  List RBD image namespaces.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <namespace-name>     namespace name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help namespace remove
+  usage: rbd namespace remove [--pool <pool>] [--namespace <namespace>] 
+                              <pool-name> <namespace-name> 
+  
+  Remove an RBD image namespace.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <namespace-name>     namespace name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help object-map check
   usage: rbd object-map check [--pool <pool>] [--image <image>] [--snap <snap>] 
