@@ -92,8 +92,10 @@ bool Throttle::_wait(int64_t c, UNIQUE_LOCK_T(lock)& l)
   if (_should_wait(c) || !conds.empty()) { // always wait behind other waiters.
     {
       auto cv = conds.emplace(conds.end());
+      conds_empty = conds.empty();
       auto w = make_scope_guard([this, cv]() {
 	  conds.erase(cv);
+	  conds_empty = conds.empty();
 	});
       waited = true;
       ldout(cct, 2) << "_wait waiting..." << dendl;
@@ -188,11 +190,13 @@ bool Throttle::get_or_fail(int64_t c)
 
   assert (c >= 0);
 
-  bool should_wait = _should_wait(c);
-  if (!should_wait) {
-    auto l = uniquely_lock(lock);
-    should_wait = !conds.empty();
-  }
+  bool should_wait;
+  int64_t count_snap;
+  do {
+    count_snap = count.load();
+    should_wait = _should_wait(c, count_snap) || !conds_empty;
+  } while (!should_wait && !count.compare_exchange_weak(count_snap,
+							count_snap + c));
 
   if (should_wait) {
     ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
@@ -201,14 +205,13 @@ bool Throttle::get_or_fail(int64_t c)
     }
     return false;
   } else {
-    ldout(cct, 10) << "get_or_fail " << c << " success (" << count.load()
-		   << " -> " << (count.load() + c) << ")" << dendl;
-    count += c;
+    ldout(cct, 10) << "get_or_fail " << c << " success (" << count_snap
+		   << " -> " << (count_snap + c) << ")" << dendl;
     if (logger) {
       logger->inc(l_throttle_get_or_fail_success);
       logger->inc(l_throttle_get);
       logger->inc(l_throttle_get_sum, c);
-      logger->set(l_throttle_val, count);
+      logger->set(l_throttle_val, count_snap + c);
     }
     return true;
   }
