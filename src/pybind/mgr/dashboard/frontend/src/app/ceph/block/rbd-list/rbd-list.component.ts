@@ -4,9 +4,8 @@ import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 
 import { RbdService } from '../../../shared/api/rbd.service';
-import {
-  DeletionModalComponent
-} from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
+import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -17,9 +16,6 @@ import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
-import {
-  FlattenConfirmationModalComponent
-} from '../flatten-confirmation-modal/flatten-confimation-modal.component';
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
 import { RbdModel } from './rbd-model';
 
@@ -29,10 +25,11 @@ import { RbdModel } from './rbd-model';
   styleUrls: ['./rbd-list.component.scss']
 })
 export class RbdListComponent implements OnInit, OnDestroy {
-
   @ViewChild('usageTpl') usageTpl: TemplateRef<any>;
   @ViewChild('parentTpl') parentTpl: TemplateRef<any>;
   @ViewChild('nameTpl') nameTpl: TemplateRef<any>;
+
+  @ViewChild('flattenTpl') flattenTpl: TemplateRef<any>;
 
   images: any;
   executingTasks: ExecutingTask[] = [];
@@ -45,13 +42,14 @@ export class RbdListComponent implements OnInit, OnDestroy {
 
   modalRef: BsModalRef;
 
-  constructor(private rbdService: RbdService,
-              private dimlessBinaryPipe: DimlessBinaryPipe,
-              private dimlessPipe: DimlessPipe,
-              private summaryService: SummaryService,
-              private modalService: BsModalService,
-              private taskWrapper: TaskWrapperService) {
-  }
+  constructor(
+    private rbdService: RbdService,
+    private dimlessBinaryPipe: DimlessBinaryPipe,
+    private dimlessPipe: DimlessPipe,
+    private summaryService: SummaryService,
+    private modalService: BsModalService,
+    private taskWrapper: TaskWrapperService
+  ) {}
 
   ngOnInit() {
     this.columns = [
@@ -115,7 +113,6 @@ export class RbdListComponent implements OnInit, OnDestroy {
         this.loadImages(data.executing_tasks);
       });
     });
-
   }
 
   ngOnDestroy() {
@@ -128,12 +125,11 @@ export class RbdListComponent implements OnInit, OnDestroy {
     if (executingTasks === null) {
       executingTasks = this.executingTasks;
     }
-    this.rbdService.list()
-      .subscribe(
+    this.rbdService.list().subscribe(
       (resp: any[]) => {
         let images = [];
         const viewCacheStatusMap = {};
-        resp.forEach(pool => {
+        resp.forEach((pool) => {
           if (_.isUndefined(viewCacheStatusMap[pool.status])) {
             viewCacheStatusMap[pool.status] = [];
           }
@@ -144,33 +140,43 @@ export class RbdListComponent implements OnInit, OnDestroy {
         _.forEach(viewCacheStatusMap, (value, key) => {
           viewCacheStatusList.push({
             status: parseInt(key, 10),
-            statusFor: (value.length > 1 ? 'pools ' : 'pool ') +
-            '<strong>' + value.join('</strong>, <strong>') + '</strong>'
+            statusFor:
+              (value.length > 1 ? 'pools ' : 'pool ') +
+              '<strong>' +
+              value.join('</strong>, <strong>') +
+              '</strong>'
           });
         });
         this.viewCacheStatusList = viewCacheStatusList;
-        images.forEach(image => {
-          image.executingTasks = this._getExecutingTasks(executingTasks,
-            image.pool_name, image.name);
+        images.forEach((image) => {
+          image.executingTasks = this._getExecutingTasks(
+            executingTasks,
+            image.pool_name,
+            image.name
+          );
         });
         this.images = this.merge(images, executingTasks);
         this.executingTasks = executingTasks;
       },
       () => {
-        this.viewCacheStatusList = [{status: ViewCacheStatus.ValueException}];
+        this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
       }
     );
   }
 
   _getExecutingTasks(executingTasks: ExecutingTask[], poolName, imageName): ExecutingTask[] {
     const result: ExecutingTask[] = [];
-    executingTasks.forEach(executingTask => {
-      if (executingTask.name === 'rbd/snap/create' ||
+    executingTasks.forEach((executingTask) => {
+      if (
+        executingTask.name === 'rbd/snap/create' ||
         executingTask.name === 'rbd/snap/delete' ||
         executingTask.name === 'rbd/snap/edit' ||
-        executingTask.name === 'rbd/snap/rollback') {
-        if (poolName === executingTask.metadata['pool_name'] &&
-          imageName === executingTask.metadata['image_name']) {
+        executingTask.name === 'rbd/snap/rollback'
+      ) {
+        if (
+          poolName === executingTask.metadata['pool_name'] &&
+          imageName === executingTask.metadata['image_name']
+        ) {
           result.push(executingTask);
         }
       }
@@ -182,34 +188,31 @@ export class RbdListComponent implements OnInit, OnDestroy {
     const resultRBDs = _.clone(rbds);
     executingTasks.forEach((executingTask) => {
       const rbdExecuting = resultRBDs.find((rbd) => {
-        return rbd.pool_name === executingTask.metadata['pool_name'] &&
-          rbd.name === executingTask.metadata['image_name'];
+        return (
+          rbd.pool_name === executingTask.metadata['pool_name'] &&
+          rbd.name === executingTask.metadata['image_name']
+        );
       });
       if (rbdExecuting) {
         if (executingTask.name === 'rbd/delete') {
           rbdExecuting.cdExecuting = 'deleting';
-
         } else if (executingTask.name === 'rbd/edit') {
           rbdExecuting.cdExecuting = 'updating';
-
         } else if (executingTask.name === 'rbd/flatten') {
           rbdExecuting.cdExecuting = 'flattening';
         }
-
       } else if (executingTask.name === 'rbd/create') {
         const rbdModel = new RbdModel();
         rbdModel.name = executingTask.metadata['image_name'];
         rbdModel.pool_name = executingTask.metadata['pool_name'];
         rbdModel.cdExecuting = 'creating';
         this.pushIfNotExists(resultRBDs, rbdModel);
-
       } else if (executingTask.name === 'rbd/clone') {
         const rbdModel = new RbdModel();
         rbdModel.name = executingTask.metadata['child_image_name'];
         rbdModel.pool_name = executingTask.metadata['child_pool_name'];
         rbdModel.cdExecuting = 'cloning';
         this.pushIfNotExists(resultRBDs, rbdModel);
-
       } else if (executingTask.name === 'rbd/copy') {
         const rbdModel = new RbdModel();
         rbdModel.name = executingTask.metadata['dest_image_name'];
@@ -255,32 +258,39 @@ export class RbdListComponent implements OnInit, OnDestroy {
   }
 
   flattenRbd(poolName, imageName) {
-    this.taskWrapper.wrapTaskAroundCall({
-      task: new FinishedTask('rbd/flatten', {
-        pool_name: poolName,
-        image_name: imageName
-      }),
-      tasks: this.executingTasks,
-      call: this.rbdService.flatten(poolName, imageName)
-    }).subscribe(
-      undefined,
-      undefined,
-      () => {
+    this.taskWrapper
+      .wrapTaskAroundCall({
+        task: new FinishedTask('rbd/flatten', {
+          pool_name: poolName,
+          image_name: imageName
+        }),
+        tasks: this.executingTasks,
+        call: this.rbdService.flatten(poolName, imageName)
+      })
+      .subscribe(undefined, undefined, () => {
         this.modalRef.hide();
         this.loadImages(null);
-      }
-    );
+      });
   }
 
   flattenRbdModal() {
     const poolName = this.selection.first().pool_name;
     const imageName = this.selection.first().name;
-    this.modalRef = this.modalService.show(FlattenConfirmationModalComponent);
     const parent: RbdParentModel = this.selection.first().parent;
-    this.modalRef.content.parent = `${parent.pool_name}/${parent.image_name}@${parent.snap_name}`;
-    this.modalRef.content.child = `${poolName}/${imageName}`;
-    this.modalRef.content.onSubmit.subscribe(() => {
-      this.flattenRbd(poolName, imageName);
-    });
+
+    const initialState = {
+      titleText: 'RBD flatten',
+      buttonText: 'Flatten',
+      bodyTpl: this.flattenTpl,
+      bodyData: {
+        parent: `${parent.pool_name}/${parent.image_name}@${parent.snap_name}`,
+        child: `${poolName}/${imageName}`
+      },
+      onSubmit: () => {
+        this.flattenRbd(poolName, imageName);
+      }
+    };
+
+    this.modalRef = this.modalService.show(ConfirmationModalComponent, { initialState });
   }
 }

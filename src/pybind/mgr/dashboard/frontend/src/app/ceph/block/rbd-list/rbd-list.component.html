@@ -20,43 +20,70 @@
           selectionType="single"
           (updateSelection)="updateSelection($event)">
   <div class="table-actions">
-    <div class="btn-group" dropdown>
+    <div class="btn-group"
+         dropdown>
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="!selection.hasSingleSelection"
               routerLink="/rbd/add">
-        <i class="fa fa-fw fa-plus"></i><span i18n>Add</span>
+        <i class="fa fa-fw fa-plus"></i>
+        <span i18n>Add</span>
       </button>
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="selection.hasSingleSelection"
               [ngClass]="{'disabled': selection.first().executing}"
               routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}">
-        <i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span>
+        <i class="fa fa-fw fa-pencil"></i>
+        <span i18n>Edit</span>
       </button>
-      <button type="button" dropdownToggle class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split">
+      <button type="button"
+              dropdownToggle
+              class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split">
         <span class="caret"></span>
         <span class="sr-only"></span>
       </button>
-      <ul *dropdownMenu class="dropdown-menu" role="menu">
+      <ul *dropdownMenu
+          class="dropdown-menu"
+          role="menu">
         <li role="menuitem">
-          <a class="dropdown-item" routerLink="/rbd/add"><i class="fa fa-fw fa-plus"></i><span i18n>Add</span></a>
+          <a class="dropdown-item"
+             routerLink="/rbd/add">
+            <i class="fa fa-fw fa-plus"></i>
+            <span i18n>Add</span>
+          </a>
         </li>
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
-          <a class="dropdown-item" routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}"><i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span></a>
+          <a class="dropdown-item"
+             routerLink="/rbd/edit/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}">
+            <i class="fa fa-fw fa-pencil"></i>
+            <span i18n>Edit</span>
+          </a>
         </li>
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
-          <a class="dropdown-item" routerLink="/rbd/copy/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}"><i class="fa fa-fw fa-copy"></i><span i18n>Copy</span></a>
+          <a class="dropdown-item"
+             routerLink="/rbd/copy/{{ selection.first()?.pool_name }}/{{ selection.first()?.name }}">
+            <i class="fa fa-fw fa-copy"></i>
+            <span i18n>Copy</span>
+          </a>
         </li>
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing || !selection.first().parent}">
-          <a class="dropdown-item" (click)="flattenRbdModal()"><i class="fa fa-fw fa-chain-broken"></i><span i18n>Flatten</span></a>
+          <a class="dropdown-item"
+             (click)="flattenRbdModal()">
+            <i class="fa fa-fw fa-chain-broken"></i>
+            <span i18n>Flatten</span>
+          </a>
         </li>
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
-          <a class="dropdown-item" (click)="deleteRbdModal()"><i class="fa fa-fw fa-trash-o"></i><span i18n>Delete</span></a>
+          <a class="dropdown-item"
+             (click)="deleteRbdModal()">
+            <i class="fa fa-fw fa-trash-o"></i>
+            <span i18n>Delete</span>
+          </a>
         </li>
       </ul>
     </div>
@@ -67,11 +94,22 @@
 </cd-table>
 
 <ng-template #usageNotAvailableTooltipTpl>
-  <div i18n [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
+  <div i18n
+       [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
 </ng-template>
 
 <ng-template #parentTpl
              let-value="value">
   <span *ngIf="value">{{ value.pool_name }}/{{ value.image_name }}@{{ value.snap_name }}</span>
   <span *ngIf="!value">-</span>
+</ng-template>
+
+<ng-template #flattenTpl
+             let-value>
+  You are about to flatten
+  <strong>{{ value.child }}</strong>.
+  <br>
+  <br> All blocks will be copied from parent
+  <strong>{{ value.parent }}</strong> to child
+  <strong>{{ value.child }}</strong>.
 </ng-template>
