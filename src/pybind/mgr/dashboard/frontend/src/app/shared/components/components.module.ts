@@ -6,6 +6,7 @@ import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { AlertModule, ModalModule, PopoverModule, TooltipModule } from 'ngx-bootstrap';
 
 import { PipesModule } from '../pipes/pipes.module';
+import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
 import { ErrorPanelComponent } from './error-panel/error-panel.component';
 import { HelperComponent } from './helper/helper.component';
@@ -40,7 +41,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     LoadingPanelComponent,
     InfoPanelComponent,
     ModalComponent,
-    DeletionModalComponent
+    DeletionModalComponent,
+    ConfirmationModalComponent
   ],
   providers: [],
   exports: [
@@ -56,7 +58,8 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
   ],
   entryComponents: [
     ModalComponent,
-    DeletionModalComponent
+    DeletionModalComponent,
+    ConfirmationModalComponent
   ]
 })
 export class ComponentsModule { }
