@@ -66,8 +66,10 @@ protected:
   }
 
 protected:
-  void transaction_start(const std::string &oid) override;
-  void transaction_finish(const std::string &oid) override;
+  void transaction_start(const std::string& nspace,
+                         const std::string &oid) override;
+  void transaction_finish(const std::string& nspace,
+                          const std::string &oid) override;
 
 private:
   TestMemCluster *m_mem_cluster;
