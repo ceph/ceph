@@ -706,7 +706,7 @@ function TEST_backfill_ec_down_out() {
 }
 
 
-main recout "$@"
+main osd-backfill-stats "$@"
 
 # Local Variables:
 # compile-command: "make -j4 && ../qa/run-standalone.sh osd-backfill-stats.sh"
