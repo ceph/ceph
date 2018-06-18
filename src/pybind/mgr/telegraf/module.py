@@ -8,7 +8,7 @@ from threading import Event
 
 from telegraf.basesocket import BaseSocket
 from telegraf.protocol import Line
-from mgr_module import MgrModule
+from mgr_module import MgrModule, PG_STATES
 
 try:
     from urllib.parse import urlparse
@@ -130,18 +130,13 @@ class Module(MgrModule):
                     'num_pgs', 'num_objects', 'num_pools']:
             stats[key] = pg_status[key]
 
-        pg_states = ['active', 'peering', 'clean', 'scrubbing', 'undersized',
-                     'backfilling', 'recovering', 'degraded', 'inconsistent',
-                     'remapped', 'backfill_toofull', 'wait_backfill',
-                     'recovery_wait']
-
-        for state in pg_states:
+        for state in PG_STATES:
             stats['num_pgs_{0}'.format(state)] = 0
 
         stats['num_pgs'] = pg_status['num_pgs']
         for state in pg_status['pgs_by_state']:
             states = state['state_name'].split('+')
-            for s in pg_states:
+            for s in PG_STATES:
                 key = 'num_pgs_{0}'.format(s)
                 if s in states:
                     stats[key] += state['count']
