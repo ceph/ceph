@@ -205,6 +205,10 @@
     }
     .datatable-pager .pager {
       margin-right: 5px !important;
+      & li:not(:first-child) {
+        /** Add space between buttons */
+        margin-left: 3px;
+      }
       & li > a, & li > span {
         border-radius: 3px;
       }
