@@ -83,5 +83,6 @@
    outsideClick="true">
   <i class="fa"
      [ngClass]="icon"></i>
-  Background-Tasks<span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>
+  <span i18n>Background-Tasks</span>
+  <span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>
 </a>

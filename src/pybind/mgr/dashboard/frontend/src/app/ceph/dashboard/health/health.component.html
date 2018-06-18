@@ -5,7 +5,7 @@
       <div class="well">
         <fieldset>
           <legend i18n>Health</legend>
-          <ng-container i18n>Overall status:</ng-container>
+          <ng-container i18n>Overall status: </ng-container>
           <span [ngStyle]="contentData.health.status | healthColor">{{ contentData.health.status }}</span>
           <ul>
             <li *ngFor="let check of contentData.health.checks">
