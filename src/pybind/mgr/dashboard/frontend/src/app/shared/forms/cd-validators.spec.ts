@@ -168,4 +168,35 @@ describe('CdValidators', () => {
       expect(x.valid).toBeTruthy();
     });
   });
+
+  describe('match', () => {
+    let form: FormGroup;
+
+    beforeEach(() => {
+      form = new FormGroup({
+        x: new FormControl(),
+        y: new FormControl()
+      });
+    });
+
+    it('should error when values are different', () => {
+      const x = form.get('x');
+      const y = form.get('y');
+      x.setValue('aaa');
+      y.setValue('aab');
+      CdValidators.match('x', 'y')(form);
+      expect(x.hasError('match')).toBeFalsy();
+      expect(y.hasError('match')).toBeTruthy();
+    });
+
+    it('should not error when values are equal', () => {
+      const x = form.get('x');
+      const y = form.get('y');
+      x.setValue('aaa');
+      y.setValue('aaa');
+      CdValidators.match('x', 'y')(form);
+      expect(x.hasError('match')).toBeFalsy();
+      expect(y.hasError('match')).toBeFalsy();
+    });
+  });
 });
