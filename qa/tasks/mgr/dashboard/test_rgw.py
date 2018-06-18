@@ -31,21 +31,43 @@ class RgwControllerTest(DashboardTestCase):
         self.assertIn('rgw_status', data)
         self.assertTrue(data['rgw_metadata'])
 
-    @authenticate
-    def test_rgw_status(self):
-        self._radosgw_admin_cmd([
+
+class RgwApiUserTest(DashboardTestCase):
+    @classmethod
+    def setUpClass(cls):
+        super(RgwApiUserTest, cls).setUpClass()
+        cls._radosgw_admin_cmd([
             'user', 'create', '--uid=admin', '--display-name=admin',
             '--system', '--access-key=admin', '--secret=admin'
         ])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
-        self._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
+        cls._ceph_cmd(['dashboard', 'set-rgw-api-secret-key', 'admin'])
+        cls._ceph_cmd(['dashboard', 'set-rgw-api-access-key', 'admin'])
 
+    def setUp(self):
+        # Restart the Dashboard module to ensure that the connection to the
+        # RGW Admin Ops API is re-established with the new credentials.
+        self._ceph_cmd(['mgr', 'module', 'disable', 'dashboard'])
+        self._ceph_cmd(['mgr', 'module', 'enable', 'dashboard', '--force'])
+
+    @authenticate
+    def test_success(self):
+        self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', ''])
         data = self._get('/api/rgw/status')
         self.assertStatus(200)
         self.assertIn('available', data)
         self.assertIn('message', data)
         self.assertTrue(data['available'])
+
+    @authenticate
+    def test_failure(self):
+        self._ceph_cmd(['dashboard', 'set-rgw-api-user-id', 'xyz'])
+        data = self._get('/api/rgw/status')
+        self.assertStatus(200)
+        self.assertIn('available', data)
+        self.assertIn('message', data)
+        self.assertFalse(data['available'])
+        self.assertIn('The user "xyz" is unknown to the Object Gateway.',
+                      data['message'])
 
 
 class RgwProxyExceptionsTest(DashboardTestCase):
