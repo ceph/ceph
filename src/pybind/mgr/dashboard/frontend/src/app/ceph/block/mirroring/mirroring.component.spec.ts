@@ -3,9 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { BsDropdownModule, TabsModule } from 'ngx-bootstrap';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
-import { Observable } from 'rxjs';
 
-import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { configureTestBed } from '../../../shared/unit-test-helper';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
@@ -15,14 +13,6 @@ describe('MirroringComponent', () => {
   let component: MirroringComponent;
   let fixture: ComponentFixture<MirroringComponent>;
 
-  const fakeService = {
-    get: (service_type: string, service_id: string) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    }
-  };
-
   configureTestBed({
     declarations: [MirroringComponent, MirrorHealthColorPipe],
     imports: [
@@ -31,8 +21,7 @@ describe('MirroringComponent', () => {
       TabsModule.forRoot(),
       ProgressbarModule.forRoot(),
       HttpClientTestingModule
-    ],
-    providers: [{ provide: RbdMirroringService, useValue: fakeService }]
+    ]
   });
 
   beforeEach(() => {
