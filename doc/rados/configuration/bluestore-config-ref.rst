@@ -8,18 +8,15 @@ Devices
 BlueStore manages either one, two, or (in certain cases) three storage
 devices.
 
-In the simplest case, BlueStore consumes a single (primary) storage
-device.  The storage device is normally partitioned into two parts:
+In the simplest case, BlueStore consumes a single (primary) storage device.
+The storage device is normally used as a whole, occupying the full device that
+is managed directly by BlueStore. This *primary device* is normally identifed
+by a ``block`` symlink in data directory.
 
-#. A small partition is formatted with XFS and contains basic metadata
-   for the OSD.  This *data directory* includes information about the
-   OSD (its identifier, which cluster it belongs to, and its private
-   keyring).
-
-#. The rest of the device is normally a large partition occupying the
-   rest of the device that is managed directly by BlueStore contains
-   all of the actual data.  This *primary device* is normally identifed
-   by a ``block`` symlink in data directory.
+The data directory is a ``tmpfs`` mount which gets populated (at boot time, or
+when ``ceph-volume`` activates it) with all the common OSD files that hold
+information about the OSD, like: its identifier, which cluster it belongs to,
+and its private keyring.
 
 It is also possible to deploy BlueStore across two additional devices:
 
@@ -41,7 +38,7 @@ more, provisioning a DB device makes more sense.  The BlueStore
 journal will always be placed on the fastest device available, so
 using a DB device will provide the same benefit that the WAL device
 would while *also* allowing additional metadata to be stored there (if
-it will fix).
+it will fit).
 
 A single-device BlueStore OSD can be provisioned with::
 
