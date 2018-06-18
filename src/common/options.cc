@@ -319,6 +319,24 @@ void Option::dump(Formatter *f) const
   dump_value("max", max, f);
 
   f->dump_bool("can_update_at_runtime", can_update_at_runtime());
+
+  f->open_array_section("flags");
+  if (has_flag(FLAG_RUNTIME)) {
+    f->dump_string("option", "runtime");
+  }
+  if (has_flag(FLAG_NO_MON_UPDATE)) {
+    f->dump_string("option", "no_mon_update");
+  }
+  if (has_flag(FLAG_STARTUP)) {
+    f->dump_string("option", "startup");
+  }
+  if (has_flag(FLAG_CLUSTER_CREATE)) {
+    f->dump_string("option", "cluster_create");
+  }
+  if (has_flag(FLAG_CREATE)) {
+    f->dump_string("option", "create");
+  }
+  f->close_section();
 }
 
 std::string Option::to_str(const Option::value_t& v)
