@@ -33,6 +33,7 @@ class Throttle final : public ThrottleInterface {
   std::atomic<int64_t> count = { 0 }, max = { 0 };
   std::mutex lock;
   std::list<std::condition_variable> conds;
+  std::atomic<bool> conds_empty = { true };
   const bool use_perf;
 
 public:
@@ -41,13 +42,16 @@ public:
 
 private:
   void _reset_max(int64_t m);
-  bool _should_wait(int64_t c) const {
+  bool _should_wait(int64_t c, int64_t count_snap) const {
     int64_t m = max;
-    int64_t cur = count;
     return
       m &&
-      ((c <= m && cur + c > m) || // normally stay under max
-       (c >= m && cur > m));     // except for large c
+      ((c <= m && count_snap + c > m) || // normally stay under max
+       (c >= m && count_snap > m));     // except for large c
+  }
+  bool _should_wait(int64_t c) const {
+    int64_t count_snap = count;
+    return _should_wait(c, count_snap);
   }
 
   bool _wait(int64_t c, UNIQUE_LOCK_T(lock)& l);
