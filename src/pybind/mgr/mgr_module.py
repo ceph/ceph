@@ -8,6 +8,37 @@ import threading
 from collections import defaultdict
 import rados
 
+PG_STATES = [
+        "active",
+        "clean",
+        "down",
+        "recovery_unfound",
+        "backfill_unfound",
+        "scrubbing",
+        "degraded",
+        "inconsistent",
+        "peering",
+        "repair",
+        "recovering",
+        "forced_recovery",
+        "backfill_wait",
+        "incomplete",
+        "stale",
+        "remapped",
+        "deep",
+        "backfilling",
+        "forced_backfill",
+        "backfill_toofull",
+        "recovery_wait",
+        "recovery_toofull",
+        "undersized",
+        "activating",
+        "peered",
+        "snaptrim",
+        "snaptrim_wait",
+        "snaptrim_error",
+        "creating",
+        "unknown"]
 
 class CPlusPlusHandler(logging.Handler):
     def __init__(self, module_inst):
