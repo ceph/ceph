@@ -92,6 +92,27 @@ void add_pool_option(po::options_description *opt,
     (name.c_str(), po::value<std::string>(), description.c_str());
 }
 
+void add_namespace_option(boost::program_options::options_description *opt,
+                          ArgumentModifier modifier) {
+  std::string name = NAMESPACE_NAME;
+  std::string description = "namespace name";
+  switch (modifier) {
+  case ARGUMENT_MODIFIER_NONE:
+    break;
+  case ARGUMENT_MODIFIER_SOURCE:
+    description = "source " + description;
+    break;
+  case ARGUMENT_MODIFIER_DEST:
+    name = DEST_POOL_NAME;
+    description = "destination " + description;
+    break;
+  }
+
+  // TODO add validator
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
 void add_image_option(po::options_description *opt,
                       ArgumentModifier modifier,
                       const std::string &desc_suffix) {
@@ -205,6 +226,13 @@ void add_pool_options(boost::program_options::options_description *pos,
     ("pool-name", "pool name");
   opt->add_options()
     ((POOL_NAME + ",p").c_str(), po::value<std::string>(), "pool name");
+}
+
+void add_namespace_options(boost::program_options::options_description *pos,
+                           boost::program_options::options_description *opt) {
+  pos->add_options()
+    ("namespace-name", "namespace name");
+  add_namespace_option(opt, ARGUMENT_MODIFIER_NONE);
 }
 
 void add_image_spec_options(po::options_description *pos,

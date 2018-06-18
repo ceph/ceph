@@ -28,6 +28,7 @@ set(rbd_srcs
   action/MergeDiff.cc
   action/MirrorPool.cc
   action/MirrorImage.cc
+  action/Namespace.cc
   action/Nbd.cc
   action/ObjectMap.cc
   action/Pool.cc
