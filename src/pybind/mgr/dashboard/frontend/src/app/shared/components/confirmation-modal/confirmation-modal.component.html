@@ -1,0 +1,27 @@
+<cd-modal>
+  <ng-container class="modal-title">{{ titleText }}</ng-container>
+  <ng-container class="modal-content">
+    <form name="confirmationForm"
+          class="form-horizontal"
+          #formDir="ngForm"
+          [formGroup]="confirmationForm"
+          novalidate>
+      <div class="modal-body">
+        <ng-container *ngTemplateOutlet="bodyTpl; context: bodyContext"></ng-container>
+      </div>
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button i18n
+                            [form]="confirmationForm"
+                            (submitAction)="submit()">
+            {{ buttonText }}
+          </cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  (click)="modalRef.hide()">Cancel</button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

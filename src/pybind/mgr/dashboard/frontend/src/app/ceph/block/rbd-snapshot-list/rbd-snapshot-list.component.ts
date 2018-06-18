@@ -4,6 +4,7 @@ import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 
 import { RbdService } from '../../../shared/api/rbd.service';
+import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -15,7 +16,6 @@ import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { TaskManagerService } from '../../../shared/services/task-manager.service';
 import { RbdSnapshotFormComponent } from '../rbd-snapshot-form/rbd-snapshot-form.component';
-import { RollbackConfirmationModalComponent } from '../rollback-confirmation-modal/rollback-confimation-modal.component';
 import { RbdSnapshotModel } from './rbd-snapshot.model';
 
 @Component({
@@ -31,6 +31,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   @ViewChild('nameTpl') nameTpl: TemplateRef<any>;
   @ViewChild('protectTpl') protectTpl: TemplateRef<any>;
+  @ViewChild('rollbackTpl') rollbackTpl: TemplateRef<any>;
 
   data: RbdSnapshotModel[];
 
@@ -209,11 +210,19 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
 
   rollbackModal() {
     const snapshotName = this.selection.selected[0].name;
-    this.modalRef = this.modalService.show(RollbackConfirmationModalComponent);
-    this.modalRef.content.snapName = `${this.poolName}/${this.rbdName}@${snapshotName}`;
-    this.modalRef.content.onSubmit.subscribe((itemName: string) => {
-      this._asyncTask('rollbackSnapshot', 'rbd/snap/rollback', snapshotName);
-    });
+    const initialState = {
+      titleText: 'RBD snapshot rollback',
+      buttonText: 'Rollback',
+      bodyTpl: this.rollbackTpl,
+      bodyData: {
+        snapName: `${this.poolName}/${this.rbdName}@${snapshotName}`
+      },
+      onSubmit: () => {
+        this._asyncTask('rollbackSnapshot', 'rbd/snap/rollback', snapshotName);
+      }
+    };
+
+    this.modalRef = this.modalService.show(ConfirmationModalComponent, { initialState });
   }
 
   deleteSnapshotModal() {
