@@ -724,7 +724,7 @@ static inline int handle_metadata_errors(req_state* const s, const int op_ret)
   } else if (op_ret == -E2BIG) {
     const auto error_message = boost::str(
       boost::format("Too many metadata items; max %lld")
-        % s->cct->_conf.get_val<size_t>("rgw_max_attrs_num_in_req"));
+        % s->cct->_conf.get_val<uint64_t>("rgw_max_attrs_num_in_req"));
     set_req_state_err(s, EINVAL, error_message);
     return -EINVAL;
   }
@@ -1779,7 +1779,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   formatter.dump_string("version", ceph_version);
 
   const size_t max_attr_name_len = \
-    g_conf().get_val<size_t>("rgw_max_attr_name_len");
+    g_conf().get_val<Option::size_t>("rgw_max_attr_name_len");
   if (max_attr_name_len) {
     const size_t meta_name_limit = \
       max_attr_name_len - strlen(RGW_ATTR_PREFIX RGW_AMZ_META_PREFIX);
@@ -1792,7 +1792,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   }
 
   const size_t meta_num_limit = \
-    g_conf().get_val<size_t>("rgw_max_attrs_num_in_req");
+    g_conf().get_val<uint64_t>("rgw_max_attrs_num_in_req");
   if (meta_num_limit) {
     formatter.dump_int("max_meta_count", meta_num_limit);
   }
