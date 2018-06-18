@@ -187,8 +187,14 @@ bool Throttle::get_or_fail(int64_t c)
   }
 
   assert (c >= 0);
-  auto l = uniquely_lock(lock);
-  if (_should_wait(c) || !conds.empty()) {
+
+  bool should_wait = _should_wait(c);
+  if (!should_wait) {
+    auto l = uniquely_lock(lock);
+    should_wait = !conds.empty();
+  }
+
+  if (should_wait) {
     ldout(cct, 10) << "get_or_fail " << c << " failed" << dendl;
     if (logger) {
       logger->inc(l_throttle_get_or_fail_fail);
