@@ -1217,7 +1217,7 @@ void Migrator::check_export_size(CDir *dir, export_state_t& stat, set<client_t>&
   const unsigned link_size = 10;
   const unsigned null_size = 1;
 
-  uint64_t max_size = g_conf().get_val<uint64_t>("mds_max_export_size");
+  uint64_t max_size = g_conf().get_val<Option::size_t>("mds_max_export_size");
   uint64_t approx_size = 0;
 
   list<CDir*> dfs;

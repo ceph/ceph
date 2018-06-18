@@ -611,7 +611,7 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
   }
   m_core_arg -= 1;
 
-  uint32_t mem_size_arg = (uint32_t)g_conf().get_val<uint64_t>("bluestore_spdk_mem");
+  uint32_t mem_size_arg = (uint32_t)g_conf().get_val<Option::size_t>("bluestore_spdk_mem");
 
 
   if (!init) {
