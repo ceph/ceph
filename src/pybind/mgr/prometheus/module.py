@@ -6,7 +6,7 @@ import os
 import socket
 import threading
 import time
-from mgr_module import MgrModule, MgrStandbyModule
+from mgr_module import MgrModule, MgrStandbyModule, PG_STATES
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
@@ -43,38 +43,6 @@ def health_status_to_number(status):
         return 1
     elif status == 'HEALTH_ERR':
         return 2
-
-PG_STATES = [
-        "active",
-        "clean",
-        "down",
-        "recovery_unfound",
-        "backfill_unfound",
-        "scrubbing",
-        "degraded",
-        "inconsistent",
-        "peering",
-        "repair",
-        "recovering",
-        "forced_recovery",
-        "backfill_wait",
-        "incomplete",
-        "stale",
-        "remapped",
-        "deep",
-        "backfilling",
-        "forced_backfill",
-        "backfill_toofull",
-        "recovery_wait",
-        "recovery_toofull",
-        "undersized",
-        "activating",
-        "peered",
-        "snaptrim",
-        "snaptrim_wait",
-        "snaptrim_error",
-        "creating",
-        "unknown"]
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 
