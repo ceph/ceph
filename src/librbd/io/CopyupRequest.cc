@@ -362,7 +362,8 @@ bool CopyupRequest<I>::send_object_map_head() {
 
       if (!m_ictx->snaps.empty()) {
         if (is_deep_copy()) {
-          // don't copy ids for the snaps updated by object deep copy
+          // don't copy ids for the snaps updated by object deep copy or
+          // that don't overlap
           std::set<uint64_t> deep_copied;
           for (auto &it : m_ictx->migration_info.snap_map) {
             if (it.first != CEPH_NOSNAP) {
@@ -371,8 +372,30 @@ bool CopyupRequest<I>::send_object_map_head() {
           }
           std::copy_if(m_ictx->snaps.begin(), m_ictx->snaps.end(),
                        std::back_inserter(m_snap_ids),
-                       [&deep_copied](uint64_t i) {
-                         return !deep_copied.count(i);
+                       [this, cct, &deep_copied](uint64_t snap_id) {
+                         if (deep_copied.count(snap_id)) {
+                           return false;
+                         }
+                         RWLock::RLocker parent_locker(m_ictx->parent_lock);
+                         uint64_t parent_overlap = 0;
+                         int r = m_ictx->get_parent_overlap(snap_id,
+                                                            &parent_overlap);
+                         if (r < 0) {
+                           ldout(cct, 5) << "failed getting parent overlap for "
+                                         << "snap_id: " << snap_id << ": "
+                                         << cpp_strerror(r) << dendl;
+                         }
+                         if (parent_overlap == 0) {
+                           return false;
+                         }
+                         std::vector<std::pair<uint64_t, uint64_t>> extents;
+                         Striper::extent_to_file(cct, &m_ictx->layout,
+                                                 m_object_no, 0,
+                                                 m_ictx->layout.object_size,
+                                                 extents);
+                         auto overlap = m_ictx->prune_parent_extents(
+                             extents, parent_overlap);
+                         return overlap > 0;
                        });
         } else {
           m_snap_ids.insert(m_snap_ids.end(), m_ictx->snaps.begin(),
