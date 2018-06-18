@@ -96,4 +96,20 @@ export class CdValidators {
       return null;
     });
   }
+
+  /**
+   * Validate if control1 and control2 have the same value.
+   * Error will be added to control2.
+   *
+   * @param {string} control1
+   * @param {string} control2
+   */
+  static match(control1: string, control2: string): ValidatorFn {
+    return (control: AbstractControl): { [key: string]: any } => {
+      if (control.get(control1).value !== control.get(control2).value) {
+        control.get(control2).setErrors({ ['match']: true });
+      }
+      return null;
+    };
+  }
 }
