@@ -13,6 +13,7 @@
 #  version 2.1 of the License, or (at your option) any later version.
 #
 set -e
+set -x
 DIR=/tmp/install-deps.$$
 trap "rm -fr $DIR" EXIT
 mkdir -p $DIR
