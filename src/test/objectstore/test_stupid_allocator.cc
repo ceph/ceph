@@ -492,14 +492,11 @@ TYPED_TEST(AllocatorTest, test_automatic_hint) {
 
   uint64_t offset;
   uint32_t allocated;
-  sa.reserve(0x100000);
   ASSERT_EQ(sa.allocate_int(0x100000, 4096, 0x1de00000, &offset, &allocated), 0);
   ASSERT_EQ(allocated, 0x100000);
-  sa.reserve(0x100000);
   ASSERT_EQ(sa.allocate_int(0x100000, 4096, offset+allocated, &offset, &allocated), 0);
   ASSERT_EQ(allocated, 0x100000);
   ASSERT_EQ(offset, 0x1df00000);
-  sa.reserve(0x400000);
   ASSERT_EQ(sa.allocate_int(0x400000, 4096, 0, &offset, &allocated), 0);
   ASSERT_EQ(allocated, 0x400000);
 
@@ -596,30 +593,24 @@ TYPED_TEST(AllocatorTest, test_fragmentation) {
   sa.init_add_free(0, M);
 
   for (int i=0; i<100;i++) {
-    uint64_t offset;
     uint32_t v = rand() % (M / P);
     uint32_t scale = cbits(M / P) - cbits(v);
     uint64_t size = ( (rand() % (1 << scale)) + 1 ) * P;
-    if (0 == sa.reserve(size)) {
-      uint32_t allocated = 0;
-      if (0 == sa.allocate_int(size, P, 0, &offset, &allocated)) {
-        interval_set<uint64_t> tr;
-        tr.insert(offset, allocated);
-        sa.release(tr);
-      }
-      sa.unreserve(size - allocated);
+    PExtentVector ext;
+    if ((int64_t)size == sa.allocate(size, P, size, 0, &ext)) {
+      interval_set<uint64_t> tr;
+      for (auto &a: ext)
+	tr.insert(a.offset, a.length);
+      sa.release(tr);
     }
     ASSERT_EQ(sa.get_free(), M);
   }
-  sa.reserve(M);
   if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
     std::cerr << "[ SKIPPING REST ] --would fail--" << std::endl;
     return;
   }
-  uint64_t offset;
-  uint32_t allocated;
-  ASSERT_EQ(0, sa.allocate_int(M, P, 0, &offset, &allocated));
-  ASSERT_EQ(allocated, M);
+  PExtentVector ext;
+  ASSERT_EQ(M, sa.allocate(M, P, M, 0, &ext));
 }
 
 
@@ -635,26 +626,24 @@ TYPED_TEST(AllocatorTest, test_fragmentation_dragged) {
   std::vector<allocation_list_t::iterator> allocation_vector;
 
   for (int i=0; i<10000;i++) {
-    uint64_t offset;
     uint32_t v = rand() % (M / P);
     uint32_t scale = cbits(M / P) - cbits(v);
     uint64_t size = ( (rand() % (1 << scale)) + 1 ) * P;
-    if (0 == sa.reserve(size)) {
-      uint32_t allocated = 0;
-      if (0 == sa.allocate_int(size, P, 1, &offset, &allocated)) {
-        auto n = allocation_list.emplace(allocation_list.end(), allocation_t{offset,allocated});
-        allocation_vector.push_back(n);
+    PExtentVector ext;
+    if ((int64_t)size == sa.allocate(size, P, size, 1, &ext)) {
+      for (auto &a: ext) {
+	auto n = allocation_list.emplace(allocation_list.end(), allocation_t{a.offset,a.length});
+	allocation_vector.push_back(n);
       }
-      sa.unreserve(size - allocated);
-      if (allocation_vector.size() > 100) {
-        size_t r = rand()%allocation_vector.size();
-        auto it = allocation_vector[r];
-        interval_set<uint64_t> tr;
-        tr.insert(it->first, it->second);
-        sa.release(tr);
-        allocation_vector[r] = allocation_vector.back();
-        allocation_vector.resize(allocation_vector.size() - 1);
-      }
+    }
+    if (allocation_vector.size() > 100) {
+      size_t r = rand()%allocation_vector.size();
+      auto it = allocation_vector[r];
+      interval_set<uint64_t> tr;
+      tr.insert(it->first, it->second);
+      sa.release(tr);
+      allocation_vector[r] = allocation_vector.back();
+      allocation_vector.resize(allocation_vector.size() - 1);
     }
   }
   interval_set<uint64_t> tr;
@@ -666,15 +655,12 @@ TYPED_TEST(AllocatorTest, test_fragmentation_dragged) {
 
   ASSERT_EQ(sa.get_free(), M);
 
-  sa.reserve(M);
   if (std::is_same<typename TestFixture::Allocator, StupidAllocator>::value) {
       std::cerr << "[ SKIPPING REST ] --would fail--" << std::endl;
       return;
   }
-  uint64_t offset;
-  uint32_t allocated;
-  ASSERT_EQ(0, sa.allocate_int(M, P, 0, &offset, &allocated));
-  ASSERT_EQ(allocated, M);
+  PExtentVector ext;
+  ASSERT_EQ(M, sa.allocate(M, P, M, 0, &ext));
 }
 
 TYPED_TEST(AllocatorTest, performance_test) {
@@ -703,23 +689,21 @@ TYPED_TEST(AllocatorTest, performance_test) {
   for (int k=0; k<10; k++)
   for (int i=0; i<1000;i++) {
     uint64_t wsize = want_size(i);
-    uint64_t offset;
     uint32_t v = rand() % (MAXALLOC / PAGE);
     uint32_t scale = cbits(MAXALLOC / PAGE) - cbits(v);
     uint64_t size = ( (rand() % (1 << scale)) + 1 ) * PAGE;
 
     bool more = true;
     while ((CAPACITY - sa.get_free()) < wsize && more) {
-      if (0 == sa.reserve(size)) {
-        uint32_t allocated = 0;
-        if (0 == sa.allocate_int(size, PAGE, 1, &offset, &allocated)) {
-          auto n = allocation_list.emplace(allocation_list.end(), allocation_t{offset,allocated});
-          allocation_vector.push_back(n);
-          allocation_count++;
-        } else {
-          more = false;
-        }
-        sa.unreserve(size - allocated);
+      PExtentVector ext;
+      if ((int64_t)size == sa.allocate(size, PAGE, size, 1, &ext)) {
+	for (auto &a : ext) {
+	  auto n = allocation_list.emplace(allocation_list.end(), allocation_t{a.offset, a.length});
+	  allocation_vector.push_back(n);
+	  allocation_count++;
+	}
+      } else {
+	more = false;
       }
     }
     while ((CAPACITY - sa.get_free()) > wsize) {
@@ -745,11 +729,8 @@ TYPED_TEST(AllocatorTest, performance_test) {
       std::cerr << "[ SKIPPING REST ] --would fail--" << std::endl;
       return;
   }
-  uint64_t offset;
-  uint32_t allocated;
-  sa.reserve(CAPACITY);
-  ASSERT_EQ(0, sa.allocate_int(CAPACITY, PAGE, 0, &offset, &allocated));
-  ASSERT_EQ(allocated, CAPACITY);
+  PExtentVector ext;
+  ASSERT_EQ(CAPACITY, sa.allocate(CAPACITY, PAGE, CAPACITY, 0, &ext));
 }
 
 int main(int argc, char **argv) {
