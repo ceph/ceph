@@ -1,10 +1,7 @@
-import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { PerformanceCounterService } from '../../../shared/api/performance-counter.service';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { FormatterService } from '../../../shared/services/formatter.service';
+import { SharedModule } from '../../../shared/shared.module';
 import { configureTestBed } from '../../../shared/unit-test-helper';
 import { TablePerformanceCounterComponent } from './table-performance-counter.component';
 
@@ -12,17 +9,9 @@ describe('TablePerformanceCounterComponent', () => {
   let component: TablePerformanceCounterComponent;
   let fixture: ComponentFixture<TablePerformanceCounterComponent>;
 
-  const fakeService = {};
-
   configureTestBed({
-    declarations: [TablePerformanceCounterComponent, TableComponent, DimlessPipe],
-    imports: [],
-    schemas: [NO_ERRORS_SCHEMA],
-    providers: [
-      { provide: PerformanceCounterService, useValue: fakeService },
-      DimlessPipe,
-      FormatterService
-    ]
+    declarations: [TablePerformanceCounterComponent],
+    imports: [SharedModule, HttpClientTestingModule]
   });
 
   beforeEach(() => {

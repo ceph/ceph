@@ -1,20 +1,17 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { AuthService } from '../../../shared/api/auth.service';
 import { configureTestBed } from '../../../shared/unit-test-helper';
+import { AuthModule } from '../auth.module';
 import { LogoutComponent } from './logout.component';
 
 describe('LogoutComponent', () => {
   let component: LogoutComponent;
   let fixture: ComponentFixture<LogoutComponent>;
 
-  const fakeService = {};
-
   configureTestBed({
-    imports: [RouterTestingModule],
-    declarations: [LogoutComponent],
-    providers: [{ provide: AuthService, useValue: fakeService }]
+    imports: [RouterTestingModule, HttpClientTestingModule, AuthModule]
   });
 
   beforeEach(() => {

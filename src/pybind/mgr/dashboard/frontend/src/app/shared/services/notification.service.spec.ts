@@ -11,22 +11,17 @@ import { TaskManagerMessageService } from './task-manager-message.service';
 
 describe('NotificationService', () => {
   let notificationService: NotificationService;
-  const fakeService = {
-    // ToastsManager
+  const toastFakeService = {
     error: () => true,
     info: () => true,
-    success: () => true,
-    // TaskManagerMessageService
-    getDescription: () => true,
-    getErrorMessage: () => true,
-    getSuccessMessage: () => true
+    success: () => true
   };
 
   configureTestBed({
     providers: [
       NotificationService,
-      { provide: TaskManagerMessageService, useValue: fakeService },
-      { provide: ToastsManager, useValue: fakeService }
+      TaskManagerMessageService,
+      { provide: ToastsManager, useValue: toastFakeService }
     ]
   });
 
@@ -124,7 +119,11 @@ describe('NotificationService', () => {
     'should show a error task notification',
     fakeAsync(() => {
       const task = _.assign(new FinishedTask(), {
-        success: false
+        success: false,
+        metadata: 'failed',
+        exception: {
+          code: 404
+        }
       });
       notificationService.notifyTask(task);
       tick(100);

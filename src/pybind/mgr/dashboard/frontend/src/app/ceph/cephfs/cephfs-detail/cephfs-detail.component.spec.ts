@@ -1,10 +1,10 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { BsDropdownModule, ProgressbarModule, TabsModule } from 'ngx-bootstrap';
-import { Observable } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -25,19 +25,6 @@ describe('CephfsDetailComponent', () => {
   let component: CephfsDetailComponent;
   let fixture: ComponentFixture<CephfsDetailComponent>;
 
-  const fakeFilesystemService = {
-    getCephfs: (id) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    },
-    getMdsCounters: (id) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    }
-  };
-
   configureTestBed({
     imports: [
       SharedModule,
@@ -45,10 +32,11 @@ describe('CephfsDetailComponent', () => {
       RouterTestingModule,
       BsDropdownModule.forRoot(),
       ProgressbarModule.forRoot(),
-      TabsModule.forRoot()
+      TabsModule.forRoot(),
+      HttpClientTestingModule
     ],
     declarations: [CephfsDetailComponent, CephfsChartStubComponent, CephfsClientsStubComponent],
-    providers: [{ provide: CephfsService, useValue: fakeFilesystemService }]
+    providers: [CephfsService]
   });
 
   beforeEach(() => {

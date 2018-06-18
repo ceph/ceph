@@ -1,7 +1,6 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-
-import { Observable } from 'rxjs';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -18,18 +17,10 @@ describe('CephfsListComponent', () => {
   let component: CephfsListComponent;
   let fixture: ComponentFixture<CephfsListComponent>;
 
-  const fakeService = {
-    get: (service_type: string, service_id: string) => {
-      return Observable.create((observer) => {
-        return () => console.log('disposed');
-      });
-    }
-  };
-
   configureTestBed({
-    imports: [SharedModule],
+    imports: [SharedModule, HttpClientTestingModule],
     declarations: [CephfsListComponent, CephfsDetailStubComponent],
-    providers: [{ provide: CephfsService, useValue: fakeService }]
+    providers: [CephfsService]
   });
 
   beforeEach(() => {
