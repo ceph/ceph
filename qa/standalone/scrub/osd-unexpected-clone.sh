@@ -56,20 +56,19 @@ function TEST_recover_unexpected() {
     JSON=`objectstore_tool $dir $osd --op list foo | grep snapid.:1`
     echo "JSON is $JSON"
     rm -f $dir/_ $dir/data
-    objectstore_tool $dir $osd "$JSON" get-attr _ > $dir/_
-    objectstore_tool $dir $osd "$JSON" get-bytes $dir/data
+    objectstore_tool $dir $osd "$JSON" get-attr _ > $dir/_ || return 1
+    objectstore_tool $dir $osd "$JSON" get-bytes $dir/data || return 1
 
     rados -p foo rmsnap snap
 
     sleep 5
 
-    objectstore_tool $dir $osd "$JSON" set-bytes $dir/data
-    objectstore_tool $dir $osd "$JSON" set-attr _ $dir/_
-    rm -f $dir/_ $dir/data
+    objectstore_tool $dir $osd "$JSON" set-bytes $dir/data || return 1
+    objectstore_tool $dir $osd "$JSON" set-attr _ $dir/_ || return 1
 
     sleep 5
 
-    ceph pg repair 1.0
+    ceph pg repair 1.0 || return 1
 
     sleep 10
 
