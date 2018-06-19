@@ -887,7 +887,7 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
             ldout(m_cct, 20) << "COPY_OP_TYPE_TRUNC " << z.get_start() << dendl;
           }
         }
-        end_size = z.get_start();
+        end_size = std::min(end_size, z.get_start());
       } else {
         // zero interval inside the object
         m_write_ops[src_snap_seq]
