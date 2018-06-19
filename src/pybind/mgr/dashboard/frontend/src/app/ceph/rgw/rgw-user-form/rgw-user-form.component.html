@@ -40,7 +40,7 @@
 
         <!-- Username -->
         <div class="form-group"
-             [ngClass]="{'has-error': (frm.submitted || userForm.controls.user_id.dirty) && userForm.controls.user_id.invalid}">
+             [ngClass]="{'has-error': userForm.showError('user_id', frm)}">
           <label class="control-label col-sm-3"
                  for="user_id"
                  i18n>Username
@@ -56,12 +56,12 @@
                    [readonly]="editing"
                    autofocus>
             <span class="help-block"
-                  *ngIf="(frm.submitted || userForm.controls.user_id.dirty) && userForm.controls.user_id.hasError('required')"
+                  *ngIf="userForm.showError('user_id', frm, 'required')"
                   i18n>
               This field is required.
             </span>
             <span class="help-block"
-                  *ngIf="(frm.submitted || userForm.controls.user_id.dirty) && userForm.controls.user_id.hasError('userIdExists')"
+                  *ngIf="userForm.showError('user_id', frm, 'userIdExists')"
                   i18n>
               The chosen user ID is already in use.
             </span>
@@ -70,7 +70,7 @@
 
         <!-- Full name -->
         <div class="form-group"
-             [ngClass]="{'has-error': (frm.submitted || userForm.controls.display_name.dirty) && userForm.controls.display_name.invalid}">
+             [ngClass]="{'has-error': userForm.showError('display_name', frm)}">
           <label class="control-label col-sm-3"
                  for="display_name"
                  i18n>Full name
@@ -84,7 +84,7 @@
                    type="text"
                    formControlName="display_name">
             <span class="help-block"
-                  *ngIf="(frm.submitted || userForm.controls.display_name.dirty) && userForm.controls.display_name.hasError('required')"
+                  *ngIf="userForm.showError('display_name', frm, 'required')"
                   i18n>
               This field is required.
             </span>
@@ -93,7 +93,7 @@
 
         <!-- Email address -->
         <div class="form-group"
-             [ngClass]="{'has-error': (frm.submitted || userForm.controls.email.dirty) && userForm.controls.email.invalid}">
+             [ngClass]="{'has-error': userForm.showError('email', frm)}">
           <label class="control-label col-sm-3"
                  for="email"
                  i18n>Email address
@@ -104,7 +104,7 @@
                    type="text"
                    formControlName="email">
             <span class="help-block"
-                  *ngIf="(frm.submitted || userForm.controls.email.dirty) && userForm.controls.email.hasError('email')"
+                  *ngIf="userForm.showError('email', frm, 'email')"
                   i18n>
               This is not a valid email address.
             </span>
@@ -113,7 +113,7 @@
 
         <!-- Max. buckets -->
         <div class="form-group"
-             [ngClass]="{'has-error': (frm.submitted || userForm.controls.max_buckets.dirty) && userForm.controls.max_buckets.invalid}">
+             [ngClass]="{'has-error': userForm.showError('max_buckets', frm)}">
           <label class="control-label col-sm-3"
                  for="max_buckets"
                  i18n>Max. buckets
@@ -125,12 +125,12 @@
                    type="number"
                    formControlName="max_buckets">
             <span class="help-block"
-                  *ngIf="(frm.submitted || userForm.controls.max_buckets.dirty) && userForm.controls.max_buckets.hasError('required')"
+                  *ngIf="userForm.showError('max_buckets', frm, 'required')"
                   i18n>
               This field is required.
             </span>
             <span class="help-block"
-                  *ngIf="(frm.submitted || userForm.controls.max_buckets.dirty) && userForm.controls.max_buckets.hasError('min')"
+                  *ngIf="userForm.showError('max_buckets', frm, 'min')"
                   i18n>
               The entered value must be >= 0.
             </span>
@@ -171,8 +171,8 @@
 
           <!-- Access key -->
           <div class="form-group"
-               [ngClass]="{'has-error': (frm.submitted || userForm.controls.access_key.dirty) && userForm.controls.access_key.invalid}"
-               *ngIf="!editing && !userForm.controls.generate_key.value">
+               [ngClass]="{'has-error': userForm.showError('access_key', frm)}"
+               *ngIf="!editing && !userForm.getValue('generate_key')">
             <label class="control-label col-sm-3"
                    for="access_key"
                    i18n>Access key
@@ -196,7 +196,7 @@
                 </span>
               </div>
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.access_key.dirty) && userForm.controls.access_key.hasError('required')"
+                    *ngIf="userForm.showError('access_key', frm, 'required')"
                     i18n>
                 This field is required.
               </span>
@@ -205,8 +205,8 @@
 
           <!-- Secret key -->
           <div class="form-group"
-               [ngClass]="{'has-error': (frm.submitted || userForm.controls.secret_key.dirty) && userForm.controls.secret_key.invalid}"
-               *ngIf="!editing && !userForm.controls.generate_key.value">
+               [ngClass]="{'has-error': userForm.showError('secret_key', frm)}"
+               *ngIf="!editing && !userForm.getValue('generate_key')">
             <label class="control-label col-sm-3"
                    for="secret_key"
                    i18n>Secret key
@@ -230,7 +230,7 @@
                 </span>
               </div>
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.secret_key.dirty) && userForm.controls.secret_key.hasError('required')"
+                    *ngIf="userForm.showError('secret_key', frm, 'required')"
                     i18n>
                 This field is required.
               </span>
@@ -481,8 +481,8 @@
 
           <!-- Maximum size -->
           <div class="form-group"
-               [ngClass]="{'has-error': (frm.submitted || userForm.controls.user_quota_max_size.dirty) && userForm.controls.user_quota_max_size.invalid}"
-               *ngIf="!userForm.controls.user_quota_max_size_unlimited.value">
+               [ngClass]="{'has-error': userForm.showError('user_quota_max_size', frm)}"
+               *ngIf="!userForm.getValue('user_quota_max_size_unlimited')">
             <label class="control-label col-sm-3"
                    for="user_quota_max_size"
                    i18n>Max. size
@@ -494,12 +494,12 @@
                      type="text"
                      formControlName="user_quota_max_size">
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.user_quota_max_size.dirty) && userForm.controls.user_quota_max_size.hasError('required')"
+                    *ngIf="userForm.showError('user_quota_max_size', frm, 'required')"
                     i18n>
                 This field is required.
               </span>
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.user_quota_max_size.dirty) && userForm.controls.user_quota_max_size.hasError('quotaMaxSize')"
+                    *ngIf="userForm.showError('user_quota_max_size', frm, 'quotaMaxSize')"
                     i18n>
                 The value is not valid.
               </span>
@@ -523,8 +523,8 @@
 
           <!-- Maximum objects -->
           <div class="form-group"
-               [ngClass]="{'has-error': (frm.submitted || userForm.controls.user_quota_max_objects.dirty) && userForm.controls.user_quota_max_objects.invalid}"
-               *ngIf="!userForm.controls.user_quota_max_objects_unlimited.value">
+               [ngClass]="{'has-error': userForm.showError('user_quota_max_objects', frm)}"
+               *ngIf="!userForm.getValue('user_quota_max_objects_unlimited')">
             <label class="control-label col-sm-3"
                    for="user_quota_max_objects"
                    i18n>Max. objects
@@ -536,12 +536,12 @@
                      type="number"
                      formControlName="user_quota_max_objects">
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.user_quota_max_objects.dirty) && userForm.controls.user_quota_max_objects.hasError('required')"
+                    *ngIf="userForm.showError('user_quota_max_objects', frm, 'required')"
                     i18n>
                 This field is required.
               </span>
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.user_quota_max_objects.dirty) && userForm.controls.user_quota_max_objects.hasError('min')"
+                    *ngIf="userForm.showError('user_quota_max_objects', frm, 'min')"
                     i18n>
               The entered value must be >= 0.
             </span>
@@ -584,8 +584,8 @@
 
           <!-- Maximum size -->
           <div class="form-group"
-               [ngClass]="{'has-error': (frm.submitted || userForm.controls.bucket_quota_max_size.dirty) && userForm.controls.bucket_quota_max_size.invalid}"
-               *ngIf="!userForm.controls.bucket_quota_max_size_unlimited.value">
+               [ngClass]="{'has-error': userForm.showError('bucket_quota_max_size', frm)}"
+               *ngIf="!userForm.getValue('bucket_quota_max_size_unlimited')">
             <label class="control-label col-sm-3"
                    for="bucket_quota_max_size"
                    i18n>Max. size
@@ -597,12 +597,12 @@
                      type="text"
                      formControlName="bucket_quota_max_size">
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.bucket_quota_max_size.dirty) && userForm.controls.bucket_quota_max_size.hasError('required')"
+                    *ngIf="userForm.showError('bucket_quota_max_size', frm, 'required')"
                     i18n>
                 This field is required.
               </span>
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.bucket_quota_max_size.dirty) && userForm.controls.bucket_quota_max_size.hasError('quotaMaxSize')"
+                    *ngIf="userForm.showError('bucket_quota_max_size', frm, 'quotaMaxSize')"
                     i18n>
                 The value is not valid.
               </span>
@@ -626,8 +626,8 @@
 
           <!-- Maximum objects -->
           <div class="form-group"
-               [ngClass]="{'has-error': (frm.submitted || userForm.controls.bucket_quota_max_objects.dirty) && userForm.controls.bucket_quota_max_objects.invalid}"
-               *ngIf="!userForm.controls.bucket_quota_max_objects_unlimited.value">
+               [ngClass]="{'has-error': userForm.showError('bucket_quota_max_objects', frm)}"
+               *ngIf="!userForm.getValue('bucket_quota_max_objects_unlimited')">
             <label class="control-label col-sm-3"
                    for="bucket_quota_max_objects"
                    i18n>Max. objects
@@ -639,12 +639,12 @@
                      type="number"
                      formControlName="bucket_quota_max_objects">
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.bucket_quota_max_objects.dirty) && userForm.controls.bucket_quota_max_objects.hasError('required')"
+                    *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'required')"
                     i18n>
                 This field is required.
               </span>
               <span class="help-block"
-                    *ngIf="(frm.submitted || userForm.controls.bucket_quota_max_objects.dirty) && userForm.controls.bucket_quota_max_objects.hasError('min')"
+                    *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'min')"
                     i18n>
               The entered value must be >= 0.
             </span>
