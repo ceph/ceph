@@ -13,7 +13,7 @@
 
     <!-- Name -->
     <div class="form-group"
-         [ngClass]="{'has-error': (formDir.submitted || snapshotForm.controls.snapshotName.dirty) && snapshotForm.controls.snapshotName.invalid}">
+         [ngClass]="{'has-error': snapshotForm.showError('snapshotName', formDir)}">
       <label i18n
              class="control-label col-sm-3"
              for="snapshotName">Name
@@ -29,7 +29,7 @@
                autofocus>
         <span i18n
               class="help-block"
-              *ngIf="(formDir.submitted || snapshotForm.controls.snapshotName.dirty) && snapshotForm.controls.snapshotName.hasError('required')">
+              *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')">
               This field is required.
             </span>
       </div>
