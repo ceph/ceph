@@ -20,7 +20,6 @@
 #include <map>
 #include <set>
 #include <vector>
-#include "include/memory.h"
 #include <exception>
 
 #include "osd/osd_types.h"

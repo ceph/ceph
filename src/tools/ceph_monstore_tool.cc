@@ -237,7 +237,7 @@ void usage(const char *n, po::options_description &d)
 }
 
 int update_osdmap(MonitorDBStore& store, version_t ver, bool copy,
-		  ceph::shared_ptr<CrushWrapper> crush,
+		  std::shared_ptr<CrushWrapper> crush,
 		  MonitorDBStore::Transaction* t) {
   const string prefix("osdmap");
 
@@ -320,7 +320,7 @@ int rewrite_transaction(MonitorDBStore& store, int version,
 
   // load/extract the crush map
   int r = 0;
-  ceph::shared_ptr<CrushWrapper> crush(new CrushWrapper);
+  std::shared_ptr<CrushWrapper> crush(new CrushWrapper);
   if (crush_file.empty()) {
     bufferlist bl;
     r = store.get(prefix, store.combine_strings("full", good_version), bl);

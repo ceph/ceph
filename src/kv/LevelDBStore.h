@@ -9,7 +9,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "leveldb/db.h"
 #include "leveldb/env.h"

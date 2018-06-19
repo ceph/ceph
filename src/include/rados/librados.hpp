@@ -7,7 +7,6 @@
 #include <set>
 #include <vector>
 #include <utility>
-#include "memory.h"
 #include "buffer.h"
 
 #include "librados.h"

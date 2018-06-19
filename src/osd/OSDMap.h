@@ -33,7 +33,7 @@
 #include <list>
 #include <set>
 #include <map>
-#include "include/memory.h"
+#include <memory>
 #include "include/btree_map.h"
 
 // forward declaration
@@ -524,21 +524,21 @@ private:
     CEPH_FEATUREMASK_SERVER_NAUTILUS;
 
   struct addrs_s {
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addrvec_t> > client_addrs;
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > cluster_addr;
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > hb_back_addr;
-    mempool::osdmap::vector<ceph::shared_ptr<entity_addr_t> > hb_front_addr;
+    mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
+    mempool::osdmap::vector<std::shared_ptr<entity_addr_t> > cluster_addr;
+    mempool::osdmap::vector<std::shared_ptr<entity_addr_t> > hb_back_addr;
+    mempool::osdmap::vector<std::shared_ptr<entity_addr_t> > hb_front_addr;
   };
-  ceph::shared_ptr<addrs_s> osd_addrs;
+  std::shared_ptr<addrs_s> osd_addrs;
 
   entity_addr_t _blank_addr;
   entity_addrvec_t _blank_addrvec;
 
   mempool::osdmap::vector<__u32>   osd_weight;   // 16.16 fixed point, 0x10000 = "in", 0 = "out"
   mempool::osdmap::vector<osd_info_t> osd_info;
-  ceph::shared_ptr<PGTempMap> pg_temp;  // temp pg mapping (e.g. while we rebuild)
-  ceph::shared_ptr< mempool::osdmap::map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
-  ceph::shared_ptr< mempool::osdmap::vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
+  std::shared_ptr<PGTempMap> pg_temp;  // temp pg mapping (e.g. while we rebuild)
+  std::shared_ptr< mempool::osdmap::map<pg_t,int32_t > > primary_temp;  // temp primary mapping (e.g. while we rebuild)
+  std::shared_ptr< mempool::osdmap::vector<__u32> > osd_primary_affinity; ///< 16.16 fixed point, 0x10000 = baseline
 
   // remap (post-CRUSH, pre-up)
   mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> pg_upmap; ///< remap pg
@@ -549,7 +549,7 @@ private:
   mempool::osdmap::map<string,map<string,string> > erasure_code_profiles;
   mempool::osdmap::map<string,int64_t> name_pool;
 
-  ceph::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
+  std::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
   mempool::osdmap::unordered_map<entity_addr_t,utime_t> blacklist;
@@ -588,7 +588,7 @@ private:
   bool have_crc() const { return crc_defined; }
   uint32_t get_crc() const { return crc; }
 
-  ceph::shared_ptr<CrushWrapper> crush;       // hierarchical map
+  std::shared_ptr<CrushWrapper> crush;       // hierarchical map
 private:
   uint32_t crush_version = 1;
 
@@ -1474,7 +1474,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
-typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
+typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
 inline ostream& operator<<(ostream& out, const OSDMap& m) {
   m.print_oneline_summary(out);

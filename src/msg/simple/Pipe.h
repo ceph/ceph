@@ -15,7 +15,6 @@
 #ifndef CEPH_MSGR_PIPE_H
 #define CEPH_MSGR_PIPE_H
 
-#include "include/memory.h"
 #include "auth/AuthSessionHandler.h"
 
 #include "msg/msg_types.h"
@@ -128,7 +127,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 
-    ceph::shared_ptr<AuthSessionHandler> session_security;
+    std::shared_ptr<AuthSessionHandler> session_security;
 
   protected:
     friend class SimpleMessenger;

@@ -5,7 +5,6 @@ install(FILES rados/librados.h
   buffer.h
   buffer_fwd.h
   inline_memory.h
-  memory.h
   page.h
   crc32c.h
   rados/objclass.h

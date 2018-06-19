@@ -17,7 +17,6 @@
 
 #include "include/types.h"
 #include "include/utime.h"
-#include "include/memory.h"
 #include "include/buffer.h"
 
 #include <string>
@@ -94,7 +93,7 @@ protected:
 
   // cache a pointer to the implementation-specific key handler, so we
   // don't have to create it for every crypto operation.
-  mutable ceph::shared_ptr<CryptoKeyHandler> ckh;
+  mutable std::shared_ptr<CryptoKeyHandler> ckh;
 
   int _set_secret(int type, const bufferptr& s);
 

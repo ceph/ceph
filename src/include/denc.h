@@ -41,7 +41,6 @@
 #include "include/assert.h"	// boost clobbers this
 #include "include/intarith.h"
 #include "include/int_types.h"
-#include "include/memory.h"
 
 #include "buffer.h"
 #include "byteorder.h"

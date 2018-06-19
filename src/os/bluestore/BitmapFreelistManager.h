@@ -15,7 +15,7 @@
 class BitmapFreelistManager : public FreelistManager {
   std::string meta_prefix, bitmap_prefix;
   KeyValueDB *kvdb;
-  ceph::shared_ptr<KeyValueDB::MergeOperator> merge_op;
+  std::shared_ptr<KeyValueDB::MergeOperator> merge_op;
   std::mutex lock;
 
   uint64_t size;            ///< size of device (bytes)

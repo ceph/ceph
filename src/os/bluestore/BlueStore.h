@@ -31,7 +31,6 @@
 
 #include "include/assert.h"
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "include/mempool.h"
 #include "common/bloom_filter.hpp"
 #include "common/Finisher.h"

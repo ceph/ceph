@@ -9,8 +9,6 @@
 
 using std::string;
 
-#include "include/memory.h"
-
 #include "common/debug.h"
 #include "common/perf_counters.h"
 

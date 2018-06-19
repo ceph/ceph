@@ -16,7 +16,6 @@
 #define REPBACKEND_H
 
 #include "PGBackend.h"
-#include "include/memory.h"
 
 struct C_ReplicatedBackend_OnPullComplete;
 class ReplicatedBackend : public PGBackend {
@@ -412,7 +411,7 @@ private:
     RepModify() : committed(false), ackerosd(-1),
 		  epoch_started(0) {}
   };
-  typedef ceph::shared_ptr<RepModify> RepModifyRef;
+  typedef std::shared_ptr<RepModify> RepModifyRef;
 
   struct C_OSD_RepModifyCommit;
 
