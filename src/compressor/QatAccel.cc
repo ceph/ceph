@@ -76,11 +76,11 @@ int QatAccel::compress(const bufferlist &in, bufferlist &out) {
 }
 
 int QatAccel::decompress(const bufferlist &in, bufferlist &out) {
-  bufferlist::iterator i = const_cast<bufferlist&>(in).begin();
+  auto i = in.begin();
   return decompress(i, in.length(), out);
 }
 
-int QatAccel::decompress(bufferlist::iterator &p,
+int QatAccel::decompress(bufferlist::const_iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) {
   unsigned int ratio_idx = 0;
