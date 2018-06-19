@@ -6,7 +6,8 @@ Creating a plugin
 -----------------
 
 In pybind/mgr/, create a python module.  Within your module, create a class
-that inherits from ``MgrModule``.
+that inherits from ``MgrModule``.  For ceph-mgr to detect your module, your
+directory must contain a file called `module.py`.
 
 The most important methods to override are:
 
