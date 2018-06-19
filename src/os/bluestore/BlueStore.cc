@@ -8792,7 +8792,7 @@ void BlueStore::_osr_drain_all()
   dout(10) << __func__ << dendl;
 
   set<OpSequencerRef> s;
-  set<OpSequencerRef> zombies;
+  vector<OpSequencerRef> zombies;
   {
     RWLock::RLocker l(coll_lock);
     for (auto& i : coll_map) {
@@ -8803,7 +8803,7 @@ void BlueStore::_osr_drain_all()
     std::lock_guard<std::mutex> l(zombie_osr_lock);
     for (auto& i : zombie_osr_set) {
       s.insert(i.second);
-      zombies.insert(i.second);
+      zombies.push_back(i.second);
     }
   }
   dout(20) << __func__ << " osr_set " << s << dendl;
