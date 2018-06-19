@@ -14,18 +14,18 @@ TIME_FORMAT = '%Y%m%d-%H%M%S'
 
 class Module(MgrModule):
     OPTIONS = [
-        { 'name': 'active' },
+        { 'name': 'enable_monitoring' },
         { 'name': 'scrape_frequency' },
         { 'name': 'pool_name' },
         { 'name': 'retention_period' },
     ]
     DEFAULTS = {
-        'active': True,
+        'enable_monitoring': True,
         'scrape_frequency': str(86400),
         'retention_period': str(86400*14),
         'pool_name': 'device_health_metrics',
     }
-    active = DEFAULTS['active']
+    enable_monitoring = DEFAULTS['enable_monitoring']
     scrape_frequency = DEFAULTS['scrape_frequency']
     retention_period = DEFAULTS['retention_period']
     pool_name = DEFAULTS['pool_name']
@@ -93,7 +93,7 @@ class Module(MgrModule):
             raise NotImplementedError(cmd['prefix'])
 
     def refresh_config(self):
-        self.active = self.get_config('active', '') is not '' or 'false'
+        self.enable_monitoring = self.get_config('enable_monitoring', '') is not '' or 'false'
         for opt, value in self.DEFAULTS.iteritems():
             setattr(self, opt, self.get_config(opt) or value)
 
@@ -115,8 +115,8 @@ class Module(MgrModule):
                 continue
 
             self.log.debug('Waking up [%s]',
-                           "active" if self.active else "inactive")
-            if not self.active:
+                           "active" if self.enable_monitoring else "inactive")
+            if not self.enable_monitoring:
                 continue
             self.log.debug('Running')
 
