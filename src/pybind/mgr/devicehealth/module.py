@@ -50,6 +50,11 @@ class Module(MgrModule):
             "desc": "Show stored device metrics for the device",
             "perm": "r"
         },
+        {
+            "cmd": "devicehealth self-test",
+            "desc": "Run a self-test on the devicehealth module",
+            "perm": "rw",
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -92,11 +97,29 @@ class Module(MgrModule):
             return self.scrape_all();
         elif cmd['prefix'] == 'device show-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
-
+        elif cmd['prefix'] == 'devicehealth self-test':
+            return self.self_test()
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
             raise NotImplementedError(cmd['prefix'])
+
+    def self_test(self):
+        self.refresh_config()
+        osdmap = self.get('osd_map')
+        osd_id = osdmap['osds'][0]['osd']
+        osdmeta = self.get('osd_metadata')
+        devs = osdmeta.get(str(osd_id), {}).get('device_ids')
+        if devs:
+            devid = devs.split()[0].split('=')[1]
+            (r, before, err) = self.show_device_metrics(devid, '')
+            assert r == 0
+            (r, out, err) = self.scrape_device(devid)
+            assert r == 0
+            (r, after, err) = self.show_device_metrics(devid, '')
+            assert r == 0
+            assert before != after
+        return (0, '', '')
 
     def refresh_config(self):
         self.enable_monitoring = self.get_config('enable_monitoring', '') is not '' or 'false'
