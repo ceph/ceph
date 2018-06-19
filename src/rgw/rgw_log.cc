@@ -196,7 +196,7 @@ static void log_usage(struct req_state *s, const string& op_name)
 
   if (!bucket_name.empty()) {
     user = s->bucket_owner.get_id();
-    if (s->bucket_info.requester_pays) {
+    if (s->bucket_info.requester_pays || user != s->user->user_id) {
       payer = s->user->user_id;
     }
   } else {
