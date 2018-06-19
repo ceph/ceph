@@ -29,7 +29,7 @@ class QatAccel {
 
   int compress(const bufferlist &in, bufferlist &out);
   int decompress(const bufferlist &in, bufferlist &out);
-  int decompress(bufferlist::iterator &p, size_t compressed_len, bufferlist &dst);
+  int decompress(bufferlist::const_iterator &p, size_t compressed_len, bufferlist &dst);
 };
 
 #endif
