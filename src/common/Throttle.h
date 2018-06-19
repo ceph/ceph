@@ -373,27 +373,39 @@ public:
   		    SafeTimer *timer, Mutex *timer_lock);
   
   ~TokenBucketThrottle();
+
+  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
+  void add_blocker(uint64_t c, T *handler, I *item, uint64_t flag) {
+    Context *ctx = new FunctionContext([handler, item, flag](int r) {
+      (handler->*MF)(r, item, flag);
+      });
+    m_blockers.emplace_back(c, ctx);
+  }
   
-  template <typename T, typename I, void(T::*MF)(int, I*)>
-  bool get(uint64_t c, T *handler, I *item) {
+  template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
+  bool get(uint64_t c, T *handler, I *item, uint64_t flag) {
     if (0 == m_throttle.max)
       return false;
   
-    bool waited = false;
-  
+    bool wait = false;
+    uint64_t got = 0;
     Mutex::Locker lock(m_lock);
-    uint64_t got = m_throttle.get(c);
-    if (got < c) {
-      // Not enough tokens, add a blocker for it.
-      Context *ctx = new FunctionContext([handler, item](int r) {
-  	(handler->*MF)(r, item);
-        });
-      m_blockers.emplace_back(c - got, ctx);
-      waited = true;
+    if (!m_blockers.empty()) {
+      // Keep the order of requests, add item after previous blocked requests.
+      wait = true;
+    } else {
+      got = m_throttle.get(c);
+      if (got < c) {
+        // Not enough tokens, add a blocker for it.
+        wait = true;
+      }
     }
-    return waited;
+
+    if (wait)
+      add_blocker<T, I, MF>(c - got, handler, item, flag);
+
+    return wait;
   }
-  
   
   void set_max(uint64_t m);
   void set_average(uint64_t avg);
