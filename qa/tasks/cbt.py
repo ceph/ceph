@@ -72,11 +72,11 @@ class CBT(Task):
         system_type = misc.get_system_type(self.first_mon)
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            epel_pkg = 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm'
-            self.first_mon.run(args=install_cmd + epel_pkg)
+            epel_pkg = ['https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm']
+            self.ctx.cluster.run(args=install_cmd + epel_pkg)
             # enable epel
             enable_epel = ['sudo', 'yum-config-manager', '--enable', 'epel']
-            self.first_mon.run(args=enable_epel)
+            self.ctx.cluster.run(args=enable_epel)
 
     def install_dependencies(self):
         system_type = misc.get_system_type(self.first_mon)
@@ -87,7 +87,7 @@ class CBT(Task):
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
             cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
-        self.first_mon.run(args=install_cmd + cbt_depends)
+        self.ctx.cluster.run(args=install_cmd + cbt_depends)
 
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
         self.log.info('benchmark: %s', benchmark_type)
