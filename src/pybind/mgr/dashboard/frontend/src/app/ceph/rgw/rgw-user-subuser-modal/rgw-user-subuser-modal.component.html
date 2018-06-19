@@ -17,7 +17,7 @@
 
     <!-- Username -->
     <div class="form-group"
-         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.uid.dirty) && formGroup.controls.uid.invalid}">
+         [ngClass]="{'has-error': formGroup.showError('uid', frm)}">
       <label class="control-label col-sm-3"
              for="uid"
              i18n>Username
@@ -33,7 +33,7 @@
 
     <!-- Subuser -->
     <div class="form-group"
-         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.subuid.dirty) && formGroup.controls.subuid.invalid}">
+         [ngClass]="{'has-error': formGroup.showError('subuid', frm)}">
       <label class="control-label col-sm-3"
              for="subuid"
              i18n>Subuser
@@ -49,12 +49,12 @@
                [readonly]="editing"
                autofocus>
         <span class="help-block"
-              *ngIf="(frm.submitted || formGroup.controls.subuid.dirty) && formGroup.controls.subuid.hasError('required')"
+              *ngIf="formGroup.showError('subuid', frm, 'required')"
               i18n>
           This field is required.
         </span>
         <span class="help-block"
-              *ngIf="(frm.submitted || formGroup.controls.subuid.dirty) && formGroup.controls.subuid.hasError('subuserIdExists')"
+              *ngIf="formGroup.showError('subuid', frm, 'subuserIdExists')"
               i18n>
           The chosen subuser ID is already in use.
         </span>
@@ -63,7 +63,7 @@
 
     <!-- Permission -->
     <div class="form-group"
-         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.perm.dirty) && formGroup.controls.perm.invalid}">
+         [ngClass]="{'has-error': formGroup.showError('perm', frm)}">
       <label class="control-label col-sm-3"
              for="perm"
              i18n>Permission
@@ -91,7 +91,7 @@
           </option>
         </select>
         <span class="help-block"
-              *ngIf="(frm.submitted || formGroup.controls.perm.dirty) && formGroup.controls.perm.hasError('required')"
+              *ngIf="formGroup.showError('perm', frm, 'required')"
               i18n>
           This field is required.
         </span>
@@ -118,8 +118,8 @@
 
       <!-- Secret key -->
       <div class="form-group"
-           [ngClass]="{'has-error': (frm.submitted || formGroup.controls.secret_key.dirty) && formGroup.controls.secret_key.invalid}"
-           *ngIf="!editing && !formGroup.controls.generate_secret.value">
+           [ngClass]="{'has-error': formGroup.showError('secret_key', frm)}"
+           *ngIf="!editing && !formGroup.getValue('generate_secret')">
         <label class="control-label col-sm-3"
                for="secret_key"
                i18n>Secret key
@@ -143,7 +143,7 @@
             </span>
           </div>
           <span class="help-block"
-                *ngIf="(frm.submitted || formGroup.controls.secret_key.dirty) && formGroup.controls.secret_key.hasError('required')"
+                *ngIf="formGroup.showError('secret_key', frm, 'required')"
                 i18n>
             This field is required.
           </span>

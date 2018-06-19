@@ -1,16 +1,11 @@
 import { Component, EventEmitter, Output } from '@angular/core';
-import {
-  AbstractControl,
-  FormBuilder,
-  FormGroup,
-  ValidationErrors,
-  ValidatorFn,
-  Validators
-} from '@angular/forms';
+import { AbstractControl, ValidationErrors, ValidatorFn, Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
 
+import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '../../../shared/validators/cd-validators';
 import { RgwUserSubuser } from '../models/rgw-user-subuser';
 
@@ -26,11 +21,11 @@ export class RgwUserSubuserModalComponent {
    */
   @Output() submitAction = new EventEmitter();
 
-  formGroup: FormGroup;
+  formGroup: CdFormGroup;
   editing = true;
   subusers: RgwUserSubuser[] = [];
 
-  constructor(private formBuilder: FormBuilder, public bsModalRef: BsModalRef) {
+  constructor(private formBuilder: CdFormBuilder, public bsModalRef: BsModalRef) {
     this.createForm();
     this.listenToChanges();
   }
