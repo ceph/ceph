@@ -1729,7 +1729,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
       ldout(cct, 10) << "writex writing " << f_it->first << "~"
 		     << f_it->second << " into " << *bh << " at " << opos
 		     << dendl;
-      uint64_t bhoff = bh->start() - opos;
+      uint64_t bhoff = opos - bh->start();
       assert(f_it->second <= bh->length() - bhoff);
 
       // get the frag we're mapping in
