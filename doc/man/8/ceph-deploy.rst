@@ -240,7 +240,7 @@ Here, [HOST] is hostname of the monitor from where keys are to be pulled.
 disk
 ----
 
-Manage disks on a remote host. It actually triggers the ``ceph-disk`` utility
+Manage disks on a remote host. It actually triggers the ``ceph-volume`` utility
 and it's subcommands to manage disks.
 
 Subcommand ``list`` lists disk partitions and Ceph OSDs.
@@ -556,5 +556,5 @@ See also
 
 :doc:`ceph-mon <ceph-mon>`\(8),
 :doc:`ceph-osd <ceph-osd>`\(8),
-:doc:`ceph-disk <ceph-disk>`\(8),
+:doc:`ceph-volume <ceph-volume>`\(8),
 :doc:`ceph-mds <ceph-mds>`\(8)

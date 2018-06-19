@@ -6,12 +6,6 @@ if [ ! -e Makefile -o ! -d bin ]; then
     exit 1
 fi
 
-TEMP_DIR=${TMPDIR:-/tmp}
-if [ ! -d $TEMP_DIR/ceph-disk-virtualenv -o ! -d $TEMP_DIR/ceph-detect-init-virtualenv ]; then
-    echo '/tmp/*-virtualenv directories not built. Please run "make check" first.'
-    exit 1
-fi
-
 function get_cmake_variable() {
     local variable=$1
     grep "$variable" CMakeCache.txt | cut -d "=" -f 2
