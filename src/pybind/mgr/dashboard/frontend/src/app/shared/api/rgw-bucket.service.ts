@@ -11,7 +11,7 @@ import { ApiModule } from './api.module';
   providedIn: ApiModule
 })
 export class RgwBucketService {
-  private url = '/api/rgw/proxy/bucket';
+  private url = '/api/rgw/bucket';
 
   constructor(private http: HttpClient) {}
 
@@ -26,10 +26,12 @@ export class RgwBucketService {
           return observableForkJoin(
             buckets.map((bucket: string) => {
               return this.get(bucket);
-            }));
+            })
+          );
         }
         return observableOf([]);
-      }));
+      })
+    );
   }
 
   /**
@@ -41,32 +43,27 @@ export class RgwBucketService {
   }
 
   get(bucket: string) {
-    let params = new HttpParams();
-    params = params.append('bucket', bucket);
-    return this.http.get(this.url, { params: params });
+    return this.http.get(`${this.url}/${bucket}`);
   }
 
   create(bucket: string, uid: string) {
-    const body = {
-      bucket: bucket,
-      uid: uid
-    };
-    return this.http.post('/api/rgw/bucket', body);
-  }
-
-  update(bucketId: string, bucket: string, uid: string) {
     let params = new HttpParams();
     params = params.append('bucket', bucket);
-    params = params.append('bucket-id', bucketId as string);
     params = params.append('uid', uid);
-    return this.http.put(this.url, null, { params: params });
+    return this.http.post(this.url, null, { params: params });
+  }
+
+  update(bucket: string, bucketId: string, uid: string) {
+    let params = new HttpParams();
+    params = params.append('bucket_id', bucketId);
+    params = params.append('uid', uid);
+    return this.http.put(`${this.url}/${bucket}`, null, { params: params});
   }
 
   delete(bucket: string, purgeObjects = true) {
     let params = new HttpParams();
-    params = params.append('bucket', bucket);
-    params = params.append('purge-objects', purgeObjects ? 'true' : 'false');
-    return this.http.delete(this.url, { params: params });
+    params = params.append('purge_objects', purgeObjects ? 'true' : 'false');
+    return this.http.delete(`${this.url}/${bucket}`, { params: params });
   }
 
   /**
@@ -79,6 +76,7 @@ export class RgwBucketService {
       mergeMap((resp: string[]) => {
         const index = _.indexOf(resp, bucket);
         return observableOf(-1 !== index);
-      }));
+      })
+    );
   }
 }
