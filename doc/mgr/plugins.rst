@@ -61,7 +61,15 @@ like this::
 The ``cmd`` part of each entry is parsed in the same way as internal
 Ceph mon and admin socket commands (see mon/MonCommands.h in
 the Ceph source for examples). Note that the "poll" field is optional,
-and is set to False by default.
+and is set to False by default; this indicates to the ``ceph`` CLI
+that it should call this command repeatedly and output results (see
+``ceph -h`` and its ``--period`` option).
+
+Each command is expected to return a tuple ``(retval, stdout, stderr)``.
+``retval`` is an integer representing a libc error code (e.g. EINVAL,
+EPERM, or 0 for no error), ``stdout`` is a string containing any
+non-error output, and ``stderr`` is a string containing any progress or
+error explanation output.  Either or both of the two strings may be empty.
 
 Configuration options
 ---------------------
