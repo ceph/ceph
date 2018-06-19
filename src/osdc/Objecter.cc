@@ -1532,6 +1532,7 @@ void Objecter::_check_linger_pool_dne(LingerOp *op, bool *need_unregister)
       LingerOp::unique_lock wl{op->watch_lock};
       if (op->on_reg_commit) {
 	op->on_reg_commit->complete(-ENOENT);
+	op->on_reg_commit = nullptr;
       }
       if (op->on_notify_finish) {
         op->on_notify_finish->complete(-ENOENT);
