@@ -30,6 +30,5 @@ install(FILES
   ceph-mds.target
   ceph-radosgw.target
   ceph-rbd-mirror.target
-  ceph-disk@.service
   ceph-volume@.service
   DESTINATION ${CMAKE_INSTALL_SYSTEMD_SERVICEDIR})

@@ -130,7 +130,7 @@ target_link_libraries(ceph_bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAK
 add_executable(ceph_test_mutate
   test_mutate.cc
   )
-target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES} 
+target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
 # test_trans
@@ -413,7 +413,7 @@ target_link_libraries(ceph_multi_stress_watch librados global radostest
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 #ceph_perf_local
-add_executable(ceph_perf_local 
+add_executable(ceph_perf_local
   perf_local.cc
   perf_helper.cc)
 if(HAVE_SSE)
@@ -559,7 +559,6 @@ add_dependencies(tests
   ceph_test_objectstore
   ceph_erasure_code_non_regression
   ceph_erasure_code
-  ceph-disk
   cython${PY_BINDING_INFIX}_modules)
 if(WITH_MGR)
   add_dependencies(tests ceph-mgr)
@@ -573,9 +572,6 @@ endif(WITH_RBD)
 if(WITH_RADOSGW)
   add_dependencies(tests radosgw radosgw-admin)
 endif(WITH_RADOSGW)
-if(NOT FREEBSD)
-  add_dependencies(tests ceph-detect-init)
-endif(NOT FREEBSD)
 
 if(WITH_RBD)
   add_ceph_test(run-rbd-unit-tests.sh ${CMAKE_CURRENT_SOURCE_DIR}/run-rbd-unit-tests.sh)
@@ -589,25 +585,16 @@ add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_obje
 # flaky
 #add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
 
-add_ceph_test(test_subman.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_subman.sh)
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 add_ceph_test(unittest_bufferlist.sh ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh)
 
-add_test(NAME run-tox-ceph-disk COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-disk/run-tox.sh)
-add_test(NAME run-tox-ceph-detect-init COMMAND bash ${CMAKE_SOURCE_DIR}/src/ceph-detect-init/run-tox.sh)
-
-set(CEPH_DISK_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv)
-set(CEPH_DETECT_INIT_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv)
-
-set(tox_tests run-tox-ceph-disk run-tox-ceph-detect-init)
+# XXX are these safe to remove? they used to be around for ceph-disk tox testing
 set(env_vars_for_tox_tests
   CEPH_BUILD_DIR=${CMAKE_BINARY_DIR}
   CEPH_ROOT=${CMAKE_SOURCE_DIR}
   CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
   CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
   CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV}
-  CEPH_DISK_VIRTUALENV=${CEPH_DISK_VIRTUALENV}
-  CEPH_DETECT_INIT_VIRTUALENV=${CEPH_DETECT_INIT_VIRTUALENV}
   LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
   PATH=$ENV{PATH}:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src
   PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind
@@ -631,7 +618,7 @@ add_executable(unittest_admin_socket
   $<TARGET_OBJECTS:unit-main>
   )
 add_ceph_unittest(unittest_admin_socket)
-target_link_libraries(unittest_admin_socket global) 
+target_link_libraries(unittest_admin_socket global)
 
 # unittest_encoding
 add_executable(unittest_encoding
@@ -689,7 +676,7 @@ add_executable(unittest_base64
   base64.cc
   )
 add_ceph_unittest(unittest_base64)
-target_link_libraries(unittest_base64 global) 
+target_link_libraries(unittest_base64 global)
 
 # unittest_ceph_argparse
 add_executable(unittest_ceph_argparse
@@ -899,7 +886,7 @@ endif(WITH_RBD)
 
 # unittest_ipaddr
 add_executable(unittest_ipaddr
-  test_ipaddr.cc)  
+  test_ipaddr.cc)
 add_ceph_unittest(unittest_ipaddr)
 target_link_libraries(unittest_ipaddr mon global)
 

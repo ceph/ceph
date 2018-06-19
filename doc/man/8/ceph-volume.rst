@@ -264,4 +264,3 @@ See also
 ========
 
 :doc:`ceph-osd <ceph-osd>`\(8),
-:doc:`ceph-disk <ceph-disk>`\(8),
