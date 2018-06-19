@@ -51,6 +51,9 @@ class TestModuleSelftest(MgrTestCase):
     def test_iostat(self):
         self._selftest_plugin("iostat")
 
+    def test_devicehealth(self):
+        self._selftest_plugin("devicehealth")
+
     def test_selftest_run(self):
         self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "self-test", "run")
