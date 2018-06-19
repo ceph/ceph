@@ -44,6 +44,15 @@ Major Changes from Luminous
     image and associated snapshots) to new pools or with altered data
     layouts.
 
+- *Misc*:
+
+  * We have dropped the Debian builds for the Mimic release due to the
+    lack of GCC 8 in Stretch.  We expect Debian builds to return with
+    the release of Buster in early 2019, and hope to build a final
+    Luminous release (and possibly later Mimic point releases) once
+    Buster is available.
+
+
 Upgrading from Luminous
 -----------------------
 
