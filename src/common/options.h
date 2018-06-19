@@ -93,6 +93,7 @@ struct Option {
   const type_t type;
   const level_t level;
 
+  enum { max_desc_length = 100 };
   std::string desc;
   std::string long_desc;
 
@@ -259,7 +260,11 @@ struct Option {
     return *this;
   }
   Option& set_description(const char* new_desc) {
-    desc = new_desc;
+    // only 100 single byte chars will be copied
+    char buf[max_desc_length];
+    // old school ...
+    memcpy(buf, new_desc, max_desc_length);
+    desc = buf;
     return *this;
   }
   Option& set_long_description(const char* new_desc) {
