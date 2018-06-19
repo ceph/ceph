@@ -367,7 +367,7 @@ class AsyncConnection : public Connection {
   uint64_t state_offset;
   Worker *worker;
   EventCenter *center;
-  ceph::shared_ptr<AuthSessionHandler> session_security;
+  std::shared_ptr<AuthSessionHandler> session_security;
 
  public:
   // used by eventcallback

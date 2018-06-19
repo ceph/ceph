@@ -17,7 +17,6 @@
 
 #include <string>
 #include <vector>
-#include "include/memory.h"
 
 #include "osd/osd_types.h"
 #include "include/object.h"
@@ -77,7 +76,7 @@ protected:
 
   RWLock access_lock;
   /// Type of returned paths
-  typedef ceph::shared_ptr<Path> IndexedPath;
+  typedef std::shared_ptr<Path> IndexedPath;
 
   static IndexedPath get_testing_path(string path, coll_t collection) {
     return std::make_shared<Path>(path, collection);

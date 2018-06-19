@@ -45,7 +45,6 @@
 #include "auth/KeyRing.h"
 #include "messages/MMonCommand.h"
 #include "mon/MonitorDBStore.h"
-#include "include/memory.h"
 #include "mgr/MgrClient.h"
 
 #include "mon/MonOpRequest.h"
@@ -285,7 +284,7 @@ private:
     ScrubState() : finished(false) { }
     virtual ~ScrubState() { }
   };
-  ceph::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
+  std::shared_ptr<ScrubState> scrub_state; ///< keeps track of current scrub
 
   /**
    * @defgroup Monitor_h_sync Synchronization

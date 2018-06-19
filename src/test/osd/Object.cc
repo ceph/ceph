@@ -126,7 +126,7 @@ const ContDesc &ObjectDesc::most_recent() {
 }
 
 void ObjectDesc::update(ContentsGenerator *gen, const ContDesc &next) {
-  layers.push_front(std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(gen), next));
+  layers.push_front(std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>(std::shared_ptr<ContentsGenerator>(gen), next));
   return;
 }
 

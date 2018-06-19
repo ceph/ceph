@@ -159,7 +159,7 @@ public:
   friend std::ostream& operator<<(std::ostream& out, const HashInfo& hi);
 };
 
-typedef ceph::shared_ptr<HashInfo> HashInfoRef;
+typedef std::shared_ptr<HashInfo> HashInfoRef;
 
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();

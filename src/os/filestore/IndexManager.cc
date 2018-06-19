@@ -12,7 +12,6 @@
  *
  */
 
-#include "include/memory.h"
 #include "include/unordered_map.h"
 
 #if defined(__FreeBSD__)

@@ -28,7 +28,7 @@ typedef struct {
 
 typedef struct {
   PyObject_HEAD
-  ceph::shared_ptr<CrushWrapper> crush;
+  std::shared_ptr<CrushWrapper> crush;
 } BasePyCRUSH;
 
 // ----------
@@ -465,7 +465,7 @@ BasePyCRUSH_init(BasePyCRUSH *self,
     }
     assert(PyObject_TypeCheck(crush_capsule, &PyCapsule_Type));
 
-    auto ptr_ref = (ceph::shared_ptr<CrushWrapper>*)(
+    auto ptr_ref = (std::shared_ptr<CrushWrapper>*)(
         PyCapsule_GetPointer(crush_capsule, nullptr));
 
     // We passed a pointer to a shared pointer, which is weird, but

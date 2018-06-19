@@ -57,7 +57,7 @@ class DamageEntry
 };
 
 
-typedef ceph::shared_ptr<DamageEntry> DamageEntryRef;
+typedef std::shared_ptr<DamageEntry> DamageEntryRef;
 
 
 class DirFragIdent

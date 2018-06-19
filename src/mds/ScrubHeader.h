@@ -59,8 +59,8 @@ protected:
   bool repaired = false;  // May be set during scrub if repairs happened
 };
 
-typedef ceph::shared_ptr<ScrubHeader> ScrubHeaderRef;
-typedef ceph::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;
+typedef std::shared_ptr<ScrubHeader> ScrubHeaderRef;
+typedef std::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;
 
 #endif // SCRUB_HEADER_H_
 

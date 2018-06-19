@@ -710,9 +710,9 @@ int JournalTool::recover_dentries(
     std::set<std::string> read_keys;
 
     // Compose list of potentially-existing dentries we would like to fetch
-    list<ceph::shared_ptr<EMetaBlob::fullbit> > const &fb_list =
+    list<std::shared_ptr<EMetaBlob::fullbit> > const &fb_list =
       lump.get_dfull();
-    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
+    for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
         fb_list.begin(); fbi != fb_list.end(); ++fbi) {
       EMetaBlob::fullbit const &fb = *(*fbi);
 
@@ -759,7 +759,7 @@ int JournalTool::recover_dentries(
 
     // Compose list of dentries we will write back
     std::map<std::string, bufferlist> write_vals;
-    for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
+    for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator fbi =
         fb_list.begin(); fbi != fb_list.end(); ++fbi) {
       EMetaBlob::fullbit const &fb = *(*fbi);
 
@@ -960,7 +960,7 @@ int JournalTool::recover_dentries(
    * important because clients use them to infer completeness
    * of directories
    */
-  for (list<ceph::shared_ptr<EMetaBlob::fullbit> >::const_iterator p =
+  for (list<std::shared_ptr<EMetaBlob::fullbit> >::const_iterator p =
        metablob.roots.begin(); p != metablob.roots.end(); ++p) {
     EMetaBlob::fullbit const &fb = *(*p);
     inodeno_t ino = fb.inode.ino;

@@ -24,7 +24,6 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "common/errno.h"
 #include "MemStore.h"
 #include "include/compat.h"

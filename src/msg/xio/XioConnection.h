@@ -132,7 +132,7 @@ private:
     Messenger::Policy policy;
 
     CryptoKey session_key;
-    ceph::shared_ptr<AuthSessionHandler> session_security;
+    std::shared_ptr<AuthSessionHandler> session_security;
     AuthAuthorizer *authorizer;
     XioConnection *xcon;
     uint32_t protocol_version;

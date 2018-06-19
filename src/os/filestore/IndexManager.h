@@ -14,7 +14,6 @@
 #ifndef OS_INDEXMANAGER_H
 #define OS_INDEXMANAGER_H
 
-#include "include/memory.h"
 #include "include/unordered_map.h"
 
 #include "common/Mutex.h"

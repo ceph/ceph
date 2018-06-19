@@ -42,7 +42,7 @@ struct XorMergeOperator : public KeyValueDB::MergeOperator {
 
 void BitmapFreelistManager::setup_merge_operator(KeyValueDB *db, string prefix)
 {
-  ceph::shared_ptr<XorMergeOperator> merge_op(new XorMergeOperator);
+  std::shared_ptr<XorMergeOperator> merge_op(new XorMergeOperator);
   db->set_merge_operator(prefix, merge_op);
 }
 

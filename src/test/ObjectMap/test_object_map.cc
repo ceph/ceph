@@ -1,5 +1,4 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-#include "include/memory.h"
 #include <map>
 #include <set>
 #include <boost/scoped_ptr.hpp>
