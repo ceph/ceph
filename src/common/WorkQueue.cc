@@ -157,11 +157,12 @@ void ThreadPool::start_threads()
     ldout(cct, 10) << "start_threads creating and starting " << wt << dendl;
     _threads.insert(wt);
 
+    wt->create(thread_name.c_str());
+
     int r = wt->set_ioprio(ioprio_class, ioprio_priority);
     if (r < 0)
       lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
 
-    wt->create(thread_name.c_str());
   }
 }
 
