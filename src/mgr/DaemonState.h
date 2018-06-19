@@ -45,7 +45,20 @@ class PerfCounterInstance
     {}
   };
 
+  class AvgDataPoint
+  {
+    public:
+    utime_t t;
+    uint64_t s;
+    uint64_t c;
+    AvgDataPoint(utime_t t_, uint64_t s_, uint64_t c_)
+      : t(t_), s(s_), c(c_)
+    {}
+  };
+
   boost::circular_buffer<DataPoint> buffer;
+  boost::circular_buffer<AvgDataPoint> avg_buffer;
+
   uint64_t get_current() const;
 
   public:
@@ -53,9 +66,20 @@ class PerfCounterInstance
   {
     return buffer;
   }
+  const boost::circular_buffer<AvgDataPoint> & get_data_avg() const
+  {
+    return avg_buffer;
+  }
   void push(utime_t t, uint64_t const &v);
-  PerfCounterInstance()
-    : buffer(20) {}
+  void push_avg(utime_t t, uint64_t const &s, uint64_t const &c);
+
+  PerfCounterInstance(enum perfcounter_type_d type)
+  {
+    if (type & PERFCOUNTER_LONGRUNAVG)
+      avg_buffer = boost::circular_buffer<AvgDataPoint>(20);
+    else
+      buffer = boost::circular_buffer<DataPoint>(20);
+  };
 };
 
 
