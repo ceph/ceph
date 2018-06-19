@@ -68,6 +68,16 @@ class CBT(Task):
             benchmarks=benchmark_config,
             )
 
+    def enable_epel(self):
+        system_type = misc.get_system_type(self.first_mon)
+        if system_type == 'rpm':
+            install_cmd = ['sudo', 'yum', '-y', 'install']
+            epel_pkg = 'https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm'
+            self.first_mon.run(args=install_cmd + epel_pkg)
+            # enable epel
+            enable_epel = ['sudo', 'yum-config-manager', '--enable', 'epel']
+            self.first_mon.run(args=enable_epel)
+
     def install_dependencies(self):
         system_type = misc.get_system_type(self.first_mon)
 
@@ -201,6 +211,7 @@ class CBT(Task):
         misc.write_file(self.first_mon, os.path.join(self.cbt_dir, 'cbt_config.yaml'),
                         yaml.safe_dump(self.cbt_config, default_flow_style=False))
         self.checkout_cbt()
+        self.enable_epel()
         self.install_dependencies()
 
     def begin(self):
