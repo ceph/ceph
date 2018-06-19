@@ -13,17 +13,15 @@ import { MirrorHealthColorPipe } from './mirror-health-color.pipe';
 import { MirroringComponent } from './mirroring/mirroring.component';
 import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
+import { RbdImagesComponent } from './rbd-images/rbd-images.component';
 import { RbdListComponent } from './rbd-list/rbd-list.component';
 import { RbdSnapshotFormComponent } from './rbd-snapshot-form/rbd-snapshot-form.component';
 import { RbdSnapshotListComponent } from './rbd-snapshot-list/rbd-snapshot-list.component';
+import { RbdTrashListComponent } from './rbd-trash-list/rbd-trash-list.component';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-move-modal.component';
 
 @NgModule({
-  entryComponents: [
-    RbdDetailsComponent,
-    RbdSnapshotFormComponent,
-    RbdTrashMoveModalComponent
-  ],
+  entryComponents: [RbdDetailsComponent, RbdSnapshotFormComponent, RbdTrashMoveModalComponent],
   imports: [
     CommonModule,
     FormsModule,
@@ -46,7 +44,9 @@ import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-mov
     RbdFormComponent,
     RbdSnapshotListComponent,
     RbdSnapshotFormComponent,
-    RbdTrashMoveModalComponent
+    RbdTrashListComponent,
+    RbdTrashMoveModalComponent,
+    RbdImagesComponent
   ]
 })
 export class BlockModule {}

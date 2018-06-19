@@ -96,6 +96,10 @@ export class RbdService {
     });
   }
 
+  listTrash() {
+    return this.http.get(`api/block/image/trash/`);
+  }
+
   moveTrash(poolName, rbdName, delay) {
     return this.http.post(
       `api/block/image/${poolName}/${rbdName}/move_trash`,
