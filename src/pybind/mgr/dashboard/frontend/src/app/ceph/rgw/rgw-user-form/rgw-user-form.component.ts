@@ -1,12 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import {
-  AbstractControl,
-  AsyncValidatorFn,
-  FormBuilder,
-  FormGroup,
-  ValidationErrors,
-  Validators
-} from '@angular/forms';
+import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
@@ -14,6 +7,8 @@ import { BsModalService } from 'ngx-bootstrap';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { CdValidators, isEmptyInputValue } from '../../../shared/validators/cd-validators';
 import { RgwUserCapability } from '../models/rgw-user-capability';
@@ -31,7 +26,7 @@ import { RgwUserSwiftKeyModalComponent } from '../rgw-user-swift-key-modal/rgw-u
   styleUrls: ['./rgw-user-form.component.scss']
 })
 export class RgwUserFormComponent implements OnInit {
-  userForm: FormGroup;
+  userForm: CdFormGroup;
   editing = false;
   error = false;
   loading = false;
@@ -43,7 +38,7 @@ export class RgwUserFormComponent implements OnInit {
   capabilities: RgwUserCapability[] = [];
 
   constructor(
-    private formBuilder: FormBuilder,
+    private formBuilder: CdFormBuilder,
     private route: ActivatedRoute,
     private router: Router,
     private rgwUserService: RgwUserService,
@@ -225,7 +220,7 @@ export class RgwUserFormComponent implements OnInit {
     if (this.userForm.pristine) {
       this.goToListView();
     }
-    const uid = this.userForm.get('user_id').value;
+    const uid = this.userForm.getValue('user_id');
     if (this.editing) {
       // Edit
       if (this._isGeneralDirty()) {
@@ -309,7 +304,7 @@ export class RgwUserFormComponent implements OnInit {
       'full-control': 'full',
       'read-write': 'readwrite'
     };
-    const uid = this.userForm.get('user_id').value;
+    const uid = this.userForm.getValue('user_id');
     const args = {
       subuser: subuser.id,
       access:
@@ -348,7 +343,7 @@ export class RgwUserFormComponent implements OnInit {
     const subuser = this.subusers[index];
     // Create an observable to delete the subuser when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteSubuser(this.userForm.get('user_id').value, subuser.id)
+      this.rgwUserService.deleteSubuser(this.userForm.getValue('user_id'), subuser.id)
     );
     // Remove the associated S3 keys.
     this.s3Keys = this.s3Keys.filter((key) => {
@@ -368,7 +363,7 @@ export class RgwUserFormComponent implements OnInit {
    * Add/Update a capability.
    */
   setCapability(cap: RgwUserCapability, index?: number) {
-    const uid = this.userForm.get('user_id').value;
+    const uid = this.userForm.getValue('user_id');
     if (_.isNumber(index)) {
       // Modify
       const oldCap = this.capabilities[index];
@@ -400,7 +395,7 @@ export class RgwUserFormComponent implements OnInit {
     const cap = this.capabilities[index];
     // Create an observable to delete the capability when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteCapability(this.userForm.get('user_id').value, cap.type, cap.perm)
+      this.rgwUserService.deleteCapability(this.userForm.getValue('user_id'), cap.type, cap.perm)
     );
     // Remove the capability to update the UI.
     this.capabilities.splice(index, 1);
@@ -448,7 +443,7 @@ export class RgwUserFormComponent implements OnInit {
     const key = this.s3Keys[index];
     // Create an observable to delete the S3 key when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteS3Key(this.userForm.get('user_id').value, key.access_key)
+      this.rgwUserService.deleteS3Key(this.userForm.getValue('user_id'), key.access_key)
     );
     // Remove the S3 key to update the UI.
     this.s3Keys.splice(index, 1);
@@ -461,7 +456,7 @@ export class RgwUserFormComponent implements OnInit {
    * @param {number | undefined} index The subuser to show.
    */
   showSubuserModal(index?: number) {
-    const uid = this.userForm.get('user_id').value;
+    const uid = this.userForm.getValue('user_id');
     const modalRef = this.bsModalService.show(RgwUserSubuserModalComponent);
     if (_.isNumber(index)) {
       // Edit
@@ -580,25 +575,25 @@ export class RgwUserFormComponent implements OnInit {
    */
   private _getCreateArgs() {
     const result = {
-      uid: this.userForm.get('user_id').value,
-      display_name: this.userForm.get('display_name').value,
-      suspended: this.userForm.get('suspended').value,
+      uid: this.userForm.getValue('user_id'),
+      display_name: this.userForm.getValue('display_name'),
+      suspended: this.userForm.getValue('suspended'),
       email: '',
-      max_buckets: this.userForm.get('max_buckets').value,
-      generate_key: this.userForm.get('generate_key').value,
+      max_buckets: this.userForm.getValue('max_buckets'),
+      generate_key: this.userForm.getValue('generate_key'),
       access_key: '',
       secret_key: ''
     };
-    const emailCtl = this.userForm.get('email');
-    if (_.isString(emailCtl.value) && emailCtl.value.length > 0) {
-      _.merge(result, { email: emailCtl.value });
+    const email = this.userForm.getValue('email');
+    if (_.isString(email) && email.length > 0) {
+      _.merge(result, { email: email });
     }
-    const generateKeyCtl = this.userForm.get('generate_key');
-    if (!generateKeyCtl.value) {
+    const generateKey = this.userForm.getValue('generate_key');
+    if (!generateKey) {
       _.merge(result, {
         generate_key: false,
-        access_key: this.userForm.get('access_key').value,
-        secret_key: this.userForm.get('secret_key').value
+        access_key: this.userForm.getValue('access_key'),
+        secret_key: this.userForm.getValue('secret_key')
       });
     }
     return result;
@@ -612,8 +607,7 @@ export class RgwUserFormComponent implements OnInit {
     const result = {};
     const keys = ['display_name', 'email', 'max_buckets', 'suspended'];
     for (const key of keys) {
-      const ctl = this.userForm.get(key);
-      result[key] = ctl.value;
+      result[key] = this.userForm.getValue(key);
     }
     return result;
   }
@@ -625,18 +619,18 @@ export class RgwUserFormComponent implements OnInit {
   private _getUserQuotaArgs(): object {
     const result = {
       quota_type: 'user',
-      enabled: this.userForm.get('user_quota_enabled').value,
+      enabled: this.userForm.getValue('user_quota_enabled'),
       max_size_kb: -1,
       max_objects: -1
     };
-    if (!this.userForm.get('user_quota_max_size_unlimited').value) {
+    if (!this.userForm.getValue('user_quota_max_size_unlimited')) {
       // Convert the given value to bytes.
-      const bytes = new FormatterService().toBytes(this.userForm.get('user_quota_max_size').value);
+      const bytes = new FormatterService().toBytes(this.userForm.getValue('user_quota_max_size'));
       // Finally convert the value to KiB.
       result['max_size_kb'] = (bytes / 1024).toFixed(0) as any;
     }
-    if (!this.userForm.get('user_quota_max_objects_unlimited').value) {
-      result['max_objects'] = this.userForm.get('user_quota_max_objects').value;
+    if (!this.userForm.getValue('user_quota_max_objects_unlimited')) {
+      result['max_objects'] = this.userForm.getValue('user_quota_max_objects');
     }
     return result;
   }
@@ -648,20 +642,18 @@ export class RgwUserFormComponent implements OnInit {
   private _getBucketQuotaArgs(): object {
     const result = {
       quota_type: 'bucket',
-      enabled: this.userForm.get('bucket_quota_enabled').value,
+      enabled: this.userForm.getValue('bucket_quota_enabled'),
       max_size_kb: -1,
       max_objects: -1
     };
-    if (!this.userForm.get('bucket_quota_max_size_unlimited').value) {
+    if (!this.userForm.getValue('bucket_quota_max_size_unlimited')) {
       // Convert the given value to bytes.
-      const bytes = new FormatterService().toBytes(
-        this.userForm.get('bucket_quota_max_size').value
-      );
+      const bytes = new FormatterService().toBytes(this.userForm.getValue('bucket_quota_max_size'));
       // Finally convert the value to KiB.
       result['max_size_kb'] = (bytes / 1024).toFixed(0) as any;
     }
-    if (!this.userForm.get('bucket_quota_max_objects_unlimited').value) {
-      result['max_objects'] = this.userForm.get('bucket_quota_max_objects').value;
+    if (!this.userForm.getValue('bucket_quota_max_objects_unlimited')) {
+      result['max_objects'] = this.userForm.getValue('bucket_quota_max_objects');
     }
     return result;
   }
@@ -673,7 +665,7 @@ export class RgwUserFormComponent implements OnInit {
   private _getS3KeyUserCandidates() {
     let result = [];
     // Add the current user id.
-    const user_id = this.userForm.get('user_id').value;
+    const user_id = this.userForm.getValue('user_id');
     if (_.isString(user_id) && !_.isEmpty(user_id)) {
       result.push(user_id);
     }
