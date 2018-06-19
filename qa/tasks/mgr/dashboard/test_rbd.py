@@ -3,6 +3,8 @@
 
 from __future__ import absolute_import
 
+import time
+
 from .helper import DashboardTestCase, JObj, JLeaf, JList
 
 
@@ -135,6 +137,31 @@ class RbdTest(DashboardTestCase):
                        '--yes-i-really-really-mean-it'])
         cls._ceph_cmd(['osd', 'pool', 'delete', 'rbd_data', 'rbd_data',
                        '--yes-i-really-really-mean-it'])
+
+    @classmethod
+    def create_image_in_trash(cls, pool, name, delay=0, **kwargs):
+        cls.create_image(pool, name, 10240)
+        img = cls._get('/api/block/image/{}/{}'.format(pool, name))
+
+        cls._task_post("/api/block/image/{}/{}/move_trash".format(pool, name),
+                        {'delay': delay})
+
+        return img['id']
+
+    @classmethod
+    def remove_trash(cls, pool, image_id, image_name, force=False):
+        return cls._task_delete('/api/block/image/trash/{}/{}/?image_name={}&force={}'.format('rbd', image_id, image_name, force))
+
+    @classmethod
+    def get_trash(cls, pool, image_id):
+        trash = cls._get('/api/block/image/trash/?pool_name={}'.format(pool))
+        if isinstance(trash, list):
+            for pool in trash:
+                for image in pool['value']:
+                    if image['id'] == image_id:
+                        return image
+
+        return None
 
     def _validate_image(self, img, **kwargs):
         """
@@ -599,3 +626,83 @@ class RbdTest(DashboardTestCase):
                                             'object-map'])
 
         self.remove_image('rbd', rbd_name_encoded)
+
+    def test_move_image_to_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd')
+        self.assertStatus(200)
+
+        self._get('/api/block/image/rbd/test_rbd')
+        self.assertStatus(404)
+
+        time.sleep(1)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNotNone(image)
+
+        self.remove_trash('rbd', id, 'test_rbd')
+
+    def test_list_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd', 0)
+        data = self._get('/api/block/image/trash/?pool_name={}'.format('rbd'))
+        self.assertStatus(200)
+        self.assertIsInstance(data, list)
+        self.assertIsNotNone(data)
+
+        self.remove_trash('rbd', id, 'test_rbd')
+        self.assertStatus(204)
+
+    def test_restore_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd')
+
+        self._task_post('/api/block/image/trash/{}/{}/restore'.format('rbd', id), {'new_image_name': 'test_rbd'})
+
+        self._get('/api/block/image/rbd/test_rbd')
+        self.assertStatus(200)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNone(image)
+
+        self.remove_image('rbd', 'test_rbd')
+
+    def test_remove_expired_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd', 0)
+        self.remove_trash('rbd', id, 'test_rbd', False)
+        self.assertStatus(204)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNone(image)
+
+    def test_remove_not_expired_trash(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+        self.remove_trash('rbd', id, 'test_rbd', False)
+        self.assertStatus(400)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNotNone(image)
+
+        self.remove_trash('rbd', id, 'test_rbd', True)
+
+    def test_remove_not_expired_trash_with_force(self):
+        id = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+        self.remove_trash('rbd', id, 'test_rbd', True)
+        self.assertStatus(204)
+
+        image = self.get_trash('rbd', id)
+        self.assertIsNone(image)
+
+    def test_purge_trash(self):
+        id_expired = self.create_image_in_trash('rbd', 'test_rbd_expired', 0)
+        id_not_expired = self.create_image_in_trash('rbd', 'test_rbd', 9999)
+
+        time.sleep(1)
+
+        self._task_post('/api/block/image/trash/purge?pool_name={}'.format('rbd'))
+        self.assertStatus(200)
+
+        time.sleep(1)
+
+        trash_not_expired = self.get_trash('rbd', id_not_expired)
+        self.assertIsNotNone(trash_not_expired)
+
+        trash_expired = self.get_trash('rbd', id_expired)
+        self.assertIsNone(trash_expired)
