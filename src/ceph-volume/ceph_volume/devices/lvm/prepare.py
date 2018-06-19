@@ -215,7 +215,7 @@ class Prepare(object):
         try:
             self.prepare(args)
         except Exception:
-            logger.error('lvm prepare was unable to complete')
+            logger.exception('lvm prepare was unable to complete')
             logger.info('will rollback OSD ID creation')
             rollback_osd(args, self.osd_id)
             raise
