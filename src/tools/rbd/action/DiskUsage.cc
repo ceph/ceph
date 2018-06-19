@@ -102,8 +102,8 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
     f->open_array_section("images");
   } else {
     tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("PROVISIONED", TextTable::RIGHT, TextTable::RIGHT);
-    tbl.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("PROVISIONED", TextTable::LEFT, TextTable::RIGHT);
+    tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
   }
 
   uint32_t count = 0;

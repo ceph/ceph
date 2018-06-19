@@ -637,7 +637,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>quuy</name>
   </images>
   $ rbd list -l
-  NAME         SIZE PARENT FMT PROT LOCK 
+  NAME      SIZE    PARENT FMT PROT LOCK 
   foo         1 GiB          1           
   foo@snap    1 GiB          1           
   quux        1 MiB          1      excl 
@@ -762,7 +762,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <name>deep-flatten-child</name>
   </images>
   $ rbd list rbd_other -l
-  NAME                       SIZE PARENT       FMT PROT LOCK 
+  NAME                    SIZE    PARENT       FMT PROT LOCK 
   child                   512 MiB                2           
   child@snap              512 MiB rbd/bar@snap   2           
   deep-flatten-child      512 MiB                2           
@@ -900,7 +900,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </lock>
   </locks>
   $ rbd snap list foo
-  SNAPID NAME  SIZE TIMESTAMP 
+  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
   *snap*1 GiB* (glob)
   $ rbd snap list foo --format json | python -mjson.tool | sed 's/,$/, /'
   [
@@ -921,7 +921,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd snap list bar
-  SNAPID NAME     SIZE TIMESTAMP                
+  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
   *snap*512 MiB* (glob)
   *snap2*1 GiB* (glob)
   $ rbd snap list bar --format json | python -mjson.tool | sed 's/,$/, /'
@@ -960,7 +960,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   $ rbd snap list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <snapshots></snapshots>
   $ rbd snap list rbd_other/child
-  SNAPID NAME    SIZE TIMESTAMP                
+  SNAPID*NAME*SIZE*TIMESTAMP* (glob)
   *snap*512 MiB* (glob)
   $ rbd snap list rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
   [
@@ -981,7 +981,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
   </snapshots>
   $ rbd disk-usage --pool rbd_other 2>/dev/null
-  NAME                    PROVISIONED  USED 
+  NAME                    PROVISIONED USED  
   child@snap                  512 MiB   0 B 
   child                       512 MiB 4 MiB 
   deep-flatten-child@snap     512 MiB   0 B 
