@@ -155,3 +155,12 @@ Enums
 For options with a defined set of allowed values::
 
   .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"})
+
+Flags
+-----
+
+* **RUNTIME**: the value can be updated at runtime
+* **NO_MON_UPDATE**: Daemons/clients do not pull this value from the monitor config database.  We disallow setting this option via 'ceph config set ...'.  This option should be configured via ceph.conf or via the command line.
+* **STARTUP**: option takes effect only during daemon startup
+* **CLUSTER_CREATE**: option only affects cluster creation
+* **CREATE**: option only affects daemon creation
