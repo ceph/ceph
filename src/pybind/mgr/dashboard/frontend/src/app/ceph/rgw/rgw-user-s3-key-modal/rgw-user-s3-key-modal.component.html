@@ -17,7 +17,7 @@
 
     <!-- Username -->
     <div class="form-group"
-         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.user.dirty) && formGroup.controls.user.invalid}">
+         [ngClass]="{'has-error': formGroup.showError('user', frm)}">
       <label class="control-label col-sm-3"
              for="user"
              i18n>Username
@@ -45,7 +45,7 @@
                   [value]="userCandidate">{{ userCandidate }}</option>
         </select>
         <span class="help-block"
-              *ngIf="(frm.submitted || formGroup.controls.user.dirty) && formGroup.controls.user.hasError('required')"
+              *ngIf="formGroup.showError('user', frm, 'required')"
               i18n>
           This field is required.
         </span>
@@ -69,8 +69,8 @@
 
     <!-- Access key -->
     <div class="form-group"
-         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.access_key.dirty) && formGroup.controls.access_key.invalid}"
-         *ngIf="!formGroup.controls.generate_key.value">
+         [ngClass]="{'has-error': formGroup.showError('access_key', frm)}"
+         *ngIf="!formGroup.getValue('generate_key')">
       <label class="control-label col-sm-3"
              for="access_key"
              i18n>Access key
@@ -97,7 +97,7 @@
           </span>
         </div>
         <span class="help-block"
-              *ngIf="(frm.submitted || formGroup.controls.access_key.dirty) && formGroup.controls.access_key.hasError('required')"
+              *ngIf="formGroup.showError('access_key', frm, 'required')"
               i18n>
           This field is required.
         </span>
@@ -106,8 +106,8 @@
 
     <!-- Secret key -->
     <div class="form-group"
-         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.secret_key.dirty) && formGroup.controls.secret_key.invalid}"
-         *ngIf="!formGroup.controls.generate_key.value">
+         [ngClass]="{'has-error': formGroup.showError('secret_key', frm)}"
+         *ngIf="!formGroup.getValue('generate_key')">
       <label class="control-label col-sm-3"
              for="secret_key"
              i18n>Secret key
@@ -134,7 +134,7 @@
           </span>
         </div>
         <span class="help-block"
-              *ngIf="(frm.submitted || formGroup.controls.secret_key.dirty) && formGroup.controls.secret_key.hasError('required')"
+              *ngIf="formGroup.showError('secret_key', frm, 'required')"
               i18n>
           This field is required.
         </span>
