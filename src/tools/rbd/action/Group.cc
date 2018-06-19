@@ -559,7 +559,7 @@ int execute_group_snap_list(const po::variables_map &vm,
     f->open_array_section("group_snaps");
   } else {
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    t.define_column("STATUS", TextTable::RIGHT, TextTable::RIGHT);
+    t.define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
   }
 
   for (auto i : snaps) {
