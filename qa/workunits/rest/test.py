@@ -78,7 +78,7 @@ if __name__ == '__main__':
     expect('auth/export', 'GET', 200, 'xml', XMLHDR)
 
     expect('auth/add?entity=client.xx&'
-           'caps=mon&caps=allow&caps=osd&caps=allow+*', 'PUT', 200, 'json',
+           'caps=mon&caps=allow+*&caps=osd&caps=allow+*', 'PUT', 200, 'json',
             JSONHDR)
 
     r = expect('auth/export?entity=client.xx', 'GET', 200, 'plain')

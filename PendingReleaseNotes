@@ -28,3 +28,7 @@
   develop. The new option client_die_on_failed_dentry_invalidate (default:
   true) may be turned off to allow the client to proceed (dangerous!).
 
+* In 10.2.10 and earlier releases, keyring caps were not checked for validity,
+  so the caps string could be anything. As of 10.2.11, caps strings are
+  validated and providing a keyring with an invalid caps string to, e.g.,
+  "ceph auth add" will result in an error.
