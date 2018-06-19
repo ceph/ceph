@@ -129,11 +129,18 @@ public:
 
   void start_op();
 
-  bool was_throttled() {
-    return m_throttled;
+  uint64_t tokens_requested(uint64_t flag);
+
+  bool was_throttled(uint64_t flag) {
+    return m_throttled_flag & flag;
   }
-  void set_throttled() {
-    m_throttled = true;
+
+  void set_throttled(uint64_t flag) {
+    m_throttled_flag |= flag;
+  }
+
+  bool were_all_throttled() {
+    return m_throttled_flag & RBD_QOS_MASK;
   }
 
 private:
@@ -146,6 +153,7 @@ private:
 
   struct SendVisitor;
   struct IsWriteOpVisitor;
+  struct TokenRequestedVisitor;
 
   ImageDispatchSpec(ImageCtxT& image_ctx, AioCompletion* aio_comp,
                      Extents&& image_extents, Request&& request,
@@ -161,9 +169,9 @@ private:
   Request m_request;
   int m_op_flags;
   ZTracer::Trace m_parent_trace;
+  std::atomic<uint64_t> m_throttled_flag = 0;
 
-  bool m_throttled = false;
-
+  uint64_t extents_length();
 };
 
 } // namespace io
