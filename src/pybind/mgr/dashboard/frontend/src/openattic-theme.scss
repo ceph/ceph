@@ -545,8 +545,8 @@ ul.task-queue-pagination {
 .panel .panel-toolbar>.dropdown>a {
   padding-left: 5px;
 }
-.panel .panel-footer > .button-group button.btn {
-  margin-left: 3px;
+.panel .panel-footer > .button-group button.btn:not(:first-child) {
+  margin-left: 5px;
 }
 .panel-dashboard {
   height: 100%;
@@ -1132,8 +1132,8 @@ hr.oa-hr-small {
 }
 
 /* Modal dialog */
-.modal-footer button.btn {
-  margin-left: 3px;
+.modal-footer button.btn:not(:first-child) {
+  margin-left: 5px;
 }
 
 // awesome-bootstrap-checkbox + ForkAwesome
