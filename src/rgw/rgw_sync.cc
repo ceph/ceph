@@ -2248,7 +2248,7 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request()
     log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
     http_op->put();
     http_op = NULL;
-    return ret;
+    return set_cr_error(ret);
   }
 
   return io_block(0);
