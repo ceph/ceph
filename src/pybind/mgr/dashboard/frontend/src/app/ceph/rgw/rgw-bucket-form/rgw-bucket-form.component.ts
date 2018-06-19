@@ -91,7 +91,7 @@ export class RgwBucketFormComponent implements OnInit {
     if (this.editing) {
       // Edit
       const idCtl = this.bucketForm.get('id');
-      this.rgwBucketService.update(idCtl.value, bucketCtl.value, ownerCtl.value).subscribe(
+      this.rgwBucketService.update(bucketCtl.value, idCtl.value, ownerCtl.value).subscribe(
         () => {
           this.goToListView();
         },

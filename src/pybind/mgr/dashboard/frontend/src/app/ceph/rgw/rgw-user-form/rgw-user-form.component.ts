@@ -59,7 +59,7 @@ export class RgwUserFormComponent implements OnInit {
       user_id: [null, [Validators.required], [this.userIdValidator()]],
       display_name: [null, [Validators.required]],
       email: [null, [CdValidators.email]],
-      max_buckets: [null, [Validators.min(0)]],
+      max_buckets: [1000, [Validators.required, Validators.min(0)]],
       suspended: [false],
       // S3 key
       generate_key: [true],
@@ -181,8 +181,8 @@ export class RgwUserFormComponent implements OnInit {
               value[type + '_quota_max_size'] = quota.max_size;
             }
             if (quota.max_objects < 0) {
-              value[type + '_quota_max_size_unlimited'] = true;
-              value[type + '_quota_max_size'] = null;
+              value[type + '_quota_max_objects_unlimited'] = true;
+              value[type + '_quota_max_objects'] = null;
             } else {
               value[type + '_quota_max_objects_unlimited'] = false;
               value[type + '_quota_max_objects'] = quota.max_objects;
@@ -225,26 +225,27 @@ export class RgwUserFormComponent implements OnInit {
     if (this.userForm.pristine) {
       this.goToListView();
     }
+    const uid = this.userForm.get('user_id').value;
     if (this.editing) {
       // Edit
       if (this._isGeneralDirty()) {
-        const args = this._getApiPostArgs();
-        this.submitObservables.push(this.rgwUserService.post(args));
+        const args = this._getUpdateArgs();
+        this.submitObservables.push(this.rgwUserService.update(uid, args));
       }
     } else {
       // Add
-      const args = this._getApiPutArgs();
-      this.submitObservables.push(this.rgwUserService.put(args));
+      const args = this._getCreateArgs();
+      this.submitObservables.push(this.rgwUserService.create(args));
     }
     // Check if user quota has been modified.
     if (this._isUserQuotaDirty()) {
-      const userQuotaArgs = this._getApiUserQuotaArgs();
-      this.submitObservables.push(this.rgwUserService.putQuota(userQuotaArgs));
+      const userQuotaArgs = this._getUserQuotaArgs();
+      this.submitObservables.push(this.rgwUserService.updateQuota(uid, userQuotaArgs));
     }
     // Check if bucket quota has been modified.
     if (this._isBucketQuotaDirty()) {
-      const bucketQuotaArgs = this._getApiBucketQuotaArgs();
-      this.submitObservables.push(this.rgwUserService.putQuota(bucketQuotaArgs));
+      const bucketQuotaArgs = this._getBucketQuotaArgs();
+      this.submitObservables.push(this.rgwUserService.updateQuota(uid, bucketQuotaArgs));
     }
     // Finally execute all observables.
     observableForkJoin(this.submitObservables).subscribe(
@@ -304,31 +305,29 @@ export class RgwUserFormComponent implements OnInit {
    * Add/Update a subuser.
    */
   setSubuser(subuser: RgwUserSubuser, index?: number) {
+    const mapPermissions = {
+      'full-control': 'full',
+      'read-write': 'readwrite'
+    };
+    const uid = this.userForm.get('user_id').value;
+    const args = {
+      subuser: subuser.id,
+      access:
+        subuser.permissions in mapPermissions
+          ? mapPermissions[subuser.permissions]
+          : subuser.permissions,
+      key_type: 'swift',
+      secret_key: subuser.secret_key,
+      generate_secret: subuser.generate_secret ? 'true' : 'false'
+    };
+    this.submitObservables.push(this.rgwUserService.createSubuser(uid, args));
     if (_.isNumber(index)) {
       // Modify
       // Create an observable to modify the subuser when the form is submitted.
-      this.submitObservables.push(
-        this.rgwUserService.addSubuser(
-          this.userForm.get('user_id').value,
-          subuser.id,
-          subuser.permissions,
-          subuser.secret_key,
-          subuser.generate_secret
-        )
-      );
       this.subusers[index] = subuser;
     } else {
       // Add
       // Create an observable to add the subuser when the form is submitted.
-      this.submitObservables.push(
-        this.rgwUserService.addSubuser(
-          this.userForm.get('user_id').value,
-          subuser.id,
-          subuser.permissions,
-          subuser.secret_key,
-          subuser.generate_secret
-        )
-      );
       this.subusers.push(subuser);
       // Add a Swift key. If the secret key is auto-generated, then visualize
       // this to the user by displaying a notification instead of the key.
@@ -418,16 +417,17 @@ export class RgwUserFormComponent implements OnInit {
       // Nothing to do here at the moment.
     } else {
       // Add
+      // Split the key's user name into its user and subuser parts.
+      const userMatches = key.user.match(/([^:]+)(:(.+))?/);
       // Create an observable to add the S3 key when the form is submitted.
-      this.submitObservables.push(
-        this.rgwUserService.addS3Key(
-          this.userForm.get('user_id').value,
-          key.user,
-          key.access_key,
-          key.secret_key,
-          key.generate_key
-        )
-      );
+      const uid = userMatches[1];
+      const args = {
+        subuser: userMatches[2] ? userMatches[3] : '',
+        generate_key: key.generate_key ? 'true' : 'false',
+        access_key: key.access_key,
+        secret_key: key.secret_key
+      };
+      this.submitObservables.push(this.rgwUserService.addS3Key(uid, args));
       // If the access and the secret key are auto-generated, then visualize
       // this to the user by displaying a notification instead of the key.
       this.s3Keys.push({
@@ -578,31 +578,28 @@ export class RgwUserFormComponent implements OnInit {
    * Helper function to get the arguments of the API request when a new
    * user is created.
    */
-  private _getApiPutArgs() {
+  private _getCreateArgs() {
     const result = {
       uid: this.userForm.get('user_id').value,
-      'display-name': this.userForm.get('display_name').value
+      display_name: this.userForm.get('display_name').value,
+      suspended: this.userForm.get('suspended').value,
+      email: '',
+      max_buckets: this.userForm.get('max_buckets').value,
+      generate_key: this.userForm.get('generate_key').value,
+      access_key: '',
+      secret_key: ''
     };
-    const suspendedCtl = this.userForm.get('suspended');
-    if (suspendedCtl.value) {
-      _.extend(result, { suspended: suspendedCtl.value });
-    }
     const emailCtl = this.userForm.get('email');
     if (_.isString(emailCtl.value) && emailCtl.value.length > 0) {
-      _.extend(result, { email: emailCtl.value });
-    }
-    const maxBucketsCtl = this.userForm.get('max_buckets');
-    if (maxBucketsCtl.value > 0) {
-      _.extend(result, { 'max-buckets': maxBucketsCtl.value });
+      _.merge(result, { email: emailCtl.value });
     }
     const generateKeyCtl = this.userForm.get('generate_key');
     if (!generateKeyCtl.value) {
-      _.extend(result, {
-        'access-key': this.userForm.get('access_key').value,
-        'secret-key': this.userForm.get('secret_key').value
+      _.merge(result, {
+        generate_key: false,
+        access_key: this.userForm.get('access_key').value,
+        secret_key: this.userForm.get('secret_key').value
       });
-    } else {
-      _.extend(result, { 'generate-key': true });
     }
     return result;
   }
@@ -611,21 +608,12 @@ export class RgwUserFormComponent implements OnInit {
    * Helper function to get the arguments for the API request when the user
    * configuration has been modified.
    */
-  private _getApiPostArgs() {
-    const result = {
-      uid: this.userForm.get('user_id').value
-    };
-    const argsMap = {
-      'display-name': 'display_name',
-      email: 'email',
-      'max-buckets': 'max_buckets',
-      suspended: 'suspended'
-    };
-    for (const key of Object.keys(argsMap)) {
-      const ctl = this.userForm.get(argsMap[key]);
-      if (ctl.dirty) {
-        result[key] = ctl.value;
-      }
+  private _getUpdateArgs() {
+    const result = {};
+    const keys = ['display_name', 'email', 'max_buckets', 'suspended'];
+    for (const key of keys) {
+      const ctl = this.userForm.get(key);
+      result[key] = ctl.value;
     }
     return result;
   }
@@ -634,22 +622,21 @@ export class RgwUserFormComponent implements OnInit {
    * Helper function to get the arguments for the API request when the user
    * quota configuration has been modified.
    */
-  private _getApiUserQuotaArgs(): object {
+  private _getUserQuotaArgs(): object {
     const result = {
-      uid: this.userForm.get('user_id').value,
-      'quota-type': 'user',
+      quota_type: 'user',
       enabled: this.userForm.get('user_quota_enabled').value,
-      'max-size-kb': -1,
-      'max-objects': -1
+      max_size_kb: -1,
+      max_objects: -1
     };
     if (!this.userForm.get('user_quota_max_size_unlimited').value) {
       // Convert the given value to bytes.
       const bytes = new FormatterService().toBytes(this.userForm.get('user_quota_max_size').value);
       // Finally convert the value to KiB.
-      result['max-size-kb'] = (bytes / 1024).toFixed(0) as any;
+      result['max_size_kb'] = (bytes / 1024).toFixed(0) as any;
     }
     if (!this.userForm.get('user_quota_max_objects_unlimited').value) {
-      result['max-objects'] = this.userForm.get('user_quota_max_objects').value;
+      result['max_objects'] = this.userForm.get('user_quota_max_objects').value;
     }
     return result;
   }
@@ -658,13 +645,12 @@ export class RgwUserFormComponent implements OnInit {
    * Helper function to get the arguments for the API request when the bucket
    * quota configuration has been modified.
    */
-  private _getApiBucketQuotaArgs(): object {
+  private _getBucketQuotaArgs(): object {
     const result = {
-      uid: this.userForm.get('user_id').value,
-      'quota-type': 'bucket',
+      quota_type: 'bucket',
       enabled: this.userForm.get('bucket_quota_enabled').value,
-      'max-size-kb': -1,
-      'max-objects': -1
+      max_size_kb: -1,
+      max_objects: -1
     };
     if (!this.userForm.get('bucket_quota_max_size_unlimited').value) {
       // Convert the given value to bytes.
@@ -672,10 +658,10 @@ export class RgwUserFormComponent implements OnInit {
         this.userForm.get('bucket_quota_max_size').value
       );
       // Finally convert the value to KiB.
-      result['max-size-kb'] = (bytes / 1024).toFixed(0) as any;
+      result['max_size_kb'] = (bytes / 1024).toFixed(0) as any;
     }
     if (!this.userForm.get('bucket_quota_max_objects_unlimited').value) {
-      result['max-objects'] = this.userForm.get('bucket_quota_max_objects').value;
+      result['max_objects'] = this.userForm.get('bucket_quota_max_objects').value;
     }
     return result;
   }
