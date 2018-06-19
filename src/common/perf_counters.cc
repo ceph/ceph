@@ -398,9 +398,9 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
       }
       f->dump_int("priority", get_adjusted_priority(d->prio));
       
-      if (d->unit == NONE) {
+      if (d->unit == UNIT_NONE) {
 	f->dump_string("units", "none"); 
-      } else if (d->unit == BYTES) {
+      } else if (d->unit == UNIT_BYTES) {
 	f->dump_string("units", "bytes");
       }
       f->close_section();
