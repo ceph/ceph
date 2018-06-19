@@ -3063,6 +3063,8 @@ bool pg_interval_t::is_new_interval(
   unsigned new_pg_num,
   bool old_sort_bitwise,
   bool new_sort_bitwise,
+  bool old_recovery_deletes,
+  bool new_recovery_deletes,
   pg_t pgid) {
   return old_acting_primary != new_acting_primary ||
     new_acting != old_acting ||
@@ -3071,7 +3073,8 @@ bool pg_interval_t::is_new_interval(
     old_min_size != new_min_size ||
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
-    old_sort_bitwise != new_sort_bitwise;
+    old_sort_bitwise != new_sort_bitwise ||
+    old_recovery_deletes != new_recovery_deletes;
 }
 
 bool pg_interval_t::is_new_interval(
@@ -3103,6 +3106,8 @@ bool pg_interval_t::is_new_interval(
 		    osdmap->get_pg_num(pgid.pool()),
 		    lastmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
+		    lastmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
+		    osdmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
 		    pgid);
 }
 
@@ -3615,6 +3620,61 @@ ostream& operator<<(ostream& out, const pg_log_entry_t& e)
   return out;
 }
 
+// -- pg_log_dup_t --
+
+string pg_log_dup_t::get_key_name() const
+{
+  return "dup_" + version.get_key_name();
+}
+
+void pg_log_dup_t::encode(bufferlist &bl) const
+{
+  ENCODE_START(1, 1, bl);
+  ::encode(reqid, bl);
+  ::encode(version, bl);
+  ::encode(user_version, bl);
+  ::encode(return_code, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_log_dup_t::decode(bufferlist::iterator &bl)
+{
+  DECODE_START(1, bl);
+  ::decode(reqid, bl);
+  ::decode(version, bl);
+  ::decode(user_version, bl);
+  ::decode(return_code, bl);
+  DECODE_FINISH(bl);
+}
+
+void pg_log_dup_t::dump(Formatter *f) const
+{
+  f->dump_stream("reqid") << reqid;
+  f->dump_stream("version") << version;
+  f->dump_stream("user_version") << user_version;
+  f->dump_stream("return_code") << return_code;
+}
+
+void pg_log_dup_t::generate_test_instances(list<pg_log_dup_t*>& o)
+{
+  o.push_back(new pg_log_dup_t());
+  o.push_back(new pg_log_dup_t(eversion_t(1,2),
+			       1,
+			       osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       0));
+  o.push_back(new pg_log_dup_t(eversion_t(1,2),
+			       2,
+			       osd_reqid_t(entity_name_t::CLIENT(777), 8, 999),
+			       -ENOENT));
+}
+
+
+std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e) {
+  return out << "log_dup(reqid=" << e.reqid <<
+    " v=" << e.version << " uv=" << e.user_version <<
+    " rc=" << e.return_code << ")";
+}
+
 
 // -- pg_log_t --
 
@@ -3656,18 +3716,19 @@ void pg_log_t::filter_log(spg_t import_pgid, const OSDMap &curmap,
 
 void pg_log_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(6, 3, bl);
+  ENCODE_START(7, 3, bl);
   ::encode(head, bl);
   ::encode(tail, bl);
   ::encode(log, bl);
   ::encode(can_rollback_to, bl);
   ::encode(rollback_info_trimmed_to, bl);
+  ::encode(dups, bl);
   ENCODE_FINISH(bl);
 }
  
 void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(7, 3, 3, bl);
   ::decode(head, bl);
   ::decode(tail, bl);
   if (struct_v < 2) {
@@ -3682,6 +3743,10 @@ void pg_log_t::decode(bufferlist::iterator &bl, int64_t pool)
     ::decode(rollback_info_trimmed_to, bl);
   else
     rollback_info_trimmed_to = tail;
+
+  if (struct_v >= 7)
+    ::decode(dups, bl);
+
   DECODE_FINISH(bl);
 
   // handle hobject_t format change
@@ -3703,6 +3768,13 @@ void pg_log_t::dump(Formatter *f) const
   for (list<pg_log_entry_t>::const_iterator p = log.begin(); p != log.end(); ++p) {
     f->open_object_section("entry");
     p->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("dups");
+  for (const auto& entry : dups) {
+    f->open_object_section("entry");
+    entry.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -3777,13 +3849,16 @@ void pg_log_t::copy_up_to(const pg_log_t &other, int max)
   }
 }
 
-ostream& pg_log_t::print(ostream& out) const 
+ostream& pg_log_t::print(ostream& out) const
 {
   out << *this << std::endl;
   for (list<pg_log_entry_t>::const_iterator p = log.begin();
        p != log.end();
-       ++p) 
+       ++p)
     out << *p << std::endl;
+  for (const auto& entry : dups) {
+    out << " dup entry: " << entry << std::endl;
+  }
   return out;
 }
 
@@ -3803,15 +3878,19 @@ void pg_missing_t::resort(bool sort_bitwise)
 
 void pg_missing_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(3, 2, bl);
-  ::encode(missing, bl);
+  ENCODE_START(4, 2, bl);
+  ::encode(missing, bl, may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : (uint64_t)0);
+  ::encode(may_include_deletes, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_missing_t::decode(bufferlist::iterator &bl, int64_t pool)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   ::decode(missing, bl);
+  if (struct_v >= 4) {
+    ::decode(may_include_deletes, bl);
+  }
   DECODE_FINISH(bl);
 
   if (struct_v < 3) {
@@ -3848,13 +3927,15 @@ void pg_missing_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->dump_bool("may_include_deletes", may_include_deletes);
 }
 
 void pg_missing_t::generate_test_instances(list<pg_missing_t*>& o)
 {
   o.push_back(new pg_missing_t);
   o.push_back(new pg_missing_t);
-  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0, ""), eversion_t(5, 6), eversion_t(5, 1));
+  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0, ""), eversion_t(5, 6), eversion_t(5, 1), false);
+  o.back()->add(hobject_t(object_t("foo"), "foo", 123, 456, 0, ""), eversion_t(5, 6), eversion_t(5, 1), true);
 }
 
 ostream& operator<<(ostream& out, const pg_missing_t::item& i) 
@@ -3862,12 +3943,14 @@ ostream& operator<<(ostream& out, const pg_missing_t::item& i)
   out << i.need;
   if (i.have != eversion_t())
     out << "(" << i.have << ")";
+  out << " flags = " << i.flag_str();
   return out;
 }
 
 ostream& operator<<(ostream& out, const pg_missing_t& missing) 
 {
-  out << "missing(" << missing.num_missing();
+  out << "missing(" << missing.num_missing()
+      << " may_include_deletes = " << missing.may_include_deletes;
   //if (missing.num_lost()) out << ", " << missing.num_lost() << " lost";
   out << ")";
   return out;
@@ -3888,6 +3971,9 @@ void pg_missing_t::swap(pg_missing_t& o)
 {
   missing.swap(o.missing);
   rmissing.swap(o.rmissing);
+  bool tmp_may_include_deletes = o.may_include_deletes;
+  o.may_include_deletes = may_include_deletes;
+  may_include_deletes = tmp_may_include_deletes;
 }
 
 bool pg_missing_t::is_missing(const hobject_t& oid) const
@@ -3921,41 +4007,40 @@ eversion_t pg_missing_t::have_old(const hobject_t& oid) const
  */
 void pg_missing_t::add_next_event(const pg_log_entry_t& e)
 {
-  if (e.is_update()) {
-    map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator missing_it;
-    missing_it = missing.find(e.soid);
-    bool is_missing_divergent_item = missing_it != missing.end();
-    if (e.prior_version == eversion_t() || e.is_clone()) {
-      // new object.
-      if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase((missing_it->second).need.version);
-        missing_it->second = item(e.version, eversion_t());  // .have = nil
-      } else  // create new element in missing map
-        missing[e.soid] = item(e.version, eversion_t());     // .have = nil
-    } else if (is_missing_divergent_item) {
-      // already missing (prior).
+  map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator missing_it;
+  missing_it = missing.find(e.soid);
+  bool is_missing_divergent_item = missing_it != missing.end();
+  if (e.prior_version == eversion_t() || e.is_clone()) {
+    // new object.
+    if (is_missing_divergent_item) {  // use iterator
       rmissing.erase((missing_it->second).need.version);
-      (missing_it->second).need = e.version;  // leave .have unchanged.
-    } else if (e.is_backlog()) {
-      // May not have prior version
-      assert(0 == "these don't exist anymore");
-    } else {
-      // not missing, we must have prior_version (if any)
-      assert(!is_missing_divergent_item);
-      missing[e.soid] = item(e.version, e.prior_version);
-    }
-    rmissing[e.version.version] = e.soid;
-  } else
-    rm(e.soid, e.version);
+      missing_it->second = item(e.version, eversion_t(), e.is_delete());  // .have = nil
+    } else  // create new element in missing map
+      missing[e.soid] = item(e.version, eversion_t(), e.is_delete());     // .have = nil
+  } else if (is_missing_divergent_item) {
+    // already missing (prior).
+    rmissing.erase((missing_it->second).need.version);
+    (missing_it->second).need = e.version;  // leave .have unchanged.
+    missing_it->second.set_delete(e.is_delete());
+  } else if (e.is_backlog()) {
+    // May not have prior version
+    assert(0 == "these don't exist anymore");
+  } else {
+    // not missing, we must have prior_version (if any)
+    assert(!is_missing_divergent_item);
+    missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
+  }
+  rmissing[e.version.version] = e.soid;
 }
 
-void pg_missing_t::revise_need(hobject_t oid, eversion_t need)
+void pg_missing_t::revise_need(hobject_t oid, eversion_t need, bool is_delete)
 {
   if (missing.count(oid)) {
     rmissing.erase(missing[oid].need.version);
     missing[oid].need = need;            // no not adjust .have
+    missing[oid].set_delete(is_delete);
   } else {
-    missing[oid] = item(need, eversion_t());
+    missing[oid] = item(need, eversion_t(), is_delete);
   }
   rmissing[need.version] = oid;
 }
@@ -3967,9 +4052,10 @@ void pg_missing_t::revise_have(hobject_t oid, eversion_t have)
   }
 }
 
-void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have)
+void pg_missing_t::add(const hobject_t& oid, eversion_t need, eversion_t have,
+		       bool is_delete)
 {
-  missing[oid] = item(need, have);
+  missing[oid] = item(need, have, is_delete);
   rmissing[need.version] = oid;
 }
 
@@ -3990,7 +4076,7 @@ void pg_missing_t::got(const hobject_t& oid, eversion_t v)
 {
   std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator p = missing.find(oid);
   assert(p != missing.end());
-  assert(p->second.need <= v);
+  assert(p->second.need <= v || p->second.is_delete());
   got(p);
 }
 
@@ -4005,12 +4091,14 @@ void pg_missing_t::split_into(
   unsigned split_bits,
   pg_missing_t *omissing)
 {
+  omissing->may_include_deletes = may_include_deletes;
   unsigned mask = ~((~0)<<split_bits);
   for (map<hobject_t, item, hobject_t::ComparatorWithDefault>::iterator i = missing.begin();
        i != missing.end();
        ) {
     if ((i->first.get_hash() & mask) == child_pgid.m_seed) {
-      omissing->add(i->first, i->second.need, i->second.have);
+      omissing->add(i->first, i->second.need, i->second.have,
+		    i->second.is_delete());
       rm(i++);
     } else {
       ++i;

@@ -45,6 +45,9 @@
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDSubOpReply.h"
 #include "messages/MOSDRepOpReply.h"
+#include "messages/MOSDPGRecoveryDelete.h"
+#include "messages/MOSDPGRecoveryDeleteReply.h"
+
 #include "common/BackTrace.h"
 
 #ifdef WITH_LTTNG
@@ -150,6 +153,7 @@ void PG::dump_live_ids()
 }
 #endif
 
+
 void PGPool::update(OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
@@ -220,7 +224,8 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   deleting(false), dirty_info(false), dirty_big_info(false),
   info(p),
   info_struct_v(0),
-  coll(p), pg_log(cct),
+  coll(p),
+  pg_log(cct),
   pgmeta_oid(p.make_pgmeta_oid()),
   missing_loc(this),
   recovery_item(this), stat_queue_item(this),
@@ -488,8 +493,13 @@ bool PG::search_for_missing(
 bool PG::MissingLoc::readable_with_acting(
   const hobject_t &hoid,
   const set<pg_shard_t> &acting) const {
-  if (!needs_recovery(hoid)) return true;
-  if (!missing_loc.count(hoid)) return false;
+  if (!needs_recovery(hoid))
+    return true;
+  if (is_deleted(hoid))
+    return false;
+  auto missing_loc_entry = missing_loc.find(hoid);
+  if (missing_loc_entry == missing_loc.end())
+    return false;
   const set<pg_shard_t> &locs = missing_loc.find(hoid)->second;
   dout(10) << __func__ << ": locs:" << locs << dendl;
   set<pg_shard_t> have_acting;
@@ -514,6 +524,8 @@ void PG::MissingLoc::add_batch_sources_info(
       handle->reset_tp_timeout();
       loop = 0;
     }
+    if (i->second.is_delete())
+      continue;
     missing_loc[i->first].insert(sources.begin(), sources.end());
     missing_loc_sources.insert(sources.begin(), sources.end());
   }
@@ -537,6 +549,12 @@ bool PG::MissingLoc::add_source_info(
     if (handle && ++loop >= g_conf->osd_loop_before_reset_tphandle) {
       handle->reset_tp_timeout();
       loop = 0;
+    }
+    if (p->second.is_delete()) {
+      ldout(pg->cct, 10) << __func__ << " " << soid
+			 << " delete, ignoring source" << dendl;
+      found_missing = true;
+      continue;
     }
     if (oinfo.last_update < need) {
       dout(10) << "search_for_missing " << soid << " " << need
@@ -1687,6 +1705,7 @@ void PG::activate(ObjectStore::Transaction& t,
       dout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
       MOSDPGLog *m = 0;
+      assert(peer_missing.count(peer));
       pg_missing_t& pm = peer_missing[peer];
 
       bool needs_past_intervals = pi.dne();
@@ -1782,11 +1801,17 @@ void PG::activate(ObjectStore::Transaction& t,
       if (m && pi.last_backfill != hobject_t()) {
         for (list<pg_log_entry_t>::iterator p = m->log.log.begin();
              p != m->log.log.end();
-             ++p)
-	  if (cmp(p->soid, pi.last_backfill, get_sort_bitwise()) <= 0)
-	    pm.add_next_event(*p);
+             ++p) {
+	  if (cmp(p->soid, pi.last_backfill, get_sort_bitwise()) <= 0) {
+	    if (perform_deletes_during_peering() && p->is_delete()) {
+	      pm.rm(p->soid, p->version);
+	    } else {
+	      pm.add_next_event(*p);
+	    }
+	  }
+	}
       }
-      
+
       if (m) {
 	dout(10) << "activate peer osd." << peer << " sending " << m->log << dendl;
 	//m->log.print(cout);
@@ -1810,6 +1835,7 @@ void PG::activate(ObjectStore::Transaction& t,
     for (set<pg_shard_t>::iterator i = actingbackfill.begin();
 	 i != actingbackfill.end();
 	 ++i) {
+      dout(20) << __func__ << " setting up missing_loc from shard " << *i << " " << dendl;
       if (*i == get_primary()) {
 	missing_loc.add_active_missing(missing);
         if (!missing.have_missing())
@@ -3272,6 +3298,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     _simplify_past_intervals(past_intervals);
   }
 
+  pg_log.set_may_include_deletes(!perform_deletes_during_peering());
   ostringstream oss;
   pg_log.read_log(store,
 		  coll,
@@ -3830,12 +3857,12 @@ void PG::_scan_rollback_obs(
        i != rollback_obs.end();
        ++i) {
     if (i->generation < trimmed_to.version) {
-      osd->clog->error() << "osd." << osd->whoami
-			<< " pg " << info.pgid
-			<< " found obsolete rollback obj "
-			<< *i << " generation < trimmed_to "
-			<< trimmed_to
-			<< "...repaired";
+      dout(20) << "osd." << osd->whoami
+	       << " pg " << info.pgid
+	       << " found obsolete rollback obj "
+	       << *i << " generation < trimmed_to "
+	       << trimmed_to
+	       << "...repaired" << dendl;
       t.remove(coll, *i);
     }
   }
@@ -4042,7 +4069,7 @@ void PG::repair_object(
   bv.push_back(po.attrs[OI_ATTR]);
   object_info_t oi(bv);
   if (bad_peer != primary) {
-    peer_missing[bad_peer].add(soid, oi.version, eversion_t());
+    peer_missing[bad_peer].add(soid, oi.version, eversion_t(), false);
   } else {
     // We should only be scrubbing if the PG is clean.
     assert(waiting_for_unreadable_object.empty());
@@ -4896,6 +4923,7 @@ void PG::merge_new_log_entries(
     assert(peer_missing.count(peer));
     assert(peer_info.count(peer));
     pg_missing_t& pmissing(peer_missing[peer]);
+    dout(20) << __func__ << " peer_missing for " << peer << " = " << pmissing << dendl;
     pg_info_t& pinfo(peer_info[peer]);
     PGLog::append_log_entries_update_missing(
       pinfo.last_backfill,
@@ -5640,6 +5668,11 @@ bool PG::can_discard_request(OpRequestRef& op)
     return can_discard_replica_op<MOSDSubOpReply, MSG_OSD_SUBOPREPLY>(op);
   case MSG_OSD_REPOPREPLY:
     return can_discard_replica_op<MOSDRepOpReply, MSG_OSD_REPOPREPLY>(op);
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    return can_discard_replica_op<MOSDPGRecoveryDelete, MSG_OSD_PG_RECOVERY_DELETE>(op);
+
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return can_discard_replica_op<MOSDPGRecoveryDeleteReply, MSG_OSD_PG_RECOVERY_DELETE_REPLY>(op);
 
   case MSG_OSD_EC_WRITE:
     return can_discard_replica_op<MOSDECSubOpWrite, MSG_OSD_EC_WRITE>(op);
@@ -5753,6 +5786,17 @@ bool PG::op_must_wait_for_map(epoch_t cur_epoch, OpRequestRef& op)
     return !have_same_or_newer_map(
       cur_epoch,
       static_cast<MOSDPGUpdateLogMissingReply*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<MOSDPGRecoveryDelete*>(op->get_req())->map_epoch);
+
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return !have_same_or_newer_map(
+      cur_epoch,
+      static_cast<MOSDPGRecoveryDeleteReply*>(op->get_req())->map_epoch);
+
   }
   assert(0);
   return false;
@@ -7890,18 +7934,23 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
        ++i) {
     if (*i == pg->get_primary()) continue;
     const pg_info_t& pi = pg->peer_info[*i];
+    // reset this so to make sure the pg_missing_t is initialized and
+    // has the correct semantics even if we don't need to get a
+    // missing set from a shard. This way later additions due to
+    // lost+unfound delete work properly.
+    pg->peer_missing[*i].may_include_deletes = !pg->perform_deletes_during_peering();
 
     if (pi.is_empty())
       continue;                                // no pg data, nothing divergent
 
     if (pi.last_update < pg->pg_log.get_tail()) {
       dout(10) << " osd." << *i << " is not contiguous, will restart backfill" << dendl;
-      pg->peer_missing[*i];
+      pg->peer_missing[*i].clear();
       continue;
     }
     if (pi.last_backfill == hobject_t()) {
       dout(10) << " osd." << *i << " will fully backfill; can infer empty missing set" << dendl;
-      pg->peer_missing[*i];
+      pg->peer_missing[*i].clear();
       continue;
     }
 
@@ -7912,7 +7961,7 @@ PG::RecoveryState::GetMissing::GetMissing(my_context ctx)
       // FIXME: we can do better here.  if last_update==last_complete we
       //        can infer the rest!
       dout(10) << " osd." << *i << " has no missing, identical log" << dendl;
-      pg->peer_missing[*i];
+      pg->peer_missing[*i].clear();
       continue;
     }
 

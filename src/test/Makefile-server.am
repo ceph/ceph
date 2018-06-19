@@ -194,7 +194,7 @@ if LINUX
 unittest_osdscrub_LDADD += -ldl
 endif # LINUX
 
-unittest_pglog_SOURCES = test/osd/TestPGLog.cc
+unittest_pglog_SOURCES = test/osd/TestPGLog.cc test/objectstore/store_test_fixture.cc
 unittest_pglog_CXXFLAGS = $(UNITTEST_CXXFLAGS)
 unittest_pglog_LDADD = $(LIBOSD) $(UNITTEST_LDADD) $(CEPH_GLOBAL)
 check_TESTPROGRAMS += unittest_pglog

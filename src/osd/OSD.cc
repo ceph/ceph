@@ -91,6 +91,8 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "messages/MOSDPGRecoveryDelete.h"
+#include "messages/MOSDPGRecoveryDeleteReply.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
@@ -6177,6 +6179,14 @@ epoch_t op_required_epoch(OpRequestRef op)
     return replica_op_required_epoch<
       MOSDPGUpdateLogMissingReply, MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(
       op);
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    return replica_op_required_epoch<
+      MOSDPGRecoveryDelete, MSG_OSD_PG_RECOVERY_DELETE>(
+      op);
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    return replica_op_required_epoch<
+      MOSDPGRecoveryDeleteReply, MSG_OSD_PG_RECOVERY_DELETE_REPLY>(
+      op);
   default:
     assert(0);
     return 0;
@@ -6300,6 +6310,15 @@ bool OSD::dispatch_op_fast(OpRequestRef& op, OSDMapRef& osdmap)
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     handle_replica_op<MOSDPGUpdateLogMissingReply,
 		      MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY>(
+      op, osdmap);
+    break;
+  case MSG_OSD_PG_RECOVERY_DELETE:
+    handle_replica_op<MOSDPGRecoveryDelete, MSG_OSD_PG_RECOVERY_DELETE>(
+      op, osdmap);
+    break;
+  case MSG_OSD_PG_RECOVERY_DELETE_REPLY:
+    handle_replica_op<MOSDPGRecoveryDeleteReply,
+		      MSG_OSD_PG_RECOVERY_DELETE_REPLY>(
       op, osdmap);
     break;
   default:

@@ -185,6 +185,7 @@ void ReplicatedPG::on_local_recover(
   const hobject_t &hoid,
   const ObjectRecoveryInfo &_recovery_info,
   ObjectContextRef obc,
+  bool is_delete,
   ObjectStore::Transaction *t
   )
 {
@@ -192,7 +193,7 @@ void ReplicatedPG::on_local_recover(
 
   ObjectRecoveryInfo recovery_info(_recovery_info);
   clear_object_snap_mapping(t, hoid);
-  if (recovery_info.soid.snap < CEPH_NOSNAP) {
+  if (!is_delete && recovery_info.soid.snap < CEPH_NOSNAP) {
     assert(recovery_info.oi.snaps.size());
     OSDriver::OSTransaction _t(osdriver.get_transaction(t));
     set<snapid_t> snaps(
@@ -231,24 +232,26 @@ void ReplicatedPG::on_local_recover(
   recover_got(recovery_info.soid, recovery_info.version);
 
   if (is_primary()) {
-    assert(obc);
-    obc->obs.exists = true;
-    obc->ondisk_write_lock();
+    if (!is_delete) {
+      assert(obc);
+      obc->obs.exists = true;
+      obc->ondisk_write_lock();
 
-    bool got = obc->get_recovery_read();
-    assert(got);
+      bool got = obc->get_recovery_read();
+      assert(got);
 
-    assert(recovering.count(obc->obs.oi.soid));
-    recovering[obc->obs.oi.soid] = obc;
-    obc->obs.oi = recovery_info.oi;  // may have been updated above
-
+      assert(recovering.count(obc->obs.oi.soid));
+      recovering[obc->obs.oi.soid] = obc;
+      obc->obs.oi = recovery_info.oi;  // may have been updated above
+      t->register_on_applied_sync(new C_OSD_OndiskWriteUnlock(obc));
+    }
 
     t->register_on_applied(new C_OSD_AppliedRecoveredObject(this, obc));
-    t->register_on_applied_sync(new C_OSD_OndiskWriteUnlock(obc));
 
     publish_stats_to_osd();
     assert(missing_loc.needs_recovery(hoid));
-    missing_loc.add_location(hoid, pg_whoami);
+    if (!is_delete)
+      missing_loc.add_location(hoid, pg_whoami);
     if (!is_unreadable_object(hoid) &&
         waiting_for_unreadable_object.count(hoid)) {
       dout(20) << " kicking unreadable waiters on " << hoid << dendl;
@@ -279,7 +282,8 @@ void ReplicatedPG::on_local_recover(
 
 void ReplicatedPG::on_global_recover(
   const hobject_t &soid,
-  const object_stat_sum_t &stat_diff)
+  const object_stat_sum_t &stat_diff,
+  bool is_delete)
 {
   info.stats.stats.sum.add(stat_diff);
   missing_loc.recovered(soid);
@@ -288,12 +292,14 @@ void ReplicatedPG::on_global_recover(
   map<hobject_t, ObjectContextRef, hobject_t::BitwiseComparator>::iterator i = recovering.find(soid);
   assert(i != recovering.end());
 
-  // recover missing won't have had an obc, but it gets filled in
-  // during on_local_recover
-  assert(i->second);
-  list<OpRequestRef> requeue_list;
-  i->second->drop_recovery_read(&requeue_list);
-  requeue_ops(requeue_list);
+  if (!is_delete) {
+    // recover missing won't have had an obc, but it gets filled in
+    // during on_local_recover
+    assert(i->second);
+    list<OpRequestRef> requeue_list;
+    i->second->drop_recovery_read(&requeue_list);
+    requeue_ops(requeue_list);
+  }
 
   if (backfills_in_flight.count(soid))
     backfills_in_flight.erase(soid);
@@ -403,6 +409,8 @@ void ReplicatedPG::maybe_kick_recovery(
     h->cache_dont_need = false;
     if (is_missing_object(soid)) {
       recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
+    } else if (missing_loc.is_deleted(soid)) {
+      prep_object_replica_deletes(soid, v, h);
     } else {
       prep_object_replica_pushes(soid, v, h);
     }
@@ -1042,6 +1050,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	  if (candidate.snap < snapid)
 	    continue;
 
+	  if (missing_loc.is_deleted(candidate))
+	    continue;
+
 	  if (snapid != CEPH_NOSNAP) {
 	    bufferlist bl;
 	    if (candidate.snap == CEPH_NOSNAP) {
@@ -1224,6 +1235,9 @@ void ReplicatedPG::do_pg_op(OpRequestRef op)
 	    continue;
 
 	  if (candidate.snap < snapid)
+	    continue;
+
+	  if (missing_loc.is_deleted(candidate))
 	    continue;
 
 	  if (snapid != CEPH_NOSNAP) {
@@ -3519,9 +3533,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
       ctx->log.back().mod_desc.update_snaps(snaps);
       if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
 	t->stash(coid, ctx->at_version.version);
-      } else {
-	t->remove(coid);
       }
+      t->remove(coid);
     } else {
       t->remove(coid);
       ctx->log.back().mod_desc.mark_unrollbackable();
@@ -3586,9 +3599,8 @@ ReplicatedPG::OpContextUPtr ReplicatedPG::trim_object(const hobject_t &coid)
     if (pool.info.require_rollback()) {
       if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
 	t->stash(snapoid, ctx->at_version.version);
-      } else {
-	t->remove(snapoid);
       }
+      t->remove(snapoid);
     } else {
       t->remove(snapoid);
       ctx->log.back().mod_desc.mark_unrollbackable();
@@ -6045,9 +6057,9 @@ inline int ReplicatedPG::_delete_oid(OpContext *ctx, bool no_whiteout)
   if (pool.info.require_rollback()) {
     if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
       t->stash(soid, ctx->at_version.version);
-    } else {
-      t->remove(soid);
     }
+    t->remove(soid);
+
     map<string, bufferlist> new_attrs;
     replace_cached_attrs(ctx, ctx->obc, new_attrs);
   } else {
@@ -6127,8 +6139,8 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     &rollback_to, false, false, &missing_oid);
   if (ret == -EAGAIN) {
     /* clone must be missing */
-    assert(is_missing_object(missing_oid));
-    dout(20) << "_rollback_to attempted to roll back to a missing object "
+    assert(is_degraded_or_backfilling_object(missing_oid));
+    dout(20) << "_rollback_to attempted to roll back to a missing or backfilling clone "
 	     << missing_oid << " (requested snapid: ) " << snapid << dendl;
     block_write_on_degraded_snap(missing_oid, ctx->op);
     return ret;
@@ -6199,9 +6211,8 @@ int ReplicatedPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 	if (obs.exists) {
 	  if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
 	    t->stash(soid, ctx->at_version.version);
-	  } else {
-	    t->remove(soid);
 	  }
+	  t->remove(soid);
 	}
 	replace_cached_attrs(ctx, ctx->obc, rollback_to->attr_cache);
       } else {
@@ -6670,9 +6681,8 @@ void ReplicatedPG::finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc
 	  if (pool.info.require_rollback()) {
 	    if (ctx->log.back().mod_desc.rmobject(ctx->at_version.version)) {
 	      ctx->op_t->stash(snapoid, ctx->at_version.version);
-	    } else {
-	      ctx->op_t->remove(snapoid);
 	    }
+	    ctx->op_t->remove(snapoid);
 	  } else {
 	    ctx->op_t->remove(snapoid);
 	    ctx->log.back().mod_desc.mark_unrollbackable();
@@ -7519,9 +7529,8 @@ void ReplicatedPG::finish_copyfrom(OpContext *ctx)
     if (obs.exists) {
       if (ctx->mod_desc.rmobject(ctx->at_version.version)) {
 	ctx->op_t->stash(obs.oi.soid, ctx->at_version.version);
-      } else {
-	ctx->op_t->remove(obs.oi.soid);
       }
+      ctx->op_t->remove(obs.oi.soid);
     }
     ctx->mod_desc.create();
     replace_cached_attrs(ctx, ctx->obc, cb->results->attrs);
@@ -9233,7 +9242,13 @@ int ReplicatedPG::find_object_context(const hobject_t& oid,
     if (pmissing)
       *pmissing = soid;
     put_snapset_context(ssc);
-    return -ENOENT;
+    if (is_degraded_or_backfilling_object(soid)) {
+      dout(20) << __func__ << " clone is degraded or backfilling " << soid << dendl;
+      return -EAGAIN;
+    } else {
+      dout(20) << __func__ << " missing clone " << soid << dendl;
+      return -ENOENT;
+    }
   }
 
   if (!obc->ssc) {
@@ -9429,6 +9444,40 @@ int ReplicatedPG::recover_missing(
     return PULL_NONE;
   }
 
+  if (missing_loc.is_deleted(soid)) {
+    start_recovery_op(soid);
+    assert(!recovering.count(soid));
+    recovering.insert(make_pair(soid, ObjectContextRef()));
+    epoch_t cur_epoch = get_osdmap()->get_epoch();
+    remove_missing_object(soid, v, new FunctionContext(
+     [=](int) {
+       lock();
+       if (!pg_has_reset_since(cur_epoch)) {
+	 bool object_missing = false;
+	 for (const auto& shard : actingbackfill) {
+	   if (shard == pg_whoami)
+	     continue;
+	   if (peer_missing[shard].is_missing(soid)) {
+	     dout(20) << __func__ << ": soid " << soid << " needs to be deleted from replica " << shard << dendl;
+	     object_missing = true;
+	     break;
+	   }
+	 }
+	 if (!object_missing) {
+	   object_stat_sum_t stat_diff;
+	   stat_diff.num_objects_recovered = 1;
+	   on_global_recover(soid, stat_diff, true);
+	 } else {
+	   auto recovery_handle = pgbackend->open_recovery_op();
+	   pgbackend->recover_delete_object(soid, v, recovery_handle);
+	   pgbackend->run_recovery_op(recovery_handle, priority);
+	 }
+       }
+       unlock();
+     }));
+    return PULL_YES;
+  }
+
   // is this a snapped object?  if so, consult the snapset.. we may not need the entire object!
   ObjectContextRef obc;
   ObjectContextRef head_obc;
@@ -9506,6 +9555,38 @@ void ReplicatedPG::send_remove_op(
   osd->send_message_osd_cluster(peer.osd, subop, get_osdmap()->get_epoch());
 }
 
+void ReplicatedPG::remove_missing_object(const hobject_t &soid,
+					 eversion_t v, Context *on_complete)
+{
+  dout(20) << __func__ << " " << soid << " " << v << dendl;
+  assert(on_complete != nullptr);
+  // delete locally
+  ObjectStore::Transaction t;
+  remove_snap_mapped_object(t, soid);
+
+  ObjectRecoveryInfo recovery_info;
+  recovery_info.soid = soid;
+  recovery_info.version = v;
+
+  epoch_t cur_epoch = get_osdmap()->get_epoch();
+  t.register_on_complete(new FunctionContext(
+     [=](int) {
+       lock();
+       if (!pg_has_reset_since(cur_epoch)) {
+	 ObjectStore::Transaction t2;
+	 on_local_recover(soid, recovery_info, ObjectContextRef(), true, &t2);
+	 t2.register_on_complete(on_complete);
+	 int r = osd->store->queue_transaction(osr.get(), std::move(t2), nullptr);
+	 assert(r == 0);
+	 unlock();
+       } else {
+	 unlock();
+	 on_complete->complete(-EAGAIN);
+       }
+     }));
+  int r = osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+  assert(r == 0);
+}
 
 void ReplicatedPG::finish_degraded_object(const hobject_t& oid)
 {
@@ -9572,7 +9653,10 @@ void ReplicatedPG::_committed_pushed_object(
 void ReplicatedPG::_applied_recovered_object(ObjectContextRef obc)
 {
   lock();
-  dout(10) << "_applied_recovered_object " << *obc << dendl;
+  dout(20) << __func__ << dendl;
+  if (obc) {
+    dout(20) << "obc = " << *obc << dendl;
+  }
 
   assert(active_pushes >= 1);
   --active_pushes;
@@ -9582,14 +9666,13 @@ void ReplicatedPG::_applied_recovered_object(ObjectContextRef obc)
       && scrubber.is_chunky_scrub_active()) {
     requeue_scrub();
   }
-
   unlock();
 }
 
 void ReplicatedPG::_applied_recovered_object_replica()
 {
   lock();
-  dout(10) << "_applied_recovered_object_replica" << dendl;
+  dout(10) << __func__ << dendl;
 
   assert(active_pushes >= 1);
   --active_pushes;
@@ -10133,6 +10216,13 @@ void ReplicatedPG::_on_new_interval()
     object_contexts.reset_comparator(
       hobject_t::ComparatorWithDefault(get_sort_bitwise()));
   }
+
+  dout(20) << __func__ << " checking missing set deletes flag. missing = " << pg_log.get_missing() << dendl;
+  if (!pg_log.get_missing().may_include_deletes &&
+      get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
+    pg_log.rebuild_missing_set_with_deletes(osd->store, coll, info);
+  }
+  assert(pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
 }
 
 void ReplicatedPG::on_change(ObjectStore::Transaction *t)
@@ -10565,7 +10655,7 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
 
     if (pg_log.get_log().objects.count(p->second)) {
       latest = pg_log.get_log().objects.find(p->second)->second;
-      assert(latest->is_update());
+      assert(latest->is_update() || latest->is_delete());
       soid = latest->soid;
     } else {
       latest = 0;
@@ -10693,6 +10783,21 @@ int ReplicatedPG::recover_primary(int max, ThreadPool::TPHandle &handle)
   return started;
 }
 
+int ReplicatedPG::prep_object_replica_deletes(
+  const hobject_t& soid, eversion_t v,
+  PGBackend::RecoveryHandle *h)
+{
+  assert(is_primary());
+  dout(10) << __func__ << ": on " << soid << dendl;
+
+  start_recovery_op(soid);
+  assert(!recovering.count(soid));
+  recovering.insert(make_pair(soid, ObjectContextRef()));
+
+  pgbackend->recover_delete_object(soid, v, h);
+  return 1;
+}
+
 int ReplicatedPG::prep_object_replica_pushes(
   const hobject_t& soid, eversion_t v,
   PGBackend::RecoveryHandle *h)
@@ -10804,6 +10909,13 @@ int ReplicatedPG::recover_replicas(int max, ThreadPool::TPHandle &handle)
 
       if (missing_loc.is_unfound(soid)) {
 	dout(10) << __func__ << ": " << soid << " still unfound" << dendl;
+	continue;
+      }
+
+      if (missing_loc.is_deleted(soid)) {
+	dout(10) << __func__ << ": " << soid << " is a delete, removing" << dendl;
+	map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::const_iterator r = m.missing.find(soid);
+	started += prep_object_replica_deletes(soid, r->second.need, h);
 	continue;
       }
 
@@ -11279,7 +11391,7 @@ void ReplicatedPG::prep_backfill_object_push(
   for (unsigned int i = 0 ; i < peers.size(); ++i) {
     map<pg_shard_t, pg_missing_t>::iterator bpm = peer_missing.find(peers[i]);
     assert(bpm != peer_missing.end());
-    bpm->second.add(oid, eversion_t(), eversion_t());
+    bpm->second.add(oid, eversion_t(), eversion_t(), false);
   }
 
   assert(!recovering.count(oid));
@@ -11436,7 +11548,7 @@ void ReplicatedPG::check_local()
       continue;
     did.insert(p->soid);
 
-    if (p->is_delete()) {
+    if (p->is_delete() && !is_missing_object(p->soid)) {
       dout(10) << " checking " << p->soid
 	       << " at " << p->version << dendl;
       struct stat st;
@@ -11834,9 +11946,8 @@ void ReplicatedPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
       if (ctx->log.back().mod_desc.rmobject(
 	  ctx->at_version.version)) {
 	ctx->op_t->stash(oid, ctx->at_version.version);
-      } else {
-	ctx->op_t->remove(oid);
       }
+      ctx->op_t->remove(oid);
     } else {
       ctx->op_t->remove(oid);
       ctx->log.back().mod_desc.mark_unrollbackable();

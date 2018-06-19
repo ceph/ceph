@@ -636,6 +636,16 @@ inline void encode(const std::map<T,U>& m, bufferlist& bl, uint64_t features)
     encode(p->second, bl, features);
   }
 }
+template<class T, class U, class C>
+inline void encode(const std::map<T,U,C>& m, bufferlist& bl, uint64_t features)
+{
+  __u32 n = (__u32)(m.size());
+  encode(n, bl);
+  for (typename std::map<T,U,C>::const_iterator p = m.begin(); p != m.end(); ++p) {
+    encode(p->first, bl, features);
+    encode(p->second, bl, features);
+  }
+}
 template<class T, class U>
 inline void decode(std::map<T,U>& m, bufferlist::iterator& p)
 {

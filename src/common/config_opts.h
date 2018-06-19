@@ -334,6 +334,7 @@ OPTION(mon_keyvaluedb, OPT_STR, "leveldb")   // type of keyvaluedb backend
 
 // UNSAFE -- TESTING ONLY! Allows addition of a cache tier with preexisting snaps
 OPTION(mon_debug_unsafe_allow_tier_with_nonempty_snaps, OPT_BOOL, false)
+OPTION(mon_debug_init_recovery_deletes, OPT_BOOL, true) // whether to initialize a new cluster with the recovery_deletes osdmap flag
 
 OPTION(paxos_stash_full_interval, OPT_INT, 25)   // how often (in commits) to stash a full copy of the PaxosService state
 OPTION(paxos_max_join_drift, OPT_INT, 10) // max paxos iterations before we must first sync the monitor stores
@@ -795,8 +796,9 @@ OPTION(osd_kill_backfill_at, OPT_INT, 0)
 // Bounds how infrequently a new map epoch will be persisted for a pg
 OPTION(osd_pg_epoch_persisted_max_stale, OPT_U32, 150) // make this < map_cache_size!
 
-OPTION(osd_min_pg_log_entries, OPT_U32, 3000)  // number of entries to keep in the pg log when trimming it
-OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // max entries, say when degraded, before we trim
+OPTION(osd_min_pg_log_entries, OPT_U32, 1500)  // minimum number of entries to maintain in the PG log
+OPTION(osd_max_pg_log_entries, OPT_U32, 10000) // maximum number of entries to maintain in the PG log when degraded before we trim
+OPTION(osd_pg_log_dups_tracked, OPT_U32, 3000) // how many versions back to track in order to detect duplicate ops; this is combined with both the regular pg log entries and additional minimal dup detection entries
 OPTION(osd_pg_log_trim_min, OPT_U32, 100)
 OPTION(osd_pg_log_trim_max, OPT_U32, 10000)
 OPTION(osd_op_complaint_time, OPT_FLOAT, 30) // how many seconds old makes an op complaint-worthy

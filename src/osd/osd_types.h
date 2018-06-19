@@ -732,7 +732,7 @@ public:
   eversion_t(epoch_t e, version_t v) : version(v), epoch(e), __pad(0) {}
 
   // cppcheck-suppress noExplicitConstructor
-  eversion_t(const ceph_eversion& ce) : 
+  eversion_t(const ceph_eversion& ce) :
     version(ce.version),
     epoch(ce.epoch),
     __pad(0) { }
@@ -2254,6 +2254,8 @@ struct pg_interval_t {
     unsigned new_pg_num,
     bool old_sort_bitwise,
     bool new_sort_bitwise,
+    bool old_recovery_deletes,
+    bool new_recovery_deletes,
     pg_t pgid
     );
 
@@ -2627,7 +2629,45 @@ WRITE_CLASS_ENCODER(pg_log_entry_t)
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e);
 
+struct pg_log_dup_t {
+  osd_reqid_t reqid;  // caller+tid to uniquely identify request
+  eversion_t version;
+  version_t user_version; // the user version for this entry
+  int32_t return_code; // only stored for ERRORs for dup detection
 
+  pg_log_dup_t()
+   : user_version(0), return_code(0) {}
+  explicit pg_log_dup_t(const pg_log_entry_t &entry)
+    : reqid(entry.reqid), version(entry.version),
+      user_version(entry.user_version), return_code(0)
+  {}
+  pg_log_dup_t(const eversion_t& v, version_t uv,
+	       const osd_reqid_t& rid, int return_code)
+    : reqid(rid), version(v), user_version(uv),
+      return_code(return_code)
+  {}
+
+  string get_key_name() const;
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<pg_log_dup_t*>& o);
+
+  bool operator==(const pg_log_dup_t &rhs) const {
+    return reqid == rhs.reqid &&
+      version == rhs.version &&
+      user_version == rhs.user_version &&
+      return_code == rhs.return_code;
+  }
+  bool operator!=(const pg_log_dup_t &rhs) const {
+    return !(*this == rhs);
+  }
+
+  friend std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
+};
+WRITE_CLASS_ENCODER(pg_log_dup_t)
+
+std::ostream& operator<<(std::ostream& out, const pg_log_dup_t& e);
 
 /**
  * pg_log_t - incremental log of recent pg changes.
@@ -2652,13 +2692,15 @@ struct pg_log_t {
   eversion_t rollback_info_trimmed_to;
 
   list<pg_log_entry_t> log;  // the actual log.
-  
+  list<pg_log_dup_t> dups;  // entries just for dup op detection
+
   pg_log_t() {}
 
   void clear() {
     eversion_t z;
     can_rollback_to = head = tail = z;
     log.clear();
+    dups.clear();
   }
 
   bool empty() const {
@@ -2747,7 +2789,7 @@ struct pg_log_t {
 };
 WRITE_CLASS_ENCODER(pg_log_t)
 
-inline ostream& operator<<(ostream& out, const pg_log_t& log) 
+inline ostream& operator<<(ostream& out, const pg_log_t& log)
 {
   out << "log((" << log.tail << "," << log.head << "], crt="
       << log.can_rollback_to << ")";
@@ -2764,33 +2806,86 @@ inline ostream& operator<<(ostream& out, const pg_log_t& log)
 struct pg_missing_t {
   struct item {
     eversion_t need, have;
-    item() {}
-    explicit item(eversion_t n) : need(n) {}  // have no old version
-    item(eversion_t n, eversion_t h) : need(n), have(h) {}
+    enum missing_flags_t {
+      FLAG_NONE = 0,
+      FLAG_DELETE = 1,
+    } flags;
+    item() : flags(FLAG_NONE) {}
+    explicit item(eversion_t n) : need(n), flags(FLAG_NONE) {}  // have no old version
+    item(eversion_t n, eversion_t h, bool is_delete=false) : need(n), have(h) {
+      set_delete(is_delete);
+    }
 
-    void encode(bufferlist& bl) const {
-      ::encode(need, bl);
-      ::encode(have, bl);
+    void encode(bufferlist& bl, uint64_t features) const {
+      if ((features & CEPH_FEATURE_OSD_RECOVERY_DELETES) == CEPH_FEATURE_OSD_RECOVERY_DELETES) {
+	// encoding a zeroed eversion_t to differentiate between this and
+	// legacy unversioned encoding - a need value of 0'0 is not
+	// possible. This can be replaced with the legacy encoding
+	// macros post-luminous.
+	eversion_t e;
+	::encode(e, bl);
+	::encode(need, bl);
+	::encode(have, bl);
+	::encode(static_cast<uint8_t>(flags), bl);
+      } else {
+	// legacy unversioned encoding
+	::encode(need, bl);
+	::encode(have, bl);
+      }
     }
     void decode(bufferlist::iterator& bl) {
-      ::decode(need, bl);
-      ::decode(have, bl);
+      eversion_t e;
+      ::decode(e, bl);
+      if (e != eversion_t()) {
+	// legacy encoding, this is the need value
+	need = e;
+	::decode(have, bl);
+      } else {
+	::decode(need, bl);
+	::decode(have, bl);
+	uint8_t f;
+	::decode(f, bl);
+	flags = static_cast<missing_flags_t>(f);
+      }
     }
+
+    void set_delete(bool is_delete) {
+      flags = is_delete ? FLAG_DELETE : FLAG_NONE;
+    }
+
+    bool is_delete() const {
+      return (flags & FLAG_DELETE) == FLAG_DELETE;
+    }
+
+    string flag_str() const {
+      if (flags == FLAG_NONE) {
+	return "none";
+      } else {
+	return "delete";
+      }
+    }
+
     void dump(Formatter *f) const {
       f->dump_stream("need") << need;
       f->dump_stream("have") << have;
+      f->dump_stream("flags") << flag_str();
     }
     static void generate_test_instances(list<item*>& o) {
       o.push_back(new item);
       o.push_back(new item);
       o.back()->need = eversion_t(1, 2);
       o.back()->have = eversion_t(1, 1);
+      o.push_back(new item);
+      o.back()->need = eversion_t(3, 5);
+      o.back()->have = eversion_t(3, 4);
+      o.back()->flags = FLAG_DELETE;
     }
   }; 
-  WRITE_CLASS_ENCODER(item)
+  WRITE_CLASS_ENCODER_FEATURES(item)
 
   map<hobject_t, item, hobject_t::ComparatorWithDefault> missing;  // oid -> (need v, have v)
   map<version_t, hobject_t> rmissing;  // v -> oid
+  bool may_include_deletes = false;
 
   unsigned int num_missing() const;
   bool have_missing() const;
@@ -2799,9 +2894,9 @@ struct pg_missing_t {
   bool is_missing(const hobject_t& oid, eversion_t v) const;
   eversion_t have_old(const hobject_t& oid) const;
   void add_next_event(const pg_log_entry_t& e);
-  void revise_need(hobject_t oid, eversion_t need);
+  void revise_need(hobject_t oid, eversion_t need, bool is_delete);
   void revise_have(hobject_t oid, eversion_t have);
-  void add(const hobject_t& oid, eversion_t need, eversion_t have);
+  void add(const hobject_t& oid, eversion_t need, eversion_t have, bool is_delete);
   void rm(const hobject_t& oid, eversion_t v);
   void rm(const std::map<hobject_t, pg_missing_t::item, hobject_t::ComparatorWithDefault>::iterator &m);
   void got(const hobject_t& oid, eversion_t v);
@@ -2820,7 +2915,7 @@ struct pg_missing_t {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<pg_missing_t*>& o);
 };
-WRITE_CLASS_ENCODER(pg_missing_t::item)
+WRITE_CLASS_ENCODER_FEATURES(pg_missing_t::item)
 WRITE_CLASS_ENCODER(pg_missing_t)
 
 ostream& operator<<(ostream& out, const pg_missing_t::item& i);
@@ -3108,10 +3203,6 @@ inline ostream& operator<<(ostream& out, const ObjectExtent &ex)
 	     << " -> " << ex.buffer_extents
              << ")";
 }
-
-
-
-
 
 
 // ---------------------------------------

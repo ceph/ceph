@@ -46,7 +46,7 @@ public:
     RecoveryHandle *h
     );
 
-  bool handle_message(
+  bool _handle_message(
     OpRequestRef op
     );
   bool can_handle_while_inactive(
