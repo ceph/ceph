@@ -5,6 +5,7 @@ from __future__ import absolute_import
 
 import math
 from functools import partial
+from datetime import datetime
 
 import cherrypy
 import six
@@ -15,7 +16,7 @@ from . import ApiController, RESTController, Task, UpdatePermission
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
-from ..tools import ViewCache
+from ..tools import ViewCache, str_to_bool
 from ..services.exception import handle_rados_error, handle_rbd_error, \
     serialize_dashboard_exception
 
@@ -373,6 +374,16 @@ class Rbd(RESTController):
         rbd_default_features = mgr.get('config')['rbd_default_features']
         return _format_bitmask(int(rbd_default_features))
 
+    @RbdTask('trash/move', ['{pool_name}', '{image_name}'], 2.0)
+    @RESTController.Resource('POST')
+    def move_trash(self, pool_name, image_name, delay=0):
+        """Move an image to the trash.
+        Images, even ones actively in-use by clones,
+        can be moved to the trash and deleted at a later time.
+        """
+        rbd_inst = rbd.RBD()
+        return _rbd_call(pool_name, rbd_inst.trash_move, image_name, delay)
+
 
 @ApiController('/block/image/{pool_name}/{image_name}/snap', Scope.RBD_IMAGE)
 class RbdSnapshot(RESTController):
@@ -452,3 +463,68 @@ class RbdSnapshot(RESTController):
             return _rbd_call(child_pool_name, _clone)
 
         return _rbd_call(pool_name, _parent_clone)
+
+
+@ApiController('/block/image/trash')
+class RbdTrash(RESTController):
+    RESOURCE_ID = "pool_name/image_id"
+    rbd_inst = rbd.RBD()
+
+    @ViewCache()
+    def _trash_pool_list(self, pool_name):
+        with mgr.rados.open_ioctx(pool_name) as ioctx:
+            images = self.rbd_inst.trash_list(ioctx)
+            result = []
+            for trash in images:
+                trash['pool_name'] = pool_name
+                trash['deletion_time'] = "{}Z".format(trash['deletion_time'].isoformat())
+                trash['deferment_end_time'] = "{}Z".format(trash['deferment_end_time'].isoformat())
+                result.append(trash)
+            return result
+
+    def _trash_list(self, pool_name=None):
+        if pool_name:
+            pools = [pool_name]
+        else:
+            pools = [p['pool_name'] for p in CephService.get_pool_list('rbd')]
+
+        result = []
+        for pool in pools:
+            # pylint: disable=unbalanced-tuple-unpacking
+            status, value = self._trash_pool_list(pool)
+            result.append({'status': status, 'value': value, 'pool_name': pool})
+        return result
+
+    @handle_rbd_error()
+    @handle_rados_error('pool')
+    def list(self, pool_name=None):
+        """List all entries from trash."""
+        return self._trash_list(pool_name)
+
+    @handle_rbd_error()
+    @handle_rados_error('pool')
+    @RbdTask('trash/purge', ['{pool_name}'], 2.0)
+    @RESTController.Collection('POST', query_params=['pool_name'])
+    def purge(self, pool_name=None):
+        """Remove all expired images from trash."""
+        now = "{}Z".format(datetime.now().isoformat())
+        pools = self._trash_list(pool_name)
+
+        for pool in pools:
+            for image in pool['value']:
+                if image['deferment_end_time'] < now:
+                    _rbd_call(pool['pool_name'], self.rbd_inst.trash_remove, image['id'], 0)
+
+    @RbdTask('trash/restore', ['{pool_name}', '{image_id}', '{new_image_name}'], 2.0)
+    @RESTController.Resource('POST')
+    def restore(self, pool_name, image_id, new_image_name):
+        """Restore an image from trash."""
+        return _rbd_call(pool_name, self.rbd_inst.trash_restore, image_id, new_image_name)
+
+    @RbdTask('trash/remove', ['{pool_name}', '{image_id}', '{image_name}'], 2.0)
+    def delete(self, pool_name, image_id, image_name, force=False):
+        """Delete an image from trash.
+        If image deferment time has not expired you can not removed it unless use force.
+        But an actively in-use by clones or has snapshots can not be removed.
+        """
+        return _rbd_call(pool_name, self.rbd_inst.trash_remove, image_id, int(str_to_bool(force)))
