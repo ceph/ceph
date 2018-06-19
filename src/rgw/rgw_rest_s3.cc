@@ -1436,7 +1436,7 @@ void RGWPutObj_ObjStore_S3::send_response()
       if (strftime(buf, sizeof(buf), "%Y-%m-%dT%T.000Z", &tmp) > 0) {
         s->formatter->dump_string("LastModified", buf);
       }
-      s->formatter->dump_string("ETag", etag);
+      dump_etag(s, etag);
       s->formatter->close_section();
       rgw_flush_formatter_and_reset(s, s->formatter);
       return;
@@ -2192,9 +2192,7 @@ void RGWCopyObj_ObjStore_S3::send_response()
 
   if (op_ret == 0) {
     dump_time(s, "LastModified", &mtime);
-    if (! etag.empty()) {
-      s->formatter->dump_string("ETag", std::move(etag));
-    }
+    dump_etag(s, etag);
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
