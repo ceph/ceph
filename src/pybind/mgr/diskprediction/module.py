@@ -86,17 +86,17 @@ class Module(MgrModule):
         },
         {
             'cmd': 'diskprediction run-metrics-forced',
-            'desc': 'Run metrics agent forcely',
+            'desc': 'Run metrics agent forced',
             'perm': 'r'
         },
         {
             'cmd': 'diskprediction run-prediction-forced',
-            'desc': 'Run prediction agent forcely',
+            'desc': 'Run prediction agent forced',
             'perm': 'r'
         },
         {
             'cmd': 'diskprediction run-smart-forced',
-            'desc': 'Run smart agent forcely',
+            'desc': 'Run smart agent forced',
             'perm': 'r'
         },
         {

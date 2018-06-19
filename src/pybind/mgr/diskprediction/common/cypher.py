@@ -1,5 +1,7 @@
 from __future__ import absolute_import
 
+import time
+
 
 class NodeInfo(object):
     """ Neo4j Node information """
@@ -14,45 +16,47 @@ class CypherOP(object):
     """ Cypher Operation """
 
     @staticmethod
-    def update(node, timestamp, name, value):
+    def update(node, key, value, timestamp=int(time.time()*(1000**3))):
         result = ""
         if isinstance(node, NodeInfo):
-            cy_value = value
-            if name != "time":
+            if key != "time":
                 cy_value = "\'%s\'" % value
-            result = "set %s.%s=case when %s.time >= %s then %s.%s ELSE %s end" % (
-                node.label, name,
+            else:
+                cy_value=value
+            result = \
+                "set %s.%s=case when %s.time >= %s then %s.%s ELSE %s end" % (
+                node.label, key,
                 node.label, timestamp,
-                node.label, name,
+                node.label, key,
                 cy_value)
         return result
 
     @staticmethod
-    def create_or_merge(node, timestamp):
+    def create_or_merge(node, timestamp=int(time.time()*(1000**3))):
         result = ""
         if isinstance(node, NodeInfo):
             meta_list = []
             if isinstance(node.meta, dict):
                 for key, value in node.meta.items():
-                    meta_list.append(CypherOP.update(node, timestamp, key, value))
+                    meta_list.append(CypherOP.update(node, key, value, timestamp))
             domain_id = "{domainId:\'%s\'}" % node.domain_id
             if meta_list:
                 result = "merge (%s:%s %s) %s %s %s" % (
                     node.label, node.label,
                     domain_id,
-                    CypherOP.update(node, timestamp, 'name', node.name),
+                    CypherOP.update(node, 'name', node.name, timestamp),
                     " ".join(meta_list),
-                    CypherOP.update(node, timestamp, 'time', timestamp))
+                    CypherOP.update(node, 'time', timestamp, timestamp))
             else:
                 result = "merge (%s:%s %s) %s %s" % (
                     node.label, node.label,
                     domain_id,
-                    CypherOP.update(node, timestamp, 'name', node.name),
-                    CypherOP.update(node, timestamp, 'time', timestamp))
+                    CypherOP.update(node, 'name', node.name, timestamp),
+                    CypherOP.update(node, 'time', timestamp, timestamp))
         return result
 
     @staticmethod
-    def add_link(snode, dnode, relationship, timestamp):
+    def add_link(snode, dnode, relationship, timestamp=int(time.time()*(1000**3))):
         result = ""
         if isinstance(snode, NodeInfo) and isinstance(dnode, NodeInfo):
             cy_snode = CypherOP.create_or_merge(snode, timestamp)

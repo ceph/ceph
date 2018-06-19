@@ -1,15 +1,13 @@
 from __future__ import absolute_import
 
 import socket
-import time
 
 from . import MetricsAgent
-
 from ...common.cypher import CypherOP, NodeInfo
 from ...common.db import DB_API
 from ...models.metrics.dp import DB_Relay
 from ...models.relation.mgrdp import MGRDpCeph, MGRDpMon, MGRDpOsd, \
-                                     MGRDpMds, MGRDpPG, MGRDpDisk, MGRDpRBD
+    MGRDpMds, MGRDpPG, MGRDpDisk, MGRDpRBD
 
 
 def get_human_readable(size, precision=2):
@@ -106,12 +104,10 @@ class DB_RelayAgent(MetricsAgent):
             )
 
             # add osd node relationship
-            timestamp = int(time.time())
             cypher_cmd = CypherOP.add_link(
                 cluster_node,
                 host_node,
-                'CephClusterContainsHost',
-                timestamp
+                'CephClusterContainsHost'
             )
             cluster_host = socket.gethostname()
             data.tags['agenthost'] = cluster_host
@@ -151,12 +147,10 @@ class DB_RelayAgent(MetricsAgent):
                 )
 
                 # add mon node relationship
-                timestamp = int(time.time())
                 cypher_cmd = CypherOP.add_link(
                     host_node,
                     mon_node,
-                    'HostContainsMon',
-                    timestamp
+                    'HostContainsMon'
                 )
                 cluster_host = socket.gethostname()
                 data.tags['agenthost'] = cluster_host
@@ -249,12 +243,10 @@ class DB_RelayAgent(MetricsAgent):
                         meta=dp_osd.__dict__
                     )
                     # add osd node relationship
-                    timestamp = int(time.time())
                     cypher_cmd = CypherOP.add_link(
                         host_node,
                         osd_node,
-                        'HostContainsOsd',
-                        timestamp
+                        'HostContainsOsd'
                     )
                     cluster_host = socket.gethostname()
                     data.tags['agenthost'] = cluster_host
@@ -299,12 +291,10 @@ class DB_RelayAgent(MetricsAgent):
                         meta=dp_mds.__dict__
                     )
                     # add osd node relationship
-                    timestamp = int(time.time())
                     cypher_cmd = CypherOP.add_link(
                         host_node,
                         mds_node,
-                        'HostContainsMds',
-                        timestamp
+                        'HostContainsMds'
                     )
                     cluster_host = socket.gethostname()
                     data.tags['agenthost'] = cluster_host
@@ -351,18 +341,16 @@ class DB_RelayAgent(MetricsAgent):
                     # create pg node
                     pg_node = NodeInfo(
                         label='CephPG',
-                        domain_id="{}.osd.{}.pg.{}".format(cluster_id, osd_id, pgid),
+                        domain_id="{}.pg.{}".format(cluster_id, pgid),
                         name='PG.{}'.format(pgid),
                         meta=dp_pg.__dict__
                     )
 
                     # add pg node relationship
-                    timestamp = int(time.time())
                     cypher_cmd = CypherOP.add_link(
                         osd_node,
                         pg_node,
-                        'OsdContainsPg',
-                        timestamp
+                        'OsdContainsPg'
                     )
                     cluster_host = socket.gethostname()
                     data.tags['agenthost'] = cluster_host
@@ -422,12 +410,10 @@ class DB_RelayAgent(MetricsAgent):
                 )
 
                 # add disk node relationship
-                timestamp = int(time.time())
                 cypher_cmd = CypherOP.add_link(
                     osd_node,
                     disk_node,
-                    'DiskOfOsd',
-                    timestamp
+                    'DiskOfOsd'
                 )
                 cluster_host = socket.gethostname()
                 data.tags['agenthost'] = cluster_host
@@ -447,12 +433,10 @@ class DB_RelayAgent(MetricsAgent):
                 )
 
                 # add osd node relationship
-                timestamp = int(time.time())
                 cypher_cmd = CypherOP.add_link(
                     host_node,
                     disk_node,
-                    'VmHostContainsVmDisk',
-                    timestamp
+                    'VmHostContainsVmDisk'
                 )
                 data.tags['agenthost'] = cluster_host
                 data.tags['agenthost_domain_id'] = \
@@ -477,11 +461,30 @@ class DB_RelayAgent(MetricsAgent):
                 rbd_id = rbd_info.get('id')
                 rbd_size = rbd_info.get('size')
                 rbd_pgids = rbd_info.get('pgs', [])
+
                 pgids = []
                 for _data in rbd_pgids:
                     pgid = _data.get('pgid')
                     if pgid:
                         pgids.append(pgid)
+
+                # RBD info
+                dp_rbd=MGRDpRBD(
+                    fsid=cluster_id,
+                    _id=rbd_id,
+                    name=image_name,
+                    pool_name=pool_name,
+                    size=rbd_size,
+                    pgids=','.join(pgids)
+                )
+
+                # create rbd node
+                rbd_node=NodeInfo(
+                    label='CephRBD',
+                    domain_id="{}.rbd.{}".format(cluster_id, image_name),
+                    name=image_name,
+                    meta=dp_rbd.__dict__
+                )
 
                 for _data in pg_stats:
                     pgid = _data.get('pgid')
@@ -498,23 +501,6 @@ class DB_RelayAgent(MetricsAgent):
                     num_objects_unfound = stat_sum.get('num_objects_unfound')
 
                     data = DB_Relay()
-                    dp_rbd = MGRDpRBD(
-                        fsid=cluster_id,
-                        _id=rbd_id,
-                        name=image_name,
-                        pool_name=pool_name,
-                        size=rbd_size,
-                        pgids=','.join(pgids)
-                    )
-
-                    # create rbd node
-                    rbd_node = NodeInfo(
-                        label='CephRBD',
-                        domain_id="{}.rbd.{}".format(cluster_id, image_name),
-                        name=image_name,
-                        meta=dp_rbd.__dict__
-                    )
-
                     dp_pg = MGRDpPG(
                         fsid=cluster_id,
                         pgid=pgid,
@@ -530,18 +516,16 @@ class DB_RelayAgent(MetricsAgent):
                     # create pg node
                     pg_node = NodeInfo(
                         label='CephPG',
-                        domain_id="{}.rbd.{}.pg.{}".format(cluster_id, image_name, pgid),
+                        domain_id="{}.pg.{}".format(cluster_id, pgid),
                         name='PG.{}'.format(pgid),
                         meta=dp_pg.__dict__
                     )
 
                     # add rbd node relationship
-                    timestamp = int(time.time())
                     cypher_cmd = CypherOP.add_link(
                         rbd_node,
                         pg_node,
-                        'RbdContainsPg',
-                        timestamp
+                        'RbdContainsPg'
                     )
                     cluster_host = socket.gethostname()
                     data.tags['agenthost'] = cluster_host
