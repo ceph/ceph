@@ -12,6 +12,13 @@ from datetime import datetime, timedelta, date, time
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
+DEFAULTS = {
+    'enable_monitoring': True,
+    'scrape_frequency': str(86400),
+    'retention_period': str(86400*14),
+    'pool_name': 'device_health_metrics',
+}
+
 class Module(MgrModule):
     OPTIONS = [
         { 'name': 'enable_monitoring' },
@@ -19,16 +26,6 @@ class Module(MgrModule):
         { 'name': 'pool_name' },
         { 'name': 'retention_period' },
     ]
-    DEFAULTS = {
-        'enable_monitoring': True,
-        'scrape_frequency': str(86400),
-        'retention_period': str(86400*14),
-        'pool_name': 'device_health_metrics',
-    }
-    enable_monitoring = DEFAULTS['enable_monitoring']
-    scrape_frequency = DEFAULTS['scrape_frequency']
-    retention_period = DEFAULTS['retention_period']
-    pool_name = DEFAULTS['pool_name']
 
     COMMANDS = [
         {
@@ -55,9 +52,18 @@ class Module(MgrModule):
         },
     ]
 
-    run = True
-    event = Event()
-    last_scrape_time = ""
+    def __init__(self, *args, **kwargs):
+        super(Module, self).__init__(*args, **kwargs)
+
+        # options
+        self.enable_monitoring = DEFAULTS['enable_monitoring']
+        self.scrape_frequency = DEFAULTS['scrape_frequency']
+        self.retention_period = DEFAULTS['retention_period']
+        self.pool_name = DEFAULTS['pool_name']
+
+        # other
+        self.run = True
+        self.event = Event()
 
     def handle_command(self, inbuf, cmd):
         self.log.error("handle_command")
@@ -94,7 +100,7 @@ class Module(MgrModule):
 
     def refresh_config(self):
         self.enable_monitoring = self.get_config('enable_monitoring', '') is not '' or 'false'
-        for opt, value in self.DEFAULTS.iteritems():
+        for opt, value in DEFAULTS.iteritems():
             setattr(self, opt, self.get_config(opt) or value)
 
     def serve(self):
