@@ -1,11 +1,10 @@
-import {
-  Component, OnInit, TemplateRef, ViewChild
-} from '@angular/core';
-import { FormControl, FormGroup, Validators } from '@angular/forms';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { FormControl, Validators } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap';
 import { Observable } from 'rxjs';
 
+import { CdFormGroup } from '../../forms/cd-form-group';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
 
 @Component({
@@ -22,13 +21,25 @@ export class DeletionModalComponent implements OnInit {
   deletionMethod: Function;
   modalRef: BsModalRef;
 
-  deletionForm: FormGroup;
+  deletionForm: CdFormGroup;
   confirmation: FormControl;
 
   // Parameters are destructed here than assigned to specific types and marked as optional
-  setUp({modalRef, metaType, deletionMethod, pattern, deletionObserver, description}:
-          { modalRef: BsModalRef, metaType: string, deletionMethod?: Function, pattern?: string,
-            deletionObserver?: () => Observable<any>, description?: TemplateRef<any>}) {
+  setUp({
+    modalRef,
+    metaType,
+    deletionMethod,
+    pattern,
+    deletionObserver,
+    description
+  }: {
+    modalRef: BsModalRef;
+    metaType: string;
+    deletionMethod?: Function;
+    pattern?: string;
+    deletionObserver?: () => Observable<any>;
+    description?: TemplateRef<any>;
+  }) {
     if (!modalRef) {
       throw new Error('No modal reference');
     } else if (!metaType) {
@@ -46,23 +57,12 @@ export class DeletionModalComponent implements OnInit {
 
   ngOnInit() {
     this.confirmation = new FormControl('', {
-      validators: [
-        Validators.required
-      ],
+      validators: [Validators.required],
       updateOn: 'blur'
     });
-    this.deletionForm = new FormGroup({
+    this.deletionForm = new CdFormGroup({
       confirmation: this.confirmation
     });
-  }
-
-  invalidControl(submitted: boolean, error?: string): boolean {
-    const control = this.confirmation;
-    return !!(
-      (submitted || control.dirty) &&
-      control.invalid &&
-      (error ? control.errors[error] : true)
-    );
   }
 
   updateConfirmation($e) {
@@ -91,6 +91,6 @@ export class DeletionModalComponent implements OnInit {
   }
 
   stopLoadingSpinner() {
-    this.deletionForm.setErrors({'cdSubmitButton': true});
+    this.deletionForm.setErrors({ cdSubmitButton: true });
   }
 }
