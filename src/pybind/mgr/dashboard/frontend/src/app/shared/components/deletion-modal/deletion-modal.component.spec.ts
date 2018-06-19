@@ -1,6 +1,6 @@
 import { Component, NgModule, NO_ERRORS_SCHEMA, TemplateRef, ViewChild } from '@angular/core';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { ReactiveFormsModule } from '@angular/forms';
+import { NgForm, ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
@@ -258,9 +258,11 @@ describe('DeletionModalComponent', () => {
       expect(component.modalRef.hide).toHaveBeenCalled();
     });
 
-    describe('invalid control', () => {
-      const testInvalidControl = (submitted: boolean, error: string, expected: boolean) => {
-        expect(component.invalidControl(submitted, error)).toBe(expected);
+    describe('validate confirmation', () => {
+      const testValidation = (submitted: boolean, error: string, expected: boolean) => {
+        expect(
+          component.deletionForm.showError('confirmation', <NgForm>{ submitted: submitted }, error)
+        ).toBe(expected);
       };
 
       beforeEach(() => {
@@ -268,22 +270,21 @@ describe('DeletionModalComponent', () => {
       });
 
       it('should test empty values', () => {
-        expect(component.invalidControl).toBeTruthy();
         component.deletionForm.reset();
-        testInvalidControl(false, undefined, false);
-        testInvalidControl(true, 'required', true);
+        testValidation(false, undefined, false);
+        testValidation(true, 'required', true);
         component.deletionForm.reset();
         changeValue('let-me-pass');
         changeValue('');
-        testInvalidControl(true, 'required', true);
+        testValidation(true, 'required', true);
       });
 
       it('should test pattern', () => {
         changeValue('let-me-pass');
-        testInvalidControl(false, 'pattern', true);
+        testValidation(false, 'pattern', true);
         changeValue('ctrl-test');
-        testInvalidControl(false, undefined, false);
-        testInvalidControl(true, undefined, false);
+        testValidation(false, undefined, false);
+        testValidation(true, undefined, false);
       });
     });
 
