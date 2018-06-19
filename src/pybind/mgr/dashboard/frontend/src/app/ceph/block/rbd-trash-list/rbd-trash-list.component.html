@@ -1,0 +1,26 @@
+<cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
+               [status]="viewCacheStatus.status"
+               [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
+
+<cd-table [data]="images"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="id"
+          forceIdentifier="true"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+</cd-table>
+
+<ng-template #expiresTpl
+             let-row="row"
+             let-value="value">
+  <ng-container *ngIf="row.cdIsExpired"
+                i18n>Expired at
+  </ng-container>
+
+  <ng-container *ngIf="!row.cdIsExpired"
+                i18n>Protected until
+  </ng-container>
+
+  {{ value | cdDate }}
+</ng-template>
