@@ -1734,15 +1734,13 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
 
       // get the frag we're mapping in
       bufferlist frag;
-      frag.substr_of(wr->bl,
-		     f_it->first, f_it->second);
+      frag.substr_of(wr->bl, f_it->first, f_it->second);
 
       // keep anything left of bhoff
-      bufferlist newbl;
-      if (bhoff)
-	newbl.substr_of(bh->bl, 0, bhoff);
-      newbl.claim_append(frag);
-      bh->bl.swap(newbl);
+      if (!bhoff)
+        bh->bl.swap(frag);
+      else
+        bh->bl.claim_append(frag);
 
       opos += f_it->second;
     }
