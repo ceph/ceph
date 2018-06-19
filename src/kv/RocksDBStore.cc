@@ -823,7 +823,8 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
   utime_t start = ceph_clock_now();
   rocksdb::WriteOptions woptions;
-  woptions.sync = true;
+  // if disableWAL, sync can't set
+  woptions.sync = !disableWAL;
   
   int result = submit_common(woptions, t);
   
