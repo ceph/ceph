@@ -17,7 +17,7 @@
 
     <!-- Type -->
     <div class="form-group"
-         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.type.dirty) && formGroup.controls.type.invalid}">
+         [ngClass]="{'has-error': formGroup.showError('type', frm)}">
       <label class="control-label col-sm-3"
              for="type"
              i18n>Type
@@ -45,7 +45,7 @@
                   [value]="type">{{ type }}</option>
         </select>
         <span class="help-block"
-              *ngIf="(frm.submitted || formGroup.controls.type.dirty) && formGroup.controls.type.hasError('required')"
+              *ngIf="formGroup.showError('type', frm, 'required')"
               i18n>
           This field is required.
         </span>
@@ -54,7 +54,7 @@
 
     <!-- Permission -->
     <div class="form-group"
-         [ngClass]="{'has-error': (frm.submitted || formGroup.controls.perm.dirty) && formGroup.controls.perm.invalid}">
+         [ngClass]="{'has-error': formGroup.showError('perm', frm)}">
       <label class="control-label col-sm-3"
              for="perm"
              i18n>Permission
@@ -73,7 +73,7 @@
           </option>
         </select>
         <span class="help-block"
-              *ngIf="(frm.submitted || formGroup.controls.perm.dirty) && formGroup.controls.perm.hasError('required')"
+              *ngIf="formGroup.showError('perm', frm, 'required')"
               i18n>
           This field is required.
         </span>
