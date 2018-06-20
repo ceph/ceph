@@ -52,7 +52,7 @@ void SharedPersistentObjectCacherObjectDispatch<I>::init() {
   ldout(cct, 20) << "parent image: setup SRO cache client = " << dendl;
 
   std::string controller_path = "/tmp/rbd_shared_readonly_cache_demo";
-  m_cache_client = new CacheClient(io_service, controller_path.c_str(),
+  m_cache_client = new rbd::cache::CacheClient(io_service, controller_path.c_str(),
     ([&](std::string s){client_handle_request(s);}));
 
   int ret = m_cache_client->connect();
@@ -120,7 +120,7 @@ void SharedPersistentObjectCacherObjectDispatch<I>::client_handle_request(std::s
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << dendl;
 
-  rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(msg.c_str());
+  rbd::cache::rbdsc_req_type_t *io_ctx = (rbd::cache::rbdsc_req_type_t*)(msg.c_str());
 
   switch (io_ctx->type) {
     case RBDSC_REGISTER_REPLY: {

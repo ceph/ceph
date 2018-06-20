@@ -7,11 +7,11 @@
 #include "common/errno.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
-#include "CacheController.hpp"
+#include "CacheController.h"
 
 #include <vector>
 
-CacheController *cachectl = nullptr;
+rbd::cache::CacheController *cachectl = nullptr;
 
 void usage() {
   std::cout << "usage: cache controller [options...]" << std::endl;
@@ -64,7 +64,7 @@ int main(int argc, const char **argv)
   // disable unnecessary librbd cache
   g_ceph_context->_conf->set_val_or_die("rbd_cache", "false");
 
-  cachectl = new CacheController(g_ceph_context, cmd_args);
+  cachectl = new rbd::cache::CacheController(g_ceph_context, cmd_args);
   int r = cachectl->init();
   if (r < 0) {
     std::cerr << "failed to initialize: " << cpp_strerror(r) << std::endl;

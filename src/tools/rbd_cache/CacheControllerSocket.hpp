@@ -17,6 +17,9 @@
 
 using boost::asio::local::stream_protocol;
 
+namespace rbd {
+namespace cache {
+
 class session : public std::enable_shared_from_this<session> {
 public:
   session(uint64_t session_id, boost::asio::io_service& io_service, ProcessMsg processmsg)
@@ -121,5 +124,8 @@ private:
   uint64_t session_id = 1;
   std::map<uint64_t, session_ptr> session_map;
 };
+
+} // namespace cache
+} // namespace rbd
 
 #endif

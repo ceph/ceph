@@ -19,7 +19,7 @@ SharedPersistentObjectCacher<I>::SharedPersistentObjectCacher(I *image_ctx, std:
   : m_image_ctx(image_ctx), m_cache_path(cache_path),
     m_file_map_lock("librbd::cache::SharedObjectCacher::filemaplock") {
   auto *cct = m_image_ctx->cct;
-
+  ldout(cct, 20) << dendl;
 }
 
 template <typename I>
@@ -40,7 +40,7 @@ int SharedPersistentObjectCacher<I>::read_object(std::string oid, ceph::bufferli
   std::string cache_file_name = m_image_ctx->data_ctx.get_pool_name() + oid;
 
   //TODO(): make a cache for cachefile fd
-  os::CacheStore::SyncFile* target_cache_file = new os::CacheStore::SyncFile(cct, cache_file_name);
+  SyncFile* target_cache_file = new SyncFile(cct, cache_file_name);
   target_cache_file->open();
 
   int ret = target_cache_file->read_object_from_file(read_data, offset, length);

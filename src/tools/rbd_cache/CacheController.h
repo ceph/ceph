@@ -22,6 +22,9 @@
 
 using boost::asio::local::stream_protocol;
 
+namespace rbd {
+namespace cache {
+
 class CacheController {
  public:
   CacheController(CephContext *cct, const std::vector<const char*> &args);
@@ -45,5 +48,8 @@ class CacheController {
   ObjectCacheStore *m_object_cache_store;
   ContextWQ* pcache_op_work_queue;
 };
+
+} // namespace rbd
+} // namespace cache
 
 #endif

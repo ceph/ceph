@@ -12,6 +12,9 @@
 #define RBDSC_LOOKUP_REPLY     0X16
 #define RBDSC_READ_RADOS       0X16
 
+namespace rbd {
+namespace cache {
+
 typedef std::function<void(uint64_t, std::string)> ProcessMsg;
 typedef std::function<void(std::string)> ClientProcessMsg;
 typedef uint8_t rbdsc_req_type;
@@ -40,4 +43,6 @@ struct rbdsc_req_type_t {
   }
 };
 
+} // namespace cache
+} // namespace rbd
 #endif

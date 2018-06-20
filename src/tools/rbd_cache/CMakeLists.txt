@@ -1,5 +1,5 @@
 add_executable(rbd-cache
-  ${CMAKE_SOURCE_DIR}/src/os/CacheStore/SyncFile.cc
+  ${CMAKE_SOURCE_DIR}/src/librbd/cache/SharedPersistentObjectCacherFile.cc
   ObjectCacheStore.cc
   CacheController.cc
   main.cc)

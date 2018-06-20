@@ -9,6 +9,8 @@
 #define dout_prefix *_dout << "rbd::cache::ObjectCacheStore: " << this << " " \
                            << __func__ << ": "
 
+namespace rbd {
+namespace cache {
 
 ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
       : m_cct(cct), m_work_queue(work_queue),
@@ -77,7 +79,7 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
   }
 
   // persistent to cache
-  os::CacheStore::SyncFile cache_file(m_cct, cache_file_name);
+  librbd::cache::SyncFile cache_file(m_cct, cache_file_name);
   cache_file.open();
   ret = cache_file.write_object_to_file(read_buf, object_size);
   
@@ -145,3 +147,6 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_
   return ret;
   
 }
+
+} // namespace cache
+} // namespace rbd

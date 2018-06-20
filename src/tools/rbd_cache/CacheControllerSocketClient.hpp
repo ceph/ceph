@@ -13,6 +13,9 @@
 
 using boost::asio::local::stream_protocol;
 
+namespace rbd {
+namespace cache {
+
 class CacheClient {
 public:
   CacheClient(boost::asio::io_service& io_service,
@@ -128,4 +131,6 @@ public:
   bool connected = false;
 };
 
+} // namespace cache
+} // namespace rbd
 #endif

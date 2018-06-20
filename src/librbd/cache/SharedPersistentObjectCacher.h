@@ -6,7 +6,7 @@
 
 #include "include/buffer_fwd.h"
 #include "include/int_types.h"
-#include "os/CacheStore/SyncFile.h"
+#include "SharedPersistentObjectCacherFile.h"
 #include "common/Mutex.h"
 #include <vector>
 #include <map>
@@ -31,9 +31,9 @@ public:
 
 private:
   ImageCtxT *m_image_ctx;
-  std::map<std::string,  os::CacheStore::SyncFile*> file_map;
-  Mutex m_file_map_lock;
   std::string m_cache_path;
+  Mutex m_file_map_lock;
+  std::map<std::string,  SyncFile*> file_map;
 
 };
 

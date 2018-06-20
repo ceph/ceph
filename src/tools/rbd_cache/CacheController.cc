@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "CacheController.hpp"
+#include "CacheController.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_cache
@@ -9,6 +9,8 @@
 #define dout_prefix *_dout << "rbd::cache::CacheController: " << this << " " \
                            << __func__ << ": "
 
+namespace rbd {
+namespace cache {
 
 class ThreadPoolSingleton : public ThreadPool {
 public:
@@ -103,3 +105,8 @@ void CacheController::handle_request(uint64_t sesstion_id, std::string msg){
     
   }
 }
+
+} // namespace rbd
+} // namespace cache
+
+

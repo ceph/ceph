@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_LIBOS_CACHE_STORE_SYNC_FILE
-#define CEPH_LIBOS_CACHE_STORE_SYNC_FILE
+#ifndef CEPH_LIBRBD_CACHE_STORE_SYNC_FILE
+#define CEPH_LIBRBD_CACHE_STORE_SYNC_FILE
 
 #include "include/buffer_fwd.h"
 #include <sys/mman.h>
@@ -12,9 +12,9 @@ struct Context;
 struct ContextWQ;
 class CephContext;
 
-namespace os {
+namespace librbd {
 
-namespace CacheStore {
+namespace cache {
 
 class SyncFile {
 public:
@@ -68,7 +68,7 @@ private:
   int fdatasync();
 };
 
-} // namespace CacheStore
-} // namespace os
+} // namespace cache
+} // namespace librbd
 
-#endif // CEPH_LIBOS_CACHE_STORE_SYNC_FILE
+#endif // CEPH_LIBRBD_CACHE_STORE_SYNC_FILE

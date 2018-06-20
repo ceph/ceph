@@ -12,10 +12,13 @@
 #include "include/rbd/librbd.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
-#include "os/CacheStore/SyncFile.h"
+#include "librbd/cache/SharedPersistentObjectCacherFile.h"
 
 using librados::Rados;
 using librados::IoCtx;
+
+namespace rbd {
+namespace cache {
 
 typedef shared_ptr<librados::Rados> RadosRef;
 typedef shared_ptr<librados::IoCtx> IoCtxRef;
@@ -59,7 +62,9 @@ class ObjectCacheStore
 
     std::map<std::string, librados::IoCtx*> m_ioctxs;
 
-    os::CacheStore::SyncFile *m_cache_file;
+    librbd::cache::SyncFile *m_cache_file;
 };
 
+} // namespace rbd
+} // namespace cache
 #endif

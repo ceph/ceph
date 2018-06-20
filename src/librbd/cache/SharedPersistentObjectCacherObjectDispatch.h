@@ -115,7 +115,7 @@ private:
   ImageCtxT* m_image_ctx;
 
   void client_handle_request(std::string msg);
-  CacheClient *m_cache_client = nullptr;
+  rbd::cache::CacheClient *m_cache_client = nullptr;
   boost::asio::io_service io_service;
 };
 
