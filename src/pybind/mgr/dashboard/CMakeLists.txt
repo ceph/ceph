@@ -15,7 +15,7 @@ add_custom_command(
   OUTPUT "${mgr-dashboard-nodeenv}/bin/npm"
   COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${mgr-dashboard-nodeenv}
   COMMAND ${mgr-dashboard-nodeenv}/bin/pip install nodeenv
-  COMMAND ${mgr-dashboard-nodeenv}/bin/nodeenv -p -n 8.10.0
+  COMMAND ${mgr-dashboard-nodeenv}/bin/nodeenv -p -n 8.11.3
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
   COMMENT "dashboard nodeenv is being installed"
 )
