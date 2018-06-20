@@ -3146,6 +3146,32 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
+
+    Option("osd_memory_target", Option::TYPE_UINT, Option::LEVEL_BASIC)
+    .set_default(4_G)
+    .add_see_also("bluestore_cache_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, try to keep this many bytes mapped in memory."),
+
+    Option("osd_memory_base", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(768_M)
+    .add_see_also("bluestore_cache_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, estimate the minimum amount of memory in bytes the OSD will need."),
+
+    Option("osd_memory_expected_fragmentation", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0.15)
+    .add_see_also("bluestore_cache_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, estimate the percent of memory fragmentation."),
+
+    Option("osd_memory_cache_min", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(128_M)
+    .add_see_also("bluestore_cache_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, set the minimum amount of memory used for caches."),
+
+    Option("osd_memory_cache_resize_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(1)
+    .add_see_also("bluestore_cache_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, wait this many seconds between resizing caches."),
+
     Option("memstore_device_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description(""),
@@ -3543,39 +3569,41 @@ std::vector<Option> get_global_options() {
     .set_default(.5)
     .set_description("2Q paper suggests .5"),
 
-    Option("bluestore_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description("Cache size (in bytes) for BlueStore")
     .set_long_description("This includes data and metadata cached by BlueStore as well as memory devoted to rocksdb's cache(s)."),
 
-    Option("bluestore_cache_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_size_hdd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(1_G)
     .set_description("Default bluestore_cache_size for rotational media"),
 
-    Option("bluestore_cache_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_size_ssd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(3_G)
     .set_description("Default bluestore_cache_size for non-rotational (solid state) media"),
 
-    Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.01)
+    Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(.4)
+    .add_see_also("bluestore_cache_size")
     .set_description("Ratio of bluestore cache to devote to metadata"),
 
-    Option("bluestore_cache_kv_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.99)
+    Option("bluestore_cache_kv_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(.4)
+    .add_see_also("bluestore_cache_size")
     .set_description("Ratio of bluestore cache to devote to kv database (rocksdb)"),
 
-    Option("bluestore_cache_autotune", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_autotune", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .add_see_also("bluestore_cache_size")
     .add_see_also("bluestore_cache_meta_ratio")
     .set_description("Automatically tune the ratio of caches while respecting min values."),
 
-    Option("bluestore_cache_autotune_chunk_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_autotune_chunk_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(33554432)
     .add_see_also("bluestore_cache_autotune")
     .set_description("The chunk size in bytes to allocate to caches when cache autotune is enabled."),
 
-    Option("bluestore_cache_autotune_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_autotune_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(5)
     .add_see_also("bluestore_cache_autotune")
     .set_description("The number of seconds to wait between rebalances when cache autotune is enabled."),

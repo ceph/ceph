@@ -69,7 +69,10 @@ if(WITH_SPDK)
   add_compile_options(-mcrc32 -msse3 -mssse3 -msse4.1 -msse4.2)
 endif()
 
-add_library(os STATIC ${libos_srcs} $<TARGET_OBJECTS:kv_objs>)
+add_library(os STATIC ${libos_srcs}
+  $<TARGET_OBJECTS:kv_objs> $<TARGET_OBJECTS:heap_profiler_objs>)
+
+
 
 if(HAVE_LIBAIO)
   target_link_libraries(os ${AIO_LIBRARIES})

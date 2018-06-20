@@ -1921,17 +1921,18 @@ private:
   uint64_t kv_throttle_costs = 0;
 
   // cache trim control
-  uint64_t cache_size = 0;      ///< total cache size
+  uint64_t cache_size = 0;       ///< total cache size
   double cache_meta_ratio = 0;   ///< cache ratio dedicated to metadata
   double cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
-  uint64_t cache_meta_min = 0;   ///< cache min dedicated to metadata
-  uint64_t cache_kv_min = 0;     ///< cache min dedicated to kv (e.g., rocksdb)
-  uint64_t cache_data_min = 0;   ///< cache min dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
   uint64_t cache_autotune_chunk_size = 0; ///< cache autotune chunk size
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
-
+  uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
+  uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
+  double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
+  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cahce
+  double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
   std::mutex vstatfs_lock;
   volatile_statfs vstatfs;
 
@@ -1942,6 +1943,7 @@ private:
     Cond cond;
     Mutex lock;
     bool stop = false;
+    uint64_t autotune_cache_size = 0;
 
     struct MempoolCache : public PriorityCache::PriCache {
       BlueStore *store;
@@ -2060,7 +2062,8 @@ private:
 
   private:
     void _adjust_cache_settings();
-    void _trim_shards(bool log_stats);
+    void _trim_shards(bool interval_stats);
+    void _tune_cache_size(bool interval_stats);
     void _balance_cache(const std::list<PriorityCache::PriCache *>& caches);
     void _balance_cache_pri(int64_t *mem_avail, 
                             const std::list<PriorityCache::PriCache *>& caches, 
