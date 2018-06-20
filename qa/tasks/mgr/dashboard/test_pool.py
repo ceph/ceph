@@ -120,6 +120,8 @@ class PoolTest(DashboardTestCase):
                     self.assertEqual(pool['type'], data['pool_type'])
                 elif k == 'pg_num':
                     self.assertEqual(pool[k], int(v), '{}: {} != {}'.format(k, pool[k], v))
+                    k = 'pg_placement_num' # Should have the same value as pg_num
+                    self.assertEqual(pool[k], int(v), '{}: {} != {}'.format(k, pool[k], v))
                 elif k == 'application_metadata':
                     self.assertIsInstance(pool[k], list)
                     self.assertEqual(pool[k],
