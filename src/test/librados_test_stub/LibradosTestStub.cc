@@ -738,6 +738,11 @@ void IoCtx::set_namespace(const std::string& nspace) {
   ctx->set_namespace(nspace);
 }
 
+std::string IoCtx::get_namespace() const {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->get_namespace();
+}
+
 static int save_operation_result(int result, int *pval) {
   if (pval != NULL) {
     *pval = result;
