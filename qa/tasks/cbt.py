@@ -18,7 +18,7 @@ class CBT(Task):
         self.log = log
 
     def hosts_of_type(self, type_):
-        return [r.name for r in self.ctx.cluster.only(misc.is_type(type_)).remotes.keys()]
+        return [r.hostname for r in self.ctx.cluster.only(misc.is_type(type_)).remotes.keys()]
 
     def generate_cbt_config(self):
         mon_hosts = self.hosts_of_type('mon')
@@ -57,8 +57,7 @@ class CBT(Task):
             benchmark_config['cosbench']['controller'] = self.first_mon.hostname
 
             # set auth details using first client
-            clients = [r.hostname for r in self.ctx.cluster.only(misc.is_type('client')).remotes.keys()]
-            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:7280/auth/v1.0;retry=9" % (clients[0])
+            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:7280/auth/v1.0;retry=9" % (client_hosts[0])
 
         return dict(
             cluster=cluster_config,
