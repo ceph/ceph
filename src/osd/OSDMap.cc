@@ -1674,17 +1674,18 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     for (auto osd : raw) {
       if (type > 0) {
         auto parent = tmpmap.crush->get_parent_of_type(osd, type, crush_rule);
-        if (parent >= 0) {
+        if (parent < 0) {
+          auto r = parents.insert(parent);
+          if (!r.second) {
+            // two up-set osds come from same parent
+            to_cancel.insert(pg);
+            break;
+          }
+        } else {
           lderr(cct) << __func__ << " unable to get parent of raw osd."
                      << osd << " of pg " << pg
                      << dendl;
-          break;
-        }
-        auto r = parents.insert(parent);
-        if (!r.second) {
-          // two up-set osds come from same parent
-          to_cancel.insert(pg);
-          break;
+          // continue to do checks below
         }
       }
       // the above check validates collision only
