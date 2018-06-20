@@ -537,7 +537,7 @@ protected:
   void trim_cache(bool trim_kernel_dcache=false);
   void trim_cache_for_reconnect(MetaSession *s);
   void trim_dentry(Dentry *dn);
-  void trim_caps(MetaSession *s, int max);
+  void trim_caps(MetaSession *s, uint64_t max);
   void _invalidate_kernel_dcache();
   
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
