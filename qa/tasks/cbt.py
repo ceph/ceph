@@ -25,6 +25,7 @@ class CBT(Task):
         mon_hosts = self.hosts_of_type('mon')
         osd_hosts = self.hosts_of_type('osd')
         client_hosts = self.hosts_of_type('client')
+        cos_driver = self.hosts_of_type('cos')
         rgw_client = {}
         rgw_client[client_hosts[0]] = None
         rgw_hosts = self.config.get('cluster', {}).get('rgws', rgw_client)
@@ -55,7 +56,7 @@ class CBT(Task):
             benchmark_config['cosbench']['cosbench_dir'] = os.path.join(testdir, 'cos')
             benchmark_config['cosbench']['cosbench_xml_dir'] = os.path.join(testdir, 'xml')
             self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', benchmark_config['cosbench']['cosbench_xml_dir']])
-            benchmark_config['cosbench']['controller'] = osd_hosts[0]
+            benchmark_config['cosbench']['controller'] = cos_driver[0]
 
             # set auth details
             remotes_and_roles = self.ctx.cluster.remotes.items()
