@@ -1730,7 +1730,8 @@ bool DaemonServer::handle_command(MCommand *m)
     }
 
     std::stringstream ds;
-    int r = py_modules.handle_command(handler_name, cmdctx->cmdmap, &ds, &ss);
+    bufferlist inbl = cmdctx->m->get_data();
+    int r = py_modules.handle_command(handler_name, cmdctx->cmdmap, inbl, &ds, &ss);
     cmdctx->odata.append(ds);
     cmdctx->reply(r, ss);
   }));

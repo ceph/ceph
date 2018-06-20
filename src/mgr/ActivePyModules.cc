@@ -766,6 +766,7 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
 int ActivePyModules::handle_command(
   std::string const &module_name,
   const cmdmap_t &cmdmap,
+  const bufferlist &inbuf,
   std::stringstream *ds,
   std::stringstream *ss)
 {
@@ -777,7 +778,7 @@ int ActivePyModules::handle_command(
   }
 
   lock.Unlock();
-  return mod_iter->second->handle_command(cmdmap, ds, ss);
+  return mod_iter->second->handle_command(cmdmap, inbuf, ds, ss);
 }
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)
