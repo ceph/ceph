@@ -6668,10 +6668,53 @@ TEST_F(TestLibRBD, NamespacesPP) {
   std::vector<std::string> names;
   ASSERT_EQ(0, rbd.namespace_list(ioctx, &names));
   ASSERT_EQ(2U, names.size());
-
-  ASSERT_EQ(2U, names.size());
   ASSERT_EQ("name1", names[0]);
   ASSERT_EQ("name3", names[1]);
+
+  librados::IoCtx ns_io_ctx;
+  ns_io_ctx.dup(ioctx);
+
+  std::string name = get_temp_image_name();
+  int order = 0;
+  uint64_t features = 0;
+  if (!get_features(&features)) {
+    // old format doesn't support namespaces
+    ns_io_ctx.set_namespace("name1");
+    ASSERT_EQ(-EINVAL, create_image_pp(rbd, ns_io_ctx, name.c_str(), 0,
+                                       &order));
+    return;
+  }
+
+  ns_io_ctx.set_namespace("missing");
+  ASSERT_EQ(-ENOENT, create_image_pp(rbd, ns_io_ctx, name.c_str(), 0, &order));
+
+  ns_io_ctx.set_namespace("name1");
+  ASSERT_EQ(0, create_image_pp(rbd, ns_io_ctx, name.c_str(), 0, &order));
+  ASSERT_EQ(-EBUSY, rbd.namespace_remove(ns_io_ctx, "name1"));
+
+  std::string image_id;
+  {
+    librbd::Image image;
+    ASSERT_EQ(-ENOENT, rbd.open(ioctx, image, name.c_str(), NULL));
+    ASSERT_EQ(0, rbd.open(ns_io_ctx, image, name.c_str(), NULL));
+    ASSERT_EQ(0, get_image_id(image, &image_id));
+  }
+
+  ASSERT_EQ(-ENOENT, rbd.trash_move(ioctx, name.c_str(), 0));
+  ASSERT_EQ(0, rbd.trash_move(ns_io_ctx, name.c_str(), 0));
+  ASSERT_EQ(-EBUSY, rbd.namespace_remove(ns_io_ctx, "name1"));
+
+  PrintProgress pp;
+  ASSERT_EQ(-ENOENT, rbd.trash_remove_with_progress(ioctx, image_id.c_str(),
+                                                    false, pp));
+  ASSERT_EQ(0, rbd.trash_remove_with_progress(ns_io_ctx, image_id.c_str(),
+                                              false, pp));
+  ASSERT_EQ(0, rbd.namespace_remove(ns_io_ctx, "name1"));
+
+  names.clear();
+  ASSERT_EQ(0, rbd.namespace_list(ioctx, &names));
+  ASSERT_EQ(1U, names.size());
+  ASSERT_EQ("name3", names[0]);
 }
 
 // poorman's assert()

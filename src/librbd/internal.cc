@@ -746,6 +746,11 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return r;
     }
 
+    if (!io_ctx.get_namespace().empty()) {
+      lderr(cct) << "attempting to add v1 image to namespace" << dendl;
+      return -EINVAL;
+    }
+
     ldout(cct, 2) << "adding rbd image to directory..." << dendl;
     r = tmap_set(io_ctx, imgname);
     if (r < 0) {
