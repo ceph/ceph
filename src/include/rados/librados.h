@@ -998,6 +998,18 @@ CEPH_RADOS_API void rados_ioctx_locator_set_key(rados_ioctx_t io,
  */
 CEPH_RADOS_API void rados_ioctx_set_namespace(rados_ioctx_t io,
                                               const char *nspace);
+
+/**
+ * Get the namespace for objects within the io context
+ *
+ * @param io the io context to query
+ * @param buf pointer to buffer where name will be stored
+ * @param maxlen size of buffer where name will be stored
+ * @returns length of string stored, or -ERANGE if buffer too small
+ */
+CEPH_RADOS_API int rados_ioctx_get_namespace(rados_ioctx_t io, char *buf,
+                                             unsigned maxlen);
+
 /** @} obj_loc */
 
 /**
