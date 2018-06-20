@@ -83,7 +83,8 @@ class CBT(Task):
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
             cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
-        self.ctx.cluster.run(args=install_cmd + cbt_depends)
+        clients = self.ctx.cluster.only(misc.is_type('client'))
+        clients.run(args=install_cmd + cbt_depends)
 
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
         self.log.info('benchmark: %s', benchmark_type)
@@ -91,14 +92,14 @@ class CBT(Task):
         if benchmark_type == 'librbdfio':
             # install fio
             testdir = misc.get_testdir(self.ctx)
-            self.first_mon.run(
+            clients.run(
                 args=[
                     'git', 'clone', '-b', 'master',
                     'https://github.com/axboe/fio.git',
                     '{tdir}/fio'.format(tdir=testdir)
                 ]
             )
-            self.first_mon.run(
+            clients.run(
                 args=[
                     'cd', os.path.join(testdir, 'fio'), run.Raw('&&'),
                     './configure', run.Raw('&&'),
