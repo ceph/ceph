@@ -4070,6 +4070,8 @@ int OSDMap::calc_pg_upmaps(
     multimap<float,int> deviation_osd;  // deviation(pgs), osd
     set<int> overfull;
     for (auto& i : pgs_by_osd) {
+      // make sure osd is still there (belongs to this crush-tree)
+      assert(osd_weight.count(i.first));
       float target = osd_weight[i.first] * pgs_per_weight;
       float deviation = (float)i.second.size() - target;
       ldout(cct, 20) << " osd." << i.first
@@ -4108,8 +4110,6 @@ int OSDMap::calc_pg_upmaps(
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
       int osd = p->second;
       float deviation = p->first;
-      // make sure osd is still there (belongs to this crush-tree)
-      assert(osd_weight.count(osd));
       float target = osd_weight[osd] * pgs_per_weight;
       assert(target > 0);
       if (deviation/target < max_deviation_ratio) {
