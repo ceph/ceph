@@ -23,6 +23,7 @@ class Scope(object):
     MANAGER = "manager"
     LOG = "log"
     GRAFANA = "grafana"
+    USER = "user"
 
     @classmethod
     def all_scopes(cls):
