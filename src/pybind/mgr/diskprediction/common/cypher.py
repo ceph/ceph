@@ -22,7 +22,7 @@ class CypherOP(object):
             if key != "time":
                 cy_value = "\'%s\'" % value
             else:
-                cy_value=value
+                cy_value = value
             result = \
                 "set %s.%s=case when %s.time >= %s then %s.%s ELSE %s end" % (
                 node.label, key,
@@ -56,8 +56,10 @@ class CypherOP(object):
         return result
 
     @staticmethod
-    def add_link(snode, dnode, relationship, timestamp=int(time.time()*(1000**3))):
+    def add_link(snode, dnode, relationship, timestamp=None):
         result = ""
+        if timestamp is None:
+            timestamp = int(time.time()*(1000**3))
         if isinstance(snode, NodeInfo) and isinstance(dnode, NodeInfo):
             cy_snode = CypherOP.create_or_merge(snode, timestamp)
             cy_dnode = CypherOP.create_or_merge(dnode, timestamp)

@@ -2,7 +2,7 @@ from __future__ import absolute_import
 
 import socket
 
-from . import MetricsAgent
+from . import MetricsAgent, AGENT_VERSION
 from ...common.db import DB_API
 from ...models.metrics.dp import SAI_Host
 
@@ -25,9 +25,9 @@ class SAI_HostAgent(MetricsAgent):
                 osd_host = osd_metadata.get("hostname", "None")
                 if osd_host not in hosts:
                     data = SAI_Host()
-                    data.tags['agenthost'] = str(socket.gethostname())
+                    data.fields['agenthost'] = str(socket.gethostname())
                     data.tags['agenthost_domain_id'] = \
-                        str("%s_%s" % (cluster_id, data.tags['agenthost']))
+                        str("%s_%s" % (cluster_id, data.fields['agenthost']))
                     data.tags['domain_id'] = \
                         str("%s_%s" % (cluster_id, osd_host))
                     data.fields['cluster_domain_id'] = str(cluster_id)
@@ -48,9 +48,9 @@ class SAI_HostAgent(MetricsAgent):
             mon_addr = _data['public_addr'].split(':')[0]
             if mon_host not in hosts:
                 data = SAI_Host()
-                data.tags['agenthost'] = str(socket.gethostname())
+                data.fields['agenthost'] = str(socket.gethostname())
                 data.tags['agenthost_domain_id'] = \
-                    str("%s_%s" % (cluster_id, data.tags['agenthost']))
+                    str("%s_%s" % (cluster_id, data.fields['agenthost']))
                 data.tags['domain_id'] = \
                     str("%s_%s" % (cluster_id, mon_host))
                 data.fields['cluster_domain_id'] = str(cluster_id)
@@ -70,9 +70,10 @@ class SAI_HostAgent(MetricsAgent):
                 mds_host = mds_data.get('name')
                 if mds_host not in hosts:
                     data = SAI_Host()
-                    data.tags['agenthost'] = str(socket.gethostname())
+                    data.fields['agent_version'] = AGENT_VERSION
+                    data.fields['agenthost'] = str(socket.gethostname())
                     data.tags['agenthost_domain_id'] = \
-                        str("%s_%s" % (cluster_id, data.tags['agenthost']))
+                        str("%s_%s" % (cluster_id, data.fields['agenthost']))
                     data.tags['domain_id'] = \
                         str("%s_%s" % (cluster_id, mds_host))
                     data.fields['cluster_domain_id'] = str(cluster_id)

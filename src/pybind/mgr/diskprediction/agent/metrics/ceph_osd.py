@@ -26,9 +26,9 @@ class CephOSD_Agent(MetricsAgent):
             stat_bytes_used = 0
             d_osd.tags['cluster_id'] = cluster_id
             d_osd.tags['osd_id'] = n_name[4:]
-            d_osd.tags['agenthost'] = socket.gethostname()
+            d_osd.fields['agenthost'] = socket.gethostname()
             d_osd.tags['agenthost_domain_id'] = \
-                '%s_%s' % (cluster_id, d_osd.tags['agenthost'])
+                '%s_%s' % (cluster_id, d_osd.fields['agenthost'])
             d_osd.tags['host_domain_id'] = \
                 '%s_%s' % (cluster_id,
                            obj_api.get_osd_hostname(d_osd.tags['osd_id']))

@@ -24,9 +24,9 @@ class CephMon_Agent(MetricsAgent):
             d_mon = Ceph_MON()
             d_mon.tags['cluster_id'] = cluster_id
             d_mon.tags['mon_id'] = n_name[4:]
-            d_mon.tags['agenthost'] = socket.gethostname()
+            d_mon.fields['agenthost'] = socket.gethostname()
             d_mon.tags['agenthost_domain_id'] = \
-                "%s_%s" % (cluster_id, d_mon.tags['agenthost'])
+                "%s_%s" % (cluster_id, d_mon.fields['agenthost'])
             d_mon.fields['num_sessions'] = \
                 i_perf.get("mon.num_sessions", {}).get('value', 0)
             d_mon.fields['session_add'] = \

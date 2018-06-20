@@ -31,9 +31,9 @@ class SAI_DiskSmartAgent(MetricsAgent):
                 smart_data.fields['host_domain_id'] = \
                     str('%s_%s'
                         % (cluster_id, osds_meta.get('hostname', 'None')))
-                smart_data.tags['agenthost'] = str(socket.gethostname())
+                smart_data.fields['agenthost'] = str(socket.gethostname())
                 smart_data.tags['agenthost_domain_id'] = \
-                    str('%s_%s' % (cluster_id, smart_data.tags['agenthost']))
+                    str('%s_%s' % (cluster_id, smart_data.fields['agenthost']))
                 # parse attributes
                 ata_smart = s_val.get('ata_smart_attributes', {})
                 for attr in ata_smart.get('attrs', []):

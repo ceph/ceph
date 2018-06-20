@@ -17,9 +17,9 @@ class CephCluster_Agent(MetricsAgent):
 
         c_data = Ceph_Cluster()
         c_data.tags['cluster_id'] = cluster_id
-        c_data.tags['agenthost'] = socket.gethostname()
+        c_data.fields['agenthost'] = socket.gethostname()
         c_data.tags['agenthost_domain_id'] = \
-            "%s_%s" % (cluster_id, c_data.tags['agenthost'])
+            "%s_%s" % (cluster_id, c_data.fields['agenthost'])
         c_data.fields['osd_epoch'] = obj_api.get_osd_epoch()
         c_data.fields['num_osd'] = obj_api.get_max_osd()
         c_data.fields['num_mon'] = len(obj_api.get_mons())

@@ -9,7 +9,7 @@ class CPU(MetricsField):
 
     def __init__(self):
         super(CPU, self).__init__()
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.tags['cpu'] = None
         self.fields['usage_guest'] = None
@@ -33,7 +33,7 @@ class DiskIO(MetricsField):
 
     def __init__(self):
         super(DiskIO, self).__init__()
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.tags['name'] = None
         self.fields['reads'] = None
@@ -56,7 +56,7 @@ class MEM(MetricsField):
 
     def __init__(self):
         super(MEM, self).__init__()
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.fields['active'] = None
         self.fields['available'] = None
@@ -79,7 +79,7 @@ class NET(MetricsField):
 
     def __init__(self):
         super(NET, self).__init__()
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.tags['interface'] = None
         self.fields['bytes_recv'] = None
@@ -102,7 +102,8 @@ class SAI_Host(MetricsField):
     def __init__(self):
         super(SAI_Host, self).__init__()
         self.tags['domain_id'] = None
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
+        self.fields['agent_version'] = None
         self.tags['agenthost_domain_id'] = None
         self.fields['cluster_domain_id'] = None
         self.fields['name'] = None
@@ -133,7 +134,7 @@ class SAI_Disk(MetricsField):
 
     def __init__(self):
         super(SAI_Disk, self).__init__()
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.tags['disk_domain_id'] = None
         self.tags['disk_name'] = None
@@ -167,7 +168,7 @@ class SAI_Disk_Smart(MetricsField):
 
     def __init__(self):
         super(SAI_Disk_Smart, self).__init__()
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.tags['disk_domain_id'] = None
         self.tags['disk_name'] = None
@@ -188,7 +189,7 @@ class Ceph_Cluster(MetricsField):
     def __init__(self):
         super(Ceph_Cluster, self).__init__()
         self.tags['cluster_id'] = None
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.fields['num_mon'] = None
         self.fields['num_mon_quorum'] = None
@@ -223,7 +224,7 @@ class Ceph_MON(MetricsField):
         super(Ceph_MON, self).__init__()
         self.tags['cluster_id'] = None
         self.tags['mon_id'] = None
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.fields['num_sessions'] = None
         self.fields['session_add'] = None
@@ -243,7 +244,7 @@ class Ceph_Pool(MetricsField):
         super(Ceph_Pool, self).__init__()
         self.tags['cluster_id'] = None
         self.tags['pool_id'] = None
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.fields['bytes_used'] = None
         self.fields['max_avail'] = None
@@ -262,7 +263,7 @@ class Ceph_OSD(MetricsField):
         super(Ceph_OSD, self).__init__()
         self.tags['cluster_id'] = None
         self.tags['osd_id'] = None
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.tags['host_domain_id'] = None
         self.fields['op_w'] = None
@@ -294,7 +295,7 @@ class DB_Relay(MetricsField):
 
     def __init__(self):
         super(DB_Relay, self).__init__()
-        self.tags['agenthost'] = None
+        self.fields['agenthost'] = None
         self.tags['agenthost_domain_id'] = None
         self.tags['dc_tag'] = 'na'
         self.tags['host'] = None
