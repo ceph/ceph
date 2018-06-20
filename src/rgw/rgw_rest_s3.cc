@@ -3859,6 +3859,14 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
    * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
    * by default. We don't need to change that. */
   if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s)) {
+    if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 17>()) {
+      ldout(s->cct, 17)
+	<< " payload_unsigned="
+	<< std::to_string(is_v4_payload_unsigned(exp_payload_hash))
+	<< " payload_empty="
+	<< std::to_string(is_v4_payload_empty(s))
+	<< dendl;
+    }
     return {
       access_key_id,
       client_signature,

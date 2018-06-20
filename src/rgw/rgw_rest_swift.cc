@@ -60,20 +60,15 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
     limit = (uint64_t)l;
   }
 
-  if (s->cct->_conf->rgw_swift_need_stats) {
-    bool stats, exists;
-    int r = s->info.args.get_bool("stats", &stats, &exists);
+  bool stats_arg;
+  int r = s->info.args.get_bool("stats", &wants_stats, &stats_arg);
 
-    if (r < 0) {
-      return r;
-    }
-
-    if (exists) {
-      need_stats = stats;
-    }
-  } else {
-    need_stats = false;
+  if (r < 0) {
+    return r;
   }
+
+  need_stats = (s->cct->_conf->rgw_swift_need_stats &&
+		stats_arg && wants_stats);
 
   return 0;
 }
@@ -221,9 +216,14 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& obj)
   s->formatter->open_object_section("container");
   s->formatter->dump_string("name", obj.bucket.name);
 
-  if (need_stats) {
-    s->formatter->dump_int("count", obj.count);
-    s->formatter->dump_int("bytes", obj.size);
+  if (wants_stats) {
+    if (need_stats) {
+      s->formatter->dump_int("count", obj.count);
+      s->formatter->dump_int("bytes", obj.size);
+    } else {
+      s->formatter->dump_int("count", 0L);
+      s->formatter->dump_int("bytes", 0L);
+    }
   }
 
   s->formatter->close_section();

@@ -36,7 +36,8 @@ public:
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
-  bool need_stats;
+  bool need_stats; // fetch bucket stats, override via rgw_swift_needs_stats
+  bool wants_stats; // api request expects stats values
   bool wants_reversed;
   std::string prefix;
   std::vector<RGWUserBuckets> reverse_buffer;
@@ -48,6 +49,7 @@ class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
 public:
   RGWListBuckets_ObjStore_SWIFT()
     : need_stats(true),
+      wants_stats(false),
       wants_reversed(false) {
   }
   ~RGWListBuckets_ObjStore_SWIFT() override {}
