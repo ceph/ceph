@@ -585,6 +585,8 @@ class RESTController(BaseController):
     @classmethod
     def endpoints(cls):
         result = super(RESTController, cls).endpoints()
+        res_id_params = cls.infer_resource_id()
+
         for _, func in inspect.getmembers(cls, predicate=callable):
             no_resource_id_params = False
             status = 200
@@ -596,30 +598,35 @@ class RESTController(BaseController):
                 meth = cls._method_mapping[func.__name__]
 
                 if meth['resource']:
-                    res_id_params = cls.infer_resource_id()
-                    if res_id_params is None:
+                    if not res_id_params:
                         no_resource_id_params = True
                     else:
-                        res_id_params = ["{{{}}}".format(p) for p in res_id_params]
-                        path += "/{}".format("/".join(res_id_params))
+                        path_params = ["{{{}}}".format(p) for p in res_id_params]
+                        path += "/{}".format("/".join(path_params))
 
                 status = meth['status']
                 method = meth['method']
 
             elif hasattr(func, "_collection_method_"):
-                path = "/{}".format(func.__name__)
+                if func._collection_method_['path']:
+                    path = func._collection_method_['path']
+                else:
+                    path = "/{}".format(func.__name__)
+                status = func._collection_method_['status']
                 method = func._collection_method_['method']
                 query_params = func._collection_method_['query_params']
 
             elif hasattr(func, "_resource_method_"):
-                res_id_params = cls.infer_resource_id()
-                if res_id_params is None:
+                if not res_id_params:
                     no_resource_id_params = True
                 else:
-                    res_id_params = ["{{{}}}".format(p) for p in res_id_params]
-                    path += "/{}".format("/".join(res_id_params))
-                    path += "/{}".format(func.__name__)
-
+                    path_params = ["{{{}}}".format(p) for p in res_id_params]
+                    path += "/{}".format("/".join(path_params))
+                    if func._resource_method_['path']:
+                        path += func._resource_method_['path']
+                    else:
+                        path += "/{}".format(func.__name__)
+                status = func._resource_method_['status']
                 method = func._resource_method_['method']
                 query_params = func._resource_method_['query_params']
 
@@ -628,10 +635,18 @@ class RESTController(BaseController):
 
             if no_resource_id_params:
                 raise TypeError("Could not infer the resource ID parameters for"
-                                " method {}. "
+                                " method {} of controller {}. "
                                 "Please specify the resource ID parameters "
                                 "using the RESOURCE_ID class property"
-                                .format(func.__name__))
+                                .format(func.__name__, cls.__name__))
+
+            if method in ['GET', 'DELETE']:
+                params = _get_function_params(func)
+                if res_id_params is None:
+                    res_id_params = []
+                if query_params is None:
+                    query_params = [p['name'] for p in params
+                                    if p['name'] not in res_id_params]
 
             func = cls._status_code_wrapper(func, status)
             endp_func = Endpoint(method, path=path,
@@ -650,26 +665,36 @@ class RESTController(BaseController):
         return wrapper
 
     @staticmethod
-    def Resource(method=None, query_params=None):
+    def Resource(method=None, path=None, status=None, query_params=None):
         if not method:
             method = 'GET'
+
+        if status is None:
+            status = 200
 
         def _wrapper(func):
             func._resource_method_ = {
                 'method': method,
+                'path': path,
+                'status': status,
                 'query_params': query_params
             }
             return func
         return _wrapper
 
     @staticmethod
-    def Collection(method=None, query_params=None):
+    def Collection(method=None, path=None, status=None, query_params=None):
         if not method:
             method = 'GET'
+
+        if status is None:
+            status = 200
 
         def _wrapper(func):
             func._collection_method_ = {
                 'method': method,
+                'path': path,
+                'status': status,
                 'query_params': query_params
             }
             return func
