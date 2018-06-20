@@ -646,7 +646,11 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def set_store(self, key, val):
         """
-        Set a value in this module's persistent key value store
+        Set a value in this module's persistent key value store.
+        If val is None, remove key from store
+
+        :param str key:
+        :param str val:
         """
         self._ceph_set_store(key, val)
 
