@@ -2695,11 +2695,12 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   bool exclusive = (!write_ofs && immutable_head()); /* immutable head object, need to verify nothing exists there
                                                         we could be racing with another upload, to the same
                                                         object and cleanup can be messy */
+  int write_size = (int)bl.length(); // return actual write size for throttle
   int ret = write_data(bl, write_ofs, phandle, pobj, exclusive);
   if (ret >= 0) { /* we might return, need to clear bl as it was already sent */
     bl.clear();
   }
-  return ret;
+  return write_size;
 }
 
 
@@ -7642,6 +7643,7 @@ public:
         return ret;
 
       ofs += size;
+      int write_size = ret; // get processor actual write size
 
       if (need_opstate && opstate) {
         /* need to update opstate repository with new state. This is ratelimited, so we're not
@@ -7650,7 +7652,7 @@ public:
         ret = opstate->renew_state();
         if (ret < 0) {
           ldout(cct, 0) << "ERROR: RGWRadosPutObj::handle_data(): failed to renew op state ret=" << ret << dendl;
-          int r = filter->throttle_data(handle, obj, size, false);
+          int r = filter->throttle_data(handle, obj, write_size, false);
           if (r < 0) {
             ldout(cct, 0) << "ERROR: RGWRadosPutObj::handle_data(): processor->throttle_data() returned " << r << dendl;
           }
@@ -7660,7 +7662,7 @@ public:
         need_opstate = false;
       }
 
-      ret = filter->throttle_data(handle, obj, size, false);
+      ret = filter->throttle_data(handle, obj, write_size, false);
       if (ret < 0)
         return ret;
     } while (again);

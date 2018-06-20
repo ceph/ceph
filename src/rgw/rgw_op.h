@@ -1862,14 +1862,14 @@ static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
     void *handle = nullptr;
     rgw_raw_obj obj;
 
-    uint64_t size = data.length();
-
     int ret = processor->handle_data(data, ofs, &handle, &obj, &again);
     if (ret < 0)
       return ret;
+
+    int write_size = ret; // get processor actual write size
     if (handle != nullptr)
     {
-      ret = processor->throttle_data(handle, obj, size, need_to_wait);
+      ret = processor->throttle_data(handle, obj, write_size, need_to_wait);
       if (ret < 0)
         return ret;
     }
