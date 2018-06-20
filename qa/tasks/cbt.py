@@ -3,7 +3,6 @@ import os
 import yaml
 
 from teuthology import misc
-from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology.task import Task
 
@@ -48,8 +47,8 @@ class CBT(Task):
         benchmark_config = self.config.get('benchmarks')
         benchmark_type = benchmark_config.keys()[0]
         if benchmark_type == 'librbdfio':
-          testdir = misc.get_testdir(self.ctx)
-          benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
+            testdir = misc.get_testdir(self.ctx)
+            benchmark_config['librbdfio']['cmd_path'] = os.path.join(testdir, 'fio/fio')
         if benchmark_type == 'cosbench':
             # create cosbench_dir and cosbench_xml_dir
             testdir = misc.get_testdir(self.ctx)
@@ -58,11 +57,9 @@ class CBT(Task):
             self.ctx.cluster.run(args=['mkdir', '-p', '-m0755', '--', benchmark_config['cosbench']['cosbench_xml_dir']])
             benchmark_config['cosbench']['controller'] = cos_driver[0]
 
-            # set auth details
-            remotes_and_roles = self.ctx.cluster.remotes.items()
-            ips = [host for (host, port) in
-                   (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
-            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:7280/auth/v1.0;retry=9" %(ips[0])
+            # set auth details using first client
+            clients = [r.hostname for r in self.ctx.cluster.only(misc.is_type('client')).remotes.keys()]
+            benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:7280/auth/v1.0;retry=9" % (clients[0])
 
         return dict(
             cluster=cluster_config,
