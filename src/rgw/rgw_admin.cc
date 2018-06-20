@@ -5934,9 +5934,8 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECTS_EXPIRE) {
-    int ret = store->process_expire_objects();
-    if (ret < 0) {
-      cerr << "ERROR: process_expire_objects() processing returned error: " << cpp_strerror(-ret) << std::endl;
+    if (!store->process_expire_objects()) {
+      cerr << "ERROR: process_expire_objects() processing returned error." << std::endl;
       return 1;
     }
   }
