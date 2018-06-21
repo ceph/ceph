@@ -238,7 +238,7 @@ orchestration tools along Ceph in the near future, but currently, you will have
 to install and configure both manually. After you have installed Prometheus and
 Grafana on your preferred hosts, proceed with the following steps:
 
- 1. Enable the Ceph Exporter which comes as Ceph Manager module by running::
+#. Enable the Ceph Exporter which comes as Ceph Manager module by running::
 
     $ ceph mgr module enable prometheus
 
@@ -246,8 +246,8 @@ Grafana on your preferred hosts, proceed with the following steps:
     <http://docs.ceph.com/docs/master/mgr/prometheus/>`_ of the prometheus
     module.
 
- 2. Add the corresponding scrape configuration to Prometheus. This may look
-    like::
+#. Add the corresponding scrape configuration to Prometheus. This may look
+   like::
 
         global:
           scrape_interval: 5s
@@ -263,16 +263,16 @@ Grafana on your preferred hosts, proceed with the following steps:
             static_configs:
               - targets: ['localhost:9100']
 
- 3. Add Prometheus as data source to Grafana
+#. Add Prometheus as data source to Grafana
 
- 4. Install the `vonage-status-panel` plugin using::
+#. Install the `vonage-status-panel` plugin using::
 
         grafana-cli plugins install vonage-status-panel
 
- 4. Add the Dashboards to Grafana by importing them
+#. Add the Dashboards to Grafana by importing them
 
- 5. Configure Grafana in `/etc/grafana/grafana.ini` to adapt the URLs to the
-    Ceph Dashboard properly::
+#. Configure Grafana in `/etc/grafana/grafana.ini` to adapt the URLs to the
+   Ceph Dashboard properly::
 
         root_url = http://localhost:3000/api/grafana/proxy
 
