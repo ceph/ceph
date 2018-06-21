@@ -7928,6 +7928,13 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
     }
     break;
   default:
+    if (!session->is_capable("osd", MON_CAP_W)) {
+      dout(0) << "got pool op from entity with insufficient privileges. "
+              << "message: " << *m  << std::endl
+              << "caps: " << session->caps << dendl;
+      _pool_op_reply(op, -EPERM, osdmap.get_epoch());
+      return true;
+    }
     break;
   }
 
@@ -8015,19 +8022,6 @@ bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
-  MonSession *session = m->get_session();
-  if (!session) {
-    _pool_op_reply(op, -EPERM, osdmap.get_epoch());
-    return true;
-  }
-  if (!session->is_capable("osd", MON_CAP_W)) {
-    dout(5) << "attempt to create new pool without sufficient auid privileges!"
-	    << "message: " << *m  << std::endl
-	    << "caps: " << session->caps << dendl;
-    _pool_op_reply(op, -EPERM, osdmap.get_epoch());
-    return true;
-  }
-
   int64_t pool = osdmap.lookup_pg_pool_name(m->name.c_str());
   if (pool >= 0) {
     _pool_op_reply(op, 0, osdmap.get_epoch());
