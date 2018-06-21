@@ -125,7 +125,7 @@ public:
   }
   void decode(bufferlist::const_iterator &p);
   void set_client_metadata(std::map<std::string, std::string> const &meta);
-  std::string get_human_name() const {return human_name;}
+  const std::string& get_human_name() const {return human_name;}
 
   // Ephemeral state for tracking progress of capability recalls
   utime_t recalled_at;  // When was I asked to SESSION_RECALL?
