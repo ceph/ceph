@@ -10,6 +10,7 @@ from .. import logger
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
 from ..rest_client import RequestException
+from ..exceptions import DashboardException
 
 
 @ApiController('/rgw')
@@ -120,3 +121,23 @@ class RgwBucket(RESTController):
             cherrypy.response.headers['Content-Type'] = 'application/json'
             cherrypy.response.status = 500
             return {'detail': str(e)}
+
+
+@ApiController('/rgw/user')
+@AuthRequired()
+class RgwUser(RESTController):
+
+    def delete(self, uid):
+        try:
+            rgw_client = RgwClient.admin_instance()
+
+            # Ensure the user is not configured to access the Object Gateway.
+            if rgw_client.userid == uid:
+                raise DashboardException(msg='Unable to delete "{}" - this user '
+                                             'account is required for managing the '
+                                             'Object Gateway'.format(uid))
+
+            # Finally redirect request to the RGW proxy.
+            return rgw_client.proxy('DELETE', 'user', cherrypy.request.params, None)
+        except (DashboardException, RequestException) as e:
+            raise DashboardException(e, component='rgw')
