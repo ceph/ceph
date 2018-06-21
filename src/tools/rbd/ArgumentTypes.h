@@ -60,6 +60,7 @@ static const std::string DEST_JOURNAL_NAME("dest-journal");
 static const std::string PATH("path");
 static const std::string FROM_SNAPSHOT_NAME("from-snap");
 static const std::string WHOLE_OBJECT("whole-object");
+static const std::string NAMESPACE_NAME("namespace");
 
 static const std::string IMAGE_FORMAT("image-format");
 static const std::string IMAGE_NEW_FORMAT("new-format");
@@ -137,6 +138,8 @@ void add_all_option(boost::program_options::options_description *opt,
 void add_pool_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix = "");
+void add_namespace_option(boost::program_options::options_description *opt,
+                          ArgumentModifier modifier);
 
 void add_image_option(boost::program_options::options_description *opt,
                       ArgumentModifier modifier,
@@ -159,6 +162,8 @@ void add_journal_option(boost::program_options::options_description *opt,
 
 void add_pool_options(boost::program_options::options_description *pos,
                       boost::program_options::options_description *opt);
+void add_namespace_options(boost::program_options::options_description *pos,
+                           boost::program_options::options_description *opt);
 
 void add_image_spec_options(boost::program_options::options_description *pos,
                             boost::program_options::options_description *opt,

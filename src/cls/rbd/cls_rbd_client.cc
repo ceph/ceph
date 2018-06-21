@@ -1254,6 +1254,40 @@ namespace librbd {
       return ioctx->operate(oid, &op);
     }
 
+    void dir_state_assert(librados::ObjectOperation *op,
+                          cls::rbd::DirectoryState directory_state)
+    {
+      bufferlist bl;
+      encode(directory_state, bl);
+      op->exec("rbd", "dir_state_assert", bl);
+    }
+
+    int dir_state_assert(librados::IoCtx *ioctx, const std::string &oid,
+                         cls::rbd::DirectoryState directory_state)
+    {
+      librados::ObjectWriteOperation op;
+      dir_state_assert(&op, directory_state);
+
+      return ioctx->operate(oid, &op);
+    }
+
+    void dir_state_set(librados::ObjectWriteOperation *op,
+                       cls::rbd::DirectoryState directory_state)
+    {
+      bufferlist bl;
+      encode(directory_state, bl);
+      op->exec("rbd", "dir_state_set", bl);
+    }
+
+    int dir_state_set(librados::IoCtx *ioctx, const std::string &oid,
+                      cls::rbd::DirectoryState directory_state)
+    {
+      librados::ObjectWriteOperation op;
+      dir_state_set(&op, directory_state);
+
+      return ioctx->operate(oid, &op);
+    }
+
     void dir_remove_image(librados::ObjectWriteOperation *op,
 			  const std::string &name, const std::string &id)
     {
@@ -2464,6 +2498,78 @@ namespace librbd {
 
       auto it = out_bl.cbegin();
       return trash_get_finish(&it, trash_spec);
+    }
+
+    void namespace_add(librados::ObjectWriteOperation *op,
+                       const std::string &name)
+    {
+      bufferlist bl;
+      encode(name, bl);
+      op->exec("rbd", "namespace_add", bl);
+    }
+
+    int namespace_add(librados::IoCtx *ioctx, const std::string &name)
+    {
+      librados::ObjectWriteOperation op;
+      namespace_add(&op, name);
+
+      return ioctx->operate(RBD_NAMESPACE, &op);
+    }
+
+    void namespace_remove(librados::ObjectWriteOperation *op,
+                          const std::string &name)
+    {
+      bufferlist bl;
+      encode(name, bl);
+      op->exec("rbd", "namespace_remove", bl);
+    }
+
+    int namespace_remove(librados::IoCtx *ioctx, const std::string &name)
+    {
+      librados::ObjectWriteOperation op;
+      namespace_remove(&op, name);
+
+      return ioctx->operate(RBD_NAMESPACE, &op);
+    }
+
+    void namespace_list_start(librados::ObjectReadOperation *op,
+                              const std::string &start, uint64_t max_return)
+    {
+      bufferlist bl;
+      encode(start, bl);
+      encode(max_return, bl);
+      op->exec("rbd", "namespace_list", bl);
+    }
+
+    int namespace_list_finish(bufferlist::const_iterator *it,
+                              std::list<std::string> *entries)
+    {
+      assert(entries);
+
+      try {
+	decode(*entries, *it);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+
+    int namespace_list(librados::IoCtx *ioctx,
+                       const std::string &start, uint64_t max_return,
+                       std::list<std::string> *entries)
+    {
+      librados::ObjectReadOperation op;
+      namespace_list_start(&op, start, max_return);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(RBD_NAMESPACE, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      auto iter = out_bl.cbegin();
+      return namespace_list_finish(&iter, entries);
     }
 
   } // namespace cls_client

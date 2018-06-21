@@ -611,6 +611,26 @@ test_thick_provision() {
     rbd ls | grep test1 | wc -l | grep '^0$'
 }
 
+test_namespace() {
+    echo "testing namespace..."
+    remove_images
+
+    rbd namespace ls | wc -l | grep '^0$'
+    rbd namespace create rbd test1
+    rbd namespace create --pool rbd test2
+    rbd namespace create --namespace test3
+    rbd namespace create rbd test3 || true
+
+    rbd namespace list | grep 'test' | wc -l | grep '^3$'
+
+    rbd namespace remove --pool rbd missing || true
+    rbd namespace remove --pool rbd test1
+    rbd namespace remove --namespace test3
+
+    rbd namespace list | grep 'test' | wc -l | grep '^1$'
+    rbd namespace remove rbd test2
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -628,5 +648,6 @@ test_purge
 test_deep_copy_clone
 test_clone_v2
 test_thick_provision
+test_namespace
 
 echo OK

@@ -2538,6 +2538,96 @@ int dir_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return dir_remove_image_helper(hctx, name, id);
 }
 
+/**
+ * Verify the current state of the directory
+ *
+ * Input:
+ * @param state the DirectoryState of the directory
+ *
+ * Output:
+ * @returns -ENOENT if the state does not match
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_state_assert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::DirectoryState directory_state;
+  try {
+    auto iter = in->cbegin();
+    decode(directory_state, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  cls::rbd::DirectoryState on_disk_directory_state;
+  int r = read_key(hctx, "state", &on_disk_directory_state);
+  if (r < 0) {
+    return r;
+  }
+
+  if (directory_state != on_disk_directory_state) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+/**
+ * Set the current state of the directory
+ *
+ * Input:
+ * @param state the DirectoryState of the directory
+ *
+ * Output:
+ * @returns -ENOENT if the state does not match
+ * @returns 0 on success, negative error code on failure
+ */
+int dir_state_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls::rbd::DirectoryState directory_state;
+  try {
+    auto iter = in->cbegin();
+    decode(directory_state, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  switch (directory_state) {
+  case cls::rbd::DIRECTORY_STATE_READY:
+    break;
+  case cls::rbd::DIRECTORY_STATE_ADD_DISABLED:
+    {
+      if (r == -ENOENT) {
+        return r;
+      }
+
+      // verify that the directory is empty
+      std::map<std::string, bufferlist> vals;
+      bool more;
+      r = cls_cxx_map_get_vals(hctx, RBD_DIR_NAME_KEY_PREFIX,
+                               RBD_DIR_NAME_KEY_PREFIX, 1, &vals, &more);
+      if (r < 0) {
+        return r;
+      } else if (!vals.empty()) {
+        return -EBUSY;
+      }
+    }
+    break;
+  default:
+    return -EINVAL;
+  }
+
+  r = write_key(hctx, "state", directory_state);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int object_map_read(cls_method_context_t hctx, BitVector<2> &object_map)
 {
   uint64_t size;
@@ -6077,6 +6167,148 @@ int trash_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return r;
 }
 
+namespace nspace {
+
+const std::string NAME_KEY_PREFIX("name_");
+
+std::string key_for_name(const std::string& name) {
+  return NAME_KEY_PREFIX + name;
+}
+
+std::string name_from_key(const std::string &key) {
+  return key.substr(NAME_KEY_PREFIX.size());
+}
+
+} // namespace nspace
+
+/**
+ * Add a namespace to the namespace directory.
+ *
+ * Input:
+ * @param name the name of the namespace
+ *
+ * Output:
+ * @returns -EEXIST if the namespace is already exists
+ * @returns 0 on success, negative error code on failure
+ */
+int namespace_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  std::string name;
+  try {
+    auto iter = in->cbegin();
+    decode(name, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string key(nspace::key_for_name(name));
+  bufferlist value;
+  int r = cls_cxx_map_get_val(hctx, key, &value);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  } else if (r == 0) {
+    return -EEXIST;
+  }
+
+  r = cls_cxx_map_set_val(hctx, key, &value);
+  if (r < 0) {
+    CLS_ERR("failed to set omap key: %s", key.c_str());
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Add a namespace to the namespace directory.
+ *
+ * Input:
+ * @param name the name of the namespace
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int namespace_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  std::string name;
+  try {
+    auto iter = in->cbegin();
+    decode(name, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::string key(nspace::key_for_name(name));
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, key, &bl);
+  if (r < 0) {
+    return r;
+  }
+
+  r = cls_cxx_map_remove_key(hctx, key);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Returns the list of namespaces in the rbd_namespace object
+ *
+ * Input:
+ * @param start_after which name to begin listing after
+ *        (use the empty string to start at the beginning)
+ * @param max_return the maximum number of names to list
+ *
+ * Output:
+ * @param data list of namespace names
+ * @returns 0 on success, negative error code on failure
+ */
+int namespace_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  string start_after;
+  uint64_t max_return;
+  try {
+    auto iter = in->cbegin();
+    decode(start_after, iter);
+    decode(max_return, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  std::list<std::string> data;
+  std::string last_read = nspace::key_for_name(start_after);
+  bool more = true;
+
+  CLS_LOG(20, "namespace_list");
+  while (data.size() < max_return) {
+    std::map<std::string, bufferlist> raw_data;
+    int max_read = std::min<int32_t>(RBD_MAX_KEYS_READ,
+                                     max_return - data.size());
+    int r = cls_cxx_map_get_vals(hctx, last_read, nspace::NAME_KEY_PREFIX,
+                                 max_read, &raw_data, &more);
+    if (r < 0) {
+      CLS_ERR("failed to read the vals off of disk: %s",
+              cpp_strerror(r).c_str());
+      return r;
+    }
+
+    for (auto& it : raw_data) {
+      data.push_back(nspace::name_from_key(it.first));
+    }
+
+    if (raw_data.empty() || !more) {
+      break;
+    }
+
+    last_read = raw_data.rbegin()->first;
+  }
+
+  encode(data, *out);
+  return 0;
+}
+
 CLS_INIT(rbd)
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -6122,6 +6354,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_dir_add_image;
   cls_method_handle_t h_dir_remove_image;
   cls_method_handle_t h_dir_rename_image;
+  cls_method_handle_t h_dir_state_assert;
+  cls_method_handle_t h_dir_state_set;
   cls_method_handle_t h_object_map_load;
   cls_method_handle_t h_object_map_save;
   cls_method_handle_t h_object_map_resize;
@@ -6185,6 +6419,9 @@ CLS_INIT(rbd)
   cls_method_handle_t h_trash_remove;
   cls_method_handle_t h_trash_list;
   cls_method_handle_t h_trash_get;
+  cls_method_handle_t h_namespace_add;
+  cls_method_handle_t h_namespace_remove;
+  cls_method_handle_t h_namespace_list;
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
@@ -6338,6 +6575,11 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "dir_rename_image",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  dir_rename_image, &h_dir_rename_image);
+  cls_register_cxx_method(h_class, "dir_state_assert", CLS_METHOD_RD,
+                          dir_state_assert, &h_dir_state_assert);
+  cls_register_cxx_method(h_class, "dir_state_set",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+                          dir_state_set, &h_dir_state_set);
 
   /* methods for the rbd_object_map.$image_id object */
   cls_register_cxx_method(h_class, "object_map_load",
@@ -6507,5 +6749,13 @@ CLS_INIT(rbd)
                           CLS_METHOD_RD,
                           trash_get, &h_trash_get);
 
-  return;
+  /* rbd_namespace object methods */
+  cls_register_cxx_method(h_class, "namespace_add",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          namespace_add, &h_namespace_add);
+  cls_register_cxx_method(h_class, "namespace_remove",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          namespace_remove, &h_namespace_remove);
+  cls_register_cxx_method(h_class, "namespace_list", CLS_METHOD_RD,
+                          namespace_list, &h_namespace_list);
 }
