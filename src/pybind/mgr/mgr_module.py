@@ -622,28 +622,6 @@ class MgrModule(ceph_module.BaseMgrModule):
         self._validate_option(key)
         return self._set_localized(key, val, self._set_config)
 
-    def set_store_json(self, key, val):
-        """
-        Helper for setting json-serialized stored data
-
-        :param str key:
-        :param val: json-serializable object
-        """
-        self.set_store(key, json.dumps(val))
-
-    def get_store_json(self, key):
-        """
-        Helper for getting json-serialized stored data
-
-        :param str key:
-        :return: object
-        """
-        raw = self.get_store(key)
-        if raw is None:
-            return None
-        else:
-            return json.loads(raw)
-
     def set_store(self, key, val):
         """
         Set a value in this module's persistent key value store
