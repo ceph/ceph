@@ -518,27 +518,6 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._set_localized(key, val, self.set_config)
 
-    def set_store_json(self, key, val):
-        """
-        Helper for setting json-serialized stored data
-
-        :param key: str
-        :param val: json-serializable object
-        """
-        self.set_store(key, json.dumps(val))
-
-    def get_store_json(self, key):
-        """
-        Helper for getting json-serialized stored data
-
-        :param key: str
-        :return: object
-        """
-        raw = self.get_store(key)
-        if raw is None:
-            return None
-        else:
-            return json.loads(raw)
 
     def set_store(self, key, val):
         """

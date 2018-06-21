@@ -143,8 +143,6 @@ class Module(MgrModule):
         self.set_store("testkey", "testvalue")
         assert self.get_store("testkey") == "testvalue"
 
-        self.set_store_json("testjsonkey", {"testblob": 2})
-        assert self.get_store_json("testjsonkey") == {"testblob": 2}
 
     def _self_test_perf_counters(self):
         self.get_perf_schema("osd", "0")
