@@ -30,6 +30,7 @@
 #include "librbd/api/Group.h"
 #include "librbd/api/Image.h"
 #include "librbd/api/Mirror.h"
+#include "librbd/api/Namespace.h"
 #include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
@@ -613,6 +614,19 @@ namespace librbd {
     int r = librbd::trash_restore(io_ctx, id, name);
     tracepoint(librbd, trash_undelete_exit, r);
     return r;
+  }
+
+  int RBD::namespace_create(IoCtx& io_ctx, const char *namespace_name) {
+    return librbd::api::Namespace<>::create(io_ctx, namespace_name);
+  }
+
+  int RBD::namespace_remove(IoCtx& io_ctx, const char *namespace_name) {
+    return librbd::api::Namespace<>::remove(io_ctx, namespace_name);
+  }
+
+  int RBD::namespace_list(IoCtx& io_ctx,
+                          std::vector<std::string>* namespace_names) {
+    return librbd::api::Namespace<>::list(io_ctx, namespace_names);
   }
 
   int RBD::list(IoCtx& io_ctx, vector<string>& names)
@@ -2682,6 +2696,54 @@ extern "C" int rbd_trash_restore(rados_ioctx_t p, const char *id,
   int r = librbd::trash_restore(io_ctx, id, name);
   tracepoint(librbd, trash_undelete_exit, r);
   return r;
+}
+
+extern "C" int rbd_namespace_create(rados_ioctx_t io,
+                                    const char *namespace_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+
+  return librbd::api::Namespace<>::create(io_ctx, namespace_name);
+}
+
+extern "C" int rbd_namespace_remove(rados_ioctx_t io,
+                                    const char *namespace_name) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+
+  return librbd::api::Namespace<>::remove(io_ctx, namespace_name);
+}
+
+extern "C" int rbd_namespace_list(rados_ioctx_t io, char *names, size_t *size) {
+  librados::IoCtx io_ctx;
+  librados::IoCtx::from_rados_ioctx_t(io, io_ctx);
+
+  if (names == nullptr || size == nullptr) {
+    return -EINVAL;
+  }
+
+  std::vector<std::string> cpp_names;
+  int r = librbd::api::Namespace<>::list(io_ctx, &cpp_names);
+  if (r < 0) {
+    return r;
+  }
+
+  size_t expected_size = 0;
+  for (size_t i = 0; i < cpp_names.size(); i++) {
+    expected_size += cpp_names[i].size() + 1;
+  }
+  if (*size < expected_size) {
+    *size = expected_size;
+    return -ERANGE;
+  }
+
+  for (int i = 0; i < (int)cpp_names.size(); i++) {
+    const char* name = cpp_names[i].c_str();
+    strcpy(names, name);
+    names += strlen(names) + 1;
+  }
+
+  return (int)expected_size;
 }
 
 extern "C" int rbd_copy(rbd_image_t image, rados_ioctx_t dest_p,

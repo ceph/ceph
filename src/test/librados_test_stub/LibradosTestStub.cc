@@ -733,6 +733,11 @@ int IoCtx::application_metadata_list(const std::string& app_name,
   return -EOPNOTSUPP;
 }
 
+void IoCtx::set_namespace(const std::string& nspace) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  ctx->set_namespace(nspace);
+}
+
 static int save_operation_result(int result, int *pval) {
   if (pval != NULL) {
     *pval = result;

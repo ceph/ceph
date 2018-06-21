@@ -212,6 +212,21 @@ std::string get_pool_name(const po::variables_map &vm, size_t *arg_index) {
   return pool_name;
 }
 
+std::string get_namespace_name(const boost::program_options::variables_map &vm,
+                               size_t *arg_index) {
+  std::string namespace_name;
+  if (vm.count(at::NAMESPACE_NAME)) {
+    namespace_name = vm[at::NAMESPACE_NAME].as<std::string>();
+  } else {
+    namespace_name = get_positional_argument(vm, *arg_index);
+    if (!namespace_name.empty()) {
+       ++(*arg_index);
+    }
+  }
+
+  return namespace_name;
+}
+
 int get_special_pool_group_names(const po::variables_map &vm,
 				 size_t *arg_index,
 				 std::string *group_pool_name,

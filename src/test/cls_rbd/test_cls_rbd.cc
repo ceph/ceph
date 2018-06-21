@@ -245,6 +245,11 @@ TEST_F(TestClsRbd, directory_methods)
   string invalid_id = ".abc";
   string empty;
 
+  ASSERT_EQ(-ENOENT, dir_state_assert(&ioctx, oid,
+                                      cls::rbd::DIRECTORY_STATE_READY));
+  ASSERT_EQ(-ENOENT, dir_state_set(&ioctx, oid,
+                                   cls::rbd::DIRECTORY_STATE_ADD_DISABLED));
+
   ASSERT_EQ(-ENOENT, dir_get_id(&ioctx, oid, imgname, &id));
   ASSERT_EQ(-ENOENT, dir_get_name(&ioctx, oid, valid_id, &name));
   ASSERT_EQ(-ENOENT, dir_remove_image(&ioctx, oid, imgname, valid_id));
@@ -261,7 +266,13 @@ TEST_F(TestClsRbd, directory_methods)
   ASSERT_EQ(0u, images.size());
   ASSERT_EQ(0, ioctx.remove(oid));
 
+  ASSERT_EQ(0, dir_state_set(&ioctx, oid, cls::rbd::DIRECTORY_STATE_READY));
+  ASSERT_EQ(0, dir_state_assert(&ioctx, oid, cls::rbd::DIRECTORY_STATE_READY));
+
   ASSERT_EQ(0, dir_add_image(&ioctx, oid, imgname, valid_id));
+  ASSERT_EQ(-EBUSY, dir_state_set(&ioctx, oid,
+                                  cls::rbd::DIRECTORY_STATE_ADD_DISABLED));
+
   ASSERT_EQ(-EEXIST, dir_add_image(&ioctx, oid, imgname, valid_id2));
   ASSERT_EQ(-EBADF, dir_add_image(&ioctx, oid, imgname2, valid_id));
   ASSERT_EQ(0, dir_list(&ioctx, oid, "", 30, &images));
@@ -2479,6 +2490,7 @@ TEST_F(TestClsRbd, group_snap_get_by_id) {
   ASSERT_EQ(snap.name, received_snap.name);
   ASSERT_EQ(snap.state, received_snap.state);
 }
+
 TEST_F(TestClsRbd, trash_methods)
 {
   librados::IoCtx ioctx;
@@ -2718,3 +2730,37 @@ TEST_F(TestClsRbd, clone_child)
   ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_CHILD) == 0ULL);
 }
 
+TEST_F(TestClsRbd, namespace_methods)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string name1 = "123456789";
+  string name2 = "123456780";
+
+  std::list<std::string> entries;
+  ASSERT_EQ(-ENOENT, namespace_list(&ioctx, "", 1024, &entries));
+
+  ASSERT_EQ(0, namespace_add(&ioctx, name1));
+  ASSERT_EQ(-EEXIST, namespace_add(&ioctx, name1));
+
+  ASSERT_EQ(0, namespace_remove(&ioctx, name1));
+  ASSERT_EQ(-ENOENT, namespace_remove(&ioctx, name1));
+
+  ASSERT_EQ(0, namespace_list(&ioctx, "", 1024, &entries));
+  ASSERT_TRUE(entries.empty());
+
+  ASSERT_EQ(0, namespace_add(&ioctx, name1));
+  ASSERT_EQ(0, namespace_add(&ioctx, name2));
+
+  ASSERT_EQ(0, namespace_list(&ioctx, "", 1, &entries));
+  ASSERT_EQ(1U, entries.size());
+  ASSERT_EQ(name2, entries.front());
+
+  ASSERT_EQ(0, namespace_list(&ioctx, name2, 1, &entries));
+  ASSERT_EQ(1U, entries.size());
+  ASSERT_EQ(name1, entries.front());
+
+  ASSERT_EQ(0, namespace_list(&ioctx, name1, 1, &entries));
+  ASSERT_TRUE(entries.empty());
+}

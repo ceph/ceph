@@ -239,6 +239,10 @@ public:
                       std::vector<group_snap_info_t> *snaps,
                       size_t group_snap_info_size);
 
+  int namespace_create(IoCtx& ioctx, const char *namespace_name);
+  int namespace_remove(IoCtx& ioctx, const char *namespace_name);
+  int namespace_list(IoCtx& io_ctx, std::vector<std::string>* namespace_names);
+
 private:
   /* We don't allow assignment or copying */
   RBD(const RBD& rhs);
