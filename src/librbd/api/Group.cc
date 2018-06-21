@@ -499,6 +499,11 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
 		 << " group name " << group_name << " image "
 		 << &image_ioctx << " name " << image_name << dendl;
 
+  if (group_ioctx.get_namespace() != image_ioctx.get_namespace()) {
+    lderr(cct) << "group and image cannot be in different namespaces" << dendl;
+    return -EINVAL;
+  }
+
   string group_id;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
@@ -572,6 +577,11 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
 		<< " group name " << group_name << " image "
 		<< &image_ioctx << " name " << image_name << dendl;
+
+  if (group_ioctx.get_namespace() != image_ioctx.get_namespace()) {
+    lderr(cct) << "group and image cannot be in different namespaces" << dendl;
+    return -EINVAL;
+  }
 
   string group_id;
 
