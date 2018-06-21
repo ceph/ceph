@@ -63,13 +63,13 @@ Cloned bios (dm-snapshot.ko, based on generic/081):
   $ rbd create --size 300M img
   $ DEV=$(sudo rbd map img)
   $ sudo vgcreate vg_img $DEV
-    Physical volume "/dev/rbd?" successfully created (glob)
+    Physical volume "/dev/rbd?" successfully created* (glob)
     Volume group "vg_img" successfully created
   $ sudo lvcreate -L 256M -n lv_img vg_img
     Logical volume "lv_img" created.
   $ udevadm settle
   $ sudo mkfs.ext4 -q /dev/mapper/vg_img-lv_img
-  $ sudo lvcreate -L 4M --snapshot -n lv_snap vg_img/lv_img
+  $ sudo lvcreate -L 4M --snapshot -n lv_snap vg_img/lv_img | grep created
     Logical volume "lv_snap" created.
   $ udevadm settle
   $ sudo mount /dev/mapper/vg_img-lv_snap /mnt
@@ -80,6 +80,6 @@ Cloned bios (dm-snapshot.ko, based on generic/081):
     Logical volume "lv_img" successfully removed
     Volume group "vg_img" successfully removed
   $ sudo pvremove $DEV
-    Labels on physical volume "/dev/rbd?" successfully wiped (glob)
+    Labels on physical volume "/dev/rbd?" successfully wiped* (glob)
   $ sudo rbd unmap $DEV
   $ rbd rm --no-progress img
