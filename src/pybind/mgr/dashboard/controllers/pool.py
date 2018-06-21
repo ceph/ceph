@@ -57,13 +57,18 @@ class Pool(RESTController):
     def list(self, attrs=None, stats=False):
         return self._pool_list(attrs, stats)
 
-    def get(self, pool_name, attrs=None, stats=False):
+    def _get(self, pool_name, attrs=None, stats=False):
         # type: (str, str, bool) -> dict
         pools = self._pool_list(attrs, stats)
         pool = [pool for pool in pools if pool['pool_name'] == pool_name]
         if not pool:
             raise cherrypy.NotFound('No such pool')
         return pool[0]
+
+    # '_get' will be wrapped into JSON through '_request_wrapper'
+    def get(self, pool_name, attrs=None, stats=False):
+        # type: (str, str, bool) -> str
+        return self._get(pool_name, attrs, stats)
 
     @pool_task('delete', ['{pool_name}'])
     @handle_send_command_error('pool')
@@ -94,10 +99,9 @@ class Pool(RESTController):
             def set_app(what, app):
                 CephService.send_command('mon', 'osd pool application ' + what, pool=pool, app=app,
                                          force='--yes-i-really-mean-it')
-
             if update_existing:
                 original_app_metadata = set(
-                    self.get(pool, 'application_metadata')['application_metadata'])
+                    self._get(pool, 'application_metadata')['application_metadata'])
             else:
                 original_app_metadata = set()
 
@@ -106,13 +110,13 @@ class Pool(RESTController):
             for app in set(application_metadata) - original_app_metadata:
                 set_app('enable', app)
 
-        for key, value in kwargs.items():
-            def set_key(key):
-                CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=str(value))
+        def set_key(key, value):
+            CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=str(value))
 
-            set_key(key)
+        for key, value in kwargs.items():
+            set_key(key, value)
             if key == 'pg_num':
-                set_key('pgp_num')
+                set_key('pgp_num', value)
 
     @Endpoint()
     @ReadPermission
