@@ -157,8 +157,6 @@ a particular prefix (i.e. all keys starting with a particular substring).
 
 .. automethod:: MgrModule.get_store
 .. automethod:: MgrModule.set_store
-.. automethod:: MgrModule.set_store_json
-.. automethod:: MgrModule.get_store_json
 .. automethod:: MgrModule.get_localized_store
 .. automethod:: MgrModule.set_localized_store
 .. automethod:: MgrModule.get_store_prefix
