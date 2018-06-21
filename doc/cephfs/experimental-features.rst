@@ -21,7 +21,7 @@ load on the MDS. It is not sufficiently tested to support at this time, although
 failures within it are unlikely to make non-inlined data inaccessible
 
 Inline data has always been off by default and requires setting
-the "inline_data" flag.
+the ``inline_data`` flag.
 
 Mantle: Programmable Metadata Load Balancer
 -------------------------------------------
@@ -49,7 +49,7 @@ Snapshots are known not to work with multi-MDS filesystems.
 For somewhat obscure implementation reasons, the kernel client only supports up
 to 400 snapshots (http://tracker.ceph.com/issues/21420).
 
-Snapshotting was blocked off with the "allow_new_snaps" flag prior to Firefly.
+Snapshotting was blocked off with the ``allow_new_snaps`` flag prior to Firefly.
 
 Multiple filesystems within a Ceph cluster
 ------------------------------------------
@@ -70,7 +70,7 @@ Note that snapshots and multiple filesystems are *not* tested in combination
 and may not work together; see above.
 
 Multiple filesystems were available starting in the Jewel release candidates
-but were protected behind the "enable_multiple" flag before the final release.
+but were protected behind the ``enable_multiple`` flag before the final release.
 
 
 Previously experimental features
