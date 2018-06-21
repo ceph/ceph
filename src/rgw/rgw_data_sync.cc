@@ -2869,6 +2869,12 @@ int RGWBucketShardIncrementalSyncCR::operate()
               /* we have reported this error */
             }
           }
+          if (sync_status != 0)
+            break;
+        }
+        if (sync_status != 0) {
+          /* get error, stop */
+          break;
         }
         if (!marker_tracker.index_key_to_marker(key, cur_id)) {
           set_status() << "can't do op, sync already in progress for object";
