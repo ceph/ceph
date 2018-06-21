@@ -120,7 +120,7 @@ if os.path.exists(os.path.join(MYPDIR, "CMakeCache.txt")) \
         respawn_in_path(lib_path, pybind_path, pythonlib_path)
 
         if 'PATH' in os.environ and bin_path not in os.environ['PATH']:
-            os.environ['PATH'] += ':' + bin_path
+            os.environ['PATH'] = os.pathsep.join([bin_path, os.environ['PATH']])
 
 import argparse
 import errno
