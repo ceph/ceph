@@ -278,6 +278,7 @@ int execute_list(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   std::string image_id;
@@ -286,30 +287,18 @@ int execute_list(const po::variables_map &vm,
     image_id = vm[at::IMAGE_ID].as<std::string>();
   }
 
-  bool has_image_spec = utils::check_if_image_spec_present(
-      vm, at::ARGUMENT_MODIFIER_NONE, arg_index);
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, image_id.empty(),
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
 
-  if (!image_id.empty() && has_image_spec) {
+  if (!image_id.empty() && !image_name.empty()) {
     std::cerr << "rbd: trying to access image using both name and id. "
               << std::endl;
     return -EINVAL;
-  }
-
-  int r;
-  if (image_id.empty()) {
-    r = utils::get_pool_image_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                             &arg_index, &pool_name,
-                                             &image_name, &snap_name,
-                                             utils::SNAPSHOT_PRESENCE_NONE,
-                                             utils::SPEC_VALIDATION_NONE);
-  } else {
-    r = utils::get_pool_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                       &arg_index, &pool_name, &snap_name,
-                                       utils::SNAPSHOT_PRESENCE_NONE,
-                                       utils::SPEC_VALIDATION_NONE);
-  }
-  if (r < 0) {
-    return r;
   }
 
   at::Format::Formatter formatter;
@@ -321,8 +310,8 @@ int execute_list(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, image_id, "", true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name,
+                                 image_id, "", true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -346,11 +335,13 @@ int execute_create(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_SNAP);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_SNAP);
   if (r < 0) {
     return r;
   }
@@ -358,8 +349,8 @@ int execute_create(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
-                                 &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -387,6 +378,7 @@ int execute_remove(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   std::string image_id;
@@ -396,36 +388,24 @@ int execute_remove(const po::variables_map &vm,
     image_id = vm[at::IMAGE_ID].as<std::string>();
   }
 
-  bool has_image_spec = utils::check_if_image_spec_present(
-      vm, at::ARGUMENT_MODIFIER_NONE, arg_index);
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, image_id.empty(),
+    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
 
-  if (!image_id.empty() && has_image_spec) {
+  if (!image_id.empty() && !image_name.empty()) {
     std::cerr << "rbd: trying to access image using both name and id. "
               << std::endl;
     return -EINVAL;
   }
 
-  int r;
-  if (image_id.empty()) {
-    r = utils::get_pool_image_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                             &arg_index, &pool_name,
-                                             &image_name, &snap_name,
-                                             utils::SNAPSHOT_PRESENCE_REQUIRED,
-                                             utils::SPEC_VALIDATION_NONE);
-  } else {
-    r = utils::get_pool_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                       &arg_index, &pool_name, &snap_name,
-                                       utils::SNAPSHOT_PRESENCE_REQUIRED,
-                                       utils::SPEC_VALIDATION_NONE);
-  }
-  if (r < 0) {
-    return r;
-  }
-
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -465,6 +445,7 @@ int execute_purge(const po::variables_map &vm,
                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   std::string image_id;
@@ -473,36 +454,24 @@ int execute_purge(const po::variables_map &vm,
     image_id = vm[at::IMAGE_ID].as<std::string>();
   }
 
-  bool has_image_spec = utils::check_if_image_spec_present(
-      vm, at::ARGUMENT_MODIFIER_NONE, arg_index);
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, image_id.empty(),
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
 
-  if (!image_id.empty() && has_image_spec) {
+  if (!image_id.empty() && !image_name.empty()) {
     std::cerr << "rbd: trying to access image using both name and id. "
               << std::endl;
     return -EINVAL;
   }
 
-  int r;
-  if (image_id.empty()) {
-    r = utils::get_pool_image_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                             &arg_index, &pool_name,
-                                             &image_name, &snap_name,
-                                             utils::SNAPSHOT_PRESENCE_NONE,
-                                             utils::SPEC_VALIDATION_NONE);
-  } else {
-    r = utils::get_pool_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                       &arg_index, &pool_name, &snap_name,
-                                       utils::SNAPSHOT_PRESENCE_NONE,
-                                       utils::SPEC_VALIDATION_NONE);
-  }
-  if (r < 0) {
-    return r;
-  }
-
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -538,11 +507,13 @@ int execute_rollback(const po::variables_map &vm,
                      const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -550,8 +521,8 @@ int execute_rollback(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
-                                 &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -574,11 +545,13 @@ int execute_protect(const po::variables_map &vm,
                     const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -586,8 +559,8 @@ int execute_protect(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
-                                 &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
@@ -622,6 +595,7 @@ int execute_unprotect(const po::variables_map &vm,
                       const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   std::string image_id;
@@ -630,36 +604,24 @@ int execute_unprotect(const po::variables_map &vm,
     image_id = vm[at::IMAGE_ID].as<std::string>();
   }
 
-  bool has_image_spec = utils::check_if_image_spec_present(
-      vm, at::ARGUMENT_MODIFIER_NONE, arg_index);
+  int r = utils::get_pool_image_snapshot_names(
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, image_id.empty(),
+    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_NONE);
+  if (r < 0) {
+    return r;
+  }
 
-  if (!image_id.empty() && has_image_spec) {
+  if (!image_id.empty() && !image_name.empty()) {
     std::cerr << "rbd: trying to access image using both name and id. "
               << std::endl;
     return -EINVAL;
   }
 
-  int r;
-  if (image_id.empty()) {
-    r = utils::get_pool_image_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                             &arg_index, &pool_name,
-                                             &image_name, &snap_name,
-                                             utils::SNAPSHOT_PRESENCE_REQUIRED,
-                                             utils::SPEC_VALIDATION_NONE);
-  } else {
-    r = utils::get_pool_snapshot_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                       &arg_index, &pool_name, &snap_name,
-                                       utils::SNAPSHOT_PRESENCE_REQUIRED,
-                                       utils::SPEC_VALIDATION_NONE);
-  }
-  if (r < 0) {
-    return r;
-  }
-
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -704,13 +666,15 @@ int execute_set_limit(const po::variables_map &vm,
                       const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   uint64_t limit;
 
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -725,8 +689,8 @@ int execute_set_limit(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
-				 &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
       return r;
   }
@@ -749,12 +713,14 @@ int execute_clear_limit(const po::variables_map &vm,
                         const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
 
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
+    vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_NONE,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -762,8 +728,8 @@ int execute_clear_limit(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
-				 &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
       return r;
   }
@@ -787,23 +753,25 @@ int execute_rename(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string src_snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &src_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED,
+    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &src_snap_name, true, utils::SNAPSHOT_PRESENCE_REQUIRED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return -r;
   }
 
   std::string dest_pool_name(pool_name);
+  std::string dest_namespace_name(namespace_name);
   std::string dest_image_name;
   std::string dest_snap_name;
   r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dest_pool_name,
-    &dest_image_name, &dest_snap_name, utils::SNAPSHOT_PRESENCE_REQUIRED,
-    utils::SPEC_VALIDATION_SNAP);
+    &dest_namespace_name, &dest_image_name, &dest_snap_name, true,
+    utils::SNAPSHOT_PRESENCE_REQUIRED, utils::SPEC_VALIDATION_SNAP);
   if (r < 0) {
     return -r;
   }
@@ -812,17 +780,20 @@ int execute_rename(const po::variables_map &vm,
     std::cerr << "rbd: source and destination pool must be the same"
               << std::endl;
     return -EINVAL;
+  } else if (namespace_name != dest_namespace_name) {
+    std::cerr << "rbd: source and destination namespace must be the same"
+              << std::endl;
   } else if (image_name != dest_image_name) {
     std::cerr << "rbd: source and destination image name must be the same"
               << std::endl;
     return -EINVAL;
   }
-  
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", "", false, &rados,
-                                 &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
+                                 false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }

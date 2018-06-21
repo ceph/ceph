@@ -7,6 +7,14 @@ rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this s
 
 IMGS="testimg1 testimg2 testimg3 testimg4 testimg5 testimg6 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 test4 clone2"
 
+expect_fail()
+{
+  set -x
+  set +e
+  "$@"
+  if [ $? == 0 ]; then return 1; else return 0; fi
+}
+
 tiered=0
 if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
     tiered=1
@@ -619,11 +627,26 @@ test_namespace() {
     rbd namespace create rbd test1
     rbd namespace create --pool rbd test2
     rbd namespace create --namespace test3
-    rbd namespace create rbd test3 || true
+    expect_fail rbd namespace create rbd test3
 
     rbd namespace list | grep 'test' | wc -l | grep '^3$'
 
-    rbd namespace remove --pool rbd missing || true
+    expect_fail rbd namespace remove --pool rbd missing
+
+    rbd create rbd/test1/image1 --size 1G
+    rbd create --namespace test1 image2 --size 1G
+    expect_fail rbd namespace remove --pool rbd test1
+
+    rbd group create rbd/test1/group1
+    rbd group image add rbd/test1/group1 rbd/test1/image1
+    rbd group rm rbd/test1/group1
+
+    rbd trash move rbd/test1/image1
+    ID=`rbd trash --namespace test1 ls | cut -d ' ' -f 1`
+    rbd trash rm rbd/test1/${ID}
+
+    rbd remove rbd/test1/image2
+
     rbd namespace remove --pool rbd test1
     rbd namespace remove --namespace test3
 

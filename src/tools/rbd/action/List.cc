@@ -144,7 +144,8 @@ int list_process_image(librados::Rados* rados, WorkerEntry* w, bool lflag, Forma
   return 0;
 }
 
-int do_list(std::string &pool_name, bool lflag, int threads, Formatter *f) {
+int do_list(const std::string &pool_name, const std::string& namespace_name,
+            bool lflag, int threads, Formatter *f) {
   std::vector<WorkerEntry*> workers;
   std::vector<std::string> names;
   librados::Rados rados;
@@ -158,7 +159,7 @@ int do_list(std::string &pool_name, bool lflag, int threads, Formatter *f) {
     threads = 32;
   }
 
-  int r = utils::init(pool_name, &rados, &ioctx);
+  int r = utils::init(pool_name, namespace_name, &rados, &ioctx);
   if (r < 0) {
     return r;
   }
@@ -279,6 +280,7 @@ void get_arguments(po::options_description *positional,
   options->add_options()
     ("long,l", po::bool_switch(), "long listing format");
   at::add_pool_options(positional, options);
+  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -286,6 +288,7 @@ int execute(const po::variables_map &vm,
             const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  std::string namespace_name = utils::get_namespace_name(vm, nullptr);
 
   at::Format::Formatter formatter;
   int r = utils::get_formatter(vm, &formatter);
@@ -293,7 +296,7 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
-  r = do_list(pool_name, vm["long"].as<bool>(),
+  r = do_list(pool_name, namespace_name, vm["long"].as<bool>(),
               g_conf->get_val<int64_t>("rbd_concurrent_management_ops"),
               formatter.get());
   if (r < 0) {
