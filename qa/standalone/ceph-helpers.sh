@@ -168,7 +168,13 @@ function teardown() {
         fi
     fi
     if [ "$cores" = "yes" -o "$dumplogs" = "1" ]; then
-        display_logs $dir
+	if [ -n "$LOCALRUN" ]; then
+	    display_logs $dir
+        else
+	    # Move logs to where Teuthology will archive it
+	    sudo mkdir -p $TESTDIR/archive/log
+	    sudo mv $dir/*.log $TESTDIR/archive/log
+	fi
     fi
     rm -fr $dir
     rm -rf $(get_asok_dir)
