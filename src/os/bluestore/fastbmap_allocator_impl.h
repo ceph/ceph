@@ -45,6 +45,7 @@ typedef mempool::bluestore_alloc::vector<slot_t> slot_vector_t;
 
 // fitting into cache line on x86_64
 static const size_t slotset_width = 8; // 8 slots per set
+static const size_t slots_per_slotset = 8;
 static const size_t slotset_bytes = sizeof(slot_t) * slotset_width;
 static const size_t bits_per_slot = sizeof(slot_t) * 8;
 static const size_t bits_per_slotset = slotset_bytes * 8;
@@ -137,6 +138,7 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     L1_ENTRY_NOT_USED = 0x02,
     L1_ENTRY_FREE = 0x03,
     CHILD_PER_SLOT = bits_per_slot / L1_ENTRY_WIDTH, // 32
+    L1_ENTRIES_PER_SLOT = bits_per_slot / L1_ENTRY_WIDTH, //32
     CHILD_PER_SLOT_L0 = bits_per_slot, // 64
   };
   uint64_t _children_per_slot() const override
@@ -463,6 +465,111 @@ public:
       }
     }
     return res * l0_granularity;
+  }
+
+  static inline ssize_t count_0s(slot_t slot_val, size_t start_pos)
+  {
+  #ifdef __GNUC__
+    size_t pos = __builtin_ffsll(slot_val >> start_pos);
+    if (pos == 0)
+      return sizeof(slot_t)*8 - start_pos;
+    return pos - 1;
+  #else
+    size_t pos = start_pos;
+    slot_t mask = slot_t(1) << pos;
+    while (pos < bits_per_slot && (slot_val & mask) == 0) {
+      mask <<= 1;
+      pos++;
+    }
+    return pos - start_pos;
+  #endif
+  }
+
+  static inline ssize_t count_1s(slot_t slot_val, size_t start_pos)
+  {
+    return count_0s(~slot_val, start_pos);
+  }
+
+  double _get_fragmentation()
+  {
+    size_t s = l0.size() * bits_per_slot;
+    size_t range = (sizeof(s) * 8 - clz(s)) + 1;
+
+    std::vector<double> scales;
+    scales.resize(range);
+    scales[0] = 1;
+    for (size_t i = 1; i < range ;i++) {
+      scales[i] = scales[i-1] * 1.1;
+    }
+
+    double contrib_sum = 0;
+    size_t sum = 0;
+
+    auto get_alloc_value = [&](size_t v) -> double {
+      size_t sc = sizeof(v) * 8 - clz(v) - 1;
+      double x = double(v - (1<<sc)) / (1<<sc);
+      double contrib = (1<<sc) * scales[sc-1] * (1-x) + (1<<(sc+1)) *scales[sc] * x;
+      return contrib;
+    };
+
+    auto value_allocation = [&](size_t v) {
+      contrib_sum += get_alloc_value(v);
+      sum += v;
+    };
+
+    size_t len = 0;
+    for (size_t i = 0; i < l1.size(); i++)
+    {
+      for (size_t j = 0; j < L1_ENTRIES_PER_SLOT * L1_ENTRY_WIDTH; j += L1_ENTRY_WIDTH)
+      {
+	size_t w = (l1[i] >> j) & L1_ENTRY_MASK;
+	switch (w) {
+	  case L1_ENTRY_FULL:
+	    if (len > 0) {
+	      value_allocation(len);
+	      len = 0;
+	    }
+	    break;
+	  case L1_ENTRY_FREE:
+	    len += bits_per_slotset;
+	    break;
+	  case L1_ENTRY_PARTIAL:
+	    size_t pos = ( bits_per_slot/L1_ENTRY_WIDTH * i + j/L1_ENTRY_WIDTH ) * slots_per_slotset;
+	    for (size_t t = 0; t < slots_per_slotset; t++) {
+	      size_t p = 0;
+	      while (p < bits_per_slot) {
+		if (len == 0) {
+		  //continue skip allocated space, meaning bits set to 0
+		  ssize_t alloc_count = count_0s(l0[pos + t], p);
+		  p += alloc_count;
+		  if (p < bits_per_slot) {
+		    //now @p are 1s
+		    ssize_t free_count = count_1s(l0[pos + t], p);
+		    assert(free_count > 0);
+		    p += free_count;
+		    len += free_count;
+		  }
+		} else {
+		  //continue free region
+		  ssize_t free_count = count_1s(l0[pos + t], p);
+		  if (free_count == 0) {
+		    value_allocation(len);
+		    len = 0;
+		  } else {
+		    p += free_count;
+		    len += free_count;
+		  }
+		}
+	      }
+	    }
+	    break;
+	}
+      }
+    }
+    if (len > 0)
+      value_allocation(len);
+    double ideal = get_alloc_value(sum);
+    return 1 - contrib_sum/ideal;
   }
 };
 

@@ -40,7 +40,7 @@ public:
   }
   double get_fragmentation(uint64_t) override
   {
-    return _get_fragmentation();
+    return AllocatorLevel02<AllocatorLevel01Loose>::l1._get_fragmentation();
   }
 
   void init_add_free(uint64_t offset, uint64_t length) override;
