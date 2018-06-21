@@ -117,8 +117,6 @@ class RDMADispatcher {
   void handle_tx_event(ibv_wc *cqe, int n);
   void post_tx_buffer(std::vector<Chunk*> &chunks);
 
-  std::atomic<uint64_t> inflight = {0};
-
   void post_chunk_to_pool(Chunk* chunk); 
 
 };
