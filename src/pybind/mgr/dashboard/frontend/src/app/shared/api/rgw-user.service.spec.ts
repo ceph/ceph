@@ -33,7 +33,7 @@ describe('RgwUserService', () => {
     service.list().subscribe((resp) => {
       result = resp;
     });
-    const req = httpTesting.expectOne('/api/rgw/proxy/metadata/user');
+    const req = httpTesting.expectOne('/api/rgw/user');
     expect(req.request.method).toBe('GET');
     req.flush([]);
     expect(result).toEqual([]);
@@ -45,15 +45,15 @@ describe('RgwUserService', () => {
       result = resp;
     });
 
-    let req = httpTesting.expectOne('/api/rgw/proxy/metadata/user');
+    let req = httpTesting.expectOne('/api/rgw/user');
     expect(req.request.method).toBe('GET');
     req.flush(['foo', 'bar']);
 
-    req = httpTesting.expectOne('/api/rgw/proxy/user?uid=foo');
+    req = httpTesting.expectOne('/api/rgw/user/foo');
     expect(req.request.method).toBe('GET');
     req.flush({ name: 'foo' });
 
-    req = httpTesting.expectOne('/api/rgw/proxy/user?uid=bar');
+    req = httpTesting.expectOne('/api/rgw/user/bar');
     expect(req.request.method).toBe('GET');
     req.flush({ name: 'bar' });
 
@@ -62,100 +62,79 @@ describe('RgwUserService', () => {
 
   it('should call enumerate', () => {
     service.enumerate().subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/metadata/user');
+    const req = httpTesting.expectOne('/api/rgw/user');
     expect(req.request.method).toBe('GET');
   });
 
   it('should call get', () => {
     service.get('foo').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?uid=foo');
+    const req = httpTesting.expectOne('/api/rgw/user/foo');
     expect(req.request.method).toBe('GET');
   });
 
   it('should call getQuota', () => {
     service.getQuota('foo').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?quota&uid=foo');
+    const req = httpTesting.expectOne('/api/rgw/user/foo/quota');
     expect(req.request.method).toBe('GET');
   });
 
-  it('should call put', () => {
-    service.put({ foo: 'bar' }).subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?foo=bar');
+  it('should call update', () => {
+    service.update('foo', { xxx: 'yyy' }).subscribe();
+    const req = httpTesting.expectOne('/api/rgw/user/foo?xxx=yyy');
     expect(req.request.method).toBe('PUT');
   });
 
-  it('should call putQuota', () => {
-    service.putQuota({ foo: 'bar' }).subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?quota&foo=bar');
+  it('should call updateQuota', () => {
+    service.updateQuota('foo', { xxx: 'yyy' }).subscribe();
+    const req = httpTesting.expectOne('/api/rgw/user/foo/quota?xxx=yyy');
     expect(req.request.method).toBe('PUT');
   });
 
-  it('should call post', () => {
-    service.post({ foo: 'bar' }).subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?foo=bar');
+  it('should call create', () => {
+    service.create({ foo: 'bar' }).subscribe();
+    const req = httpTesting.expectOne('/api/rgw/user?foo=bar');
     expect(req.request.method).toBe('POST');
   });
 
   it('should call delete', () => {
     service.delete('foo').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?uid=foo');
+    const req = httpTesting.expectOne('/api/rgw/user/foo');
     expect(req.request.method).toBe('DELETE');
   });
 
-  it('should call addSubuser with unrecognized permission', () => {
-    service.addSubuser('foo', 'bar', 'baz', null, true).subscribe();
-    const req = httpTesting.expectOne(
-      '/api/rgw/proxy/user?uid=foo&subuser=bar&key-type=swift&access=baz&generate-secret=true'
-    );
-    expect(req.request.method).toBe('PUT');
-  });
-
-  it('should call addSubuser with mapped permission', () => {
-    service.addSubuser('foo', 'bar', 'full-control', 'baz', false).subscribe();
-    const req = httpTesting.expectOne(
-      '/api/rgw/proxy/user?uid=foo&subuser=bar&key-type=swift&access=full&secret-key=baz'
-    );
-    expect(req.request.method).toBe('PUT');
+  it('should call createSubuser', () => {
+    service.createSubuser('foo', { xxx: 'yyy' }).subscribe();
+    const req = httpTesting.expectOne('/api/rgw/user/foo/subuser?xxx=yyy');
+    expect(req.request.method).toBe('POST');
   });
 
   it('should call deleteSubuser', () => {
     service.deleteSubuser('foo', 'bar').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?uid=foo&subuser=bar&purge-keys=true');
+    const req = httpTesting.expectOne('/api/rgw/user/foo/subuser/bar');
     expect(req.request.method).toBe('DELETE');
   });
 
   it('should call addCapability', () => {
     service.addCapability('foo', 'bar', 'baz').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?caps&uid=foo&user-caps=bar=baz');
-    expect(req.request.method).toBe('PUT');
+    const req = httpTesting.expectOne('/api/rgw/user/foo/capability?type=bar&perm=baz');
+    expect(req.request.method).toBe('POST');
   });
 
   it('should call deleteCapability', () => {
     service.deleteCapability('foo', 'bar', 'baz').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?caps&uid=foo&user-caps=bar=baz');
+    const req = httpTesting.expectOne('/api/rgw/user/foo/capability?type=bar&perm=baz');
     expect(req.request.method).toBe('DELETE');
   });
 
-  it('should call addS3Key, with generateKey true', () => {
-    service.addS3Key('1', 'foo', 'bar', 'baz', true).subscribe();
-    const req = httpTesting.expectOne(
-      '/api/rgw/proxy/user?key&uid=1&key-type=s3&generate-key=true&subuser=foo'
-    );
-    expect(req.request.method).toBe('PUT');
-  });
-
-  it('should call addS3Key, with generateKey false', () => {
-    service.addS3Key('1', 'foo', 'bar', 'baz', false).subscribe();
-    const req = httpTesting.expectOne(
-      '/api/rgw/proxy/user?key' +
-        '&uid=1&key-type=s3&generate-key=false&access-key=bar&secret-key=baz&subuser=foo'
-    );
-    expect(req.request.method).toBe('PUT');
+  it('should call addS3Key', () => {
+    service.addS3Key('foo', { xxx: 'yyy' }).subscribe();
+    const req = httpTesting.expectOne('/api/rgw/user/foo/key?key_type=s3&xxx=yyy');
+    expect(req.request.method).toBe('POST');
   });
 
   it('should call deleteS3Key', () => {
     service.deleteS3Key('foo', 'bar').subscribe();
-    const req = httpTesting.expectOne('/api/rgw/proxy/user?key&uid=foo&key-type=s3&access-key=bar');
+    const req = httpTesting.expectOne('/api/rgw/user/foo/key?key_type=s3&access_key=bar');
     expect(req.request.method).toBe('DELETE');
   });
 

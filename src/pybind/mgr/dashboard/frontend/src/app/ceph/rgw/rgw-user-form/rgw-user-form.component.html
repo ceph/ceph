@@ -117,12 +117,18 @@
           <label class="control-label col-sm-3"
                  for="max_buckets"
                  i18n>Max. buckets
+            <span class="required"></span>
           </label>
           <div class="col-sm-9">
             <input id="max_buckets"
                    class="form-control"
                    type="number"
                    formControlName="max_buckets">
+            <span class="help-block"
+                  *ngIf="(frm.submitted || userForm.controls.max_buckets.dirty) && userForm.controls.max_buckets.hasError('required')"
+                  i18n>
+              This field is required.
+            </span>
             <span class="help-block"
                   *ngIf="(frm.submitted || userForm.controls.max_buckets.dirty) && userForm.controls.max_buckets.hasError('min')"
                   i18n>
