@@ -39,7 +39,7 @@ int execute_create(const po::variables_map &vm,
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, &rados, &io_ctx);
+  int r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -74,7 +74,7 @@ int execute_remove(const po::variables_map &vm,
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, &rados, &io_ctx);
+  int r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -100,7 +100,6 @@ int execute_remove(const po::variables_map &vm,
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_pool_options(positional, options);
-  at::add_namespace_options(positional, options);
   at::add_format_options(options);
 }
 
@@ -117,7 +116,7 @@ int execute_list(const po::variables_map &vm,
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }

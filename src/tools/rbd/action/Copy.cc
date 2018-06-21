@@ -44,22 +44,25 @@ int execute(const po::variables_map &vm,
             const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
   std::string dst_pool_name;
+  std::string dst_namespace_name;
   std::string dst_image_name;
   std::string dst_snap_name;
   r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dst_pool_name, &dst_image_name,
-    &dst_snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dst_pool_name,
+    &dst_namespace_name, &dst_image_name, &dst_snap_name, true,
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -73,14 +76,14 @@ int execute(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                 snap_name, true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
 
   librados::IoCtx dst_io_ctx;
-  r = utils::init_io_ctx(rados, dst_pool_name, &dst_io_ctx);
+  r = utils::init_io_ctx(rados, dst_pool_name, dst_namespace_name, &dst_io_ctx);
   if (r < 0) {
     return r;
   }
@@ -130,22 +133,25 @@ int execute_deep(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string image_name;
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &image_name,
-    &snap_name, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index, &pool_name, &namespace_name,
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
     utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
 
   std::string dst_pool_name;
+  std::string dst_namespace_name;
   std::string dst_image_name;
   std::string dst_snap_name;
   r = utils::get_pool_image_snapshot_names(
-    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dst_pool_name, &dst_image_name,
-    &dst_snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
+    vm, at::ARGUMENT_MODIFIER_DEST, &arg_index, &dst_pool_name,
+    &dst_namespace_name, &dst_image_name, &dst_snap_name, true,
+    utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_FULL);
   if (r < 0) {
     return r;
   }
@@ -159,14 +165,14 @@ int execute_deep(const po::variables_map &vm,
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, image_name, "", snap_name, true,
-                                 &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                 snap_name, true, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }
 
   librados::IoCtx dst_io_ctx;
-  r = utils::init_io_ctx(rados, dst_pool_name, &dst_io_ctx);
+  r = utils::init_io_ctx(rados, dst_pool_name, dst_namespace_name, &dst_io_ctx);
   if (r < 0) {
     return r;
   }
@@ -181,8 +187,8 @@ int execute_deep(const po::variables_map &vm,
 }
 
 Shell::Action action_deep(
-  {"deep", "copy"}, {"deep", "cp"}, "Deep copy src image to dest.", at::get_long_features_help(),
-  &get_arguments_deep, &execute_deep);
+  {"deep", "copy"}, {"deep", "cp"}, "Deep copy src image to dest.",
+  at::get_long_features_help(), &get_arguments_deep, &execute_deep);
 
 } // namespace copy
 } // namespace action
