@@ -544,3 +544,88 @@ void AllocatorLevel01Loose::collect_stats(
     bins_overall[cbits(free_seq_cnt) - 1]++;
   }
 }
+
+inline ssize_t AllocatorLevel01Loose::count_0s(slot_t slot_val, size_t start_pos)
+  {
+  #ifdef __GNUC__
+    size_t pos = __builtin_ffsll(slot_val >> start_pos);
+    if (pos == 0)
+      return sizeof(slot_t)*8 - start_pos;
+    return pos - 1;
+  #else
+    size_t pos = start_pos;
+    slot_t mask = slot_t(1) << pos;
+    while (pos < bits_per_slot && (slot_val & mask) == 0) {
+      mask <<= 1;
+      pos++;
+    }
+    return pos - start_pos;
+  #endif
+  }
+
+ inline ssize_t AllocatorLevel01Loose::count_1s(slot_t slot_val, size_t start_pos)
+ {
+   return count_0s(~slot_val, start_pos);
+ }
+void AllocatorLevel01Loose::dump(
+    std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  size_t len = 0;
+  size_t off = 0;
+  for (size_t i = 0; i < l1.size(); i++)
+  {
+    for (size_t j = 0; j < L1_ENTRIES_PER_SLOT * L1_ENTRY_WIDTH; j += L1_ENTRY_WIDTH)
+    {
+      size_t w = (l1[i] >> j) & L1_ENTRY_MASK;
+      switch (w) {
+        case L1_ENTRY_FULL:
+          if (len > 0) {
+            notify(off, len);
+            len = 0;
+          }
+          break;
+        case L1_ENTRY_FREE:
+          if (len == 0)
+            off = ( ( bits_per_slot * i + j ) / L1_ENTRY_WIDTH ) * slots_per_slotset * bits_per_slot;
+          len += bits_per_slotset;
+          break;
+        case L1_ENTRY_PARTIAL:
+          size_t pos = ( ( bits_per_slot * i + j ) / L1_ENTRY_WIDTH ) * slots_per_slotset;
+          for (size_t t = 0; t < slots_per_slotset; t++) {
+            size_t p = 0;
+            slot_t allocation_pattern = l0[pos + t];
+            while (p < bits_per_slot) {
+              if (len == 0) {
+                //continue to skip allocated space, meaning bits set to 0
+                ssize_t alloc_count = count_0s(allocation_pattern, p);
+                p += alloc_count;
+                //now we are switched to expecting free space
+                if (p < bits_per_slot) {
+                  //now @p are 1s
+                  ssize_t free_count = count_1s(allocation_pattern, p);
+                  assert(free_count > 0);
+                  len = free_count;
+                  off = (pos + t) * bits_per_slot + p;
+                  p += free_count;
+                }
+              } else {
+                //continue free region
+                ssize_t free_count = count_1s(allocation_pattern, p);
+                if (free_count == 0) {
+                  notify(off, len);
+                  len = 0;
+                } else {
+                  p += free_count;
+                  len += free_count;
+                }
+              }
+            }
+          }
+          break;
+      }
+    }
+  }
+  if (len > 0)
+    notify(off, len);
+}
+

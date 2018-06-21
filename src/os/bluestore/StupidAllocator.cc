@@ -293,6 +293,16 @@ void StupidAllocator::dump()
   }
 }
 
+void StupidAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+{
+  std::lock_guard l(lock);
+  for (unsigned bin = 0; bin < free.size(); ++bin) {
+    for (auto p = free[bin].begin(); p != free[bin].end(); ++p) {
+      notify(p.get_start(), p.get_len());
+    }
+  }
+}
+
 void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   std::lock_guard l(lock);
