@@ -509,19 +509,19 @@ class BaseController(object):
                 content_length = int(cherrypy.request.headers['Content-Length'])
                 body = cherrypy.request.body.read(content_length)
                 if not body:
-                    return func(*args, **kwargs)
-
-                try:
-                    data = json.loads(body.decode('utf-8'))
-                except Exception as e:
-                    raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
-                                             .format(str(e)))
-                kwargs.update(data.items())
-                ret = func(*args, **kwargs)
+                    ret = func(*args, **kwargs)
+                else:
+                    try:
+                        data = json.loads(body.decode('utf-8'))
+                    except Exception as e:
+                        raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
+                                                 .format(str(e)))
+                    kwargs.update(data.items())
+                    ret = func(*args, **kwargs)
 
             if json_response:
                 cherrypy.response.headers['Content-Type'] = 'application/json'
-                return json.dumps(ret).encode('utf8')
+                ret = json.dumps(ret).encode('utf8')
             return ret
         return inner
 
