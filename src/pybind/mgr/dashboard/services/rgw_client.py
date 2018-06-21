@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 import re
+from distutils.util import strtobool
 from ..awsauth import S3Auth
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
@@ -206,13 +207,23 @@ class RgwClient(RestClient):
         return response['data']['user_id']
 
     @RestClient.api_get('/{admin_path}/metadata/user', resp_structure='[+]')
-    def _is_system_user(self, admin_path, request=None):
+    def _user_exists(self, admin_path, request=None):
         # pylint: disable=unused-argument
         response = request()
         return self.userid in response
 
+    def user_exists(self):
+        return self._user_exists(self.admin_path)
+
+    @RestClient.api_get('/{admin_path}/metadata/user?key={userid}',
+                        resp_structure='data > system')
+    def _is_system_user(self, admin_path, userid, request=None):
+        # pylint: disable=unused-argument
+        response = request()
+        return strtobool(response['data']['system'])
+
     def is_system_user(self):
-        return self._is_system_user(self.admin_path)
+        return self._is_system_user(self.admin_path, self.userid)
 
     @RestClient.api_get(
         '/{admin_path}/user',
