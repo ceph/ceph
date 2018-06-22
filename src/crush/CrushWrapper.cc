@@ -297,6 +297,19 @@ void CrushWrapper::find_takes(set<int> *roots) const
   }
 }
 
+void CrushWrapper::find_takes_by_rule(int rule, set<int> *roots) const
+{
+  if (rule < 0 || rule >= (int)crush->max_rules)
+    return;
+  crush_rule *r = crush->rules[rule];
+  if (!r)
+    return;
+  for (unsigned i = 0; i < r->len; i++) {
+    if (r->steps[i].op == CRUSH_RULE_TAKE)
+      roots->insert(r->steps[i].arg1);
+  }
+}
+
 void CrushWrapper::find_roots(set<int> *roots) const
 {
   for (int i = 0; i < crush->max_buckets; i++) {
@@ -833,6 +846,36 @@ int CrushWrapper::get_children(int id, list<int> *children)
     children->push_back(b->items[n]);
   }
   return b->size;
+}
+
+void CrushWrapper::get_children_of_type(int id,
+                                        int type,
+					set<int> *children,
+					bool exclude_shadow) const
+{
+  if (id >= 0) {
+    if (type == 0) {
+      // want leaf?
+      children->insert(id);
+    }
+    return;
+  }
+  auto b = get_bucket(id);
+  if (IS_ERR(b)) {
+    return;
+  }
+  if (b->type < type) {
+    // give up
+    return;
+  } else if (b->type == type) {
+    if (!is_shadow_item(b->id) || !exclude_shadow) {
+      children->insert(b->id);
+    }
+    return;
+  }
+  for (unsigned n = 0; n < b->size; n++) {
+    get_children_of_type(b->items[n], type, children, exclude_shadow);
+  }
 }
 
 int CrushWrapper::get_rule_failure_domain(int rule_id)
@@ -1427,15 +1470,33 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
   return -ENOENT;
 }
 
-int CrushWrapper::get_parent_of_type(int item, int type) const
+int CrushWrapper::get_parent_of_type(int item, int type, int rule) const
 {
-  do {
-    int r = get_immediate_parent_id(item, &item);
-    if (r < 0) {
-      return 0;
+  if (rule < 0) {
+    // no rule specified
+    do {
+      int r = get_immediate_parent_id(item, &item);
+      if (r < 0) {
+        return 0;
+      }
+    } while (get_bucket_type(item) != type);
+    return item;
+  }
+  set<int> roots;
+  find_takes_by_rule(rule, &roots);
+  for (auto root : roots) {
+    set<int> candidates;
+    get_children_of_type(root, type, &candidates, false);
+    for (auto candidate : candidates) {
+      if (subtree_contains(candidate, item)) {
+	// note that here we assure that no two different buckets
+	// from a single crush rule will share a same device,
+	// which should generally be true.
+        return candidate;
+      }
     }
-  } while (get_bucket_type(item) != type);
-  return item;
+  }
+  return 0; // not found
 }
 
 int CrushWrapper::rename_class(const string& srcname, const string& dstname)
