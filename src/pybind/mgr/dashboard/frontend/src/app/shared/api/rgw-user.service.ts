@@ -5,8 +5,10 @@ import * as _ from 'lodash';
 import { forkJoin as observableForkJoin, of as observableOf } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 
+import { cdEncode } from '../decorators/cd-encode';
 import { ApiModule } from './api.module';
 
+@cdEncode
 @Injectable({
   providedIn: ApiModule
 })
