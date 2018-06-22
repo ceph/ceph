@@ -78,6 +78,8 @@ def _get_matrix(path, subset=None):
 
 
 def _build_matrix(path, mincyclicity=0, item=''):
+    if os.path.basename(path)[0] == '.':
+        return None
     if not os.path.exists(path):
         raise IOError('%s does not exist (abs %s)' % (path, os.path.abspath(path)))
     if os.path.isfile(path):
