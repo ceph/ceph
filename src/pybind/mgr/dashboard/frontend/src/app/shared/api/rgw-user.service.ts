@@ -6,6 +6,9 @@ import 'rxjs/add/observable/forkJoin';
 import 'rxjs/add/observable/of';
 import { Observable } from 'rxjs/Observable';
 
+import { cdEncode } from '../decorators/cd-encode';
+
+@cdEncode
 @Injectable()
 export class RgwUserService {
 

@@ -10,6 +10,7 @@ import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { DataTableModule } from '../../../shared/datatable/datatable.module';
+import { PipesModule } from '../../../shared/pipes/pipes.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { ServicesModule } from '../../../shared/services/services.module';
@@ -30,7 +31,8 @@ describe('RbdSnapshotListComponent', () => {
         ServicesModule,
         ApiModule,
         HttpClientTestingModule,
-        RouterTestingModule
+        RouterTestingModule,
+        PipesModule
       ],
       providers: [ AuthStorageService ]
     })

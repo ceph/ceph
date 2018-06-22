@@ -16,6 +16,12 @@ import time
 import threading
 import types  # pylint: disable=import-error
 
+if sys.version_info >= (3, 0):
+    from urllib.parse import unquote  # pylint: disable=no-name-in-module,import-error
+else:
+    from urllib import unquote  # pylint: disable=no-name-in-module
+
+# pylint: disable=wrong-import-position
 import cherrypy
 from six import add_metaclass
 
@@ -393,6 +399,7 @@ class BaseController(object):
                 action = attr
                 if attr == '__call__':
                     suffix = None
+
                 result.append(([], suffix, action, args))
         return result
 
@@ -510,6 +517,12 @@ class RESTController(BaseController):
         method_name, status_code = self._method_mapping[
             (cherrypy.request.method, is_element)]
         method = getattr(self, method_name, None)
+
+        for key, value in params.items():
+            # pylint: disable=undefined-variable
+            if (sys.version_info < (3, 0) and isinstance(value, unicode)) \
+                    or isinstance(value, str):
+                params[key] = unquote(value)
 
         if cherrypy.request.method not in ['GET', 'DELETE']:
             method = RESTController._takes_json(method)

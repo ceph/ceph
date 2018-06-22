@@ -1,6 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import { cdEncode } from '../decorators/cd-encode';
+
+@cdEncode
 @Injectable()
 export class RgwDaemonService {
 
