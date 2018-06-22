@@ -1693,17 +1693,18 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     for (auto osd : raw) {
       if (type > 0) {
         auto parent = tmpmap.crush->get_parent_of_type(osd, type, crush_rule);
-        if (parent >= 0) {
+        if (parent < 0) {
+          auto r = parents.insert(parent);
+          if (!r.second) {
+            // two up-set osds come from same parent
+            to_cancel.insert(pg);
+            break;
+          }
+        } else {
           lderr(cct) << __func__ << " unable to get parent of raw osd."
                      << osd << " of pg " << pg
                      << dendl;
-          break;
-        }
-        auto r = parents.insert(parent);
-        if (!r.second) {
-          // two up-set osds come from same parent
-          to_cancel.insert(pg);
-          break;
+          // continue to do checks below
         }
       }
       // the above check validates collision only
@@ -4221,6 +4222,8 @@ int OSDMap::calc_pg_upmaps(
     multimap<float,int> deviation_osd;  // deviation(pgs), osd
     set<int> overfull;
     for (auto& i : pgs_by_osd) {
+      // make sure osd is still there (belongs to this crush-tree)
+      assert(osd_weight.count(i.first));
       float target = osd_weight[i.first] * pgs_per_weight;
       float deviation = (float)i.second.size() - target;
       ldout(cct, 20) << " osd." << i.first
@@ -4259,8 +4262,6 @@ int OSDMap::calc_pg_upmaps(
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
       int osd = p->second;
       float deviation = p->first;
-      // make sure osd is still there (belongs to this crush-tree)
-      assert(osd_weight.count(osd));
       float target = osd_weight[osd] * pgs_per_weight;
       assert(target > 0);
       if (deviation/target < max_deviation_ratio) {
