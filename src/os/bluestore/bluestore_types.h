@@ -64,6 +64,8 @@ struct bluestore_cnode_t {
 };
 WRITE_CLASS_DENC(bluestore_cnode_t)
 
+ostream& operator<<(ostream& out, const bluestore_cnode_t& l);
+
 class AllocExtent;
 typedef mempool::bluestore_alloc::vector<AllocExtent> AllocExtentVector;
 class AllocExtent {

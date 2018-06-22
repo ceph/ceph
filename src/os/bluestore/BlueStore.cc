@@ -1667,7 +1667,7 @@ void BlueStore::SharedBlob::put()
 			     << " removing self from set " << get_parent()
 			     << dendl;
     if (get_parent()) {
-      get_parent()->remove_last(this);
+      get_parent()->remove(this);
     }
     delete this;
   }
@@ -5004,6 +5004,7 @@ void BlueStore::_commit_bluefs_freespace(
 
 int BlueStore::_open_collections(int *errors)
 {
+  dout(10) << __func__ << dendl;
   assert(coll_map.empty());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
   for (it->upper_bound(string());
@@ -5025,7 +5026,8 @@ int BlueStore::_open_collections(int *errors)
              << pretty_binary_string(it->key()) << dendl;
         return -EIO;
       }   
-      dout(20) << __func__ << " opened " << cid << " " << c << dendl;
+      dout(20) << __func__ << " opened " << cid << " " << c
+	       << " " << c->cnode << dendl;
       coll_map[cid] = c;
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
@@ -5758,7 +5760,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  continue;
 	}
 	c->cid.is_pg(&pgid);
-	dout(20) << __func__ << "  collection " << c->cid << dendl;
+	dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
+		 << dendl;
       }
 
       if (!expecting_shards.empty()) {
