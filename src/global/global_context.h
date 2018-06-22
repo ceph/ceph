@@ -21,4 +21,11 @@ struct md_config_t;
 extern CephContext *g_ceph_context;
 extern md_config_t *g_conf;
 
+extern const char *g_assert_file;
+extern int g_assert_line;
+extern const char *g_assert_func;
+extern const char *g_assert_condition;
+extern unsigned long long g_assert_thread;
+extern char g_assert_thread_name[4096];
+
 #endif
