@@ -15,8 +15,8 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 6.9.0 or higher
- * NPM 3 or higher
+ * Node 8.9.0 or higher
+ * NPM 5.5.1 or higher
 
 nodeenv:
   During Ceph's build we create a virtualenv with ``node`` and ``npm``
