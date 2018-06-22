@@ -74,9 +74,6 @@ class CBT(Task):
             enable_epel = ['sudo', 'yum-config-manager', '--enable', 'epel']
             self.ctx.cluster.run(args=enable_epel)
 
-    def run_cmd(self, remote, args):
-        remote.run(args=args)
-
     def install_dependencies(self):
         system_type = misc.get_system_type(self.first_mon)
 
@@ -87,8 +84,8 @@ class CBT(Task):
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
             cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
         clients = self.ctx.cluster.only(misc.is_type('client'))
-        self.run_cmd(remote=clients, args=args)
-        self.run_cmd(remote=self.first_mon, args=args)
+        clients.run(args=install_cmd + cbt_depends)
+        self.first_mon.run(args=install_cmd + cbt_depends)
 
         benchmark_type = self.cbt_config.get('benchmarks').keys()[0]
         self.log.info('benchmark: %s', benchmark_type)
@@ -99,12 +96,12 @@ class CBT(Task):
             args = ['git', 'clone', '-b', 'master',
                     'https://github.com/axboe/fio.git',
                     '{tdir}/fio'.format(tdir=testdir)]
-            self.run_cmd(clients, args)
-            self.run_cmd(self.first_mon, args)
+            clients.run(args=args)
+            self.first_mon.run(args=args)
             args = ['cd', os.path.join(testdir, 'fio'), run.Raw('&&'),
                     './configure', run.Raw('&&'), 'make']
-            self.run_cmd(clients, args)
-            self.run_cmd(self.first_mon, args)
+            clients.run(args=args)
+            self.first_mon.run(args=args)
         if benchmark_type == 'cosbench':
             # install cosbench
             self.log.info('install dependecies for cosbench')
