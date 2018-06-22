@@ -202,4 +202,15 @@ ceph osd pool rm cool cool --yes-i-really-really-mean-it
 ceph osd pool rm cold cold --yes-i-really-really-mean-it
 ceph osd crush weight-set rm-compat
 
+# weight set vs device classes vs move
+ceph osd crush weight-set create-compat
+ceph osd crush add-bucket fooo host
+ceph osd crush move fooo root=default
+ceph osd crush add-bucket barr rack
+ceph osd crush move barr root=default
+ceph osd crush move fooo rack=barr
+ceph osd crush rm fooo
+ceph osd crush rm barr
+ceph osd crush weight-set rm-compat
+
 echo OK

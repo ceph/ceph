@@ -1487,7 +1487,7 @@ int CrushWrapper::populate_classes(
   // accumulate weight values for each carg and bucket as we go. because it is
   // depth first, we will have the nested bucket weights we need when we
   // finish constructing the containing buckets.
-  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> [bucket weight for each position]
   set<int> roots;
   find_nonshadow_roots(&roots);
   for (auto &r : roots) {
@@ -2096,8 +2096,10 @@ int CrushWrapper::device_class_clone(
 	int item = copy->items[i];
 	if (item >= 0) {
 	  n.weight_set[s].weights[i] = o.weight_set[s].weights[item_orig_pos[i]];
-	} else {
+	} else if ((*cmap_item_weight)[w.first].count(item)) {
 	  n.weight_set[s].weights[i] = (*cmap_item_weight)[w.first][item][s];
+	} else {
+	  n.weight_set[s].weights[i] = 0;
 	}
 	bucket_weights[s] += n.weight_set[s].weights[i];
       }
