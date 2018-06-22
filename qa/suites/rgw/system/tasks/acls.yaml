@@ -3,6 +3,7 @@ tasks:
 - ceph-ansible: null
 - rgw-system-test:
    test-name: test_acls
+   test_dir_version: v1
    config:
        user_count: 2
        bucket_count: 25
