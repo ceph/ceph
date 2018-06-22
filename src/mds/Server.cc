@@ -110,70 +110,80 @@ public:
 void Server::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_server", l_mdss_first, l_mdss_last);
-  plb.add_u64_counter(l_mdss_handle_client_request,"handle_client_request",
-      "Client requests", "hcr", PerfCountersBuilder::PRIO_INTERESTING);
+
+  plb.add_u64_counter(l_mdss_handle_client_request, "handle_client_request",
+                      "Client requests", "hcr", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_handle_slave_request, "handle_slave_request",
-      "Slave requests", "hsr", PerfCountersBuilder::PRIO_INTERESTING);
-  plb.add_u64_counter(l_mdss_handle_client_session, "handle_client_session",
-      "Client session messages", "hcs", PerfCountersBuilder::PRIO_INTERESTING);
-  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request", "Client requests dispatched");
-  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
+                      "Slave requests", "hsr", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdss_handle_client_session,
+                      "handle_client_session", "Client session messages", "hcs",
+                      PerfCountersBuilder::PRIO_INTERESTING);
+
+  // fop latencies are useful
+  plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   plb.add_time_avg(l_mdss_req_lookuphash_latency, "req_lookuphash_latency",
-      "Request type lookup hash of inode latency");
+                   "Request type lookup hash of inode latency");
   plb.add_time_avg(l_mdss_req_lookupino_latency, "req_lookupino_latency",
-      "Request type lookup inode latency");
+                   "Request type lookup inode latency");
   plb.add_time_avg(l_mdss_req_lookupparent_latency, "req_lookupparent_latency",
-      "Request type lookup parent latency");
+                   "Request type lookup parent latency");
   plb.add_time_avg(l_mdss_req_lookupname_latency, "req_lookupname_latency",
-      "Request type lookup name latency");
+                   "Request type lookup name latency");
   plb.add_time_avg(l_mdss_req_lookup_latency, "req_lookup_latency",
-      "Request type lookup latency");
+                   "Request type lookup latency");
   plb.add_time_avg(l_mdss_req_lookupsnap_latency, "req_lookupsnap_latency",
-      "Request type lookup snapshot latency");
+                   "Request type lookup snapshot latency");
   plb.add_time_avg(l_mdss_req_getattr_latency, "req_getattr_latency",
-      "Request type get attribute latency");
+                   "Request type get attribute latency");
   plb.add_time_avg(l_mdss_req_setattr_latency, "req_setattr_latency",
-      "Request type set attribute latency");
+                   "Request type set attribute latency");
   plb.add_time_avg(l_mdss_req_setlayout_latency, "req_setlayout_latency",
-      "Request type set file layout latency");
+                   "Request type set file layout latency");
   plb.add_time_avg(l_mdss_req_setdirlayout_latency, "req_setdirlayout_latency",
-      "Request type set directory layout latency");
+                   "Request type set directory layout latency");
   plb.add_time_avg(l_mdss_req_setxattr_latency, "req_setxattr_latency",
-      "Request type set extended attribute latency");
+                   "Request type set extended attribute latency");
   plb.add_time_avg(l_mdss_req_rmxattr_latency, "req_rmxattr_latency",
-      "Request type remove extended attribute latency");
+                   "Request type remove extended attribute latency");
   plb.add_time_avg(l_mdss_req_readdir_latency, "req_readdir_latency",
-      "Request type read directory latency");
+                   "Request type read directory latency");
   plb.add_time_avg(l_mdss_req_setfilelock_latency, "req_setfilelock_latency",
-      "Request type set file lock latency");
+                   "Request type set file lock latency");
   plb.add_time_avg(l_mdss_req_getfilelock_latency, "req_getfilelock_latency",
-      "Request type get file lock latency");
+                   "Request type get file lock latency");
   plb.add_time_avg(l_mdss_req_create_latency, "req_create_latency",
-      "Request type create latency");
+                   "Request type create latency");
   plb.add_time_avg(l_mdss_req_open_latency, "req_open_latency",
-      "Request type open latency");
+                   "Request type open latency");
   plb.add_time_avg(l_mdss_req_mknod_latency, "req_mknod_latency",
-      "Request type make node latency");
+                   "Request type make node latency");
   plb.add_time_avg(l_mdss_req_link_latency, "req_link_latency",
-      "Request type link latency");
+                   "Request type link latency");
   plb.add_time_avg(l_mdss_req_unlink_latency, "req_unlink_latency",
-      "Request type unlink latency");
+                   "Request type unlink latency");
   plb.add_time_avg(l_mdss_req_rmdir_latency, "req_rmdir_latency",
-      "Request type remove directory latency");
+                   "Request type remove directory latency");
   plb.add_time_avg(l_mdss_req_rename_latency, "req_rename_latency",
-      "Request type rename latency");
+                   "Request type rename latency");
   plb.add_time_avg(l_mdss_req_mkdir_latency, "req_mkdir_latency",
-      "Request type make directory latency");
+                   "Request type make directory latency");
   plb.add_time_avg(l_mdss_req_symlink_latency, "req_symlink_latency",
-      "Request type symbolic link latency");
+                   "Request type symbolic link latency");
   plb.add_time_avg(l_mdss_req_lssnap_latency, "req_lssnap_latency",
-      "Request type list snapshot latency");
+                   "Request type list snapshot latency");
   plb.add_time_avg(l_mdss_req_mksnap_latency, "req_mksnap_latency",
-      "Request type make snapshot latency");
+                   "Request type make snapshot latency");
   plb.add_time_avg(l_mdss_req_rmsnap_latency, "req_rmsnap_latency",
-      "Request type remove snapshot latency");
+                   "Request type remove snapshot latency");
   plb.add_time_avg(l_mdss_req_renamesnap_latency, "req_renamesnap_latency",
-      "Request type rename snapshot latency");
+                   "Request type rename snapshot latency");
+
+  plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
+  plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request",
+                      "Client requests dispatched");
+  plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request",
+                      "Server requests dispatched");
+
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
