@@ -10,6 +10,7 @@
 #include "include/str_list.h"
 #include "msg/msg_types.h"
 #include "include/uuid.h"
+#include "include/intarith.h"
 
 struct Option {
   enum type_t {
@@ -23,6 +24,7 @@ struct Option {
     TYPE_UUID,
     TYPE_SIZE,
     TYPE_SECS,
+    TYPE_P2_UINT,
   };
 
   const char *type_to_str(type_t t) const {
@@ -37,6 +39,7 @@ struct Option {
     case TYPE_UUID: return "uuid_d";
     case TYPE_SIZE: return "size_t";
     case TYPE_SECS: return "secs";
+    case TYPE_P2_UINT: return "ceph::math::p2_t<uint64_t>";
     default: return "unknown";
     }
   }
@@ -91,7 +94,8 @@ struct Option {
     entity_addrvec_t,
     std::chrono::seconds,
     size_t,
-    uuid_d>;
+    uuid_d,
+    ceph::math::p2_t<uint64_t>>;
   const std::string name;
   const type_t type;
   const level_t level;
@@ -165,6 +169,8 @@ struct Option {
       value = size_t{0}; break;
     case TYPE_SECS:
       value = std::chrono::seconds{0}; break;
+    case TYPE_P2_UINT:
+      value = ceph::math::p2_t<uint64_t>(0); break;
     default:
       ceph_abort();
     }
@@ -215,6 +221,8 @@ struct Option {
       v = size_t{static_cast<std::size_t>(new_value)}; break;
     case TYPE_SECS:
       v = std::chrono::seconds{new_value}; break;
+    case TYPE_P2_UINT:
+      v = ceph::math::p2_t<uint64_t>(new_value); break;
     default:
       std::cerr << "Bad type in set_value: " << name << ": "
                 << typeid(T).name() << std::endl;
@@ -329,7 +337,8 @@ struct Option {
       (has_flag(FLAG_RUNTIME)
        || type == TYPE_BOOL || type == TYPE_INT
        || type == TYPE_UINT || type == TYPE_FLOAT
-       || type == TYPE_SIZE || type == TYPE_SECS)
+       || type == TYPE_SIZE || type == TYPE_SECS
+       || type == TYPE_P2_UINT)
       && !has_flag(FLAG_STARTUP)
       && !has_flag(FLAG_CLUSTER_CREATE)
       && !has_flag(FLAG_CREATE);

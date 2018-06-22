@@ -42,6 +42,9 @@ public:
   void operator()(const std::chrono::seconds v) const {
     out << v.count();
   }
+  void operator()(const ceph::math::p2_t<uint64_t>& v) const {
+    out << v;
+  }
 };
 }
 
@@ -70,6 +73,9 @@ void Option::dump_value(const char *field_name,
     f->dump_float(field_name, boost::get<double>(v)); break;
   case TYPE_BOOL:
     f->dump_bool(field_name, boost::get<bool>(v)); break;
+  case TYPE_P2_UINT:
+    f->dump_unsigned(field_name,
+		     boost::get<ceph::math::p2_t<uint64_t>>(v).get_value());
   default:
     f->dump_stream(field_name) << v; break;
   }
@@ -212,6 +218,16 @@ int Option::parse_value(
   } else if (type == Option::TYPE_UINT) {
     uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
     if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    *out = f;
+  } else if (type == Option::TYPE_P2_UINT) {
+    uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
+    if (!error_message->empty()) {
+      return -EINVAL;
+    }
+    if (!isp2(f)) {
+      *error_message = "strict_sistrtoll: value is not power of two";
       return -EINVAL;
     }
     *out = f;
