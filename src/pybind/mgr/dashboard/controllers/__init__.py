@@ -182,45 +182,45 @@ def load_controllers():
 ENDPOINT_MAP = collections.defaultdict(list)
 
 
-def generate_controller_routes(ctrl_class, mapper, base_url):
-    inst = ctrl_class()
-    endp_base_urls = set()
+def generate_controller_routes(endpoint, mapper, base_url):
+    inst = endpoint.inst
+    ctrl_class = endpoint.ctrl
+    endp_base_url = None
 
-    for endpoint in ctrl_class.endpoints():
-        if endpoint.proxy:
-            conditions = None
-        else:
-            conditions = dict(method=[endpoint.method])
+    if endpoint.proxy:
+        conditions = None
+    else:
+        conditions = dict(method=[endpoint.method])
 
-        endp_url = endpoint.url
-        if base_url == "/":
-            base_url = ""
-        if endp_url == "/" and base_url:
-            endp_url = ""
-        url = "{}{}".format(base_url, endp_url)
+    endp_url = endpoint.url
+    if base_url == "/":
+        base_url = ""
+    if endp_url == "/" and base_url:
+        endp_url = ""
+    url = "{}{}".format(base_url, endp_url)
 
-        if '/' in url[len(base_url)+1:]:
-            endp_base_urls.add(url[:len(base_url)+1+endp_url[1:].find('/')])
-        else:
-            endp_base_urls.add(url)
+    if '/' in url[len(base_url)+1:]:
+        endp_base_url = url[:len(base_url)+1+endp_url[1:].find('/')]
+    else:
+        endp_base_url = url
 
-        logger.debug("Mapped [%s] to %s:%s restricted to %s",
-                     url, ctrl_class.__name__, endpoint.action,
-                     endpoint.method)
+    logger.debug("Mapped [%s] to %s:%s restricted to %s",
+                 url, ctrl_class.__name__, endpoint.action,
+                 endpoint.method)
 
-        ENDPOINT_MAP[endpoint.url].append(endpoint)
+    ENDPOINT_MAP[endpoint.url].append(endpoint)
 
-        name = ctrl_class.__name__ + ":" + endpoint.action
-        mapper.connect(name, url, controller=inst, action=endpoint.action,
-                       conditions=conditions)
+    name = ctrl_class.__name__ + ":" + endpoint.action
+    mapper.connect(name, url, controller=inst, action=endpoint.action,
+                   conditions=conditions)
 
-        # adding route with trailing slash
-        name += "/"
-        url += "/"
-        mapper.connect(name, url, controller=inst, action=endpoint.action,
-                       conditions=conditions)
+    # adding route with trailing slash
+    name += "/"
+    url += "/"
+    mapper.connect(name, url, controller=inst, action=endpoint.action,
+                   conditions=conditions)
 
-    return endp_base_urls
+    return endp_base_url
 
 
 def generate_routes(url_prefix):
@@ -228,9 +228,18 @@ def generate_routes(url_prefix):
     ctrls = load_controllers()
 
     parent_urls = set()
+
+    endpoint_list = []
     for ctrl in ctrls:
-        parent_urls.update(generate_controller_routes(ctrl, mapper,
-                                                      "{}".format(url_prefix)))
+        inst = ctrl()
+        for endpoint in ctrl.endpoints():
+            endpoint.inst = inst
+            endpoint_list.append(endpoint)
+
+    endpoint_list = sorted(endpoint_list, key=lambda e: e.url)
+    for endpoint in endpoint_list:
+        parent_urls.add(generate_controller_routes(endpoint, mapper,
+                                                   "{}".format(url_prefix)))
 
     logger.debug("list of parent paths: %s", parent_urls)
     return mapper, parent_urls
@@ -347,6 +356,7 @@ class BaseController(object):
         """
         def __init__(self, ctrl, func):
             self.ctrl = ctrl
+            self.inst = None
             self.func = func
 
             if not self.config['proxy']:
