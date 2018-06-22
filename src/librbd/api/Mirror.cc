@@ -288,6 +288,10 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
                        << info.first.second  << dendl;
             return r;
           }
+
+          // TODO support clone v2 child namespaces
+          ioctx.set_namespace(ictx->md_ctx.get_namespace());
+
           for (auto &id_it : info.second) {
             cls::rbd::MirrorImage mirror_image_internal;
             r = cls_client::mirror_image_get(&ioctx, id_it,

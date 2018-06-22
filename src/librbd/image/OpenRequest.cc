@@ -409,6 +409,7 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
       send_close_image(*result);
       return nullptr;
     }
+    m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
   }
 
   m_image_ctx->init_layout();

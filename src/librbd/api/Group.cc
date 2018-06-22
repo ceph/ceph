@@ -228,6 +228,7 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     if (r < 0) {
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
     }
+    image_io_ctx.set_namespace(group_ioctx.get_namespace());
 
     librbd::ImageCtx* image_ctx = new ImageCtx("", group_snap.snaps[i].image_id,
 					       nullptr, image_io_ctx, false);
@@ -425,6 +426,8 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
       lderr(cct) << "error creating image_ioctx" << dendl;
       return r;
     }
+    image_ioctx.set_namespace(io_ctx.get_namespace());
+
     r = group_image_remove(io_ctx, group_id, image_ioctx, image.spec.image_id);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error removing image from a group" << dendl;
@@ -618,6 +621,8 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
     if (r < 0) {
       return r;
     }
+    ioctx.set_namespace(group_ioctx.get_namespace());
+
     std::string image_name;
     r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY,
 				 image_id.spec.image_id, &image_name);
@@ -676,6 +681,7 @@ int Group<I>::image_get_group(I *ictx, group_info_t *group_info)
     r = rados.ioctx_create2(ictx->group_spec.pool_id, ioctx);
     if (r < 0)
       return r;
+    ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
     std::string group_name;
     r = cls_client::dir_get_name(&ioctx, RBD_GROUP_DIRECTORY,
@@ -762,6 +768,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     if (r < 0) {
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
     }
+    image_io_ctx.set_namespace(group_ioctx.get_namespace());
 
     ldout(cct, 20) << "Opening image with id " << image.spec.image_id << dendl;
 

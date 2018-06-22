@@ -98,6 +98,9 @@ public:
       return r;
     }
 
+    // TODO support clone v2 child namespaces
+    m_pool_ioctx.set_namespace(image_ctx.md_ctx.get_namespace());
+
     librados::ObjectReadOperation op;
     cls_client::get_children_start(&op, m_pspec);
 
