@@ -101,9 +101,19 @@ def task(ctx, config):
     rgw[0].run(args=['cd', 'nfs-ganesha-rgw', run.Raw(';'), 'git', 'clone',
                      'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git'])
 
-    rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', 'wip-nfs-v2'])
+    rgw[0].run(args=['cd', 'nfs-ganesha-rgw/ceph-qe-scripts', run.Raw(';'), 'git', 'checkout', 'wip-nfs-ganesha-rgw-v2'])
 
     rgw[0].run(args=['virtualenv', 'venv'])
+
+    rgw[0].run(
+        args=[
+            'source',
+            'venv/bin/activate',
+            run.Raw(';'),
+            run.Raw('pip install --upgrade setuptools'),
+            run.Raw(';'),
+            'deactivate'])
+
     rgw[0].run(
         args=[
             'source',
