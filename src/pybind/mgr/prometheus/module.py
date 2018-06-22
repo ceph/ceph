@@ -83,14 +83,15 @@ DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
 OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
              'norecover', 'noscrub', 'nodeep-scrub')
 
-FS_METADATA = ('data_pools', 'id', 'metadata_pool', 'name')
+FS_METADATA = ('data_pools', 'fs_id', 'metadata_pool', 'name')
 
-MDS_METADATA = ('id', 'fs', 'hostname', 'public_addr', 'rank', 'ceph_version')
-
-MON_METADATA = ('id', 'hostname', 'public_addr', 'rank', 'ceph_version')
-
-OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'hostname', 'public_addr',
+MDS_METADATA = ('ceph_daemon', 'fs_id', 'hostname', 'public_addr', 'rank',
                 'ceph_version')
+
+MON_METADATA = ('ceph_daemon', 'hostname', 'public_addr', 'rank', 'ceph_version')
+
+OSD_METADATA = ('ceph_daemon', 'cluster_addr', 'device_class', 'hostname',
+                'public_addr', 'ceph_version')
 
 OSD_STATUS = ['weight', 'up', 'in']
 
@@ -98,9 +99,11 @@ OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name')
 
-RGW_METADATA = ('id', 'hostname', 'ceph_version')
+RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
-DISK_OCCUPATION = ('instance', 'device', 'ceph_daemon')
+DISK_OCCUPATION = ( 'ceph_daemon', 'device','instance')
+
+NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
 
 class Metrics(object):
@@ -253,6 +256,13 @@ class Metrics(object):
                 'DF pool {}'.format(state),
                 ('pool_id',)
             )
+        for state in NUM_OBJECTS:
+            path = 'num_objects_{}'.format(state)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'Number of {} objects'.format(state),
+            )
 
         return metrics
 
@@ -373,13 +383,14 @@ class Module(MgrModule):
                                  fs['id'],
                                  fs['mdsmap']['metadata_pool'],
                                  fs['mdsmap']['fs_name']))
+            self.log.debug('mdsmap: {}'.format(fs['mdsmap']))
             for gid, daemon in fs['mdsmap']['info'].items():
                 id_ = daemon['name']
                 host_version = servers.get((id_, 'mds'), ('',''))
                 self.metrics.append('mds_metadata', 1,
-                                    (id_, fs['id'], host_version[0],
-                                     daemon['addr'], daemon['rank'],
-                                     host_version[1]))
+                                    ('mds.{}'.format(id_), fs['id'],
+                                     host_version[0], daemon['addr'],
+                                     daemon['rank'], host_version[1]))
 
     def get_quorum_status(self):
         mon_status = json.loads(self.get('mon_status')['json'])
@@ -389,12 +400,12 @@ class Module(MgrModule):
             id_ = mon['name']
             host_version = servers.get((id_, 'mon'), ('',''))
             self.metrics.append('mon_metadata', 1,
-                                (id_, host_version[0],
+                                ('mon.{}'.format(id_), host_version[0],
                                  mon['public_addr'].split(':')[0], rank,
                                  host_version[1]))
             in_quorum = int(rank in mon_status['quorum'])
             self.metrics.append('mon_quorum_status', in_quorum,
-                                ('mon_{}'.format(id_),))
+                                ('mon.{}'.format(id_),))
 
     def get_pg_status(self):
         # TODO add per pool status?
@@ -477,9 +488,10 @@ class Module(MgrModule):
             host_version = servers.get((str(id_), 'osd'), ('',''))
 
             self.metrics.append('osd_metadata', 1, (
+                'osd.{}'.format(id_),
                 c_addr,
                 dev_class,
-                id_, host_version[0],
+                host_version[0],
                 p_addr, host_version[1]
             ))
 
@@ -505,9 +517,9 @@ class Module(MgrModule):
                 self.log.debug("Got dev for osd {0}: {1}/{2}".format(
                     id_, osd_hostname, osd_dev_node))
                 self.metrics.set('disk_occupation', 1, (
-                    osd_hostname,
+                    "osd.{0}".format(id_),
                     osd_dev_node,
-                    "osd.{0}".format(id_)
+                    osd_hostname
                 ))
             else:
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
@@ -526,8 +538,14 @@ class Module(MgrModule):
             self.metrics.append(
                 'rgw_metadata',
                 1,
-                (service_id, hostname, version)
+                ('{}.{}'.format(service_type, service_id), hostname, version)
             )
+
+    def get_num_objects(self):
+        pg_sum = self.get('pg_summary')['pg_stats_sum']['stat_sum']
+        for obj in NUM_OBJECTS:
+            stat = 'num_objects_{}'.format(obj)
+            self.metrics.set(stat, pg_sum[stat])
 
     def collect(self):
         self.get_health()
@@ -537,24 +555,47 @@ class Module(MgrModule):
         self.get_quorum_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
+        self.get_num_objects()
 
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
+                # Skip histograms, they are represented by long running avgs
                 stattype = self._stattype_to_str(counter_info['type'])
-                # XXX simplify first effort: no histograms
-                # averages are already collapsed to one value for us
                 if not stattype or stattype == 'histogram':
                     self.log.debug('ignoring %s, type %s' % (path, stattype))
                     continue
 
-                self.metrics.add_metric(path, Metric(
+                # Get the value of the counter
+                value = self._perfvalue_to_value(counter_info['type'], counter_info['value'])
+
+                # Represent the long running avgs as sum/count pairs
+                if counter_info['type'] & self.PERFCOUNTER_LONGRUNAVG:
+                    _path = path + '_sum'
+                    self.metrics.add_metric(_path, Metric(
+                        stattype,
+                        _path,
+                        counter_info['description'] + ' Total',
+                        ("ceph_daemon",),
+                    ))
+                    self.metrics.append(_path, value, (daemon,))
+
+                    _path = path + '_count'
+                    self.metrics.add_metric(_path, Metric(
+                        'counter',
+                        _path,
+                        counter_info['description'] + ' Count',
+                        ("ceph_daemon",),
+                    ))
+                    self.metrics.append(_path, counter_info['count'], (daemon,))
+                else:
+                    self.metrics.add_metric(path, Metric(
                         stattype,
                         path,
                         counter_info['description'],
                         ("ceph_daemon",),
                     ))
+                    self.metrics.append(path, value, (daemon,))
 
-                self.metrics.append(path, counter_info['value'], (daemon,))
         # It is sufficient to reset the pending metrics once per scrape
         self.metrics.reset()
 
