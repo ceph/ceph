@@ -206,9 +206,9 @@ export class RbdFormComponent implements OnInit {
       this.mode === this.rbdFormMode.copying
     ) {
       this.route.params.subscribe((params: { pool: string; name: string; snap: string }) => {
-        const poolName = params.pool;
-        const rbdName = params.name;
-        this.snapName = params.snap;
+        const poolName = decodeURIComponent(params.pool);
+        const rbdName = decodeURIComponent(params.name);
+        this.snapName = decodeURIComponent(params.snap);
         this.rbdService.get(poolName, rbdName).subscribe((resp: RbdFormResponseModel) => {
           this.setResponse(resp, this.snapName);
         });
