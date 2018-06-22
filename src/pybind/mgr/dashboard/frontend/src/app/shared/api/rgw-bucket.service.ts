@@ -57,7 +57,7 @@ export class RgwBucketService {
     let params = new HttpParams();
     params = params.append('bucket_id', bucketId);
     params = params.append('uid', uid);
-    return this.http.put(`${this.url}/${bucket}`, null, { params: params});
+    return this.http.put(`${this.url}/${bucket}`, null, { params: params });
   }
 
   delete(bucket: string, purgeObjects = true) {
