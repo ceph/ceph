@@ -34,7 +34,7 @@
               class="btn btn-sm btn-primary"
               [ngClass]="{'disabled': !selection.hasSelection}"
               *ngIf="permission.update && (!permission.create && !selection.hasMultiSelection || selection.hasSingleSelection)"
-              routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket }}">
+              routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket | encodeUri }}">
         <i class="fa fa-fw fa-pencil"></i>
         <ng-container i18n>Edit</ng-container>
       </button>
@@ -69,7 +69,7 @@
             *ngIf="permission.update"
             [ngClass]="{'disabled': !selection.hasSingleSelection}">
           <a class="dropdown-item"
-             routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket }}"
+             routerLink="/rgw/bucket/edit/{{ selection.first()?.bucket | encodeUri }}"
              i18n>
             <i class="fa fa-fw fa-pencil"></i>
             Edit

@@ -580,3 +580,22 @@ class RbdTest(DashboardTestCase):
         self.assertEqual(default_features, ['deep-flatten', 'exclusive-lock',
                                              'fast-diff', 'layering',
                                              'object-map'])
+
+    def test_image_with_special_name(self):
+        rbd_name = 'test/rbd'
+        rbd_name_encoded = 'test%2Frbd'
+
+        self.create_image('rbd', rbd_name, 10240)
+        self.assertStatus(201)
+
+        img = self._get("/api/block/image/rbd/" + rbd_name_encoded)
+        self.assertStatus(200)
+
+        self._validate_image(img, name=rbd_name, size=10240,
+                             num_objs=1, obj_size=4194304,
+                             features_name=['deep-flatten',
+                                            'exclusive-lock',
+                                            'fast-diff', 'layering',
+                                            'object-map'])
+
+        self.remove_image('rbd', rbd_name_encoded)

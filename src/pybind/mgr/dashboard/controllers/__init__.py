@@ -9,9 +9,15 @@ import json
 import os
 import pkgutil
 import sys
-
-import cherrypy
 from six import add_metaclass
+
+if sys.version_info >= (3, 0):
+    from urllib.parse import unquote  # pylint: disable=no-name-in-module,import-error
+else:
+    from urllib import unquote  # pylint: disable=no-name-in-module
+
+# pylint: disable=wrong-import-position
+import cherrypy
 
 from .. import logger
 from ..security import Scope, Permission
@@ -521,6 +527,12 @@ class BaseController(object):
     def _request_wrapper(func, method, json_response):
         @wraps(func)
         def inner(*args, **kwargs):
+            for key, value in kwargs.items():
+                # pylint: disable=undefined-variable
+                if (sys.version_info < (3, 0) and isinstance(value, unicode)) \
+                        or isinstance(value, str):
+                    kwargs[key] = unquote(value)
+
             if method in ['GET', 'DELETE']:
                 ret = func(*args, **kwargs)
 

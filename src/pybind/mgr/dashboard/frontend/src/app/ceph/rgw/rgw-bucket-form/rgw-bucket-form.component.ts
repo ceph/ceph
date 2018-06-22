@@ -56,6 +56,7 @@ export class RgwBucketFormComponent implements OnInit {
         if (!params.hasOwnProperty('bucket')) {
           return;
         }
+        params.bucket = decodeURIComponent(params.bucket);
         this.loading = true;
         // Load the bucket data in 'edit' mode.
         this.editing = true;
