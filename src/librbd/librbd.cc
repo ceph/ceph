@@ -1508,6 +1508,12 @@ namespace librbd {
     return r;
   }
 
+  int Image::snap_remove_by_id(uint64_t snap_id)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Snapshot<>::remove(ictx, snap_id);
+  }
+
   int Image::snap_rollback(const char *snap_name)
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
@@ -1653,6 +1659,13 @@ namespace librbd {
                                                          group_snap);
     tracepoint(librbd, snap_get_group_namespace_exit, r);
     return r;
+  }
+
+  int Image::snap_get_trash_namespace(uint64_t snap_id,
+                                      std::string* original_name) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    return librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
+                                                        original_name);
   }
 
   int Image::snap_set_limit(uint64_t limit)
@@ -3440,6 +3453,12 @@ extern "C" int rbd_snap_remove2(rbd_image_t image, const char *snap_name, uint32
   return r;
 }
 
+extern "C" int rbd_snap_remove_by_id(rbd_image_t image, uint64_t snap_id)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  return librbd::api::Snapshot<>::remove(ictx, snap_id);
+}
+
 extern "C" int rbd_snap_rollback(rbd_image_t image, const char *snap_name)
 {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
@@ -4905,6 +4924,25 @@ extern "C" int rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *grou
   return 0;
 }
 
+extern "C" int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
+                                            char *original_name,
+                                            size_t max_length) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+
+  std::string cpp_original_name;
+  int r = librbd::api::Snapshot<>::get_trash_namespace(ictx, snap_id,
+                                                       &cpp_original_name);
+  if (r < 0) {
+    return r;
+  }
+
+  if (cpp_original_name.length() >= max_length) {
+    return -ERANGE;
+  }
+
+  strcpy(original_name, cpp_original_name.c_str());
+  return 0;
+}
 extern "C" int rbd_watchers_list(rbd_image_t image,
 				 rbd_image_watcher_t *watchers,
 				 size_t *max_watchers) {
