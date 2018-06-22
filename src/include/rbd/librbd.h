@@ -486,6 +486,7 @@ CEPH_RBD_API int rbd_snap_create(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_remove(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_remove2(rbd_image_t image, const char *snap_name, uint32_t flags,
 				  librbd_progress_fn_t cb, void *cbdata);
+CEPH_RBD_API int rbd_snap_remove_by_id(rbd_image_t image, uint64_t snap_id);
 CEPH_RBD_API int rbd_snap_rollback(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_rollback_with_progress(rbd_image_t image,
                                                  const char *snapname,
@@ -556,6 +557,10 @@ CEPH_RBD_API int rbd_snap_get_group_namespace(rbd_image_t image,
                                               size_t group_snap_size);
 CEPH_RBD_API int rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_snap,
                                                   size_t group_snap_size);
+CEPH_RBD_API int rbd_snap_get_trash_namespace(rbd_image_t image,
+                                              uint64_t snap_id,
+                                              char* original_name,
+                                              size_t max_length);
 
 CEPH_RBD_API int rbd_flatten(rbd_image_t image);
 
