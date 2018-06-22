@@ -964,32 +964,76 @@ void RGWZoneParams::dump(Formatter *f) const
   encode_json("realm_id", realm_id, f);
 }
 
+void RGWZoneStorageClass::dump(Formatter *f) const
+{
+  if (data_pool) {
+    encode_json("data_pool", data_pool.get(), f);
+  }
+  if (compression_type) {
+    encode_json("compression_type", compression_type.get(), f);
+  }
+}
+
+void RGWZoneStorageClass::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("data_pool", data_pool, obj);
+  JSONDecoder::decode_json("compression_type", compression_type, obj);
+}
+
+void RGWZoneStorageClasses::dump(Formatter *f) const
+{
+  for (auto& i : m) {
+    encode_json(i.first.c_str(), i.second, f);
+  }
+}
+
+void RGWZoneStorageClasses::decode_json(JSONObj *obj)
+{
+  JSONFormattable f;
+  decode_json_obj(f, obj);
+
+  for (auto& field : f.object()) {
+    JSONObj *field_obj = obj->find_obj(field.first);
+    assert(field_obj);
+
+    decode_json_obj(m[field.first], field_obj);
+  }
+}
+
 void RGWZonePlacementInfo::dump(Formatter *f) const
 {
   encode_json("index_pool", index_pool, f);
-  encode_json("data_pools", data_pools, f);
+  encode_json("storage_classes", storage_classes, f);
   encode_json("data_extra_pool", data_extra_pool, f);
   encode_json("index_type", (uint32_t)index_type, f);
-  encode_json("compression", compression_type, f);
+
+  /* no real need for backward compatibility of compression_type and data_pool in here,
+   * rather not clutter the output */
 }
 
 void RGWZonePlacementInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("index_pool", index_pool, obj);
-  JSONDecoder::decode_json("data_pools", data_pools, obj);
-  if (JSONDecoder::decode_json("data_pool", standard_data_pool, obj)) {
-    data_pools[RGW_STORAGE_CLASS_STANDARD] = standard_data_pool;
-  } else {
-    auto iter = data_pools.find(RGW_STORAGE_CLASS_STANDARD);
-    if (iter != data_pools.end()) {
-      standard_data_pool = iter->second;
-    }
-  }
+  JSONDecoder::decode_json("storage_classes", storage_classes, obj);
   JSONDecoder::decode_json("data_extra_pool", data_extra_pool, obj);
   uint32_t it;
   JSONDecoder::decode_json("index_type", it, obj);
   index_type = (RGWBucketIndexType)it;
-  JSONDecoder::decode_json("compression", compression_type, obj);
+
+  /* backward compatibility, these are now defined in storage_classes */
+  string standard_compression_type;
+  string *pcompression = nullptr;
+  if (JSONDecoder::decode_json("compression", standard_compression_type, obj)) {
+    pcompression = &standard_compression_type;
+  }
+  rgw_pool standard_data_pool;
+  rgw_pool *ppool = nullptr;
+  if (JSONDecoder::decode_json("data_pool", standard_data_pool, obj)) {
+    ppool = &standard_data_pool;
+  }
+  if (ppool || pcompression) {
+    storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, ppool, pcompression);
+  }
 }
 
 void RGWZoneParams::decode_json(JSONObj *obj)
