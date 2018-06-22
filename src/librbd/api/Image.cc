@@ -119,6 +119,7 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                  << dendl;
       return r;
     }
+    ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
     set<string> image_ids;
     r = cls_client::get_children(&ioctx, RBD_CHILDREN, parent_spec,
@@ -135,6 +136,9 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
   IoCtx parent_io_ctx;
   r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
   assert(r == 0);
+
+  // TODO support clone v2 parent namespaces
+  parent_io_ctx.set_namespace(ictx->md_ctx.get_namespace());
 
   cls::rbd::ChildImageSpecs child_images;
   r = cls_client::children_list(&parent_io_ctx,
@@ -153,6 +157,9 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                     << dendl;
       continue;
     }
+
+    // TODO support clone v2 child namespaces
+    io_ctx.set_namespace(ictx->md_ctx.get_namespace());
 
     PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name()};
     (*pool_image_ids)[pool_spec].insert(child_image.image_id);
@@ -237,6 +244,10 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
                  << cpp_strerror(r) << dendl;
       return r;
     }
+
+    // TODO support clone v2 parent namespaces
+    parent_io_ctx.set_namespace(dest_md_ctx.get_namespace());
+
     ImageCtx *src_parent_image_ctx =
       new ImageCtx("", parent_spec.image_id, nullptr, parent_io_ctx, false);
     r = src_parent_image_ctx->state->open(true);

@@ -62,6 +62,9 @@ void DetachChildRequest<I>::clone_v2_child_detach() {
   int r = rados.ioctx_create2(m_parent_spec.pool_id, m_parent_io_ctx);
   assert(r == 0);
 
+  // TODO support clone v2 parent namespaces
+  m_parent_io_ctx.set_namespace(m_image_ctx.md_ctx.get_namespace());
+
   auto aio_comp = create_rados_callback<
     DetachChildRequest<I>,
     &DetachChildRequest<I>::handle_clone_v2_child_detach>(this);

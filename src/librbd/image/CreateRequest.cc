@@ -357,6 +357,7 @@ void CreateRequest<I>::validate_overwrite() {
       complete(r);
       return;
     }
+    m_data_io_ctx.set_namespace(m_io_ctx.get_namespace());
   }
 
   using klass = CreateRequest<I>;
