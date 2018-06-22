@@ -6,7 +6,7 @@ import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
 
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
-import { CdValidators, isEmptyInputValue } from '../../../shared/validators/cd-validators';
+import { CdValidators, isEmptyInputValue } from '../../../shared/forms/cd-validators';
 import { RgwUserSubuser } from '../models/rgw-user-subuser';
 
 @Component({
