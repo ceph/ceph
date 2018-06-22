@@ -26,7 +26,6 @@ import { RbdFormResponseModel } from './rbd-form-response.model';
   styleUrls: ['./rbd-form.component.scss']
 })
 export class RbdFormComponent implements OnInit {
-
   poolPermission: Permission;
   rbdForm: FormGroup;
   featuresFormGroups: FormGroup;
@@ -91,7 +90,7 @@ export class RbdFormComponent implements OnInit {
         allowEnable: false,
         allowDisable: true
       },
-      'layering': {
+      layering: {
         desc: 'Layering',
         requires: null,
         allowEnable: false,
@@ -109,7 +108,7 @@ export class RbdFormComponent implements OnInit {
         allowEnable: true,
         allowDisable: true
       },
-      'journaling': {
+      journaling: {
         desc: 'Journaling (requires exclusive-lock)',
         requires: 'exclusive-lock',
         allowEnable: true,
@@ -134,41 +133,40 @@ export class RbdFormComponent implements OnInit {
     this.deepFlattenFormControl = new FormControl(false);
     this.layeringFormControl = new FormControl(false);
     this.exclusiveLockFormControl = new FormControl(false);
-    this.objectMapFormControl = new FormControl({value: false, disabled: true});
-    this.journalingFormControl = new FormControl({value: false, disabled: true});
-    this.fastDiffFormControl = new FormControl({value: false, disabled: true});
+    this.objectMapFormControl = new FormControl({ value: false, disabled: true });
+    this.journalingFormControl = new FormControl({ value: false, disabled: true });
+    this.fastDiffFormControl = new FormControl({ value: false, disabled: true });
     this.featuresFormGroups = new FormGroup({
       'deep-flatten': this.deepFlattenFormControl,
-      'layering': this.layeringFormControl,
+      layering: this.layeringFormControl,
       'exclusive-lock': this.exclusiveLockFormControl,
       'object-map': this.objectMapFormControl,
-      'journaling': this.journalingFormControl,
-      'fast-diff': this.fastDiffFormControl,
+      journaling: this.journalingFormControl,
+      'fast-diff': this.fastDiffFormControl
     });
-    this.rbdForm = new FormGroup({
-      parent: new FormControl(''),
-      name: new FormControl('', {
-        validators: [
-          Validators.required
-        ]
-      }),
-      pool: new FormControl(null, {
-        validators: [
-          Validators.required
-        ]
-      }),
-      useDataPool: new FormControl(false),
-      dataPool: new FormControl(null),
-      size: new FormControl(null, {
-        updateOn: 'blur'
-      }),
-      obj_size: new FormControl(this.defaultObjectSize),
-      features: this.featuresFormGroups,
-      stripingUnit: new FormControl(null),
-      stripingCount: new FormControl(null, {
-        updateOn: 'blur'
-      })
-    }, this.validateRbdForm(this.formatter));
+    this.rbdForm = new FormGroup(
+      {
+        parent: new FormControl(''),
+        name: new FormControl('', {
+          validators: [Validators.required]
+        }),
+        pool: new FormControl(null, {
+          validators: [Validators.required]
+        }),
+        useDataPool: new FormControl(false),
+        dataPool: new FormControl(null),
+        size: new FormControl(null, {
+          updateOn: 'blur'
+        }),
+        obj_size: new FormControl(this.defaultObjectSize),
+        features: this.featuresFormGroups,
+        stripingUnit: new FormControl(null),
+        stripingCount: new FormControl(null, {
+          updateOn: 'blur'
+        })
+      },
+      this.validateRbdForm(this.formatter)
+    );
   }
 
   disableForEdit() {
@@ -202,29 +200,28 @@ export class RbdFormComponent implements OnInit {
       this.mode = this.rbdFormMode.copying;
       this.disableForCopy();
     }
-    if (this.mode === this.rbdFormMode.editing ||
-        this.mode === this.rbdFormMode.cloning ||
-        this.mode === this.rbdFormMode.copying) {
-      this.route.params.subscribe(
-        (params: { pool: string, name: string, snap: string }) => {
-          const poolName = params.pool;
-          const rbdName = params.name;
-          this.snapName = params.snap;
-          this.rbdService.get(poolName, rbdName)
-            .subscribe((resp: RbdFormResponseModel) => {
-              this.setResponse(resp, this.snapName);
-            });
-        }
-      );
-    } else {
-      this.rbdService.defaultFeatures()
-        .subscribe((defaultFeatures: Array<string>) => {
-          this.setFeatures(defaultFeatures);
+    if (
+      this.mode === this.rbdFormMode.editing ||
+      this.mode === this.rbdFormMode.cloning ||
+      this.mode === this.rbdFormMode.copying
+    ) {
+      this.route.params.subscribe((params: { pool: string; name: string; snap: string }) => {
+        const poolName = params.pool;
+        const rbdName = params.name;
+        this.snapName = params.snap;
+        this.rbdService.get(poolName, rbdName).subscribe((resp: RbdFormResponseModel) => {
+          this.setResponse(resp, this.snapName);
         });
+      });
+    } else {
+      this.rbdService.defaultFeatures().subscribe((defaultFeatures: Array<string>) => {
+        this.setFeatures(defaultFeatures);
+      });
     }
     if (this.mode !== this.rbdFormMode.editing && this.poolPermission.read) {
-      this.poolService.list(['pool_name', 'type', 'flags_names', 'application_metadata']).then(
-        resp => {
+      this.poolService
+        .list(['pool_name', 'type', 'flags_names', 'application_metadata'])
+        .then((resp) => {
           const pools = [];
           const dataPools = [];
           for (const pool of resp) {
@@ -232,8 +229,10 @@ export class RbdFormComponent implements OnInit {
               if (pool.type === 'replicated') {
                 pools.push(pool);
                 dataPools.push(pool);
-              } else if (pool.type === 'erasure' &&
-                pool.flags_names.indexOf('ec_overwrites') !== -1) {
+              } else if (
+                pool.type === 'erasure' &&
+                pool.flags_names.indexOf('ec_overwrites') !== -1
+              ) {
                 dataPools.push(pool);
               }
             }
@@ -247,8 +246,7 @@ export class RbdFormComponent implements OnInit {
             this.rbdForm.get('pool').setValue(poolName);
             this.onPoolChange(poolName);
           }
-        }
-      );
+        });
     }
     this.deepFlattenFormControl.valueChanges.subscribe((value) => {
       this.watchDataFeatures('deep-flatten', value);
@@ -280,7 +278,7 @@ export class RbdFormComponent implements OnInit {
     this.dataPools = newDataPools;
   }
 
-  onUseDataPoolChange () {
+  onUseDataPoolChange() {
     if (!this.rbdForm.get('useDataPool').value) {
       this.rbdForm.get('dataPool').setValue(null);
       this.onDataPoolChange(null);
@@ -304,23 +302,24 @@ export class RbdFormComponent implements OnInit {
       const dataPoolControl = formGroup.get('dataPool');
       let dataPoolControlErrors = null;
       if (useDataPoolControl.value && dataPoolControl.value == null) {
-        dataPoolControlErrors = {'required': true};
+        dataPoolControlErrors = { required: true };
       }
       dataPoolControl.setErrors(dataPoolControlErrors);
       // Size
       const sizeControl = formGroup.get('size');
       const objectSizeControl = formGroup.get('obj_size');
       const objectSizeInBytes = formatter.toBytes(
-        objectSizeControl.value != null ? objectSizeControl.value : this.defaultObjectSize);
+        objectSizeControl.value != null ? objectSizeControl.value : this.defaultObjectSize
+      );
       const stripingCountControl = formGroup.get('stripingCount');
       const stripingCount = stripingCountControl.value != null ? stripingCountControl.value : 1;
       let sizeControlErrors = null;
       if (sizeControl.value === null) {
-        sizeControlErrors = {'required': true};
+        sizeControlErrors = { required: true };
       } else {
         const sizeInBytes = formatter.toBytes(sizeControl.value);
         if (stripingCount * objectSizeInBytes > sizeInBytes) {
-          sizeControlErrors = {'invalidSizeObject': true};
+          sizeControlErrors = { invalidSizeObject: true };
         }
       }
       sizeControl.setErrors(sizeControlErrors);
@@ -328,20 +327,20 @@ export class RbdFormComponent implements OnInit {
       const stripingUnitControl = formGroup.get('stripingUnit');
       let stripingUnitControlErrors = null;
       if (stripingUnitControl.value === null && stripingCountControl.value !== null) {
-        stripingUnitControlErrors = {'required': true};
+        stripingUnitControlErrors = { required: true };
       } else if (stripingUnitControl.value !== null) {
         const stripingUnitInBytes = formatter.toBytes(stripingUnitControl.value);
         if (stripingUnitInBytes > objectSizeInBytes) {
-          stripingUnitControlErrors = {'invalidStripingUnit': true};
+          stripingUnitControlErrors = { invalidStripingUnit: true };
         }
       }
       stripingUnitControl.setErrors(stripingUnitControlErrors);
       // Striping Count
       let stripingCountControlErrors = null;
       if (stripingCountControl.value === null && stripingUnitControl.value !== null) {
-        stripingCountControlErrors = {'required': true};
+        stripingCountControlErrors = { required: true };
       } else if (stripingCount < 1) {
-        stripingCountControlErrors = {'min': true};
+        stripingCountControlErrors = { min: true };
       }
       stripingCountControl.setErrors(stripingCountControlErrors);
       return null;
@@ -361,10 +360,8 @@ export class RbdFormComponent implements OnInit {
         }
       }
       if (this.mode === this.rbdFormMode.editing && this.featuresFormGroups.get(feature).enabled) {
-
         if (this.response.features_name.indexOf(feature) !== -1 && !details.allowDisable) {
           this.featuresFormGroups.get(feature).disable();
-
         } else if (this.response.features_name.indexOf(feature) === -1 && !details.allowEnable) {
           this.featuresFormGroups.get(feature).disable();
         }
@@ -409,7 +406,8 @@ export class RbdFormComponent implements OnInit {
       }
     } else if (response.parent) {
       const parent = response.parent;
-      this.rbdForm.get('parent')
+      this.rbdForm
+        .get('parent')
         .setValue(`${parent.pool_name}/${parent.image_name}@${parent.snap_name}`);
     }
     if (this.mode === this.rbdFormMode.editing) {
@@ -423,8 +421,9 @@ export class RbdFormComponent implements OnInit {
     this.rbdForm.get('size').setValue(this.dimlessBinaryPipe.transform(response.size));
     this.rbdForm.get('obj_size').setValue(this.dimlessBinaryPipe.transform(response.obj_size));
     this.setFeatures(response.features_name);
-    this.rbdForm.get('stripingUnit').setValue(
-      this.dimlessBinaryPipe.transform(response.stripe_unit));
+    this.rbdForm
+      .get('stripingUnit')
+      .setValue(this.dimlessBinaryPipe.transform(response.stripe_unit));
     this.rbdForm.get('stripingCount').setValue(response.stripe_count);
   }
 
