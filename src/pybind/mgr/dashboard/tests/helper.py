@@ -23,8 +23,15 @@ class ControllerTestCase(helper.CPWebCase):
         if not isinstance(ctrl_classes, list):
             ctrl_classes = [ctrl_classes]
         mapper = cherrypy.dispatch.RoutesDispatcher()
+        endpoint_list = []
         for ctrl in ctrl_classes:
-            generate_controller_routes(ctrl, mapper, base_url)
+            inst = ctrl()
+            for endpoint in ctrl.endpoints():
+                endpoint.inst = inst
+                endpoint_list.append(endpoint)
+        endpoint_list = sorted(endpoint_list, key=lambda e: e.url)
+        for endpoint in endpoint_list:
+            generate_controller_routes(endpoint, mapper, base_url)
         if base_url == '':
             base_url = '/'
         cherrypy.tree.mount(None, config={
