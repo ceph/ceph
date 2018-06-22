@@ -121,3 +121,25 @@ class RgwBucket(RESTController):
             cherrypy.response.headers['Content-Type'] = 'application/json'
             cherrypy.response.status = 500
             return {'detail': str(e)}
+
+
+@ApiController('rgw/user')
+@AuthRequired()
+class RgwUser(RESTController):
+
+    def delete(self, uid):
+        try:
+            rgw_client = RgwClient.admin_instance()
+
+            # Ensure the user is not configured to access the Object Gateway.
+            if rgw_client.userid == uid:
+                raise RequestException('Unable to delete "{}" - this user '
+                                       'account is required for managing the '
+                                       'Object Gateway'.format(uid))
+
+            # Finally redirect request to the RGW proxy.
+            return rgw_client.proxy('DELETE', 'user', cherrypy.request.params, None)
+        except RequestException as e:
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 500
+            return {'detail': str(e)}

@@ -75,9 +75,7 @@ export class RgwUserService {
   }
 
   delete(uid: string) {
-    let params = new HttpParams();
-    params = params.append('uid', uid);
-    return this.http.delete(this.url, {params: params});
+    return this.http.delete(`api/rgw/user/${uid}`);
   }
 
   addSubuser(uid: string, subuser: string, permissions: string,
