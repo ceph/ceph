@@ -52,29 +52,30 @@ void MDLog::create_logger()
 {
   PerfCountersBuilder plb(g_ceph_context, "mds_log", l_mdl_first, l_mdl_last);
 
-  plb.add_u64_counter(l_mdl_evadd, "evadd",
-      "Events submitted", "subm", PerfCountersBuilder::PRIO_INTERESTING);
-  plb.add_u64_counter(l_mdl_evex, "evex", "Total expired events");
-  plb.add_u64_counter(l_mdl_evtrm, "evtrm", "Trimmed events");
-  plb.add_u64(l_mdl_ev, "ev",
-      "Events", "evts", PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64_counter(l_mdl_evadd, "evadd", "Events submitted", "subm",
+                      PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64(l_mdl_ev, "ev", "Events", "evts",
+              PerfCountersBuilder::PRIO_INTERESTING);
+  plb.add_u64(l_mdl_seg, "seg", "Segments", "segs",
+              PerfCountersBuilder::PRIO_INTERESTING);
+
+  plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   plb.add_u64(l_mdl_evexg, "evexg", "Expiring events");
   plb.add_u64(l_mdl_evexd, "evexd", "Current expired events");
-
+  plb.add_u64(l_mdl_segexg, "segexg", "Expiring segments");
+  plb.add_u64(l_mdl_segexd, "segexd", "Current expired segments");
+  plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed");
+  plb.add_time_avg(l_mdl_jlat, "jlat", "Journaler flush latency");
+  plb.add_u64_counter(l_mdl_evex, "evex", "Total expired events");
+  plb.add_u64_counter(l_mdl_evtrm, "evtrm", "Trimmed events");
   plb.add_u64_counter(l_mdl_segadd, "segadd", "Segments added");
   plb.add_u64_counter(l_mdl_segex, "segex", "Total expired segments");
   plb.add_u64_counter(l_mdl_segtrm, "segtrm", "Trimmed segments");
-  plb.add_u64(l_mdl_seg, "seg",
-      "Segments", "segs", PerfCountersBuilder::PRIO_INTERESTING);
-  plb.add_u64(l_mdl_segexg, "segexg", "Expiring segments");
-  plb.add_u64(l_mdl_segexd, "segexd", "Current expired segments");
 
+  plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
   plb.add_u64(l_mdl_expos, "expos", "Journaler xpire position");
   plb.add_u64(l_mdl_wrpos, "wrpos", "Journaler  write position");
   plb.add_u64(l_mdl_rdpos, "rdpos", "Journaler  read position");
-  plb.add_time_avg(l_mdl_jlat, "jlat", "Journaler flush latency");
-
-  plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed");
 
   // logger
   logger = plb.create_perf_counters();
