@@ -142,6 +142,10 @@ public:
 
   template<class T>
   static void decode_json(const char *name, T& val, const T& default_val, JSONObj *obj);
+
+  template<class T>
+  static bool decode_json(const char *name, boost::optional<T>& val, JSONObj *obj, bool mandatory = false);
+
 };
 
 template<class T>
@@ -344,6 +348,32 @@ void JSONDecoder::decode_json(const char *name, T& val, const T& default_val, JS
     s.append(e.message);
     throw err(s);
   }
+}
+
+template<class T>
+bool JSONDecoder::decode_json(const char *name, boost::optional<T>& val, JSONObj *obj, bool mandatory)
+{
+  JSONObjIter iter = obj->find_first(name);
+  if (iter.end()) {
+    if (mandatory) {
+      string s = "missing mandatory field " + string(name);
+      throw err(s);
+    }
+    val = boost::none;
+    return false;
+  }
+
+  try {
+    val.reset(T());
+    decode_json_obj(val.get(), *iter);
+  } catch (err& e) {
+    val.reset();
+    string s = string(name) + ": ";
+    s.append(e.message);
+    throw err(s);
+  }
+
+  return true;
 }
 
 template<class T>
@@ -573,6 +603,10 @@ public:
   long val_long() const;
   long long val_long_long() const;
   bool val_bool() const;
+
+  const map<std::string, JSONFormattable> object() const {
+    return obj;
+  }
 
   const vector<JSONFormattable>& array() const {
     return arr;

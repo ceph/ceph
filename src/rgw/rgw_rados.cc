@@ -2891,7 +2891,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
   return -ENOENT;
 }
 
-bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool)
+bool RGWRados::get_obj_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool)
 {
   return rgw_get_obj_data_pool(svc.zone->get_zonegroup(), svc.zone->get_zone_params(), placement_rule, obj, pool);
 }
@@ -4260,9 +4260,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
 
-#warning compression type
   const auto& compression_type = svc.zone->get_zone_params().get_compression_type(
-      dest_bucket_info.placement_rule.name);
+      dest_bucket_info.placement_rule);
   if (compression_type != "none") {
     plugin = Compressor::create(cct, compression_type);
     if (!plugin) {

@@ -3865,7 +3865,7 @@ void RGWPostObj::execute()
       filter = encrypt.get();
     } else {
       const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(
-          s->bucket_info.placement_rule.name);
+          s->bucket_info.placement_rule);
       if (compression_type != "none") {
         plugin = Compressor::create(s->cct, compression_type);
         if (!plugin) {
@@ -6586,9 +6586,8 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   /* No filters by default. */
   DataProcessor *filter = &processor;
 
-#warning add storage_class compression
   const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(
-      binfo.placement_rule.name);
+      binfo.placement_rule);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
   if (compression_type != "none") {
