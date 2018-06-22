@@ -1,0 +1,7 @@
+tasks:
+- ssh-keys: null
+- ceph-ansible: null
+- nfs_ganesha_rgw_v2:
+    test-name: test_on_nfs_io_delete
+    nfs-version: 3
+    mount-dir: ganesha-mount
