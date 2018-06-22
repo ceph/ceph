@@ -450,17 +450,15 @@ public:
       sb->coll = coll;
     }
 
-    void remove_last(SharedBlob *sb) {
-      std::lock_guard<std::mutex> l(lock);
-      assert(sb->nref == 0);
-      assert(sb->get_parent() == this);
-      sb_map.erase(sb->get_sbid());
-    }
-
     void remove(SharedBlob *sb) {
       std::lock_guard<std::mutex> l(lock);
       assert(sb->get_parent() == this);
-      sb_map.erase(sb->get_sbid());
+      // only remove if it still points to us
+      auto p = sb_map.find(sb->get_sbid());
+      if (p != sb_map.end() &&
+	  p->second == sb) {
+	sb_map.erase(p);
+      }
     }
 
     bool empty() {
@@ -1680,6 +1678,7 @@ public:
     DeferredBatch *deferred_pending = nullptr;
 
     BlueStore *store;
+    coll_t cid;
 
     size_t shard;
 
@@ -1693,9 +1692,9 @@ public:
 
     std::atomic_bool zombie = {false};    ///< in zombie_osr set (collection going away)
 
-    OpSequencer(BlueStore *store)
+    OpSequencer(BlueStore *store, const coll_t& c)
       : RefCountedObject(store->cct, 0),
-	store(store) {
+	store(store), cid(c) {
     }
     ~OpSequencer() {
       assert(q.empty());
@@ -1832,7 +1831,7 @@ private:
   vector<Cache*> cache_shards;
 
   std::mutex zombie_osr_lock;              ///< protect zombie_osr_set
-  std::set<OpSequencerRef> zombie_osr_set; ///< set of OpSequencers for deleted collections
+  std::map<coll_t,OpSequencerRef> zombie_osr_set; ///< set of OpSequencers for deleted collections
 
   std::atomic<uint64_t> nid_last = {0};
   std::atomic<uint64_t> nid_max = {0};

@@ -94,6 +94,11 @@ void bluestore_cnode_t::generate_test_instances(list<bluestore_cnode_t*>& o)
   o.push_back(new bluestore_cnode_t(123));
 }
 
+ostream& operator<<(ostream& out, const bluestore_cnode_t& l)
+{
+  return out << "cnode(bits " << l.bits << ")";
+}
+
 // bluestore_extent_ref_map_t
 
 void bluestore_extent_ref_map_t::_check() const
