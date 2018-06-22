@@ -3168,6 +3168,24 @@ TEST_F(TestLibRBD, TestClone2)
   ASSERT_PASSED(validate_object_map, child);
   ASSERT_PASSED(validate_object_map, parent);
 
+  rbd_snap_info_t snaps[2];
+  int max_snaps = 2;
+  ASSERT_EQ(1, rbd_snap_list(parent, snaps, &max_snaps));
+  rbd_snap_list_end(snaps);
+
+  ASSERT_EQ(0, rbd_snap_remove_by_id(parent, snaps[0].id));
+
+  rbd_snap_namespace_type_t snap_namespace_type;
+  ASSERT_EQ(0, rbd_snap_get_namespace_type(parent, snaps[0].id,
+                                           &snap_namespace_type));
+  ASSERT_EQ(RBD_SNAP_NAMESPACE_TYPE_TRASH, snap_namespace_type);
+
+  char original_name[32];
+  ASSERT_EQ(0, rbd_snap_get_trash_namespace(parent, snaps[0].id,
+                                            original_name,
+                                            sizeof(original_name)));
+  ASSERT_EQ(0, strcmp("parent_snap", original_name));
+
   ASSERT_EQ(0, rbd_close(child));
   ASSERT_EQ(0, rbd_close(parent));
   rados_ioctx_destroy(ioctx);
