@@ -163,11 +163,8 @@ class Module(MgrModule):
         self.set_store("testkey", "testvalue")
         assert self.get_store("testkey") == "testvalue"
 
-        self.set_store_json("testjsonkey", {"testblob": 2})
-        assert self.get_store_json("testjsonkey") == {"testblob": 2}
-
         assert sorted(self.get_store_prefix("test").keys()) == sorted(
-                list({"testkey", "testjsonkey"} | existing_keys))
+                list({"testkey"} | existing_keys))
 
 
     def _self_test_perf_counters(self):
