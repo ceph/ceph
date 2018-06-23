@@ -142,6 +142,14 @@ TEST_F(TestInternal, OpenByID) {
    close_image(ictx);
 }
 
+TEST_F(TestInternal, OpenSnapDNE) {
+   librbd::ImageCtx *ictx;
+   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+   ictx = new librbd::ImageCtx(m_image_name, "", "unknown_snap", m_ioctx, true);
+   ASSERT_EQ(-ENOENT, ictx->state->open(true));
+}
+
 TEST_F(TestInternal, IsExclusiveLockOwner) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
