@@ -362,6 +362,7 @@ def task(ctx, config):
                     {
                     'port'      : 7280,
                     'is_secure' : 'no',
+                    'api_name'  : 'default',
                     },
                 'fixtures' : {},
                 's3 main'  : {},
