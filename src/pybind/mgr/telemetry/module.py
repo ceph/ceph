@@ -287,7 +287,7 @@ class Module(MgrModule):
 
         requests.put(url=self.config['url'], json=report, proxies=proxies)
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         if command['prefix'] == 'telemetry config-show':
             return 0, json.dumps(self.config), ''
         elif command['prefix'] == 'telemetry config-set':
