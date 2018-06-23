@@ -515,8 +515,9 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
                                        m_image_ctx->snap_name);
   }
   if (snap_id == CEPH_NOSNAP) {
-    *result = -ENOENT;
-    return m_on_finish;
+    lderr(cct) << "failed to find snapshot " << m_image_ctx->snap_name << dendl;
+    send_close_image(-ENOENT);
+    return nullptr;
   }
 
   using klass = OpenRequest<I>;
