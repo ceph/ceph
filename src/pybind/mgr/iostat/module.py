@@ -22,7 +22,7 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
 
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         rd = 0
         wr = 0
         total = 0
