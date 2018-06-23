@@ -364,7 +364,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param width: the width of the terminal
         """
         n = len(elems)
-        column_width = width / n
+        column_width = int(width / n)
 
         ret = '|'
         for elem in elems:
@@ -380,7 +380,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param width: the width of the terminal
         """
         n = len(elems)
-        column_width = width / n
+        column_width = int(width / n)
 
         # dash line
         ret = '+'
