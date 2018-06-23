@@ -8075,18 +8075,21 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 
   // update most recent clone_overlap and usage stats
   if (ctx->new_snapset.clones.size() > 0) {
+    // the clone_overlap is difference of range between head and clones.
     // we need to check whether the most recent clone exists, if it's
-    // been evicted, it's not included in the stats
+    // been evicted, it's not included in the stats, but the clone_overlap
+    // is still exist in the snapset, so we should update the
+    // clone_overlap to make it sense.
     hobject_t last_clone_oid = soid;
     last_clone_oid.snap = ctx->new_snapset.clone_overlap.rbegin()->first;
+    interval_set<uint64_t> &newest_overlap =
+      ctx->new_snapset.clone_overlap.rbegin()->second;
+    ctx->modified_ranges.intersection_of(newest_overlap);
     if (is_present_clone(last_clone_oid)) {
-      interval_set<uint64_t> &newest_overlap =
-	ctx->new_snapset.clone_overlap.rbegin()->second;
-      ctx->modified_ranges.intersection_of(newest_overlap);
       // modified_ranges is still in use by the clone
       ctx->delta_stats.num_bytes += ctx->modified_ranges.size();
-      newest_overlap.subtract(ctx->modified_ranges);
     }
+    newest_overlap.subtract(ctx->modified_ranges);
   }
   
   if (snapc.seq > ctx->new_snapset.seq) {
