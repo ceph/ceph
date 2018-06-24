@@ -253,6 +253,7 @@ else
         esac
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+        [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
 	if [ -n "$dts_ver" ]; then
             ensure_decent_gcc_on_rh $dts_ver
 	fi
