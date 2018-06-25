@@ -14,13 +14,13 @@ from six import iteritems
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
 DEFAULTS = {
-    'enable_monitoring': True,
+    'enable_monitoring': str(True),
     'scrape_frequency': str(86400),
     'retention_period': str(86400*14),
     'pool_name': 'device_health_metrics',
     'mark_out_threshold': str(86400*14),
     'warn_threshold': str(86400*14*2),
-    'self_heal': True,
+    'self_heal': str(True),
 }
 
 health_messages = {
