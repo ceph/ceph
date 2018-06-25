@@ -48,8 +48,9 @@ function main {
     else
         branch="$1"
     fi
-    sha=${branch##*:}
-    if [ -z "$sha" ]; then
+    if [ "${branch%%:*}" != "${branch}" ]; then
+        sha=${branch##*:}
+    else
         sha=latest
     fi
     branch=${branch%%:*}
@@ -86,12 +87,12 @@ FROM ${env}
 
 WORKDIR /root
 RUN apt-get update --yes --quiet && \
-    apt-get install --yes --quiet screen wget gdb software-properties-common python-software-properties apt-transport-https
+    apt-get install --yes --quiet screen gdb software-properties-common apt-transport-https curl
 COPY cephdev.asc cephdev.asc
-RUN apt-key add cephdev.asc
-RUN add-apt-repository "\$(wget --quiet -O - https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/repo)" && \
+RUN apt-key add cephdev.asc && \
+    curl -L https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/repo | tee /etc/apt/sources.list.d/ceph_dev.list && \
     apt-get update --yes && \
-    apt-get install --yes --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg
+    DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg
 EOF
         time run docker build $CACHE --tag "$tag" .
     else # try RHEL flavor
