@@ -57,10 +57,8 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
 
         # options
-        self.enable_monitoring = DEFAULTS['enable_monitoring']
-        self.scrape_frequency = DEFAULTS['scrape_frequency']
-        self.retention_period = DEFAULTS['retention_period']
-        self.pool_name = DEFAULTS['pool_name']
+        for k, v in DEFAULTS.iteritems():
+            setattr(self, k, v)
 
         # other
         self.run = True
