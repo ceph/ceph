@@ -5784,6 +5784,31 @@ int FileStore::_merge_collection(const coll_t& cid,
   if (_check_replay_guard(cid, spos) > 0)
     r = _destroy_collection(cid);
 
+  if (!r && cct->_conf->filestore_debug_verify_split) {
+    vector<ghobject_t> objects;
+    ghobject_t next;
+    while (1) {
+      collection_list(
+	dest,
+	next, ghobject_t::get_max(),
+	get_ideal_list_max(),
+	&objects,
+	&next);
+      if (objects.empty())
+	break;
+      for (vector<ghobject_t>::iterator i = objects.begin();
+	   i != objects.end();
+	   ++i) {
+	if (!i->match(bits, pgid.pgid.ps())) {
+	  dout(20) << __FUNC__ << ": " << *i << " does not belong in "
+		   << cid << dendl;
+	  assert(i->match(bits, pgid.pgid.ps()));
+	}
+      }
+      objects.clear();
+    }
+  }
+
   dout(15) << __FUNC__ << ": " << cid << " " << dest << " bits " << bits
 	   << " = " << r << dendl;
   return r;
