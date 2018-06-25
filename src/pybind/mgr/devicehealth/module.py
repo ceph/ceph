@@ -29,6 +29,9 @@ class Module(MgrModule):
         { 'name': 'scrape_frequency' },
         { 'name': 'pool_name' },
         { 'name': 'retention_period' },
+        { 'name': 'mark_out_threshold' },
+        { 'name': 'warn_threshold' },
+        { 'name': 'self_heal' },
     ]
 
     COMMANDS = [
