@@ -285,6 +285,37 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   // digits after decimal point due to this.
   EXPECT_EQ(0, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
 }
+
+TEST_P(AllocTest, test_alloc_bug_24598)
+{
+  if (string(GetParam()) != "bitmap")
+    return;
+  
+  uint64_t capacity = 0x2625a0000ull;
+  uint64_t alloc_unit = 0x4000;
+  uint64_t want_size = 0x200000;
+  PExtentVector allocated, tmp;
+
+  init_alloc(capacity, alloc_unit);
+
+  alloc->init_add_free(0x4800000, 0x100000);
+  alloc->init_add_free(0x4a00000, 0x100000);
+
+  alloc->init_rm_free(0x4800000, 0x100000);
+  alloc->init_rm_free(0x4a00000, 0x100000);
+
+  alloc->init_add_free(0x3f00000, 0x500000);
+  alloc->init_add_free(0x4500000, 0x100000);
+  alloc->init_add_free(0x4700000, 0x100000);
+  alloc->init_add_free(0x4900000, 0x100000);
+  alloc->init_add_free(0x4b00000, 0x200000);
+
+  EXPECT_EQ(want_size, alloc->allocate(want_size, 0x100000, 0, 0, &tmp));
+  EXPECT_EQ(tmp[0].offset, 0x4b00000);
+  EXPECT_EQ(tmp[0].length, 0x200000);
+  EXPECT_EQ(tmp.size(), 1);
+}
+
 INSTANTIATE_TEST_CASE_P(
   Allocator,
   AllocTest,
