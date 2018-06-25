@@ -88,11 +88,16 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       break;
     }
 
+    int get_trash_res = -ENOENT;
+    std::string trash_original_name;
     int get_group_res = -ENOENT;
     librbd::snap_group_namespace_t group_snap;
     if (snap_namespace == RBD_SNAP_NAMESPACE_TYPE_GROUP) {
       get_group_res = image.snap_get_group_namespace(s->id, &group_snap,
                                                      sizeof(group_snap));
+    } else if (snap_namespace == RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+      get_trash_res = image.snap_get_trash_namespace(
+        s->id, &trash_original_name);
     }
 
     if (f) {
@@ -109,7 +114,9 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
 	  f->dump_string("pool", pool_name);
 	  f->dump_string("group", group_snap.group_name);
 	  f->dump_string("group snap", group_snap.group_snap_name);
-	}
+	} else if (get_trash_res == 0) {
+          f->dump_string("original_name", trash_original_name);
+        }
 	f->close_section();
       }
       f->close_section();
@@ -125,6 +132,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
 	  oss << " (" << pool_name << "/"
 		      << group_snap.group_name << "@"
 		      << group_snap.group_snap_name << ")";
+        } else if (get_trash_res == 0) {
+          oss << " (" << trash_original_name << ")";
         }
 
 	t << oss.str();
