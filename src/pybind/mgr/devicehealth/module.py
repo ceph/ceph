@@ -18,6 +18,9 @@ DEFAULTS = {
     'scrape_frequency': str(86400),
     'retention_period': str(86400*14),
     'pool_name': 'device_health_metrics',
+    'mark_out_threshold': str(86400*14),
+    'warn_threshold': str(86400*14*2),
+    'self_heal': True,
 }
 
 class Module(MgrModule):
@@ -301,6 +304,101 @@ class Module(MgrModule):
             except:
                 pass
         return (0, json.dumps(res, indent=4), '')
+
+    def life_expectancy_response(self):
+        mark_out_threshold_td = timedelta(seconds=int(self.mark_out_threshold))
+        warn_threshold_td = timedelta(seconds=int(self.warn_threshold))
+        health_warnings = []
+        devs = self.get("devices")
+        for dev in devs['devices']:
+            if 'life_expectancy_min' not in dev:
+                continue
+            # life_expectancy_(min/max) is in the format of:
+            # '%Y-%m-%d %H:%M:%S.%f', e.g.:
+            # '2019-01-20 21:12:12.000000'
+            life_expectancy_min = datetime.strptime(dev['life_expectancy_min'], '%Y-%m-%d %H:%M:%S.%f')
+            now = datetime.now()
+            if life_expectancy_min - now <= mark_out_threshold_td:
+                if self.self_heal:
+                    # dev['daemons'] == ["osd.0","osd.1","osd.2"]
+                    if dev['daemons']:
+                        osd_ids = map(lambda x: x[4:], dev['daemons'])
+                        osds_in = []
+                        osds_out = []
+                        for _id in osd_ids:
+                            if self.is_osd_in(_id):
+                                osds_in.append(_id)
+                            else:
+                                osds_out.append(_id)
+                        if osds_in:
+                            self.mark_out(osds_in)
+                        # OSD might be marked 'out' (which means it has no
+                        # data), however PGs are still attached to it.
+                        for _id in osds_out:
+                            num_pgs = self.get_osd_num_pgs(_id)
+                            if num_pgs > 0:
+                                health_warnings.append('osd.%s is marked out, '
+                                                       'but still has %s PG(s)'
+                                                       ' attached' %
+                                                       (_id, num_pgs))
+                        # TODO: set_primary_affinity
+                self.log.warn(self.create_warning_message(dev))
+            elif life_expectancy_min - now <= warn_threshold_td:
+                health_warnings.append(self.create_warning_message(dev))
+        if health_warnings:
+            self.set_health_checks({
+                'MGR_DEVICE_HEALTH': {
+                    'severity': 'warning',
+                    'summary': 'Imminent failure anticipated for device(s)',
+                    'detail': health_warnings
+                }
+            })
+        else:
+            self.set_health_checks({}) # clearing health checks
+        return (0,"","")
+
+    def is_osd_in(self, osd_id):
+        osdmap = self.get("osd_map")
+        assert osdmap is not None
+        for osd in osdmap['osds']:
+            if str(osd_id) == str(osd['osd']):
+                return bool(osd['in'])
+        return False
+
+    def get_osd_num_pgs(self, osd_id):
+        stats = self.get('osd_stats')
+        assert stats is not None
+        for stat in stats['osd_stats']:
+            if str(osd_id) == str(stat['osd']):
+                return stat['num_pgs']
+        return -1
+
+    def create_warning_message(self, dev):
+        # device can appear in more than one location in case of SCSI multipath
+        device_locations = map(lambda x: x['host'] + ':' + x['dev'], dev['location'])
+        return ('%s at %s;'
+               ' Affected OSDs: %s;'
+               ' Life expectancy: between %s and %s'
+               % (dev['devid'],
+                device_locations,
+                dev.get('daemons', 'none'),
+                dev['life_expectancy_min'],
+                dev.get('life_expectancy_max', 'unknown')))
+                # TODO: by default, dev['life_expectancy_max'] == '0.000000',
+                # so dev.get('life_expectancy_max', 'unknown')
+                # above should be altered.
+
+    def mark_out(self, osd_ids):
+        self.log.info('Marking out OSDs: %s' % osd_ids)
+        result = CommandResult('')
+        self.send_command(result, 'mon', '', json.dumps({
+            'prefix': 'osd out',
+            'format': 'json',
+            'ids': osd_ids,
+        }), '')
+        r, outb, outs = result.wait()
+        if r != 0:
+            self.log.warn('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]' % (osd_ids, r, outb, outs))
 
     def extract_smart_features(self, raw):
         # FIXME: extract and normalize raw smartctl --json output and
