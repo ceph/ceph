@@ -6,6 +6,7 @@ from __future__ import absolute_import
 
 import json
 import rbd
+import rados
 from mgr_module import CommandResult
 
 
@@ -35,6 +36,40 @@ class DB_API(object):
         names = [val for key, val in RBD_FEATURES_NAME_MAPPING.items()
                  if key & features == key]
         return sorted(names)
+
+    def _open_connection(self, pool_name='device_health_metrics'):
+        pools = self.module.rados.list_pools()
+        is_pool = False
+        for pool in pools:
+            if pool == pool_name:
+                is_pool = True
+                break
+        if not is_pool:
+            self.module.log.debug('create %s pool' % pool_name)
+            # create pool
+            result = CommandResult('')
+            self.module.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd pool create',
+                'format': 'json',
+                'pool': pool_name,
+                'pg_num': 1,
+            }), '')
+            r, outb, outs = result.wait()
+            assert r == 0
+
+            # set pool application
+            result = CommandResult('')
+            self.module.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd pool application enable',
+                'format': 'json',
+                'pool': pool_name,
+                'app': 'mgr_devicehealth',
+            }), '')
+            r, outb, outs = result.wait()
+            assert r == 0
+
+        ioctx = self.module.rados.open_ioctx(pool_name)
+        return (ioctx)
 
     @classmethod
     def _rbd_disk_usage(cls, image, snaps, whole_object=True):
@@ -133,7 +168,7 @@ class DB_API(object):
         result = []
         for pool in pools:
             rbd_inst = rbd.RBD()
-            with self.module.rados.open_ioctx(str(pool)) as ioctx:
+            with self._open_connection(str(pool)) as ioctx:
                 names = rbd_inst.list(ioctx)
                 for name in names:
                     try:
@@ -161,14 +196,17 @@ class DB_API(object):
             }), '')
         ret, outb, outs = result.wait()
         try:
-            data_jaon = json.loads(outb)
-            self.module.log.debug("outs: %s" % data_jaon)
+            if outb:
+                data_jaon = json.loads(outb)
+            else:
+                self.module.log.error("unable to get %s pg info" % pool_name)
         except Exception as e:
-            self.module.log.error("error: %s" % str(e))
+            self.module.log.error(
+                "unable to get %s pg, error: %s" % (pool_name, str(e)))
         return data_jaon
 
     def get_rbd_info(self, pool_name, image_name):
-        with self.module.rados.open_ioctx(pool_name) as ioctx:
+        with self._open_connection(pool_name) as ioctx:
             try:
                 stat = self._rbd_image(ioctx, pool_name, image_name)
                 if stat.get('id'):
@@ -186,7 +224,7 @@ class DB_API(object):
     def get_pool_objects(self, pool_name, image_id=None):
         # list_objects
         objects = []
-        with self.module.rados.open_ioctx(pool_name) as ioctx:
+        with self._open_connection(pool_name) as ioctx:
             object_iterator = ioctx.list_objects()
             while True:
                 try:
@@ -276,23 +314,56 @@ class DB_API(object):
         mon_status = json.loads(self.module.get('mon_status')['json'])
         return mon_status
 
-    def get_osd_smart(self, osd_id):
+    def get_osd_smart(self, osd_id, device_id=None):
         result = CommandResult("")
         data_jaon = {}
-        if not str(osd_id).isdigit():
-            self.module.log("invalid osd id %s" % osd_id)
-            return data_jaon
-        self.module.send_command(result, 'osd', "%s" % osd_id, json.dumps({
-            'prefix': 'smart',
-            'format': 'json',
-        }), '')
+        if str(osd_id).isdigit():
+            osd_name = "osd.%s" % osd_id
+        else:
+            osd_name = osd_id
+        if osd_name[0:4] != 'osd.':
+            raise Exception('not a valid <osd.NNN> id or number')
+
+        if device_id:
+            self.module.send_command(result, 'osd', str(osd_name[4:]), json.dumps({
+                'prefix': 'smart',
+                'format': 'json',
+                'devid': device_id,
+            }), '')
+        else:
+            self.module.send_command(result, 'osd', str(osd_name[4:]), json.dumps({
+                'prefix': 'smart',
+                'format': 'json',
+            }), '')
         ret, outb, outs = result.wait()
         try:
             data_jaon = json.loads(outb)
-            self.module.log.debug("outs: %s" % data_jaon)
         except Exception as e:
             self.module.log.error("error: %s" % str(e))
         return data_jaon
+
+    def get_device_health(self, device_id):
+        res = {}
+        try:
+            with self._open_connection() as ioctx:
+                with rados.ReadOpCtx() as op:
+                    iter, ret = ioctx.get_omap_vals(op, "", '', 500)
+                    assert ret == 0
+                    try:
+                        ioctx.operate_read_op(op, device_id)
+                        for key, value in list(iter):
+                            try:
+                                v = json.loads(value)
+                            except:
+                                self.log.error(
+                                    'unable to parse value for %s: "%s"' % (key, value))
+                                pass
+                            res[key] = v
+                    except:
+                        pass
+        except:
+            return {}
+        return res
 
     def get_osd_hostname(self, osd_id):
         result = ""
@@ -300,6 +371,30 @@ class DB_API(object):
         if osd_metadata:
             osd_host = osd_metadata.get("hostname", "None")
             result = osd_host
+        return result
+
+    def get_osd_device_id(self, osd_id):
+        result = {}
+        osdid = None
+        if not str(osd_id).isdigit():
+            if str(osd_id)[0:4] == 'osd.':
+                osdid = osd_id[4:]
+            else:
+                raise Exception('not a valid <osd.NNN> id or number')
+        else:
+            osdid = osd_id
+        osd_metadata = self.get_osd_metadata(osd_id)
+        if osd_metadata:
+            osd_device_ids = osd_metadata.get("device_ids", "")
+            if osd_device_ids:
+                result = {}
+                for osd_device_id in osd_device_ids.split(","):
+                    if str(osd_device_id).split('=') >= 2:
+                        dev_name = osd_device_id.split('=')[0]
+                        dev_id = osd_device_id.split('=')[1]
+                    else:
+                        dev_id = osd_device_id
+                    result[dev_name] = {'dev_id': dev_id}
         return result
 
     def get_file_systems(self):
@@ -313,6 +408,33 @@ class DB_API(object):
 
     def get(self, data_name):
         return self.module.get(data_name)
+
+    def set_device_life_expectancy(self, device_id, from_date, to_date=None):
+        result = CommandResult("")
+        
+        self.module.send_command(result, 'mon', '', json.dumps({
+            'prefix': 'device set-life-expectancy',
+            'devid': device_id,
+            'from': from_date,
+            'to': to_date
+        }), '')
+        ret, outb, outs = result.wait()
+        if ret != 0:
+            self.module.log.error(
+                "failed to reset device life expectancy, %s" % outs)
+        return ret
+
+    def reset_device_life_expectancy(self, device_id):
+        result = CommandResult("")
+        self.module.send_command(result, 'mon', '', json.dumps({
+            'prefix': 'device rm-life-expectancy',
+            'devid': device_id
+        }), '')
+        ret, outb, outs = result.wait()
+        if ret != 0:
+            self.module.log.error(
+                "failed to reset device life expectancy, %s" % outs)
+        return ret
 
     def get_all_information(self):
         result = dict()

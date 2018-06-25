@@ -3,22 +3,26 @@ from __future__ import absolute_import
 
 from requests.auth import HTTPBasicAuth
 
-from ..common.netlib import BaseNET
 from ..common import timeout, TimeoutError
+from ..common.restapi import RestAPI, gen_configuration
 
 
-class Command(BaseNET):
-    def __init__(self, host, user=None, password=None,
-                 dbname='telegraf', port=8086):
-        self.host = host
-        self.dbname = dbname
-        self.port = port
+
+class Command(object):
+    def __init__(self, *args, **kwargs):
+        self.host = kwargs.get('host')
+        self.dbname = kwargs.get('dbname', )
+        self.port = kwargs.get('port')
         self.auth = None
+        conf = gen_configuration(**kwargs)
+        self._obj_sender = RestAPI(conf)
+        user = kwargs.get('user')
+        password = kwargs.get('password')
         if user and password:
             self.auth = HTTPBasicAuth(user, password)
 
     def __nonzero__(self):
-        if self.host:
+        if self._obj_sender:
             return True
         else:
             return False
@@ -27,20 +31,20 @@ class Command(BaseNET):
         return "https://{0}:{1}".format(self.host, self.port)
 
     def _send_cmd(self, method, url, **kwargs):
-        return self.send_data(method=method, url=url, verify=False, **kwargs)
+        return self._obj_sender.send_data(
+            method=method, url=url, verify=False, **kwargs)
 
     def test_connection(self):
-        resp = self.show_database()
-        if resp.status_code == 200:
+        result = self._obj_sender.test_connection()
+        if result.status_code == 200:
             return True
-        return False
+        else:
+            return False
 
-    def send_info(self, data):
-        kwargs = {
-            'auth': self.auth,
-            'data': data,
-            'headers': {"Content-Type": "application/x-www-form-urlencoded"}
-        }
+    def send_info(self, *args, **kwargs):
+        kwargs['auth'] = self.auth
+        kwargs['headers'] = \
+            {"Content-Type": "application/x-www-form-urlencoded"}
         url = "{0}/write?db={1}".format(self._base_url(), self.dbname)
         return self._send_cmd('POST', url=url, **kwargs)
 
@@ -49,16 +53,6 @@ class Command(BaseNET):
             'auth': self.auth,
             'headers': {"Accept": "application/json"},
             'params': {'db': self.dbname, 'q': sql, 'epoch': 'ns'}
-        }
-        url = "{0}/query".format(self._base_url())
-        return self._send_cmd('GET', url=url, **kwargs)
-
-    def show_database(self):
-        kwargs = {
-            'auth': self.auth,
-            'params': {
-                "q": "SHOW DATABASES"},
-            'headers': {"Accept": "application/json"}
         }
         url = "{0}/query".format(self._base_url())
         return self._send_cmd('GET', url=url, **kwargs)

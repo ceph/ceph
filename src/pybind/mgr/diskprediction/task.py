@@ -15,14 +15,14 @@ from .agent.metrics.sai_disk_smart import SAI_DiskSmartAgent
 from .agent.metrics.sai_host import SAI_HostAgent
 from .agent.predict.prediction import Prediction_Agent
 
-DP_MGR_STAT_OK ='OK'
+DP_MGR_STAT_OK = 'OK'
 DP_MGR_STAT_WARNING = 'WARNING'
 DP_MGR_STAT_FAILED = 'FAILED'
 DP_MGR_STAT_DISABLED = 'DISABLED'
 DP_MGR_STAT_ENABLED = 'ENABLED'
 
 
-class DP_Task(object):
+class DPTask(object):
 
     _task_name = ""
     _interval_key = ""
@@ -31,8 +31,6 @@ class DP_Task(object):
         """
 
         :param ceph_context: parent ceph mgr module
-        :param obj_sender: data push sender object
-        :param task_interval: (unit seconds) interval trigger task , default: 1 hour
         :param agent_timeout: (unit seconds) agent execute timeout value, default: 60 secs
         """
         self._agent_timeout = agent_timeout
@@ -83,7 +81,10 @@ class DP_Task(object):
             self._obj_sender = Command(
                 host=self._context.get_configuration("diskprediction_server"),
                 user=self._context.get_configuration("diskprediction_user"),
-                password=self._context.get_configuration("diskprediction_password"))
+                password=self._context.get_configuration("diskprediction_password"),
+                port=self._context.get_configuration("diskprediction_port"),
+                dbname=self._context.get_configuration('diskprediction_database'),
+                context=self._context)
             if not self._obj_sender:
                 self._log.error("invalid diskprediction sender")
                 self._context.status = DP_MGR_STAT_FAILED
@@ -104,7 +105,7 @@ class DP_Task(object):
         pass
 
 
-class Metrics_Task(DP_Task):
+class MetricsTask(DPTask):
 
     _task_name = "Metrics Task"
     _interval_key = "diskprediction_upload_metrics_interval"
@@ -125,7 +126,7 @@ class Metrics_Task(DP_Task):
                 continue
 
 
-class Prediction_Task(DP_Task):
+class PredictionTask(DPTask):
 
     _task_name = "Prediction Task"
     _interval_key = "diskprediction_retrieve_prediction_interval"
@@ -145,7 +146,7 @@ class Prediction_Task(DP_Task):
                 continue
 
 
-class Smart_Task(DP_Task):
+class SmartTask(DPTask):
 
     _task_name = "Smart data Task"
     _interval_key = "diskprediction_upload_smart_interval"

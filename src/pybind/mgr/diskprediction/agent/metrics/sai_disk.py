@@ -63,7 +63,7 @@ class SAI_DiskAgent(MetricsAgent):
                 d_data = SAI_Disk()
                 d_data.tags['disk_name'] = str(dev_name)
                 d_data.fields['cluster_domain_id'] = str(cluster_id)
-                d_data.fields['host_domain_id'] = \
+                d_data.tags['host_domain_id'] = \
                     str("%s_%s"
                         % (cluster_id, osds_meta.get("hostname", "None")))
                 d_data.fields['agenthost'] = str(socket.gethostname())
@@ -99,7 +99,7 @@ class SAI_DiskAgent(MetricsAgent):
                     d_data.fields['serial_number'] = str(dev_name)
                 d_data.tags['primary_key'] = \
                     str("%s%s%s"
-                        % (cluster_id, d_data.fields['host_domain_id'],
+                        % (cluster_id, d_data.tags['host_domain_id'],
                            d_data.tags['disk_domain_id']))
                 d_data.fields['disk_status'] = int(1)
                 is_ssd = True if s_val.get('rotation_rate') == 0 else False

@@ -17,7 +17,7 @@ class SAI_CluserAgent(MetricsAgent):
 
         c_data.tags['domain_id'] = str(cluster_id)
         c_data.fields['agent_version'] = AGENT_VERSION
-        c_data.fields['host_domain_id'] = "%s_%s" % (str(cluster_id), str(socket.gethostname()))
+        c_data.tags['host_domain_id'] = "%s_%s" % (str(cluster_id), str(socket.gethostname()))
         c_data.fields['agenthost'] = str(socket.gethostname())
         c_data.tags['agenthost_domain_id'] = \
             str("%s_%s" % (cluster_id, c_data.fields['agenthost']))

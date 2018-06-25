@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 
+import datetime
 import json
 import os
 import time
@@ -11,6 +12,8 @@ from ...common.db import DB_API
 PREDICTION_FILE = '/var/tmp/disk_prediction.json'
 
 test_json = '{"results":[{"statement_id":0,"series":[{"name":"sai_disk_prediction","columns":["time","cluster_domain_id","confidence","disk_domain_id","disk_model","disk_name","disk_serial_number","disk_type","disk_vendor","host_domain_id","life_expectancy","life_expectancy_day","near_failure","predicted","primary_key"],"values":[["2018-05-25T01:26:18.231490725Z","dpCluster",100,"55cd2e404b7ee6d3","INTEL SSDSC2BP480G4","MegaraidDisk-0","BTJR516601GW480BGN","5","","da24c5fac654244dccffeb6b564b139b",24,730,"Good",1527211578228188894,"dpCluster-da24c5fac654244dccffeb6b564b139b-55cd2e404b7ee6d3"]]}]}]}'
+TIME_DAYS = 24*60*60
+TIME_WEEK = TIME_DAYS * 7
 
 
 class Prediction_Agent(BaseAgent):
@@ -60,11 +63,11 @@ class Prediction_Agent(BaseAgent):
         except Exception as e:
             self._logger.error(str(e))
 
-    def _parse_prediction_data(self, host_domain_id, dev_name):
+    def _parse_prediction_data(self, host_domain_id, disk_domain_id):
         result = {}
 
         sql = "SELECT * FROM \"%s\" WHERE (%s) ORDER BY time DESC LIMIT 1"
-        where = "host_domain_id=\'%s\' AND disk_name=\'%s\'" % (host_domain_id, dev_name)
+        where = "host_domain_id=\'%s\' AND disk_domain_id=\'%s\'" % (host_domain_id, disk_domain_id)
         try:
             query_info = self._command.query_info(sql % (self.__class__.measurement, where))
             status_code = query_info.status_code
@@ -205,9 +208,43 @@ class Prediction_Agent(BaseAgent):
                     'smartHealthStatus': tmp['smart_health_status'],
                     'sectorSize': tmp['sector_size'],
                     'size': str(s_val.get('user_capacity', '0')),
-                    'prediction': self._parse_prediction_data(host_domain_id, dev_name)
+                    'prediction': self._parse_prediction_data(host_domain_id, tmp['disk_domain_id'])
                 }
                 info_list.append(disk_info)
+                # Update osd life-expectancy
+                dev_id = ''
+                predicted = None
+                life_expectancy_day = None
+                devs_info = obj_api.get_osd_device_id(osd_id)
+                if disk_info.get('prediction', {}).get('predicted'):
+                    predicted = int(disk_info['prediction']['predicted'])
+                if disk_info.get('prediction', {}).get('life_expectancy_day'):
+                    life_expectancy_day = int(disk_info['prediction']['life_expectancy_day'])
+                check_dev_id = ''
+                if model:
+                    check_dev_id += str(model).upper()
+                if serial_number:
+                    check_dev_id += (" %s" % serial_number).upper()
+                check_dev_id = check_dev_id.replace(' ', '_')
+                for dev_n, dev_info in devs_info.iteritems():
+                    if dev_info.get('dev_id', '').find(check_dev_id) >= 0:
+                        dev_id = dev_info.get['dev_id']
+                        break
+
+                if predicted and dev_id and life_expectancy_day:
+                    from_date = None
+                    to_date = None
+                    try:
+                        from_date = datetime.datetime.fromtimestamp(predicted/(1000**3)).strftime('%Y-%m-%d')
+                        if life_expectancy_day:
+                            to_date = datetime.datetime.fromtimestamp(predicted/(1000**3)+(life_expectancy_day*TIME_DAYS)).strftime('%Y-%m-%d')
+                        obj_api.set_device_life_expectancy(dev_id, from_date, to_date)
+                        self._logger.info("succeed to set device %s life expectancy from: %s, to: %s" % (dev_id, from_date, to_date))
+                    except Exception as e:
+                        self._logger.info("failed to set device %s life expectancy from: %s, to: %s, %s" % (dev_id, from_date, to_date, str(e)))
+                else:
+                    if dev_id:
+                        obj_api.reset_device_life_expectancy(dev_id)
 
             effected = self._effected_resource(osd_id)
             collect_data.update({

@@ -81,7 +81,7 @@ class MetricsAgent(BaseAgent):
                     ','.join(field_list),
                     int(time.time() * 1000 * 1000 * 1000))
                 try:
-                    resp = self._command.send_info(data)
+                    resp = self._command.send_info(data=data, measurement=measurement)
                     status_code = resp.status_code
                     if status_code >= 200 or status_code < 300:
                         self._logger.debug(
