@@ -1704,8 +1704,9 @@
   
   rbd help snap remove
   usage: rbd snap remove [--pool <pool>] [--namespace <namespace>] 
-                         [--image <image>] [--snap <snap>] [--no-progress] 
-                         [--image-id <image-id>] [--force] 
+                         [--image <image>] [--snap <snap>] 
+                         [--image-id <image-id>] [--snap-id <snap-id>] 
+                         [--no-progress] [--force] 
                          <snap-spec> 
   
   Delete a snapshot.
@@ -1721,8 +1722,9 @@
     --namespace arg      namespace name
     --image arg          image name
     --snap arg           snapshot name
-    --no-progress        disable progress output
     --image-id arg       image id
+    --snap-id arg        snapshot id
+    --no-progress        disable progress output
     --force              flatten children and unprotect snapshot if needed.
   
   rbd help snap rename
