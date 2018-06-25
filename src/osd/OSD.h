@@ -295,6 +295,8 @@ public:
   }
 
   class Oio_mon {
+    static constexpr double target_load_limit = 2.0;
+
     Mutex lock;
     CephContext *cct;
     double tot = 0;
@@ -307,7 +309,7 @@ public:
     utime_t last_update;
     double max_tput = 0.0;
     double satur_load = 0.0;            // load that makes saturation
-    double target_load = 0.0;
+    double target_load = target_load_limit;
 
   public:
     Oio_mon(CephContext *_cct) : lock("oio mon"), cct(_cct)
@@ -379,7 +381,7 @@ public:
           satur_load = 0.9 * satur_load + 0.1 * load_avg;
         }
 	else if (satur_load/2 < load_avg &&
-            max_tput/satur_load > cur_tput * 1.1 / load_avg) {
+		 max_tput/satur_load > cur_tput * 1.1 / load_avg) {
           //something wrong
           max_tput = 0.9 * max_tput + 0.1 * cur_tput;
           satur_load = 0.9 * satur_load + 0.1 * load_avg;
@@ -391,6 +393,7 @@ public:
       }	else {
 	target_load = satur_load * 1.1;
       }
+      target_load = std::max(target_load_limit, target_load);
 
       last_update = now;
       return true;
