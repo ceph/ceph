@@ -12,7 +12,7 @@ cp ${config}.sample $config
 
 .  $CEPH_ROOT/build/src/pybind/mgr/dashboard/node-env/bin/activate
 
-npm run build -- --prod
+npm run build -- --prod --progress=false
 npm run test:ci
 npm run lint
 
