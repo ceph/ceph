@@ -85,8 +85,8 @@ interval_t AllocatorLevel01Loose::_get_longest_from_l0(uint64_t pos0,
 	      res_candidate.length, min_granules);
 	    if (res.length < res_candidate.length) {
 	      res = res_candidate;
-	      res_candidate = interval_t();
 	    }
+	    res_candidate = interval_t();
 	    pos += d;
 	    end_loop = pos >= pos1;
 	    continue;
