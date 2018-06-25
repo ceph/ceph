@@ -2523,18 +2523,65 @@ void Monitor::_generate_command_map(map<string,cmd_vartype>& cmdmap,
   }
 }
 
+
 const MonCommand *Monitor::_get_moncommand(const string &cmd_prefix,
-                                           MonCommand *cmds, int cmds_size)
+                                           MonCommand *cmds, int cmds_size,map<string,cmd_vartype> cmdmap)
 {
   MonCommand *this_cmd = NULL;
   for (MonCommand *cp = cmds;
        cp < &cmds[cmds_size]; cp++) {
     if (cp->cmdstring.compare(0, cmd_prefix.size(), cmd_prefix) == 0) {
+	  bool allfind = true;
+	  vector<string> moncmd_name = _get_moncmd_name(cp->cmdstring);	
+	  for(map<string,cmd_vartype>::iterator i = cmdmap.begin(); i!= cmdmap.end();i++)
+	  {
+		  if(i->first == "prefix" || i->first == "format")
+			continue;
+		  bool found = false;
+		  for(int j = 0 ; j < moncmd_name.size(); j++)
+		  {
+			  if(moncmd_name[j] == i->first)
+			  {
+				  found = true;
+				  break;
+			  }
+		  }
+		  if(found == false)
+		  {
+			  allfind = false;
+			  break;
+		  }
+			  
+	  }
+	  if(!allfind)
+		  continue;
       this_cmd = cp;
       break;
     }
   }
   return this_cmd;
+}
+vector<string> Monitor::_get_moncmd_name(string cmdstring)
+{
+	vector<string> res;
+	vector<string> tmpres;
+	int pos = 0;   
+	while(pos >= 0) 
+	{                 
+		pos = cmdstring.find("name",pos+1);
+		if(pos > 0)
+		{             
+			int nextpos = cmdstring.find("name",pos+1);
+			tmpres.push_back(cmdstring.substr(pos,(nextpos>0?nextpos:cmdstring.size()) - pos));
+		}             
+	}                 
+	for(int i = 0 ; i < tmpres.size() ; i++)
+	{                 
+		int start = tmpres[i].find('=',0);
+		int end = tmpres[i].find(',',0);
+		res.push_back(tmpres[i].substr(start+1,(end>0?end-1:tmpres[i].size()) - start));
+	}                 
+	return res;
 }
 
 bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
