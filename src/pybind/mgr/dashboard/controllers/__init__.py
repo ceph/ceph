@@ -542,6 +542,8 @@ class BaseController(object):
                     kwargs.update(data.items())
                     ret = func(*args, **kwargs)
 
+            if isinstance(ret, bytes):
+                ret = ret.decode('utf-8')
             if json_response:
                 cherrypy.response.headers['Content-Type'] = 'application/json'
                 ret = json.dumps(ret).encode('utf8')
