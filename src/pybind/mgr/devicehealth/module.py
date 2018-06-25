@@ -26,6 +26,7 @@ DEFAULTS = {
 health_messages = {
     'DEVICE_HEALTH': '%d device(s) expected to fail soon',
     'DEVICE_HEALTH_IN_USE': '%d daemons(s) expected to fail soon and still contain data',
+    'DEVICE_HEALTH_TOOMANY': 'Too many daemons are expected to fail soon',
 }
 
 class Module(MgrModule):
@@ -321,13 +322,18 @@ class Module(MgrModule):
 
     def check_health(self):
         self.log.info('Check health')
+        config = self.get('config')
+        min_in_ratio = float(config.get('mon_osd_min_in_ratio'))
         mark_out_threshold_td = timedelta(seconds=int(self.mark_out_threshold))
         warn_threshold_td = timedelta(seconds=int(self.warn_threshold))
+        checks = {}
         health_warnings = {
             'DEVICE_HEALTH': [],
             'DEVICE_HEALTH_IN_USE': [],
             }
         devs = self.get("devices")
+        osds_in = {}
+        osds_out = {}
         now = datetime.now()
         osdmap = self.get("osd_map")
         assert osdmap is not None
@@ -351,24 +357,11 @@ class Module(MgrModule):
                         osds = [x for x in dev['daemons']
                                 if x.startswith('osd.')]
                         osd_ids = map(lambda x: x[4:], osds)
-                        osds_in = []
-                        osds_out = []
                         for _id in osd_ids:
                             if self.is_osd_in(osdmap, _id):
-                                osds_in.append(_id)
+                                osds_in[_id] = 1
                             else:
-                                osds_out.append(_id)
-                        if osds_in:
-                            self.mark_out_etc(osds_in)
-                        # OSD might be marked 'out' (which means it has no
-                        # data), however PGs are still attached to it.
-                        for _id in osds_out:
-                            num_pgs = self.get_osd_num_pgs(_id)
-                            if num_pgs > 0:
-                                health_warnings['DEVICE_HEALTH_IN_USE'].append(
-                                    'osd.%s is marked out '
-                                    'but still has %s PG(s)' %
-                                    (_id, num_pgs))
+                                osds_out[_id] = 1
 
             if life_expectancy_min - now <= warn_threshold_td:
                 # device can appear in more than one location in case
@@ -386,7 +379,35 @@ class Module(MgrModule):
                 # so dev.get('life_expectancy_max', 'unknown')
                 # above should be altered.
 
-        checks = {}
+        # OSD might be marked 'out' (which means it has no
+        # data), however PGs are still attached to it.
+        for _id in osds_out.iterkeys():
+            num_pgs = self.get_osd_num_pgs(_id)
+            if num_pgs > 0:
+                health_warnings['DEVICE_HEALTH_IN_USE'].append(
+                    'osd.%s is marked out '
+                    'but still has %s PG(s)' %
+                    (_id, num_pgs))
+        if osds_in:
+            self.log.debug('osds_in %s' % osds_in)
+            # calculate target in ratio
+            bad = len(osds_in)
+            num_osds = len(osdmap['osds'])
+            num_in = len([x for x in osdmap['osds'] if x['in']])
+            ratio = float(max(0, num_in - bad)) / float(num_osds)
+            self.log.debug('osds %d in %d final %f min %f' %
+                           (num_osds, num_in, ratio, min_in_ratio))
+            if ratio >= min_in_ratio:
+                for _id in osds_in.iterkeys():
+                    self.mark_out_etc(osd_id)
+            else:
+                checks['DEVICE_HEALTH_TOOMANY'] = {
+                    'severity': 'warning',
+                    'summary': health_messages['DEVICE_HEALTH_TOOMANY'],
+                    'detail': [
+                        '%d OSDs with failing device(s) would bring "in" ratio to %f < mon_osd_min_in_ratio %f' % (bad, ratio, min_in_ratio)
+                        ]
+                    }
         for warning, ls in health_warnings.iteritems():
             n = len(ls)
             if n:
