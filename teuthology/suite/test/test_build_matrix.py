@@ -413,6 +413,76 @@ class TestBuildMatrix(object):
         assert len(result) == 11
         assert len(result2) == len(result)
 
+    def test_hidden(self):
+        fake_fs = {
+            'teuthology': {
+                'no-ceph': {
+                    '%': None,
+                    '.qa': None,
+                    'clusters': {
+                        'single.yaml': None,
+                        '.qa': None,
+                    },
+                    'distros': {
+                        '.qa': None,
+                        'baremetal.yaml': None,
+                        'rhel7.0.yaml': None,
+                        'ubuntu12.04.yaml': None,
+                        'ubuntu14.04.yaml': None,
+                        'vps.yaml': None,
+                        'vps_centos6.5.yaml': None,
+                        'vps_debian7.yaml': None,
+                        'vps_rhel6.4.yaml': None,
+                        'vps_rhel6.5.yaml': None,
+                        'vps_rhel7.0.yaml': None,
+                        'vps_ubuntu14.04.yaml': None,
+                    },
+                    'tasks': {
+                        '.qa': None,
+                        'teuthology.yaml': None,
+                    },
+                    '.foo': {
+                        '.qa': None,
+                        'teuthology.yaml': None,
+                    },
+                },
+            },
+        }
+        self.start_patchers(fake_fs)
+        result = build_matrix.build_matrix('teuthology/no-ceph')
+        self.stop_patchers()
+
+        fake_fs2 = {
+            'teuthology': {
+                'no-ceph': {
+                    '%': None,
+                    'clusters': {
+                        'single.yaml': None,
+                    },
+                    'distros': {
+                        'baremetal.yaml': None,
+                        'rhel7.0.yaml': None,
+                        'ubuntu12.04.yaml': None,
+                        'ubuntu14.04.yaml': None,
+                        'vps.yaml': None,
+                        'vps_centos6.5.yaml': None,
+                        'vps_debian7.yaml': None,
+                        'vps_rhel6.4.yaml': None,
+                        'vps_rhel6.5.yaml': None,
+                        'vps_rhel7.0.yaml': None,
+                        'vps_ubuntu14.04.yaml': None,
+                    },
+                    'tasks': {
+                        'teuthology.yaml': None,
+                    },
+                },
+            },
+        }
+        self.start_patchers(fake_fs2)
+        result2 = build_matrix.build_matrix('teuthology/no-ceph')
+        assert len(result) == 11
+        assert len(result2) == len(result)
+
     def test_disable_extension(self):
         fake_fs = {
             'teuthology': {
