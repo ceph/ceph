@@ -43,6 +43,96 @@ class ClusterConfigurationTest(DashboardTestCase):
         if orig_value:
             self._ceph_cmd(['config', 'set', 'mon', config_name, orig_value[0]['value']])
 
+    def test_create(self):
+        config_name = 'debug_ms'
+        orig_value = self._get_config_by_name(config_name)
+
+        # remove all existing settings for equal preconditions
+        self._clear_all_values_for_config_option(config_name)
+
+        expected_result = [{'section': 'mon', 'value': '0/3'}]
+
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': expected_result
+        })
+        self.assertStatus(201)
+        result = self._wait_for_expected_get_result(self._get_config_by_name, config_name,
+                                                    expected_result)
+        self.assertEqual(result, expected_result)
+
+        # reset original value
+        self._clear_all_values_for_config_option(config_name)
+        self._reset_original_values(config_name, orig_value)
+
+    def test_create_two_values(self):
+        config_name = 'debug_ms'
+        orig_value = self._get_config_by_name(config_name)
+
+        # remove all existing settings for equal preconditions
+        self._clear_all_values_for_config_option(config_name)
+
+        expected_result = [{'section': 'mon', 'value': '0/3'},
+                           {'section': 'osd', 'value': '0/5'}]
+
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': expected_result
+        })
+        self.assertStatus(201)
+        result = self._wait_for_expected_get_result(self._get_config_by_name, config_name,
+                                                    expected_result)
+        self.assertEqual(result, expected_result)
+
+        # reset original value
+        self._clear_all_values_for_config_option(config_name)
+        self._reset_original_values(config_name, orig_value)
+
+    def test_create_can_handle_none_values(self):
+        config_name = 'debug_ms'
+        orig_value = self._get_config_by_name(config_name)
+
+        # remove all existing settings for equal preconditions
+        self._clear_all_values_for_config_option(config_name)
+
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': [{'section': 'mon', 'value': '0/3'},
+                      {'section': 'osd', 'value': None}]
+        })
+        self.assertStatus(201)
+
+        expected_result = [{'section': 'mon', 'value': '0/3'}]
+        result = self._wait_for_expected_get_result(self._get_config_by_name, config_name,
+                                                    expected_result)
+        self.assertEqual(result, expected_result)
+
+        # reset original value
+        self._clear_all_values_for_config_option(config_name)
+        self._reset_original_values(config_name, orig_value)
+
+    def test_create_can_handle_boolean_values(self):
+        config_name = 'mon_allow_pool_delete'
+        orig_value = self._get_config_by_name(config_name)
+
+        # remove all existing settings for equal preconditions
+        self._clear_all_values_for_config_option(config_name)
+
+        expected_result = [{'section': 'mon', 'value': 'true'}]
+
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': [{'section': 'mon', 'value': True}]})
+        self.assertStatus(201)
+
+        result = self._wait_for_expected_get_result(self._get_config_by_name, config_name,
+                                                    expected_result)
+        self.assertEqual(result, expected_result)
+
+        # reset original value
+        self._clear_all_values_for_config_option(config_name)
+        self._reset_original_values(config_name, orig_value)
+
     def _validate_single(self, data):
         self.assertIn('name', data)
         self.assertIn('daemon_default', data)
@@ -83,3 +173,14 @@ class ClusterConfigurationTest(DashboardTestCase):
         if 'value' in data:
             return data['value']
         return None
+
+    def _clear_all_values_for_config_option(self, config_name):
+        values = self._get_config_by_name(config_name)
+        if values:
+            for value in values:
+                self._ceph_cmd(['config', 'rm', value['section'], config_name])
+
+    def _reset_original_values(self, config_name, orig_values):
+        if orig_values:
+            for value in orig_values:
+                self._ceph_cmd(['config', 'set', value['section'], config_name, value['value']])
