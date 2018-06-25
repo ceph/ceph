@@ -57,6 +57,11 @@ class Module(MgrModule):
             "desc": "Show stored device metrics for the device",
             "perm": "r"
         },
+        {
+            "cmd": "device check-health",
+            "desc": "Check life expectancy of devices",
+            "perm": "rw",
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -97,6 +102,8 @@ class Module(MgrModule):
             return self.scrape_all();
         elif cmd['prefix'] == 'device show-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
+        elif cmd['prefix'] == 'device check-health':
+            return self.check_health()
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
@@ -145,8 +152,7 @@ class Module(MgrModule):
             if not self.enable_monitoring:
                 continue
             self.log.debug('Running')
-
-            # WRITE ME
+            self.check_health()
 
     def shutdown(self):
         self.log.info('Stopping')
@@ -308,7 +314,8 @@ class Module(MgrModule):
                 pass
         return (0, json.dumps(res, indent=4), '')
 
-    def life_expectancy_response(self):
+    def check_health(self):
+        self.log.info('Check health')
         mark_out_threshold_td = timedelta(seconds=int(self.mark_out_threshold))
         warn_threshold_td = timedelta(seconds=int(self.warn_threshold))
         health_warnings = []
