@@ -12,4 +12,8 @@ export class ConfigurationService {
   getConfigData() {
     return this.http.get('api/cluster_conf/');
   }
+
+  get(configOption) {
+    return this.http.get(`api/cluster_conf/${configOption}`);
+  }
 }

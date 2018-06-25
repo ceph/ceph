@@ -3,7 +3,12 @@
           [columns]="columns"
           selectionType="single"
           (updateSelection)="updateSelection($event)">
-  <div class="table-actions form-inline">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <div class="table-filters">
     <div class="form-group filter"
          *ngFor="let filter of filters">
       <label>{{ filter.label }}: </label>
