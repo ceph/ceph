@@ -12,6 +12,16 @@ from datetime import datetime, timedelta, date, time
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
+<<<<<<< HEAD
+=======
+DEFAULTS = {
+    'enable_monitoring': True,
+    'scrape_frequency': str(86400),
+    'retention_period': str(86400*14),
+    'pool_name': 'device_health_metrics',
+}
+
+>>>>>>> 3ae503f87580f77ad08c736c280669a212cb29be
 class Module(MgrModule):
     OPTIONS = [
         { 'name': 'enable_monitoring' },
@@ -19,6 +29,7 @@ class Module(MgrModule):
         { 'name': 'pool_name' },
         { 'name': 'retention_period' },
     ]
+<<<<<<< HEAD
     DEFAULTS = {
         'enable_monitoring': True,
         'scrape_frequency': str(86400),
@@ -29,6 +40,8 @@ class Module(MgrModule):
     scrape_frequency = DEFAULTS['scrape_frequency']
     retention_period = DEFAULTS['retention_period']
     pool_name = DEFAULTS['pool_name']
+=======
+>>>>>>> 3ae503f87580f77ad08c736c280669a212cb29be
 
     COMMANDS = [
         {
@@ -53,11 +66,33 @@ class Module(MgrModule):
             "desc": "Show stored device metrics for the device",
             "perm": "r"
         },
+<<<<<<< HEAD
     ]
 
     run = True
     event = Event()
     last_scrape_time = ""
+=======
+        {
+            "cmd": "devicehealth self-test",
+            "desc": "Run a self-test on the devicehealth module",
+            "perm": "rw",
+        },
+    ]
+
+    def __init__(self, *args, **kwargs):
+        super(Module, self).__init__(*args, **kwargs)
+
+        # options
+        self.enable_monitoring = DEFAULTS['enable_monitoring']
+        self.scrape_frequency = DEFAULTS['scrape_frequency']
+        self.retention_period = DEFAULTS['retention_period']
+        self.pool_name = DEFAULTS['pool_name']
+
+        # other
+        self.run = True
+        self.event = Event()
+>>>>>>> 3ae503f87580f77ad08c736c280669a212cb29be
 
     def handle_command(self, inbuf, cmd):
         self.log.error("handle_command")
@@ -86,15 +121,43 @@ class Module(MgrModule):
             return self.scrape_all();
         elif cmd['prefix'] == 'device show-health-metrics':
             return self.show_device_metrics(cmd['devid'], cmd.get('sample'))
+<<<<<<< HEAD
 
+=======
+        elif cmd['prefix'] == 'devicehealth self-test':
+            return self.self_test()
+>>>>>>> 3ae503f87580f77ad08c736c280669a212cb29be
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
             raise NotImplementedError(cmd['prefix'])
 
+<<<<<<< HEAD
     def refresh_config(self):
         self.enable_monitoring = self.get_config('enable_monitoring', '') is not '' or 'false'
         for opt, value in self.DEFAULTS.iteritems():
+=======
+    def self_test(self):
+        self.refresh_config()
+        osdmap = self.get('osd_map')
+        osd_id = osdmap['osds'][0]['osd']
+        osdmeta = self.get('osd_metadata')
+        devs = osdmeta.get(str(osd_id), {}).get('device_ids')
+        if devs:
+            devid = devs.split()[0].split('=')[1]
+            (r, before, err) = self.show_device_metrics(devid, '')
+            assert r == 0
+            (r, out, err) = self.scrape_device(devid)
+            assert r == 0
+            (r, after, err) = self.show_device_metrics(devid, '')
+            assert r == 0
+            assert before != after
+        return (0, '', '')
+
+    def refresh_config(self):
+        self.enable_monitoring = self.get_config('enable_monitoring', '') is not '' or 'false'
+        for opt, value in DEFAULTS.iteritems():
+>>>>>>> 3ae503f87580f77ad08c736c280669a212cb29be
             setattr(self, opt, self.get_config(opt) or value)
 
     def serve(self):
