@@ -6,7 +6,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
-#define dout_prefix *_dout << "fbmap_alloc 0x" << this << " "
+#define dout_prefix *_dout << "fbmap_alloc " << this << " "
 
 BitmapAllocator::BitmapAllocator(CephContext* _cct,
 					 int64_t capacity,
@@ -24,7 +24,7 @@ int64_t BitmapAllocator::allocate(
 {
   uint64_t allocated = 0;
 
-  ldout(cct, 10) << __func__ << std::hex << "0x" << want_size
+  ldout(cct, 10) << __func__ << std::hex << " 0x" << want_size
 		 << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		 << std::dec << dendl;
     
