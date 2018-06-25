@@ -23,6 +23,11 @@ DEFAULTS = {
     'self_heal': True,
 }
 
+health_messages = {
+    'DEVICE_HEALTH': '%d device(s) expected to fail soon',
+    'DEVICE_HEALTH_IN_USE': '%d daemons(s) expected to fail soon and still contain data',
+}
+
 class Module(MgrModule):
     OPTIONS = [
         { 'name': 'enable_monitoring' },
@@ -318,21 +323,32 @@ class Module(MgrModule):
         self.log.info('Check health')
         mark_out_threshold_td = timedelta(seconds=int(self.mark_out_threshold))
         warn_threshold_td = timedelta(seconds=int(self.warn_threshold))
-        health_warnings = []
+        health_warnings = {
+            'DEVICE_HEALTH': [],
+            'DEVICE_HEALTH_IN_USE': [],
+            }
         devs = self.get("devices")
         for dev in devs['devices']:
+            devid = dev['devid']
             if 'life_expectancy_min' not in dev:
                 continue
             # life_expectancy_(min/max) is in the format of:
             # '%Y-%m-%d %H:%M:%S.%f', e.g.:
             # '2019-01-20 21:12:12.000000'
-            life_expectancy_min = datetime.strptime(dev['life_expectancy_min'], '%Y-%m-%d %H:%M:%S.%f')
+            life_expectancy_min = datetime.strptime(
+                dev['life_expectancy_min'],
+                '%Y-%m-%d %H:%M:%S.%f')
+            self.log.debug('device %s expectancy min %s', dev,
+                           life_expectancy_min)
             now = datetime.now()
+
             if life_expectancy_min - now <= mark_out_threshold_td:
                 if self.self_heal:
                     # dev['daemons'] == ["osd.0","osd.1","osd.2"]
                     if dev['daemons']:
-                        osd_ids = map(lambda x: x[4:], dev['daemons'])
+                        osds = [x for x in dev['daemons']
+                                if x.startswith('osd.')]
+                        osd_ids = map(lambda x: x[4:], osds)
                         osds_in = []
                         osds_out = []
                         for _id in osd_ids:
@@ -347,24 +363,38 @@ class Module(MgrModule):
                         for _id in osds_out:
                             num_pgs = self.get_osd_num_pgs(_id)
                             if num_pgs > 0:
-                                health_warnings.append('osd.%s is marked out, '
-                                                       'but still has %s PG(s)'
-                                                       ' attached' %
-                                                       (_id, num_pgs))
+                                health_warnings['DEVICE_HEALTH_IN_USE'].append(
+                                    'osd.%s is marked out '
+                                    'but still has %s PG(s)' %
+                                    (_id, num_pgs))
                         # TODO: set_primary_affinity
-                self.log.warn(self.create_warning_message(dev))
-            elif life_expectancy_min - now <= warn_threshold_td:
-                health_warnings.append(self.create_warning_message(dev))
-        if health_warnings:
-            self.set_health_checks({
-                'MGR_DEVICE_HEALTH': {
+
+            if life_expectancy_min - now <= warn_threshold_td:
+                # device can appear in more than one location in case
+                # of SCSI multipath
+                device_locations = map(lambda x: x['host'] + ':' + x['dev'],
+                                       dev['location'])
+                health_warnings['DEVICE_HEALTH'].append(
+                    '%s (%s); daemons %s; life expectancy between %s and %s'
+                    % (dev['devid'],
+                       ','.join(device_locations),
+                       ','.join(dev.get('daemons', ['none'])),
+                       dev['life_expectancy_min'],
+                       dev.get('life_expectancy_max', 'unknown')))
+                # TODO: by default, dev['life_expectancy_max'] == '0.000000',
+                # so dev.get('life_expectancy_max', 'unknown')
+                # above should be altered.
+
+        checks = {}
+        for warning, ls in health_warnings.iteritems():
+            n = len(ls)
+            if n:
+                checks[warning] = {
                     'severity': 'warning',
-                    'summary': 'Imminent failure anticipated for device(s)',
-                    'detail': health_warnings
+                    'summary': health_messages[warning] % n,
+                    'detail': ls,
                 }
-            })
-        else:
-            self.set_health_checks({}) # clearing health checks
+        self.set_health_checks(checks)
         return (0,"","")
 
     def is_osd_in(self, osd_id):
@@ -382,21 +412,6 @@ class Module(MgrModule):
             if str(osd_id) == str(stat['osd']):
                 return stat['num_pgs']
         return -1
-
-    def create_warning_message(self, dev):
-        # device can appear in more than one location in case of SCSI multipath
-        device_locations = map(lambda x: x['host'] + ':' + x['dev'], dev['location'])
-        return ('%s at %s;'
-               ' Affected OSDs: %s;'
-               ' Life expectancy: between %s and %s'
-               % (dev['devid'],
-                device_locations,
-                dev.get('daemons', 'none'),
-                dev['life_expectancy_min'],
-                dev.get('life_expectancy_max', 'unknown')))
-                # TODO: by default, dev['life_expectancy_max'] == '0.000000',
-                # so dev.get('life_expectancy_max', 'unknown')
-                # above should be altered.
 
     def mark_out(self, osd_ids):
         self.log.info('Marking out OSDs: %s' % osd_ids)
