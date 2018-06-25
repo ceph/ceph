@@ -1,9 +1,12 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { Permission } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-configuration',
@@ -11,6 +14,8 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
   styleUrls: ['./configuration.component.scss']
 })
 export class ConfigurationComponent implements OnInit {
+  permission: Permission;
+  tableActions: CdTableAction[];
   data = [];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
@@ -79,7 +84,21 @@ export class ConfigurationComponent implements OnInit {
   @ViewChild('confFlagTpl')
   public confFlagTpl: TemplateRef<any>;
 
-  constructor(private configurationService: ConfigurationService) {}
+  constructor(
+    private authStorageService: AuthStorageService,
+    private configurationService: ConfigurationService
+  ) {
+    this.permission = this.authStorageService.getPermissions().configOpt;
+    const getConfigOptUri = () =>
+      this.selection.first() && `${encodeURI(this.selection.first().name)}`;
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      routerLink: () => `/configuration/edit/${getConfigOptUri()}`,
+      name: 'Edit'
+    };
+    this.tableActions = [editAction];
+  }
 
   ngOnInit() {
     this.columns = [
