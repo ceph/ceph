@@ -359,7 +359,7 @@ class Module(MgrModule):
                             else:
                                 osds_out.append(_id)
                         if osds_in:
-                            self.mark_out(osds_in)
+                            self.mark_out_etc(osds_in)
                         # OSD might be marked 'out' (which means it has no
                         # data), however PGs are still attached to it.
                         for _id in osds_out:
@@ -369,7 +369,6 @@ class Module(MgrModule):
                                     'osd.%s is marked out '
                                     'but still has %s PG(s)' %
                                     (_id, num_pgs))
-                        # TODO: set_primary_affinity
 
             if life_expectancy_min - now <= warn_threshold_td:
                 # device can appear in more than one location in case
@@ -413,7 +412,7 @@ class Module(MgrModule):
                 return stat['num_pgs']
         return -1
 
-    def mark_out(self, osd_ids):
+    def mark_out_etc(self, osd_ids):
         self.log.info('Marking out OSDs: %s' % osd_ids)
         result = CommandResult('')
         self.send_command(result, 'mon', '', json.dumps({
@@ -424,6 +423,18 @@ class Module(MgrModule):
         r, outb, outs = result.wait()
         if r != 0:
             self.log.warn('Could not mark OSD %s out. r: [%s], outb: [%s], outs: [%s]' % (osd_ids, r, outb, outs))
+        for osd_id in osd_ids:
+            result = CommandResult('')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd primary-affinity',
+                'format': 'json',
+                'id': int(osd_id),
+                'weight': 0.0,
+            }), '')
+            r, outb, outs = result.wait()
+            if r != 0:
+                self.log.warn('Could not set osd.%s primary-affinity, r: [%s], outs: [%s]' % (osd_id, r, outb, outs))
+
 
     def extract_smart_features(self, raw):
         # FIXME: extract and normalize raw smartctl --json output and
