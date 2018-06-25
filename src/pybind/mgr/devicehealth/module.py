@@ -6,6 +6,7 @@ Device health monitoring
 import errno
 import json
 from mgr_module import MgrModule, CommandResult
+import operator
 import rados
 from threading import Event
 from datetime import datetime, timedelta, date, time
@@ -359,7 +360,7 @@ class Module(MgrModule):
                         osd_ids = map(lambda x: x[4:], osds)
                         for _id in osd_ids:
                             if self.is_osd_in(osdmap, _id):
-                                osds_in[_id] = 1
+                                osds_in[_id] = life_expectancy_min
                             else:
                                 osds_out[_id] = 1
 
@@ -391,23 +392,29 @@ class Module(MgrModule):
         if osds_in:
             self.log.debug('osds_in %s' % osds_in)
             # calculate target in ratio
-            bad = len(osds_in)
             num_osds = len(osdmap['osds'])
             num_in = len([x for x in osdmap['osds'] if x['in']])
-            ratio = float(max(0, num_in - bad)) / float(num_osds)
-            self.log.debug('osds %d in %d final %f min %f' %
-                           (num_osds, num_in, ratio, min_in_ratio))
-            if ratio >= min_in_ratio:
-                for _id in osds_in.iterkeys():
-                    self.mark_out_etc(osd_id)
-            else:
-                checks['DEVICE_HEALTH_TOOMANY'] = {
-                    'severity': 'warning',
-                    'summary': health_messages['DEVICE_HEALTH_TOOMANY'],
-                    'detail': [
-                        '%d OSDs with failing device(s) would bring "in" ratio to %f < mon_osd_min_in_ratio %f' % (bad, ratio, min_in_ratio)
+            num_bad = len(osds_in)
+            # sort with next-to-fail first
+            bad_osds = sorted(osds_in.items(), key=operator.itemgetter(1))
+            did = 0
+            to_mark_out = []
+            for osd_id, when in bad_osds:
+                ratio = float(num_in - did - 1) / float(num_osds)
+                if ratio < min_in_ratio:
+                    final_ratio = float(num_in - num_bad) / float(num_osds)
+                    checks['DEVICE_HEALTH_TOOMANY'] = {
+                        'severity': 'warning',
+                        'summary': health_messages['DEVICE_HEALTH_TOOMANY'],
+                        'detail': [
+                            '%d OSDs with failing device(s) would bring "in" ratio to %f < mon_osd_min_in_ratio %f' % (num_bad - did, final_ratio, min_in_ratio)
                         ]
                     }
+                    break
+                to_mark_out.append(osd_id)
+                did += 1
+            if to_mark_out:
+                self.mark_out_etc(to_mark_out)
         for warning, ls in health_warnings.iteritems():
             n = len(ls)
             if n:
