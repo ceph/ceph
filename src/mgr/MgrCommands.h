@@ -114,6 +114,12 @@ COMMAND("osd destroy "	    \
         "but removes cephx keys, config-key data and lockbox keys, "\
         "rendering data permanently unreadable.", \
         "osd", "rw", "cli,rest")
+COMMAND("osd purge " \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephString,req=false",			     \
+        "purge all osd data from the monitors including the OSD id " \
+	"and CRUSH position",					     \
+	"osd", "rw", "cli,rest")
 
 COMMAND("osd safe-to-destroy name=ids,type=CephString,n=N",
 	"check whether osd(s) can be safely destroyed without reducing data durability",

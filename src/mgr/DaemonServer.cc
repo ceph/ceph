@@ -1202,7 +1202,8 @@ bool DaemonServer::handle_command(MCommand *m)
       return true;
     }
   } else if (prefix == "osd safe-to-destroy" ||
-	     prefix == "osd destroy") {
+	     prefix == "osd destroy" ||
+	     prefix == "osd purge") {
     set<int> osds;
     int r = 0;
     if (prefix == "osd safe-to-destroy") {
@@ -1284,11 +1285,12 @@ bool DaemonServer::handle_command(MCommand *m)
       r = -EBUSY;
     }
 
-    if (r && prefix == "osd destroy") {
+    if (r && (prefix == "osd destroy" ||
+	      prefix == "osd purge")) {
       string sure;
       if (!cmd_getval(cct, cmdctx->cmdmap, "sure", sure) ||
 	  sure != "--force") {
-	ss << "\nYou can proceed with OSD removal by passing --force, but be warned that this will likely mean real, permanent data loss.";
+	ss << "\nYou can proceed by passing --force, but be warned that this will likely mean real, permanent data loss.";
       } else {
 	r = 0;
       }
@@ -1297,10 +1299,11 @@ bool DaemonServer::handle_command(MCommand *m)
       cmdctx->reply(r, ss);
       return true;
     }
-    if (prefix == "osd destroy") {
+    if (prefix == "osd destroy" ||
+	prefix == "osd purge") {
       const string cmd =
 	"{"
-	"\"prefix\": \"osd destroy-actual\", "
+	"\"prefix\": \"" + prefix + "-actual\", "
 	"\"id\": " + stringify(osds) + ", "
 	"\"sure\": \"--yes-i-really-mean-it\""
 	"}";

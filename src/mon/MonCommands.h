@@ -884,12 +884,12 @@ COMMAND("osd purge-new " \
         "purge all traces of an OSD that was partially created but never " \
 	"started", \
         "osd", "rw", "cli,rest")
-COMMAND("osd purge " \
+COMMAND_WITH_FLAG("osd purge-actual " \
         "name=id,type=CephOsdName " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
         "purge all osd data from the monitors. Combines `osd destroy`, " \
         "`osd rm`, and `osd crush rm`.", \
-        "osd", "rw", "cli,rest")
+		  "osd", "rw", "cli,rest", FLAG(HIDDEN))
 COMMAND("osd lost " \
 	"name=id,type=CephOsdName " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
