@@ -46,7 +46,6 @@
 #include "rgw_crypt_sanitize.h"
 #include "rgw_rest_user_policy.h"
 #include "include/ceph_assert.h"
-#include "include/assert.h"
 #include "rgw_role.h"
 #include "rgw_rest_sts.h"
 #include "rgw_sts.h"
