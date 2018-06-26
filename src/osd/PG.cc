@@ -570,7 +570,12 @@ bool PG::search_for_missing(
     from, oinfo, omissing, ctx->handle);
   if (found_missing && num_unfound_before != missing_loc.num_unfound())
     publish_stats_to_osd();
-  if (found_missing) {
+  // avoid doing this if the peer is empty.  This is abit of paranoia
+  // to avoid doing something rash if add_source_info() above
+  // incorrectly decided we found something new. (if the peer has
+  // last_update=0'0 that's impossible.)
+  if (found_missing &&
+      oinfo.last_update != eversion_t()) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
     (*(ctx->info_map))[from.osd].push_back(
