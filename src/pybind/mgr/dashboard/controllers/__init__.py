@@ -14,16 +14,25 @@ import cherrypy
 from six import add_metaclass
 
 from .. import logger
+from ..security import Scope, Permission
 from ..settings import Settings
 from ..tools import Session, wraps, getargspec, TaskManager
-from ..exceptions import ViewCacheNoDataException, DashboardException
+from ..exceptions import ViewCacheNoDataException, DashboardException, \
+                         ScopeNotValid, PermissionNotValid
 from ..services.exception import serialize_dashboard_exception
+from ..services.auth import AuthManager
 
 
 class Controller(object):
-    def __init__(self, path, base_url=None):
+    def __init__(self, path, base_url=None, security_scope=None, secure=True):
+        if security_scope and not Scope.valid_scope(security_scope):
+            logger.debug("Invalid security scope name: %s\n Possible values: "
+                         "%s", security_scope, Scope.all_scopes())
+            raise ScopeNotValid(security_scope)
         self.path = path
         self.base_url = base_url
+        self.security_scope = security_scope
+        self.secure = secure
 
         if self.path and self.path[0] != "/":
             self.path = "/" + self.path
@@ -39,24 +48,26 @@ class Controller(object):
     def __call__(self, cls):
         cls._cp_controller_ = True
         cls._cp_path_ = "{}{}".format(self.base_url, self.path)
+        cls._security_scope = self.security_scope
 
         config = {
             'tools.sessions.on': True,
             'tools.sessions.name': Session.NAME,
             'tools.session_expire_at_browser_close.on': True,
-            'tools.dashboard_exception_handler.on': True
+            'tools.dashboard_exception_handler.on': True,
+            'tools.authenticate.on': self.secure,
         }
         if not hasattr(cls, '_cp_config'):
             cls._cp_config = {}
-        if 'tools.authenticate.on' not in cls._cp_config:
-            config['tools.authenticate.on'] = False
         cls._cp_config.update(config)
         return cls
 
 
 class ApiController(Controller):
-    def __init__(self, path):
-        super(ApiController, self).__init__(path, base_url="/api")
+    def __init__(self, path, security_scope=None, secure=True):
+        super(ApiController, self).__init__(path, base_url="/api",
+                                            security_scope=security_scope,
+                                            secure=secure)
 
     def __call__(self, cls):
         cls = super(ApiController, self).__call__(cls)
@@ -65,24 +76,10 @@ class ApiController(Controller):
 
 
 class UiApiController(Controller):
-    def __init__(self, path):
-        super(UiApiController, self).__init__(path, base_url="/ui-api")
-
-
-def AuthRequired(enabled=True):
-    if not isinstance(enabled, bool):
-        raise TypeError('AuthRequired used incorrectly. '
-                        'You are likely missing parentheses!')
-
-    def decorate(cls):
-        if not hasattr(cls, '_cp_config'):
-            cls._cp_config = {
-                'tools.authenticate.on': enabled
-            }
-        else:
-            cls._cp_config['tools.authenticate.on'] = enabled
-        return cls
-    return decorate
+    def __init__(self, path, security_scope=None, secure=True):
+        super(UiApiController, self).__init__(path, base_url="/ui-api",
+                                              security_scope=security_scope,
+                                              secure=secure)
 
 
 def Endpoint(method=None, path=None, path_params=None, query_params=None,
@@ -185,45 +182,45 @@ def load_controllers():
 ENDPOINT_MAP = collections.defaultdict(list)
 
 
-def generate_controller_routes(ctrl_class, mapper, base_url):
-    inst = ctrl_class()
-    endp_base_urls = set()
+def generate_controller_routes(endpoint, mapper, base_url):
+    inst = endpoint.inst
+    ctrl_class = endpoint.ctrl
+    endp_base_url = None
 
-    for endpoint in ctrl_class.endpoints():
-        if endpoint.proxy:
-            conditions = None
-        else:
-            conditions = dict(method=[endpoint.method])
+    if endpoint.proxy:
+        conditions = None
+    else:
+        conditions = dict(method=[endpoint.method])
 
-        endp_url = endpoint.url
-        if base_url == "/":
-            base_url = ""
-        if endp_url == "/" and base_url:
-            endp_url = ""
-        url = "{}{}".format(base_url, endp_url)
+    endp_url = endpoint.url
+    if base_url == "/":
+        base_url = ""
+    if endp_url == "/" and base_url:
+        endp_url = ""
+    url = "{}{}".format(base_url, endp_url)
 
-        if '/' in url[len(base_url)+1:]:
-            endp_base_urls.add(url[:len(base_url)+1+endp_url[1:].find('/')])
-        else:
-            endp_base_urls.add(url)
+    if '/' in url[len(base_url)+1:]:
+        endp_base_url = url[:len(base_url)+1+endp_url[1:].find('/')]
+    else:
+        endp_base_url = url
 
-        logger.debug("Mapped [%s] to %s:%s restricted to %s",
-                     url, ctrl_class.__name__, endpoint.action,
-                     endpoint.method)
+    logger.debug("Mapped [%s] to %s:%s restricted to %s",
+                 url, ctrl_class.__name__, endpoint.action,
+                 endpoint.method)
 
-        ENDPOINT_MAP[endpoint.url].append(endpoint)
+    ENDPOINT_MAP[endpoint.url].append(endpoint)
 
-        name = ctrl_class.__name__ + ":" + endpoint.action
-        mapper.connect(name, url, controller=inst, action=endpoint.action,
-                       conditions=conditions)
+    name = ctrl_class.__name__ + ":" + endpoint.action
+    mapper.connect(name, url, controller=inst, action=endpoint.action,
+                   conditions=conditions)
 
-        # adding route with trailing slash
-        name += "/"
-        url += "/"
-        mapper.connect(name, url, controller=inst, action=endpoint.action,
-                       conditions=conditions)
+    # adding route with trailing slash
+    name += "/"
+    url += "/"
+    mapper.connect(name, url, controller=inst, action=endpoint.action,
+                   conditions=conditions)
 
-    return endp_base_urls
+    return endp_base_url
 
 
 def generate_routes(url_prefix):
@@ -231,9 +228,18 @@ def generate_routes(url_prefix):
     ctrls = load_controllers()
 
     parent_urls = set()
+
+    endpoint_list = []
     for ctrl in ctrls:
-        parent_urls.update(generate_controller_routes(ctrl, mapper,
-                                                      "{}".format(url_prefix)))
+        inst = ctrl()
+        for endpoint in ctrl.endpoints():
+            endpoint.inst = inst
+            endpoint_list.append(endpoint)
+
+    endpoint_list = sorted(endpoint_list, key=lambda e: e.url)
+    for endpoint in endpoint_list:
+        parent_urls.add(generate_controller_routes(endpoint, mapper,
+                                                   "{}".format(url_prefix)))
 
     logger.debug("list of parent paths: %s", parent_urls)
     return mapper, parent_urls
@@ -350,6 +356,7 @@ class BaseController(object):
         """
         def __init__(self, ctrl, func):
             self.ctrl = ctrl
+            self.inst = None
             self.func = func
 
             if not self.config['proxy']:
@@ -434,8 +441,8 @@ class BaseController(object):
             path_params = [p['name'] for p in self.path_params]
             query_params = [p['name'] for p in self.query_params]
             return [p for p in func_params
-                    if p['name'] not in path_params and
-                    p['name'] not in query_params]
+                    if p['name'] not in path_params
+                    and p['name'] not in query_params]
 
         @property
         def group(self):
@@ -456,6 +463,22 @@ class BaseController(object):
     def __init__(self):
         logger.info('Initializing controller: %s -> %s',
                     self.__class__.__name__, self._cp_path_)
+
+    def _has_permissions(self, permissions, scope=None):
+        if not self._cp_config['tools.authenticate.on']:
+            raise Exception("Cannot verify permission in non secured "
+                            "controllers")
+
+        if not isinstance(permissions, list):
+            permissions = [permissions]
+
+        if scope is None:
+            scope = getattr(self, '_security_scope', None)
+        if scope is None:
+            raise Exception("Cannot verify permissions without scope security"
+                            " defined")
+        username = cherrypy.session.get(Session.USERNAME)
+        return AuthManager.authorize(username, scope, permissions)
 
     @classmethod
     def get_path_param_names(cls, path_extension=None):
@@ -519,6 +542,8 @@ class BaseController(object):
                     kwargs.update(data.items())
                     ret = func(*args, **kwargs)
 
+            if isinstance(ret, bytes):
+                ret = ret.decode('utf-8')
             if json_response:
                 cherrypy.response.headers['Content-Type'] = 'application/json'
                 ret = json.dumps(ret).encode('utf8')
@@ -557,6 +582,13 @@ class RESTController(BaseController):
     # of the resourse ID.
     RESOURCE_ID = None
 
+    _permission_map = {
+        'GET': Permission.READ,
+        'POST': Permission.CREATE,
+        'PUT': Permission.UPDATE,
+        'DELETE': Permission.DELETE
+    }
+
     _method_mapping = collections.OrderedDict([
         ('list', {'method': 'GET', 'resource': False, 'status': 200}),
         ('create', {'method': 'POST', 'resource': False, 'status': 201}),
@@ -593,6 +625,8 @@ class RESTController(BaseController):
             method = None
             query_params = None
             path = ""
+            sec_permissions = hasattr(func, '_security_permissions')
+            permission = None
 
             if func.__name__ in cls._method_mapping:
                 meth = cls._method_mapping[func.__name__]
@@ -606,6 +640,8 @@ class RESTController(BaseController):
 
                 status = meth['status']
                 method = meth['method']
+                if not sec_permissions:
+                    permission = cls._permission_map[method]
 
             elif hasattr(func, "_collection_method_"):
                 if func._collection_method_['path']:
@@ -615,6 +651,8 @@ class RESTController(BaseController):
                 status = func._collection_method_['status']
                 method = func._collection_method_['method']
                 query_params = func._collection_method_['query_params']
+                if not sec_permissions:
+                    permission = cls._permission_map[method]
 
             elif hasattr(func, "_resource_method_"):
                 if not res_id_params:
@@ -629,6 +667,8 @@ class RESTController(BaseController):
                 status = func._resource_method_['status']
                 method = func._resource_method_['method']
                 query_params = func._resource_method_['query_params']
+                if not sec_permissions:
+                    permission = cls._permission_map[method]
 
             else:
                 continue
@@ -651,6 +691,8 @@ class RESTController(BaseController):
             func = cls._status_code_wrapper(func, status)
             endp_func = Endpoint(method, path=path,
                                  query_params=query_params)(func)
+            if permission:
+                _set_func_permissions(endp_func, [permission])
             result.append(cls.Endpoint(cls, endp_func))
 
         return result
@@ -699,3 +741,43 @@ class RESTController(BaseController):
             }
             return func
         return _wrapper
+
+
+# Role-based access permissions decorators
+
+def _set_func_permissions(func, permissions):
+    if not isinstance(permissions, list):
+        permissions = [permissions]
+
+    for perm in permissions:
+        if not Permission.valid_permission(perm):
+            logger.debug("Invalid security permission: %s\n "
+                         "Possible values: %s", perm,
+                         Permission.all_permissions())
+            raise PermissionNotValid(perm)
+
+    if not hasattr(func, '_security_permissions'):
+        func._security_permissions = permissions
+    else:
+        permissions.extend(func._security_permissions)
+        func._security_permissions = list(set(permissions))
+
+
+def ReadPermission(func):
+    _set_func_permissions(func, Permission.READ)
+    return func
+
+
+def CreatePermission(func):
+    _set_func_permissions(func, Permission.CREATE)
+    return func
+
+
+def DeletePermission(func):
+    _set_func_permissions(func, Permission.DELETE)
+    return func
+
+
+def UpdatePermission(func):
+    _set_func_permissions(func, Permission.UPDATE)
+    return func

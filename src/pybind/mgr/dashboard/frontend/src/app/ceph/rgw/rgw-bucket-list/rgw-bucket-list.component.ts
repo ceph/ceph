@@ -8,6 +8,8 @@ import { DeletionModalComponent } from '../../../shared/components/deletion-moda
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { Permission } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-rgw-bucket-list',
@@ -17,11 +19,17 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 export class RgwBucketListComponent {
   @ViewChild(TableComponent) table: TableComponent;
 
+  permission: Permission;
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
 
-  constructor(private rgwBucketService: RgwBucketService, private bsModalService: BsModalService) {
+  constructor(
+    private authStorageService: AuthStorageService,
+    private rgwBucketService: RgwBucketService,
+    private bsModalService: BsModalService
+  ) {
+    this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
         name: 'Name',

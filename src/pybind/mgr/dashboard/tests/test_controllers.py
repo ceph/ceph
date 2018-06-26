@@ -6,7 +6,7 @@ from ..controllers import BaseController, RESTController, Controller, \
                           ApiController, Endpoint
 
 
-@Controller("/btest/{key}", base_url="/ui")
+@Controller("/btest/{key}", base_url="/ui", secure=False)
 class BTest(BaseController):
     @Endpoint()
     def test1(self, key, opt=1):
@@ -38,7 +38,7 @@ class BTest(BaseController):
         return {'key': key, 'opt': opt}
 
 
-@ApiController("/rtest/{key}")
+@ApiController("/rtest/{key}", secure=False)
 class RTest(RESTController):
     RESOURCE_ID = 'skey/ekey'
 
@@ -72,7 +72,7 @@ class RTest(RESTController):
         return {'key': key, 'skey': skey, 'ekey': ekey, 'opt': opt}
 
 
-@Controller("/")
+@Controller("/", secure=False)
 class Root(BaseController):
     @Endpoint(json_response=False)
     def __call__(self):

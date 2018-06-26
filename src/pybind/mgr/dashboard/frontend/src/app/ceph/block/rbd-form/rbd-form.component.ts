@@ -8,7 +8,9 @@ import { Observable } from 'rxjs/Observable';
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { RbdFormCloneRequestModel } from './rbd-form-clone-request.model';
@@ -25,6 +27,7 @@ import { RbdFormResponseModel } from './rbd-form-response.model';
 })
 export class RbdFormComponent implements OnInit {
 
+  poolPermission: Permission;
   rbdForm: FormGroup;
   featuresFormGroups: FormGroup;
   deepFlattenFormControl: FormControl;
@@ -71,6 +74,7 @@ export class RbdFormComponent implements OnInit {
   ];
 
   constructor(
+    private authStorageService: AuthStorageService,
     private route: ActivatedRoute,
     private router: Router,
     private poolService: PoolService,
@@ -79,6 +83,7 @@ export class RbdFormComponent implements OnInit {
     private taskWrapper: TaskWrapperService,
     private dimlessBinaryPipe: DimlessBinaryPipe
   ) {
+    this.poolPermission = this.authStorageService.getPermissions().pool;
     this.features = {
       'deep-flatten': {
         desc: 'Deep flatten',
@@ -217,7 +222,7 @@ export class RbdFormComponent implements OnInit {
           this.setFeatures(defaultFeatures);
         });
     }
-    if (this.mode !== this.rbdFormMode.editing) {
+    if (this.mode !== this.rbdFormMode.editing && this.poolPermission.read) {
       this.poolService.list(['pool_name', 'type', 'flags_names', 'application_metadata']).then(
         resp => {
           const pools = [];

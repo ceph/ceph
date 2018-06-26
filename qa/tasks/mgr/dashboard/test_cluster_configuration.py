@@ -2,11 +2,11 @@ from __future__ import absolute_import
 
 import time
 
-from .helper import DashboardTestCase, authenticate
+from .helper import DashboardTestCase
 
 
 class ClusterConfigurationTest(DashboardTestCase):
-    @authenticate
+
     def test_list(self):
         data = self._get('/api/cluster_conf')
         self.assertStatus(200)
@@ -15,7 +15,6 @@ class ClusterConfigurationTest(DashboardTestCase):
         for conf in data:
             self._validate_single(conf)
 
-    @authenticate
     def test_get(self):
         data = self._get('/api/cluster_conf/admin_socket')
         self.assertStatus(200)
@@ -25,11 +24,14 @@ class ClusterConfigurationTest(DashboardTestCase):
         data = self._get('/api/cluster_conf/fantasy_name')
         self.assertStatus(404)
 
-    @authenticate
     def test_get_specific_db_config_option(self):
         def _get_mon_allow_pool_delete_config():
             data = self._get('/api/cluster_conf/mon_allow_pool_delete')
-            return data['value'][0]
+            if 'value' in data:
+                return data['value'][0]
+            return None
+
+        orig_value = _get_mon_allow_pool_delete_config()
 
         self._ceph_cmd(['config', 'set', 'mon', 'mon_allow_pool_delete', 'true'])
         result = self._wait_for_expected_get_result(_get_mon_allow_pool_delete_config,
@@ -40,6 +42,11 @@ class ClusterConfigurationTest(DashboardTestCase):
         result = self._wait_for_expected_get_result(_get_mon_allow_pool_delete_config,
                                                     {'section': 'mon', 'value': 'false'})
         self.assertEqual(result, {'section': 'mon', 'value': 'false'})
+
+        # restore value
+        if orig_value:
+            self._ceph_cmd(['config', 'set', 'mon', 'mon_allow_pool_delete',
+                           orig_value['value']])
 
     def _validate_single(self, data):
         self.assertIn('name', data)

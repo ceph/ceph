@@ -13,7 +13,7 @@ from ..tools import ViewCache, TaskManager, NotificationQueue
 
 
 # pylint: disable=W0613
-@Controller('foo')
+@Controller('foo', secure=False)
 class FooResource(RESTController):
 
     @Endpoint()

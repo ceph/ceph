@@ -5,6 +5,8 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BsDropdownModule } from 'ngx-bootstrap';
 
 import { ComponentsModule } from '../../../shared/components/components.module';
+import { Permissions } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { configureTestBed } from '../../../shared/unit-test-helper';
 import { HostsComponent } from './hosts.component';
@@ -12,6 +14,12 @@ import { HostsComponent } from './hosts.component';
 describe('HostsComponent', () => {
   let component: HostsComponent;
   let fixture: ComponentFixture<HostsComponent>;
+
+  const fakeAuthStorageService = {
+    getPermissions: () => {
+      return new Permissions({ hosts: ['read', 'update', 'create', 'delete'] });
+    }
+  };
 
   configureTestBed({
     imports: [
@@ -21,6 +29,7 @@ describe('HostsComponent', () => {
       BsDropdownModule.forRoot(),
       RouterTestingModule
     ],
+    providers: [{ provide: AuthStorageService, useValue: fakeAuthStorageService }],
     declarations: [HostsComponent]
   });
 

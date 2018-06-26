@@ -10,20 +10,12 @@ import time
 
 import requests
 import six
+from teuthology.exceptions import CommandFailedError
 
 from ..mgr_test_case import MgrTestCase
 
 
 log = logging.getLogger(__name__)
-
-
-def authenticate(func):
-    def decorate(self, *args, **kwargs):
-        self._ceph_cmd(['dashboard', 'set-login-credentials', 'admin', 'admin'])
-        self._post('/api/auth', {'username': 'admin', 'password': 'admin'})
-        self.assertStatus(201)
-        return func(self, *args, **kwargs)
-    return decorate
 
 
 class DashboardTestCase(MgrTestCase):
@@ -35,13 +27,86 @@ class DashboardTestCase(MgrTestCase):
 
     _session = None
     _resp = None
+    _loggedin = False
+    _base_uri = None
+
+    AUTO_AUTHENTICATE = True
+
+    AUTH_ROLES = ['administrator']
+
+    @classmethod
+    def create_user(cls, username, password, roles):
+        try:
+            cls._ceph_cmd(['dashboard', 'ac-user-show', username])
+            cls._ceph_cmd(['dashboard', 'ac-user-delete', username])
+        except CommandFailedError as ex:
+            if ex.exitstatus != 2:
+                raise ex
+
+        cls._ceph_cmd(['dashboard', 'ac-user-create', username, password])
+
+        set_roles_args = ['dashboard', 'ac-user-set-roles', username]
+        for idx, role in enumerate(roles):
+            if isinstance(role, str):
+                set_roles_args.append(role)
+            else:
+                assert isinstance(role, dict)
+                rolename = 'test_role_{}'.format(idx)
+                try:
+                    cls._ceph_cmd(['dashboard', 'ac-role-show', rolename])
+                    cls._ceph_cmd(['dashboard', 'ac-role-delete', rolename])
+                except CommandFailedError as ex:
+                    if ex.exitstatus != 2:
+                        raise ex
+                cls._ceph_cmd(['dashboard', 'ac-role-create', rolename])
+                for mod, perms in role.items():
+                    args = ['dashboard', 'ac-role-add-scope-perms', rolename, mod]
+                    args.extend(perms)
+                    cls._ceph_cmd(args)
+                set_roles_args.append(rolename)
+        cls._ceph_cmd(set_roles_args)
+
+    @classmethod
+    def login(cls, username, password):
+        if cls._loggedin:
+            cls.logout()
+        cls._post('/api/auth', {'username': username, 'password': password})
+        cls._loggedin = True
+
+    @classmethod
+    def logout(cls):
+        if cls._loggedin:
+            cls._delete('/api/auth')
+            cls._loggedin = False
+
+    @classmethod
+    def delete_user(cls, username, roles=None):
+        if roles is None:
+            roles = []
+        cls._ceph_cmd(['dashboard', 'ac-user-delete', username])
+        for idx, role in enumerate(roles):
+            if isinstance(role, dict):
+                cls._ceph_cmd(['dashboard', 'ac-role-delete', 'test_role_{}'.format(idx)])
+
+    @classmethod
+    def RunAs(cls, username, password, roles):
+        def wrapper(func):
+            def execute(self, *args, **kwargs):
+                self.create_user(username, password, roles)
+                self.login(username, password)
+                res = func(self, *args, **kwargs)
+                self.logout()
+                self.delete_user(username, roles)
+                return res
+            return execute
+        return wrapper
 
     @classmethod
     def setUpClass(cls):
         super(DashboardTestCase, cls).setUpClass()
         cls._assign_ports("dashboard", "server_port")
         cls._load_module("dashboard")
-        cls.base_uri = cls._get_uri("dashboard").rstrip('/')
+        cls._base_uri = cls._get_uri("dashboard").rstrip('/')
 
         if cls.CEPHFS:
             cls.mds_cluster.clear_firewall()
@@ -72,6 +137,14 @@ class DashboardTestCase(MgrTestCase):
         cls._session = requests.Session()
         cls._resp = None
 
+        cls.create_user('admin', 'admin', cls.AUTH_ROLES)
+        if cls.AUTO_AUTHENTICATE:
+            cls.login('admin', 'admin')
+
+    def setUp(self):
+        if not self._loggedin and self.AUTO_AUTHENTICATE:
+            self.login('admin', 'admin')
+
     @classmethod
     def tearDownClass(cls):
         super(DashboardTestCase, cls).tearDownClass()
@@ -79,7 +152,7 @@ class DashboardTestCase(MgrTestCase):
     # pylint: disable=inconsistent-return-statements
     @classmethod
     def _request(cls, url, method, data=None, params=None):
-        url = "{}{}".format(cls.base_uri, url)
+        url = "{}{}".format(cls._base_uri, url)
         log.info("request %s to %s", method, url)
         if method == 'GET':
             cls._resp = cls._session.get(url, params=params, verify=False)
@@ -155,7 +228,10 @@ class DashboardTestCase(MgrTestCase):
     @classmethod
     def _task_request(cls, method, url, data, timeout):
         res = cls._request(url, method, data)
-        cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 400])
+        cls._assertIn(cls._resp.status_code, [200, 201, 202, 204, 400, 403])
+
+        if cls._resp.status_code == 403:
+            return None
 
         if cls._resp.status_code != 202:
             log.info("task finished immediately")
