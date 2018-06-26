@@ -2394,4 +2394,52 @@ extern string lowercase_dash_http_attr(const string& orig);
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
 
+static inline void rgw_escape_str(const string& s, char esc_char,
+				  char special_char, string *dest)
+{
+  const char *src = s.c_str();
+  char dest_buf[s.size() * 2 + 1];
+  char *destp = dest_buf;
+
+  for (size_t i = 0; i < s.size(); i++) {
+    char c = src[i];
+    if (c == esc_char || c == special_char) {
+      *destp++ = esc_char;
+    }
+    *destp++ = c;
+  }
+  *destp++ = '\0';
+  *dest = dest_buf;
+}
+
+static inline ssize_t rgw_unescape_str(const string& s, ssize_t ofs,
+				       char esc_char, char special_char,
+				       string *dest)
+{
+  const char *src = s.c_str();
+  char dest_buf[s.size() + 1];
+  char *destp = dest_buf;
+  bool esc = false;
+
+  dest_buf[0] = '\0';
+
+  for (size_t i = ofs; i < s.size(); i++) {
+    char c = src[i];
+    if (!esc && c == esc_char) {
+      esc = true;
+      continue;
+    }
+    if (!esc && c == special_char) {
+      *destp = '\0';
+      *dest = dest_buf;
+      return (ssize_t)i + 1;
+    }
+    *destp++ = c;
+    esc = false;
+  }
+  *destp = '\0';
+  *dest = dest_buf;
+  return string::npos;
+}
+
 #endif

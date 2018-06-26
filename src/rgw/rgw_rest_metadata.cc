@@ -20,6 +20,7 @@
 #include "rgw_client_io.h"
 #include "common/errno.h"
 #include "common/strtol.h"
+#include "rgw/rgw_b64.h"
 #include "include/assert.h"
 
 #define dout_context g_ceph_context
@@ -68,9 +69,25 @@ const string RGWOp_Metadata_List::name() {
 }
 
 void RGWOp_Metadata_List::execute() {
-  string marker = s->info.args.get("marker");
+  string marker;
+  ldout(s->cct, 16) << __func__
+		    << " raw marker " << s->info.args.get("marker")
+		    << dendl;
+
+  try {
+    marker = s->info.args.get("marker");
+    if (!marker.empty()) {
+      marker = rgw::from_base64(marker);
+    }
+    ldout(s->cct, 16) << __func__
+	     << " marker " << marker << dendl;
+  } catch (...) {
+    marker = std::string("");
+  }
+
   bool max_entries_specified;
-  string max_entries_str = s->info.args.get("max-entries", &max_entries_specified);
+  string max_entries_str =
+    s->info.args.get("max-entries", &max_entries_specified);
 
   bool extended_response = (max_entries_specified); /* for backward compatibility, if max-entries is not specified
                                                     we will send the old response format */
@@ -92,6 +109,12 @@ void RGWOp_Metadata_List::execute() {
   /* List keys */
   void *handle;
   int max = 1000;
+
+  /* example markers:
+     marker = "3:b55a9110:root::bu_9:head";
+     marker = "3:b9a8b2a6:root::sorry_janefonda_890:head";
+     marker = "3:bf885d8f:root::sorry_janefonda_665:head";
+  */
 
   http_ret = store->meta_mgr->list_keys_init(metadata_key, marker, &handle);
   if (http_ret < 0) {
@@ -133,7 +156,9 @@ void RGWOp_Metadata_List::execute() {
     encode_json("truncated", truncated, s->formatter);
     encode_json("count", count, s->formatter);
     if (truncated) {
-      encode_json("marker", store->meta_mgr->get_marker(handle), s->formatter);
+      string esc_marker =
+	rgw::to_base64(store->meta_mgr->get_marker(handle));
+      encode_json("marker", esc_marker, s->formatter);
     }
     s->formatter->close_section();
   }
