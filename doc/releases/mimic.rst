@@ -27,10 +27,10 @@ Major Changes from Luminous
 
   * RGW can now replicate a zone (or a subset of buckets) to an
     external cloud storage service like S3.
-  * RGW now supports the S3 multi-factor authentication api on
+  * RGW now supports the S3 multi-factor authentication API on
     versioned buckets.
-  * The Beast frontend is no long expermiental and is considered stable
-    and ready for use.
+  * The Beast frontend is no longer experimental, and is considered
+    stable and ready for use.
 
 - *CephFS*:
 
@@ -100,7 +100,7 @@ Instructions
    possibly have a negative impact on your Ceph clients' performance.
 
 #. Make sure your cluster is stable and healthy (no down or
-   recoverying OSDs).  (Optional, but recommended.)
+   recovering OSDs).  (Optional, but recommended.)
 
 #. Set the ``noout`` flag for the duration of the upgrade. (Optional,
    but recommended.)::
@@ -112,9 +112,9 @@ Instructions
 
      # systemctl restart ceph-mon.target
 
-   Verify the monitor upgrade is complete once all monitors are up by
-   looking for the ``mimic`` feature string in the mon map.  For
-   example::
+   Once all monitors are up, verify that the monitor upgrade is
+   complete by looking for the ``mimic`` feature string in the mon
+   map.  For example::
 
      # ceph mon feature ls
 
@@ -129,7 +129,8 @@ Instructions
 
      # systemctl restart ceph-mgr.target
 
-   Verify the ceph-mgr daemons are running by checking ``ceph -s``::
+   Verify the ``ceph-mgr`` daemons are running by checking ``ceph
+   -s``::
 
      # ceph -s
 
@@ -192,7 +193,7 @@ Instructions
 
      # systemctl restart radosgw.target
 
-#. Complete the upgrade by disallowing pre-mimic OSDs and enabling
+#. Complete the upgrade by disallowing pre-Mimic OSDs and enabling
    all new Mimic-only functionality::
 
      # ceph osd require-osd-release mimic
