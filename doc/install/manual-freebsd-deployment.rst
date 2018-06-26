@@ -54,7 +54,8 @@ Current implementation works on ZFS pools
 
     gpart create -s GPT ada1
     gpart add -t freebsd-zfs -l osd1 ada1
-    zpool create -o mountpoint=/var/lib/ceph/osd/osd.1 osd
+    zpool create zpool gpt/osd1
+    zfs create -o mountpoint=/var/lib/ceph/osd/osd.1 zpool/osd
 
 * Some cache and log (ZIL) can be attached.
   Please note that this is different from the Ceph journals. Cache and log are
