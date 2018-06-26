@@ -45,7 +45,7 @@
 
   <target name="test" depends="compile-tests-jar">
     <junit printsummary="yes" haltonfailure="yes" showoutput="yes" fork="true">
-      <sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../.libs/"/>
+      <sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../../build/lib/"/>
       <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
       <jvmarg value="-Xcheck:jni"/>
       <classpath>
@@ -60,7 +60,7 @@
 
   <target name="test-compat" depends="compile-tests-jar">
     <junit printsummary="yes" haltonfailure="yes" showoutput="yes" fork="true">
-      <sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../.libs/"/>
+      <sysproperty key="java.library.path" path="${env.CEPHFS_JNI_LIB}:../../build/lib/"/>
       <sysproperty key="CEPH_CONF_FILE" path="${env.CEPHFS_CONF}"/>
       <classpath>
         <pathelement location="${env.CEPHFS_JAR}"/>
