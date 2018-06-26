@@ -665,7 +665,6 @@ bool PG::MissingLoc::add_source_info(
     if (p->second.is_delete()) {
       ldout(pg->cct, 10) << __func__ << " " << soid
 			 << " delete, ignoring source" << dendl;
-      found_missing = true;
       continue;
     }
     if (oinfo.last_update < need) {
