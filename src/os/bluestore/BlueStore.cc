@@ -4557,9 +4557,7 @@ int BlueStore::_open_db(bool create)
     string bfn;
     struct stat st;
 
-    if (read_meta("path_block.db", &bfn) < 0) {
-      bfn = path + "/block.db";
-    }
+    bfn = path + "/block.db";
     if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn);
       if (r < 0) {
@@ -4598,9 +4596,7 @@ int BlueStore::_open_db(bool create)
     }
 
     // shared device
-    if (read_meta("path_block", &bfn) < 0) {
-      bfn = path + "/block";
-    }
+    bfn = path + "/block";
     r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: " 
@@ -4629,9 +4625,7 @@ int BlueStore::_open_db(bool create)
       bluefs_extents.insert(start, initial);
     }
 
-    if (read_meta("path_block.wal", &bfn) < 0) {
-      bfn = path + "/block.wal";
-    }
+    bfn = path + "/block.wal";
     if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
       if (r < 0) {
@@ -5231,17 +5225,6 @@ int BlueStore::mkfs()
   r = _open_bdev(true);
   if (r < 0)
     goto out_close_fsid;
-
-  {
-    string wal_path = cct->_conf->get_val<string>("bluestore_block_wal_path");
-    if (wal_path.size()) {
-      write_meta("path_block.wal", wal_path);
-    }
-    string db_path = cct->_conf->get_val<string>("bluestore_block_db_path");
-    if (db_path.size()) {
-      write_meta("path_block.db", db_path);
-    }
-  }
 
   // choose min_alloc_size
   if (cct->_conf->bluestore_min_alloc_size) {
