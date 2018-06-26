@@ -20,7 +20,8 @@
       <!--STATS -->
       <div class="row">
         <div class="col-md-6">
-          <div class="well">
+          <div class="well"
+               *ngIf="contentData.mon_status">
             <div class="media">
               <div class="media-left">
                 <i class="fa fa-database fa-fw"></i>
@@ -36,7 +37,8 @@
           </div>
         </div>
         <div class="col-md-6">
-          <div class="well">
+          <div class="well"
+               *ngIf="contentData.osd_map">
             <div class="media">
               <div class="media-left">
                 <i class="fa fa-hdd-o fa-fw"></i>
@@ -54,7 +56,8 @@
       </div>
       <div class="row">
         <div class="col-md-6">
-          <div class="well">
+          <div class="well"
+               *ngIf="contentData.fs_map">
             <div class="media">
               <div class="media-left">
                 <i class="fa fa-folder fa-fw"></i>
@@ -68,7 +71,8 @@
           </div>
         </div>
         <div class="col-md-6">
-          <div class="well">
+          <div class="well"
+               *ngIf="contentData.mgr_map">
             <div class="media">
               <div class="media-left">
                 <i class="fa fa-cog fa-fw"></i>
@@ -88,7 +92,8 @@
   <div class="row">
     <!-- USAGE -->
     <div class="col-md-6">
-      <div class="well">
+      <div class="well"
+           *ngIf="contentData.df?.stats?.total_objects">
         <fieldset class="usage">
           <legend i18n>Usage</legend>
 
@@ -125,7 +130,8 @@
     </div>
 
     <div class="col-md-6">
-      <div class="well">
+      <div class="well"
+           *ngIf="contentData.pools">
         <fieldset>
           <legend i18n>Pools</legend>
           <table class="table table-condensed">
@@ -172,13 +178,15 @@
   <div class="row">
     <div class="col-md-12">
       <!-- LOGS -->
-      <div class="well">
+      <div class="well"
+           *ngIf="contentData.clog || contentData.audit_log">
         <fieldset>
           <legend i18n>Logs</legend>
 
           <tabset>
             <tab heading="Cluster log"
                  class="text-monospace"
+                 *ngIf="contentData.clog"
                  i18n-heading>
               <span *ngFor="let line of contentData.clog">
                 {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
@@ -190,6 +198,7 @@
             </tab>
             <tab heading="Audit log"
                  class="text-monospace"
+                 *ngIf="contentData.audit_log"
                  i18n-heading>
               <span *ngFor="let line of contentData.audit_log">
                 {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;

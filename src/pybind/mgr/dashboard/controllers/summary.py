@@ -3,15 +3,16 @@ from __future__ import absolute_import
 
 import json
 
+
+from . import ApiController, Endpoint, BaseController
 from .. import mgr
-from . import AuthRequired, ApiController, Endpoint, BaseController
+from ..security import Permission, Scope
 from ..controllers.rbd_mirroring import get_daemons_and_pools
-from ..tools import ViewCacheNoDataException
+from ..exceptions import ViewCacheNoDataException
 from ..tools import TaskManager
 
 
 @ApiController('/summary')
-@AuthRequired()
 class Summary(BaseController):
     def _health_status(self):
         health_data = mgr.get("health")
@@ -43,12 +44,14 @@ class Summary(BaseController):
     @Endpoint()
     def __call__(self):
         executing_t, finished_t = TaskManager.list_serializable()
-        return {
+        result = {
             'health_status': self._health_status(),
-            'rbd_mirroring': self._rbd_mirroring(),
             'mgr_id': mgr.get_mgr_id(),
             'have_mon_connection': mgr.have_mon_connection(),
             'executing_tasks': executing_t,
             'finished_tasks': finished_t,
             'version': mgr.version
         }
+        if self._has_permissions(Permission.READ, Scope.RBD_MIRRORING):
+            result['rbd_mirroring'] = self._rbd_mirroring()
+        return result

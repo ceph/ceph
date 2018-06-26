@@ -2,7 +2,7 @@ from . import UiApiController, BaseController, Endpoint
 from .. import logger
 
 
-@UiApiController('/logging')
+@UiApiController('/logging', secure=False)
 class Logging(BaseController):
 
     @Endpoint('POST', path='js-error')

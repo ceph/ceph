@@ -8,29 +8,39 @@
          dropdown>
       <button type="button"
               class="btn btn-sm btn-primary"
-              *ngIf="!selection.hasSingleSelection"
+              *ngIf="permission.create && (!permission.update || !selection.hasSingleSelection)"
               (click)="openCreateSnapshotModal()">
         <i class="fa fa-fw fa-plus"></i>
         <span i18n>Create</span>
       </button>
       <button type="button"
               class="btn btn-sm btn-primary"
-              *ngIf="selection.hasSingleSelection"
-              [ngClass]="{'disabled': selection.first().executing}"
+              *ngIf="permission.update && (!permission.create || permission.create && selection.hasSingleSelection)"
+              [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}"
               (click)="openEditSnapshotModal()">
         <i class="fa fa-fw fa-pencil"></i>
         <span i18n>Rename</span>
       </button>
       <button type="button"
+              class="btn btn-sm btn-primary"
+              *ngIf="permission.delete && !permission.update && !permission.create"
+              [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}"
+              (click)="deleteSnapshotModal()">
+        <i class="fa fa-fw fa-trash-o"></i>
+        <span i18n>Delete</span>
+      </button>
+      <button type="button"
               dropdownToggle
-              class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split">
+              class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split"
+              *ngIf="permission.create || permission.update">
         <span class="caret"></span>
         <span class="sr-only"></span>
       </button>
       <ul *dropdownMenu
           class="dropdown-menu"
           role="menu">
-        <li role="menuitem">
+        <li role="menuitem"
+            *ngIf="permission.create">
           <a class="dropdown-item"
              (click)="openCreateSnapshotModal()">
             <i class="fa fa-fw fa-plus"></i>
@@ -38,17 +48,17 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.update"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
-          <a class="dropdown-item"
-             (click)="openEditSnapshotModal()">
+          <a class="dropdown-item" (click)="openEditSnapshotModal()">
             <i class="fa fa-fw fa-pencil"></i>
             <span i18n>Rename</span>
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.update"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
-          <a class="dropdown-item"
-             (click)="toggleProtection()">
+          <a class="dropdown-item" (click)="toggleProtection()">
             <span *ngIf="!selection.first()?.is_protected">
               <i class="fa fa-fw fa-lock"></i>
               <span i18n>Protect</span>
@@ -60,6 +70,7 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.create"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
              routerLink="/rbd/clone/{{ poolName }}/{{ rbdName }}/{{ selection.first()?.name }}">
@@ -68,14 +79,14 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.create"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
-          <a class="dropdown-item"
-             routerLink="/rbd/copy/{{ poolName }}/{{ rbdName }}/{{ selection.first()?.name }}">
-            <i class="fa fa-fw fa-copy"></i>
-            <span i18n>Copy</span>
+          <a class="dropdown-item" routerLink="/rbd/copy/{{ poolName }}/{{ rbdName }}/{{ selection.first()?.name }}">
+            <i class="fa fa-fw fa-copy"></i><span i18n>Copy</span>
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.update"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing}">
           <a class="dropdown-item"
              (click)="rollbackModal()">
@@ -84,6 +95,7 @@
           </a>
         </li>
         <li role="menuitem"
+            *ngIf="permission.delete"
             [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().executing || selection.first().is_protected}">
           <a class="dropdown-item"
              (click)="deleteSnapshotModal()">

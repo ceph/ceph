@@ -3,12 +3,11 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from . import Controller, BaseController, AuthRequired, Endpoint, ENDPOINT_MAP
+from . import Controller, BaseController, Endpoint, ENDPOINT_MAP
 from .. import logger
 
 
 @Controller('/docs')
-@AuthRequired()
 class Docs(BaseController):
 
     @classmethod

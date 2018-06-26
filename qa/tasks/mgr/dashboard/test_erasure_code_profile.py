@@ -4,11 +4,27 @@ from __future__ import absolute_import
 
 import unittest
 
-from .helper import DashboardTestCase, authenticate
+from .helper import DashboardTestCase
 
 
 class ECPTest(DashboardTestCase):
 
+    AUTH_ROLES = ['pool-manager']
+
+    @DashboardTestCase.RunAs('test', 'test', ['block-manager'])
+    def test_read_access_permissions(self):
+        self._get("/api/erasure_code_profile")
+        self.assertStatus(403)
+
+    @DashboardTestCase.RunAs('test', 'test', ['read-only'])
+    def test_write_access_permissions(self):
+        self._get("/api/erasure_code_profile")
+        self.assertStatus(200)
+        data = {'name': 'ecp32', 'k': 3, 'm': 2}
+        self._post('/api/erasure_code_profile', data)
+        self.assertStatus(403)
+        self._delete('/api/erasure_code_profile/default')
+        self.assertStatus(403)
 
     @classmethod
     def tearDownClass(cls):
@@ -16,7 +32,6 @@ class ECPTest(DashboardTestCase):
         cls._ceph_cmd(['osd', 'erasure-code-profile', 'rm', 'ecp32'])
         cls._ceph_cmd(['osd', 'erasure-code-profile', 'rm', 'lrc'])
 
-    @authenticate
     def test_list(self):
         data = self._get('/api/erasure_code_profile')
         self.assertStatus(200)
@@ -37,7 +52,6 @@ class ECPTest(DashboardTestCase):
             self.assertEqual(get_data, default[0])
 
 
-    @authenticate
     def test_create(self):
         data = {'name': 'ecp32', 'k': 3, 'm': 2}
         self._post('/api/erasure_code_profile', data)
@@ -62,7 +76,6 @@ class ECPTest(DashboardTestCase):
         self._delete('/api/erasure_code_profile/ecp32')
         self.assertStatus(204)
 
-    @authenticate
     def test_create_plugin(self):
         data = {'name': 'lrc', 'k': '2', 'm': '2', 'l': '2', 'plugin': 'lrc'}
         self._post('/api/erasure_code_profile', data)

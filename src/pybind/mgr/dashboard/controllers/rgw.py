@@ -4,19 +4,21 @@ from __future__ import absolute_import
 import json
 import cherrypy
 
-from . import ApiController, BaseController, RESTController, AuthRequired, Endpoint
+from . import ApiController, BaseController, RESTController, Endpoint, \
+              ReadPermission
 from .. import logger
+from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
 from ..rest_client import RequestException
 from ..exceptions import DashboardException
 
 
-@ApiController('/rgw')
-@AuthRequired()
+@ApiController('/rgw', Scope.RGW)
 class Rgw(BaseController):
 
     @Endpoint()
+    @ReadPermission
     def status(self):
         status = {'available': False, 'message': None}
         try:
@@ -36,8 +38,7 @@ class Rgw(BaseController):
         return status
 
 
-@ApiController('/rgw/daemon')
-@AuthRequired()
+@ApiController('/rgw/daemon', Scope.RGW)
 class RgwDaemon(RESTController):
 
     def list(self):
@@ -96,8 +97,7 @@ class RgwRESTController(RESTController):
             raise DashboardException(e, http_status_code=500, component='rgw')
 
 
-@ApiController('/rgw/bucket')
-@AuthRequired()
+@ApiController('/rgw/bucket', Scope.RGW)
 class RgwBucket(RgwRESTController):
 
     def list(self):
@@ -127,8 +127,7 @@ class RgwBucket(RgwRESTController):
         }, json_response=False)
 
 
-@ApiController('/rgw/user')
-@AuthRequired()
+@ApiController('/rgw/user', Scope.RGW)
 class RgwUser(RgwRESTController):
 
     def list(self):
