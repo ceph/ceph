@@ -236,7 +236,7 @@ Enabling the Embedding of Grafana Dashboards
 Grafana and Prometheus are likely going to be bundled and installed by some
 orchestration tools along Ceph in the near future, but currently, you will have
 to install and configure both manually. After you have installed Prometheus and
-Grafana on your preferred hosts, proceed with the following steps:
+Grafana on your preferred hosts, proceed with the following steps.
 
 #. Enable the Ceph Exporter which comes as Ceph Manager module by running::
 
