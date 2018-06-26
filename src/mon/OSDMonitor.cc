@@ -10640,7 +10640,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return true;
     }
 
-  } else if (prefix == "osd destroy" ||
+  } else if (prefix == "osd destroy-actual" ||
 	     prefix == "osd purge" ||
 	     prefix == "osd purge-new") {
     /* Destroying an OSD means that we don't expect to further make use of
@@ -10665,13 +10665,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
-      ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap.at("id")) << "";
+      auto p = cmdmap.find("id");
+      if (p == cmdmap.end()) {
+	ss << "no osd id specified";
+      } else {
+	ss << "unable to parse osd id value '"
+	   << cmd_vartype_stringify(cmdmap.at("id")) << "";
+      }
       err = -EINVAL;
       goto reply;
     }
 
-    bool is_destroy = (prefix == "osd destroy");
+    bool is_destroy = (prefix == "osd destroy-actual");
     if (!is_destroy) {
       assert("osd purge" == prefix ||
 	     "osd purge-new" == prefix);

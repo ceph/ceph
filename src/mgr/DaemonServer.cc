@@ -1201,17 +1201,28 @@ bool DaemonServer::handle_command(MCommand *m)
       cmdctx->reply(r, ss);
       return true;
     }
-  } else if (prefix == "osd safe-to-destroy") {
-    vector<string> ids;
-    cmd_getval(g_ceph_context, cmdctx->cmdmap, "ids", ids);
+  } else if (prefix == "osd safe-to-destroy" ||
+	     prefix == "osd destroy") {
     set<int> osds;
-    int r;
-    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	r = osdmap.parse_osd_id_list(ids, &osds, &ss);
-      });
-    if (!r && osds.empty()) {
-      ss << "must specify one or more OSDs";
-      r = -EINVAL;
+    int r = 0;
+    if (prefix == "osd safe-to-destroy") {
+      vector<string> ids;
+      cmd_getval(g_ceph_context, cmdctx->cmdmap, "ids", ids);
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+				  r = osdmap.parse_osd_id_list(ids, &osds, &ss);
+				});
+      if (!r && osds.empty()) {
+	ss << "must specify one or more OSDs";
+	r = -EINVAL;
+      }
+    } else {
+      int64_t id;
+      if (!cmd_getval(g_ceph_context, cmdctx->cmdmap, "id", id)) {
+	r = -EINVAL;
+	ss << "must specify OSD id";
+      } else {
+	osds.insert(id);
+      }
     }
     if (r < 0) {
       cmdctx->reply(r, ss);
@@ -1272,13 +1283,34 @@ bool DaemonServer::handle_command(MCommand *m)
 	 << " aren't still needed.";
       r = -EBUSY;
     }
+
+    if (r && prefix == "osd destroy") {
+      string sure;
+      if (!cmd_getval(cct, cmdctx->cmdmap, "sure", sure) ||
+	  sure != "--force") {
+	ss << "\nYou can proceed with OSD removal by passing --force, but be warned that this will likely mean real, permanent data loss.";
+      } else {
+	r = 0;
+      }
+    }
     if (r) {
       cmdctx->reply(r, ss);
       return true;
     }
-    ss << "OSD(s) " << osds << " are safe to destroy without reducing data"
-       << " durability.";
-    cmdctx->reply(0, ss);
+    if (prefix == "osd destroy") {
+      const string cmd =
+	"{"
+	"\"prefix\": \"osd destroy-actual\", "
+	"\"id\": " + stringify(osds) + ", "
+	"\"sure\": \"--yes-i-really-mean-it\""
+	"}";
+      auto on_finish = new ReplyOnFinish(cmdctx);
+      monc->start_mon_command({cmd}, {}, nullptr, &on_finish->outs, on_finish);
+    } else {
+      ss << "OSD(s) " << osds << " are safe to destroy without reducing data"
+	 << " durability.";
+      cmdctx->reply(0, ss);
+    }
     return true;
   } else if (prefix == "osd ok-to-stop") {
     vector<string> ids;
