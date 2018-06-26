@@ -871,13 +871,13 @@ COMMAND("osd primary-affinity " \
 	"type=CephFloat,name=weight,range=0.0|1.0", \
 	"adjust osd primary-affinity from 0.0 <= <weight> <= 1.0", \
 	"osd", "rw", "cli,rest")
-COMMAND("osd destroy-actual "	    \
+COMMAND_WITH_FLAG("osd destroy-actual "	    \
         "name=id,type=CephOsdName " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
         "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
         "but removes cephx keys, config-key data and lockbox keys, "\
         "rendering data permanently unreadable.", \
-        "osd", "rw", "cli,rest")
+		  "osd", "rw", "cli,rest", FLAG(HIDDEN))
 COMMAND("osd purge-new " \
         "name=id,type=CephOsdName " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
