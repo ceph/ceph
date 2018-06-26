@@ -7,7 +7,7 @@ import { ToastsManager } from 'ng2-toastr';
 })
 export class Copy2ClipboardButtonDirective implements OnInit {
 
-  @Input('cdCopy2ClipboardButton') private cdCopy2ClipboardButton: string;
+  @Input('cdCopy2ClipboardButton') private copy2ClipboardButtonId: string;
 
   constructor(private elementRef: ElementRef,
               private renderer: Renderer2,
@@ -22,7 +22,7 @@ export class Copy2ClipboardButtonDirective implements OnInit {
   }
 
   private getInputElement() {
-    return document.getElementById(this.cdCopy2ClipboardButton) as HTMLInputElement;
+    return document.getElementById(this.copy2ClipboardButtonId) as HTMLInputElement;
   }
 
   @HostListener('click')

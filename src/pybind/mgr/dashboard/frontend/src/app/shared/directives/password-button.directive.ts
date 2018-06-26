@@ -6,7 +6,7 @@ import { Directive, ElementRef, HostListener, Input, OnInit, Renderer2 } from '@
 export class PasswordButtonDirective implements OnInit {
   private iElement: HTMLElement;
 
-  @Input('cdPasswordButton') private cdPasswordButton: string;
+  @Input('cdPasswordButton') private passwordButtonId: string;
 
   constructor(private elementRef: ElementRef,
               private renderer: Renderer2) {}
@@ -20,7 +20,7 @@ export class PasswordButtonDirective implements OnInit {
   }
 
   private getInputElement() {
-    return document.getElementById(this.cdPasswordButton) as HTMLInputElement;
+    return document.getElementById(this.passwordButtonId) as HTMLInputElement;
   }
 
   private update() {
