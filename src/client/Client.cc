@@ -13940,7 +13940,7 @@ const char** Client::get_tracked_conf_keys() const
   return keys;
 }
 
-void Client::handle_conf_change(const struct md_config_t *conf,
+void Client::handle_conf_change(const md_config_t *conf,
 				const std::set <std::string> &changed)
 {
   Mutex::Locker lock(client_lock);

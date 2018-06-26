@@ -590,7 +590,7 @@ void PurgeQueue::update_op_limit(const MDSMap &mds_map)
   }
 }
 
-void PurgeQueue::handle_conf_change(const struct md_config_t *conf,
+void PurgeQueue::handle_conf_change(const md_config_t *conf,
 			     const std::set <std::string> &changed,
                              const MDSMap &mds_map)
 {

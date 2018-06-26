@@ -365,7 +365,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void MDSDaemon::handle_conf_change(const struct md_config_t *conf,
+void MDSDaemon::handle_conf_change(const md_config_t *conf,
 			     const std::set <std::string> &changed)
 {
   // We may be called within mds_lock (via `tell`) or outwith the

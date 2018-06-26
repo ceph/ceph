@@ -14,6 +14,7 @@
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "global/global_context.h"
 #include "include/cephfs/libcephfs.h"

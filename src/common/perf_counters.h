@@ -26,6 +26,7 @@
 #include "common/perf_histogram.h"
 #include "include/utime.h"
 #include "common/Mutex.h"
+#include "common/ceph_context.h"
 #include "common/ceph_time.h"
 
 class CephContext;

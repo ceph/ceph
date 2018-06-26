@@ -5882,7 +5882,7 @@ const char** FileStore::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void FileStore::handle_conf_change(const struct md_config_t *conf,
+void FileStore::handle_conf_change(const md_config_t *conf,
 			  const std::set <std::string> &changed)
 {
   if (changed.count("filestore_max_inline_xattr_size") ||

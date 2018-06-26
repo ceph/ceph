@@ -15,8 +15,9 @@
 #ifndef CEPH_GLOBAL_CONTEXT_H
 #define CEPH_GLOBAL_CONTEXT_H
 
+#include "common/config_fwd.h"
+
 class CephContext;
-struct md_config_t;
 
 extern CephContext *g_ceph_context;
 extern md_config_t *g_conf;

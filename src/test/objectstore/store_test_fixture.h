@@ -2,9 +2,9 @@
 #include <stack>
 #include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
+#include "common/config_fwd.h"
 
 class ObjectStore;
-struct md_config_t;
 
 class StoreTestFixture : virtual public ::testing::Test {
   const std::string type;

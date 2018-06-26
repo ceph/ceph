@@ -35,6 +35,8 @@
 
 #include "auth/Crypto.h"
 #include "include/str_list.h"
+#include "common/config.h"
+#include "common/config_obs.h"
 #include "common/PluginRegistry.h"
 #include "common/valgrind.h"
 #include "include/spinlock.h"
