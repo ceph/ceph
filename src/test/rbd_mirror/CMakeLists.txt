@@ -39,7 +39,7 @@ add_executable(unittest_rbd_mirror
   image_sync/test_mock_SyncPointPruneRequest.cc
   pool_watcher/test_mock_RefreshImagesRequest.cc
   )
-add_ceph_unittest(unittest_rbd_mirror parallel)
+add_ceph_unittest(unittest_rbd_mirror)
 set_target_properties(unittest_rbd_mirror PROPERTIES COMPILE_FLAGS
   ${UNITTEST_CXX_FLAGS})
 add_dependencies(unittest_rbd_mirror
