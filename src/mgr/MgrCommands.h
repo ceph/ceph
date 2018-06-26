@@ -107,6 +107,14 @@ COMMAND("osd test-reweight-by-pg " \
 	"dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]", \
 	"osd", "r", "cli,rest")
 
+COMMAND("osd destroy "	    \
+        "name=id,type=CephOsdName " \
+        "name=sure,type=CephString,req=False",
+        "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
+        "but removes cephx keys, config-key data and lockbox keys, "\
+        "rendering data permanently unreadable.", \
+        "osd", "rw", "cli,rest")
+
 COMMAND("osd safe-to-destroy name=ids,type=CephString,n=N",
 	"check whether osd(s) can be safely destroyed without reducing data durability",
 	"osd", "r", "cli,rest")
