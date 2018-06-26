@@ -1089,6 +1089,17 @@ void md_config_t::early_expand_meta(
   conf_stringify(v, &val);
 }
 
+void md_config_t::finalize_reexpand_meta()
+{
+  Mutex::Locker l(lock);
+  for (auto &i : may_reexpand_meta) {
+    set_val(i.first, i.second);
+  }
+  
+  if (may_reexpand_meta.size())
+    _apply_changes(NULL);
+}
+
 Option::value_t md_config_t::_expand_meta(
   const Option::value_t& in,
   const Option *o,
@@ -1168,6 +1179,9 @@ Option::value_t md_config_t::_expand_meta(
 	out += name.get_id();
       } else if (var == "pid") {
 	out += stringify(getpid());
+        if (o) {
+          may_reexpand_meta[o->name] = *str;
+        }
       } else if (var == "cctid") {
 	out += stringify((unsigned long long)this);
       } else if (var == "home") {
