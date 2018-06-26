@@ -80,6 +80,9 @@ class Pool(RESTController):
             for app in application_metadata.split(','):
                 CephService.send_command('mon', 'osd pool application enable', pool=pool, app=app)
 
+        if 'pg_num' in kwargs:
+            kwargs['pgp_num'] = kwargs['pg_num']
+
         for key, value in kwargs.items():
             CephService.send_command('mon', 'osd pool set', pool=pool, var=key, val=value)
 
