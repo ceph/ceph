@@ -300,8 +300,8 @@ WRITE_CLASS_ENCODER(hobject_t)
 namespace std {
   template<> struct hash<hobject_t> {
     size_t operator()(const hobject_t &r) const {
-      static rjhash<uint64_t> I;
-      return r.get_hash() ^ I(r.snap);
+      static rjhash<uint64_t> RJ;
+      return RJ(r.get_hash() ^ r.snap);
     }
   };
 } // namespace std
@@ -473,8 +473,12 @@ WRITE_CLASS_ENCODER(ghobject_t)
 namespace std {
   template<> struct hash<ghobject_t> {
     size_t operator()(const ghobject_t &r) const {
-      static rjhash<uint64_t> I;
-      return r.hobj.get_hash() ^ I(r.hobj.snap);
+      static rjhash<uint64_t> RJ;
+      static hash<hobject_t> HO;
+      size_t hash = HO(r.hobj);
+      hash = RJ(hash ^ r.generation);
+      hash = hash ^ r.shard_id.id;
+      return hash;
     }
   };
 } // namespace std
