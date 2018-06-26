@@ -113,7 +113,7 @@ void Server::wait_clean() {
   }
 
   while (!m_io_finished.empty()) {
-    ceph::unique_ptr<IOContext> free_ctx(m_io_finished.front());
+    std::unique_ptr<IOContext> free_ctx(m_io_finished.front());
     m_io_finished.pop_front();
   }
 }
@@ -158,7 +158,7 @@ void Server::reader_entry() {
   dout(20) << dendl;
 
   while (!m_stopping) {
-    ceph::unique_ptr<IOContext> ctx(new IOContext(this));
+    std::unique_ptr<IOContext> ctx(new IOContext(this));
 
     dout(20) << "waiting for ggate request" << dendl;
 
@@ -215,7 +215,7 @@ void Server::writer_entry() {
   while (!m_stopping) {
     dout(20) << "waiting for io request" << dendl;
 
-    ceph::unique_ptr<IOContext> ctx(wait_io_finish());
+    std::unique_ptr<IOContext> ctx(wait_io_finish());
     if (!ctx) {
       dout(20) << "no io requests, terminating" << dendl;
       return;

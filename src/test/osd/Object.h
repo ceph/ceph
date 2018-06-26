@@ -314,7 +314,7 @@ public:
   ObjectDesc(const ContDesc &init, ContentsGenerator *cont_gen)
     : exists(false), dirty(false),
       version(0) {
-    layers.push_front(std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc>(ceph::shared_ptr<ContentsGenerator>(cont_gen), init));
+    layers.push_front(std::pair<std::shared_ptr<ContentsGenerator>, ContDesc>(std::shared_ptr<ContentsGenerator>(cont_gen), init));
   }
 
   class iterator {
@@ -329,12 +329,12 @@ public:
 
     public:
       ContDesc cont;
-      ceph::shared_ptr<ContentsGenerator> gen;
+      std::shared_ptr<ContentsGenerator> gen;
       ContentsGenerator::iterator iter;
 
       ContState(
 	const ContDesc &_cont,
-	ceph::shared_ptr<ContentsGenerator> _gen,
+	std::shared_ptr<ContentsGenerator> _gen,
 	ContentsGenerator::iterator _iter)
 	: size(_gen->get_length(_cont)), cont(_cont), gen(_gen), iter(_iter) {
 	gen->get_ranges(cont, ranges);
@@ -516,7 +516,7 @@ public:
   std::string redirect_target;
   std::map<uint64_t, ChunkDesc> chunk_info;
 private:
-  std::list<std::pair<ceph::shared_ptr<ContentsGenerator>, ContDesc> > layers;
+  std::list<std::pair<std::shared_ptr<ContentsGenerator>, ContDesc> > layers;
 };
 
 #endif

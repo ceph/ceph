@@ -99,7 +99,7 @@ class MonitorDBStore
   };
 
   struct Transaction;
-  typedef ceph::shared_ptr<Transaction> TransactionRef;
+  typedef std::shared_ptr<Transaction> TransactionRef;
   struct Transaction {
     list<Op> ops;
     uint64_t bytes, keys;
@@ -421,7 +421,7 @@ class MonitorDBStore
     virtual void get_chunk_tx(TransactionRef tx, uint64_t max) = 0;
     virtual pair<string,string> get_next_key() = 0;
   };
-  typedef ceph::shared_ptr<StoreIteratorImpl> Synchronizer;
+  typedef std::shared_ptr<StoreIteratorImpl> Synchronizer;
 
   class WholeStoreIteratorImpl : public StoreIteratorImpl {
     KeyValueDB::WholeSpaceIterator iter;
@@ -492,7 +492,7 @@ class MonitorDBStore
     else
       iter->seek_to_first();
 
-    return ceph::shared_ptr<StoreIteratorImpl>(
+    return std::shared_ptr<StoreIteratorImpl>(
 	new WholeStoreIteratorImpl(iter, prefixes)
     );
   }

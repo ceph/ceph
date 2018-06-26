@@ -1583,7 +1583,6 @@ fi
 %{_includedir}/rados/crc32c.h
 %{_includedir}/rados/rados_types.h
 %{_includedir}/rados/rados_types.hpp
-%{_includedir}/rados/memory.h
 %{_libdir}/librados.so
 %if %{with lttng}
 %{_libdir}/librados_tp.so

@@ -4780,7 +4780,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   string fn = path + "/db";
   string options;
   stringstream err;
-  ceph::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
+  std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
 
   string kv_backend;
   std::vector<KeyValueDB::ColumnFamily> cfs;

@@ -117,7 +117,7 @@ public:
   };
 
   struct CopyOp;
-  typedef ceph::shared_ptr<CopyOp> CopyOpRef;
+  typedef std::shared_ptr<CopyOp> CopyOpRef;
 
   struct CopyOp {
     CopyCallback *cb;
@@ -210,7 +210,7 @@ public:
 	user_version(0), data_offset(0),
 	canceled(false) { }
   };
-  typedef ceph::shared_ptr<ProxyReadOp> ProxyReadOpRef;
+  typedef std::shared_ptr<ProxyReadOp> ProxyReadOpRef;
 
   struct ProxyWriteOp {
     OpContext *ctx;
@@ -231,7 +231,7 @@ public:
 	canceled(false),
         reqid(_reqid) { }
   };
-  typedef ceph::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
+  typedef std::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
 
   struct FlushOp {
     ObjectContextRef obc;       ///< obc we are flushing
@@ -253,7 +253,7 @@ public:
 	blocking(false), removal(false), chunks(0) {}
     ~FlushOp() { assert(!on_flush); }
   };
-  typedef ceph::shared_ptr<FlushOp> FlushOpRef;
+  typedef std::shared_ptr<FlushOp> FlushOpRef;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() override {

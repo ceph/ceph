@@ -24,7 +24,6 @@
 #include <memory>
 
 #include "include/assert.h"
-#include "include/memory.h"
 
 #define mydout(cct, v) lgeneric_subdout(cct, context, v)
 
@@ -119,7 +118,7 @@ struct RunOnDelete {
       to_run->complete(0);
   }
 };
-typedef ceph::shared_ptr<RunOnDelete> RunOnDeleteRef;
+typedef std::shared_ptr<RunOnDelete> RunOnDeleteRef;
 
 template <typename T>
 struct LambdaContext : public Context {

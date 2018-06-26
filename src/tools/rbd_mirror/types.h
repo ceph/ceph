@@ -16,9 +16,9 @@
 namespace rbd {
 namespace mirror {
 
-typedef shared_ptr<librados::Rados> RadosRef;
-typedef shared_ptr<librados::IoCtx> IoCtxRef;
-typedef shared_ptr<librbd::Image> ImageRef;
+typedef std::shared_ptr<librados::Rados> RadosRef;
+typedef std::shared_ptr<librados::IoCtx> IoCtxRef;
+typedef std::shared_ptr<librbd::Image> ImageRef;
 
 struct ImageId {
   std::string global_id;

@@ -18,7 +18,6 @@
 #include <stdint.h>
 
 #include "common/TrackedOp.h"
-#include "include/memory.h"
 #include "mon/Session.h"
 #include "msg/Message.h"
 

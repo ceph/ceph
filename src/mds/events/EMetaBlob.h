@@ -207,7 +207,7 @@ public:
   private:
     mutable bufferlist dnbl;
     mutable bool dn_decoded;
-    mutable list<ceph::shared_ptr<fullbit> > dfull;
+    mutable list<std::shared_ptr<fullbit> > dfull;
     mutable list<remotebit> dremote;
     mutable list<nullbit> dnull;
 
@@ -225,12 +225,12 @@ public:
     bool is_dirty_dft() { return state & STATE_DIRTYDFT; }
     void mark_dirty_dft() { state |= STATE_DIRTYDFT; }
 
-    const list<ceph::shared_ptr<fullbit> > &get_dfull()   const { return dfull; }
+    const list<std::shared_ptr<fullbit> > &get_dfull()   const { return dfull; }
     const list<remotebit>                  &get_dremote() const { return dremote; }
     const list<nullbit>                    &get_dnull()   const { return dnull; }
 
     void add_dnull(nullbit const &n)                   { dnull.push_back(n); };
-    void add_dfull(ceph::shared_ptr<fullbit> const &p) { dfull.push_back(p); };
+    void add_dfull(std::shared_ptr<fullbit> const &p) { dfull.push_back(p); };
     void add_dremote(remotebit const &r)               { dremote.push_back(r); };
 
     void print(dirfrag_t dirfrag, ostream& out) {
@@ -239,7 +239,7 @@ public:
 	  << " num " << nfull << "/" << nremote << "/" << nnull
 	  << std::endl;
       _decode_bits();
-      for (list<ceph::shared_ptr<fullbit> >::iterator p = dfull.begin(); p != dfull.end(); ++p)
+      for (list<std::shared_ptr<fullbit> >::iterator p = dfull.begin(); p != dfull.end(); ++p)
 	(*p)->print(out);
       for (list<remotebit>::iterator p = dremote.begin(); p != dremote.end(); ++p)
 	p->print(out);
@@ -292,7 +292,7 @@ public:
   // my lumps.  preserve the order we added them in a list.
   list<dirfrag_t>         lump_order;
   map<dirfrag_t, dirlump> lump_map;
-  list<ceph::shared_ptr<fullbit> > roots;
+  list<std::shared_ptr<fullbit> > roots;
 public:
   list<pair<__u8,version_t> > table_tids;  // tableclient transactions
 
@@ -455,7 +455,7 @@ private:
       sr->encode(snapbl);
 
     lump.nfull++;
-    lump.add_dfull(ceph::shared_ptr<fullbit>(new fullbit(dn->get_name(),
+    lump.add_dfull(std::shared_ptr<fullbit>(new fullbit(dn->get_name(),
 							 dn->first, dn->last,
 							 dn->get_projected_version(),
 							 *pi, in->dirfragtree,
@@ -506,7 +506,7 @@ private:
     if (sr)
       sr->encode(snapbl);
 
-    for (list<ceph::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
+    for (list<std::shared_ptr<fullbit> >::iterator p = roots.begin(); p != roots.end(); ++p) {
       if ((*p)->inode.ino == in->ino()) {
 	roots.erase(p);
 	break;
@@ -514,7 +514,7 @@ private:
     }
 
     string empty;
-    roots.push_back(ceph::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, pi,
+    roots.push_back(std::shared_ptr<fullbit>(new fullbit(empty, in->first, in->last, 0, pi,
 							  pdft, px, in->symlink,
 							  in->oldest_snap, snapbl,
 							  dirty ? fullbit::STATE_DIRTY : 0,

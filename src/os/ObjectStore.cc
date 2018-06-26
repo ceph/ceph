@@ -13,7 +13,6 @@
  */
 #include <ctype.h>
 #include <sstream>
-#include "include/memory.h"
 #include "ObjectStore.h"
 #include "common/Formatter.h"
 #include "common/safe_io.h"

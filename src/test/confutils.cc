@@ -24,7 +24,6 @@
 #include <stdint.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include "include/memory.h"
 
 using ceph::bufferlist;
 using std::cerr;
@@ -78,7 +77,7 @@ static int create_tempfile(const std::string &fname, const char *text)
 	 << get_temp_dir() << "'. " << cpp_strerror(err) << std::endl;
     return err;
   }
-  ceph::shared_ptr<FILE> fpp(fp, fclose);
+  std::shared_ptr<FILE> fpp(fp, fclose);
   if (unlink_idx >= MAX_FILES_TO_DELETE)
     return -ENOBUFS;
   if (unlink_idx == 0) {

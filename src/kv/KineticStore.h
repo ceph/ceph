@@ -9,7 +9,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <kinetic/kinetic.h>
 
 #include <errno.h>

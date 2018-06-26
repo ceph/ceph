@@ -231,7 +231,7 @@ private:
       cond.Wait(lock);
 
     while(!io_finished.empty()) {
-      ceph::unique_ptr<IOContext> free_ctx(io_finished.front());
+      std::unique_ptr<IOContext> free_ctx(io_finished.front());
       io_finished.pop_front();
     }
   }
@@ -274,7 +274,7 @@ private:
   void reader_entry()
   {
     while (!terminated) {
-      ceph::unique_ptr<IOContext> ctx(new IOContext());
+      std::unique_ptr<IOContext> ctx(new IOContext());
       ctx->server = this;
 
       dout(20) << __func__ << ": waiting for nbd request" << dendl;
@@ -350,7 +350,7 @@ private:
   {
     while (!terminated) {
       dout(20) << __func__ << ": waiting for io request" << dendl;
-      ceph::unique_ptr<IOContext> ctx(wait_io_finish());
+      std::unique_ptr<IOContext> ctx(wait_io_finish());
       if (!ctx) {
 	dout(20) << __func__ << ": no io requests, terminating" << dendl;
         return;
