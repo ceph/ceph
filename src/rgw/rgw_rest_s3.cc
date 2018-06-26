@@ -1241,7 +1241,7 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
   size_t pos = location_constraint.find(':');
   if (pos != string::npos) {
-    placement_rule.init(location_constraint.substr(pos + 1), s->info.storage_class);
+    placement_rule.init(location_constraint.substr(pos + 1), s->info.storage_class.storage_class);
     location_constraint = location_constraint.substr(0, pos);
   }
 
@@ -3437,7 +3437,7 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 
   const char *sc = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS");
   if (sc) {
-    s->info.storage_class = sc;
+    s->info.storage_class.storage_class = sc;
   }
 
   return RGWHandler_REST::init(store, s, cio);

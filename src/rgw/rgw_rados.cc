@@ -313,10 +313,13 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
   manifest = _m;
 
   if (!tail_placement_rule) {
-    tail_placement_rule = &head_placement_rule;
+    manifest->set_tail_placement(head_placement_rule, _b);
+  } else {
+    rgw_placement_rule new_tail_rule = *tail_placement_rule;
+    new_tail_rule.inherit_from(head_placement_rule);
+    manifest->set_tail_placement(new_tail_rule, _b);
   }
 
-  manifest->set_tail_placement(*tail_placement_rule, _b);
   manifest->set_head(head_placement_rule, _obj, 0);
   last_ofs = 0;
 

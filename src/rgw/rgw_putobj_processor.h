@@ -114,7 +114,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
  protected:
   RGWRados *const store;
   const RGWBucketInfo& bucket_info;
-  const rgw_placement_rule *ptail_placement_rule;
+  rgw_placement_rule tail_placement_rule;
   const rgw_user& owner;
   RGWObjectCtx& obj_ctx;
   rgw_obj head_obj;
@@ -136,11 +136,14 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
                           const rgw_obj& head_obj)
     : HeadObjectProcessor(0),
       store(store), bucket_info(bucket_info),
-      ptail_placement_rule(ptail_placement_rule), owner(owner),
+      owner(owner),
       obj_ctx(obj_ctx), head_obj(head_obj),
       writer(aio, store, bucket_info, obj_ctx, head_obj),
-      chunk(&writer, 0), stripe(&chunk, this, 0)
-  {}
+      chunk(&writer, 0), stripe(&chunk, this, 0) {
+        if (ptail_placement_rule) {
+          tail_placement_rule = *ptail_placement_rule;
+        }
+      }
 };
 
 

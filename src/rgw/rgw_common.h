@@ -664,6 +664,15 @@ struct rgw_placement_rule {
     return name.empty() && storage_class.empty();
   }
 
+  void inherit_from(const rgw_placement_rule& r) {
+    if (name.empty()) {
+      name = r.name;
+    }
+    if (storage_class.empty()) {
+      storage_class = r.storage_class;
+    }
+  }
+
   void clear() {
     name.clear();
     storage_class.clear();
@@ -1611,7 +1620,7 @@ struct req_info {
   string effective_uri;
   string request_params;
   string domain;
-  string storage_class;
+  rgw_placement_rule storage_class;
 
   req_info(CephContext *cct, const RGWEnv *env);
   void rebuild_from(req_info& src);
