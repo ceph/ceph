@@ -24,7 +24,7 @@
 // re-include our assert to clobber the system one; fix dout:
 #include "include/assert.h"
 
-template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
+template <class K, class V>
 class SharedLRU {
   CephContext *cct;
   typedef std::shared_ptr<V> VPtr;
@@ -36,6 +36,8 @@ class SharedLRU {
 public:
   int waiting;
 private:
+  using C = std::less<K>;
+  using H = std::hash<K>;
   ceph::unordered_map<K, typename list<pair<K, VPtr> >::iterator, H> contents;
   list<pair<K, VPtr> > lru;
 
