@@ -17,7 +17,6 @@
 
 #include "include/unordered_map.h"
 #include <boost/tuple/tuple.hpp>
-#include "include/memory.h"
 #include "common/Formatter.h"
 #include "common/hobject.h"
 #include "include/interval_set.h"

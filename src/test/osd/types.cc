@@ -131,11 +131,11 @@ for (unsigned i = 0; i < 4; ++i) {
   //
   int osd_id = 1;
   epoch_t epoch = 40;
-  ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+  std::shared_ptr<OSDMap> osdmap(new OSDMap());
   osdmap->set_max_osd(10);
   osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
   osdmap->set_epoch(epoch);
-  ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
+  std::shared_ptr<OSDMap> lastmap(new OSDMap());
   lastmap->set_max_osd(10);
   lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
   lastmap->set_epoch(epoch);
@@ -282,7 +282,7 @@ for (unsigned i = 0; i < 4; ++i) {
   // PG is splitting
   //
   {
-    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -316,7 +316,7 @@ for (unsigned i = 0; i < 4; ++i) {
   // PG size has changed
   //
   {
-    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -393,7 +393,7 @@ for (unsigned i = 0; i < 4; ++i) {
     // The new osdmap is created so that it triggers the
     // bug.
     //
-    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -469,7 +469,7 @@ for (unsigned i = 0; i < 4; ++i) {
     new_acting.push_back(osd_id + 4);
     new_acting.push_back(osd_id + 5);
 
-    ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
+    std::shared_ptr<OSDMap> lastmap(new OSDMap());
     lastmap->set_max_osd(10);
     lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
     lastmap->set_epoch(epoch);
@@ -516,7 +516,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     epoch_t last_epoch_clean = epoch - 10;
 
-    ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
+    std::shared_ptr<OSDMap> lastmap(new OSDMap());
     lastmap->set_max_osd(10);
     lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
     lastmap->set_epoch(epoch);

@@ -25,7 +25,6 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/circular_buffer.hpp>
 #include <boost/container/flat_set.hpp>
-#include "include/memory.h"
 #include "include/mempool.h"
 
 // re-include our assert to clobber boost's

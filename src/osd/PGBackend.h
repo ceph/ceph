@@ -35,7 +35,7 @@ struct inconsistent_obj_wrapper;
 //forward declaration
 class OSDMap;
 class PGLog;
-typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
+typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
  /**
   * PGBackend

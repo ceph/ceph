@@ -38,7 +38,6 @@
 #include "const.h"
 #include "circular_buffer.h"
 #include "ethernet.h"
-#include "memory.h"
 #include "Packet.h"
 #include "stream.h"
 #include "net.h"

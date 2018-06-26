@@ -8,7 +8,6 @@
 #include <set>
 #include <map>
 #include <string>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
 #include "common/Formatter.h"
@@ -147,7 +146,7 @@ public:
 
     virtual ~TransactionImpl() {}
   };
-  typedef ceph::shared_ptr< TransactionImpl > Transaction;
+  typedef std::shared_ptr< TransactionImpl > Transaction;
 
   /// create a new instance
   static KeyValueDB *create(CephContext *cct, const std::string& type,
@@ -233,7 +232,7 @@ public:
       }
     }
   };
-  typedef ceph::shared_ptr< IteratorImpl > Iterator;
+  typedef std::shared_ptr< IteratorImpl > Iterator;
 
   // This is the low-level iterator implemented by the underlying KV store.
   class WholeSpaceIteratorImpl {
@@ -268,7 +267,7 @@ public:
     }
     virtual ~WholeSpaceIteratorImpl() { }
   };
-  typedef ceph::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
+  typedef std::shared_ptr< WholeSpaceIteratorImpl > WholeSpaceIterator;
 
 private:
   int64_t cache_bytes[PriorityCache::Priority::LAST+1] = { 0 };

@@ -1635,7 +1635,7 @@ void Pipe::reader()
     }
 
     // get a reference to the AuthSessionHandler while we have the pipe_lock
-    ceph::shared_ptr<AuthSessionHandler> auth_handler = session_security;
+    std::shared_ptr<AuthSessionHandler> auth_handler = session_security;
 
     pipe_lock.Unlock();
 

@@ -8,7 +8,6 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 
-#include "include/memory.h"
 #include "include/assert.h"  // boost clobbers this
 
 struct uuid_d;
@@ -55,7 +54,7 @@ class Graylog
   void log_entry(Entry const * const e);
   void log_log_entry(LogEntry const * const e);
 
-  typedef ceph::shared_ptr<Graylog> Ref;
+  typedef std::shared_ptr<Graylog> Ref;
 
  private:
   SubsystemMap const * const m_subs;

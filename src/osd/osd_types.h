@@ -2755,8 +2755,8 @@ public:
     int new_up_primary,                         ///< [in] up primary of osdmap
     const vector<int> &old_up,                  ///< [in] up as of lastmap
     const vector<int> &new_up,                  ///< [in] up as of osdmap
-    ceph::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
-    ceph::shared_ptr<const OSDMap> lastmap, ///< [in] last map
+    std::shared_ptr<const OSDMap> osdmap,  ///< [in] current map
+    std::shared_ptr<const OSDMap> lastmap, ///< [in] last map
     pg_t pgid                                   ///< [in] pgid for pg
     );
 
@@ -2775,8 +2775,8 @@ public:
     const vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
-    ceph::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
-    ceph::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
+    std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
+    std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
     IsPGRecoverablePredicate *could_have_gone_active, /// [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals

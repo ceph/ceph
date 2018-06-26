@@ -315,8 +315,7 @@ librados_dev() {
 		page.h \
 		crc32c.h \
 		rados_types.h \
-		rados_types.hpp \
-		memory.h
+		rados_types.hpp
 	_pkg $_libdir librados.so
 	_pkg $_bindir librados-config
 }

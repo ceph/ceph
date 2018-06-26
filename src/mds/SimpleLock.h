@@ -43,7 +43,6 @@ inline const char *get_lock_type_name(int t) {
   }
 }
 
-#include "include/memory.h"
 
 struct MutationImpl;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
