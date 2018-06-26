@@ -7,6 +7,7 @@ import { CephReleaseNamePipe } from './ceph-release-name.pipe';
 import { CephShortVersionPipe } from './ceph-short-version.pipe';
 import { DimlessBinaryPipe } from './dimless-binary.pipe';
 import { DimlessPipe } from './dimless.pipe';
+import { EncodeUriPipe } from './encode-uri.pipe';
 import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
 import { ListPipe } from './list.pipe';
@@ -24,7 +25,8 @@ import { RelativeDatePipe } from './relative-date.pipe';
     ListPipe,
     FilterPipe,
     CdDatePipe,
-    EmptyPipe
+    EmptyPipe,
+    EncodeUriPipe
   ],
   exports: [
     DimlessBinaryPipe,
@@ -36,7 +38,8 @@ import { RelativeDatePipe } from './relative-date.pipe';
     ListPipe,
     FilterPipe,
     CdDatePipe,
-    EmptyPipe
+    EmptyPipe,
+    EncodeUriPipe
   ],
   providers: [
     DatePipe,
@@ -47,7 +50,8 @@ import { RelativeDatePipe } from './relative-date.pipe';
     RelativeDatePipe,
     ListPipe,
     CdDatePipe,
-    EmptyPipe
+    EmptyPipe,
+    EncodeUriPipe
   ]
 })
 export class PipesModule {}

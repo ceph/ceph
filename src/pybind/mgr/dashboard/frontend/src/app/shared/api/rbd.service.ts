@@ -1,15 +1,15 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import { cdEncode } from '../decorators/cd-encode';
 import { ApiModule } from './api.module';
 
+@cdEncode
 @Injectable({
   providedIn: ApiModule
 })
 export class RbdService {
-
-  constructor(private http: HttpClient) {
-  }
+  constructor(private http: HttpClient) {}
 
   create(rbd) {
     return this.http.post('api/block/image', rbd, { observe: 'response' });
@@ -32,13 +32,15 @@ export class RbdService {
   }
 
   copy(poolName, rbdName, rbd) {
-    return this.http.post(`api/block/image/${poolName}/${rbdName}/copy`, rbd,
-      { observe: 'response' });
+    return this.http.post(`api/block/image/${poolName}/${rbdName}/copy`, rbd, {
+      observe: 'response'
+    });
   }
 
   flatten(poolName, rbdName) {
-    return this.http.post(`api/block/image/${poolName}/${rbdName}/flatten`, null,
-      { observe: 'response' });
+    return this.http.post(`api/block/image/${poolName}/${rbdName}/flatten`, null, {
+      observe: 'response'
+    });
   }
 
   defaultFeatures() {
@@ -49,43 +51,48 @@ export class RbdService {
     const request = {
       snapshot_name: snapshotName
     };
-    return this.http.post(`api/block/image/${poolName}/${rbdName}/snap`, request,
-      { observe: 'response' });
+    return this.http.post(`api/block/image/${poolName}/${rbdName}/snap`, request, {
+      observe: 'response'
+    });
   }
 
   renameSnapshot(poolName, rbdName, snapshotName, newSnapshotName) {
     const request = {
       new_snap_name: newSnapshotName
     };
-    return this.http.put(
-      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}`, request,
-        { observe: 'response' });
+    return this.http.put(`api/block/image/${poolName}/${rbdName}/snap/${snapshotName}`, request, {
+      observe: 'response'
+    });
   }
 
   protectSnapshot(poolName, rbdName, snapshotName, isProtected) {
     const request = {
       is_protected: isProtected
     };
-    return this.http.put(
-      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}`, request,
-      { observe: 'response' });
+    return this.http.put(`api/block/image/${poolName}/${rbdName}/snap/${snapshotName}`, request, {
+      observe: 'response'
+    });
   }
 
   rollbackSnapshot(poolName, rbdName, snapshotName) {
     return this.http.post(
-      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}/rollback`, null,
-      { observe: 'response' });
+      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}/rollback`,
+      null,
+      { observe: 'response' }
+    );
   }
 
   cloneSnapshot(poolName, rbdName, snapshotName, request) {
     return this.http.post(
-      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}/clone`, request,
-      { observe: 'response' });
+      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}/clone`,
+      request,
+      { observe: 'response' }
+    );
   }
 
   deleteSnapshot(poolName, rbdName, snapshotName) {
-    return this.http.delete(
-      `api/block/image/${poolName}/${rbdName}/snap/${snapshotName}`,
-      { observe: 'response' });
+    return this.http.delete(`api/block/image/${poolName}/${rbdName}/snap/${snapshotName}`, {
+      observe: 'response'
+    });
   }
 }
