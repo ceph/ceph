@@ -112,6 +112,9 @@ public:
   /// values from mon that we failed to set
   std::map<std::string,std::string> ignored_mon_values;
 
+  /// original raw values saved that may need to re-expand at certain time
+  mutable std::map<std::string, std::string> may_reexpand_meta;
+
   /// encoded, cached copy of of values + ignored_mon_values
   bufferlist values_bl;
 
@@ -308,6 +311,9 @@ private:
 public:  // for global_init
   void early_expand_meta(std::string &val,
 			 std::ostream *oss) const;
+
+  // for those want to reexpand special meta, e.g, $pid
+  void finalize_reexpand_meta();
 private:
 
   /// expand all metavariables in config structure.
