@@ -119,12 +119,7 @@ Mantle::Mantle (void)
   }
 
   /* balancer policies can use basic Lua functions */
-  luaopen_base(L);
-  luaopen_coroutine(L);
-  luaopen_string(L);
-  luaopen_math(L);
-  luaopen_table(L);
-  luaopen_utf8(L);
+  luaL_openlibs(L);
 
   /* setup debugging */
   lua_register(L, "BAL_LOG", dout_wrapper);
