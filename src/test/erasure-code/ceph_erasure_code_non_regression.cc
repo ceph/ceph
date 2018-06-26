@@ -28,6 +28,7 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/errno.h"
+#include "common/ceph_context.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "erasure-code/ErasureCodePlugin.h"

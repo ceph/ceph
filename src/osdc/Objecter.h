@@ -33,6 +33,7 @@
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
 #include "common/ceph_timer.h"
+#include "common/config_obs.h"
 #include "common/shunique_lock.h"
 #include "common/zipkin_trace.h"
 #include "common/Finisher.h"
@@ -1206,7 +1207,7 @@ class Objecter : public md_config_obs_t, public Dispatcher {
 public:
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed) override;
 
 public:

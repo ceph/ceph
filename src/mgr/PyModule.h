@@ -13,13 +13,14 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
+#include <string>
+#include <boost/optional.hpp>
+#include "common/Mutex.h"
 #include "Python.h"
 #include "Gil.h"
 
-#include <string>
-#include "common/Mutex.h"
-#include <memory>
-#include <boost/optional.hpp>
 
 class MonClient;
 

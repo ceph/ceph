@@ -176,7 +176,7 @@ public:
 
   void update_op_limit(const MDSMap &mds_map);
 
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const md_config_t *conf,
                           const std::set <std::string> &changed,
                           const MDSMap &mds_map);
 

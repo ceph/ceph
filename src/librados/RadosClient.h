@@ -14,6 +14,7 @@
 #ifndef CEPH_LIBRADOS_RADOSCLIENT_H
 #define CEPH_LIBRADOS_RADOSCLIENT_H
 
+#include "common/config_fwd.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/RWLock.h"
@@ -30,7 +31,6 @@ struct AuthAuthorizer;
 struct Context;
 class CephContext;
 struct Connection;
-struct md_config_t;
 class Message;
 class MLog;
 class Messenger;

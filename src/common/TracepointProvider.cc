@@ -20,13 +20,13 @@ TracepointProvider::~TracepointProvider() {
 }
 
 void TracepointProvider::handle_conf_change(
-    const struct md_config_t *conf, const std::set<std::string> &changed) {
+    const md_config_t *conf, const std::set<std::string> &changed) {
   if (changed.count(m_config_keys[0])) {
     verify_config(conf);
   }
 }
 
-void TracepointProvider::verify_config(const struct md_config_t *conf) {
+void TracepointProvider::verify_config(const md_config_t *conf) {
   Mutex::Locker locker(m_lock);
   if (m_handle) {
     return;
