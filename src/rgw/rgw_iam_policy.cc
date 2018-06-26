@@ -847,6 +847,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         if ((t->notaction & iamAllValue) == iamAllValue) {
           t->notaction[iamAll] = 1;
         }
+        if ((t->action & stsAllValue) == stsAllValue) {
+          t->action[stsAll] = 1;
+        }
+        if ((t->notaction & stsAllValue) == stsAllValue) {
+          t->notaction[stsAll] = 1;
+        }
       }
     }
   } else if (w->id == TokenID::Resource || w->id == TokenID::NotResource) {

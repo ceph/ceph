@@ -84,6 +84,7 @@ using rgw::IAM::NotAction_t;
 using rgw::IAM::iamCreateRole;
 using rgw::IAM::iamDeleteRole;
 using rgw::IAM::iamAll;
+using rgw::IAM::stsAll;
 
 class FakeIdentity : public Identity {
   const Principal id;
@@ -615,7 +616,7 @@ TEST_F(PolicyTest, Parse6) {
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
   Action_t act;
-  for (auto i = 0U; i <= iamAll; i++)
+  for (auto i = 0U; i <= stsAll; i++)
     act[i] = 1;
   EXPECT_EQ(p->statements[0].action, act);
   EXPECT_EQ(p->statements[0].notaction, None);

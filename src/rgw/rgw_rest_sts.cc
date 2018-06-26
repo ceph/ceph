@@ -4,7 +4,6 @@
 #include <boost/utility/in_place_factory.hpp>
 #include <boost/tokenizer.hpp>
 
-#include "include/assert.h"
 #include "ceph_ver.h"
 
 #include "common/Formatter.h"
