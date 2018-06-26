@@ -4557,9 +4557,7 @@ int BlueStore::_open_db(bool create)
     string bfn;
     struct stat st;
 
-    if (read_meta("path_block.db", &bfn) < 0) {
-      bfn = path + "/block.db";
-    }
+    bfn = path + "/block.db";
     if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn);
       if (r < 0) {
@@ -4588,19 +4586,20 @@ int BlueStore::_open_db(bool create)
       }
       bluefs_shared_bdev = BlueFS::BDEV_SLOW;
       bluefs_single_shared_device = false;
-    } else if (::lstat(bfn.c_str(), &st) == -1) {
-      bluefs_shared_bdev = BlueFS::BDEV_DB;
     } else {
-      //symlink exist is bug
-      derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
       r = -errno;
-      goto free_bluefs;
+      if (::lstat(bfn.c_str(), &st) == -1) {
+	r = 0;
+	bluefs_shared_bdev = BlueFS::BDEV_DB;
+      } else {
+	derr << __func__ << " " << bfn << " symlink exists but target unusable: "
+	     << cpp_strerror(r) << dendl;
+	goto free_bluefs;
+      }
     }
 
     // shared device
-    if (read_meta("path_block", &bfn) < 0) {
-      bfn = path + "/block";
-    }
+    bfn = path + "/block";
     r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: " 
@@ -4629,9 +4628,7 @@ int BlueStore::_open_db(bool create)
       bluefs_extents.insert(start, initial);
     }
 
-    if (read_meta("path_block.wal", &bfn) < 0) {
-      bfn = path + "/block.wal";
-    }
+    bfn = path + "/block.wal";
     if (::stat(bfn.c_str(), &st) == 0) {
       r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
       if (r < 0) {
@@ -4660,13 +4657,16 @@ int BlueStore::_open_db(bool create)
       }
       cct->_conf->set_val("rocksdb_separate_wal_dir", "true");
       bluefs_single_shared_device = false;
-    } else if (::lstat(bfn.c_str(), &st) == -1) {
-      cct->_conf->set_val("rocksdb_separate_wal_dir", "false");
     } else {
-      //symlink exist is bug
-      derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
       r = -errno;
-      goto free_bluefs;
+      if (::lstat(bfn.c_str(), &st) == -1) {
+	r = 0;
+	cct->_conf->set_val("rocksdb_separate_wal_dir", "false");
+      } else {
+	derr << __func__ << " " << bfn << " symlink exists but target unusable: "
+	     << cpp_strerror(r) << dendl;
+	goto free_bluefs;
+      }
     }
 
     if (create) {
@@ -5231,17 +5231,6 @@ int BlueStore::mkfs()
   r = _open_bdev(true);
   if (r < 0)
     goto out_close_fsid;
-
-  {
-    string wal_path = cct->_conf->get_val<string>("bluestore_block_wal_path");
-    if (wal_path.size()) {
-      write_meta("path_block.wal", wal_path);
-    }
-    string db_path = cct->_conf->get_val<string>("bluestore_block_db_path");
-    if (db_path.size()) {
-      write_meta("path_block.db", db_path);
-    }
-  }
 
   // choose min_alloc_size
   if (cct->_conf->bluestore_min_alloc_size) {
