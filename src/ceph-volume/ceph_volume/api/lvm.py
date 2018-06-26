@@ -80,6 +80,51 @@ def _splitname_parser(line):
     return parsed
 
 
+def sizing(device_size, parts=None, size=None):
+    """
+    Calculate proper sizing to fully utilize the volume group in the most
+    efficient way possible. To prevent situations where LVM might accept
+    a percentage that is beyond the vg's capabilities, it will refuse with
+    an error when requesting a larger-than-possible parameter, in addition
+    to rounding down calculations.
+
+    A dictionary with different sizing parameters is returned, to make it
+    easier for others to choose what they need in order to create logical
+    volumes::
+
+        >>> sizing(100, parts=2)
+        >>> {'parts': 2, 'percentages': 50, 'sizes': 50}
+
+    """
+    if parts is not None and size is not None:
+        raise ValueError(
+            "Cannot process sizing with both parts (%s) and size (%s)" % (parts, size)
+        )
+
+    if size and size > device_size:
+        raise SizeAllocationError(size, device_size)
+
+    def get_percentage(parts):
+        return int(floor(100 / float(parts)))
+
+    if parts is not None:
+        # Prevent parts being 0, falling back to 1 (100% usage)
+        parts = parts or 1
+        percentages = get_percentage(parts)
+
+    if size:
+        parts = int(floor(device_size / size)) or 1
+        percentages = get_percentage(parts)
+
+    sizes = int(floor(device_size / parts)) if parts else int(floor(device_size))
+
+    return {
+        'parts': parts,
+        'percentages': percentages,
+        'sizes': sizes
+    }
+
+
 def parse_tags(lv_tags):
     """
     Return a dictionary mapping of all the tags associated with
@@ -926,33 +971,7 @@ class VolumeGroup(object):
         :raises SizeAllocationError: When requested size cannot be allocated with
         :raises ValueError: If both ``parts`` and ``size`` are given
         """
-        if parts is not None and size is not None:
-            raise ValueError(
-                "Cannot process sizing with both parts (%s) and size (%s)" % (parts, size)
-            )
-
-        if size and size > self.free:
-            raise SizeAllocationError(size, self.free)
-
-        def get_percentage(parts):
-            return int(floor(100 / float(parts)))
-
-        if parts is not None:
-            # Prevent parts being 0, falling back to 1 (100% usage)
-            parts = parts or 1
-            percentages = get_percentage(parts)
-
-        if size:
-            parts = int(floor(self.free / size)) or 1
-            percentages = get_percentage(parts)
-
-        sizes = int(floor(self.free / parts)) if parts else int(floor(self.free))
-
-        return {
-            'parts': parts,
-            'percentages': percentages,
-            'sizes': sizes
-        }
+        return sizing(self.free, parts=parts, size=size)
 
 
 class Volume(object):
