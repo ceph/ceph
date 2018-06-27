@@ -40,6 +40,8 @@ enum {
   l_mdssm_session_count,
   l_mdssm_session_add,
   l_mdssm_session_remove,
+  l_mdssm_session_open,
+  l_mdssm_session_stale,
   l_mdssm_last,
 };
 
@@ -661,6 +663,11 @@ public:
    */
   void save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
                      MDSGatherBuilder *gather_bld);
+
+private:
+  uint64_t get_session_count_in_state(int state) {
+    return !is_any_state(state) ? 0 : by_state[state]->size();
+  }
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);

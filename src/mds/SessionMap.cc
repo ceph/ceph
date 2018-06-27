@@ -55,6 +55,10 @@ void SessionMap::register_perfcounters()
       "Sessions added");
   plb.add_u64_counter(l_mdssm_session_remove, "session_remove",
       "Sessions removed");
+  plb.add_u64(l_mdssm_session_open, "sessions_open",
+              "Sessions currently open");
+  plb.add_u64(l_mdssm_session_stale, "sessions_stale",
+              "Sessions currently stale");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -486,7 +490,15 @@ uint64_t SessionMap::set_state(Session *session, int s) {
     if (by_state_entry == by_state.end())
       by_state_entry = by_state.emplace(s, new xlist<Session*>).first;
     by_state_entry->second->push_back(&session->item_session_list);
+
+    // refresh number of sessions for states which have perf
+    // couters associated
+    logger->set(l_mdssm_session_open,
+                get_session_count_in_state(Session::STATE_OPEN));
+    logger->set(l_mdssm_session_stale,
+                get_session_count_in_state(Session::STATE_STALE));
   }
+
   return session->get_state_seq();
 }
 
