@@ -1820,6 +1820,7 @@ bool RGWUserCaps::is_valid_cap_type(const string& tp)
                                     "bilog",
                                     "mdlog",
                                     "datalog",
+                                    "opslog",
                                     "roles",
                                     "user-policy"};
 

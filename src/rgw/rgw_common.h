@@ -524,6 +524,9 @@ enum RGWOpType {
   /* sts specific*/
   RGW_STS_ASSUME_ROLE,
   RGW_STS_GET_SESSION_TOKEN,
+  /* ops log specific*/
+  RGW_OP_GET_OPS_LOG,
+  RGW_OP_DELETE_OPS_LOG,
 };
 
 class RGWAccessControlPolicy;
