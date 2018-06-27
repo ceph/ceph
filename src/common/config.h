@@ -24,7 +24,8 @@
 #include "log/SubsystemMap.h"
 #include "common/options.h"
 #include "common/subsys_types.h"
-#include "config_fwd.h"
+#include "common/config_fwd.h"
+#include "common/lock_mutex.h"
 
 class CephContext;
 
@@ -41,30 +42,6 @@ enum {
 extern const char *ceph_conf_level_name(int level);
 
 namespace ceph::internal {
-// empty helper class except when the template argument is policy_mutex
-template<LockPolicy lp>
-class LockMutex {
-  struct Locker {};
-public:
-  Locker operator()() const {
-    return Locker{};
-  }
-  bool is_locked() const {
-    return true;
-  }
-};
-
-template<>
-class LockMutex<LockPolicy::MUTEX> {
-  mutable Mutex mutex{"md_config_t", true, false};
-public:
-  auto operator()() const {
-    return Mutex::Locker{mutex};
-  }
-  bool is_locked() const {
-    return mutex.is_locked();
-  }
-};
 
 /** This class represents the current Ceph configuration.
  *
