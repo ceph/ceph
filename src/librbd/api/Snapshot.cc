@@ -42,6 +42,7 @@ public:
       lderr(cct) << "failed to open group pool: " << cpp_strerror(r) << dendl;
       return r;
     }
+    group_ioctx.set_namespace(image_ioctx->get_namespace());
 
     cls::rbd::GroupSnapshot group_snapshot;
 

@@ -105,6 +105,9 @@ void RefreshParentRequest<I>::send_open_parent() {
     return;
   }
 
+  // TODO support clone v2 parent namespaces
+  parent_io_ctx.set_namespace(m_child_image_ctx.md_ctx.get_namespace());
+
   // since we don't know the image and snapshot name, set their ids and
   // reset the snap_name and snap_exists fields after we read the header
   m_parent_image_ctx = new I("", m_parent_md.spec.image_id, NULL, parent_io_ctx,

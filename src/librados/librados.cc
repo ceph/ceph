@@ -2215,6 +2215,11 @@ void librados::IoCtx::set_namespace(const string& nspace)
   io_ctx_impl->oloc.nspace = nspace;
 }
 
+std::string librados::IoCtx::get_namespace() const
+{
+  return io_ctx_impl->oloc.nspace;
+}
+
 int64_t librados::IoCtx::get_id()
 {
   return io_ctx_impl->get_id();
@@ -4031,6 +4036,22 @@ extern "C" void rados_ioctx_set_namespace(rados_ioctx_t io, const char *nspace)
   else
     ctx->oloc.nspace = "";
   tracepoint(librados, rados_ioctx_set_namespace_exit);
+}
+
+extern "C" int rados_ioctx_get_namespace(rados_ioctx_t io, char *s,
+                                         unsigned maxlen)
+{
+  tracepoint(librados, rados_ioctx_get_namespace_enter, io, maxlen);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  auto length = ctx->oloc.nspace.length();
+  if (length >= maxlen) {
+    tracepoint(librados, rados_ioctx_get_namespace_exit, -ERANGE, "");
+    return -ERANGE;
+  }
+  strcpy(s, ctx->oloc.nspace.c_str());
+  int retval = (int)length;
+  tracepoint(librados, rados_ioctx_get_namespace_exit, retval, s);
+  return retval;
 }
 
 extern "C" rados_t rados_ioctx_get_cluster(rados_ioctx_t io)
