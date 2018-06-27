@@ -1,0 +1,9 @@
+overrides:
+  ceph:
+    conf:
+      mds:
+        mds debug scatterstat: true
+        mds verify scatter: true
+        mds debug frag: true
+        debug ms: 1
+        debug mds: 20
