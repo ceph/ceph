@@ -171,16 +171,7 @@ bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 void SimpleMessenger::set_myaddrs(const entity_addrvec_t &av)
 {
   my_addr = av.front();
-  my_addr.set_nonce(nonce);
-  // do this in a slightly paranoid way because we update this value in a
-  // thread-unsafe way.  SimpleMessenger sucks.
-  if (my_addrs->empty()) {
-    Messenger::set_myaddrs(av);
-  } else {
-    assert(my_addrs->v.size() == av.v.size());
-    my_addrs->v[0] = av.front();
-    set_endpoint_addr(av.front(), my_name);
-  }
+  Messenger::set_myaddrs(av);
 }
 
 void SimpleMessenger::set_addrs(const entity_addrvec_t &av)
