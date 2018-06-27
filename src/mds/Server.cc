@@ -1136,6 +1136,30 @@ void Server::update_required_client_features()
 
   std::sort(bits.begin(), bits.end());
   required_client_features = feature_bitset_t(bits);
+  dout(7) << "required_client_features: " << required_client_features << dendl;
+
+  if (mds->get_state() >= MDSMap::STATE_RECONNECT) {
+    set<Session*> sessions;
+    mds->sessionmap.get_client_session_set(sessions);
+    for (auto session : sessions) {
+      feature_bitset_t missing_features = required_client_features;
+      missing_features -= session->info.client_metadata.features;
+      if (!missing_features.empty()) {
+	bool blacklisted = mds->objecter->with_osdmap(
+	    [session](const OSDMap &osd_map) -> bool {
+	      return osd_map.is_blacklisted(session->info.inst.addr);
+	    });
+	if (blacklisted)
+	  continue;
+
+	mds->clog->warn() << "evicting session " << *session << ", missing required features '"
+			  << missing_features << "'";
+	std::stringstream ss;
+	mds->evict_client(session->get_client().v, false,
+			  g_conf()->mds_session_blacklist_on_evict, ss);
+      }
+    }
+  }
 }
 
 void Server::reconnect_gather_finish()
