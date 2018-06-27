@@ -5,6 +5,8 @@
 #include "lock_policy.h"
 #include "Mutex.h"
 
+class SharedLRUTest;
+
 namespace ceph::internal {
 
 template<LockPolicy lp> class LockCond;
@@ -43,6 +45,7 @@ private:
   }
   mutable Mutex mutex;
   friend class LockCond<LockPolicy::MUTEX>;
+  friend class ::SharedLRUTest;
 };
 
 } // namespace ceph::internal

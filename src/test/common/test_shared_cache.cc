@@ -28,8 +28,8 @@
 
 class SharedLRUTest : public SharedLRU<unsigned int, int> {
 public:
-  Mutex &get_lock() { return lock; }
-  Cond &get_cond() { return cond; }
+  Mutex &get_lock() { return lock.get(); }
+  Cond &get_cond() { return cond.get(); }
   map<unsigned int, pair< std::weak_ptr<int>, int* > > &get_weak_refs() {
     return weak_refs;
   }
