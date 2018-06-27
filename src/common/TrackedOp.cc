@@ -147,7 +147,9 @@ void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters, bool by
   f->close_section();
 }
 
-OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
+OpTracker::OpTracker(CephContext* const cct_,
+		     const bool tracking,
+		     const ceph::math::p2_t<std::size_t> num_shards):
   seq(0),
   sharded_in_flight_list(num_shards, [](const size_t i, auto emplacer) {
     char lock_name[32];

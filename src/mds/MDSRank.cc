@@ -66,7 +66,7 @@ MDSRank::MDSRank(
     inotable(NULL), snapserver(NULL), snapclient(NULL),
     sessionmap(this), logger(NULL), mlogger(NULL),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
-               g_conf()->osd_num_op_tracker_shard),
+               g_conf().get_val<ceph::math::p2_t<std::size_t>>("osd_num_op_tracker_shard")),
     last_state(MDSMap::STATE_BOOT),
     state(MDSMap::STATE_BOOT),
     cluster_degraded(false), stopping(false),

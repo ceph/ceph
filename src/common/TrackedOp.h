@@ -308,7 +308,9 @@ class OpTracker {
 
 public:
   CephContext *cct;
-  OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards);
+  OpTracker(CephContext *cct_,
+	    bool tracking,
+	    ceph::math::p2_t<std::size_t> num_shards);
       
   void set_complaint_and_threshold(float time, int threshold) {
     complaint_time = time;
