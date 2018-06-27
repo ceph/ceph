@@ -67,7 +67,7 @@ class Module(MgrModule):
         """
         
         factor = 1000 if decimal else 1024
-        units = [' ', 'k', 'M', 'G', 'T', 'P']
+        units = [' ', 'k', 'M', 'G', 'T', 'P', 'E']
         unit = 0
         while len("%s" % (int(n) // (factor**unit))) > width - 1:
             unit += 1
