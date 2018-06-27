@@ -95,7 +95,11 @@ void ImageCopyRequest<I>::send_open_parent() {
     return;
   }
 
-  m_src_parent_image_ctx = I::create("", m_parent_spec.image_id, nullptr, parent_io_ctx, true);
+  // TODO support clone v2 parent namespaces
+  parent_io_ctx.set_namespace(m_src_image_ctx->md_ctx.get_namespace());
+
+  m_src_parent_image_ctx = I::create("", m_parent_spec.image_id, nullptr,
+                                     parent_io_ctx, true);
 
   auto ctx = create_context_callback<
     ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_open_parent>(this);

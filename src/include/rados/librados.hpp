@@ -1241,6 +1241,7 @@ namespace librados
 
     void locator_set_key(const std::string& key);
     void set_namespace(const std::string& nspace);
+    std::string get_namespace() const;
 
     int64_t get_id();
 

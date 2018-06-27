@@ -592,6 +592,9 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
         return r;
       }
 
+      // TODO support clone v2 child namespaces
+      ioctx.set_namespace(ictx->md_ctx.get_namespace());
+
       for (auto &id_it : info.second) {
 	ImageCtx *imctx = new ImageCtx("", id_it, NULL, ioctx, false);
 	int r = imctx->state->open(false);
@@ -660,6 +663,9 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
                    << dendl;
         return r;
       }
+
+      // TODO support clone v2 child namespaces
+      ioctx.set_namespace(ictx->md_ctx.get_namespace());
 
       for (auto &id_it : info.second) {
         string name;
@@ -744,6 +750,11 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     int r = validate_pool(io_ctx, cct);
     if (r < 0) {
       return r;
+    }
+
+    if (!io_ctx.get_namespace().empty()) {
+      lderr(cct) << "attempting to add v1 image to namespace" << dendl;
+      return -EINVAL;
     }
 
     ldout(cct, 2) << "adding rbd image to directory..." << dendl;
