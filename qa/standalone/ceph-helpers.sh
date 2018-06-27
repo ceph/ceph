@@ -33,9 +33,15 @@ fi
 
 if [ `uname` = FreeBSD ]; then
     SED=gsed
+    DIFFCOLOPTS=""
     KERNCORE="kern.corefile"
 else
     SED=sed
+    termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
+    if [ -n "$termwidth" -a "$termwidth" != "0" ]; then
+        termwidth="-W ${termwidth}"
+    fi
+    DIFFCOLOPTS="-y $termwidth"
     KERNCORE="kernel.core_pattern"
 fi
 
@@ -2053,6 +2059,15 @@ function inject_eio() {
         fi
         sleep 1
     done
+}
+
+function multidiff() {
+    if ! diff $@ ; then
+        if [ "$DIFFCOLOPTS" = "" ]; then
+            return 1
+        fi
+        diff $DIFFCOLOPTS $@
+    fi
 }
 
 # Local Variables:
