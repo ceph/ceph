@@ -2008,6 +2008,15 @@ function inject_eio() {
     done
 }
 
+function multidiff() {
+    if ! diff $@ ; then
+        if [ "$DIFFCOLOPTS" = "" ]; then
+            return 1
+        fi
+        diff $DIFFCOLOPTS $@
+    fi
+}
+
 # Local Variables:
 # compile-command: "cd ../../src ; make -j4 && ../qa/standalone/ceph-helpers.sh TESTS # test_get_config"
 # End:
