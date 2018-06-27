@@ -645,7 +645,8 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         if not metadata['sectorsize']:
             metadata['sectorsize'] = get_file_contents(sysdir + "/queue/hw_sector_size", 512)
         metadata['human_readable_size'] = human_readable_size(float(size) * 512)
-        metadata['size'] = human_readable_size(float(size) * 512)
+        metadata['size'] = float(size) * 512
+        metadata['path'] = diskname
 
         device_facts[diskname] = metadata
     return device_facts
