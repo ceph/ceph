@@ -54,11 +54,8 @@ private:
    *                                  <start> . . . . > . . . . .
    *                                     |                      .
    *                                     v                      .
-   *                               VALIDATE POOL                v (pool validation
+   *                               VALIDATE DATA POOL           v (pool validation
    *                                     |                      .  disabled)
-   *                                     v                      .
-   *                             VALIDATE OVERWRITE             .
-   *                                     |                      .
    *                                     v                      .
    * (error: bottom up)         ADD IMAGE TO DIRECTORY  < . . . .
    *  _______<_______                    |
@@ -133,11 +130,8 @@ private:
   rbd_mirror_mode_t m_mirror_mode = RBD_MIRROR_MODE_DISABLED;
   cls::rbd::MirrorImage m_mirror_image_internal;
 
-  void validate_pool();
-  void handle_validate_pool(int r);
-
-  void validate_overwrite();
-  void handle_validate_overwrite(int r);
+  void validate_data_pool();
+  void handle_validate_data_pool(int r);
 
   void add_image_to_directory();
   void handle_add_image_to_directory(int r);
