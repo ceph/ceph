@@ -2916,12 +2916,12 @@ bool MDSRank::evict_client(int64_t session_id,
   std::string tmp = ss.str();
   std::vector<std::string> cmd = {tmp};
 
-  auto kill_mds_session = [this, session_id, on_killed](){
+  auto kill_client_session = [this, session_id, wait, on_killed](){
     assert(mds_lock.is_locked_by_me());
     Session *session = sessionmap.get_session(
         entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
     if (session) {
-      if (on_killed) {
+      if (on_killed || !wait) {
         server->kill_session(session, on_killed);
       } else {
         C_SaferCond on_safe;
@@ -2943,7 +2943,7 @@ bool MDSRank::evict_client(int64_t session_id,
     }
   };
 
-  auto background_blacklist = [this, cmd](std::function<void ()> fn){
+  auto apply_blacklist = [this, cmd](std::function<void ()> fn){
     assert(mds_lock.is_locked_by_me());
 
     Context *on_blacklist_done = new FunctionContext([this, fn](int r) {
@@ -2966,17 +2966,13 @@ bool MDSRank::evict_client(int64_t session_id,
     monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blacklist_done);
   };
 
-  auto blocking_blacklist = [this, cmd, background_blacklist](){
-    C_SaferCond inline_ctx;
-    background_blacklist([&inline_ctx](){inline_ctx.complete(0);});
-    mds_lock.Unlock();
-    inline_ctx.wait();
-    mds_lock.Lock();
-  };
-
   if (wait) {
     if (blacklist) {
-      blocking_blacklist();
+      C_SaferCond inline_ctx;
+      apply_blacklist([&inline_ctx](){inline_ctx.complete(0);});
+      mds_lock.Unlock();
+      inline_ctx.wait();
+      mds_lock.Lock();
     }
 
     // We dropped mds_lock, so check that session still exists
@@ -2987,12 +2983,12 @@ bool MDSRank::evict_client(int64_t session_id,
                  "for blacklist" << dendl;
       return true;
     }
-    kill_mds_session();
+    kill_client_session();
   } else {
     if (blacklist) {
-      background_blacklist(kill_mds_session);
+      apply_blacklist(kill_client_session);
     } else {
-      kill_mds_session();
+      kill_client_session();
     }
   }
 
