@@ -17,6 +17,7 @@
 
 #include "Cond.h"
 #include "include/unordered_map.h"
+#include "common/config_obs.h"
 #include "common/HeartbeatMap.h"
 
 #include <atomic>
@@ -89,7 +90,7 @@ private:
   const char **get_tracked_conf_keys() const override {
     return _conf_keys;
   }
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const md_config_t *conf,
 			  const std::set <std::string> &changed) override;
 
 public:

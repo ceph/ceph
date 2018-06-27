@@ -15,7 +15,7 @@
 #ifndef CEPH_COMMON_PIDFILE_H
 #define CEPH_COMMON_PIDFILE_H
 
-struct md_config_t;
+#include "common/config_fwd.h"
 
 // Write a pidfile with the current pid, using the configuration in the
 // provided conf structure.

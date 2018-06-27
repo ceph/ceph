@@ -18,6 +18,7 @@
 #include <memory>
 #include <errno.h>
 #include <cstdio>
+#include "common/config_obs.h"
 #include "common/hobject.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"

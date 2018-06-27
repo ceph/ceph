@@ -21,6 +21,7 @@
 using std::deque;
 
 #include "Journal.h"
+#include "common/config_fwd.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Thread.h"
@@ -307,7 +308,7 @@ private:
   int set_throttle_params();
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(
-    const struct md_config_t *conf,
+    const md_config_t *conf,
     const std::set <std::string> &changed) override {
     for (const char **i = get_tracked_conf_keys();
 	 *i;

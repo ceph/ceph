@@ -12,6 +12,7 @@
  *
  */
 
+#include "common/ceph_context.h"
 #include "common/config.h"
 #include "ceph_crypto.h"
 

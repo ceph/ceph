@@ -62,7 +62,7 @@ ThreadPool::~ThreadPool()
   delete[] _conf_keys;
 }
 
-void ThreadPool::handle_conf_change(const struct md_config_t *conf,
+void ThreadPool::handle_conf_change(const md_config_t *conf,
 				    const std::set <std::string> &changed)
 {
   if (changed.count(_thread_num_option)) {

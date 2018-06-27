@@ -94,8 +94,8 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
   // config observer bits
   const char** get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
-				  const std::set <std::string> &changed) override;
+  void handle_conf_change(const md_config_t *conf,
+			  const std::set <std::string> &changed) override;
  protected:
   // tick and other timer fun
   Context *tick_event = nullptr;

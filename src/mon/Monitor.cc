@@ -495,7 +495,7 @@ const char** Monitor::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void Monitor::handle_conf_change(const struct md_config_t *conf,
+void Monitor::handle_conf_change(const md_config_t *conf,
                                  const std::set<std::string> &changed)
 {
   sanitize_options();

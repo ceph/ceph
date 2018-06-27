@@ -33,7 +33,7 @@ public:
   {}
 
   void test_expand_meta() {
-    Mutex::Locker l(lock);
+    auto locker = lock();
     // successfull meta expansion $run_dir and ${run_dir}
     {
       ostringstream oss;

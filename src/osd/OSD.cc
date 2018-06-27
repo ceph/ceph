@@ -8976,7 +8976,7 @@ const char** OSD::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void OSD::handle_conf_change(const struct md_config_t *conf,
+void OSD::handle_conf_change(const md_config_t *conf,
 			     const std::set <std::string> &changed)
 {
   if (changed.count("osd_max_backfills")) {
