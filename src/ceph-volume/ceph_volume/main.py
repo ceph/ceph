@@ -10,6 +10,12 @@ from ceph_volume.decorators import catches
 from ceph_volume import log, devices, configuration, conf, exceptions, terminal
 
 
+IGNORE_CEPH_CONFIG_COMMANDS = [
+    "lvm list",
+    "lvm zap",
+]
+
+
 class Volume(object):
     _help = """
 ceph-volume: Deploy Ceph OSDs using different device technologies like lvm or
@@ -149,11 +155,16 @@ Ceph Conf: {ceph_path}
         try:
             conf.ceph = configuration.load(conf.path)
         except exceptions.ConfigurationError as error:
-            # we warn only here, because it is possible that the configuration
-            # file is not needed, or that it will be loaded by some other means
-            # (like reading from lvm tags)
-            logger.exception('ignoring inability to load ceph.conf')
-            terminal.red(error)
+            is_help = "-h" in subcommand_args or "--help" in subcommand_args
+            if " ".join(subcommand_args[:2]) in IGNORE_CEPH_CONFIG_COMMANDS or is_help:
+                # we warn only here, because it is possible that the configuration
+                # file is not needed, or that it will be loaded by some other means
+                # (like reading from lvm tags)
+                logger.exception('ignoring inability to load ceph.conf')
+                terminal.red(error)
+            else:
+                terminal.red(error)
+                raise
         # dispatch to sub-commands
         terminal.dispatch(self.mapper, subcommand_args)
 
