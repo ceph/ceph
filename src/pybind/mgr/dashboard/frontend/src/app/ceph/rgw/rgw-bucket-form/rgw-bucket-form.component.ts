@@ -1,18 +1,13 @@
 import { Component, OnInit } from '@angular/core';
-import {
-  AbstractControl,
-  AsyncValidatorFn,
-  FormBuilder,
-  FormGroup,
-  ValidationErrors,
-  Validators
-} from '@angular/forms';
+import { AbstractControl, AsyncValidatorFn, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -20,16 +15,16 @@ import { RgwUserService } from '../../../shared/api/rgw-user.service';
   styleUrls: ['./rgw-bucket-form.component.scss']
 })
 export class RgwBucketFormComponent implements OnInit {
-  bucketForm: FormGroup;
+  bucketForm: CdFormGroup;
   editing = false;
   error = false;
   loading = false;
   owners = null;
 
   constructor(
-    private formBuilder: FormBuilder,
     private route: ActivatedRoute,
     private router: Router,
+    private formBuilder: CdFormBuilder,
     private rgwBucketService: RgwBucketService,
     private rgwUserService: RgwUserService
   ) {
