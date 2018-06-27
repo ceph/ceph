@@ -4123,7 +4123,9 @@ void OSD::load_pgs()
     }
   }
 
-  build_past_intervals_parallel();
+  if (g_conf->get_val<bool>("osd_build_past_intervals_parallel")) {
+    build_past_intervals_parallel();
+  }
 }
 
 

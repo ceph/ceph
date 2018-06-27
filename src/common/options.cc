@@ -2721,6 +2721,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("osd_build_past_intervals_parallel", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Attempt to efficiently build past intervals on startup"),
+
     Option("osd_debug_shutdown", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Turn up debug levels during shutdown"),
