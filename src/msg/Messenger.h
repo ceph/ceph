@@ -54,7 +54,7 @@ protected:
   entity_name_t my_name;
 
   /// my addr
-  mutable_item_history<entity_addrvec_t> my_addrs;
+  safe_item_history<entity_addrvec_t> my_addrs;
 
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
