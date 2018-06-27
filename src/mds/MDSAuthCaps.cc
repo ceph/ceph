@@ -69,17 +69,21 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
 	     (path >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3)] |
              (path)[_val = phoenix::construct<MDSCapMatch>(_1)]);
 
-    // capspec = * | r[w]
+    // capspec = * | r[w][p][s]
     capspec = spaces >> (
-        lit("*")[_val = MDSCapSpec(true, true, true, true)]
+        lit("*")[_val = MDSCapSpec(MDSCapSpec::ALL)]
         |
-        lit("all")[_val = MDSCapSpec(true, true, true, true)]
+        lit("all")[_val = MDSCapSpec(MDSCapSpec::ALL)]
         |
-        (lit("rwp"))[_val = MDSCapSpec(true, true, false, true)]
+        (lit("rwps"))[_val = MDSCapSpec(MDSCapSpec::RWPS)]
         |
-        (lit("rw"))[_val = MDSCapSpec(true, true, false, false)]
+        (lit("rwp"))[_val = MDSCapSpec(MDSCapSpec::RWP)]
         |
-        (lit("r"))[_val = MDSCapSpec(true, false, false, false)]
+        (lit("rws"))[_val = MDSCapSpec(MDSCapSpec::RWS)]
+        |
+        (lit("rw"))[_val = MDSCapSpec(MDSCapSpec::RW)]
+        |
+        (lit("r"))[_val = MDSCapSpec(MDSCapSpec::READ)]
         );
 
     grant = lit("allow") >> (capspec >> match)[_val = phoenix::construct<MDSCapGrant>(_1, _2)];
@@ -221,7 +225,13 @@ bool MDSAuthCaps::is_capable(std::string_view inode_path,
 
       // Spec is non-allowing if caller asked for set pool but spec forbids it
       if (mask & MAY_SET_VXATTR) {
-        if (!i->spec.allows_set_vxattr()) {
+        if (!i->spec.allow_set_vxattr()) {
+          continue;
+        }
+      }
+
+      if (mask & MAY_SNAPSHOT) {
+        if (!i->spec.allow_snapshot()) {
           continue;
         }
       }
@@ -276,9 +286,7 @@ bool MDSAuthCaps::is_capable(std::string_view inode_path,
 void MDSAuthCaps::set_allow_all()
 {
     grants.clear();
-    grants.push_back(MDSCapGrant(
-                       MDSCapSpec(true, true, true, true),
-                       MDSCapMatch()));
+    grants.push_back(MDSCapGrant(MDSCapSpec(MDSCapSpec::ALL), MDSCapMatch()));
 }
 
 bool MDSAuthCaps::parse(CephContext *c, std::string_view str, ostream *err)
@@ -286,7 +294,7 @@ bool MDSAuthCaps::parse(CephContext *c, std::string_view str, ostream *err)
   // Special case for legacy caps
   if (str == "allow") {
     grants.clear();
-    grants.push_back(MDSCapGrant(MDSCapSpec(true, true, false, true), MDSCapMatch()));
+    grants.push_back(MDSCapGrant(MDSCapSpec(MDSCapSpec::RWPS), MDSCapMatch()));
     return true;
   }
 
@@ -353,14 +361,20 @@ ostream &operator<<(ostream &out, const MDSCapMatch &match)
 
 ostream &operator<<(ostream &out, const MDSCapSpec &spec)
 {
-  if (spec.any) {
+  if (spec.allow_all()) {
     out << "*";
   } else {
-    if (spec.read) {
+    if (spec.allow_read()) {
       out << "r";
     }
-    if (spec.write) {
+    if (spec.allow_write()) {
       out << "w";
+    }
+    if (spec.allow_set_vxattr()) {
+      out << "p";
+    }
+    if (spec.allow_snapshot()) {
+      out << "s";
     }
   }
 
