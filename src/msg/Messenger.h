@@ -29,6 +29,7 @@
 #include "include/types.h"
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
+#include "common/item_history.h"
 
 #include <errno.h>
 #include <sstream>
@@ -53,7 +54,7 @@ protected:
   entity_name_t my_name;
 
   /// my addr
-  entity_addrvec_t my_addrs;
+  mutable_item_history<entity_addrvec_t> my_addrs;
 
   int default_send_priority;
   /// set to true once the Messenger has started, and set to false on shutdown
@@ -151,10 +152,10 @@ public:
    * currently believes to be its own.
    */
   entity_addr_t get_myaddr() {
-    return my_addrs.front();
+    return my_addrs->front();
   }
   const entity_addrvec_t& get_myaddrs() {
-    return my_addrs;
+    return *my_addrs;
   }
 
   /**

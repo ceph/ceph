@@ -255,7 +255,7 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
     return rc;
   }
 
-  ldout(msgr->cct,1) <<  __func__ << " my_addrs " << msgr->my_addrs
+  ldout(msgr->cct,1) <<  __func__ << " my_addrs " << *msgr->my_addrs
 		     << " my_addr " << msgr->my_addr
 		     << " need_addr=" << msgr->get_need_addr() << dendl;
   return 0;
@@ -273,7 +273,7 @@ int Accepter::rebind(const set<int>& avoid_ports)
   // adjust the nonce; we want our entity_addr_t to be truly unique.
   nonce += 1000000;
   msgr->my_addr.nonce = nonce;
-  msgr->my_addrs.v[0].nonce = nonce;
+  msgr->my_addrs->v[0].nonce = nonce;
   ldout(msgr->cct,10) << __func__ << " new nonce " << nonce << " and addr "
 			<< msgr->my_addr << dendl;
 

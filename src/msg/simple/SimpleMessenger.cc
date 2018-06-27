@@ -151,7 +151,7 @@ bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 {
   bool ret = false;
   auto addr = addrs.legacy_addr();
-  assert(my_addr == my_addrs.front());
+  assert(my_addr == my_addrs->front());
   if (my_addr.is_blank_ip()) {
     ldout(cct,1) << __func__ << " " << addr << dendl;
     entity_addr_t t = my_addr;
@@ -164,7 +164,7 @@ bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
   } else {
     ldout(cct,1) << __func__ << " " << addr << " no-op" << dendl;
   }
-  assert(my_addr == my_addrs.front());
+  assert(my_addr == my_addrs->front());
   return ret;
 }
 
@@ -174,11 +174,11 @@ void SimpleMessenger::set_myaddrs(const entity_addrvec_t &av)
   my_addr.set_nonce(nonce);
   // do this in a slightly paranoid way because we update this value in a
   // thread-unsafe way.  SimpleMessenger sucks.
-  if (my_addrs.empty()) {
+  if (my_addrs->empty()) {
     Messenger::set_myaddrs(av);
   } else {
-    assert(my_addrs.v.size() == av.v.size());
-    my_addrs.v[0] = av.front();
+    assert(my_addrs->v.size() == av.v.size());
+    my_addrs->v[0] = av.front();
     set_endpoint_addr(av.front(), my_name);
   }
 }
@@ -347,7 +347,7 @@ int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    assert(my_addrs == entity_addrvec_t(bind_addr));
+    assert(*my_addrs == entity_addrvec_t(bind_addr));
     return 0;
   }
   if (started) {
@@ -776,7 +776,7 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 
 void SimpleMessenger::init_local_connection()
 {
-  local_connection->peer_addrs = my_addrs;
+  local_connection->peer_addrs = *my_addrs;
   local_connection->peer_type = my_name.type();
   local_connection->set_features(CEPH_FEATURES_ALL);
   ms_deliver_handle_fast_connect(local_connection.get());
