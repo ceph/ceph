@@ -472,9 +472,11 @@ void AsyncMessenger::_finish_bind(const entity_addrvec_t& bind_addrs,
   if (get_myaddrs().front().get_port() == 0) {
     set_myaddrs(listen_addrs);
   }
-  for (auto& a : my_addrs->v) {
+  entity_addrvec_t newaddrs = *my_addrs;
+  for (auto& a : newaddrs.v) {
     a.set_nonce(nonce);
   }
+  set_myaddrs(newaddrs);
 
   init_local_connection();
 
@@ -495,9 +497,11 @@ int AsyncMessenger::start()
   stopped = false;
 
   if (!did_bind) {
-    for (auto& a : my_addrs->v) {
+    entity_addrvec_t newaddrs = *my_addrs;
+    for (auto& a : newaddrs.v) {
       a.nonce = nonce;
     }
+    set_myaddrs(newaddrs);
     _init_local_connection();
   }
 
@@ -678,7 +682,8 @@ bool AsyncMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
   bool ret = false;
   Mutex::Locker l(lock);
 
-  for (auto& a : my_addrs->v) {
+  entity_addrvec_t newaddrs = *my_addrs;
+  for (auto& a : newaddrs.v) {
     if (a.is_blank_ip()) {
       int port = a.get_port();
       for (auto& b : addrs.v) {
@@ -694,6 +699,7 @@ bool AsyncMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
       }
     }
   }
+  set_myaddrs(newaddrs);
   if (ret) {
     _init_local_connection();
   }
@@ -796,7 +802,8 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
       ldout(cct,10) << __func__ << " had no addrs" << dendl;
     } else {
       // fix all addrs of the same family, regardless of type (msgr2 vs legacy)
-      for (auto& a : my_addrs->v) {
+      entity_addrvec_t newaddrs = *my_addrs;
+      for (auto& a : newaddrs.v) {
 	if (a.get_family() == peer_addr_for_me.get_family()) {
 	  entity_addr_t t = peer_addr_for_me;
 	  t.set_type(a.get_type());
@@ -806,6 +813,7 @@ void AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 	  a = t;
 	}
       }
+      set_myaddrs(newaddrs);
     }
     ldout(cct, 1) << __func__ << " learned my addr " << *my_addrs
 		  << " (peer_addr_for_me " << peer_addr_for_me << ")" << dendl;
