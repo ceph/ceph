@@ -29,6 +29,7 @@
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
+#include "common/config_fwd.h"
 
 #include "include/spinlock.h"
 
@@ -38,8 +39,6 @@ class AdminSocket;
 class CephContextServiceThread;
 class PerfCountersCollection;
 class PerfCounters;
-class md_config_obs_t;
-struct md_config_t;
 class CephContextHook;
 class CephContextObs;
 class CryptoHandler;

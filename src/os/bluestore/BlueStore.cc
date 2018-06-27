@@ -3828,7 +3828,7 @@ const char **BlueStore::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void BlueStore::handle_conf_change(const struct md_config_t *conf,
+void BlueStore::handle_conf_change(const md_config_t *conf,
 				   const std::set<std::string> &changed)
 {
   if (changed.count("bluestore_csum_type")) {

@@ -21,6 +21,7 @@
 #include "include/types.h"
 #include "PaxosService.h"
 
+#include "common/config_fwd.h"
 #include "common/LogEntry.h"
 #include "include/str_map.h"
 
@@ -198,7 +199,7 @@ private:
     };
     return KEYS;
   }
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const md_config_t *conf,
                           const std::set<std::string> &changed) override;
 };
 #endif
