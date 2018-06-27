@@ -2392,6 +2392,26 @@ void AsyncConnection::DelayedDelivery::do_request(uint64_t id)
   }
 }
 
+void AsyncConnection::DelayedDelivery::discard() {
+  stop_dispatch = true;
+  center->submit_to(center->get_id(),
+                    [this]() mutable {
+                      std::lock_guard<std::mutex> l(delay_lock);
+                      while (!delay_queue.empty()) {
+                        Message *m = delay_queue.front();
+                        dispatch_queue->dispatch_throttle_release(
+                            m->get_dispatch_throttle_size());
+                        m->put();
+                        delay_queue.pop_front();
+                      }
+                      for (auto i : register_time_events)
+                        center->delete_time_event(i);
+                      register_time_events.clear();
+                      stop_dispatch = false;
+                    },
+                    true);
+}
+
 void AsyncConnection::DelayedDelivery::flush() {
   stop_dispatch = true;
   center->submit_to(
@@ -2544,6 +2564,14 @@ void AsyncConnection::handle_write()
   lock.lock();
   fault();
   lock.unlock();
+}
+
+void AsyncConnection::stop(bool queue_reset) {
+  lock.lock();
+  bool need_queue_reset = (state != STATE_CLOSED) && queue_reset;
+  _stop();
+  lock.unlock();
+  if (need_queue_reset) dispatch_queue->queue_reset(this);
 }
 
 void AsyncConnection::wakeup_from(uint64_t id)
