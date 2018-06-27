@@ -145,7 +145,7 @@ struct Collection {
   ObjectStore::CollectionHandle ch;
   // Can't use mutex directly in vectors hence dynamic allocation
 
-  ceph::unique_ptr<std::mutex> lock;
+  std::unique_ptr<std::mutex> lock;
   uint64_t pglog_ver_head = 1;
   uint64_t pglog_ver_tail = 1;
   uint64_t pglog_dup_ver_tail = 1;
