@@ -316,6 +316,221 @@ def get_mapper_devs(mapper_path="/dev/mapper"):
     return _map_dev_paths(mapper_path, include_abspath=True, include_realpath=True)
 
 
+class BaseFloatUnit(float):
+    """
+    Base class to support float representations of size values. Suffix is
+    computed on child classes by inspecting the class name
+    """
+
+    def __repr__(self):
+        return "<%s(%s)>" % (self.__class__.__name__, self.__float__())
+
+    def __str__(self):
+        return "{size:.2f} {suffix}".format(
+            size=self.__float__(),
+            suffix=self.__class__.__name__.split('Float')[-1]
+        )
+
+
+class FloatB(BaseFloatUnit):
+    pass
+
+
+class FloatMB(BaseFloatUnit):
+    pass
+
+
+class FloatGB(BaseFloatUnit):
+    pass
+
+
+class FloatKB(BaseFloatUnit):
+    pass
+
+
+class FloatTB(BaseFloatUnit):
+    pass
+
+
+class Size(object):
+    """
+    Helper to provide an interface for different sizes given a single initial
+    input. Allows for comparison between different size objects, which avoids
+    the need to convert sizes before comparison (e.g. comparing megabytes
+    against gigabytes).
+
+    Common comparison operators are supported::
+
+        >>> hd1 = Size(gb=400)
+        >>> hd2 = Size(gb=500)
+        >>> hd1 > hd2
+        False
+        >>> hd1 < hd2
+        True
+        >>> hd1 == hd2
+        False
+        >>> hd1 == Size(gb=400)
+        True
+
+    The Size object can also be multiplied or divided::
+
+        >>> hd1
+        <Size(400.00 GB)>
+        >>> hd1 * 2
+        <Size(800.00 GB)>
+        >>> hd1
+        <Size(800.00 GB)>
+
+    Additions and subtractions are only supported between Size objects::
+
+        >>> Size(gb=224) - Size(gb=100)
+        <Size(124.00 GB)>
+        >>> Size(gb=1) + Size(mb=300)
+        <Size(1.29 GB)>
+
+    Can also display a human-readable representation, with automatic detection
+    on best suited unit, or alternatively, specific unit representation::
+
+        >>> s = Size(mb=2211)
+        >>> s
+        <Size(2.16 GB)>
+        >>> s.mb
+        <FloatMB(2211.0)>
+        >>> print "Total size: %s" % s.mb
+        Total size: 2211.00 MB
+        >>> print "Total size: %s" % s
+        Total size: 2.16 GB
+    """
+
+    def __init__(self, multiplier=1024, **kw):
+        self._multiplier = multiplier
+        # create a mapping of units-to-multiplier, skip bytes as that is
+        # calculated initially always and does not need to convert
+        aliases = [
+            [('kb', 'kilobytes'), self._multiplier],
+            [('mb', 'megabytes'), self._multiplier ** 2],
+            [('gb', 'gigabytes'), self._multiplier ** 3],
+            [('tb', 'terabytes'), self._multiplier ** 4],
+        ]
+        # and mappings for units-to-formatters, including bytes and aliases for
+        # each
+        format_aliases = [
+            [('b', 'bytes'), FloatB],
+            [('kb', 'kilobytes'), FloatKB],
+            [('mb', 'megabytes'), FloatMB],
+            [('gb', 'gigabytes'), FloatGB],
+            [('tb', 'terabytes'), FloatTB],
+        ]
+        self._formatters = {}
+        for key, value in format_aliases:
+            for alias in key:
+                self._formatters[alias] = value
+        self._factors = {}
+        for key, value in aliases:
+            for alias in key:
+                self._factors[alias] = value
+
+        for k, v in kw.items():
+            self._convert(v, k)
+            # only pursue the first occurence
+            break
+
+    def _convert(self, size, unit):
+        """
+        Convert any size down to bytes so that other methods can rely on bytes
+        being available always, regardless of what they pass in, avoiding the
+        need for a mapping of every permutation.
+        """
+        if unit in ['b', 'bytes']:
+            self._b = size
+            return
+        factor = self._factors[unit]
+        self._b = float(size * factor)
+
+    def _get_best_format(self):
+        """
+        Go through all the supported units, and use the first one that is less
+        than 1024. This allows to represent size in the most readable format
+        available
+        """
+        for unit in ['b', 'kb', 'mb', 'gb', 'tb']:
+            if getattr(self, unit) > 1024:
+                continue
+            return getattr(self, unit)
+
+    def __repr__(self):
+        return "<Size(%s)>" % self._get_best_format()
+
+    def __str__(self):
+        return "%s" % self._get_best_format()
+
+    def __lt__(self, other):
+        return self._b < other._b
+
+    def __le__(self, other):
+        return self._b <= other._b
+
+    def __eq__(self, other):
+        return self._b == other._b
+
+    def __ne__(self, other):
+        return self._b != other._b
+
+    def __ge__(self, other):
+        return self._b >= other._b
+
+    def __gt__(self, other):
+        return self._b > other._b
+
+    def __add__(self, other):
+        if isinstance(other, Size):
+            self._b = self._b + other._b
+            return self
+        raise TypeError('Cannot add "Size" object with int')
+
+    def __sub__(self, other):
+        if isinstance(other, Size):
+            self._b = self._b - other._b
+            return self
+        raise TypeError('Cannot subtract "Size" object from int')
+
+    def __mul__(self, other):
+        if isinstance(other, Size):
+            raise TypeError('Cannot multiply with "Size" object')
+        self._b = self._b * other
+        return self
+
+    def __truediv__(self, other):
+        if isinstance(other, Size):
+            raise TypeError('Cannot divide by "Size" object')
+        self._b = self._b / other
+        return self
+
+    def __div__(self, other):
+        if isinstance(other, Size):
+            raise TypeError('Cannot divide by "Size" object')
+        self._b = self._b / other
+        return self
+
+    def __getattr__(self, unit):
+        """
+        Calculate units on the fly, relies on the fact that ``bytes`` has been
+        converted at instantiation. Units that don't exist will trigger an
+        ``AttributeError``
+        """
+        try:
+            formatter = self._formatters[unit]
+        except KeyError:
+            raise AttributeError('Size object has not attribute "%s"' % unit)
+        if unit in ['b', 'bytes']:
+            return formatter(self._b)
+        try:
+            factor = self._factors[unit]
+        except KeyError:
+            raise AttributeError('Size object has not attribute "%s"' % unit)
+        return formatter(float(self._b) / factor)
+
+
 def human_readable_size(size):
     """
     Take a size in bytes, and transform it into a human readable size with up
