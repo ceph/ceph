@@ -26,6 +26,8 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 
+#include "common/Clock.h"
+
 #ifdef __linux__
 #include <limits.h>
 #endif
@@ -2006,4 +2008,142 @@ TEST(LibCephFS, ShutdownRace)
   for (int i = 0; i < nthreads; ++i)
     threads[i].join();
   ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
+}
+
+static void get_current_time_utimbuf(struct utimbuf *utb)
+{
+  utime_t t = ceph_clock_now();
+  utb->actime = t.sec();
+  utb->modtime = t.sec();
+}
+
+static void get_current_time_timeval(struct timeval tv[2])
+{
+  utime_t t = ceph_clock_now();
+  t.copy_to_timeval(&tv[0]);
+  t.copy_to_timeval(&tv[1]);
+}
+
+static void get_current_time_timespec(struct timespec ts[2])
+{
+  utime_t t = ceph_clock_now();
+  t.to_timespec(&ts[0]);
+  t.to_timespec(&ts[1]);
+}
+
+TEST(LibCephFS, TestUtime) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_file[256];
+  sprintf(test_file, "test_utime_file_%d", getpid());
+  int fd = ceph_open(cmount, test_file, O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  struct utimbuf utb;
+  struct ceph_statx stx;
+
+  get_current_time_utimbuf(&utb);
+
+  // ceph_utime()
+  EXPECT_EQ(0, ceph_utime(cmount, test_file, &utb));
+  ASSERT_EQ(ceph_statx(cmount, test_file, &stx,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME, 0), 0);
+  ASSERT_EQ(utime_t(stx.stx_atime), utime_t(utb.actime, 0));
+  ASSERT_EQ(utime_t(stx.stx_mtime), utime_t(utb.modtime, 0));
+
+  get_current_time_utimbuf(&utb);
+
+  // ceph_futime()
+  EXPECT_EQ(0, ceph_futime(cmount, fd, &utb));
+  ASSERT_EQ(ceph_statx(cmount, test_file, &stx,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME, 0), 0);
+  ASSERT_EQ(utime_t(stx.stx_atime), utime_t(utb.actime, 0));
+  ASSERT_EQ(utime_t(stx.stx_mtime), utime_t(utb.modtime, 0));
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, TestUtimes) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_file[256];
+  char test_symlink[256];
+
+  sprintf(test_file, "test_utimes_file_%d", getpid());
+  sprintf(test_symlink, "test_utimes_symlink_%d", getpid());
+  int fd = ceph_open(cmount, test_file, O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  ASSERT_EQ(ceph_symlink(cmount, test_file, test_symlink), 0);
+
+  struct timeval times[2];
+  struct ceph_statx stx;
+
+  get_current_time_timeval(times);
+
+  // ceph_utimes() on symlink, validate target file time
+  EXPECT_EQ(0, ceph_utimes(cmount, test_symlink, times));
+  ASSERT_EQ(ceph_statx(cmount, test_symlink, &stx,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME, 0), 0);
+  ASSERT_EQ(utime_t(stx.stx_atime), utime_t(times[0]));
+  ASSERT_EQ(utime_t(stx.stx_mtime), utime_t(times[1]));
+
+  get_current_time_timeval(times);
+
+  // ceph_lutimes() on symlink, validate symlink time
+  EXPECT_EQ(0, ceph_lutimes(cmount, test_symlink, times));
+  ASSERT_EQ(ceph_statx(cmount, test_symlink, &stx,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME, AT_SYMLINK_NOFOLLOW), 0);
+  ASSERT_EQ(utime_t(stx.stx_atime), utime_t(times[0]));
+  ASSERT_EQ(utime_t(stx.stx_mtime), utime_t(times[1]));
+
+  get_current_time_timeval(times);
+
+  // ceph_futimes()
+  EXPECT_EQ(0, ceph_futimes(cmount, fd, times));
+  ASSERT_EQ(ceph_statx(cmount, test_file, &stx,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME, 0), 0);
+  ASSERT_EQ(utime_t(stx.stx_atime), utime_t(times[0]));
+  ASSERT_EQ(utime_t(stx.stx_mtime), utime_t(times[1]));
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, TestFutimens) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_file[256];
+
+  sprintf(test_file, "test_futimens_file_%d", getpid());
+  int fd = ceph_open(cmount, test_file, O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  struct timespec times[2];
+  struct ceph_statx stx;
+
+  get_current_time_timespec(times);
+
+  // ceph_futimens()
+  EXPECT_EQ(0, ceph_futimens(cmount, fd, times));
+  ASSERT_EQ(ceph_statx(cmount, test_file, &stx,
+                       CEPH_STATX_MTIME|CEPH_STATX_ATIME, 0), 0);
+  ASSERT_EQ(utime_t(stx.stx_atime), utime_t(times[0]));
+  ASSERT_EQ(utime_t(stx.stx_mtime), utime_t(times[1]));
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
 }
