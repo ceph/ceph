@@ -340,10 +340,7 @@ public:
   int mount();
   void umount();
   
-  int log_dump(
-    CephContext *cct,
-    const string& path,
-    const vector<string>& devs);
+  int log_dump();
 
   void collect_metadata(map<string,string> *pm, unsigned skip_bdev_id);
   void get_devices(set<string> *ls);
