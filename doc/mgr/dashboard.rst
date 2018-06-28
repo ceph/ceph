@@ -1,41 +1,34 @@
-Dashboard Plugin
-================
+Ceph Manager Dashboard
+======================
 
 .. _mgr-dashboard-overview:
 
 Overview
 --------
 
-The original Ceph manager dashboard that was shipped with Ceph "Luminous"
-started out as a simple read-only view into various run-time information and
-performance data of a Ceph cluster. It used a very simple architecture to
-achieve the original goal.
+The original Ceph Manager Dashboard that was shipped with Ceph Luminous started
+out as a simple read-only view into various run-time information and performance
+data of a Ceph cluster. It used a very simple architecture to achieve the
+original goal. However, there was a growing demand for adding more web-based
+management capabilities, to make it easier to administer Ceph for users that
+prefer a WebUI over using the command line.
 
-However, there was a growing demand for adding more web-based management
-capabilities, to make it easier to administer Ceph for users that prefer a WebUI
-over using the command line.
-
-This new dashboard module is a replacement of the previous one and an ongoing
-project to add a native web based monitoring and administration application to
-Ceph Manager.
-
-The architecture and functionality of this module are derived from and inspired
-by the `openATTIC Ceph management and monitoring tool
+The new :term:`Ceph Manager Dashboard` plugin is a replacement of the previous
+one and adds a built-in web based monitoring and administration application to
+the Ceph Manager. The architecture and functionality of this new plugin is
+derived from and inspired by the `openATTIC Ceph management and monitoring tool
 <https://openattic.org/>`_. The development is actively driven by the team
-behind openATTIC at SUSE.
+behind openATTIC at `SUSE <https://www.suse.com/>`_.
 
 The intention is to reuse as much of the existing openATTIC functionality as
-possible, while adapting it to the different environment. While openATTIC is
-based on Django and the Django REST Framework, the dashboard module's backend
-code uses the CherryPy framework and a custom REST API implementation.
-
-The WebUI implementation is based on Angular/TypeScript, merging both
-functionality from the original dashboard as well as adding new functionality
-originally developed for the standalone version of openATTIC.
-
-The dashboard plugin is implemented as a web application that visualizes
-information and statistics about the Ceph cluster using a web server hosted by
-``ceph-mgr``.
+possible, while adapting it to the different environment. openATTIC is based on
+Django and the Django REST Framework, whereas the dashboard plugin's backend
+code uses the CherryPy framework and a custom REST API implementation. The WebUI
+implementation is based on Angular/TypeScript, merging both functionality from
+the original dashboard as well as adding new functionality originally developed
+for the standalone version of openATTIC. The Ceph Manager Dashboard plugin is
+implemented as a web application that visualizes information and statistics about
+the Ceph cluster using a web server hosted by ``ceph-mgr``.
 
 The dashboard currently provides the following features to monitor and manage
 various aspects of your Ceph cluster:
@@ -82,7 +75,7 @@ various aspects of your Ceph cluster:
 Enabling
 --------
 
-Within a running Ceph cluster, the *dashboard* manager module is enabled with::
+Within a running Ceph cluster, the Ceph Manager Dashboard is enabled with::
 
   $ ceph mgr module enable dashboard
 
@@ -176,7 +169,7 @@ app.
 .. note::
 
   The command ``ceph mgr services`` will show you all endpoints that are
-  currently configured. Look for the "dashboard" key to obtain the URL for
+  currently configured. Look for the ``dashboard`` key to obtain the URL for
   accessing the dashboard.
 
 Username and password
@@ -214,7 +207,7 @@ The credentials of an existing user can also be obtained by using
 
   $ radosgw-admin user info --uid=<user_id>
 
-Finally, provide the credentials to the dashboard module::
+Finally, provide the credentials to the dashboard::
 
   $ ceph dashboard set-rgw-api-access-key <access_key>
   $ ceph dashboard set-rgw-api-secret-key <secret_key>
@@ -363,7 +356,7 @@ User Roles and Permissions
 User accounts are also associated with a set of roles that define which
 dashboard fuctionality can be accessed by the user.
 
-Dashboard functionality/modules are grouped within a *security scope*.
+The Dashboard functionality/modules are grouped within a *security scope*.
 Security scopes are predefined and static. The current avaliable security
 scopes are:
 
