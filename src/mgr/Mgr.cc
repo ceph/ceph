@@ -523,7 +523,7 @@ bool Mgr::ms_dispatch(Message *m)
       m->put();
       break;
     case MSG_SERVICE_MAP:
-      handle_service_map((MServiceMap*)m);
+      handle_service_map(static_cast<MServiceMap*>(m));
       py_module_registry->notify_all("service_map", "");
       m->put();
       break;

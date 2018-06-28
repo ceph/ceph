@@ -2258,8 +2258,8 @@ int buffer::list::write_file(const char *fn, int mode)
 
 static int do_writev(int fd, struct iovec *vec, uint64_t offset, unsigned veclen, unsigned bytes)
 {
-  ssize_t r = 0;
   while (bytes > 0) {
+    ssize_t r = 0;
 #ifdef HAVE_PWRITEV
     r = ::pwritev(fd, vec, veclen, offset);
 #else
@@ -2492,9 +2492,8 @@ void buffer::list::hexdump(std::ostream &out, bool trailing_newline) const
   unsigned per = 16;
   bool was_zeros = false, did_star = false;
   for (unsigned o=0; o<length(); o += per) {
-    bool row_is_zeros = false;
     if (o + per < length()) {
-      row_is_zeros = true;
+      bool row_is_zeros = true;
       for (unsigned i=0; i<per && o+i<length(); i++) {
 	if ((*this)[o+i]) {
 	  row_is_zeros = false;
