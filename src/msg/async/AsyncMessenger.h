@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -336,7 +336,7 @@ private:
 public:
 
   /// con used for sending messages to ourselves
-  ConnectionRef local_connection;
+  AsyncConnectionRef local_connection;
 
   /**
    * @defgroup AsyncMessenger internals
