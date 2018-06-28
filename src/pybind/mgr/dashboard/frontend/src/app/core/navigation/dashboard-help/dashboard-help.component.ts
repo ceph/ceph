@@ -1,7 +1,10 @@
 import { Component, OnInit } from '@angular/core';
 
+import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
+import { AboutComponent } from '../about/about.component';
 
 @Component({
   selector: 'cd-dashboard-help',
@@ -9,11 +12,14 @@ import { SummaryService } from '../../../shared/services/summary.service';
   styleUrls: ['./dashboard-help.component.scss']
 })
 export class DashboardHelpComponent implements OnInit {
-
   docsUrl: string;
+  modalRef: BsModalRef;
 
-  constructor(private summaryService: SummaryService,
-              private cephReleaseNamePipe: CephReleaseNamePipe) {}
+  constructor(
+    private summaryService: SummaryService,
+    private cephReleaseNamePipe: CephReleaseNamePipe,
+    private modalService: BsModalService
+  ) {}
 
   ngOnInit() {
     const subs = this.summaryService.summaryData$.subscribe((summary: any) => {
@@ -24,5 +30,9 @@ export class DashboardHelpComponent implements OnInit {
       this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/`;
       subs.unsubscribe();
     });
+  }
+
+  openAboutModal() {
+    this.modalRef = this.modalService.show(AboutComponent);
   }
 }
