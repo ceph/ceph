@@ -19,6 +19,7 @@
 #
 TIMEOUT=300
 WAIT_FOR_CLEAN_TIMEOUT=90
+MAX_TIMEOUT=15
 PG_NUM=4
 CEPH_BUILD_VIRTUALENV=${TMPDIR:-/tmp}
 
@@ -121,6 +122,9 @@ function setup() {
     teardown $dir || return 1
     mkdir -p $dir
     mkdir -p $(get_asok_dir)
+    if [ $(ulimit -n) -le 1024 ]; then
+        ulimit -n 4096 || return 1
+    fi
 }
 
 function test_setup() {
@@ -1414,6 +1418,7 @@ function get_timeout_delays() {
     $trace && shopt -u -o xtrace
     local timeout=$1
     local first_step=${2:-1}
+    local max_timeout=${3:-$MAX_TIMEOUT}
 
     local i
     local total="0"
@@ -1422,6 +1427,13 @@ function get_timeout_delays() {
         echo -n "$(calc $i) "
         total=$(calc $total + $i)
         i=$(calc $i \* 2)
+        if [ $max_timeout -gt 0 ]; then
+            # Did we reach max timeout ?
+            if [ ${i%.*} -eq ${max_timeout%.*} ] && [ ${i#*.} \> ${max_timeout#*.} ] || [ ${i%.*} -gt ${max_timeout%.*} ]; then
+                # Yes, so let's cap the max wait time to max
+                i=$max_timeout
+            fi
+        fi
     done
     if test "$(calc $total \< $timeout)" = "1"; then
         echo -n "$(calc $timeout - $total) "
@@ -1441,6 +1453,8 @@ function test_get_timeout_delays() {
     test "$(get_timeout_delays 6 .1)" = "0.1 0.2 0.4 0.8 1.6 2.9 " || return 1
     test "$(get_timeout_delays 6.3 .1)" = "0.1 0.2 0.4 0.8 1.6 3.2 " || return 1
     test "$(get_timeout_delays 20 .1)" = "0.1 0.2 0.4 0.8 1.6 3.2 6.4 7.3 " || return 1
+    test "$(get_timeout_delays 300 .1)" = "0.1 0.2 0.4 0.8 1.6 3.2 6.4 12.8 25.6 51.2 102.4 95.3 " || return 1
+    test "$(get_timeout_delays 300 .1 10)" = "0.1 0.2 0.4 0.8 1.6 3.2 6.4 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 7.3" || return 1
 }
 
 #######################################################################
