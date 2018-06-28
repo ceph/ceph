@@ -328,6 +328,17 @@ int ceph_release(struct ceph_mount_info *cmount);
 void ceph_shutdown(struct ceph_mount_info *cmount);
 
 /**
+ * Get a global id for current instance
+ *
+ * The handle should not be mounted. This should be called on completion of
+ * all libcephfs functions.
+ *
+ * @param cmount the mount handle
+ * @returns instance global id
+ */
+uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount);
+
+/**
  * Extract the CephContext from the mount point handle.
  *
  * @param cmount the ceph mount handle to get the context from.
