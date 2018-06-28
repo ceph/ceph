@@ -443,11 +443,6 @@ COMMAND("mon feature set " \
         "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
         "set provided feature on mon map", \
         "mon", "rw", "cli,rest")
-COMMAND("mon set-rank " \
-	"name=name,type=CephString " \
-	"name=rank,type=CephInt",
-	"set the rank for the specified mon",
-	"mon", "rw", "cli,rest")
 
 /*
  * OSD commands
@@ -750,8 +745,16 @@ COMMAND("osd set " \
 COMMAND("osd unset " \
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim", \
 	"unset <key>", "osd", "rw", "cli,rest")
+COMMAND("osd setall " \
+	"type=CephString,name=keys,n=N", \
+	"set key <key> [<keys>...]", \
+    "osd", "rw", "cli,rest")
+COMMAND("osd unsetall " \
+	"type=CephString,name=keys,n=N", \
+	"unset key <key> [<keys>...]", \
+    "osd", "rw", "cli,rest")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=luminous|mimic|nautilus " \
+	"name=release,type=CephChoices,strings=luminous|mimic " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw", "cli,rest")
@@ -873,13 +876,6 @@ COMMAND("osd destroy " \
         "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
         "but removes cephx keys, config-key data and lockbox keys, "\
         "rendering data permanently unreadable.", \
-        "osd", "rw", "cli,rest")
-COMMAND("osd destroy-new " \
-        "name=id,type=CephOsdName " \
-        "name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
-        "mark osd as being destroyed. Keeps the ID intact (allowing reuse), " \
-        "but removes cephx keys, config-key data and lockbox keys, "\
-        "rendering data permanently unreadable.  Only works on new, unbooted osd ids.", \
         "osd", "rw", "cli,rest")
 COMMAND("osd purge " \
         "name=id,type=CephOsdName " \
