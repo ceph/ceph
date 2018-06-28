@@ -16,6 +16,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 #include <boost/optional.hpp>
 #include "common/Mutex.h"
 #include "Python.h"
