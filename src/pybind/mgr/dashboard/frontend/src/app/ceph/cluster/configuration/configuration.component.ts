@@ -62,8 +62,19 @@ export class ConfigurationComponent implements OnInit {
       }
     }
   ];
+  flags = {
+    runtime: 'The value can be updated at runtime.',
+    no_mon_update:
+      'Daemons/clients do not pull this value from the monitor config database. ' +
+      'We disallow setting this option via \'ceph config set ...\'. This option should be ' +
+      'configured via ceph.conf or via the command line.',
+    startup: 'Option takes effect only during daemon startup.',
+    cluster_create: 'Option only affects cluster creation.',
+    create: 'Option only affects daemon creation.'
+  };
 
   @ViewChild('confValTpl') public confValTpl: TemplateRef<any>;
+  @ViewChild('confFlagTpl') public confFlagTpl: TemplateRef<any>;
 
   constructor(private configurationService: ConfigurationService) {}
 
@@ -80,6 +91,13 @@ export class ConfigurationComponent implements OnInit {
       { flexGrow: 1, prop: 'source' },
       { flexGrow: 2, prop: 'desc', name: 'Description', cellClass: 'wrap' },
       { flexGrow: 2, prop: 'long_desc', name: 'Long description', cellClass: 'wrap' },
+      {
+        flexGrow: 2,
+        prop: 'flags',
+        name: 'Flags',
+        cellClass: 'wrap',
+        cellTemplate: this.confFlagTpl
+      },
       { flexGrow: 1, prop: 'type' },
       { flexGrow: 1, prop: 'level' },
       { flexGrow: 1, prop: 'default', cellClass: 'wrap' },

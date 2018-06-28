@@ -35,4 +35,13 @@
       </span>
     </span>
   </ng-template>
+  <ng-template #confFlagTpl let-value="value">
+    <span *ngIf="value !== ''">
+      <span *ngFor="let flag of value; last as isLast">
+        <span title="{{ flags[flag] }}">
+          {{ flag | uppercase }}{{ !isLast ? "," : "" }}<br/>
+        </span>
+      </span>
+    </span>
+  </ng-template>
 </cd-table>
