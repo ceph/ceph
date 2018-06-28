@@ -94,6 +94,7 @@ set(librgw_common_srcs
   rgw_coroutine.cc
   rgw_cr_rados.cc
   rgw_cr_rest.cc
+  rgw_cr_tools.cc
   rgw_object_expirer_core.cc
   rgw_op.cc
   rgw_otp.cc
