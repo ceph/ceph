@@ -80,9 +80,10 @@
 <a [popover]="popTemplate"
    placement="bottom"
    container="body"
-   outsideClick="true">
-  <i class="fa"
+   outsideClick="true"
+   i18n-title
+   title="Background Tasks">
+  <i class="fa fa-fw"
      [ngClass]="icon"></i>
-  <span i18n>Background-Tasks</span>
   <span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>
 </a>

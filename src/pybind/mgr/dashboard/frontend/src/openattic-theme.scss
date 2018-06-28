@@ -299,10 +299,6 @@ ul.task-queue-pagination {
   border-top: 4px solid $oa-color-blue;
   font-size: 1.2em;
 }
-.navbar-openattic i.fa {
-  /** Add space between icon and text */
-  margin-right: 5px;
-}
 .navbar-openattic .navbar-header {
   display: flex;
   float: none;
@@ -335,7 +331,7 @@ ul.task-queue-pagination {
 .navbar-openattic .navbar-nav>li>.oa-navbar>[dropdown]>a {
   color: #ececec;
   line-height: 1;
-  padding: 10px 20px;
+  padding: 10px 17px;
   position: relative;
   display: block;
   text-decoration: none;
@@ -382,7 +378,7 @@ ul.task-queue-pagination {
 }
 .navbar-openattic .navbar-utility a,
 .navbar-openattic .navbar-utility .fa{
-  font-size: 1.0em;
+  font-size: 1.1em;
 }
 .navbar-openattic .navbar-utility>.active>a {
   color: #ececec;
