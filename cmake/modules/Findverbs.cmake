@@ -22,6 +22,13 @@ if(VERBS_FOUND)
       ibv_exp_query_gid_attr(ctxt, 1, 0, &gid_attr);
       return 0;
     } " HAVE_IBV_EXP)
+  if(NOT TARGET IBVerbs::verbs)
+    add_library(IBVerbs::verbs UNKNOWN IMPORTED)
+  endif()
+  set_target_properties(IBVerbs::verbs PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${VERBS_INCLUDE_DIR}"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+    IMPORTED_LOCATION "${VERBS_LIBRARIES}")
 endif()
 
 mark_as_advanced(
