@@ -21,6 +21,7 @@ endif(HAVE_XIO)
 list(APPEND msg_srcs
   async/AsyncConnection.cc
   async/AsyncMessenger.cc
+  async/Protocol.cc
   async/Event.cc
   async/EventSelect.cc
   async/PosixStack.cc
