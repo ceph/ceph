@@ -47,8 +47,8 @@ BaseMgrStandbyModule_init(BaseMgrStandbyModule *self, PyObject *args, PyObject *
         return -1;
     }
 
-    self->this_module = (StandbyPyModule*)PyCapsule_GetPointer(
-        this_module_capsule, nullptr);
+    self->this_module = static_cast<StandbyPyModule*>(PyCapsule_GetPointer(
+        this_module_capsule, nullptr));
     assert(self->this_module);
 
     return 0;

@@ -50,12 +50,10 @@ class LZ4Compressor : public Compressor {
     int pos = 0;
     const char *data;
     unsigned num = src.get_num_buffers();
-    uint32_t origin_len;
-    int compressed_len;
     encode((uint32_t)num, dst);
     while (left) {
-      origin_len = p.get_ptr_and_advance(left, &data);
-      compressed_len = LZ4_compress_fast_continue(
+      uint32_t origin_len = p.get_ptr_and_advance(left, &data);
+      int compressed_len = LZ4_compress_fast_continue(
         &lz4_stream, data, outptr.c_str()+pos, origin_len,
         outptr.length()-pos, 1);
       if (compressed_len <= 0)

@@ -211,7 +211,7 @@ class RGWOp_Set_Bucket_Quota : public RGWRESTOp {
 public:
   RGWOp_Set_Bucket_Quota() {}
 
-  int check_caps(RGWUserCaps& caps) {
+  int check_caps(RGWUserCaps& caps) override {
     return caps.check_cap("buckets", RGW_CAP_WRITE);
   }
 

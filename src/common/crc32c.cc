@@ -218,8 +218,8 @@ uint32_t ceph_crc32c_zeros(uint32_t crc, unsigned len)
   len = len >> 4;
   range = 4;
   while (len != 0) {
-    uint32_t crc1 = 0;
     if ((len & 1) == 1) {
+      uint32_t crc1 = 0;
       uint32_t* ptr = crc_turbo_table/*.val*/[range];
       while (crc != 0) {
         uint32_t mask = ~((crc & 1) - 1);

@@ -339,8 +339,7 @@ int MonMap::build_from_host_list(std::string hostlist, const std::string &prefix
   }
 
   // maybe they passed us a DNS-resolvable name
-  char *hosts = NULL;
-  hosts = resolve_addrs(hostlist.c_str());
+  char *hosts = resolve_addrs(hostlist.c_str());
   if (!hosts)
     return -EINVAL;
   bool success = parse_ip_port_vec(hosts, addrs);

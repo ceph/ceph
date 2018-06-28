@@ -3024,7 +3024,6 @@ int process_pg_map_command(
     cmd_putval(g_ceph_context, cmdmap, "pool", pool);
   }
 
-  int r = 0;
   stringstream ds;
   if (prefix == "pg stat") {
     if (f) {
@@ -3174,12 +3173,12 @@ int process_pg_map_command(
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
                g_conf->get_val<int64_t>("mon_pg_stuck_threshold"));
 
-    r = pg_map.dump_stuck_pg_stats(ds, f, (int)threshold, stuckop_vec);
-    odata->append(ds);
-    if (r < 0)
+    if (pg_map.dump_stuck_pg_stats(ds, f, (int)threshold, stuckop_vec) < 0) {
       *ss << "failed";
-    else
+    } else {
       *ss << "ok";
+    }
+    odata->append(ds);
     return 0;
   }
 

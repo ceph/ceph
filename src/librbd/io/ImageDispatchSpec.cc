@@ -15,7 +15,7 @@ struct ImageDispatchSpec<I>::SendVisitor
   : public boost::static_visitor<void> {
   ImageDispatchSpec* spec;
 
-  SendVisitor(ImageDispatchSpec* spec)
+  explicit SendVisitor(ImageDispatchSpec* spec)
     : spec(spec) {
   }
 

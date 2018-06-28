@@ -218,7 +218,7 @@ class DPDKWorker : public Worker {
   };
   std::unique_ptr<Impl> _impl;
 
-  virtual void initialize();
+  virtual void initialize() override;
   void set_ipv4_packet_filter(ip_packet_filter* filter) {
     _impl->_inet.set_packet_filter(filter);
   }
@@ -245,7 +245,7 @@ class DPDKStack : public NetworkStack {
     funcs.resize(cct->_conf->ms_async_max_op_threads);
   }
   virtual bool support_zero_copy_read() const override { return true; }
-  virtual bool support_local_listen_table() const { return true; }
+  virtual bool support_local_listen_table() const override { return true; }
 
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override {

@@ -54,7 +54,7 @@ struct ImageRequestWQ<I>::C_AcquireLock : public Context {
 template <typename I>
 struct ImageRequestWQ<I>::C_BlockedWrites : public Context {
   ImageRequestWQ *work_queue;
-  C_BlockedWrites(ImageRequestWQ *_work_queue)
+  explicit C_BlockedWrites(ImageRequestWQ *_work_queue)
     : work_queue(_work_queue) {
   }
 
