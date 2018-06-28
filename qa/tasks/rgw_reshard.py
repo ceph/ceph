@@ -8,6 +8,12 @@ Rgw manual and dynamic resharding  testing against a running instance
 #
 #
 
+
+import sys
+from teuthology.config import config
+from teuthology.orchestra import cluster, remote
+import argparse;
+
 import copy
 import json
 import logging
@@ -33,6 +39,17 @@ from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
 
+class BucketStats:
+    def __init__(self, bucket_name, bucket_id, num_objs=0, size_kb=0, num_shards = 0):
+        self.bucket_name= bucket_name
+        self.bucket_id= bucket_id
+        self.num_objs= num_objs
+        self.size_kb= size_kb
+        self.num_shards = num_shards if num_shards > 0 else 1
+
+    def get_num_shards(self, ctx, client):
+        self.num_shards = get_bucket_num_shards(ctx, client, self.bucket_name, self.bucket_id)
+
 def get_acl(key):
     """
     Helper function to get the xml acl from a key, ensuring that the xml
@@ -52,11 +69,58 @@ def get_acl(key):
         remove_newlines(raw_acl)
     )
 
+def  get_bucket_stats(ctx, client, bucket_name):
+    """
+    function to get bucket stats
+    """
+    (err, out) = rgwadmin(ctx, client,
+                          ['bucket', 'stats', '--bucket', bucket_name], check_status=True)
+    assert err == 0
+    bucket_id = out['id']
+    num_objects = 0
+    size_kb = 0
+    if (len(out['usage']) > 0):
+        num_objects = out['usage']['rgw.main']['num_objects']
+        size_kb = out['usage']['rgw.main']['size_kb']
+
+    num_shards = get_bucket_num_shards(ctx, client, bucket_name, bucket_id)
+    log.debug("bucket %s id %s num_objects %d size_kb %d num_shards %d", bucket_name, bucket_id, num_objects, size_kb, num_shards)
+    return BucketStats(bucket_name, bucket_id, num_objects, size_kb, num_shards)
+
+
+def  get_user_stats(ctx, client, uid):
+    """
+    function to get user stats
+    """
+    (err, out) = rgwadmin(ctx, client,
+                          ['user', 'stats', '--uid', uid], check_status=True)
+    assert err == 0
+    total_entries = out['stats']['total_entries']
+    total_bytes = out['stats']['total_bytes']
+    total_bytes_rounded = out['stats']['total_bytes_rounded']
+    log.debug("user %s total_entries %d total_bytes %d rounded %d", uid, total_entries, total_bytes, total_bytes_rounded)
+    return (total_entries, total_bytes, total_bytes_rounded)
+
+def get_bucket_num_shards(ctx, client, bucket_name, bucket_id):
+    """
+    function to get bucket num shards
+    """
+    metadata = 'bucket.instance:' + bucket_name +':' + bucket_id
+    log.debug("metadata %s", metadata)
+    (err, out) = rgwadmin(ctx, client,
+                          ['metadata', 'get', metadata], check_status=True)
+    assert err == 0
+    num_shards = out['data']['bucket_info']['num_shards']
+    log.debug("bucket %s id %s num_shards %d", bucket_name, bucket_id, num_shards )
+    return num_shards
+
 def task(ctx, config):
     """
     Test resharding functionality against a running rgw instance.
     """
     global log
+
+    log.debug('rgw_reshard config is: %r', config)
 
     assert ctx.rgw.config, \
         "rgw_reshard task needs a config passed from the rgw task"
@@ -64,22 +128,26 @@ def task(ctx, config):
     log.debug('rgw_reshard config is: %r', config)
 
     clients_from_config = config.keys()
+    log.debug('rgw_reshard config is: %r', config)
 
     # choose first client as default
     client = clients_from_config[0]
+    log.debug('rgw_reshard client is: %r', client)
 
     # once the client is chosen, pull the host name and  assigned port out of
     # the role_endpoints that were assigned by the rgw task
-    (remote_host, remote_port) = ctx.rgw.role_endpoints[client]
+    endpoint  = ctx.rgw.role_endpoints[client]
+    remote_host = endpoint.hostname
+    remote_port = endpoint.port
     log.debug('remote host %r remote port %r', remote_host, remote_port)
 
     ##
     user = 'testid'
     access_key='0555b35654ad1656d804'
     secret_key='h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q=='
-    bucket_name='myfoo'
+    bucket_name1='myfoo'
     bucket_name2='mybar'
-    bucket_name3="myver"
+    ver_bucket_name ='myver'
 
     # connect to rgw
     connection = boto.s3.connection.S3Connection(
@@ -92,37 +160,48 @@ def task(ctx, config):
         )
 
     # create a bucket
-    bucket = connection.create_bucket(bucket_name)
+    bucket1 = connection.create_bucket(bucket_name1)
     bucket2 = connection.create_bucket(bucket_name2)
-    bucket3 = connection.create_bucket(bucket_name3)
-    bucket3.configure_versioning(True)
+    ver_bucket = connection.create_bucket(ver_bucket_name)
+    ver_bucket.configure_versioning(True)
+
+    bucket_stats1 = get_bucket_stats(ctx, client, bucket_name1)
+    bucket_stats2 = get_bucket_stats(ctx, client, bucket_name2)
+    ver_bucket_stats = get_bucket_stats(ctx, client, ver_bucket_name)
 
     # TESTCASE 'reshard-list','reshard','list','no resharding','succeeds, empty list'
     (err, out) = rgwadmin(ctx, client, ['reshard', 'list'], check_status=True)
 
     # TESTCASE 'reshard-add','reshard','add','add bucket to resharding queue','succeeds'
-    num_shards = '8'
-    (err, out) = rgwadmin(ctx, client, ['reshard', 'add', '--bucket', bucket_name, '--num-shards', num_shards], check_status=True)
+    num_shards = bucket_stats1.num_shards + 1
+    (err, out) = rgwadmin(ctx, client, ['reshard', 'add', '--bucket', bucket_name1, '--num-shards', str(num_shards)], check_status=True)
     (err, out) = rgwadmin(ctx, client, ['reshard', 'list'], check_status=True)
     assert len(out) == 1
-    assert out[0]['bucket_name'] == bucket_name
+    assert out[0]['bucket_name'] == bucket_name1
 
     # TESTCASE 'reshard-process','reshard','','process bucket resharding','succeeds'
-    num_shards = '16'
-    (err, out) = rgwadmin(ctx, client, ['reshard', 'process', '--bucket', bucket_name], check_status=True)
+    (err, out) = rgwadmin(ctx, client, ['reshard', 'process', '--bucket', bucket_name1], check_status=True)
+    log.debug("process err %d" , err)
     # check bucket shards num
-    #assert(out['shards']) == num_shards
+    bucket_stats1 = get_bucket_stats(ctx, client, bucket_name1)
+    assert  bucket_stats1.num_shards == num_shards
 
     # create objs
     num_objs = 8
     for i in range(0, num_objs):
-        key = boto.s3.key.Key(bucket)
+        key = boto.s3.key.Key(bucket1)
         key.key = 'obj' + `i`
         key.set_contents_from_string(key.key)
 
-    (err, out) = rgwadmin(ctx, client, ['reshard', 'process', '--bucket', bucket_name], check_status=True)
+    num_shards = bucket_stats1.num_shards + 1
+    (err, out) = rgwadmin(ctx, client, ['reshard', 'add', '--bucket', bucket_name1, '--num-shards', str(num_shards)], check_status=True)
+    (err, out) = rgwadmin(ctx, client, ['reshard', 'list'], check_status=True)
+    assert len(out) == 1
+    assert out[0]['bucket_name'] == bucket_name1
+    (err, out) = rgwadmin(ctx, client, ['reshard', 'process', '--bucket', bucket_name1], check_status=True)
     # check bucket shards num
-    #assert(out['shards']) == num_shards
+    bucket_stats1 = get_bucket_stats(ctx, client, bucket_name1)
+    assert  bucket_stats1.num_shards == num_shards
 
     # TESTCASE 'dynamic reshard-process','reshard','','process bucket resharding','succeeds'
     # create objs
@@ -135,21 +214,32 @@ def task(ctx, config):
     #assert(out['shards']) == num_shards
 
     # TESTCASE 'manual resharding','bucket', 'reshard','','manual bucket resharding','succeeds'
-    num_shards = '32'
-    (err, out) = rgwadmin(ctx, client, ['bucket', 'reshard', '--bucket', bucket_name,  '--num-shards', num_shards], check_status=True)
+    num_shards = bucket_stats1.num_shards + 1
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'reshard', '--bucket', bucket_name1,  '--num-shards', str(num_shards)], check_status=True)
     # check bucket shards num
-    #assert(out['shards']) == num_shards
+    bucket_stats1 = get_bucket_stats(ctx, client, bucket_name1)
+    assert  bucket_stats1.num_shards == num_shards
 
     # TESTCASE 'versioning reshard-','bucket', reshard','versioning reshard','succeeds'
-    num_shards = '8'
-    (err, out) = rgwadmin(ctx, client, ['bucket', 'reshard', '--bucket', bucket_name3,  '--num-shards', num_shards], check_status=True)
+    num_shards = ver_bucket_stats.num_shards + 1
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'reshard', '--bucket', ver_bucket_name,  '--num-shards', str(num_shards)], check_status=True)
     # check bucket shards num
-    #assert(out['shards']) == num_shards
+    ver_bucket_stats = get_bucket_stats(ctx, client, ver_bucket_name)
+    assert  ver_bucket_stats.num_shards == num_shards
 
-import sys
-from teuthology.config import config
-from teuthology.orchestra import cluster, remote
-import argparse;
+    # Clean up
+    log.debug("Deleting bucket %s", bucket_name1)
+    for key in bucket1:
+        key.delete()
+    bucket1.delete()
+    log.debug("Deleting bucket %s", bucket_name2)
+    for key in bucket2:
+        key.delete()
+    bucket2.delete()
+    log.debug("Deleting bucket %s", ver_bucket_name)
+    for key in ver_bucket:
+        key.delete()
+    ver_bucket.delete()
 
 def main():
     if len(sys.argv) == 3:
