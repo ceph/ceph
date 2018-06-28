@@ -172,17 +172,14 @@ if(WITH_STATIC_LIBSTDCXX)
   endif()
 endif()
 
-option(WITH_VERBS "Enable RDMA verbs in async messenger" ON)
-if(WITH_VERBS)
+option(WITH_RDMA "Enable RDMA in async messenger" ON)
+if(WITH_RDMA)
   find_package(verbs REQUIRED)
   set(HAVE_VERBS ${VERBS_FOUND})
-endif(WITH_VERBS)
-
-option(WITH_RDMACM "Enable RDMA cm in async messenger" ON)
-if(WITH_RDMACM)
   find_package(rdmacm REQUIRED)
   set(HAVE_RDMACM ${RDMACM_FOUND})
-endif(WITH_RDMACM)
+  set(HAVE_RDMA TRUE)
+endif()
 
 find_package(Backtrace)
 

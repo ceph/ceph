@@ -411,7 +411,7 @@ if(HAVE_XIO)
 endif(HAVE_XIO)
 
 set(async_rdma_common_srcs)
-if(HAVE_VERBS AND HAVE_RDMACM)
+if(HAVE_RDMA)
   list(APPEND async_rdma_common_srcs
     msg/async/rdma/Infiniband.cc
     msg/async/rdma/RDMAConnectedSocketImpl.cc
