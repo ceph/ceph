@@ -242,7 +242,7 @@ struct ARN {
   ARN(const rgw_obj& o);
   ARN(const rgw_bucket& b);
   ARN(const rgw_bucket& b, const std::string& o);
-  ARN(const string& resource_name, const string& type, const string& tenant);
+  ARN(const string& resource_name, const string& type, const string& tenant, bool has_path=false);
 
   static boost::optional<ARN> parse(const std::string& s,
 				    bool wildcard = false);
