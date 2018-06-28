@@ -125,4 +125,12 @@ public:
   RGWStreamFlusher(Formatter *f, ostream& _os) : RGWFormatterFlusher(f), os(_os) {}
 };
 
+class RGWNullFlusher : public RGWFormatterFlusher {
+protected:
+  void do_flush() override {
+  }
+public:
+  RGWNullFlusher() : RGWFormatterFlusher(nullptr) {}
+};
+
 #endif
