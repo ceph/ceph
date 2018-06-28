@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { RouterModule } from '@angular/router';
 
-import { BsDropdownModule, CollapseModule, PopoverModule } from 'ngx-bootstrap';
+import { BsDropdownModule, CollapseModule, PopoverModule, TooltipModule } from 'ngx-bootstrap';
 
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
@@ -19,6 +19,7 @@ import { TaskManagerComponent } from './task-manager/task-manager.component';
     CollapseModule.forRoot(),
     BsDropdownModule.forRoot(),
     PopoverModule.forRoot(),
+    TooltipModule.forRoot(),
     AppRoutingModule,
     SharedModule,
     RouterModule
