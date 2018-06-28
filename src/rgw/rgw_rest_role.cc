@@ -42,7 +42,7 @@ int RGWRestRole::verify_permission()
   if (!verify_user_permission(s,
                               rgw::IAM::ARN(resource_name,
                                             "role",
-                                             s->user->user_id.tenant),
+                                             s->user->user_id.tenant, true),
                                              op)) {
     return -EACCES;
   }
@@ -88,7 +88,7 @@ int RGWCreateRole::verify_permission()
   if (!verify_user_permission(s,
                               rgw::IAM::ARN(resource_name,
                                             "role",
-                                             s->user->user_id.tenant),
+                                             s->user->user_id.tenant, true),
                                              get_op())) {
     return -EACCES;
   }
@@ -179,7 +179,7 @@ int RGWGetRole::_verify_permission(const RGWRole& role)
   if (!verify_user_permission(s,
                               rgw::IAM::ARN(resource_name,
                                             "role",
-                                             s->user->user_id.tenant),
+                                             s->user->user_id.tenant, true),
                                              get_op())) {
     return -EACCES;
   }
