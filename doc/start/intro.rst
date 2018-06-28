@@ -28,8 +28,9 @@ required when running Ceph Filesystem clients.
   state of the Ceph cluster, including storage utilization, current
   performance metrics, and system load.  The Ceph Manager daemons also
   host python-based plugins to manage and expose Ceph cluster
-  information, including a web-based `dashboard`_ and `REST API`_.  At
-  least two managers are normally required for high availability.
+  information, including a web-based :doc:`/mgr/dashboard` and
+  `REST API`_.  At least two managers are normally required for high
+  availability.
 
 - **Ceph OSDs**: A :term:`Ceph OSD` (object storage daemon,
   ``ceph-osd``) stores data, handles data replication, recovery,
@@ -51,7 +52,6 @@ contain the object, and further calculates which Ceph OSD Daemon
 should store the placement group.  The CRUSH algorithm enables the
 Ceph Storage Cluster to scale, rebalance, and recover dynamically.
 
-.. _dashboard: ../../mgr/dashboard
 .. _REST API: ../../mgr/restful
 
 .. raw:: html
