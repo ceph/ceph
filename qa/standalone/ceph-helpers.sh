@@ -183,8 +183,8 @@ function teardown() {
 	    display_logs $dir
         else
 	    # Move logs to where Teuthology will archive it
-	    sudo mkdir -p $TESTDIR/archive/log
-	    sudo mv $dir/*.log $TESTDIR/archive/log
+	    mkdir -p $TESTDIR/archive/log
+	    mv $dir/*.log $TESTDIR/archive/log
 	fi
     fi
     rm -fr $dir
