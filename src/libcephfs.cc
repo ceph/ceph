@@ -378,6 +378,13 @@ extern "C" void ceph_shutdown(struct ceph_mount_info *cmount)
   cmount = nullptr;
 }
 
+extern "C" uint64_t ceph_get_instance_id(struct ceph_mount_info *cmount)
+{
+  if (cmount->is_initialized())
+    return cmount->get_client()->get_nodeid().v;
+  return 0;
+}
+
 extern "C" int ceph_conf_read_file(struct ceph_mount_info *cmount, const char *path)
 {
   return cmount->conf_read_file(path);
