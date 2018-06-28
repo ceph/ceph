@@ -49,6 +49,9 @@ class Zap(object):
     @decorators.needs_root
     def zap(self, args):
         device = args.device
+        if disk.is_mapper_device(device):
+            terminal.error("Refusing to zap the mapper device: {}".format(device))
+            raise SystemExit(1)
         lv = api.get_lv_from_argument(device)
         if lv:
             # we are zapping a logical volume

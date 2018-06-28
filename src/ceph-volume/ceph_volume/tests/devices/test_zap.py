@@ -14,4 +14,13 @@ class TestZap(object):
             lvm.zap.Zap(argv=['--help']).main()
         stdout, stderr = capsys.readouterr()
         assert 'optional arguments' in stdout
-        assert 'positional arguments' in stdout
+
+    @pytest.mark.parametrize('device_name', [
+        '/dev/mapper/foo',
+        '/dev/dm-0',
+    ])
+    def test_can_not_zap_mapper_device(self, capsys, is_root, device_name):
+        with pytest.raises(SystemExit):
+            lvm.zap.Zap(argv=[device_name]).main()
+        stdout, stderr = capsys.readouterr()
+        assert 'Refusing to zap' in stdout
