@@ -7,6 +7,7 @@ import functools
 
 import collections
 from datetime import datetime, timedelta
+from distutils.util import strtobool
 import fnmatch
 import time
 import threading
@@ -741,7 +742,25 @@ def getargspec(func):
     return _getargspec(func)
 
 
-def str_to_bool(var):
-    if isinstance(var, bool):
-        return var
-    return var.lower() in ("true", "yes", "1", 1)
+def str_to_bool(val):
+    """
+    Convert a string representation of truth to True or False.
+
+    >>> str_to_bool('true') and str_to_bool('yes') and str_to_bool('1') and str_to_bool(True)
+    True
+
+    >>> str_to_bool('false') and str_to_bool('no') and str_to_bool('0') and str_to_bool(False)
+    False
+
+    >>> str_to_bool('xyz')
+    Traceback (most recent call last):
+        ...
+    ValueError: invalid truth value 'xyz'
+
+    :param val: The value to convert.
+    :type val: str|bool
+    :rtype: bool
+    """
+    if isinstance(val, bool):
+        return val
+    return bool(strtobool(val))
