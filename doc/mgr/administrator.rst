@@ -75,7 +75,7 @@ daemon, if the client tries to connect to a standby.
 Consult the documentation pages for individual manager modules for more
 information about what functionality each module provides.
 
-Here is an example of enabling the ``dashboard`` module:
+Here is an example of enabling the :term:`Dashboard` module:
 
 ::
 
