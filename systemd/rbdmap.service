@@ -2,7 +2,8 @@
 Description=Map RBD devices
 
 After=network-online.target
-Wants=network-online.target
+Before=remote-fs-pre.target
+Wants=network-online.target remote-fs-pre.target
 
 [Service]
 EnvironmentFile=-/etc/sysconfig/ceph
