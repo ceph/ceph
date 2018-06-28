@@ -1,31 +1,24 @@
-set(test_buffer_srcs
-  test_buffer.cc
-  $<TARGET_OBJECTS:seastar_buffer_obj>)
-add_executable(unittest_seastar_buffer ${test_buffer_srcs})
+add_executable(unittest_seastar_buffer
+  test_buffer.cc)
 add_ceph_unittest(unittest_seastar_buffer)
-target_link_libraries(unittest_seastar_buffer ceph-common Seastar::seastar)
+target_link_libraries(unittest_seastar_buffer ceph-common crimson)
 
 add_executable(unittest_seastar_denc
   test_denc.cc
-  $<TARGET_OBJECTS:seastar_buffer_obj>
   $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_seastar_denc)
-target_link_libraries(unittest_seastar_denc ceph-common global Seastar::seastar)
+target_link_libraries(unittest_seastar_denc ceph-common global crimson)
 
-set(test_messenger_srcs
-  test_messenger.cc
-  $<TARGET_OBJECTS:seastar_buffer_obj>
-  $<TARGET_OBJECTS:crimson_net_objs>
-  $<TARGET_OBJECTS:crimson_thread_objs>)
-add_executable(unittest_seastar_messenger ${test_messenger_srcs})
+add_executable(unittest_seastar_messenger test_messenger.cc)
 add_ceph_unittest(unittest_seastar_messenger)
-target_link_libraries(unittest_seastar_messenger ceph-common Seastar::seastar)
+target_link_libraries(unittest_seastar_messenger ceph-common crimson)
 
-set(test_alien_echo_srcs
-  test_alien_echo.cc
-  $<TARGET_OBJECTS:seastar_buffer_obj>
-  $<TARGET_OBJECTS:crimson_net_objs>
-  $<TARGET_OBJECTS:crimson_thread_objs>)
-add_executable(unittest_seastar_echo ${test_alien_echo_srcs})
+add_executable(unittest_seastar_echo
+  test_alien_echo.cc)
 add_ceph_unittest(unittest_seastar_echo)
-target_link_libraries(unittest_seastar_echo ceph-common global Seastar::seastar)
+target_link_libraries(unittest_seastar_echo ceph-common global crimson)
+
+add_executable(unittest_seastar_thread_pool
+  test_thread_pool.cc)
+add_ceph_unittest(unittest_seastar_thread_pool)
+target_link_libraries(unittest_seastar_thread_pool crimson)
