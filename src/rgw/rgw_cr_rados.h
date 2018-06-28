@@ -101,6 +101,59 @@ public:
   }
 };
 
+template <class P>
+class RGWSimpleWriteOnlyAsyncCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+
+  P params;
+
+  class Request : public RGWAsyncRadosRequest {
+    RGWRados *store;
+    P params;
+  protected:
+    int _send_request() override;
+  public:
+    Request(RGWCoroutine *caller,
+            RGWAioCompletionNotifier *cn,
+            RGWRados *store,
+            const P& _params) : RGWAsyncRadosRequest(caller, cn),
+                                store(store),
+                                params(_params) {}
+  } *req{nullptr};
+
+ public:
+  RGWSimpleWriteOnlyAsyncCR(RGWAsyncRadosProcessor *_async_rados,
+			    RGWRados *_store,
+			    const P& _params) : RGWSimpleCoroutine(_store->ctx()),
+                                                async_rados(_async_rados),
+                                                store(_store),
+				                params(_params) {}
+
+  ~RGWSimpleWriteOnlyAsyncCR() override {
+    request_cleanup();
+  }
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request() override {
+    req = new Request(this,
+                      stack->create_completion_notifier(),
+                      store,
+                      params);
+
+    async_rados->queue(req);
+    return 0;
+  }
+  int request_complete() override {
+    return req->get_ret_status();
+  }
+};
+
 
 class RGWAsyncGetSystemObj : public RGWAsyncRadosRequest {
   RGWSysObjectCtx obj_ctx;
