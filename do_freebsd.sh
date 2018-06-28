@@ -32,6 +32,7 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D WITH_LIBCEPHFS=OFF \
 	-D WITH_CEPHFS=OFF \
 	-D WITH_MGR=YES \
+	-D WITH_RDMA=OFF \
 	-D WITH_SPDK=OFF \
 	2>&1 | tee cmake.log
 
