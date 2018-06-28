@@ -124,6 +124,13 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		The Ceph manager software, which collects all the state from the whole
 		cluster in one place.
 
+	Ceph Manager Dashboard
+	Ceph Dashboard
+	Dashboard Plugin
+	Dashboard
+                A built-in web based monitoring and administration application to
+                Ceph Manager. Refer :doc:`/mgr/dashboard` for more details.
+
 	Ceph Metadata Server
 	MDS
 		The Ceph metadata software.
