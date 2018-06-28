@@ -7,12 +7,14 @@ import { BsDropdownModule, CollapseModule, PopoverModule, TooltipModule } from '
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
 import { AuthModule } from '../auth/auth.module';
+import { AboutComponent } from './about/about.component';
 import { DashboardHelpComponent } from './dashboard-help/dashboard-help.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
 import { TaskManagerComponent } from './task-manager/task-manager.component';
 
 @NgModule({
+  entryComponents: [AboutComponent],
   imports: [
     CommonModule,
     AuthModule,
@@ -25,6 +27,7 @@ import { TaskManagerComponent } from './task-manager/task-manager.component';
     RouterModule
   ],
   declarations: [
+    AboutComponent,
     NavigationComponent,
     NotificationsComponent,
     TaskManagerComponent,
