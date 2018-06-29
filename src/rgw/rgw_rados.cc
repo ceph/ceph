@@ -2771,7 +2771,7 @@ void RGWRados::create_bucket_id(string *bucket_id)
   *bucket_id = buf;
 }
 
-int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
+int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
