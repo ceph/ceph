@@ -12,6 +12,7 @@ import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
+import { PoolFormComponent } from './ceph/pool/pool-form/pool-form.component';
 import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
 import { Rgw501Component } from './ceph/rgw/rgw-501/rgw-501.component';
 import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
@@ -92,9 +93,14 @@ const routes: Routes = [
   // Pools
   {
     path: 'pool',
-    component: PoolListComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Pools' }
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'Pools' },
+    children: [
+      { path: '', component: PoolListComponent },
+      { path: 'add', component: PoolFormComponent, data: { breadcrumbs: 'Add' } },
+      { path: 'edit/:name', component: PoolFormComponent, data: { breadcrumbs: 'Edit' } }
+    ]
   },
   // Block
   {
