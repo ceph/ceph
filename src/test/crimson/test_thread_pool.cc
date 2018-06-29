@@ -26,7 +26,7 @@ seastar::future<> test_accumulate(ThreadPool& tp) {
 
 int main(int argc, char** argv)
 {
-  ThreadPool tp{2, 128};
+  ThreadPool tp{2, 128, 0};
   seastar::app_template app;
   return app.run(argc, argv, [&tp] {
       return tp.start().then([&tp] {

@@ -71,6 +71,7 @@ class ThreadPool {
   bool is_stopping() const {
     return stopping.load(std::memory_order_relaxed);
   }
+  static void pin(unsigned cpu_id);
   seastar::semaphore& local_free_slots() {
     return submit_queue.local().free_slots;
   }
@@ -82,11 +83,12 @@ public:
    *                 it waits in this queue. we will round this number to
    *                 multiple of the number of cores.
    * @param n_threads the number of threads in this thread pool.
-   * @note, each @c Task has its own ceph::thread::Condition, which possesses
+   * @param cpu the CPU core to which this thread pool is assigned
+   * @note each @c Task has its own ceph::thread::Condition, which possesses
    * possesses an fd, so we should keep the size of queue under a resonable
    * limit.
    */
-  ThreadPool(size_t n_threads, size_t queue_sz);
+  ThreadPool(size_t n_threads, size_t queue_sz, unsigned cpu);
   ~ThreadPool();
   seastar::future<> start();
   seastar::future<> stop();
