@@ -115,6 +115,9 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_bytes_written_sst, "bytes_written_sst",
 		    "Bytes written to SSTs", "sst",
 		    PerfCountersBuilder::PRIO_CRITICAL, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_bytes_written_slow, "bytes_written_slow",
+		    "Bytes written to WAL/SSTs at slow device", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -1763,6 +1766,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   h->tail_block.clear();
 
   uint64_t bloff = 0;
+  uint64_t bytes_written_slow = 0;
   while (length > 0) {
     uint64_t x_len = std::min(p->length - x_off, length);
     bufferlist t;
@@ -1798,11 +1802,16 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       bdev[p->bdev]->aio_write(p->offset + x_off, t, h->iocv[p->bdev], buffered);
     }
     h->dirty_devs[p->bdev] = true;
+    if (p->bdev == BDEV_SLOW) {
+      bytes_written_slow += t.length();
+    }
+
     bloff += x_len;
     length -= x_len;
     ++p;
     x_off = 0;
   }
+  logger->inc(l_bluefs_bytes_written_slow, bytes_written_slow);
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
       assert(h->iocv[i]);
