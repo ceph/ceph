@@ -16,11 +16,9 @@ int RGWUserCreateCR::Request::_send_request()
 
   RGWUserAdminOpState op_state;
 
-  rgw_user uid(params.uid);
+  auto& user = params.user;
 
-  uid.tenant = params.tenant_name;
-
-  op_state.set_user_id(uid);
+  op_state.set_user_id(user);
   op_state.set_display_name(params.display_name);
   op_state.set_user_email(params.email);
   op_state.set_caps(params.caps);
@@ -86,8 +84,15 @@ int RGWUserCreateCR::Request::_send_request()
 template<>
 int RGWGetUserInfoCR::Request::_send_request()
 {
-  rgw_user user(params.tenant, params.uid);
-  return rgw_get_user_info_by_uid(store, user, result->user_info);
+  return rgw_get_user_info_by_uid(store, params.user, *result);
+}
+
+template<>
+int RGWGetBucketInfoCR::Request::_send_request()
+{
+  RGWObjectCtx obj_ctx(store);
+  return store->get_bucket_info(obj_ctx, params.tenant, params.bucket_name,
+                                result->bucket_info, &result->mtime, &result->attrs);
 }
 
 template<>

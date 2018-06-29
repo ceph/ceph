@@ -5,14 +5,13 @@
 
 
 struct rgw_user_create_params {
-  std::string uid;
+  rgw_user user;
   std::string display_name;
   std::string email;
   std::string access_key;
   std::string secret_key;
   std::string key_type; /* "swift" or "s3" */
   std::string caps;
-  std::string tenant_name;
 
   bool generate_key{true};
   bool suspended{false};
@@ -24,17 +23,24 @@ struct rgw_user_create_params {
 
 using RGWUserCreateCR = RGWSimpleWriteOnlyAsyncCR<rgw_user_create_params>;
 
-
 struct rgw_get_user_info_params {
-  std::string uid;
-  std::string tenant;
+  rgw_user user;
 };
 
-struct rgw_get_user_info_result {
-  RGWUserInfo user_info;
+using RGWGetUserInfoCR = RGWSimpleAsyncCR<rgw_get_user_info_params, RGWUserInfo>;
+
+struct rgw_get_bucket_info_params {
+  string tenant;
+  string bucket_name;
 };
 
-using RGWGetUserInfoCR = RGWSimpleAsyncCR<rgw_get_user_info_params, rgw_get_user_info_result>;
+struct rgw_get_bucket_info_result {
+  ceph::real_time mtime;
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+};
+
+using RGWGetBucketInfoCR = RGWSimpleAsyncCR<rgw_get_bucket_info_params, rgw_get_bucket_info_result>;
 
 struct rgw_bucket_create_local_params {
   shared_ptr<RGWUserInfo> user_info;

@@ -204,7 +204,8 @@ class RGWSimpleAsyncCR : public RGWSimpleCoroutine {
     req = new Request(this,
                       stack->create_completion_notifier(),
                       store,
-                      params);
+                      params,
+                      result);
 
     async_rados->queue(req);
     return 0;
