@@ -8,10 +8,18 @@
 find_path(RDMACM_INCLUDE_DIR rdma/rdma_cma.h)
 find_library(RDMACM_LIBRARIES rdmacm)
 
-# handle the QUIETLY and REQUIRED arguments and set UUID_FOUND to TRUE if
-# all listed variables are TRUE
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(rdmacm DEFAULT_MSG RDMACM_LIBRARIES RDMACM_INCLUDE_DIR)
+
+if(RDMACM_FOUND)
+  if(NOT TARGET RDMA::RDMAcm)
+    add_library(RDMA::RDMAcm UNKNOWN IMPORTED)
+  endif()
+  set_target_properties(RDMA::RDMAcm PROPERTIES
+    INTERFACE_INCLUDE_DIRECTORIES "${RDMACM_INCLUDE_DIR}"
+    IMPORTED_LINK_INTERFACE_LANGUAGES "C"
+    IMPORTED_LOCATION "${RDMACM_LIBRARIES}")
+endif()
 
 mark_as_advanced(
   RDMACM_LIBRARIES
