@@ -238,11 +238,18 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     }
 
     std::string mgr_prefix = "mgr/";
-    if (key.size() >= mgr_prefix.size() &&
-        key.substr(0, mgr_prefix.size()) == mgr_prefix) {
+    std::string dashboard_prefix = "mgr/dashboard";
+    if ((key.size() >= mgr_prefix.size() &&
+         key.substr(0, mgr_prefix.size()) == mgr_prefix)
+        &&
+        (key.size() < dashboard_prefix.size() ||
+         key.substr(0, dashboard_prefix.size()) != dashboard_prefix)) {
+
       // In <= mimic, we used config-key for mgr module configuration,
       // and we bring values forward in an upgrade, but subsequent
-      // `set` operations will not be picked up.  Warn user about this.
+      // `set` operations will not be picked up.  Warn user about this,
+      // unless they're addressing the dashboard, which uses config-key
+      // for its certificates in Mimic (but not in Nautilus)
       ss << "WARNING: it looks like you might be trying to set a ceph-mgr "
             "module configuration key.  Since Ceph 13.0.0 (Mimic), mgr module "
             "configuration is done with `config set`, and new values "
