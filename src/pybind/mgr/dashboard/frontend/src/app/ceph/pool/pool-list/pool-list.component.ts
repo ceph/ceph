@@ -1,9 +1,17 @@
 import { Component } from '@angular/core';
 
+import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+
 import { PoolService } from '../../../shared/api/pool.service';
+import {
+  DeletionModalComponent
+} from '../../../shared/components/deletion-modal/deletion-modal.component';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { ExecutingTask } from '../../../shared/models/executing-task';
+import { FinishedTask } from '../../../shared/models/finished-task';
+import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { Pool } from '../pool';
 
 @Component({
@@ -15,8 +23,14 @@ export class PoolListComponent {
   pools: Pool[] = [];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
+  modalRef: BsModalRef;
+  executingTasks: ExecutingTask[] = [];
 
-  constructor(private poolService: PoolService) {
+  constructor(
+    private poolService: PoolService,
+    private taskWrapper: TaskWrapperService,
+    private modalService: BsModalService
+  ) {
     this.columns = [
       {
         prop: 'pool_name',
@@ -77,5 +91,19 @@ export class PoolListComponent {
         context.error();
       }
     );
+  }
+
+  deletePoolModal() {
+    const name = this.selection.first().pool_name;
+    this.modalRef = this.modalService.show(DeletionModalComponent, {
+      initialState: {
+        itemDescription: 'Pool',
+        submitActionObservable: () =>
+          this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask('pool/delete', { pool_name: name }),
+            call: this.poolService.delete(name)
+          })
+      }
+    });
   }
 }

@@ -54,6 +54,12 @@ describe('PoolService', () => {
     expect(req.request.body).toEqual({ application_metadata: [] });
   });
 
+  it('should call delete', () => {
+    service.delete('somePool').subscribe();
+    const req = httpTesting.expectOne(`${apiPath}/somePool`);
+    expect(req.request.method).toBe('DELETE');
+  });
+
   it(
     'should call list without parameter',
     fakeAsync(() => {
