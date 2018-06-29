@@ -7,6 +7,7 @@ import { PoolService } from './pool.service';
 describe('PoolService', () => {
   let service: PoolService;
   let httpTesting: HttpTestingController;
+  const apiPath = 'api/pool';
 
   configureTestBed({
     providers: [PoolService],
@@ -28,8 +29,29 @@ describe('PoolService', () => {
 
   it('should call getList', () => {
     service.getList().subscribe();
-    const req = httpTesting.expectOne('api/pool');
+    const req = httpTesting.expectOne(apiPath);
     expect(req.request.method).toBe('GET');
+  });
+
+  it('should call getInfo', () => {
+    service.getInfo().subscribe();
+    const req = httpTesting.expectOne(`${apiPath}/_info`);
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call create', () => {
+    const pool = { pool: 'somePool' };
+    service.create(pool).subscribe();
+    const req = httpTesting.expectOne(apiPath);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(pool);
+  });
+
+  it('should call update', () => {
+    service.update({ pool: 'somePool', application_metadata: [] }).subscribe();
+    const req = httpTesting.expectOne(`${apiPath}/somePool`);
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ application_metadata: [] });
   });
 
   it(
@@ -37,7 +59,7 @@ describe('PoolService', () => {
     fakeAsync(() => {
       let result;
       service.list().then((resp) => (result = resp));
-      const req = httpTesting.expectOne('api/pool?attrs=');
+      const req = httpTesting.expectOne(`${apiPath}?attrs=`);
       expect(req.request.method).toBe('GET');
       req.flush(['foo', 'bar']);
       tick();
@@ -50,7 +72,7 @@ describe('PoolService', () => {
     fakeAsync(() => {
       let result;
       service.list(['foo']).then((resp) => (result = resp));
-      const req = httpTesting.expectOne('api/pool?attrs=foo');
+      const req = httpTesting.expectOne(`${apiPath}?attrs=foo`);
       expect(req.request.method).toBe('GET');
       req.flush(['foo', 'bar']);
       tick();
