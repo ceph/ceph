@@ -102,7 +102,8 @@ namespace ceph::internal {
 template<LockPolicy lp>
 md_config_impl<lp>::md_config_impl(bool is_daemon)
   : is_daemon(is_daemon),
-    cluster("")
+    cluster(""),
+    lock("md_config_t", true, false)
 {
   // Load the compile-time list of Option into
   // a map so that we can resolve keys quickly.
