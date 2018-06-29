@@ -5269,6 +5269,56 @@ void BlueStore::_dump_alloc_on_rebalance_failure()
   }
 }
 
+
+int BlueStore::allocate_bluefs_freespace(uint64_t size)
+{
+  PExtentVector extents;
+
+  if (size) {
+    // round up to alloc size
+    size = p2roundup(size, cct->_conf->bluefs_alloc_size);
+
+    uint64_t gift;
+    do {
+      // hard cap to fit into 32 bits
+      gift = std::min<uint64_t>(size, 1ull << 31);
+      dout(10) << __func__ << " gifting " << gift
+	       << " (" << byte_u_t(gift) << ")" << dendl;
+
+      int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+					  0, 0, &extents);
+
+      if (alloc_len < (int64_t)gift) {
+	dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
+		<< " min_alloc_size 0x" << cct->_conf->bluefs_alloc_size
+		<< std::dec << dendl;
+        alloc->dump();
+        alloc->release(extents);
+	return -ENOSPC;
+      }
+      size -= gift;
+    } while (size);
+    KeyValueDB::Transaction synct = db->get_transaction();
+    for (auto& e : extents) {
+      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+      bluefs->add_block_extent( bluefs_shared_bdev, e.offset, e.length);
+      bluefs_extents.insert(e.offset, e.length);
+    }
+
+    bufferlist bl;
+
+    encode(bluefs_extents, bl);
+    dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
+	      << bluefs_extents << std::dec << dendl;
+    synct->set(PREFIX_SUPER, "bluefs_extents", bl);
+
+    int r = db->submit_transaction_sync(synct);
+    assert(r == 0);
+
+  }
+  return 0;
+}
+
 int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 {
   int ret = 0;
@@ -5353,12 +5403,13 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 
     if (alloc_len <= 0) {
       dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
-              << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+              << " min_alloc_size 0x" << cct->_conf->bluefs_alloc_size
+	      << std::dec << dendl;
       _dump_alloc_on_rebalance_failure();
       return 0;
     } else if (alloc_len < (int64_t)gift) {
       dout(0) << __func__ << " insufficient allocate on 0x" << std::hex << gift
-              << " min_alloc_size 0x" << min_alloc_size 
+              << " min_alloc_size 0x" << cct->_conf->bluefs_alloc_size
 	      << " allocated 0x" << alloc_len
 	      << std::dec << dendl;
       _dump_alloc_on_rebalance_failure();
@@ -6812,7 +6863,7 @@ int BlueStore::_fsck(bool deep, bool repair)
       apply(
         e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	ceph_assert(pos < bs.size());
+	  ceph_assert(pos < bs.size());
 	  bs.reset(pos);
         }
       );

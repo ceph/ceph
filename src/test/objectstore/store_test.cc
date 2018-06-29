@@ -7315,6 +7315,30 @@ TEST_P(StoreTest, SpuriousReadErrorTest) {
   }
 }
 
+TEST_P(StoreTest, allocateBlueFSTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  BlueStore* bstore = NULL;
+  EXPECT_NO_THROW(bstore = dynamic_cast<BlueStore*> (store.get()));
+
+  struct store_statfs_t statfs;
+  store->statfs(&statfs);
+
+  uint64_t to_alloc = g_conf().get_val<uint64_t>("bluefs_alloc_size");
+
+  int r = bstore->allocate_bluefs_freespace(to_alloc);
+  ASSERT_EQ(r, 0);
+  r = bstore->allocate_bluefs_freespace(statfs.total);
+  ASSERT_EQ(r, -ENOSPC);
+  r = bstore->allocate_bluefs_freespace(to_alloc * 16);
+  ASSERT_EQ(r, 0);
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
+  r = store->mount();
+  ASSERT_EQ(r, 0);
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {

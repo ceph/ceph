@@ -2529,6 +2529,8 @@ public:
     return true;
   }
 
+  int allocate_bluefs_freespace(uint64_t size);
+
 private:
   bool _debug_data_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
