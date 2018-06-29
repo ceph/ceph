@@ -17,25 +17,31 @@
 
 #include <map>
 #include <list>
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/lock_cond.h"
+#include "common/lock_mutex.h"
+#include "common/lock_policy.h"
+#include "common/lock_shared_ptr.h"
 #include "include/unordered_map.h"
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/assert.h"
 
-template <class K, class V, class C = std::less<K>, class H = std::hash<K> >
+template <class K, class V,
+	  ceph::internal::LockPolicy lock_policy = ceph::internal::LockPolicy::MUTEX>
 class SharedLRU {
   CephContext *cct;
-  typedef std::shared_ptr<V> VPtr;
-  typedef std::weak_ptr<V> WeakVPtr;
-  Mutex lock;
+  using shared_ptr_trait_t = ceph::internal::SharedPtrTrait<lock_policy>;
+  using VPtr = typename shared_ptr_trait_t::template shared_ptr<V>;
+  using WeakVPtr = typename shared_ptr_trait_t::template weak_ptr<V>;
+  ceph::internal::LockMutex<lock_policy> lock;
   size_t max_size;
-  Cond cond;
+  ceph::internal::LockCond<lock_policy> cond;
   unsigned size;
 public:
   int waiting;
 private:
+  using C = std::less<K>;
+  using H = std::hash<K>;
   ceph::unordered_map<K, typename list<pair<K, VPtr> >::iterator, H> contents;
   list<pair<K, VPtr> > lru;
 
@@ -72,7 +78,7 @@ private:
   }
 
   void remove(const K& key, V *valptr) {
-    Mutex::Locker l(lock);
+    auto locker = lock();
     typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
     if (i != weak_refs.end() && i->second.second == valptr) {
       weak_refs.erase(i);
@@ -82,9 +88,9 @@ private:
 
   class Cleanup {
   public:
-    SharedLRU<K, V, C> *cache;
+    SharedLRU<K, V> *cache;
     K key;
-    Cleanup(SharedLRU<K, V, C> *cache, K key) : cache(cache), key(key) {}
+    Cleanup(SharedLRU<K, V> *cache, K key) : cache(cache), key(key) {}
     void operator()(V *ptr) {
       cache->remove(key, ptr);
       delete ptr;
@@ -117,7 +123,7 @@ public:
     // reorder.
     map<K, pair<WeakVPtr, V*>, C> temp;
 
-    Mutex::Locker l(lock);
+    auto locker = lock();
     temp.swap(weak_refs);
 
     // reconstruct with new comparator
@@ -154,7 +160,7 @@ public:
   void clear() {
     while (true) {
       VPtr val; // release any ref we have after we drop the lock
-      Mutex::Locker l(lock);
+      auto locker = lock();
       if (size == 0)
         break;
 
@@ -166,7 +172,7 @@ public:
   void clear(const K& key) {
     VPtr val; // release any ref we have after we drop the lock
     {
-      Mutex::Locker l(lock);
+      auto locker = lock();
       typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
       if (i != weak_refs.end()) {
 	val = i->second.first.lock();
@@ -178,7 +184,7 @@ public:
   void purge(const K &key) {
     VPtr val; // release any ref we have after we drop the lock
     {
-      Mutex::Locker l(lock);
+      auto locker = lock();
       typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.find(key);
       if (i != weak_refs.end()) {
 	val = i->second.first.lock();
@@ -191,7 +197,7 @@ public:
   void set_size(size_t new_size) {
     list<VPtr> to_release;
     {
-      Mutex::Locker l(lock);
+      auto locker = lock();
       max_size = new_size;
       trim_cache(&to_release);
     }
@@ -199,7 +205,7 @@ public:
 
   // Returns K key s.t. key <= k for all currently cached k,v
   K cached_key_lower_bound() {
-    Mutex::Locker l(lock);
+    auto locker = lock();
     return weak_refs.begin()->first;
   }
 
@@ -207,7 +213,7 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      Mutex::Locker l(lock);
+      auto locker = lock();
       ++waiting;
       bool retry = false;
       do {
@@ -234,7 +240,7 @@ public:
   bool get_next(const K &key, pair<K, VPtr> *next) {
     pair<K, VPtr> r;
     {
-      Mutex::Locker l(lock);
+      auto locker = lock();
       VPtr next_val;
       typename map<K, pair<WeakVPtr, V*>, C>::iterator i = weak_refs.upper_bound(key);
 
@@ -267,7 +273,7 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      Mutex::Locker l(lock);
+      auto locker = lock();
       ++waiting;
       bool retry = false;
       do {
@@ -292,7 +298,7 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      Mutex::Locker l(lock);
+      auto locker = lock();
       bool retry = false;
       do {
 	retry = false;
@@ -325,7 +331,7 @@ public:
    * in the cache.
    */
   bool empty() {
-    Mutex::Locker l(lock);
+    auto locker = lock();
     return weak_refs.empty();
   }
 
@@ -345,7 +351,7 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      Mutex::Locker l(lock);
+      auto locker = lock();
       typename map<K, pair<WeakVPtr, V*>, C>::iterator actual =
 	weak_refs.lower_bound(key);
       if (actual != weak_refs.end() && actual->first == key) {

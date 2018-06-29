@@ -2,13 +2,9 @@
 
 #pragma once
 
+#include "lock_policy.h"
+
 namespace ceph::internal {
-
-enum class LockPolicy {
-  SINGLE,
-  MUTEX,
-};
-
 template<LockPolicy lp> struct md_config_impl;
 template<LockPolicy lp> class md_config_obs_impl;
 }
