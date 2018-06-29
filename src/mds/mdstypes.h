@@ -421,22 +421,28 @@ public:
   void free_data() {
     blp.reset();
   }
-  bufferlist& get_data() {
+  void get_data(bufferlist& ret) const {
+    if (blp)
+      ret = *blp;
+    else
+      ret.clear();
+  }
+  void set_data(bufferlist& bl) {
     if (!blp)
       blp.reset(new bufferlist);
-    return *blp;
+    *blp = bl;
   }
   size_t length() const { return blp ? blp->length() : 0; }
 
   inline_data_t() {}
   inline_data_t(const inline_data_t& o) : version(o.version) {
     if (o.blp)
-      get_data() = *o.blp;
+      set_data(*o.blp);
   }
   inline_data_t& operator=(const inline_data_t& o) {
     version = o.version;
     if (o.blp)
-      get_data() = *o.blp;
+      set_data(*o.blp);
     else
       free_data();
     return *this;

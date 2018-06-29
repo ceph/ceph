@@ -396,11 +396,15 @@ void EMetaBlob::fullbit::encode(bufferlist& bl, uint64_t features) const {
   encode(dnfirst, bl);
   encode(dnlast, bl);
   encode(dnv, bl);
-  encode(inode, bl, features);
-  encode(xattrs, bl);
-  if (inode.is_symlink())
+  encode(*inode, bl, features);
+  if (xattrs)
+    encode(*xattrs, bl);
+  else
+    encode((__u32)0, bl);
+
+  if (inode->is_symlink())
     encode(symlink, bl);
-  if (inode.is_dir()) {
+  if (inode->is_dir()) {
     encode(dirfragtree, bl);
     encode(snapbl, bl);
   }
@@ -411,7 +415,7 @@ void EMetaBlob::fullbit::encode(bufferlist& bl, uint64_t features) const {
     encode(true, bl);
     encode(old_inodes, bl, features);
   }
-  if (!inode.is_dir())
+  if (!inode->is_dir())
     encode(snapbl, bl);
   encode(oldest_snap, bl);
   ENCODE_FINISH(bl);
@@ -423,11 +427,20 @@ void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
   decode(dnfirst, bl);
   decode(dnlast, bl);
   decode(dnv, bl);
-  decode(inode, bl);
-  decode(xattrs, bl);
-  if (inode.is_symlink())
+  auto _inode = new CInode::refcounted_inode;
+  inode.reset(_inode, false);
+  decode(*_inode, bl);
+  {
+    CInode::mempool_xattr_map tmp;
+    decode(tmp, bl);
+    if (!tmp.empty()) {
+      auto _xattrs = new CInode::refcounted_xattr_map(std::move(tmp));
+      xattrs.reset(_xattrs, false);
+    }
+  }
+  if (_inode->is_symlink())
     decode(symlink, bl);
-  if (inode.is_dir()) {
+  if (_inode->is_dir()) {
     decode(dirfragtree, bl);
     decode(snapbl, bl);
     if ((struct_v == 2) || (struct_v == 3)) {
@@ -436,7 +449,7 @@ void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
       if (dir_layout_exists) {
 	__u8 dir_struct_v;
 	decode(dir_struct_v, bl); // default_file_layout version
-	decode(inode.layout, bl); // and actual layout, that we care about
+	decode(_inode->layout, bl); // and actual layout, that we care about
       }
     }
   }
@@ -455,7 +468,7 @@ void EMetaBlob::fullbit::decode(bufferlist::const_iterator &bl) {
       decode(old_inodes, bl);
     }
   }
-  if (!inode.is_dir()) {
+  if (!_inode->is_dir()) {
     if (struct_v >= 7)
       decode(snapbl, bl);
   }
@@ -474,21 +487,23 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   f->dump_stream("snapid.last") << dnlast;
   f->dump_int("dentry version", dnv);
   f->open_object_section("inode");
-  inode.dump(f);
+  inode->dump(f);
   f->close_section(); // inode
   f->open_object_section("xattrs");
-  for (const auto &p : xattrs) {
-    std::string s(p.second.c_str(), p.second.length());
-    f->dump_string(p.first.c_str(), s);
+  if (xattrs) {
+    for (const auto &p : *xattrs) {
+      std::string s(p.second.c_str(), p.second.length());
+      f->dump_string(p.first.c_str(), s);
+    }
   }
   f->close_section(); // xattrs
-  if (inode.is_symlink()) {
+  if (inode->is_symlink()) {
     f->dump_string("symlink", symlink);
   }
-  if (inode.is_dir()) {
+  if (inode->is_dir()) {
     f->dump_stream("frag tree") << dirfragtree;
     f->dump_string("has_snapbl", snapbl.length() ? "true" : "false");
-    if (inode.has_layout()) {
+    if (inode->has_layout()) {
       f->open_object_section("file layout policy");
       // FIXME
       f->dump_string("layout", "the layout exists");
@@ -510,22 +525,24 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
 
 void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
 {
-  CInode::mempool_inode inode;
+  auto inode = new CInode::refcounted_inode;
   fragtree_t fragtree;
-  CInode::mempool_xattr_map empty_xattrs;
+  auto xattrs = new CInode::refcounted_xattr_map;
   bufferlist empty_snapbl;
   fullbit *sample = new fullbit("/testdn", 0, 0, 0,
-                                inode, fragtree, empty_xattrs, "", 0, empty_snapbl,
+                                inode, fragtree, xattrs, "", 0, empty_snapbl,
                                 false, NULL);
   ls.push_back(sample);
+  inode->put();
+  xattrs->put();
 }
 
 void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 {
-  in->inode = inode;
-  in->xattrs = xattrs;
+  in->reset_inode(inode.get());
+  in->reset_xattrs(xattrs.get());
   in->maybe_export_pin();
-  if (in->inode.is_dir()) {
+  if (in->is_dir()) {
     if (!(in->dirfragtree == dirfragtree)) {
       dout(10) << "EMetaBlob::fullbit::update_inode dft " << in->dirfragtree << " -> "
 	       << dirfragtree << " on " << *in << dendl;
@@ -544,7 +561,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 	}
       }
     }
-  } else if (in->inode.is_symlink()) {
+  } else if (in->is_symlink()) {
     in->symlink = symlink;
   }
   in->old_inodes = old_inodes;
@@ -569,9 +586,10 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
    */
   if (in->is_file()) {
     // Files must have valid layouts with a pool set
-    if (in->inode.layout.pool_id == -1 || !in->inode.layout.is_valid()) {
+    if (in->get_inode()->layout.pool_id == -1 ||
+	!in->get_inode()->layout.is_valid()) {
       dout(0) << "EMetaBlob.replay invalid layout on ino " << *in
-              << ": " << in->inode.layout << dendl;
+              << ": " << in->get_inode()->layout << dendl;
       std::ostringstream oss;
       oss << "Invalid layout for inode " << in->ino() << " in journal";
       mds->clog->error() << oss.str();
@@ -864,7 +882,7 @@ void EMetaBlob::get_inodes(
 
     // Record inodes of fullbits
     for (const auto& iter : dl.get_dfull()) {
-      inodes.insert(iter.inode.ino);
+      inodes.insert(iter.inode->ino);
     }
 
     // Record inodes of remotebits
@@ -939,7 +957,7 @@ void EMetaBlob::get_paths(
     for (const auto& iter : dl.get_dfull()) {
       std::string_view dentry = iter.dn;
       children[dir_ino].emplace_back(dentry);
-      ino_locations[iter.inode.ino] = Location(dir_ino, dentry);
+      ino_locations[iter.inode->ino] = Location(dir_ino, dentry);
     }
 
     for (const auto& iter : dl.get_dremote()) {
@@ -965,7 +983,7 @@ void EMetaBlob::get_paths(
 
     for (const auto& iter : dl.get_dfull()) {
       std::string_view dentry = iter.dn;
-      if (children.find(iter.inode.ino) == children.end()) {
+      if (children.find(iter.inode->ino) == children.end()) {
         leaf_locations.push_back(Location(dir_ino, dentry));
       }
     }
@@ -1098,10 +1116,10 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   assert(g_conf()->mds_kill_journal_replay_at != 1);
 
   for (auto& p : roots) {
-    CInode *in = mds->mdcache->get_inode(p.inode.ino);
+    CInode *in = mds->mdcache->get_inode(p.inode->ino);
     bool isnew = in ? false:true;
     if (!in)
-      in = new CInode(mds->mdcache, false, 2, CEPH_NOSNAP);
+      in = new CInode(mds->mdcache, 2, CEPH_NOSNAP, CInode::NON_AUTH | CInode::NULL_INODE);
     p.update_inode(mds, in);
 
     if (isnew)
@@ -1227,9 +1245,12 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       if (lump.is_importing())
 	dn->state_set(CDentry::STATE_AUTH);
 
-      CInode *in = mds->mdcache->get_inode(p->inode.ino, p->dnlast);
+      CInode *in = mds->mdcache->get_inode(p->inode->ino, p->dnlast);
       if (!in) {
-	in = new CInode(mds->mdcache, dn->is_auth(), p->dnfirst, p->dnlast);
+	unsigned flags = CInode::NULL_INODE;
+	if (!dn->is_auth())
+	  flags |= CInode::NON_AUTH;
+	in = new CInode(mds->mdcache, p->dnfirst, p->dnlast, flags);
 	p->update_inode(mds, in);
 	mds->mdcache->add_inode(in);
 	if (!dn->get_linkage()->is_null()) {
@@ -1237,7 +1258,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	    unlinked[dn->get_linkage()->get_inode()] = dir;
 	    stringstream ss;
 	    ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
-	       << " " << *dn->get_linkage()->get_inode() << " should be " << p->inode.ino;
+	       << " " << *dn->get_linkage()->get_inode() << " should be " << p->inode->ino;
 	    dout(0) << ss.str() << dendl;
 	    mds->clog->warn(ss);
 	  }
@@ -1261,7 +1282,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	      unlinked[dn->get_linkage()->get_inode()] = dir;
 	      stringstream ss;
 	      ss << "EMetaBlob.replay FIXME had dentry linked to wrong inode " << *dn
-		 << " " << *dn->get_linkage()->get_inode() << " should be " << p->inode.ino;
+		 << " " << *dn->get_linkage()->get_inode() << " should be " << p->inode->ino;
 	      dout(0) << ss.str() << dendl;
 	      mds->clog->warn(ss);
 	    }
