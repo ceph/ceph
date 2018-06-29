@@ -127,7 +127,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Dashboard Plugin
 	Dashboard
                 A built-in web based monitoring and administration application to
-                Ceph Manager. Refer :doc:`/mgr/dashboard` for more details.
+                Ceph Manager. Refer :ref:`mgr-dashboard` for more details.
 
 	Ceph Metadata Server
 	MDS
