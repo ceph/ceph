@@ -1,16 +1,20 @@
 #include "ThreadPool.h"
+
+#include <pthread.h>
 #include "crimson/net/Config.h"
 #include "include/intarith.h"
 
 namespace ceph::thread {
 
 ThreadPool::ThreadPool(size_t n_threads,
-                       size_t queue_sz)
+                       size_t queue_sz,
+                       unsigned cpu_id)
   : queue_size{round_up_to(queue_sz, seastar::smp::count)},
     pending{queue_size}
 {
   for (size_t i = 0; i < n_threads; i++) {
-    threads.emplace_back([this] {
+    threads.emplace_back([this, cpu_id] {
+      pin(cpu_id);
       loop();
     });
   }
@@ -21,6 +25,16 @@ ThreadPool::~ThreadPool()
   for (auto& thread : threads) {
     thread.join();
   }
+}
+
+void ThreadPool::pin(unsigned cpu_id)
+{
+  cpu_set_t cs;
+  CPU_ZERO(&cs);
+  CPU_SET(cpu_id, &cs);
+  [[maybe_unused]] auto r = pthread_setaffinity_np(pthread_self(),
+                                                   sizeof(cs), &cs);
+  assert(r == 0);
 }
 
 void ThreadPool::loop()
