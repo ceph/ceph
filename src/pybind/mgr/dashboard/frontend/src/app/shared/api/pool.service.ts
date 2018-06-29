@@ -23,6 +23,10 @@ export class PoolService {
     return this.http.put(`${this.apiPath}/${name}`, pool, { observe: 'response' });
   }
 
+  delete(name) {
+    return this.http.delete(`${this.apiPath}/${name}`, { observe: 'response' });
+  }
+
   get(poolName) {
     return this.http.get(`${this.apiPath}/${poolName}`);
   }
