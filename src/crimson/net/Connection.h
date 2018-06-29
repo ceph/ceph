@@ -24,7 +24,8 @@ namespace ceph::net {
 
 using seq_num_t = uint64_t;
 
-class Connection : public boost::intrusive_ref_counter<Connection> {
+class Connection : public boost::intrusive_ref_counter<Connection,
+						       boost::thread_unsafe_counter> {
  protected:
   Messenger *const messenger;
   entity_addr_t my_addr;
