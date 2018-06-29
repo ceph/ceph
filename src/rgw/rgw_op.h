@@ -65,6 +65,11 @@ class StrategyRegistry;
 }
 }
 
+int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
+                                       RGWRados *store,
+                                       RGWBucketInfo& bucket_info,
+                                       map<string, bufferlist>& bucket_attrs,
+                                       RGWAccessControlPolicy *policy);
 
 class RGWHandler {
 protected:
