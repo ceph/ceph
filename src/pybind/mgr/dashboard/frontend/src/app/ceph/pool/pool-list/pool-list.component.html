@@ -2,12 +2,15 @@
   <tab i18n-heading heading="Pools List">
     <cd-table [data]="pools"
               (fetchData)="getPoolList($event)"
-              [columns]="columns" selectionType="single"
+              [columns]="columns"
+              selectionType="single"
               (updateSelection)="updateSelection($event)">
       <tabset cdTableDetail
               *ngIf="selection.hasSingleSelection">
-        <tab i18n-heading heading="Details">
+        <tab i18n-heading
+             heading="Details">
           <cd-table-key-value [data]="selection.first()"
+                              [renderObjects]="true"
                               [autoReload]="false">
           </cd-table-key-value>
         </tab>

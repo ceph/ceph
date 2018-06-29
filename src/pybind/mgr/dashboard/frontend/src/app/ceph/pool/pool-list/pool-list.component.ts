@@ -4,6 +4,7 @@ import { PoolService } from '../../../shared/api/pool.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { Pool } from '../pool';
 
 @Component({
   selector: 'cd-pool-list',
@@ -11,7 +12,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
   styleUrls: ['./pool-list.component.scss']
 })
 export class PoolListComponent {
-  pools = [];
+  pools: Pool[] = [];
   columns: CdTableColumn[];
   selection = new CdTableSelection();
 
@@ -69,7 +70,7 @@ export class PoolListComponent {
 
   getPoolList(context: CdTableFetchDataContext) {
     this.poolService.getList().subscribe(
-      (pools: any[]) => {
+      (pools: Pool[]) => {
         this.pools = pools;
       },
       () => {
