@@ -397,12 +397,12 @@ public:
   inline_data_t() {}
   inline_data_t(const inline_data_t& o) : version(o.version) {
     if (o.blp)
-      get_data() = *o.blp;
+      set_data(*o.blp);
   }
   inline_data_t& operator=(const inline_data_t& o) {
     version = o.version;
     if (o.blp)
-      get_data() = *o.blp;
+      set_data(*o.blp);
     else
       free_data();
     return *this;
@@ -411,10 +411,16 @@ public:
   void free_data() {
     blp.reset();
   }
-  ceph::buffer::list& get_data() {
+  void get_data(ceph::buffer::list& ret) const {
+    if (blp)
+      ret = *blp;
+    else
+      ret.clear();
+  }
+  void set_data(const ceph::buffer::list& bl) {
     if (!blp)
       blp.reset(new ceph::buffer::list);
-    return *blp;
+    *blp = bl;
   }
   size_t length() const { return blp ? blp->length() : 0; }
 

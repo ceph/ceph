@@ -440,7 +440,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
   {
     // Record backtrace fails as remote linkage damage, as
     // we may not be able to resolve hard links to this inode
-    mdcache->mds->damage_table.notify_remote_damaged(in->inode.ino, path);
+    mdcache->mds->damage_table.notify_remote_damaged(in->ino(), path);
   } else if (result.inode.checked && !result.inode.passed &&
              !result.inode.repaired) {
     // Record damaged inode structures as damaged dentries as

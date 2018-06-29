@@ -794,10 +794,10 @@ int MetaTool::show_child(std::string_view key,
         f->close_section();
         f->flush(ds);
         
-        if (sp_ino > 0 && op != NULL && sp_ino == inode_data.inode.ino){
+        if (sp_ino > 0 && op != NULL && sp_ino == inode_data.inode->ino){
             inode_meta_t* tmp = new inode_meta_t(first, type, &inode_data);
-            op->inodes[inode_data.inode.ino] = tmp;
-            op->okeys[inode_data.inode.ino] = key.data();
+            op->inodes[inode_data.inode->ino] = tmp;
+            op->okeys[inode_data.inode->ino] = key.data();
             return 1;
         }else{
             delete &inode_data;
