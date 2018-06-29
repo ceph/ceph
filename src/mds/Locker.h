@@ -71,7 +71,7 @@ protected:
 public:
   void include_snap_rdlocks(CInode *in, MutationImpl::LockOpVec& lov);
   void include_snap_rdlocks_wlayout(CInode *in, MutationImpl::LockOpVec& lov,
-		  		    file_layout_t **layout);
+                                    const file_layout_t **layout);
 
   bool acquire_locks(MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
@@ -254,7 +254,7 @@ protected:
   void file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 			  client_t client, MClientCaps *ack);
 private:
-  uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
+  uint64_t calc_new_max_size(const CInode::refcounted_inode* pi, uint64_t size);
 public:
   void calc_new_client_ranges(CInode *in, uint64_t size,
 			      CInode::mempool_inode::client_range_map* new_ranges,

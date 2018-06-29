@@ -792,9 +792,9 @@ int JournalTool::recover_dentries(
           InodeStore inode;
           inode.decode_bare(q);
           dout(4) << "decoded embedded inode version "
-            << inode.inode.version << " vs fullbit version "
-            << fb.inode.version << dendl;
-          if (inode.inode.version < fb.inode.version) {
+            << inode.inode->version << " vs fullbit version "
+            << fb.inode->version << dendl;
+          if (inode.inode->version < fb.inode->version) {
             write_dentry = true;
           }
         } else {
@@ -816,7 +816,7 @@ int JournalTool::recover_dentries(
 
         // Record for writing to RADOS
         write_vals[key] = dentry_bl;
-        consumed_inos->insert(fb.inode.ino);
+        consumed_inos->insert(fb.inode->ino);
       }
     }
 
@@ -950,7 +950,7 @@ int JournalTool::recover_dentries(
    * of directories
    */
   for (const auto& fb : metablob.roots) {
-    inodeno_t ino = fb.inode.ino;
+    inodeno_t ino = fb.inode->ino;
     dout(4) << "updating root 0x" << std::hex << ino << std::dec << dendl;
 
     object_t root_oid = InodeStore::get_object_name(ino, frag_t(), ".inode");
@@ -974,7 +974,7 @@ int JournalTool::recover_dentries(
         dout(4) << "magic ok" << dendl;
         old_inode.decode(inode_bl_iter);
 
-        if (old_inode.inode.version < fb.inode.version) {
+        if (old_inode.inode->version < fb.inode->version) {
           write_root_ino = true;
         }
       } else {
@@ -989,7 +989,7 @@ int JournalTool::recover_dentries(
 
     if (write_root_ino && !dry_run) {
       dout(4) << "writing root ino " << root_oid.name
-               << " version " << fb.inode.version << dendl;
+               << " version " << fb.inode->version << dendl;
 
       // Compose: root ino format is magic,InodeStore(bare=false)
       bufferlist new_root_ino_bl;
@@ -1101,8 +1101,8 @@ void JournalTool::encode_fullbit_as_inode(
 
   // Compose InodeStore
   InodeStore new_inode;
-  new_inode.inode = fb.inode;
-  new_inode.xattrs = fb.xattrs;
+  new_inode.reset_inode(fb.inode.get());
+  new_inode.reset_xattrs(fb.xattrs.get());
   new_inode.dirfragtree = fb.dirfragtree;
   new_inode.snap_blob = fb.snapbl;
   new_inode.symlink = fb.symlink;

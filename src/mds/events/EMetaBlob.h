@@ -68,9 +68,9 @@ public:
     std::string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
-    CInode::mempool_inode inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
+    CInode::inode_const_ptr inode;      // if it's not XXX should not be part of mempool; wait for std::pmr to simplify
+    CInode::xattr_map_const_ptr xattrs;
     fragtree_t dirfragtree;
-    CInode::mempool_xattr_map xattrs;
     std::string symlink;
     snapid_t oldest_snap;
     bufferlist snapbl;
@@ -78,16 +78,16 @@ public:
     CInode::mempool_old_inode_map old_inodes; // XXX should not be part of mempool; wait for std::pmr to simplify
 
     fullbit(std::string_view d, snapid_t df, snapid_t dl, 
-	    version_t v, const CInode::mempool_inode& i, const fragtree_t &dft,
-	    const CInode::mempool_xattr_map &xa, std::string_view sym,
+	    version_t v, const CInode::refcounted_inode *i, const fragtree_t &dft,
+	    const CInode::refcounted_xattr_map *xa, std::string_view sym,
 	    snapid_t os, const bufferlist &sbl, __u8 st,
 	    const CInode::mempool_old_inode_map *oi = NULL) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
       oldest_snap(os), state(st)
     {
-      if (i.is_symlink())
+      if (i->is_symlink())
 	symlink = sym;
-      if (i.is_dir())
+      if (i->is_dir())
 	dirfragtree = dft;
       if (oi)
 	old_inodes = *oi;
@@ -114,7 +114,7 @@ public:
 
     void print(ostream& out) const {
       out << " fullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
-	  << " inode " << inode.ino
+	  << " inode " << inode->ino
 	  << " state=" << state << std::endl;
     }
     string state_string() const {
@@ -461,7 +461,7 @@ private:
 
     lump.nfull++;
     lump.add_dfull(dn->get_name(), dn->first, dn->last, dn->get_projected_version(),
-		   *pi, in->dirfragtree, *in->get_projected_xattrs(), in->symlink,
+		   pi, in->dirfragtree, in->get_projected_xattrs(), in->symlink,
 		   in->oldest_snap, snapbl, state, &in->old_inodes);
   }
 
@@ -497,9 +497,9 @@ private:
     in->last_journaled = event_seq;
     //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
 
-    const auto& pi = *(in->get_projected_inode());
+    const auto pi = in->get_projected_inode();
+    const auto px = in->get_projected_xattrs();
     const auto& pdft = in->dirfragtree;
-    const auto& px = *(in->get_projected_xattrs());
 
     bufferlist snapbl;
     const sr_t *sr = in->get_projected_srnode();
@@ -507,7 +507,7 @@ private:
       sr->encode(snapbl);
 
     for (auto p = roots.begin(); p != roots.end(); ++p) {
-      if (p->inode.ino == in->ino()) {
+      if (p->inode->ino == in->ino()) {
 	roots.erase(p);
 	break;
       }

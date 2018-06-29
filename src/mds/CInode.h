@@ -23,6 +23,7 @@
 #include <string_view>
 
 #include "common/config.h"
+#include "common/RefCountedObj.h"
 #include "include/counter.h"
 #include "include/elist.h"
 #include "include/types.h"
@@ -76,24 +77,63 @@ extern int num_cinode_locks;
 class InodeStoreBase {
 public:
   typedef inode_t<mempool::mds_co::pool_allocator> mempool_inode;
+  struct refcounted_inode : public mempool_inode, public RefCountedObject {
+    MEMPOOL_CLASS_HELPERS();
+    refcounted_inode() {}
+    refcounted_inode(const refcounted_inode& o) : mempool_inode(o) {}
+  };
+  typedef boost::intrusive_ptr<refcounted_inode> inode_ptr;
+  typedef boost::intrusive_ptr<const refcounted_inode> inode_const_ptr;
+
+  typedef xattr_map<mempool::mds_co::pool_allocator> mempool_xattr_map; // FIXME bufferptr not in mempool
+  struct refcounted_xattr_map : public mempool_xattr_map, public RefCountedObject {
+    MEMPOOL_CLASS_HELPERS();
+    refcounted_xattr_map() {}
+    refcounted_xattr_map(const refcounted_xattr_map& o) : mempool_xattr_map(o) {}
+    refcounted_xattr_map(mempool_xattr_map&& xattrs) :
+      mempool_xattr_map(std::move(xattrs)) {}
+    refcounted_xattr_map& operator=(const refcounted_xattr_map& o) {
+      mempool_xattr_map::operator=(o);
+      return *this;
+    }
+  };
+  typedef boost::intrusive_ptr<refcounted_xattr_map> xattr_map_ptr;
+  typedef boost::intrusive_ptr<const refcounted_xattr_map> xattr_map_const_ptr;
+
   typedef old_inode_t<mempool::mds_co::pool_allocator> mempool_old_inode;
   typedef mempool::mds_co::compact_map<snapid_t, mempool_old_inode> mempool_old_inode_map;
-  typedef xattr_map<mempool::mds_co::pool_allocator> mempool_xattr_map; // FIXME bufferptr not in mempool
 
-  mempool_inode inode;        // the inode itself
+protected:
+  inode_ptr inode;
+  xattr_map_ptr xattrs;
+public:
   mempool::mds_co::string                symlink;      // symlink dest, if symlink
-  mempool_xattr_map xattrs;
   fragtree_t                 dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
   mempool_old_inode_map old_inodes;   // key = last, value.first = first
   snapid_t                  oldest_snap = CEPH_NOSNAP;
   damage_flags_t            damage_flags = 0;
 
-  InodeStoreBase() {}
+  // flags for constructor
+  static const unsigned NON_AUTH = 1;
+  static const unsigned NULL_INODE = 2;
+
+  InodeStoreBase(unsigned flags=0) {
+    if (!(flags & NULL_INODE))
+      inode.reset(new refcounted_inode, false);
+  }
+  void reset_inode(const refcounted_inode* ptr, bool add_ref=true) {
+    inode.reset(const_cast<refcounted_inode*>(ptr), add_ref);
+  }
+  void reset_xattrs(const refcounted_xattr_map* ptr, bool add_ref=true) {
+    xattrs.reset(const_cast<refcounted_xattr_map*>(ptr), add_ref);
+  }
+  void encode_xattrs(bufferlist &bl) const;
+  void decode_xattrs(bufferlist::const_iterator &p);
 
   /* Helpers */
-  bool is_file() const    { return inode.is_file(); }
-  bool is_symlink() const { return inode.is_symlink(); }
-  bool is_dir() const     { return inode.is_dir(); }
+  bool is_file() const    { return inode->is_file(); }
+  bool is_symlink() const { return inode->is_symlink(); }
+  bool is_dir() const     { return inode->is_dir(); }
   static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
 
   /* Full serialization for use in ".inode" root inode objects */
@@ -114,6 +154,9 @@ public:
 
 class InodeStore : public InodeStoreBase {
 public:
+  using InodeStoreBase::inode;
+  using InodeStoreBase::xattrs;
+
   // FIXME bufferlist not part of mempool
   bufferlist snap_blob;  // Encoded copy of SnapRealm, because we can't
 			 // rehydrate it without full MDCache
@@ -381,8 +424,8 @@ public:
 
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
-      inode.is_dir() ||  // links to me in other snaps
-      inode.nlink > 1 || // there are remote links, possibly snapped, that will need to find me
+      get_inode()->is_dir() ||  // links to me in other snaps
+      get_inode()->nlink > 1 || // there are remote links, possibly snapped, that will need to find me
       !old_inodes.empty(); // once multiversion, always multiversion.  until old_inodes gets cleaned out.
   }
   snapid_t get_oldest_snap();
@@ -418,81 +461,80 @@ public:
    * This function will take care of the inode itself, the xattrs, and the snaprealm.
    */
 
-  class projected_inode {
-  public:
+  struct projected_inode {
     static sr_t* const UNDEF_SRNODE;
 
-    mempool_inode inode;
-    std::unique_ptr<mempool_xattr_map> xattrs;
-    sr_t *snapnode = UNDEF_SRNODE;
+    refcounted_inode& inode;
+    refcounted_xattr_map* xattrs;
+    sr_t *snapnode;
 
     projected_inode() = delete;
-    explicit projected_inode(const mempool_inode &in) : inode(in) {}
+    explicit projected_inode(refcounted_inode *i, refcounted_xattr_map* x, sr_t *s) :
+      inode(*i), xattrs(x), snapnode(s) {}
   };
 
 private:
-  mempool::mds_co::list<projected_inode> projected_nodes;   // projected values (only defined while dirty)
-  size_t num_projected_xattrs = 0;
+  struct projected_node {
+    inode_const_ptr inode;
+    xattr_map_const_ptr xattrs;
+    sr_t *snapnode;
+
+    projected_node() = delete;
+    explicit projected_node(const refcounted_inode *i, const refcounted_xattr_map* x, sr_t *s) :
+      inode(i, false), xattrs(x, false), snapnode(s) {}
+  };
+
+  mempool::mds_co::list<projected_node> projected_nodes;   // projected values (only defined while dirty)
   size_t num_projected_srnodes = 0;
 
 public:
-  CInode::projected_inode &project_inode(bool xattr = false, bool snap = false);
+  CInode::projected_inode project_inode(bool xattr = false, bool snap = false);
   void pop_and_dirty_projected_inode(LogSegment *ls);
-
-  projected_inode *get_projected_node() {
-    if (projected_nodes.empty())
-      return NULL;
-    else
-      return &projected_nodes.back();
-  }
 
   version_t get_projected_version() const {
     if (projected_nodes.empty())
-      return inode.version;
+      return inode->version;
     else
-      return projected_nodes.back().inode.version;
+      return projected_nodes.back().inode->version;
   }
   bool is_projected() const {
     return !projected_nodes.empty();
   }
 
-  const mempool_inode *get_projected_inode() const {
+  const refcounted_inode* get_projected_inode() const {
     if (projected_nodes.empty())
-      return &inode;
+      return inode.get();
     else
-      return &projected_nodes.back().inode;
+      return projected_nodes.back().inode.get();
   }
-  mempool_inode *get_projected_inode() {
-    if (projected_nodes.empty())
-      return &inode;
-    else
-      return &projected_nodes.back().inode;
+  refcounted_inode* _get_projected_inode() {
+    assert(!projected_nodes.empty());
+    return const_cast<refcounted_inode*>(projected_nodes.back().inode.get());
   }
-  mempool_inode *get_previous_projected_inode() {
+  const refcounted_inode* get_previous_projected_inode() const {
     assert(!projected_nodes.empty());
     auto it = projected_nodes.rbegin();
     ++it;
     if (it != projected_nodes.rend())
-      return &it->inode;
+      return it->inode.get();
     else
-      return &inode;
+      return inode.get();
   }
 
-  mempool_xattr_map *get_projected_xattrs() {
-    if (num_projected_xattrs > 0) {
-      for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->xattrs)
-	  return it->xattrs.get();
-    }
-    return &xattrs;
+  const refcounted_xattr_map *get_projected_xattrs() {
+    if (projected_nodes.empty())
+      return xattrs.get();
+    else
+      return projected_nodes.back().xattrs.get();
   }
-  mempool_xattr_map *get_previous_projected_xattrs() {
-    if (num_projected_xattrs > 0) {
-      for (auto it = ++projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->xattrs)
-	  return it->xattrs.get();
-    }
-    return &xattrs;
+  const refcounted_xattr_map *get_previous_projected_xattrs() {
+    assert(!projected_nodes.empty());
+    auto it = projected_nodes.rbegin();
+    ++it;
+    if (it != projected_nodes.rend())
+      return it->xattrs.get();
+    else
+      return xattrs.get();
   }
 
   sr_t *prepare_new_srnode(snapid_t snapid);
@@ -686,28 +728,30 @@ public:
 
   // ---------------------------
   CInode() = delete;
-  CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
+  CInode(MDCache *c, snapid_t f=2, snapid_t l=CEPH_NOSNAP, unsigned flags=0);
   ~CInode() override {
     close_dirfrags();
     close_snaprealm();
     clear_file_locks();
-    assert(num_projected_xattrs == 0);
     assert(num_projected_srnodes == 0);
     assert(num_caps_wanted == 0);
     assert(num_subtree_roots == 0);
     assert(num_exporting_dirs == 0);
   }
   
+  inodeno_t ino() const { return inode->ino; }
+  vinodeno_t vino() const { return vinodeno_t(ino(), last); }
+  int d_type() const { return IFTODT(inode->mode); }
 
   // -- accessors --
-  bool is_root() const { return inode.ino == MDS_INO_ROOT; }
-  bool is_stray() const { return MDS_INO_IS_STRAY(inode.ino); }
+  bool is_root() const { return ino() == MDS_INO_ROOT; }
+  bool is_stray() const { return MDS_INO_IS_STRAY(ino()); }
   mds_rank_t get_stray_owner() const {
-    return (mds_rank_t)MDS_INO_STRAY_OWNER(inode.ino);
+    return (mds_rank_t)MDS_INO_STRAY_OWNER(ino());
   }
-  bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(inode.ino); }
-  bool is_base() const { return MDS_INO_IS_BASE(inode.ino); }
-  bool is_system() const { return inode.ino < MDS_INO_SYSTEM_BASE; }
+  bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(ino()); }
+  bool is_base() const { return MDS_INO_IS_BASE(ino()); }
+  bool is_system() const { return ino() < MDS_INO_SYSTEM_BASE; }
   bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
 
   bool is_head() const { return last == CEPH_NOSNAP; }
@@ -723,11 +767,12 @@ public:
   void clear_ambiguous_auth(std::list<MDSInternalContextBase*>& finished);
   void clear_ambiguous_auth();
 
-  inodeno_t ino() const { return inode.ino; }
-  vinodeno_t vino() const { return vinodeno_t(inode.ino, last); }
-  int d_type() const { return IFTODT(inode.mode); }
 
-  mempool_inode& get_inode() { return inode; }
+  const refcounted_inode* get_inode() const { return inode.get(); }
+  refcounted_inode* _get_inode() const { return inode.get(); }
+
+  const refcounted_xattr_map* get_xattrs() const { return xattrs.get(); }
+
   CDentry* get_parent_dn() { return parent; }
   const CDentry* get_parent_dn() const { return parent; }
   CDentry* get_projected_parent_dn() { return !projected_parent.empty() ? projected_parent.back() : parent; }
@@ -757,11 +802,11 @@ public:
   void name_stray_dentry(std::string& dname);
   
   // -- dirtyness --
-  version_t get_version() const { return inode.version; }
+  version_t get_version() const { return inode->version; }
 
   version_t pre_dirty();
   void _mark_dirty(LogSegment *ls);
-  void mark_dirty(version_t projected_dirv, LogSegment *ls);
+  void mark_dirty(LogSegment *ls);
   void mark_clean();
 
   void store(MDSInternalContextBase *fin);
@@ -1016,7 +1061,7 @@ public:
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(Session *s, mempool_inode *file_i) const;
+  int get_caps_allowed_for_client(Session *s, const mempool_inode *file_i) const;
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,
