@@ -9,16 +9,36 @@ import { ApiModule } from './api.module';
   providedIn: ApiModule
 })
 export class PoolService {
+  apiPath = 'api/pool';
+
   constructor(private http: HttpClient) {}
 
+  create(pool) {
+    return this.http.post(this.apiPath, pool, { observe: 'response' });
+  }
+
+  update(pool) {
+    const name = pool.pool;
+    delete pool.pool;
+    return this.http.put(`${this.apiPath}/${name}`, pool, { observe: 'response' });
+  }
+
+  get(poolName) {
+    return this.http.get(`${this.apiPath}/${poolName}`);
+  }
+
   getList() {
-    return this.http.get('api/pool');
+    return this.http.get(this.apiPath);
+  }
+
+  getInfo() {
+    return this.http.get(`${this.apiPath}/_info`);
   }
 
   list(attrs = []) {
     const attrsStr = attrs.join(',');
     return this.http
-      .get(`api/pool?attrs=${attrsStr}`)
+      .get(`${this.apiPath}?attrs=${attrsStr}`)
       .toPromise()
       .then((resp: any) => {
         return resp;
