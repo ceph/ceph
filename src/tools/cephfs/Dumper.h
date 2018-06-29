@@ -39,7 +39,7 @@ public:
   int init(mds_role_t role_, const std::string &type);
   int recover_journal(Journaler *journaler);
   int dump(const char *dumpfile);
-  int undump(const char *dumpfile);
+  int undump(const char *dumpfile, bool force);
 };
 
 #endif /* JOURNAL_DUMPER_H_ */
