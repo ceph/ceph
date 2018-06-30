@@ -109,6 +109,7 @@ void usage()
   cout << "  bi list                    list raw bucket index entries\n";
   cout << "  bi purge                   purge bucket index entries\n";
   cout << "  object rm                  remove object\n";
+  cout << "  object put                 put object\n";
   cout << "  object stat                stat an object for its metadata\n";
   cout << "  object unlink              unlink object from bucket index\n";
   cout << "  object rewrite             rewrite the specified object\n";
@@ -410,6 +411,7 @@ enum {
   OPT_USAGE_SHOW,
   OPT_USAGE_TRIM,
   OPT_USAGE_CLEAR,
+  OPT_OBJECT_PUT,
   OPT_OBJECT_RM,
   OPT_OBJECT_UNLINK,
   OPT_OBJECT_STAT,
@@ -703,6 +705,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
     if (strcmp(cmd, "list") == 0)
       return OPT_POOLS_LIST;
   } else if (strcmp(prev_cmd, "object") == 0) {
+    if (strcmp(cmd, "put") == 0)
+      return OPT_OBJECT_PUT;
     if (strcmp(cmd, "rm") == 0)
       return OPT_OBJECT_RM;
     if (strcmp(cmd, "unlink") == 0)
@@ -5869,6 +5873,47 @@ next:
         cerr << "ERROR: failed to remove bucket index object: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
+    }
+  }
+
+  if (opt_cmd == OPT_OBJECT_PUT) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    if (object.empty()) {
+      cerr << "ERROR: object not specified" << std::endl;
+      return EINVAL;
+    }
+
+    RGWDataAccess data_access(store);
+    rgw_obj_key key(object, object_version);
+
+    RGWDataAccess::BucketRef b;
+    RGWDataAccess::ObjectRef obj;
+
+    int ret = data_access.get_bucket(tenant, bucket_name, bucket_id, &b);
+    if (ret < 0) {
+      cerr << "ERROR: failed to init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    ret = b->get_object(key, &obj);
+    if (ret < 0) {
+      cerr << "ERROR: failed to get object: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    bufferlist bl;
+    ret = read_input(infile, bl);
+    if (ret < 0) {
+      cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
+    }
+
+    map<string, bufferlist> attrs;
+    ret = obj->put(bl, attrs);
+    if (ret < 0) {
+      cerr << "ERROR: put object returned error: " << cpp_strerror(-ret) << std::endl;
     }
   }
 
