@@ -47,13 +47,45 @@ config:
 
 */
 
+/*
+
+config:
+
+{
+   "tenant": <tenant>,             # default: <empty>
+   "uid": <uid>,                   # default: "pubsub"
+   "data_bucket_prefix": <prefix>  # default: "pubsub"
+
+    # non-dynamic config
+    "notifications": [
+        {
+            "path": <notification-path>,    # this can be either an explicit path: <bucket>, or <bucket>/<object>,
+                                            # or a prefix if it ends with a wildcard
+            "topic": <topic-name>
+         },
+        ...
+    ],
+    "subscriptions": [
+        {
+            "name": <subscription-name>,
+            "topic": <topic>,
+            "push_endpoint": <endpoint>,
+            "data_bucket": <bucket>,       # override name of bucket where subscription data will be store
+            "data_oid_prefix": <prefix>    # set prefix for subscription data object ids
+        },
+        ...
+    ]
+}
+
+*/
+
 struct PSSubConfig { /* subscription config */
   string name;
   string topic;
   string push_endpoint;
 
   string data_bucket_name;
-  string data_prefix;
+  string data_oid_prefix;
 
   void dump(Formatter *f) const {
     encode_json("name", name, f);
@@ -68,9 +100,10 @@ struct PSSubConfig { /* subscription config */
     name = config["name"];
     topic = config["topic"];
     push_endpoint = config["push_endpoint"];
-    string default_bucket_name = data_prefix + name;
+    string default_bucket_name = data_bucket_prefix + name;
     data_bucket_name = config["data_bucket"](default_bucket_name.c_str());
-    data_prefix = config["data_prefix"];
+#warning use data_oid_prefix for oid generation
+    data_oid_prefix = config["data_oid_prefix"];
   }
 };
 
@@ -117,8 +150,6 @@ struct PSConfig {
   string data_bucket_prefix;
 
   uint64_t sync_instance{0};
-  uint32_t num_pub_shards{0};
-  uint32_t num_topic_shards{0};
   uint64_t max_id{0};
 
 
@@ -132,15 +163,6 @@ struct PSConfig {
     user = rgw_user(config["tenant"], uid);
     data_bucket_prefix = config["data_bucket_prefix"]("pubsub");
 
-    num_pub_shards = config["num_pub_shards"](PS_NUM_PUB_SHARDS_DEFAULT);
-    if (num_pub_shards < PS_NUM_PUB_SHARDS_MIN) {
-      num_pub_shards = PS_NUM_PUB_SHARDS_MIN;
-    }
-
-    num_topic_shards = config["num_topic_shards"](PS_NUM_TOPIC_SHARDS_DEFAULT);
-    if (num_topic_shards < PS_NUM_TOPIC_SHARDS_MIN) {
-      num_topic_shards = PS_NUM_TOPIC_SHARDS_MIN;
-    }
     /* FIXME: this will be dynamically configured */
     for (auto& c : config["notifications"].array()) {
       PSNotificationConfig nc;
