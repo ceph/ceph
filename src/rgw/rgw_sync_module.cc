@@ -7,6 +7,7 @@
 #include "rgw_sync_module_log.h"
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_aws.h"
+#include "rgw_sync_module_pubsub.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -67,4 +68,7 @@ void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager)
 
   RGWSyncModuleRef aws_module(std::make_shared<RGWAWSSyncModule>());
   modules_manager->register_module("cloud", aws_module);
+
+  RGWSyncModuleRef pubsub_module(std::make_shared<RGWPSSyncModule>());
+  modules_manager->register_module("pubsub", pubsub_module);
 }
