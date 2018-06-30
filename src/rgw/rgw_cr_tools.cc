@@ -222,3 +222,22 @@ int RGWBucketCreateLocalCR::Request::_send_request()
 
   return ret;
 }
+
+template<>
+int RGWObjectSimplePutCR::Request::_send_request()
+{
+  RGWDataAccess::ObjectRef obj;
+
+  int ret = params.bucket->get_object(params.key, &obj);
+  if (ret < 0) {
+    cerr << "ERROR: failed to get object: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  ret = obj->put(params.data, params.attrs);
+  if (ret < 0) {
+    cerr << "ERROR: put object returned error: " << cpp_strerror(-ret) << std::endl;
+  }
+
+  return 0;
+}
