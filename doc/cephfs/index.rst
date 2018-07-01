@@ -1,3 +1,5 @@
+.. _ceph-filesystem:
+
 =================
  Ceph Filesystem
 =================
