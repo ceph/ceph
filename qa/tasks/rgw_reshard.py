@@ -39,6 +39,18 @@ from util.rgw import rgwadmin, get_user_summary, get_user_successful_ops
 
 log = logging.getLogger(__name__)
 
+class UserStats:
+    def __init__(self, uid, num_entries =0 , total_bytes = 0, total_bytes_rounded = 0):
+        self.uid = uid
+        self.num_entries = num_entries
+        self.total_bytes = total_bytes
+        self.total_bytes_rounded = total_bytes_rounded
+
+    def __eq__(self, other):
+        if other is None:
+            return False
+        return (self.uid, self.num_entries, self.total_bytes, self.total_bytes_rounded)   == (other.uid, other.num_entries, other.total_bytes, other.total_bytes_rounded)
+
 class BucketStats:
     def __init__(self, bucket_name, bucket_id, num_objs=0, size_kb=0, num_shards = 0):
         self.bucket_name= bucket_name
@@ -93,13 +105,13 @@ def  get_user_stats(ctx, client, uid):
     function to get user stats
     """
     (err, out) = rgwadmin(ctx, client,
-                          ['user', 'stats', '--uid', uid], check_status=True)
+                          ['user', 'stats', '--uid', uid, '--sync-stats'], check_status=True)
     assert err == 0
     total_entries = out['stats']['total_entries']
     total_bytes = out['stats']['total_bytes']
     total_bytes_rounded = out['stats']['total_bytes_rounded']
     log.debug("user %s total_entries %d total_bytes %d rounded %d", uid, total_entries, total_bytes, total_bytes_rounded)
-    return (total_entries, total_bytes, total_bytes_rounded)
+    return UserStats(uid, total_entries, total_bytes, total_bytes_rounded)
 
 def get_bucket_num_shards(ctx, client, bucket_name, bucket_id):
     """
@@ -173,6 +185,7 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['reshard', 'list'], check_status=True)
 
     # TESTCASE 'reshard-add','reshard','add','add bucket to resharding queue','succeeds'
+    old_user_stats = get_user_stats(ctx, client, user)
     num_shards = bucket_stats1.num_shards + 1
     (err, out) = rgwadmin(ctx, client, ['reshard', 'add', '--bucket', bucket_name1, '--num-shards', str(num_shards)], check_status=True)
     (err, out) = rgwadmin(ctx, client, ['reshard', 'list'], check_status=True)
@@ -185,6 +198,8 @@ def task(ctx, config):
     # check bucket shards num
     bucket_stats1 = get_bucket_stats(ctx, client, bucket_name1)
     assert  bucket_stats1.num_shards == num_shards
+    new_user_stats = get_user_stats(ctx, client, user)
+    assert old_user_stats == new_user_stats
 
     # create objs
     num_objs = 8
@@ -193,6 +208,7 @@ def task(ctx, config):
         key.key = 'obj' + `i`
         key.set_contents_from_string(key.key)
 
+    old_user_stats = get_user_stats(ctx, client, user)
     num_shards = bucket_stats1.num_shards + 1
     (err, out) = rgwadmin(ctx, client, ['reshard', 'add', '--bucket', bucket_name1, '--num-shards', str(num_shards)], check_status=True)
     (err, out) = rgwadmin(ctx, client, ['reshard', 'list'], check_status=True)
@@ -202,6 +218,8 @@ def task(ctx, config):
     # check bucket shards num
     bucket_stats1 = get_bucket_stats(ctx, client, bucket_name1)
     assert  bucket_stats1.num_shards == num_shards
+    new_user_stats = get_user_stats(ctx, client, user)
+    assert old_user_stats == new_user_stats
 
     # TESTCASE 'dynamic reshard-process','reshard','','process bucket resharding','succeeds'
     # create objs
@@ -211,21 +229,28 @@ def task(ctx, config):
         key.key = 'obj' + `i`
         key.set_contents_from_string(key.key)
     # check bucket shards num
-    #assert(out['shards']) == num_shards
+    bucket_stats1 = get_bucket_stats(ctx, client, bucket_name1)
+    #assert  bucket_stats1.num_shards > num_shards
 
     # TESTCASE 'manual resharding','bucket', 'reshard','','manual bucket resharding','succeeds'
+    old_user_stats = get_user_stats(ctx, client, user)
     num_shards = bucket_stats1.num_shards + 1
-    (err, out) = rgwadmin(ctx, client, ['bucket', 'reshard', '--bucket', bucket_name1,  '--num-shards', str(num_shards)], check_status=True)
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'reshard', '--bucket', bucket_name2,  '--num-shards', str(num_shards)], check_status=True)
     # check bucket shards num
-    bucket_stats1 = get_bucket_stats(ctx, client, bucket_name1)
-    assert  bucket_stats1.num_shards == num_shards
+    bucket_stats2 = get_bucket_stats(ctx, client, bucket_name2)
+    assert  bucket_stats2.num_shards == num_shards
+    new_user_stats = get_user_stats(ctx, client, user)
+    assert old_user_stats == new_user_stats
 
     # TESTCASE 'versioning reshard-','bucket', reshard','versioning reshard','succeeds'
+    old_user_stats = get_user_stats(ctx, client, user)
     num_shards = ver_bucket_stats.num_shards + 1
     (err, out) = rgwadmin(ctx, client, ['bucket', 'reshard', '--bucket', ver_bucket_name,  '--num-shards', str(num_shards)], check_status=True)
     # check bucket shards num
     ver_bucket_stats = get_bucket_stats(ctx, client, ver_bucket_name)
-    assert  ver_bucket_stats.num_shards == num_shards
+    assert ver_bucket_stats.num_shards == num_shards
+    new_user_stats = get_user_stats(ctx, client, user)
+    assert old_user_stats == new_user_stats
 
     # Clean up
     log.debug("Deleting bucket %s", bucket_name1)
