@@ -1515,6 +1515,8 @@ Device kernel object(s). This is done with the  command-line tool ``rbd``.
 
 .. index:: Ceph FS; Ceph Filesystem; libcephfs; MDS; metadata server; ceph-mds
 
+.. _arch-cephfs:
+
 Ceph Filesystem
 ---------------
 
