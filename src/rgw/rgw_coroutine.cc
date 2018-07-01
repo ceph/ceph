@@ -222,7 +222,7 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
   RGWCoroutine *op = *pos;
   op->stack = this;
   ldout(cct, 20) << *op << ": operate()" << dendl;
-  int r = op->operate();
+  int r = op->operate_wrapper();
   if (r < 0) {
     ldout(cct, 20) << *op << ": operate() returned r=" << r << dendl;
   }

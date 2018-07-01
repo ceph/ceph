@@ -258,6 +258,9 @@ protected:
     return status;
   }
 
+  virtual int operate_wrapper() {
+    return operate();
+  }
 public:
   RGWCoroutine(CephContext *_cct) : status(_cct), _yield_ret(false), cct(_cct), stack(NULL), retcode(0), state(RGWCoroutine_Run) {}
   ~RGWCoroutine() override;
