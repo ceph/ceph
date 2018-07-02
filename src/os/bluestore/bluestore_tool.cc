@@ -329,8 +329,12 @@ int main(int argc, char **argv)
     if (r < 0) {
       cerr << "error from fsck: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
+    } else if (r > 0) {
+      cerr << action << " found " << r << " error(s)" << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
     }
-    cout << action << " success" << std::endl;
   }
   else if (action == "prime-osd-dir") {
     bluestore_bdev_label_t label;
