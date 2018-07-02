@@ -303,7 +303,7 @@ def run_with_watchdog(process, job_config):
             log.warning("Job ran longer than {max}s. Killing...".format(
                 max=teuth_config.max_job_time))
             kill_job(job_info['name'], job_info['job_id'],
-                     teuth_config.archive_base)
+                     teuth_config.archive_base, job_config['owner'])
 
         # calling this without a status just updates the jobs updated time
         report.try_push_job_info(job_info)
