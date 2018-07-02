@@ -15,11 +15,11 @@ class RbdTest(DashboardTestCase):
             'pool': name,
             'pg_num': pg_num,
             'pool_type': pool_type,
-            'application_metadata': application
+            'application_metadata': [application]
         }
         if pool_type == 'erasure':
             data['flags'] = ['ec_overwrites']
-        cls._post("/api/pool", data)
+        cls._task_post("/api/pool", data)
 
     @DashboardTestCase.RunAs('test', 'test', [{'rbd-image': ['create', 'update', 'delete']}])
     def test_read_access_permissions(self):
