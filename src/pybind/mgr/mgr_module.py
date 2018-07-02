@@ -453,10 +453,14 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Fetch the daemon metadata for a particular service.
 
+        ceph-mgr fetches metadata asynchronously, so are windows of time during
+        addition/removal of services where the metadata is not available to
+        modules.  ``None`` is returned if no metadata is available.
+
         :param str svc_type: service type (e.g., 'mds', 'osd', 'mon')
         :param str svc_id: service id. convert OSD integer IDs to strings when
             calling this
-        :rtype: dict
+        :rtype: dict, or None if no metadata found
         """
         return self._ceph_get_metadata(svc_type, svc_id)
 
@@ -464,9 +468,12 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Fetch the latest status for a particular service daemon.
 
+        This method may return ``None`` if no status information is
+        available, for example because the daemon hasn't fully started yet.
+
         :param svc_type: string (e.g., 'rgw')
         :param svc_id: string
-        :return: dict
+        :return: dict, or None if the service is not found
         """
         return self._ceph_get_daemon_status(svc_type, svc_id)
 
