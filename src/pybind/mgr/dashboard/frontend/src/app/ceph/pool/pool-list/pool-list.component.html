@@ -5,55 +5,17 @@
               [columns]="columns"
               selectionType="single"
               (updateSelection)="updateSelection($event)">
-      <div class="table-actions">
-        <div class="btn-group"
-             dropdown>
-          <button type="button"
-                  class="btn btn-sm btn-primary"
-                  *ngIf="!selection.hasSingleSelection"
-                  routerLink="/pool/add">
-            <i class="fa fa-fw fa-plus"></i><span i18n>Add</span>
-          </button>
-          <button type="button"
-                  class="btn btn-sm btn-primary"
-                  *ngIf="selection.hasSingleSelection"
-                  [ngClass]="{'disabled': selection.first()?.executing}"
-                  routerLink="/pool/edit/{{ selection.first()?.pool_name }}">
-            <i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span>
-          </button>
-          <button type="button"
-                  dropdownToggle
-                  class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split">
-            <span class="caret"></span>
-            <span class="sr-only"></span>
-          </button>
-          <ul *dropdownMenu class="dropdown-menu" role="menu">
-            <li role="menuitem">
-              <a class="dropdown-item"
-                 routerLink="/pool/add">
-                <i class="fa fa-fw fa-plus"></i><span i18n>Add</span>
-              </a>
-            </li>
-            <li role="menuitem"
-                [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first()?.executing}">
-              <a class="dropdown-item"
-                 routerLink="/pool/edit/{{ selection.first()?.pool_name }}">
-                <i class="fa fa-fw fa-pencil"></i><span i18n>Edit</span></a>
-            </li>
-            <li role="menuitem"
-                [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first()?.executing}">
-              <a class="dropdown-item"
-                 (click)="deletePoolModal()">
-                <i class="fa fa-fw fa-trash-o"></i><span i18n>Delete</span>
-              </a>
-            </li>
-          </ul>
-        </div>
-      </div>
+      <cd-table-actions class="table-actions"
+                        [permission]="permission"
+                        [selection]="selection"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
       <tabset cdTableDetail *ngIf="selection.hasSingleSelection">
         <tab i18n-heading
              heading="Details">
-          <cd-table-key-value [renderObjects]="true" [data]="selection.first()" [autoReload]="false">
+          <cd-table-key-value [renderObjects]="true"
+                              [data]="selection.first()"
+                              [autoReload]="false">
           </cd-table-key-value>
         </tab>
         <tab i18n-heading
