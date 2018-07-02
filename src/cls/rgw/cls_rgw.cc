@@ -1928,6 +1928,13 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         return -EINVAL;
       }
 
+      if (cur_disk.pending_map.size() == 0) {
+        /* if none stale pending_map left, should do nothing.
+         * this can avoid list op get inconsistent state when raced with another op
+         */
+        continue;
+      }
+
       real_time cur_time = real_clock::now();
       map<string, struct rgw_bucket_pending_info>::iterator iter =
                 cur_disk.pending_map.begin();
