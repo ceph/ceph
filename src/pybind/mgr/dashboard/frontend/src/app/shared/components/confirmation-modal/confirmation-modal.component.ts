@@ -13,6 +13,7 @@ export class ConfirmationModalComponent implements OnInit {
   bodyTpl: TemplateRef<any>;
   buttonText: string;
   onSubmit: Function;
+  onCancel: Function;
   titleText: string;
 
   bodyContext: object;
@@ -30,6 +31,13 @@ export class ConfirmationModalComponent implements OnInit {
 
   submit() {
     this.onSubmit();
+  }
+
+  cancel() {
+    this.modalRef.hide();
+    if (this.onCancel) {
+      this.onCancel();
+    }
   }
 
   stopLoadingSpinner() {
