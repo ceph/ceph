@@ -58,7 +58,7 @@ private:
   ::SnapContext m_snapc;
   uint64_t m_object_no;
 
-  io::AsyncOperation m_async_op;
+  io::AsyncOperation *m_async_op = nullptr;
 
   void start_async_op() {
     I &image_ctx = this->m_image_ctx;
@@ -66,7 +66,9 @@ private:
     CephContext *cct = image_ctx.cct;
     ldout(cct, 10) << dendl;
 
-    m_async_op.start_op(image_ctx);
+    assert(m_async_op == nullptr);
+    m_async_op = new io::AsyncOperation();
+    m_async_op->start_op(image_ctx);
 
     if (!image_ctx.io_work_queue->writes_blocked()) {
       migrate_object();
@@ -76,7 +78,9 @@ private:
     auto ctx = create_async_context_callback(
       image_ctx, create_context_callback<
         C_MigrateObject<I>, &C_MigrateObject<I>::handle_start_async_op>(this));
-    m_async_op.finish_op();
+    m_async_op->finish_op();
+    delete m_async_op;
+    m_async_op = nullptr;
     image_ctx.io_work_queue->wait_on_writes_unblocked(ctx);
   }
 
@@ -145,7 +149,8 @@ private:
       r = 0;
     }
 
-    m_async_op.finish_op();
+    m_async_op->finish_op();
+    delete m_async_op;
     this->complete(r);
   }
 };
