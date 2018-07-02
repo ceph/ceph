@@ -37,7 +37,7 @@ class PoolTest(DashboardTestCase):
 
     @DashboardTestCase.RunAs('test', 'test', [{'pool': ['read', 'update', 'delete']}])
     def test_create_access_permissions(self):
-        self._post('/api/pool/', {})
+        self._task_post('/api/pool/', {})
         self.assertStatus(403)
 
     @DashboardTestCase.RunAs('test', 'test', [{'pool': ['read', 'create', 'update']}])
@@ -206,7 +206,7 @@ class PoolTest(DashboardTestCase):
 
     def test_pool_create_fail(self):
         data = {'pool_type': u'replicated', 'rule_name': u'dnf', 'pg_num': u'8', 'pool': u'sadfs'}
-        self._post('/api/pool/', data)
+        self._task_post('/api/pool/', data)
         self.assertStatus(400)
         self.assertJsonBody({
             'component': 'pool',
