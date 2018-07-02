@@ -60,6 +60,16 @@
   </span>
 </ng-template>
 
+<ng-template #statusLight
+             let-value="value">
+      <svg width="20" height="20">
+        <circle *ngIf="value==='green'" cx="10" cy="10" r="8" stroke="green" stroke-width="1" fill="green" />
+        <circle *ngIf="value==='yellow'" cx="10" cy="10" r="8" stroke="yellow" stroke-width="1" fill="yellow" />
+        <circle *ngIf="value==='red'" cx="10" cy="10" r="8" stroke="red" stroke-width="1" fill="red" />
+        <circle *ngIf="value==='unknown'" cx="10" cy="10" r="8" stroke="gray" stroke-width="1" fill="gray" />
+      </svg>
+</ng-template>
+
 <ng-template #osdUsageTpl
              let-row="row">
   <cd-usage-bar [totalBytes]="row.stats.stat_bytes"

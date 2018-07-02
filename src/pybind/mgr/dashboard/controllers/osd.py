@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import datetime
+
 from . import ApiController, RESTController, UpdatePermission
 from .. import mgr, logger
 from ..security import Scope
@@ -8,11 +10,14 @@ from ..services.ceph_service import CephService
 from ..services.exception import handle_send_command_error
 from ..tools import str_to_bool
 
+WEEK_DAYS_TIME = 7 * 24 * 60 * 60
+
 
 @ApiController('/osd', Scope.OSD)
 class Osd(RESTController):
     def list(self):
         osds = self.get_osd_map()
+        devices = mgr.get('devices')
         # Extending by osd stats information
         for s in mgr.get('osd_stats')['osd_stats']:
             osds[str(s['osd'])].update({'osd_stats': s})
@@ -32,11 +37,41 @@ class Osd(RESTController):
             o = osds[o_id]
             o['stats'] = {}
             o['stats_history'] = {}
+            o['devices'] = {}
+            life_expectancy_weeks = None
+            # Get device info
+            devs = self.parse_osd_devices(o_id, devices)
+            for dev_info in devs:
+                dev_id = dev_info.get('dev_id')
+                if life_expectancy_weeks is None:
+                    life_expectancy_weeks = \
+                        self.get_device_life_expectancy_weeks(dev_info)
+                    if life_expectancy_weeks is not None:
+                        o['devices'][dev_id] = \
+                            {'life_expectancy_weeks': life_expectancy_weeks}
+                else:
+                    next_dev_life_expectancy_weeks = \
+                        self.get_device_life_expectancy_weeks(dev_info)
+                    if life_expectancy_weeks > next_dev_life_expectancy_weeks and next_dev_life_expectancy_weeks is not None:
+                        life_expectancy_weeks = next_dev_life_expectancy_weeks
+                    if next_dev_life_expectancy_weeks is not None:
+                        o['devices'][dev_id] = \
+                            {'life_expectancy_weeks':
+                                 next_dev_life_expectancy_weeks}
             osd_spec = str(o['osd'])
             for s in ['osd.op_w', 'osd.op_in_bytes', 'osd.op_r', 'osd.op_out_bytes']:
                 prop = s.split('.')[1]
                 o['stats'][prop] = CephService.get_rate('osd', osd_spec, s)
                 o['stats_history'][prop] = CephService.get_rates('osd', osd_spec, s)
+            # Device life expectancy weeks over 6 weeks, the light is 'green'
+            if life_expectancy_weeks is None:
+                o['stats']['lf_s'] = 'unknown'
+            elif life_expectancy_weeks >= 6:
+                o['stats']['lf_s'] = 'green'
+            elif 6 > life_expectancy_weeks >= 4:
+                o['stats']['lf_s'] = 'yellow'
+            elif life_expectancy_weeks < 4:
+                o['stats']['lf_s'] = 'red'
             # Gauge stats
             for s in ['osd.numpg', 'osd.stat_bytes', 'osd.stat_bytes_used']:
                 o['stats'][s.split('.')[1]] = mgr.get_latest('osd', osd_spec, s)
@@ -48,6 +83,44 @@ class Osd(RESTController):
             osd['id'] = osd['osd']
             osds[str(osd['id'])] = osd
         return osds
+
+    def parse_osd_devices(self, osd_id, devices):
+        result = []
+        if str(osd_id).isdigit():
+            osd_name = 'osd.%s' % osd_id
+        else:
+            osd_name = osd_id
+        if devices:
+            for dev in devices.get('devices', []):
+                if osd_name in dev.get('daemons', []):
+                    dev_id = dev.get('devid')
+                    dev_info = {
+                        'dev_id': dev_id,
+                        'life_expectancy_max':
+                            dev.get('life_expectancy_max', None),
+                        'life_expectancy_min':
+                            dev.get('life_expectancy_min', None)
+                    }
+                    result.append(dev_info)
+        return result
+
+    def get_device_life_expectancy_weeks(self, dev_info):
+        life_expectancy_weeks = None
+        try:
+            if dev_info:
+                i_to_day = None
+                i_from_day = None
+                from_day = dev_info.get('life_expectancy_min', '')
+                to_day = dev_info.get('life_expectancy_max', '')
+                if to_day:
+                    i_to_day = int(datetime.datetime.strptime(to_day[:10], '%Y-%m-%d').strftime('%s'))
+                if from_day:
+                    i_from_day = int(datetime.datetime.strptime(from_day[:10], '%Y-%m-%d').strftime('%s'))
+                if i_to_day and i_from_day:
+                    life_expectancy_weeks = int((i_to_day - i_from_day) // WEEK_DAYS_TIME)
+        except Exception as e:
+            logger.error('failed to parse device %s life expectancy weeks, %s' % (dev_info, str(e)))
+        return life_expectancy_weeks
 
     @handle_send_command_error('osd')
     def get(self, svc_id):
