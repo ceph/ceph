@@ -152,6 +152,9 @@ class Module(MgrModule):
         data = []
         for osd_id, stats in six.iteritems(osd_sum):
             metadata = self.get_metadata('osd', "%s" % osd_id)
+            if not metadata:
+                continue
+
             for stat in stats:
                 point_1 = {
                     "measurement": "ceph_pg_summary_osd",
