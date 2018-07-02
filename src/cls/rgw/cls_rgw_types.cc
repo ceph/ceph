@@ -613,7 +613,21 @@ void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>
 
 void cls_rgw_bucket_instance_entry::dump(Formatter *f) const
 {
-  encode_json("reshard_status", (int)reshard_status, f);
+  string status_str;
+  switch(reshard_status) {
+    case CLS_RGW_RESHARD_NONE:
+      status_str= "none";
+      break;
+    case CLS_RGW_RESHARD_IN_PROGRESS:
+      status_str = "in-progress";
+      break;
+    case CLS_RGW_RESHARD_DONE:
+      status_str = "done";
+      break;
+    default:
+      status_str = "invalid";
+  }
+  encode_json("reshard_status", status_str, f);
   encode_json("new_bucket_instance_id", new_bucket_instance_id, f);
   encode_json("num_shards", num_shards, f);
 
