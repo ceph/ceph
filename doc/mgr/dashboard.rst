@@ -1,7 +1,7 @@
+.. _mgr-dashboard:
+
 Ceph Manager Dashboard
 ======================
-
-.. _mgr-dashboard-overview:
 
 Overview
 --------

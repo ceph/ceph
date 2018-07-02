@@ -12,7 +12,7 @@ Major Changes from Luminous
     replaced with a new implementation inspired by and derived from the
     `openATTIC <https://openattic.org>`_ Ceph management tool, providing a
     drop-in replacement offering a :ref:`number of additional management
-    features <mgr-dashboard-overview>`.
+    features <mgr-dashboard>`.
 
 - *RADOS*:
 
@@ -419,8 +419,8 @@ These changes occurred between the Luminous and Mimic releases.
     replaced with a new implementation, providing a drop-in replacement offering
     a number of additional management features. To access the new dashboard, you
     first need to define a username and password and create an SSL certificate.
-    See the :ref:`dashboard documentation <mgr-dashboard-overview>` for a feature
-    overview and installation instructions.
+    See the :ref:`mgr-dashboard` for a feature overview and installation
+    instructions.
 
   - The ``ceph-rest-api`` command-line tool (obsoleted by the MGR
     `restful` module and deprecated since v12.2.5) has been dropped.
