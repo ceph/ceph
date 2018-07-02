@@ -119,7 +119,21 @@ Mantle::Mantle (void)
   }
 
   /* balancer policies can use basic Lua functions */
-  luaL_openlibs(L);
+  static const luaL_Reg loadedlibs[] = {
+    {"_G", luaopen_base},
+    {LUA_COLIBNAME, luaopen_coroutine},
+    {LUA_STRLIBNAME, luaopen_string},
+    {LUA_MATHLIBNAME, luaopen_math},
+    {LUA_TABLIBNAME, luaopen_table},
+    {LUA_UTF8LIBNAME, luaopen_utf8},
+    {NULL, NULL}
+  };
+
+  const luaL_Reg *lib;
+  for (lib = loadedlibs; lib->func; lib++) {
+      luaL_requiref(L, lib->name, lib->func, 1);
+      lua_pop(L, 1);  /* remove lib */
+  }
 
   /* setup debugging */
   lua_register(L, "BAL_LOG", dout_wrapper);
