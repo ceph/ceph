@@ -31,6 +31,7 @@ describe('PoolListComponent', () => {
     fixture = TestBed.createComponent(PoolListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
+    component.permission.read = true;
   });
 
   it('should create', () => {

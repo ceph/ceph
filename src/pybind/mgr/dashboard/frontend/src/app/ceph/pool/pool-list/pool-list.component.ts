@@ -3,14 +3,15 @@ import { Component } from '@angular/core';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 
 import { PoolService } from '../../../shared/api/pool.service';
-import {
-  DeletionModalComponent
-} from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
+import { Permission } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { Pool } from '../pool';
 
@@ -25,12 +26,31 @@ export class PoolListComponent {
   selection = new CdTableSelection();
   modalRef: BsModalRef;
   executingTasks: ExecutingTask[] = [];
+  permission: Permission;
+  tableActions: CdTableAction[];
 
   constructor(
     private poolService: PoolService,
     private taskWrapper: TaskWrapperService,
+    private authStorageService: AuthStorageService,
     private modalService: BsModalService
   ) {
+    this.permission = this.authStorageService.getPermissions().pool;
+    this.tableActions = [
+      { permission: 'create', icon: 'fa-plus', routerLink: () => '/pool/add', name: 'Add' },
+      {
+        permission: 'update',
+        icon: 'fa-pencil',
+        routerLink: () => '/pool/edit/' + this.selection.first().pool_name,
+        name: 'Edit'
+      },
+      {
+        permission: 'delete',
+        icon: 'fa-trash-o',
+        click: () => this.deletePoolModal(),
+        name: 'Delete'
+      }
+    ];
     this.columns = [
       {
         prop: 'pool_name',
