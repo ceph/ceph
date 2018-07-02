@@ -366,6 +366,174 @@ TEST_F(cls_rgw, index_suggest)
   test_stats(ioctx, bucket_oid, RGWObjCategory::None, num_objs / 2, total_size);
 }
 
+TEST(cls_rgw, index_suggest_recover)
+{
+  // case recover: PUT Op fail to complete,
+  //    index_suggest should recover the index
+  string bucket_oid = str_int("bucket", 4);
+  OpMgr mgr;
+
+  ObjectWriteOperation *op = mgr.write_op();
+  cls_rgw_bucket_init(*op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  //int epoch = 0;
+  uint64_t obj_size = 1024;
+
+  uint64_t num_entries = 0;
+  uint64_t total_size = 0;
+
+  string obj = str_int("obj", 1);
+  string tag = str_int("tag", 1);
+  string loc = str_int("loc", 1);
+  index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+
+  rgw_bucket_dir_entry dirent;
+  dirent.key.name = obj;
+  dirent.locator = loc;
+  dirent.exists = true;
+  dirent.meta.size = 1024;
+  dirent.meta.accounted_size = 1024;
+
+  bufferlist updates;
+  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, dirent, updates);
+  num_entries += 1;
+  total_size += obj_size;
+
+  map<int, string> bucket_objs;
+  bucket_objs[0] = bucket_oid;
+  int r = CLSRGWIssueSetTagTimeout(ioctx, bucket_objs, 8 /* max aio */, 1)();
+  ASSERT_EQ(0, r);
+
+  sleep(1);
+
+  /* suggest changes! */
+  op = mgr.write_op();
+  cls_rgw_suggest_changes(*op, updates);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+}
+
+TEST(cls_rgw, index_suggest_race_put)
+{
+  // case race put: list op raced with put op,
+  //    index_suggest should not delete index
+  string bucket_oid = str_int("bucket", 5);
+  OpMgr mgr;
+
+  ObjectWriteOperation *op = mgr.write_op();
+  cls_rgw_bucket_init(*op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  int epoch = 0;
+  uint64_t obj_size = 1024;
+
+  uint64_t num_entries = 0;
+  uint64_t total_size = 0;
+
+  string obj = str_int("obj", 1);
+  string tag = str_int("tag", 1);
+  string loc = str_int("loc", 1);
+
+  // PUT op
+  index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = 0;
+  meta.size = obj_size;
+  total_size += meta.size;
+  num_entries += 1;
+
+  index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, ++epoch, obj, meta);
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+
+  /*
+   * 1.list after index prepare
+   * 2.check_disk_state before write head obj
+   * 3.aio_operate dir_suggest_changes after index complete
+   */
+  rgw_bucket_dir_entry dirent;
+
+  bufferlist updates;
+  cls_rgw_encode_suggestion(CEPH_RGW_REMOVE, dirent, updates);
+
+  /* suggest changes! */
+  op = mgr.write_op();
+  cls_rgw_suggest_changes(*op, updates);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+}
+
+TEST(cls_rgw, index_suggest_race_delete)
+{
+  // case race delete: list op raced with del op,
+  //    index_suggest should not recover put index
+  string bucket_oid = str_int("bucket", 6);
+  OpMgr mgr;
+
+  ObjectWriteOperation *op = mgr.write_op();
+  cls_rgw_bucket_init(*op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  int epoch = 0;
+  uint64_t obj_size = 1024;
+
+  uint64_t num_entries = 0;
+  uint64_t total_size = 0;
+
+  string obj = str_int("obj", 1);
+  string tag = str_int("tag", 1);
+  string loc = str_int("loc", 1);
+
+  // first PUT op
+  index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = 0;
+  meta.size = obj_size;
+  total_size += meta.size;
+  num_entries += 1;
+
+  index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, ++epoch, obj, meta);
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+
+  // second DEL op
+  index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, obj, loc);
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+
+  rgw_bucket_dir_entry_meta meta2;
+  num_entries -= 1;
+  total_size -= obj_size;
+
+  index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_DEL, tag, ++epoch, obj, meta2);
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+
+  /* 1.list after del op index prepare
+   * 2.check_disk_state before delete head obj
+   * 3.aio_operate dir_suggest_changes after index complete
+   */
+  rgw_bucket_dir_entry dirent;
+  dirent.key.name = obj;
+  dirent.locator = loc;
+  dirent.exists = true;
+  dirent.meta.size = 1024;
+  dirent.meta.accounted_size = 1024;
+
+  bufferlist updates;
+  cls_rgw_encode_suggestion(CEPH_RGW_UPDATE, dirent, updates);
+
+  /* suggest changes! */
+  op = mgr.write_op();
+  cls_rgw_suggest_changes(*op, updates);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  test_stats(ioctx, bucket_oid, 0, num_entries, total_size);
+}
 
 /*
  * This case is used to test whether get_obj_vals will
@@ -374,7 +542,7 @@ TEST_F(cls_rgw, index_suggest)
  */
 TEST_F(cls_rgw, index_list)
 {
-  string bucket_oid = str_int("bucket", 4);
+  string bucket_oid = str_int("bucket", 7);
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -450,7 +618,7 @@ TEST_F(cls_rgw, index_list)
  */
 TEST_F(cls_rgw, index_list_delimited)
 {
-  string bucket_oid = str_int("bucket", 7);
+  string bucket_oid = str_int("bucket", 8);
 
   ObjectWriteOperation op;
   cls_rgw_bucket_init_index(op);
@@ -553,7 +721,7 @@ TEST_F(cls_rgw, index_list_delimited)
 
 TEST_F(cls_rgw, bi_list)
 {
-  string bucket_oid = str_int("bucket", 5);
+  string bucket_oid = str_int("bucket", 9);
 
  CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
 
