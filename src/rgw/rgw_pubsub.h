@@ -2,6 +2,7 @@
 #define CEPH_RGW_PUBSUB_H
 
 #include "rgw_common.h"
+#include "rgw_tools.h"
 
 
 enum RGWPubSubEventType {
@@ -182,5 +183,98 @@ struct rgw_pubsub_user_topics {
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_user_topics)
+
+static string pubsub_user_oid_prefix = "pubsub.user.";
+
+class RGWUserPubSub
+{
+  RGWRados *store;
+  rgw_user user;
+  RGWObjectCtx obj_ctx;
+
+  template <class T>
+  int read(const rgw_raw_obj& obj, T *data, RGWObjVersionTracker *objv_tracker);
+
+  template <class T>
+  int write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTracker *obj_tracker);
+
+  int remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker);
+public:
+  RGWUserPubSub(RGWRados *_store, const rgw_user& _user) : store(_store),
+                                                           user(_user),
+                                                           obj_ctx(store) {}
+
+  string user_meta_oid() const {
+    return pubsub_user_oid_prefix + user.to_str();
+  }
+
+  string bucket_meta_oid(const rgw_bucket& bucket) const {
+    return pubsub_user_oid_prefix + user.to_str() + ".bucket." + bucket.name + "/" + bucket.bucket_id;
+  }
+
+  string sub_meta_oid(const string& name) const {
+    return pubsub_user_oid_prefix + user.to_str() + ".sub." + name;
+  }
+
+  void get_user_meta_obj(rgw_raw_obj *obj) const {
+    *obj = rgw_raw_obj(store->get_zone_params().log_pool, user_meta_oid());
+  }
+
+  void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const {
+    *obj = rgw_raw_obj(store->get_zone_params().log_pool, bucket_meta_oid(bucket));
+  }
+
+  void get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const {
+    *obj = rgw_raw_obj(store->get_zone_params().log_pool, sub_meta_oid(name));
+  }
+
+  int get_topics(rgw_pubsub_user_topics *result);
+  int get_bucket_topics(const rgw_bucket& bucket, rgw_pubsub_user_topics *result);
+  int get_topic(const string& name, rgw_pubsub_user_topic_info *result);
+  int create_topic(const string& name, const rgw_bucket& bucket);
+  int remove_topic(const string& name);
+  int get_sub(const string& name, rgw_pubsub_user_sub_config *result);
+  int add_sub(const string& name, const string& topic, const rgw_pubsub_user_sub_dest& dest);
+  int remove_sub(const string& name, const string& topic, const rgw_pubsub_user_sub_dest& dest);
+};
+
+template <class T>
+int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker *objv_tracker)
+{
+  bufferlist bl;
+  int ret = rgw_get_system_obj(store, obj_ctx,
+                               obj.pool, obj.oid,
+                               bl,
+                               objv_tracker,
+                               nullptr, nullptr, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(*result, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  return 0;
+}
+
+template <class T>
+int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTracker *objv_tracker)
+{
+  bufferlist bl;
+  encode(info, bl);
+
+  int ret = rgw_put_system_obj(store, obj.pool, obj.oid,
+                           bl, false, objv_tracker,
+                           real_time());
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
 
 #endif
