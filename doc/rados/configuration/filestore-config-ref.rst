@@ -297,7 +297,7 @@ Misc
               NOTE: A negative value means to disable subdir merging
 :Type: Integer
 :Required: No
-:Default: ``10``
+:Default: ``-10``
 
 
 ``filestore split multiple``
