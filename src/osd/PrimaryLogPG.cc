@@ -361,13 +361,16 @@ void PrimaryLogPG::on_local_recover(
     set<snapid_t> snaps;
     dout(20) << " snapset " << recovery_info.ss << dendl;
     auto p = recovery_info.ss.clone_snaps.find(hoid.snap);
-    assert(p != recovery_info.ss.clone_snaps.end());  // hmm, should we warn?
-    snaps.insert(p->second.begin(), p->second.end());
-    dout(20) << " snaps " << snaps << dendl;
-    snap_mapper.add_oid(
-      recovery_info.soid,
-      snaps,
-      &_t);
+    if (p != recovery_info.ss.clone_snaps.end()) {
+      snaps.insert(p->second.begin(), p->second.end());
+      dout(20) << " snaps " << snaps << dendl;
+      snap_mapper.add_oid(
+	recovery_info.soid,
+	snaps,
+	&_t);
+    } else {
+      derr << __func__ << " " << hoid << " had no clone_snaps" << dendl;
+    }
   }
   if (!is_delete && pg_log.get_missing().is_missing(recovery_info.soid) &&
       pg_log.get_missing().get_items().find(recovery_info.soid)->second.need > recovery_info.version) {
