@@ -22,7 +22,6 @@
 #include <fstream>
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_mds_balancer
 #undef dout_prefix
 #define dout_prefix *_dout << "mds.mantle "
 #define mantle_dout(lvl) \
