@@ -55,6 +55,7 @@ config:
    "tenant": <tenant>,             # default: <empty>
    "uid": <uid>,                   # default: "pubsub"
    "data_bucket_prefix": <prefix>  # default: "pubsub"
+   "data_oid_prefix": <prefix>     #
 
     # non-dynamic config
     "notifications": [
@@ -96,13 +97,14 @@ struct PSSubConfig { /* subscription config */
   }
 
   void init(CephContext *cct, const JSONFormattable& config,
-            const string& data_bucket_prefix) {
+            const string& data_bucket_prefix,
+            const string& default_oid_prefix) {
     name = config["name"];
     topic = config["topic"];
     push_endpoint = config["push_endpoint"];
     string default_bucket_name = data_bucket_prefix + name;
     data_bucket_name = config["data_bucket"](default_bucket_name.c_str());
-    data_oid_prefix = config["data_oid_prefix"];
+    data_oid_prefix = config["data_oid_prefix"](default_oid_prefix.c_str());
   }
 };
 
@@ -154,26 +156,29 @@ static string json_str(const char *name, const T& obj, bool pretty = false)
   return ss.str();
 }
 
-using TopicsRef = std::shared_ptr<vector<PSTopicConfig *>>;
+using PSTopicConfigRef = std::shared_ptr<PSTopicConfig>;
+using TopicsRef = std::shared_ptr<vector<PSTopicConfigRef>>;
 
 
 struct PSConfig {
   string id{"pubsub"};
   rgw_user user;
   string data_bucket_prefix;
+  string data_oid_prefix;
 
   uint64_t sync_instance{0};
   uint64_t max_id{0};
 
   /* FIXME: no hard coded buckets, we'll have configurable topics */
   map<string, PSSubConfigRef> subs;
-  map<string, PSTopicConfig> topics;
+  map<string, PSTopicConfigRef> topics;
   multimap<string, PSNotificationConfig> notifications;
 
   void dump(Formatter *f) const {
     encode_json("id", id, f);
     encode_json("user", user, f);
     encode_json("data_bucket_prefix", data_bucket_prefix, f);
+    encode_json("data_oid_prefix", data_bucket_prefix, f);
     encode_json("sync_instance", sync_instance, f);
     encode_json("max_id", max_id, f);
     {
@@ -185,7 +190,7 @@ struct PSConfig {
     {
       Formatter::ArraySection section(*f, "topics");
       for (auto& topic : topics) {
-        encode_json("topic", topic.second, f);
+        encode_json("topic", *topic.second, f);
       }
     }
     {
@@ -212,6 +217,7 @@ struct PSConfig {
     string uid = config["uid"]("pubsub");
     user = rgw_user(config["tenant"], uid);
     data_bucket_prefix = config["data_bucket_prefix"]("pubsub");
+    data_oid_prefix = config["data_oid_prefix"];
 
     /* FIXME: this will be dynamically configured */
     for (auto& c : config["notifications"].array()) {
@@ -221,13 +227,16 @@ struct PSConfig {
       notifications.insert(std::make_pair(nc.path, nc));
 
       PSTopicConfig topic_config = { .name = nc.topic };
-      topics[nc.topic] = topic_config;
+      topics[nc.topic] = make_shared<PSTopicConfig>(topic_config);
     }
     for (auto& c : config["subscriptions"].array()) {
       auto sc = std::make_shared<PSSubConfig>();
-      sc->init(cct, c, data_bucket_prefix);
+      sc->init(cct, c, data_bucket_prefix, data_oid_prefix);
       subs[sc->name] = sc;
-      topics[sc->topic].subs.insert(sc->name);
+      auto iter = topics.find(sc->topic);
+      if (iter != topics.end()) {
+        iter->second->subs.insert(sc->name);
+      }
     }
 
     ldout(cct, 5) << "pubsub: module config (parsed representation):\n" << json_str("config", *this, true) << dendl;
@@ -239,8 +248,6 @@ struct PSConfig {
 
   void get_topics(CephContext *cct, const rgw_bucket& bucket, const rgw_obj_key& key, TopicsRef *result) {
     string path = bucket.name + "/" + key.name;
-
-    (*result)->clear();
 
     auto iter = notifications.upper_bound(path);
     if (iter == notifications.begin()) {
@@ -269,7 +276,7 @@ struct PSConfig {
       }
 
       ldout(cct, 10) << ": found topic for path=" << bucket << "/" << key << ": id=" << target.id << " target_path=" << target.path << ", topic=" << target.topic << dendl;
-      (*result)->push_back(&topic->second);
+      (*result)->push_back(topic->second);
     } while (iter != notifications.begin());
   }
 
@@ -756,26 +763,56 @@ public:
 class RGWPSFindBucketTopicsCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   PSEnvRef env;
+  rgw_user owner;
   rgw_bucket bucket;
   rgw_obj_key key;
 
+  RGWUserPubSub ups;
+
+  rgw_raw_obj obj;
+  rgw_pubsub_user_topics bucket_topics;
   TopicsRef *topics;
 public:
   RGWPSFindBucketTopicsCR(RGWDataSyncEnv *_sync_env,
                       PSEnvRef& _env,
-                      const rgw_bucket& _bucket,
+                      const RGWBucketInfo& _bucket_info,
                       const rgw_obj_key& _key,
                       TopicsRef *_topics) : RGWCoroutine(_sync_env->cct),
                                                           sync_env(_sync_env),
                                                           env(_env),
-                                                          bucket(_bucket),
+                                                          owner(_bucket_info.owner),
+                                                          bucket(_bucket_info.bucket),
                                                           key(_key),
+                                                          ups(_sync_env->store, owner),
                                                           topics(_topics) {
-    *topics = std::make_shared<vector<PSTopicConfig *> >();
+    *topics = std::make_shared<vector<PSTopicConfigRef> >();
   }
   int operate() override {
     reenter(this) {
-#warning this will need to change
+      ups.get_bucket_meta_obj(bucket, &obj);
+
+
+      using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_user_topics>;
+      yield {
+        bool empty_on_enoent = true;
+        call(new ReadInfoCR(sync_env->async_rados, sync_env->store,
+                            obj,
+                            &bucket_topics, empty_on_enoent));
+      }
+      if (retcode < 0 && retcode != -ENOENT) {
+        return set_cr_error(retcode);
+      }
+
+      ldout(sync_env->cct, 20) << "RGWPSFindBucketTopicsCR(): found " << bucket_topics.topics.size() << " topics for bucket " << bucket << dendl;
+
+      for (auto& titer : bucket_topics.topics) {
+        auto& info = titer.second;
+        shared_ptr<PSTopicConfig> tc = std::make_shared<PSTopicConfig>();
+        tc->name = info.topic.name;
+        tc->subs = info.subs;
+        (*topics)->push_back(tc);
+      }
+
       env->conf->get_topics(sync_env->cct, bucket, key, topics);
       return set_cr_done();
     }
@@ -788,7 +825,7 @@ class RGWPSHandleObjEvent : public RGWCoroutine {
   PSEnvRef env;
   EventRef event;
 
-  vector<PSTopicConfig *>::iterator titer;
+  vector<PSTopicConfigRef>::iterator titer;
   set<string>::iterator siter;
   PSSubscriptionRef sub;
   TopicsRef topics;
@@ -932,7 +969,7 @@ public:
 
   int operate() override {
     reenter(this) {
-      yield call(new RGWPSFindBucketTopicsCR(sync_env, env, bucket_info.bucket, key, &topics));
+      yield call(new RGWPSFindBucketTopicsCR(sync_env, env, bucket_info, key, &topics));
       if (retcode < 0) {
         ldout(sync_env->cct, 0) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
         return set_cr_error(retcode);
@@ -973,7 +1010,7 @@ public:
     reenter(this) {
       ldout(sync_env->cct, 10) << ": remove remote obj: z=" << sync_env->source_zone
                                << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
-      yield call(new RGWPSFindBucketTopicsCR(sync_env, env, bucket_info.bucket, key, &topics));
+      yield call(new RGWPSFindBucketTopicsCR(sync_env, env, bucket_info, key, &topics));
       if (retcode < 0) {
         ldout(sync_env->cct, 0) << "ERROR: RGWPSFindBucketTopicsCR returned ret=" << retcode << dendl;
         return set_cr_error(retcode);
