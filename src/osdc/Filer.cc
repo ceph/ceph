@@ -67,7 +67,7 @@ public:
 };
 
 int Filer::probe(inodeno_t ino,
-		 file_layout_t *layout,
+		 const file_layout_t *layout,
 		 snapid_t snapid,
 		 uint64_t start_from,
 		 uint64_t *end, // LB, when !fwd
@@ -90,7 +90,7 @@ int Filer::probe(inodeno_t ino,
 }
 
 int Filer::probe(inodeno_t ino,
-		 file_layout_t *layout,
+		 const file_layout_t *layout,
 		 snapid_t snapid,
 		 uint64_t start_from,
 		 uint64_t *end, // LB, when !fwd
@@ -111,7 +111,7 @@ int Filer::probe(inodeno_t ino,
   return probe_impl(probe, layout, start_from, end);
 }
 
-int Filer::probe_impl(Probe* probe, file_layout_t *layout,
+int Filer::probe_impl(Probe* probe, const file_layout_t *layout,
 		      uint64_t start_from, uint64_t *end) // LB, when !fwd
 {
   // period (bytes before we jump unto a new set of object(s))
@@ -401,7 +401,7 @@ struct TruncRange {
 };
 
 void Filer::truncate(inodeno_t ino,
-		     file_layout_t *layout,
+		     const file_layout_t *layout,
 		     const SnapContext& snapc,
 		     uint64_t offset,
 		     uint64_t len,
