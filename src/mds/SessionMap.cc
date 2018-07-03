@@ -976,6 +976,29 @@ void SessionMap::hit_session(Session *session) {
   session->hit_session();
 }
 
+void SessionMap::handle_conf_change(const ConfigProxy &conf,
+                                    const std::set <std::string> &changed) {
+  if (changed.count("mds_request_load_average_decay_rate")) {
+    decay_rate = g_conf().get_val<double>("mds_request_load_average_decay_rate");
+    dout(20) << __func__ << " decay rate changed to " << decay_rate << dendl;
+
+    total_load_avg = DecayCounter(decay_rate);
+
+    auto p = by_state.find(Session::STATE_OPEN);
+    if (p != by_state.end()) {
+      for (const auto &session : *(p->second)) {
+        session->set_load_avg_decay_rate(decay_rate);
+      }
+    }
+    p = by_state.find(Session::STATE_STALE);
+    if (p != by_state.end()) {
+      for (const auto &session : *(p->second)) {
+        session->set_load_avg_decay_rate(decay_rate);
+      }
+    }
+  }
+}
+
 int SessionFilter::parse(
     const std::vector<std::string> &args,
     std::stringstream *ss)
