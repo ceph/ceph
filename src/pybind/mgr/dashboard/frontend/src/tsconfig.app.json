@@ -9,6 +9,7 @@
   "exclude": [
     "app/shared/unit-test-helper.ts",
     "test.ts",
+    "testing/*.ts",
     "**/*.spec.ts"
   ]
 }
