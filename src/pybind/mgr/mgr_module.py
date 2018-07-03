@@ -282,6 +282,14 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Called by the ceph-mgr service to notify the Python plugin
         that new state is available.
+
+        :param notify_type: string indicating what kind of notification,
+                            such as osd_map, mon_map, fs_map, mon_status,
+                            health, pg_summary, command, service_map
+        :param notify_id:  string (may be empty) that optionally specifies
+                            which entity is being notified about.  With
+                            "command" notifications this is set to the tag
+                            ``from send_command``.
         """
         pass
 
@@ -502,10 +510,10 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def set_health_checks(self, checks):
         """
-        Set module's health checks
-
         Set the module's current map of health checks.  Argument is a
         dict of check names to info, in this form:
+
+        ::
 
            {
              'CHECK_FOO': {
@@ -545,7 +553,8 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def get_mgr_id(self):
         """
-        Retrieve the mgr id.
+        Retrieve the name of the manager daemon where this plugin
+        is currently being executed (i.e. the active manager).
 
         :return: str
         """
