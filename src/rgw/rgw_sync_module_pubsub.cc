@@ -586,6 +586,7 @@ public:
                  PSEnvRef _env,
                  rgw_pubsub_user_sub_config& user_sub_conf) : sync_env(_sync_env),
                                       env(_env),
+                                      sub_conf(std::make_shared<PSSubConfig>()),
                                       data_access(std::make_shared<RGWDataAccess>(sync_env->store)) {
     sub_conf->from_user_conf(user_sub_conf);
   }
