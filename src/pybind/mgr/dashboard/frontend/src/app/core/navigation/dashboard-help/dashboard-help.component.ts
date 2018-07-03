@@ -17,6 +17,9 @@ export class DashboardHelpComponent implements OnInit {
 
   ngOnInit() {
     const subs = this.summaryService.summaryData$.subscribe((summary: any) => {
+      if (!summary) {
+        return;
+      }
       const releaseName = this.cephReleaseNamePipe.transform(summary.version);
       this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/`;
       subs.unsubscribe();
