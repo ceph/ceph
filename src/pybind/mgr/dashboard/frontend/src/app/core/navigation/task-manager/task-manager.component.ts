@@ -23,6 +23,9 @@ export class TaskManagerComponent implements OnInit {
 
   ngOnInit() {
     this.summaryService.summaryData$.subscribe((data: any) => {
+      if (!data) {
+        return;
+      }
       this._handleTasks(data.executing_tasks, data.finished_tasks);
       this._setIcon(data.executing_tasks.length);
     });

@@ -23,6 +23,9 @@ export class NavigationComponent implements OnInit {
 
   ngOnInit() {
     this.summaryService.summaryData$.subscribe((data: any) => {
+      if (!data) {
+        return;
+      }
       this.summaryData = data;
     });
   }
