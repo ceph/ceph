@@ -139,6 +139,7 @@ public:
     string etag;
     std::optional<uint64_t> olh_epoch;
     ceph::real_time delete_at;
+    std::optional<string> user_data;
 
     std::optional<bufferlist> aclbl;
 
@@ -164,6 +165,10 @@ public:
 
     void set_delete_at(ceph::real_time _delete_at) {
       delete_at = _delete_at;
+    }
+
+    void set_user_data(const string& _user_data) {
+      user_data = _user_data;
     }
 
     void set_policy(const RGWAccessControlPolicy& policy);

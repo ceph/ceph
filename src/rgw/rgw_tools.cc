@@ -410,9 +410,16 @@ int RGWDataAccess::Object::put(bufferlist& data,
   }
   attrs[RGW_ATTR_ACL] = *aclbl;
 
+  string *puser_data = nullptr;
+  if (user_data) {
+    puser_data = &(*user_data);
+  }
+
   return processor.complete(obj_size, etag,
 			    &mtime, mtime,
-			    attrs, delete_at);
+			    attrs, delete_at,
+                            nullptr, nullptr,
+                            puser_data);
 }
 
 void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
