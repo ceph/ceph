@@ -202,7 +202,7 @@ void BinnedLRUCacheShard::LRU_Remove(BinnedLRUHandle* e) {
 void BinnedLRUCacheShard::LRU_Insert(BinnedLRUHandle* e) {
   assert(e->next == nullptr);
   assert(e->prev == nullptr);
-  if (high_pri_pool_ratio_ > 0 && (e->IsHighPri() || e->HasHit())) {
+  if (high_pri_pool_ratio_ > 0 && e->IsHighPri()) {
     // Inset "e" to head of LRU list.
     e->next = &lru_;
     e->prev = lru_.prev;
