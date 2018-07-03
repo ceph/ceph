@@ -9,6 +9,7 @@ from mgr_module import MgrModule, CommandResult
 import rados
 from threading import Event
 from datetime import datetime, timedelta, date, time
+from six import iteritems
 
 TIME_FORMAT = '%Y%m%d-%H%M%S'
 
@@ -123,7 +124,7 @@ class Module(MgrModule):
 
     def refresh_config(self):
         self.enable_monitoring = self.get_config('enable_monitoring', '') is not '' or 'false'
-        for opt, value in DEFAULTS.iteritems():
+        for opt, value in iteritems(DEFAULTS):
             setattr(self, opt, self.get_config(opt) or value)
 
     def serve(self):
