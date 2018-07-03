@@ -6,6 +6,7 @@ from __future__ import absolute_import
 import errno
 import json
 import threading
+import time
 
 import bcrypt
 
@@ -152,7 +153,8 @@ SYSTEM_ROLES = {
 
 
 class User(object):
-    def __init__(self, username, password, name=None, email=None, roles=None):
+    def __init__(self, username, password, name=None, email=None, roles=None,
+                 lastUpdate=None):
         self.username = username
         self.password = password
         self.name = name
@@ -161,21 +163,32 @@ class User(object):
             self.roles = set()
         else:
             self.roles = roles
+        if lastUpdate is None:
+            self.refreshLastUpdate()
+        else:
+            self.lastUpdate = lastUpdate
+
+    def refreshLastUpdate(self):
+        self.lastUpdate = int(time.mktime(time.gmtime()))
 
     def set_password(self, password):
         self.password = password_hash(password)
+        self.refreshLastUpdate()
 
     def set_roles(self, roles):
         self.roles = set(roles)
+        self.refreshLastUpdate()
 
     def add_roles(self, roles):
         self.roles = self.roles.union(set(roles))
+        self.refreshLastUpdate()
 
     def del_roles(self, roles):
         for role in roles:
             if role not in self.roles:
                 raise RoleNotInUser(role.name, self.username)
         self.roles.difference_update(set(roles))
+        self.refreshLastUpdate()
 
     def authorize(self, scope, permissions):
         for role in self.roles:
@@ -201,13 +214,15 @@ class User(object):
             'password': self.password,
             'roles': sorted([r.name for r in self.roles]),
             'name': self.name,
-            'email': self.email
+            'email': self.email,
+            'lastUpdate': self.lastUpdate
         }
 
     @classmethod
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
-                    u_dict['email'], set([roles[r] for r in u_dict['roles']]))
+                    u_dict['email'], set([roles[r] for r in u_dict['roles']]),
+                    u_dict['lastUpdate'])
 
 
 class AccessControlDB(object):
@@ -268,6 +283,14 @@ class AccessControlDB(object):
                 raise UserDoesNotExist(username)
             del self.users[username]
 
+    def update_users_with_roles(self, role):
+        with self.lock:
+            if not role:
+                return
+            for _, user in self.users.items():
+                if role in user.roles:
+                    user.refreshLastUpdate()
+
     def save(self):
         with self.lock:
             db = {
@@ -305,7 +328,7 @@ class AccessControlDB(object):
     def load(cls):
         logger.info("AC: Loading user roles DB version=%s", cls.VERSION)
 
-        json_db = mgr.get_store(cls.accessdb_config_key(), None)
+        json_db = mgr.get_store(cls.accessdb_config_key())
         if json_db is None:
             logger.debug("AC: No DB v%s found, creating new...", cls.VERSION)
             db = cls(cls.VERSION, {}, {})
@@ -502,6 +525,7 @@ Username and password updated''', ''
             role = ACCESS_CTRL_DB.get_role(rolename)
             perms_array = [perm.strip() for perm in permissions]
             role.set_scope_permissions(scopename, perms_array)
+            ACCESS_CTRL_DB.update_users_with_roles(role)
             ACCESS_CTRL_DB.save()
             return 0, json.dumps(role.to_dict()), ''
         except RoleDoesNotExist as ex:
@@ -523,6 +547,7 @@ Username and password updated''', ''
         try:
             role = ACCESS_CTRL_DB.get_role(rolename)
             role.del_scope_permissions(scopename)
+            ACCESS_CTRL_DB.update_users_with_roles(role)
             ACCESS_CTRL_DB.save()
             return 0, json.dumps(role.to_dict()), ''
         except RoleDoesNotExist as ex:
@@ -669,6 +694,9 @@ Username and password updated''', ''
 class LocalAuthenticator(object):
     def __init__(self):
         load_access_control_db()
+
+    def get_user(self, username):
+        return ACCESS_CTRL_DB.get_user(username)
 
     def authenticate(self, username, password):
         try:

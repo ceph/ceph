@@ -17,6 +17,7 @@ import cherrypy
 
 from . import logger
 from .exceptions import ViewCacheNoDataException
+from .services.auth import JwtManager
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -31,14 +32,9 @@ class RequestLoggingTool(cherrypy.Tool):
         cherrypy.request.hooks.attach('after_error_response', self.request_error,
                                       priority=5)
 
-    def _get_user(self):
-        if hasattr(cherrypy.serving, 'session'):
-            return cherrypy.session.get(Session.USERNAME)
-        return None
-
     def request_begin(self):
         req = cherrypy.request
-        user = self._get_user()
+        user = JwtManager.get_username()
         if user:
             logger.debug("[%s:%s] [%s] [%s] %s", req.remote.ip,
                          req.remote.port, req.method, user, req.path_info)
@@ -85,7 +81,7 @@ class RequestLoggingTool(cherrypy.Tool):
         req = cherrypy.request
         res = cherrypy.response
         lat = time.time() - res.time
-        user = self._get_user()
+        user = JwtManager.get_username()
         status = res.status[:3] if isinstance(res.status, str) else res.status
         if 'Content-Length' in res.headers:
             length = self._format_bytes(res.headers['Content-Length'])
@@ -217,48 +213,6 @@ class ViewCache(object):
                 self.cache_by_args[args] = rvc
             return rvc.run(fn, args, kwargs)
         return wrapper
-
-
-class Session(object):
-    """
-    This class contains all relevant settings related to cherrypy.session.
-    """
-    NAME = 'session_id'
-
-    # The keys used to store the information in the cherrypy.session.
-    USERNAME = '_username'
-    TS = '_ts'
-    EXPIRE_AT_BROWSER_CLOSE = '_expire_at_browser_close'
-
-    # The default values.
-    DEFAULT_EXPIRE = 1200.0
-
-
-class SessionExpireAtBrowserCloseTool(cherrypy.Tool):
-    """
-    A CherryPi Tool which takes care that the cookie does not expire
-    at browser close if the 'Keep me logged in' checkbox was selected
-    on the login page.
-    """
-    def __init__(self):
-        cherrypy.Tool.__init__(self, 'before_finalize', self._callback)
-
-    def _callback(self):
-        # Shall the cookie expire at browser close?
-        expire_at_browser_close = cherrypy.session.get(
-            Session.EXPIRE_AT_BROWSER_CLOSE, True)
-        logger.debug("expire at browser close: %s", expire_at_browser_close)
-        if expire_at_browser_close:
-            # Get the cookie and its name.
-            cookie = cherrypy.response.cookie
-            name = cherrypy.request.config.get(
-                'tools.sessions.name', Session.NAME)
-            # Make the cookie a session cookie by purging the
-            # fields 'expires' and 'max-age'.
-            logger.debug("expire at browser close: removing 'expires' and 'max-age'")
-            if name in cookie:
-                del cookie[name]['expires']
-                del cookie[name]['max-age']
 
 
 class NotificationQueue(threading.Thread):
