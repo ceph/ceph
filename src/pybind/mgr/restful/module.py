@@ -20,16 +20,11 @@ from uuid import uuid4
 from pecan import jsonify, make_app
 from OpenSSL import crypto
 from pecan.rest import RestController
+from six import iteritems
 from werkzeug.serving import make_server, make_ssl_devcert
 
 from .hooks import ErrorHook
 from mgr_module import MgrModule, CommandResult
-
-
-try:
-    iteritems = dict.iteritems
-except:
-    iteritems = dict.items
 
 
 class CannotServe(Exception):
