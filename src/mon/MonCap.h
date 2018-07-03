@@ -80,6 +80,9 @@ struct MonCapGrant {
   std::string command;
   map<std::string,StringConstraint> command_args;
 
+  // restrict by network
+  std::string network;
+
   mon_rwxa_t allow;
 
   // explicit grants that a profile grant expands to; populated as
