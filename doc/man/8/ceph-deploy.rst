@@ -241,7 +241,7 @@ disk
 ----
 
 Manage disks on a remote host. It actually triggers the ``ceph-volume`` utility
-and it's subcommands to manage disks.
+and its subcommands to manage disks.
 
 Subcommand ``list`` lists disk partitions and Ceph OSDs.
 
