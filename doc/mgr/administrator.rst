@@ -109,6 +109,18 @@ Here is an example of enabling the :term:`Dashboard` module:
 	}
 
 
+The first time the cluster starts, it uses the ``mgr_initial_modules``
+setting to override which modules to enable.  However, this setting
+is ignored through the rest of the lifetime of the cluster: only
+use it for bootstrapping.  For example, before starting your
+monitor daemons for the first time, you might add a section like
+this to your ``ceph.conf``:
+
+::
+
+    [mon]
+        mgr initial modules = dashboard balancer
+
 Calling module commands
 -----------------------
 
