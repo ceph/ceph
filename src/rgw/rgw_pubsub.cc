@@ -165,12 +165,10 @@ int RGWUserPubSub::create_topic(const string& name, const rgw_bucket& bucket)
     return ret;
   }
 
-  rgw_pubsub_user_topic_info new_topic;
+  rgw_pubsub_user_topic_info& new_topic = topics.topics[name];
   new_topic.user = user;
   new_topic.topic.name = name;
   new_topic.topic.bucket = bucket;
-
-  topics.topics[name] = new_topic;
 
   ret = write(obj, topics, &objv_tracker);
   if (ret < 0) {
@@ -178,20 +176,12 @@ int RGWUserPubSub::create_topic(const string& name, const rgw_bucket& bucket)
     return ret;
   }
 
-  rgw_pubsub_user_topics bucket_topics;
-  for (auto& t : topics.topics) {
-    if (t.second.topic.bucket == bucket) {
-      bucket_topics.topics.insert(t);
-    }
-  }
-
-  rgw_raw_obj bobj;
-  get_bucket_meta_obj(bucket, &bobj);
-  ret = write(obj, bucket_topics, nullptr);
+  ret = update_bucket(topics, bucket);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
     return ret;
   }
+
   return 0;
 }
 
@@ -227,6 +217,17 @@ int RGWUserPubSub::remove_topic(const string& name)
     return 0;
   }
 
+  ret = update_bucket(topics, bucket);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+int RGWUserPubSub::update_bucket(const rgw_pubsub_user_topics& topics, const rgw_bucket& bucket)
+{
   rgw_pubsub_user_topics bucket_topics;
   for (auto& t : topics.topics) {
     if (t.second.topic.bucket == bucket) {
@@ -236,7 +237,7 @@ int RGWUserPubSub::remove_topic(const string& name)
 
   rgw_raw_obj bobj;
   get_bucket_meta_obj(bucket, &bobj);
-  ret = write(obj, bucket_topics, nullptr);
+  int ret = write(bobj, bucket_topics, nullptr);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to write topics info: ret=" << ret << dendl;
     return ret;
@@ -293,9 +294,15 @@ int RGWUserPubSub::add_sub(const string& name, const string& topic, const rgw_pu
     return ret;
   }
 
-  rgw_raw_obj bobj;
-  get_sub_meta_obj(name, &bobj);
-  ret = write(bobj, sub_conf, nullptr);
+  ret = update_bucket(topics, t.topic.bucket);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to write bucket topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  rgw_raw_obj sobj;
+  get_sub_meta_obj(name, &sobj);
+  ret = write(sobj, sub_conf, nullptr);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to write subscription info: ret=" << ret << dendl;
     return ret;

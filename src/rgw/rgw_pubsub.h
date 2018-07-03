@@ -199,6 +199,8 @@ class RGWUserPubSub
   int write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTracker *obj_tracker);
 
   int remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker);
+
+  int update_bucket(const rgw_pubsub_user_topics& topics, const rgw_bucket& bucket);
 public:
   RGWUserPubSub(RGWRados *_store, const rgw_user& _user) : store(_store),
                                                            user(_user),
