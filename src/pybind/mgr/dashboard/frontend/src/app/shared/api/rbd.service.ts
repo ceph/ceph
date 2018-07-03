@@ -115,4 +115,11 @@ export class RbdService {
       { observe: 'response' }
     );
   }
+
+  removeTrash(poolName, imageId, imageName, force = false) {
+    return this.http.delete(
+      `api/block/image/trash/${poolName}/${imageId}/?image_name=${imageName}&force=${force}`,
+      { observe: 'response' }
+    );
+  }
 }

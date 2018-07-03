@@ -10,7 +10,7 @@
           [formGroup]="deletionForm"
           novalidate>
       <div class="modal-body">
-        <ng-container *ngTemplateOutlet="bodyTemplate"></ng-container>
+        <ng-container *ngTemplateOutlet="bodyTemplate; context: bodyContext"></ng-container>
         <div class="question">
           <p i18n>
             Are you sure that you want to {{ actionDescription | lowercase }} the selected {{ itemDescription }}?

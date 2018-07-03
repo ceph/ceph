@@ -142,6 +142,20 @@ export class TaskMessageService {
       (metadata) => ({
         17: `Image name '${metadata.pool_name}/${metadata.new_image_name}' is already in use.`
       })
+    ),
+    'rbd/trash/remove': new TaskMessage(
+      new TaskMessageOperation('Deleting', 'delete', 'Deleted'),
+      (metadata) => `image '${metadata.pool_name}/${metadata.image_name}@${metadata.image_id}'`
+    ),
+    'rbd/trash/purge': new TaskMessage(
+      new TaskMessageOperation('Purging', 'purge', 'Purged'),
+      (metadata) => {
+        let message = 'all pools';
+        if (metadata.pool_name) {
+          message = `'${metadata.pool_name}'`;
+        }
+        return `images from ${message}`;
+      }
     )
   };
 
