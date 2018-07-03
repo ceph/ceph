@@ -694,6 +694,8 @@ private:
 
 public:
   void hit_session(Session *session);
+  void handle_conf_change(const struct md_config_t *conf,
+                          const std::set <std::string> &changed);
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);
