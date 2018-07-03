@@ -1,40 +1,30 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import time
-
 import cherrypy
 
 from . import ApiController, RESTController
 from .. import logger
 from ..exceptions import DashboardException
-from ..services.auth import AuthManager
-from ..tools import Session
+from ..services.auth import AuthManager, JwtManager
 
 
 @ApiController('/auth', secure=False)
 class Auth(RESTController):
     """
-    Provide login and logout actions.
-
-    Supported config-keys:
-
-      | KEY             | DEFAULT | DESCR                                     |
-      ------------------------------------------------------------------------|
-      | session-expire  | 1200    | Session will expire after <expires>       |
-      |                           | seconds without activity                  |
+    Provide authenticates and returns JWT token.
     """
 
-    def create(self, username, password, stay_signed_in=False):
-        now = time.time()
+    def create(self, username, password):
         user_perms = AuthManager.authenticate(username, password)
         if user_perms is not None:
-            cherrypy.session.regenerate()
-            cherrypy.session[Session.USERNAME] = username
-            cherrypy.session[Session.TS] = now
-            cherrypy.session[Session.EXPIRE_AT_BROWSER_CLOSE] = not stay_signed_in
             logger.debug('Login successful')
+            token = JwtManager.gen_token(username)
+            token = token.decode('utf-8')
+            logger.debug("JWT Token: %s", token)
+            cherrypy.response.headers['Authorization'] = "Bearer: {}".format(token)
             return {
+                'token': token,
                 'username': username,
                 'permissions': user_perms
             }
@@ -45,6 +35,5 @@ class Auth(RESTController):
                                  component='auth')
 
     def bulk_delete(self):
-        logger.debug('Logout successful')
-        cherrypy.session[Session.USERNAME] = None
-        cherrypy.session[Session.TS] = None
+        token = JwtManager.get_token_from_header()
+        JwtManager.blacklist_token(token)
