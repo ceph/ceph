@@ -2963,7 +2963,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_cache_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("lru")
+    .set_default("binned_lru")
     .set_description(""),
 
     Option("rocksdb_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
