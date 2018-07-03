@@ -24,4 +24,11 @@ const struct ifaddrs *find_ip_in_subnet(const struct ifaddrs *addrs,
  */
 bool parse_network(const char *s, struct sockaddr_storage *network, unsigned int *prefix_len);
 
+void netmask_ipv6(const struct in6_addr *addr,
+		  unsigned int prefix_len,
+		  struct in6_addr *out);
+
+void netmask_ipv4(const struct in_addr *addr,
+		  unsigned int prefix_len,
+		  struct in_addr *out);
 #endif
