@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
 failed=false
+: ${CEPH_ROOT:=$PWD/../../../../}
 cd $CEPH_ROOT/src/pybind/mgr/dashboard/frontend
 if [ `uname` != "FreeBSD" ]; then
   .  $CEPH_ROOT/build/src/pybind/mgr/dashboard/node-env/bin/activate
