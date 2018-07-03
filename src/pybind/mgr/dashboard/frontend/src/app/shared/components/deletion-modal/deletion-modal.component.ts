@@ -16,6 +16,7 @@ export class DeletionModalComponent implements OnInit {
   @ViewChild(SubmitButtonComponent)
   submitButton: SubmitButtonComponent;
   bodyTemplate: TemplateRef<any>;
+  bodyContext: any;
   submitActionObservable: () => Observable<any>;
   submitAction: Function;
   deletionForm: CdFormGroup;

@@ -93,5 +93,13 @@ describe('RbdTrashListComponent', () => {
       expect(component.images.length).toBe(2);
       expect(component.images.every((image) => !image.cdExecuting)).toBeTruthy();
     });
+
+    it('should show when an existing image is being modified', () => {
+      addTask('rbd/trash/remove', '1');
+      addTask('rbd/trash/restore', '2');
+      expect(component.images.length).toBe(2);
+      expectImageTasks(component.images[0], 'Deleting');
+      expectImageTasks(component.images[1], 'Restoring');
+    });
   });
 });
