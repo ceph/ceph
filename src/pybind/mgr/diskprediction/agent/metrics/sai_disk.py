@@ -10,7 +10,7 @@ from ...models.metrics.dp import SAI_Disk
 def get_human_readable(size, precision=2):
     suffixes = ['B', 'KB', 'MB', 'GB', 'TB']
     suffix_index = 0
-    while size > 1024 and suffix_index < 4:
+    while size > 1000 and suffix_index < 4:
         # increment the index of the suffix
         suffix_index += 1
         # apply the division
