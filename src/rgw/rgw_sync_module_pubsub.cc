@@ -559,6 +559,12 @@ class PSSubscription {
         put_obj.key = rgw_obj_key(oid_prefix + pse.generate_message_id());
 
         pse.format(&put_obj.data);
+
+        {
+          bufferlist bl64;
+          put_obj.data.encode_base64(bl64);
+          put_obj.user_data = bl64.to_str();
+        }
         
         yield call(new RGWObjectSimplePutCR(sync_env->async_rados,
                                             sync_env->store,

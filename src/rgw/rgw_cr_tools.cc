@@ -234,6 +234,10 @@ int RGWObjectSimplePutCR::Request::_send_request()
     return -ret;
   }
 
+  if (params.user_data) {
+    obj->set_user_data(*params.user_data);
+  }
+
   ret = obj->put(params.data, params.attrs);
   if (ret < 0) {
     cerr << "ERROR: put object returned error: " << cpp_strerror(-ret) << std::endl;

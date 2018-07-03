@@ -56,6 +56,7 @@ struct rgw_object_simple_put_params {
   rgw_obj_key key;
   bufferlist data;
   map<string, bufferlist> attrs;
+  std::optional<string> user_data;
 };
 
 using RGWObjectSimplePutCR = RGWSimpleWriteOnlyAsyncCR<rgw_object_simple_put_params>;
