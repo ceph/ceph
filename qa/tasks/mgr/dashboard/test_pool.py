@@ -141,6 +141,9 @@ class PoolTest(DashboardTestCase):
             log.exception("test_pool_create: pool=%s", pool)
             raise
 
+        health = self._get('/api/dashboard/health')['health']
+        self.assertEqual(health['status'], 'HEALTH_OK', msg='health={}'.format(health))
+
     def test_pool_create(self):
         self._ceph_cmd(['osd', 'crush', 'rule', 'create-erasure', 'ecrule'])
         self._ceph_cmd(
@@ -178,9 +181,9 @@ class PoolTest(DashboardTestCase):
             {
                 'application_metadata': ['rbd', 'sth'],
             },
-            {
-                'pg_num': '12',
-            },
+            # {
+            #     'pg_num': '12',
+            # },
             {
                 'application_metadata': ['rgw'],
             },
