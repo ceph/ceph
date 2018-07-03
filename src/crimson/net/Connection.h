@@ -16,7 +16,7 @@
 
 #include <queue>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
-#include <core/future.hh>
+#include <seastar/core/future.hh>
 
 #include "Fwd.h"
 

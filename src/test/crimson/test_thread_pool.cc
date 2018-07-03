@@ -1,6 +1,6 @@
 #include <chrono>
 #include <numeric>
-#include <core/app-template.hh>
+#include <seastar/core/app-template.hh>
 #include "crimson/thread/ThreadPool.h"
 
 using namespace std::chrono_literals;

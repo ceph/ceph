@@ -12,10 +12,10 @@
 #include "crimson/thread/Condition.h"
 #include "crimson/thread/Throttle.h"
 
-#include <core/alien.hh>
-#include <core/app-template.hh>
-#include <core/future-util.hh>
-#include <core/reactor.hh>
+#include <seastar/core/alien.hh>
+#include <seastar/core/app-template.hh>
+#include <seastar/core/future-util.hh>
+#include <seastar/core/reactor.hh>
 
 
 enum class echo_role {

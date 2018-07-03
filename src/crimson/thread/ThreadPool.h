@@ -8,10 +8,10 @@
 #include <type_traits>
 #include <boost/lockfree/queue.hpp>
 #include <boost/optional.hpp>
-#include <core/future.hh>
-#include <core/gate.hh>
-#include <core/semaphore.hh>
-#include <core/sharded.hh>
+#include <seastar/core/future.hh>
+#include <seastar/core/gate.hh>
+#include <seastar/core/semaphore.hh>
+#include <seastar/core/sharded.hh>
 
 #include "Condition.h"
 
