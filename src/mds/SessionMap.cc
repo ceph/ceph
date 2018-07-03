@@ -21,6 +21,7 @@
 
 #include "common/config.h"
 #include "common/errno.h"
+#include "common/DecayCounter.h"
 #include "include/assert.h"
 #include "include/stringify.h"
 
@@ -59,6 +60,8 @@ void SessionMap::register_perfcounters()
               "Sessions currently open");
   plb.add_u64(l_mdssm_session_stale, "sessions_stale",
               "Sessions currently stale");
+  plb.add_u64(l_mdssm_total_load, "total_load", "Total Load");
+  plb.add_u64(l_mdssm_avg_load, "average_load", "Average Load");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -151,8 +154,10 @@ void SessionMapStore::decode_values(std::map<std::string, bufferlist> &session_v
     }
 
     Session *s = get_or_add_session(inst);
-    if (s->is_closed())
+    if (s->is_closed()) {
       s->set_state(Session::STATE_OPEN);
+      s->set_load_avg_decay_rate(decay_rate);
+    }
     bufferlist::iterator q = i->second.begin();
     s->decode(q);
   }
@@ -491,6 +496,10 @@ uint64_t SessionMap::set_state(Session *session, int s) {
       by_state_entry = by_state.emplace(s, new xlist<Session*>).first;
     by_state_entry->second->push_back(&session->item_session_list);
 
+    if (session->is_open() || session->is_stale()) {
+      session->set_load_avg_decay_rate(decay_rate);
+    }
+
     // refresh number of sessions for states which have perf
     // couters associated
     logger->set(l_mdssm_session_open,
@@ -517,8 +526,10 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
       entity_inst_t inst;
       decode(inst.name, p);
       Session *s = get_or_add_session(inst);
-      if (s->is_closed())
+      if (s->is_closed()) {
         s->set_state(Session::STATE_OPEN);
+        s->set_load_avg_decay_rate(decay_rate);
+      }
       s->decode(p);
     }
 
@@ -547,6 +558,7 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
 	session_map[s->info.inst.name] = s;
       }
       s->set_state(Session::STATE_OPEN);
+      s->set_load_avg_decay_rate(decay_rate);
       s->last_cap_renew = now;
     }
   }
@@ -949,6 +961,21 @@ int Session::check_access(CInode *in, unsigned mask,
     return -EACCES;
   }
   return 0;
+}
+
+// track total and per session load
+void SessionMap::hit_session(Session *session) {
+  uint64_t sessions = get_session_count_in_state(Session::STATE_OPEN) +
+                      get_session_count_in_state(Session::STATE_STALE);
+  assert(sessions != 0);
+
+  double total_load = total_load_avg.hit();
+  double avg_load = total_load / sessions;
+
+  logger->set(l_mdssm_total_load, (uint64_t)total_load);
+  logger->set(l_mdssm_avg_load, (uint64_t)avg_load);
+
+  session->hit_session();
 }
 
 int SessionFilter::parse(
