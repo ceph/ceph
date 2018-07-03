@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include <core/reactor.hh>
+#include <seastar/core/reactor.hh>
 
 #include "msg/Policy.h"
 #include "Connection.h"

@@ -13,8 +13,8 @@
  */
 
 #include <algorithm>
-#include <core/shared_future.hh>
-#include <core/sleep.hh>
+#include <seastar/core/shared_future.hh>
+#include <seastar/core/sleep.hh>
 
 #include "Config.h"
 #include "Messenger.h"
