@@ -30,6 +30,7 @@ using std::set;
 
 class CInode;
 struct MDRequestImpl;
+class DecayCounter;
 
 #include "CInode.h"
 #include "Capability.h"
@@ -42,6 +43,8 @@ enum {
   l_mdssm_session_remove,
   l_mdssm_session_open,
   l_mdssm_session_stale,
+  l_mdssm_total_load,
+  l_mdssm_avg_load,
   l_mdssm_last,
 };
 
@@ -100,7 +103,9 @@ private:
   // that appropriate mark_dirty calls follow.
   std::deque<version_t> projected;
 
-
+  // request load average for this session
+  DecayCounter load_avg;
+  DecayRate    load_avg_rate;
 
 public:
 
@@ -199,6 +204,14 @@ public:
     --importing_count;
   }
   bool is_importing() const { return importing_count > 0; }
+
+  void set_load_avg_decay_rate(double rate) {
+    assert(is_open() || is_stale());
+    load_avg_rate.set_halflife(rate);
+  }
+  void hit_session() {
+    load_avg.hit(ceph_clock_now(), load_avg_rate);
+  }
 
   // -- caps --
 private:
@@ -395,6 +408,12 @@ protected:
   version_t version;
   ceph::unordered_map<entity_name_t, Session*> session_map;
   PerfCounters *logger;
+
+  // total request load avg
+  double decay_rate;
+  DecayCounter total_load_avg;
+  DecayRate    total_load_avg_rate;
+
 public:
   mds_rank_t rank;
 
@@ -436,7 +455,11 @@ public:
     session_map.clear();
   }
 
-  SessionMapStore() : version(0), logger(nullptr), rank(MDS_RANK_NONE) {}
+  SessionMapStore()
+    : version(0), logger(nullptr),
+      decay_rate(g_conf->get_val<double>("mds_request_load_average_decay_rate")),
+      total_load_avg_rate(decay_rate), rank(MDS_RANK_NONE) {
+  }
   virtual ~SessionMapStore() {};
 };
 
@@ -673,6 +696,9 @@ private:
   uint64_t get_session_count_in_state(int state) {
     return !is_any_state(state) ? 0 : by_state[state]->size();
   }
+
+public:
+  void hit_session(Session *session);
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);
