@@ -11,7 +11,7 @@
 
 #include "include/ipaddr.h"
 
-static void netmask_ipv4(const struct in_addr *addr,
+void netmask_ipv4(const struct in_addr *addr,
 			 unsigned int prefix_len,
 			 struct in_addr *out) {
   uint32_t mask;
@@ -57,9 +57,9 @@ const struct ifaddrs *find_ipv4_in_subnet(const struct ifaddrs *addrs,
 }
 
 
-static void netmask_ipv6(const struct in6_addr *addr,
-			 unsigned int prefix_len,
-			 struct in6_addr *out) {
+void netmask_ipv6(const struct in6_addr *addr,
+		  unsigned int prefix_len,
+		  struct in6_addr *out) {
   if (prefix_len > 128)
     prefix_len = 128;
 
