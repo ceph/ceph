@@ -89,7 +89,8 @@ function run() {
     fi
 
     if test -f ./install-deps.sh ; then
-	$DRY_RUN source ./install-deps.sh || return 1
+	    export WITH_SEASTAR
+	    $DRY_RUN source ./install-deps.sh --with-seastar || return 1
         trap clean_up_after_myself EXIT
     fi
 
@@ -106,7 +107,7 @@ function run() {
         CMAKE_PYTHON_OPTS="-DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3 -DWITH_GTEST_PARALLEL=OFF"
     fi
 
-    CMAKE_BUILD_OPTS="-DWITH_FIO=ON"
+    CMAKE_BUILD_OPTS="-DWITH_FIO=ON -DWITH_SEASTAR=ON"
 
     cat <<EOM
 Note that the binaries produced by this script do not contain correct time
