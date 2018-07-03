@@ -19,6 +19,7 @@ import { RbdSnapshotFormComponent } from './rbd-snapshot-form/rbd-snapshot-form.
 import { RbdSnapshotListComponent } from './rbd-snapshot-list/rbd-snapshot-list.component';
 import { RbdTrashListComponent } from './rbd-trash-list/rbd-trash-list.component';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-move-modal.component';
+import { RbdTrashPurgeModalComponent } from './rbd-trash-purge-modal/rbd-trash-purge-modal.component';
 import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-trash-restore-modal.component';
 
 @NgModule({
@@ -26,7 +27,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     RbdDetailsComponent,
     RbdSnapshotFormComponent,
     RbdTrashMoveModalComponent,
-    RbdTrashRestoreModalComponent
+    RbdTrashRestoreModalComponent,
+    RbdTrashPurgeModalComponent
   ],
   imports: [
     CommonModule,
@@ -53,7 +55,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     RbdTrashListComponent,
     RbdTrashMoveModalComponent,
     RbdImagesComponent,
-    RbdTrashRestoreModalComponent
+    RbdTrashRestoreModalComponent,
+    RbdTrashPurgeModalComponent
   ]
 })
 export class BlockModule {}

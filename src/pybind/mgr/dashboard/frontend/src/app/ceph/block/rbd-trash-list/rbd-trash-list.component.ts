@@ -19,6 +19,7 @@ import { CdDatePipe } from '../../../shared/pipes/cd-date.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { RbdTrashPurgeModalComponent } from '../rbd-trash-purge-modal/rbd-trash-purge-modal.component';
 import { RbdTrashRestoreModalComponent } from '../rbd-trash-restore-modal/rbd-trash-restore-modal.component';
 
 @Component({
@@ -196,5 +197,9 @@ export class RbdTrashListComponent implements OnInit {
 
   isExpired(expiresAt): boolean {
     return moment().isAfter(expiresAt);
+  }
+
+  purgeModal() {
+    this.modalService.show(RbdTrashPurgeModalComponent);
   }
 }

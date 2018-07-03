@@ -108,6 +108,12 @@ export class RbdService {
     );
   }
 
+  purgeTrash(poolName) {
+    return this.http.post(`api/block/image/trash/purge/?pool_name=${poolName}`, null, {
+      observe: 'response'
+    });
+  }
+
   restoreTrash(poolName, imageId, newImageName) {
     return this.http.post(
       `api/block/image/trash/${poolName}/${imageId}/restore`,
