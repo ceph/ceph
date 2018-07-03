@@ -708,7 +708,11 @@ bool DaemonServer::handle_command(MCommand *m)
         con->mark_disposable();
       }
 
-      dout(1) << "handle_command " << cpp_strerror(r) << " " << rs << dendl;
+      if (r == 0) {
+        dout(4) << __func__ << " success" << dendl;
+      } else {
+        derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
+      }
       if (con) {
         MCommandReply *reply = new MCommandReply(r, rs);
         reply->set_tid(m->get_tid());
@@ -1921,7 +1925,6 @@ bool DaemonServer::handle_command(MCommand *m)
   auto py_commands = py_modules.get_py_commands();
   for (const auto &pyc : py_commands) {
     auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
-    dout(1) << "pyc_prefix: '" << pyc_prefix << "'" << dendl;
     if (pyc_prefix == prefix) {
       handler_name = pyc.module_name;
       break;
