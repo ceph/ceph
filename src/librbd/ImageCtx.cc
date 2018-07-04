@@ -928,7 +928,7 @@ public:
                                           ContextWQ **op_work_queue) {
     auto thread_pool_singleton =
       &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-	"librbd::thread_pool", false, cct);
+	"librbd::thread_pool", cct);
     *thread_pool = thread_pool_singleton;
     *op_work_queue = thread_pool_singleton->op_work_queue;
   }
@@ -937,7 +937,7 @@ public:
                                     Mutex **timer_lock) {
     auto safe_timer_singleton =
       &cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
-	"librbd::journal::safe_timer", false, cct);
+	"librbd::journal::safe_timer", cct);
     *timer = safe_timer_singleton;
     *timer_lock = &safe_timer_singleton->lock;
   }

@@ -46,7 +46,7 @@ public:
   TaskFinisher(CephContext &cct) : m_cct(cct) {
     auto& singleton =
       cct.lookup_or_create_singleton_object<TaskFinisherSingleton>(
-	"librbd::TaskFinisher::m_safe_timer", false, &cct);
+	"librbd::TaskFinisher::m_safe_timer", &cct);
     m_lock = &singleton.m_lock;
     m_safe_timer = singleton.m_safe_timer;
     m_finisher = singleton.m_finisher;
