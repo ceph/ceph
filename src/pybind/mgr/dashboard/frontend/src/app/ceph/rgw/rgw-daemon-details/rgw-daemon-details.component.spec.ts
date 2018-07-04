@@ -2,6 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwDaemonService } from '../../../shared/api/rgw-daemon.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';

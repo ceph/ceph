@@ -9,6 +9,8 @@ import { SharedModule } from '../../../shared/shared.module';
 import { LogoutComponent } from '../../auth/logout/logout.component';
 import { NotificationsComponent } from '../notifications/notifications.component';
 import { TaskManagerComponent } from '../task-manager/task-manager.component';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { AppModule } from '../../../app.module';
 import { NavigationComponent } from './navigation.component';
 
 describe('NavigationComponent', () => {

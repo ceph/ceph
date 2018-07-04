@@ -6,6 +6,7 @@ import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, ModalModule } from 'ngx-bootstrap';
 import { Observable } from 'rxjs/Observable';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';

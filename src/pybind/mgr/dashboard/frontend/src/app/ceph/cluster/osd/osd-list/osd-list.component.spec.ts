@@ -3,6 +3,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../../shared/components/components.module';
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { DimlessPipe } from '../../../../shared/pipes/dimless.pipe';

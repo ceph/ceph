@@ -4,6 +4,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { TablePerformanceCounterComponent } from './table-performance-counter.component';
 

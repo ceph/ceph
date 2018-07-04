@@ -2,6 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { PopoverModule } from 'ngx-bootstrap/popover';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { NotificationsComponent } from './notifications.component';

@@ -2,6 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { ModalModule } from 'ngx-bootstrap/modal';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ModalComponent } from './modal.component';
 
 describe('ModalComponent', () => {

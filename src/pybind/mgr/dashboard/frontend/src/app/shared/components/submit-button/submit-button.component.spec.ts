@@ -1,6 +1,7 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormGroup } from '@angular/forms';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SubmitButtonComponent } from './submit-button.component';
 
 describe('SubmitButtonComponent', () => {

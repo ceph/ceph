@@ -2,6 +2,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { AlertModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { InfoPanelComponent } from './info-panel.component';
 
 describe('InfoPanelComponent', () => {

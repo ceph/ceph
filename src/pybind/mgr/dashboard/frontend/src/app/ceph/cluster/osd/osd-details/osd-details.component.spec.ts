@@ -3,6 +3,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../../shared/shared.module';

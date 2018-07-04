@@ -3,6 +3,8 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { AuthModule } from '../auth.module';
 import { LogoutComponent } from './logout.component';
 
 describe('LogoutComponent', () => {

@@ -2,7 +2,9 @@ import { inject, TestBed } from '@angular/core/testing';
 
 import { ToastOptions, ToastsManager } from 'ng2-toastr';
 
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
+import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
 import { TaskManagerMessageService } from './task-manager-message.service';
 import { TaskManagerService } from './task-manager.service';

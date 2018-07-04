@@ -3,6 +3,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3KeyModalComponent } from './rgw-user-s3-key-modal.component';
 

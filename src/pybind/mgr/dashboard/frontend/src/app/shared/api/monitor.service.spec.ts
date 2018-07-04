@@ -5,6 +5,7 @@ import {
 } from '@angular/common/http/testing';
 import { inject, TestBed } from '@angular/core/testing';
 
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { MonitorService } from './monitor.service';
 
 describe('MonitorService', () => {

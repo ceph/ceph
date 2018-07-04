@@ -1,5 +1,6 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { OsdPerformanceHistogramComponent } from './osd-performance-histogram.component';
 
 describe('OsdPerformanceHistogramComponent', () => {

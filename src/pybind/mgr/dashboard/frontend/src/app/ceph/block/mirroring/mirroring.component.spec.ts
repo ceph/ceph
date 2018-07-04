@@ -6,6 +6,7 @@ import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { Observable } from 'rxjs/Observable';
 
 import { RbdMirroringService } from '../../../shared/api/rbd-mirroring.service';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { MirrorHealthColorPipe } from '../mirror-health-color.pipe';
 import { MirroringComponent } from './mirroring.component';

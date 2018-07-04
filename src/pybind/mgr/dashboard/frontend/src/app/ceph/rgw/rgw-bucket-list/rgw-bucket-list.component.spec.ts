@@ -5,6 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BsDropdownModule } from 'ngx-bootstrap';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { DataTableModule } from '../../../shared/datatable/datatable.module';
 import { SharedModule } from '../../../shared/shared.module';

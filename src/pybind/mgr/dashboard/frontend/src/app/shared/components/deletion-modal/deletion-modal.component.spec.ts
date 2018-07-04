@@ -8,6 +8,7 @@ import { Subscriber } from 'rxjs/Subscriber';
 
 import { ModalComponent } from '../modal/modal.component';
 import { SubmitButtonComponent } from '../submit-button/submit-button.component';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { DeletionModalComponent } from './deletion-modal.component';
 
 @NgModule({

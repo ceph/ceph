@@ -3,6 +3,9 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { FormatterService } from '../../../shared/services/formatter.service';
 import { HealthPieComponent } from './health-pie.component';
 
 describe('HealthPieComponent', () => {

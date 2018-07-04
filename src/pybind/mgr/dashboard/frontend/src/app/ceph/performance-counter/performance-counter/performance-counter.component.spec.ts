@@ -7,6 +7,9 @@ import {
   TablePerformanceCounterService
 } from '../../../shared/api/table-performance-counter.service';
 import { PerformanceCounterModule } from '../performance-counter.module';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { SharedModule } from '../../../shared/shared.module';
+import { TablePerformanceCounterComponent } from '../table-performance-counter/table-performance-counter.component';
 import { PerformanceCounterComponent } from './performance-counter.component';
 
 describe('PerformanceCounterComponent', () => {

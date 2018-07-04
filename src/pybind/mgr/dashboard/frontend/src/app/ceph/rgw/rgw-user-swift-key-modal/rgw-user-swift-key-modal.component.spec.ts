@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal.component';
 
 describe('RgwUserSwiftKeyModalComponent', () => {

@@ -4,6 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { SharedModule } from '../../../shared/shared.module';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { AuthService } from '../../../shared/api/auth.service';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { LoginComponent } from './login.component';
 
 describe('LoginComponent', () => {

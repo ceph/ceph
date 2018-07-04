@@ -4,6 +4,7 @@ import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { AppModule } from '../../../app.module';
 import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
 import { FormatterService } from '../../services/formatter.service';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SparklineComponent } from './sparkline.component';
 
 describe('SparklineComponent', () => {

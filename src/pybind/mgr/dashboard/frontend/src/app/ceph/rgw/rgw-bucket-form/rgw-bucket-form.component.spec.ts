@@ -6,6 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import 'rxjs/add/observable/of';
 import { Observable } from 'rxjs/Observable';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';

@@ -4,6 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsDropdownModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { SharedModule } from '../../../shared/shared.module';
 import { HostsComponent } from './hosts.component';

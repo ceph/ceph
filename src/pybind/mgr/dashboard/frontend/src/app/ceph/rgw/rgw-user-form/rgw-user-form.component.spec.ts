@@ -7,6 +7,7 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import 'rxjs/add/observable/of';
 import { Observable } from 'rxjs/Observable';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';

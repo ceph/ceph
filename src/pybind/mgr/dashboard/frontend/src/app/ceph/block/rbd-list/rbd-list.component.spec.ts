@@ -13,6 +13,7 @@ import {
 import { Observable } from 'rxjs/Observable';
 
 import { RbdService } from '../../../shared/api/rbd.service';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';

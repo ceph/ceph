@@ -2,6 +2,9 @@ import { HttpClientModule } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { inject, TestBed } from '@angular/core/testing';
 
+import { of as observableOf } from 'rxjs';
+
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { RgwUserService } from './rgw-user.service';
 
 describe('RgwUserService', () => {

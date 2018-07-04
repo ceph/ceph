@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { Observable } from 'rxjs/Observable';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { ConfigurationComponent } from './configuration.component';
