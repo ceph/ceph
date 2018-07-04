@@ -3,7 +3,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import * as _ from 'lodash';
 import { Subject } from 'rxjs';
 
-import { configureTestBed } from '../unit-test-helper';
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { SummaryService } from './summary.service';
 import { TaskManagerService } from './task-manager.service';
 

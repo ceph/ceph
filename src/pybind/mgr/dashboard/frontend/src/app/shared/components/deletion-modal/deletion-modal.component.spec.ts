@@ -5,7 +5,7 @@ import { NgForm, ReactiveFormsModule } from '@angular/forms';
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
-import { configureTestBed } from '../../unit-test-helper';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { DeletionModalComponent } from './deletion-modal.component';
 
 @NgModule({

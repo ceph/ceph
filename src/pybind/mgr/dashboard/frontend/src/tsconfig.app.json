@@ -7,9 +7,8 @@
     "types": []
   },
   "exclude": [
-    "app/shared/unit-test-helper.ts",
+    "**/*.spec.ts",
     "test.ts",
-    "testing/*.ts",
-    "**/*.spec.ts"
+    "testing/*.ts"
   ]
 }

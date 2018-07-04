@@ -1,6 +1,6 @@
 import { async, TestBed } from '@angular/core/testing';
 
-import { _DEV_ } from '../../unit-test-configuration';
+import { _DEV_ } from '../unit-test-configuration';
 
 export function configureTestBed(configuration, useOldMethod?) {
   if (_DEV_ && !useOldMethod) {
