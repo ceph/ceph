@@ -286,7 +286,7 @@ class Worker {
   }
 };
 
-class NetworkStack {
+class NetworkStack : public CephContext::ForkWatcher {
   std::string type;
   unsigned num_workers = 0;
   ceph::spinlock pool_spin;
@@ -302,7 +302,7 @@ class NetworkStack {
  public:
   NetworkStack(const NetworkStack &) = delete;
   NetworkStack& operator=(const NetworkStack &) = delete;
-  virtual ~NetworkStack() {
+  ~NetworkStack() override {
     for (auto &&w : workers)
       delete w;
   }
@@ -337,6 +337,14 @@ class NetworkStack {
   // direct is used in tests only
   virtual void spawn_worker(unsigned i, std::function<void ()> &&) = 0;
   virtual void join_worker(unsigned i) = 0;
+
+  void handle_pre_fork() override {
+    stop();
+  }
+
+  void handle_post_fork() override {
+    start();
+  }
 
   virtual bool is_ready() { return true; };
   virtual void ready() { };
