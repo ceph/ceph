@@ -7,9 +7,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RbdFormMode } from './rbd-form-mode.enum';
 import { RbdFormComponent } from './rbd-form.component';
 

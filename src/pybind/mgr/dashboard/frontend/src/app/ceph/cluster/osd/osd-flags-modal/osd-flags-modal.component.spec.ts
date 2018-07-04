@@ -6,10 +6,10 @@ import * as _ from 'lodash';
 import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, ModalModule } from 'ngx-bootstrap';
 
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
-import { configureTestBed } from '../../../../shared/unit-test-helper';
 import { OsdFlagsModalComponent } from './osd-flags-modal.component';
 
 function getFlagsArray(component: OsdFlagsModalComponent) {
