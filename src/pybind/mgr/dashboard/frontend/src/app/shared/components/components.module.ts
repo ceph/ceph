@@ -29,7 +29,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     ChartsModule,
     ReactiveFormsModule,
     PipesModule,
-    ModalModule.forRoot(),
+    ModalModule.forRoot()
   ],
   declarations: [
     ViewCacheComponent,
@@ -56,10 +56,6 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     UsageBarComponent,
     ModalComponent
   ],
-  entryComponents: [
-    ModalComponent,
-    DeletionModalComponent,
-    ConfirmationModalComponent
-  ]
+  entryComponents: [ModalComponent, DeletionModalComponent, ConfirmationModalComponent]
 })
-export class ComponentsModule { }
+export class ComponentsModule {}
