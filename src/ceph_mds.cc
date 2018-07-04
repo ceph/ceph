@@ -35,7 +35,6 @@
 #include "common/Timer.h"
 #include "common/ceph_argparse.h"
 #include "common/pick_address.h"
-#include "common/Preforker.h"
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -125,11 +124,9 @@ int main(int argc, const char **argv)
     }
     else {
       derr << "Error: can't understand argument: " << *i << "\n" << dendl;
-      exit(1);
+      usage();
     }
   }
-
-  Preforker forker;
 
   entity_addrvec_t addrs;
   pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &addrs);
@@ -137,7 +134,7 @@ int main(int argc, const char **argv)
   // Normal startup
   if (g_conf->name.has_default_id()) {
     derr << "must specify '-i name' with the ceph-mds instance name" << dendl;
-    exit(1);
+    usage();
   }
 
   if (g_conf->name.get_id().empty() ||
