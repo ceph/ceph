@@ -58,7 +58,7 @@
 
         <!-- Name -->
         <div class="form-group"
-             [ngClass]="{'has-error': (frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.invalid}">
+             [ngClass]="{'has-error': bucketForm.showError('bucket', frm)}">
           <label i18n
                  class="control-label col-sm-3"
                  for="bucket">Name
@@ -77,17 +77,17 @@
                    autofocus>
             <span i18n
                   class="help-block"
-                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('required')">
+                  *ngIf="bucketForm.showError('bucket', frm, 'required')">
               This field is required.
             </span>
             <span i18n
                   class="help-block"
-                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('bucketNameInvalid')">
+                  *ngIf="bucketForm.showError('bucket', frm, 'bucketNameInvalid')">
               The value is not valid.
             </span>
             <span i18n
                   class="help-block"
-                  *ngIf="(frm.submitted || bucketForm.controls.bucket.dirty) && bucketForm.controls.bucket.hasError('bucketNameExists')">
+                  *ngIf="bucketForm.showError('bucket', frm, 'bucketNameExists')">
               The chosen name is already in use.
             </span>
           </div>
@@ -95,7 +95,7 @@
 
         <!-- Owner -->
         <div class="form-group"
-             [ngClass]="{'has-error': (frm.submitted || bucketForm.controls.owner.dirty) && bucketForm.controls.owner.invalid}">
+             [ngClass]="{'has-error': bucketForm.showError('owner', frm)}">
           <label i18n
                  class="control-label col-sm-3"
                  for="owner">Owner
@@ -119,7 +119,7 @@
             </select>
             <span i18n
                   class="help-block"
-                  *ngIf="(frm.submitted || bucketForm.controls.owner.dirty) && bucketForm.controls.owner.hasError('required')">
+                  *ngIf="bucketForm.showError('owner', frm, 'required')">
               This field is required.
             </span>
           </div>
