@@ -747,8 +747,8 @@ bool ConfigMonitor::refresh_config(MonSession *s)
   }
 
   string device_class;
-  if (s->inst.name.is_osd()) {
-    const char *c = osdmap.crush->get_item_class(s->inst.name.num());
+  if (s->name.is_osd()) {
+    const char *c = osdmap.crush->get_item_class(s->name.num());
     if (c) {
       device_class = c;
       dout(10) << __func__ << " device_class " << device_class << dendl;
@@ -779,7 +779,7 @@ bool ConfigMonitor::refresh_config(MonSession *s)
 bool ConfigMonitor::maybe_send_config(MonSession *s)
 {
   bool changed = refresh_config(s);
-  dout(10) << __func__ << " to " << s->inst << " "
+  dout(10) << __func__ << " to " << s->name << " "
 	   << (changed ? "(changed)" : "(unchanged)")
 	   << dendl;
   if (changed) {
@@ -790,7 +790,7 @@ bool ConfigMonitor::maybe_send_config(MonSession *s)
 
 void ConfigMonitor::send_config(MonSession *s)
 {
-  dout(10) << __func__ << " to " << s->inst << dendl;
+  dout(10) << __func__ << " to " << s->name << dendl;
   auto m = new MConfig(s->last_config);
   s->con->send_message(m);
 }

@@ -147,21 +147,40 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
  * If my_inst.addr doesn't have an IP set, this function
  * will fill it in from the passed addr. Otherwise it does nothing and returns.
  */
-void SimpleMessenger::set_addr_unknowns(const entity_addr_t &addr)
+bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 {
+  bool ret = false;
+  auto addr = addrs.legacy_addr();
+  assert(my_addr == my_addrs->front());
   if (my_addr.is_blank_ip()) {
-    int port = my_addr.get_port();
-    my_addr.u = addr.u;
-    my_addr.set_port(port);
+    ldout(cct,1) << __func__ << " " << addr << dendl;
+    entity_addr_t t = my_addr;
+    int port = t.get_port();
+    t.u = addr.u;
+    t.set_port(port);
+    set_addrs(entity_addrvec_t(t));
     init_local_connection();
+    ret = true;
+  } else {
+    ldout(cct,1) << __func__ << " " << addr << " no-op" << dendl;
   }
+  assert(my_addr == my_addrs->front());
+  return ret;
 }
 
-void SimpleMessenger::set_addr(const entity_addr_t &addr)
+void SimpleMessenger::set_myaddrs(const entity_addrvec_t &av)
 {
-  entity_addr_t t = addr;
-  t.set_nonce(nonce);
-  set_myaddr(t);
+  my_addr = av.front();
+  Messenger::set_myaddrs(av);
+}
+
+void SimpleMessenger::set_addrs(const entity_addrvec_t &av)
+{
+  auto t = av;
+  for (auto& a : t.v) {
+    a.set_nonce(nonce);
+  }
+  set_myaddrs(t);
   init_local_connection();
 }
 
@@ -319,7 +338,7 @@ int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    assert(my_addr == bind_addr);
+    assert(*my_addrs == entity_addrvec_t(bind_addr));
     return 0;
   }
   if (started) {
@@ -328,7 +347,7 @@ int SimpleMessenger::client_bind(const entity_addr_t &bind_addr)
   }
   ldout(cct,10) << "rank.bind " << bind_addr << dendl;
 
-  set_myaddr(bind_addr);
+  set_myaddrs(entity_addrvec_t(bind_addr));
   return 0;
 }
 
@@ -738,7 +757,7 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     t.set_nonce(my_addr.get_nonce());
     ANNOTATE_BENIGN_RACE_SIZED(&my_addr, sizeof(my_addr),
                                "SimpleMessenger learned addr");
-    my_addr = t;
+    set_myaddrs(entity_addrvec_t(t));
     ldout(cct,1) << "learned my addr " << my_addr << dendl;
     need_addr = false;
     init_local_connection();
@@ -748,7 +767,7 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 
 void SimpleMessenger::init_local_connection()
 {
-  local_connection->peer_addr = my_addr;
+  local_connection->peer_addrs = *my_addrs;
   local_connection->peer_type = my_name.type();
   local_connection->set_features(CEPH_FEATURES_ALL);
   ms_deliver_handle_fast_connect(local_connection.get());

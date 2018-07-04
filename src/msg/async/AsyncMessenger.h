@@ -47,7 +47,7 @@ class Processor {
   AsyncMessenger *msgr;
   NetHandler net;
   Worker *worker;
-  ServerSocket listen_socket;
+  vector<ServerSocket> listen_sockets;
   EventCallbackRef listen_handler;
 
   class C_processor_accept;
@@ -57,9 +57,9 @@ class Processor {
   ~Processor() { delete listen_handler; };
 
   void stop();
-  int bind(const entity_addr_t &bind_addr,
+  int bind(const entity_addrvec_t &bind_addrs,
 	   const set<int>& avoid_ports,
-	   entity_addr_t* bound_addr);
+	   entity_addrvec_t* bound_addrs);
   void start();
   void accept();
 };
@@ -94,8 +94,8 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(const entity_addr_t &addr) override;
-  void set_addr(const entity_addr_t &addr) override;
+  bool set_addr_unknowns(const entity_addrvec_t &addr) override;
+  void set_addrs(const entity_addrvec_t &addrs) override;
 
   int get_dispatch_queue_len() override {
     return dispatch_queue.get_queue_len();
@@ -118,6 +118,8 @@ public:
   int bind(const entity_addr_t& bind_addr) override;
   int rebind(const set<int>& avoid_ports) override;
   int client_bind(const entity_addr_t& bind_addr) override;
+
+  int bindv(const entity_addrvec_t& bind_addrs) override;
 
   /** @} Configuration functions */
 
@@ -149,7 +151,10 @@ public:
    */
   ConnectionRef get_connection(const entity_inst_t& dest) override;
   ConnectionRef get_loopback_connection() override;
-  void mark_down(const entity_addr_t& addr) override;
+  void mark_down(const entity_addr_t& addr) override {
+    mark_down_addrs(entity_addrvec_t(addr));
+  }
+  void mark_down_addrs(const entity_addrvec_t& addrs) override;
   void mark_down_all() override {
     shutdown_connections(true);
   }
@@ -187,13 +192,13 @@ private:
    * Initiate the connection. (This function returning does not guarantee
    * connection success.)
    *
-   * @param addr The address of the entity to connect to.
+   * @param addrs The address(es) of the entity to connect to.
    * @param type The peer type of the entity at the address.
    *
    * @return a pointer to the newly-created connection. Caller does not own a
    * reference; take one if you need it.
    */
-  AsyncConnectionRef create_connect(const entity_addr_t& addr, int type);
+  AsyncConnectionRef create_connect(const entity_addrvec_t& addrs, int type);
 
   /**
    * Queue up a Message for delivery to the entity specified
@@ -211,8 +216,8 @@ private:
                       const entity_addr_t& dest_addr, int dest_type);
 
   int _send_message(Message *m, const entity_inst_t& dest);
-  void _finish_bind(const entity_addr_t& bind_addr,
-		    const entity_addr_t& listen_addr);
+  void _finish_bind(const entity_addrvec_t& bind_addrs,
+		    const entity_addrvec_t& listen_addrs);
 
  private:
   static const uint64_t ReapDeadConnectionThreshold = 5;
@@ -238,10 +243,10 @@ private:
   bool need_addr;
 
   /**
-   * set to bind address if bind was called before NetworkStack was ready to
+   * set to bind addresses if bind was called before NetworkStack was ready to
    * bind
    */
-  entity_addr_t pending_bind_addr;
+  entity_addrvec_t pending_bind_addrs;
 
   /**
    * false; set to true if a pending bind exists
@@ -269,7 +274,7 @@ private:
    * NOTE: a Asyncconnection* with state CLOSED may still be in the map but is considered
    * invalid and can be replaced by anyone holding the msgr lock
    */
-  ceph::unordered_map<entity_addr_t, AsyncConnectionRef> conns;
+  ceph::unordered_map<entity_addrvec_t, AsyncConnectionRef> conns;
 
   /**
    * list of connection are in teh process of accepting
@@ -300,9 +305,9 @@ private:
   Cond  stop_cond;
   bool stopped;
 
-  AsyncConnectionRef _lookup_conn(const entity_addr_t& k) {
+  AsyncConnectionRef _lookup_conn(const entity_addrvec_t& k) {
     assert(lock.is_locked());
-    ceph::unordered_map<entity_addr_t, AsyncConnectionRef>::iterator p = conns.find(k);
+    auto p = conns.find(k);
     if (p == conns.end())
       return NULL;
 
@@ -319,7 +324,7 @@ private:
 
   void _init_local_connection() {
     assert(lock.is_locked());
-    local_connection->peer_addr = my_addr;
+    local_connection->peer_addrs = *my_addrs;
     local_connection->peer_type = my_name.type();
     local_connection->set_features(CEPH_FEATURES_ALL);
     ms_deliver_handle_fast_connect(local_connection.get());
@@ -339,14 +344,14 @@ public:
   /**
    * This wraps _lookup_conn.
    */
-  AsyncConnectionRef lookup_conn(const entity_addr_t& k) {
+  AsyncConnectionRef lookup_conn(const entity_addrvec_t& k) {
     Mutex::Locker l(lock);
     return _lookup_conn(k);
   }
 
   int accept_conn(AsyncConnectionRef conn) {
     Mutex::Locker l(lock);
-    auto it = conns.find(conn->peer_addr);
+    auto it = conns.find(conn->peer_addrs);
     if (it != conns.end()) {
       AsyncConnectionRef existing = it->second;
 
@@ -360,7 +365,7 @@ public:
         return -1;
       }
     }
-    conns[conn->peer_addr] = conn;
+    conns[conn->peer_addrs] = conn;
     conn->get_perf_counter()->inc(l_msgr_active_connections);
     accepting_conns.erase(conn);
     return 0;

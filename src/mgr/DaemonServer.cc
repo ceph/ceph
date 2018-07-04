@@ -34,6 +34,7 @@
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
+#include "common/pick_address.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -93,7 +94,7 @@ DaemonServer::~DaemonServer() {
   g_conf->remove_observer(this);
 }
 
-int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
+int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 {
   // Initialize Messenger
   std::string public_msgr_type = g_conf->ms_public_type.empty() ?
@@ -120,15 +121,20 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
 			      mon_byte_throttler.get(),
 			      mon_msg_throttler.get());
 
-  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
-  int r = msgr->bind(paddr);
+  entity_addrvec_t addrs;
+  int r = pick_addresses(cct, CEPH_PICK_ADDRESS_PUBLIC, &addrs);
   if (r < 0) {
-    derr << "unable to bind mgr to " << paddr << dendl;
+    return r;
+  }
+  dout(20) << __func__ << " will bind to " << addrs << dendl;
+  r = msgr->bindv(addrs);
+  if (r < 0) {
+    derr << "unable to bind mgr to " << addrs << dendl;
     return r;
   }
 
   msgr->set_myname(entity_name_t::MGR(gid));
-  msgr->set_addr_unknowns(client_addr);
+  msgr->set_addr_unknowns(client_addrs);
 
   msgr->start();
   msgr->add_dispatcher_tail(this);

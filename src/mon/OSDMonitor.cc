@@ -1503,7 +1503,8 @@ void OSDMonitor::share_map_with_random_osd()
     return;
   }
 
-  dout(10) << "committed, telling random " << s->inst << " all about it" << dendl;
+  dout(10) << "committed, telling random " << s->name
+	   << " all about it" << dendl;
 
   // get feature of the peer
   // use quorum_con_features, if it's an anonymous connection.
@@ -2671,7 +2672,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
   // already booted?
   if (osdmap.is_up(from) &&
       osdmap.get_addrs(from) == m->get_orig_source_addrs() &&
-      osdmap.get_cluster_addr(from) == m->cluster_addr) {
+      osdmap.get_cluster_addrs(from) == m->cluster_addrs) {
     // yup.
     dout(7) << "preprocess_boot dup from " << m->get_orig_source()
 	    << " " << m->get_orig_source_addrs()
@@ -2716,10 +2717,12 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
   MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
-  dout(7) << __func__ << " from " << m->get_orig_source_inst() << " sb " << m->sb
-	  << " cluster_addr " << m->cluster_addr
-	  << " hb_back_addr " << m->hb_back_addr
-	  << " hb_front_addr " << m->hb_front_addr
+  dout(7) << __func__ << " from " << m->get_source()
+	  << " sb " << m->sb
+	  << " client_addrs" << m->get_connection()->get_peer_addrs()
+	  << " cluster_addrs " << m->cluster_addrs
+	  << " hb_back_addrs " << m->hb_back_addrs
+	  << " hb_front_addrs " << m->hb_front_addrs
 	  << dendl;
 
   assert(m->get_orig_source().is_osd());
@@ -2742,7 +2745,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 	    << osdmap.get_addrs(from) << dendl;
     // preprocess should have caught these;  if not, assert.
     assert(osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
-           osdmap.get_cluster_addr(from) != m->cluster_addr);
+           osdmap.get_cluster_addrs(from) != m->cluster_addrs);
     assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
 
     if (pending_inc.new_state.count(from) == 0 ||
@@ -2759,9 +2762,9 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
   } else {
     // mark new guy up.
     pending_inc.new_up_client[from] = m->get_orig_source_addrs();
-    pending_inc.new_up_cluster[from] = m->cluster_addr;
-    pending_inc.new_hb_back_up[from] = m->hb_back_addr;
-    pending_inc.new_hb_front_up[from] = m->hb_front_addr;
+    pending_inc.new_up_cluster[from] = m->cluster_addrs;
+    pending_inc.new_hb_back_up[from] = m->hb_back_addrs;
+    pending_inc.new_hb_front_up[from] = m->hb_front_addrs;
 
     down_pending_out.erase(from);  // if any
 
@@ -3446,7 +3449,7 @@ void OSDMonitor::send_incremental(epoch_t first,
 				  MonOpRequestRef req)
 {
   dout(5) << "send_incremental [" << first << ".." << osdmap.get_epoch() << "]"
-	  << " to " << session->inst << dendl;
+	  << " to " << session->name << dendl;
 
   // get feature of the peer
   // use quorum_con_features, if it's an anonymous connection.
@@ -3454,7 +3457,7 @@ void OSDMonitor::send_incremental(epoch_t first,
     mon->get_quorum_con_features();
 
   if (first <= session->osd_epoch) {
-    dout(10) << __func__ << " " << session->inst << " should already have epoch "
+    dout(10) << __func__ << " " << session->name << " should already have epoch "
 	     << session->osd_epoch << dendl;
     first = session->osd_epoch + 1;
   }
@@ -3745,6 +3748,15 @@ int OSDMonitor::get_version_full(version_t ver, uint64_t features,
   return 0;
 }
 
+epoch_t OSDMonitor::blacklist(const entity_addrvec_t& av, utime_t until)
+{
+  dout(10) << "blacklist " << av << " until " << until << dendl;
+  for (auto& a : av.v) {
+    pending_inc.new_blacklist[a] = until;
+  }
+  return pending_inc.epoch;
+}
+
 epoch_t OSDMonitor::blacklist(const entity_addr_t& a, utime_t until)
 {
   dout(10) << "blacklist " << a << " until " << until << dendl;
@@ -3806,13 +3818,13 @@ void OSDMonitor::check_pg_creates_subs()
 
 void OSDMonitor::check_pg_creates_sub(Subscription *sub)
 {
-  dout(20) << __func__ << " .. " << sub->session->inst << dendl;
+  dout(20) << __func__ << " .. " << sub->session->name << dendl;
   assert(sub->type == "osd_pg_creates");
   // only send these if the OSD is up.  we will check_subs() when they do
   // come up so they will get the creates then.
-  if (sub->session->inst.name.is_osd() &&
-      mon->osdmon()->osdmap.is_up(sub->session->inst.name.num())) {
-    sub->next = send_pg_creates(sub->session->inst.name.num(),
+  if (sub->session->name.is_osd() &&
+      mon->osdmon()->osdmap.is_up(sub->session->name.num())) {
+    sub->next = send_pg_creates(sub->session->name.num(),
 				sub->session->con.get(),
 				sub->next);
   }

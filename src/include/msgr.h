@@ -11,7 +11,8 @@
  * Data types for message passing layer used by Ceph.
  */
 
-#define CEPH_MON_PORT    6789  /* default monitor port */
+#define CEPH_MON_PORT_LEGACY    6789  /* legacy default monitor port */
+#define CEPH_MON_PORT_IANA      3300  /* IANA monitor port */
 
 /*
  * client-side processes will try to bind to ports in this

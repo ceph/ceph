@@ -78,3 +78,10 @@ int Messenger::get_default_crc_flags(md_config_t * conf)
     r |= MSG_CRC_HEADER;
   return r;
 }
+
+int Messenger::bindv(const entity_addrvec_t& addrs)
+{
+  lderr(cct) << __func__ << " " << addrs << " fallback to legacy "
+	     << addrs.legacy_addr() << dendl;
+  return bind(addrs.legacy_addr());
+}

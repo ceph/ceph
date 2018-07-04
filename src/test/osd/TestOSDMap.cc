@@ -42,16 +42,17 @@ public:
     osdmap.build_simple(g_ceph_context, 0, fsid, num_osds);
     OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
     pending_inc.fsid = osdmap.get_fsid();
-    entity_addr_t sample_addr;
+    entity_addrvec_t sample_addrs;
+    sample_addrs.v.push_back(entity_addr_t());
     uuid_d sample_uuid;
     for (int i = 0; i < num_osds; ++i) {
       sample_uuid.generate_random();
-      sample_addr.nonce = i;
+      sample_addrs.v[0].nonce = i;
       pending_inc.new_state[i] = CEPH_OSD_EXISTS | CEPH_OSD_NEW;
-      pending_inc.new_up_client[i] = entity_addrvec_t(sample_addr);
-      pending_inc.new_up_cluster[i] = sample_addr;
-      pending_inc.new_hb_back_up[i] = sample_addr;
-      pending_inc.new_hb_front_up[i] = sample_addr;
+      pending_inc.new_up_client[i] = sample_addrs;
+      pending_inc.new_up_cluster[i] = sample_addrs;
+      pending_inc.new_hb_back_up[i] = sample_addrs;
+      pending_inc.new_hb_front_up[i] = sample_addrs;
       pending_inc.new_weight[i] = CEPH_OSD_IN;
       pending_inc.new_uuid[i] = sample_uuid;
     }

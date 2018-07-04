@@ -93,8 +93,9 @@ public:
   /** @defgroup Accessors
    * @{
    */
-  void set_addr_unknowns(const entity_addr_t& addr) override;
-  void set_addr(const entity_addr_t &addr) override;
+  bool set_addr_unknowns(const entity_addrvec_t& addr) override;
+  void set_addrs(const entity_addrvec_t &addr) override;
+  void set_myaddrs(const entity_addrvec_t& a) override;
 
   int get_dispatch_queue_len() override {
     return dispatch_queue.get_queue_len();
@@ -285,6 +286,8 @@ private:
   __u32 global_seq;
   /// lock to protect the global_seq
   ceph::spinlock global_seq_lock;
+
+  entity_addr_t my_addr;
 
   /**
    * hash map of addresses to Pipes

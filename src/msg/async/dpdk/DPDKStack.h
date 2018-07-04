@@ -38,7 +38,8 @@ template <typename Protocol>
 class DPDKServerSocketImpl : public ServerSocketImpl {
   typename Protocol::listener _listener;
  public:
-  DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt);
+  DPDKServerSocketImpl(Protocol& proto, uint16_t port, const SocketOptions &opt,
+		       int type);
   int listen() {
     return _listener.listen();
   }
@@ -181,8 +182,8 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
 
 template <typename Protocol>
 DPDKServerSocketImpl<Protocol>::DPDKServerSocketImpl(
-        Protocol& proto, uint16_t port, const SocketOptions &opt)
-        : _listener(proto.listen(port)) {}
+  Protocol& proto, uint16_t port, const SocketOptions &opt, int type)
+  : ServerSocketImpl<Protocol>(type), _listener(proto.listen(port)) {}
 
 template <typename Protocol>
 int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptions &options, entity_addr_t *out, Worker *w) {
@@ -192,8 +193,10 @@ int DPDKServerSocketImpl<Protocol>::accept(ConnectedSocket *s, const SocketOptio
   if (!c)
     return -EAGAIN;
 
-  if (out)
+  if (out) {
     *out = c->remote_addr();
+    out->set_type(addr_type);
+  }
   std::unique_ptr<NativeConnectedSocketImpl<Protocol>> csi(
           new NativeConnectedSocketImpl<Protocol>(std::move(*c)));
   *s = ConnectedSocket(std::move(csi));

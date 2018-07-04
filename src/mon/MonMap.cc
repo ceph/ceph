@@ -329,7 +329,7 @@ int MonMap::build_from_host_list(std::string hostlist, const std::string &prefix
       n[0] = 'a' + i;
       n[1] = 0;
       if (addrs[i].get_port() == 0)
-	addrs[i].set_port(CEPH_MON_PORT);
+	addrs[i].set_port(CEPH_MON_PORT_LEGACY);
       string name = prefix;
       name += n;
       if (!contains(addrs[i]))
@@ -355,7 +355,7 @@ int MonMap::build_from_host_list(std::string hostlist, const std::string &prefix
     n[0] = 'a' + i;
     n[1] = 0;
     if (addrs[i].get_port() == 0)
-      addrs[i].set_port(CEPH_MON_PORT);
+      addrs[i].set_port(CEPH_MON_PORT_LEGACY);
     string name = prefix;
     name += n;
     if (!contains(addrs[i]) &&
@@ -495,7 +495,7 @@ int MonMap::build_initial(CephContext *cct, ostream& errout)
       continue;
     }
     if (addr.get_port() == 0)
-      addr.set_port(CEPH_MON_PORT);
+      addr.set_port(CEPH_MON_PORT_LEGACY);
 
     uint16_t priority = 0;
     if (!conf->get_val_from_conf_file(sections, "mon priority", val, false)) {

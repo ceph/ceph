@@ -221,7 +221,7 @@ void Mgr::init()
   assert(!initialized);
 
   // Start communicating with daemons to learn statistics etc
-  int r = server.init(monc->get_global_id(), client_messenger->get_myaddr());
+  int r = server.init(monc->get_global_id(), client_messenger->get_myaddrs());
   if (r < 0) {
     derr << "Initialize server fail: " << cpp_strerror(r) << dendl;
     // This is typically due to a bind() failure, so let's let
@@ -579,12 +579,12 @@ void Mgr::handle_fs_map(MFSMap* m)
 	  metadata->metadata.count("addr") == 0) {
         update = true;
       } else {
-        auto metadata_addr = metadata->metadata.at("addr");
-        const auto map_addr = info.addr;
-        update = metadata_addr != stringify(map_addr);
+        auto metadata_addrs = metadata->metadata.at("addr");
+        const auto map_addrs = info.addrs;
+        update = metadata_addrs != stringify(map_addrs);
         if (update) {
-          dout(4) << "MDS[" << info.name << "] addr change " << metadata_addr
-                  << " != " << stringify(map_addr) << dendl;
+          dout(4) << "MDS[" << info.name << "] addr change " << metadata_addrs
+                  << " != " << stringify(map_addrs) << dendl;
         }
       }
     } else {
@@ -596,7 +596,7 @@ void Mgr::handle_fs_map(MFSMap* m)
 
       // Older MDS daemons don't have addr in the metadata, so
       // fake it if the returned metadata doesn't have the field.
-      c->set_default("addr", stringify(info.addr));
+      c->set_default("addr", stringify(info.addrs));
 
       std::ostringstream cmd;
       cmd << "{\"prefix\": \"mds metadata\", \"who\": \""

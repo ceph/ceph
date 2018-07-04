@@ -1055,8 +1055,8 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
   if (con->get_messenger() == osd->cluster_messenger &&
       con != osd->cluster_messenger->get_loopback_connection() &&
       osdmap->is_up(name.num()) &&
-      (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
-       osdmap->get_hb_back_addr(name.num()) == con->get_peer_addr())) {
+      (osdmap->get_cluster_addrs(name.num()) == con->get_peer_addrs() ||
+       osdmap->get_hb_back_addrs(name.num()) == con->get_peer_addrs())) {
     // remember
     epoch_t has = std::max(get_peer_epoch(name.num()), epoch);
 
@@ -1102,9 +1102,9 @@ void OSDService::share_map(
       send_incremental_map(epoch, con, osdmap);
     } else if (con->get_messenger() == osd->cluster_messenger &&
         osdmap->is_up(name.num()) &&
-        (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
-            osdmap->get_hb_back_addr(name.num()) == con->get_peer_addr())) {
-      dout(10) << name << " " << con->get_peer_addr()
+        (osdmap->get_cluster_addrs(name.num()) == con->get_peer_addrs() ||
+            osdmap->get_hb_back_addrs(name.num()) == con->get_peer_addrs())) {
+      dout(10) << name << " " << con->get_peer_addrs()
 	               << " has old map " << epoch << " < "
 	               << osdmap->get_epoch() << dendl;
       note_peer_epoch(name.num(), osdmap->get_epoch());
@@ -5338,55 +5338,55 @@ bool OSD::_is_healthy()
 void OSD::_send_boot()
 {
   dout(10) << "_send_boot" << dendl;
-  entity_addr_t cluster_addr = cluster_messenger->get_myaddr();
-  Connection *local_connection = cluster_messenger->get_loopback_connection().get();
-  if (cluster_addr.is_blank_ip()) {
-    int port = cluster_addr.get_port();
-    cluster_addr = client_messenger->get_myaddr();
-    cluster_addr.set_port(port);
-    cluster_messenger->set_addr_unknowns(cluster_addr);
-    dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
-  } else {
-    if (auto session = local_connection->get_priv(); !session) {
-      cluster_messenger->ms_deliver_handle_fast_connect(local_connection);
-    }
+  Connection *local_connection =
+    cluster_messenger->get_loopback_connection().get();
+  entity_addrvec_t client_addrs = client_messenger->get_myaddrs();
+  entity_addrvec_t cluster_addrs = cluster_messenger->get_myaddrs();
+  entity_addrvec_t hb_back_addrs = hb_back_server_messenger->get_myaddrs();
+  entity_addrvec_t hb_front_addrs = hb_front_server_messenger->get_myaddrs();
+
+  dout(20) << " initial client_addrs " << client_addrs
+	   << ", cluster_addrs " << cluster_addrs
+	   << ", hb_back_addrs " << hb_back_addrs
+	   << ", hb_front_addrs " << hb_front_addrs
+	   << dendl;
+  if (cluster_messenger->set_addr_unknowns(client_addrs)) {
+    dout(10) << " assuming cluster_addrs match client_addrs "
+	     << client_addrs << dendl;
+    cluster_addrs = cluster_messenger->get_myaddrs();
+  }
+  if (auto session = local_connection->get_priv(); !session) {
+    cluster_messenger->ms_deliver_handle_fast_connect(local_connection);
   }
 
-  entity_addr_t hb_back_addr = hb_back_server_messenger->get_myaddr();
   local_connection = hb_back_server_messenger->get_loopback_connection().get();
-  if (hb_back_addr.is_blank_ip()) {
-    int port = hb_back_addr.get_port();
-    hb_back_addr = cluster_addr;
-    hb_back_addr.set_port(port);
-    hb_back_server_messenger->set_addr_unknowns(hb_back_addr);
-    dout(10) << " assuming hb_back_addr ip matches cluster_addr" << dendl;
-  } else {
-    if (auto session = local_connection->get_priv(); !session) {
-      hb_back_server_messenger->ms_deliver_handle_fast_connect(local_connection);
-    }
+  if (hb_back_server_messenger->set_addr_unknowns(cluster_addrs)) {
+    dout(10) << " assuming hb_back_addrs match cluster_addrs "
+	     << cluster_addrs << dendl;
+    hb_back_addrs = hb_back_server_messenger->get_myaddrs();
+  }
+  if (auto session = local_connection->get_priv(); !session) {
+    hb_back_server_messenger->ms_deliver_handle_fast_connect(local_connection);
   }
 
-  entity_addr_t hb_front_addr = hb_front_server_messenger->get_myaddr();
   local_connection = hb_front_server_messenger->get_loopback_connection().get();
-  if (hb_front_addr.is_blank_ip()) {
-    int port = hb_front_addr.get_port();
-    hb_front_addr = client_messenger->get_myaddr();
-    hb_front_addr.set_port(port);
-    hb_front_server_messenger->set_addr_unknowns(hb_front_addr);
-    dout(10) << " assuming hb_front_addr ip matches client_addr" << dendl;
-  } else {
-    if (auto session = local_connection->get_priv(); !session) {
-      hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
-    }
+  if (hb_front_server_messenger->set_addr_unknowns(client_addrs)) {
+    dout(10) << " assuming hb_front_addrs match client_addrs "
+	     << client_addrs << dendl;
+    hb_front_addrs = hb_front_server_messenger->get_myaddrs();
+  }
+  if (auto session = local_connection->get_priv(); !session) {
+    hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
   }
 
-  MOSDBoot *mboot = new MOSDBoot(superblock, get_osdmap_epoch(), service.get_boot_epoch(),
-                                 hb_back_addr, hb_front_addr, cluster_addr,
-				 CEPH_FEATURES_ALL);
-  dout(10) << " client_addr " << client_messenger->get_myaddr()
-	   << ", cluster_addr " << cluster_addr
-	   << ", hb_back_addr " << hb_back_addr
-	   << ", hb_front_addr " << hb_front_addr
+  MOSDBoot *mboot = new MOSDBoot(
+    superblock, get_osdmap_epoch(), service.get_boot_epoch(),
+    hb_back_addrs, hb_front_addrs, cluster_addrs,
+    CEPH_FEATURES_ALL);
+  dout(10) << " final client_addrs " << client_addrs
+	   << ", cluster_addrs " << cluster_addrs
+	   << ", hb_back_addrs " << hb_back_addrs
+	   << ", hb_front_addrs " << hb_front_addrs
 	   << dendl;
   _collect_metadata(&mboot->metadata);
   monc->send_mon_message(mboot);
@@ -5401,10 +5401,10 @@ void OSD::_collect_metadata(map<string,string> *pm)
     // not applicable for bluestore
     (*pm)["osd_journal"] = journal_path;
   }
-  (*pm)["front_addr"] = stringify(client_messenger->get_myaddr());
-  (*pm)["back_addr"] = stringify(cluster_messenger->get_myaddr());
-  (*pm)["hb_front_addr"] = stringify(hb_front_server_messenger->get_myaddr());
-  (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddr());
+  (*pm)["front_addr"] = stringify(client_messenger->get_myaddrs());
+  (*pm)["back_addr"] = stringify(cluster_messenger->get_myaddrs());
+  (*pm)["hb_front_addr"] = stringify(hb_front_server_messenger->get_myaddrs());
+  (*pm)["hb_back_addr"] = stringify(hb_back_server_messenger->get_myaddrs());
 
   // backend
   (*pm)["osd_objectstore"] = store->get_type();
@@ -5415,10 +5415,12 @@ void OSD::_collect_metadata(map<string,string> *pm)
 
   collect_sys_info(pm, cct);
 
-  (*pm)["front_iface"] = pick_iface(cct,
-      client_messenger->get_myaddr().get_sockaddr_storage());
-  (*pm)["back_iface"] = pick_iface(cct,
-      cluster_messenger->get_myaddr().get_sockaddr_storage());
+  (*pm)["front_iface"] = pick_iface(
+    cct,
+    client_messenger->get_myaddrs().front().get_sockaddr_storage());
+  (*pm)["back_iface"] = pick_iface(
+    cct,
+    cluster_messenger->get_myaddrs().front().get_sockaddr_storage());
 
   set<string> devnames;
   store->get_devices(&devnames);
@@ -7029,7 +7031,7 @@ void OSD::wait_for_new_map(OpRequestRef op)
 void OSD::note_down_osd(int peer)
 {
   assert(osd_lock.is_locked());
-  cluster_messenger->mark_down(osdmap->get_cluster_addr(peer));
+  cluster_messenger->mark_down_addrs(osdmap->get_cluster_addrs(peer));
 
   heartbeat_lock.Lock();
   failure_queue.erase(peer);
@@ -7981,11 +7983,12 @@ bool OSD::require_same_peer_instance(const Message *m, OSDMapRef& map,
   int from = m->get_source().num();
 
   if (map->is_down(from) ||
-      (map->get_cluster_addr(from) != m->get_source_inst().addr)) {
+      (map->get_cluster_addrs(from) != m->get_source_addrs())) {
     dout(5) << "from dead osd." << from << ", marking down, "
 	    << " msg was " << m->get_source_inst().addr
-	    << " expected " << (map->is_up(from) ?
-				map->get_cluster_addr(from) : entity_addr_t())
+	    << " expected "
+	    << (map->is_up(from) ?
+		map->get_cluster_addrs(from) : entity_addrvec_t())
 	    << dendl;
     ConnectionRef con = m->get_connection();
     con->mark_down();

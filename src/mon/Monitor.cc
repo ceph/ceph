@@ -1090,7 +1090,7 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
   }
 
   if (addr.get_port() == 0)
-    addr.set_port(CEPH_MON_PORT);
+    addr.set_port(CEPH_MON_PORT_LEGACY);
 
   extra_probe_peers.insert(addr);
   ss << "adding peer " << addr << " to list: " << extra_probe_peers;
@@ -3086,7 +3086,7 @@ void Monitor::handle_command(MonOpRequestRef op)
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
     (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-      << "from='" << session->inst << "' "
+      << "from='" << session->name << " " << session->addrs << "' "
       << "entity='" << session->entity_name << "' "
       << "cmd=" << m->cmd << ":  access denied";
     reply_command(op, -EACCES, "access denied", 0);
@@ -3094,9 +3094,9 @@ void Monitor::handle_command(MonOpRequestRef op)
   }
 
   (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-    << "from='" << session->inst << "' "
-    << "entity='" << session->entity_name << "' "
-    << "cmd=" << m->cmd << ": dispatch";
+      << "from='" << session->name << " " << session->addrs << "' "
+      << "entity='" << session->entity_name << "' "
+      << "cmd=" << m->cmd << ": dispatch";
 
   if (mon_cmd->is_mgr()) {
     const auto& hdr = m->get_header();
@@ -3344,7 +3344,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     f->flush(rdata);
 
     ostringstream ss2;
-    ss2 << "report " << rdata.crc32c(CEPH_MON_PORT);
+    ss2 << "report " << rdata.crc32c(CEPH_MON_PORT_LEGACY);
     rs = ss2.str();
     r = 0;
   } else if (prefix == "osd last-stat-seq") {
@@ -3717,7 +3717,8 @@ void Monitor::handle_forward(MonOpRequestRef op)
     assert(req != NULL);
 
     ConnectionRef c(new AnonConnection(cct));
-    MonSession *s = new MonSession(req->get_source_inst(),
+    MonSession *s = new MonSession(req->get_source(),
+				   req->get_source_addrs(),
 				   static_cast<Connection*>(c.get()));
     c->set_priv(RefCountedPtr{s, false});
     c->set_peer_addr(m->client.addr);
@@ -3902,7 +3903,7 @@ void Monitor::resend_routed_requests()
 
 void Monitor::remove_session(MonSession *s)
 {
-  dout(10) << "remove_session " << s << " " << s->inst
+  dout(10) << "remove_session " << s << " " << s->name << " " << s->addrs
 	   << " features 0x" << std::hex << s->con_features << std::dec << dendl;
   assert(s->con);
   assert(!s->closed);
@@ -4032,7 +4033,9 @@ void Monitor::_ms_dispatch(Message *m)
     ConnectionRef con = m->get_connection();
     {
       Mutex::Locker l(session_map_lock);
-      s = session_map.new_session(m->get_source_inst(), con.get());
+      s = session_map.new_session(m->get_source(),
+				  m->get_source_addrs(),
+				  con.get());
     }
     assert(s);
     con->set_priv(RefCountedPtr{s, false});
@@ -4052,7 +4055,7 @@ void Monitor::_ms_dispatch(Message *m)
       s->authenticated = true;
     }
   } else {
-    dout(20) << __func__ << " existing session " << s << " for " << s->inst
+    dout(20) << __func__ << " existing session " << s << " for " << s->name
 	     << dendl;
   }
 
@@ -4925,7 +4928,7 @@ bool Monitor::ms_handle_reset(Connection *con)
 
   Mutex::Locker l(lock);
 
-  dout(10) << "reset/close on session " << s->inst << dendl;
+  dout(10) << "reset/close on session " << s->name << " " << s->addrs << dendl;
   if (!s->closed) {
     Mutex::Locker l(session_map_lock);
     remove_session(s);
@@ -5410,7 +5413,7 @@ void Monitor::tick()
       ++p;
     
       // don't trim monitors
-      if (s->inst.name.is_mon())
+      if (s->name.is_mon())
 	continue;
 
       if (s->session_timeout < now && s->con) {
@@ -5419,12 +5422,13 @@ void Monitor::tick()
 	s->session_timeout += g_conf->mon_session_timeout;
       }
       if (s->session_timeout < now) {
-	dout(10) << " trimming session " << s->con << " " << s->inst
+	dout(10) << " trimming session " << s->con << " " << s->name
+		 << " " << s->addrs
 		 << " (timeout " << s->session_timeout
 		 << " < now " << now << ")" << dendl;
       } else if (out_for_too_long) {
 	// boot the client Session because we've taken too long getting back in
-	dout(10) << " trimming session " << s->con << " " << s->inst
+	dout(10) << " trimming session " << s->con << " " << s->name
 		 << " because we've been out of quorum too long" << dendl;
       } else {
 	continue;
