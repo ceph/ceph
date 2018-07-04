@@ -212,6 +212,9 @@ public:
     assert(is_open() || is_stale());
     load_avg = DecayCounter(rate);
   }
+  uint64_t get_load_avg() const {
+    return (uint64_t)load_avg.get();
+  }
   void hit_session() {
     load_avg.adjust();
   }
