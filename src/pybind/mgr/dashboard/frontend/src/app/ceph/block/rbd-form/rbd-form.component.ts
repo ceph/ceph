@@ -54,23 +54,23 @@ export class RbdFormComponent implements OnInit {
   response: RbdFormResponseModel;
   snapName: string;
 
-  defaultObjectSize = '4MiB';
+  defaultObjectSize = '4 MiB';
 
   objectSizes: Array<string> = [
-    '4KiB',
-    '8KiB',
-    '16KiB',
-    '32KiB',
-    '64KiB',
-    '128KiB',
-    '256KiB',
-    '512KiB',
-    '1MiB',
-    '2MiB',
-    '4MiB',
-    '8MiB',
-    '16MiB',
-    '32MiB'
+    '4 KiB',
+    '8 KiB',
+    '16 KiB',
+    '32 KiB',
+    '64 KiB',
+    '128 KiB',
+    '256 KiB',
+    '512 KiB',
+    '1 MiB',
+    '2 MiB',
+    '4 MiB',
+    '8 MiB',
+    '16 MiB',
+    '32 MiB'
   ];
 
   constructor(
