@@ -538,6 +538,8 @@ enum {
   OPT_PUBSUB_SUB_GET,
   OPT_PUBSUB_SUB_CREATE,
   OPT_PUBSUB_SUB_RM,
+  OPT_PUBSUB_SUB_PULL,
+  OPT_PUBSUB_EVENT_RM,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -553,6 +555,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "data") == 0 ||
       strcmp(cmd, "datalog") == 0 ||
       strcmp(cmd, "error") == 0 ||
+      strcmp(cmd, "event") == 0 ||
       strcmp(cmd, "gc") == 0 ||
       strcmp(cmd, "global") == 0 ||
       strcmp(cmd, "key") == 0 ||
@@ -1019,6 +1022,11 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
         return OPT_PUBSUB_SUB_CREATE;
       if (strcmp(cmd, "rm") == 0)
         return OPT_PUBSUB_SUB_RM;
+      if (strcmp(cmd, "pull") == 0)
+        return OPT_PUBSUB_SUB_PULL;
+    } else if (strcmp(prev_cmd, "event") == 0) {
+      if (strcmp(cmd, "rm") == 0)
+        return OPT_PUBSUB_EVENT_RM;
     }
   }
   return -EINVAL;
@@ -2846,6 +2854,7 @@ int main(int argc, const char **argv)
   string sub_oid_prefix;
   string sub_dest_bucket;
   string sub_push_endpoint;
+  string event_id;
 
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -3177,6 +3186,8 @@ int main(int argc, const char **argv)
       sub_dest_bucket = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--sub-push-endpoint", (char*)NULL)) {
       sub_push_endpoint = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--event-id", (char*)NULL)) {
+      event_id = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -7966,6 +7977,63 @@ next:
     }
     encode_json("sub", sub, formatter);
     formatter->flush(cout);
+  }
+
+ if (opt_cmd == OPT_PUBSUB_SUB_PULL) {
+    if (get_tier_type(store) != "pubsub") {
+      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
+      return EINVAL;
+    }
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+    if (sub_name.empty()) {
+      cerr << "ERROR: subscription name was not provided (via --sub-name)" << std::endl;
+      return EINVAL;
+    }
+    RGWUserInfo& user_info = user_op.get_user_info();
+    RGWUserPubSub ups(store, user_info.user_id);
+
+    RGWUserPubSub::list_events_result result;
+
+    if (!max_entries_specified) {
+      max_entries = 100;
+    }
+    ret = ups.list_events(sub_name, marker, max_entries, &result);
+    if (ret < 0) {
+      cerr << "ERROR: could not list events: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    encode_json("result", result, formatter);
+    formatter->flush(cout);
+ }
+
+ if (opt_cmd == OPT_PUBSUB_EVENT_RM) {
+    if (get_tier_type(store) != "pubsub") {
+      cerr << "ERROR: only pubsub tier type supports this command" << std::endl;
+      return EINVAL;
+    }
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+    if (sub_name.empty()) {
+      cerr << "ERROR: subscription name was not provided (via --sub-name)" << std::endl;
+      return EINVAL;
+    }
+    if (event_id.empty()) {
+      cerr << "ERROR: event id was not provided (via --event-id)" << std::endl;
+      return EINVAL;
+    }
+    RGWUserInfo& user_info = user_op.get_user_info();
+    RGWUserPubSub ups(store, user_info.user_id);
+
+    ret = ups.remove_event(sub_name, event_id);
+    if (ret < 0) {
+      cerr << "ERROR: could not remove event: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
   }
 
   return 0;

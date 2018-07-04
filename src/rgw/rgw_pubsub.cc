@@ -1,3 +1,4 @@
+#include "rgw_b64.h"
 #include "rgw_rados.h"
 #include "rgw_pubsub.h"
 #include "rgw_tools.h"
@@ -364,3 +365,112 @@ int RGWUserPubSub::remove_sub(const string& name, const string& _topic, const rg
   return 0;
 }
 
+void RGWUserPubSub::list_events_result::dump(Formatter *f) const
+{
+  encode_json("next_marker", next_marker, f);
+  encode_json("is_truncated", is_truncated, f);
+
+  Formatter::ArraySection s(*f, "events");
+  for (auto& event : events) {
+    encode_json("event", event, f);
+  }
+}
+
+int RGWUserPubSub::list_events(const string& sub_name,
+                               const string& marker, int max_events,
+                               list_events_result *result)
+{
+  rgw_pubsub_user_sub_config sub_conf;
+  int ret = get_sub(sub_name, &sub_conf);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read sub config: ret=" << ret << dendl;
+    return ret;
+  }
+
+  RGWBucketInfo bucket_info;
+  string tenant;
+  RGWObjectCtx obj_ctx(store);
+  ret = store->get_bucket_info(obj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, nullptr);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    return ret;
+  }
+
+  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket::List list_op(&target);
+
+  list_op.params.prefix = sub_conf.dest.oid_prefix;
+  list_op.params.marker = marker;
+
+  vector<rgw_bucket_dir_entry> objs;
+
+  ret = list_op.list_objects(max_events, &objs, nullptr, &result->is_truncated);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to list bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    return ret;
+  }
+  if (result->is_truncated) {
+    result->next_marker = list_op.get_next_marker().name;
+  }
+
+  for (auto& obj : objs) {
+    bufferlist bl64;
+    bufferlist bl;
+    bl64.append(obj.meta.user_data);
+    try {
+      bl.decode_base64(bl64);
+    } catch (buffer::error& err) {
+      ldout(store->ctx(), 0) << "ERROR: failed to event (not a valid base64)" << dendl;
+      continue;
+    }
+    rgw_pubsub_event event;
+
+    auto iter = bl.cbegin();
+    try {
+      decode(event, iter);
+    } catch (buffer::error& err) {
+      ldout(store->ctx(), 0) << "ERROR: failed to decode event" << dendl;
+      continue;
+    };
+
+    result->events.push_back(event);
+  }
+  return 0;
+}
+
+int RGWUserPubSub::remove_event(const string& sub_name, const string& event_id)
+{
+  rgw_pubsub_user_sub_config sub_conf;
+  int ret = get_sub(sub_name, &sub_conf);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read sub config: ret=" << ret << dendl;
+    return ret;
+  }
+
+  RGWBucketInfo bucket_info;
+  string tenant;
+  RGWObjectCtx obj_ctx(store);
+  ret = store->get_bucket_info(obj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, nullptr);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
+    return ret;
+  }
+
+  rgw_bucket& bucket = bucket_info.bucket;
+
+  rgw_obj obj(bucket, event_id);
+
+  obj_ctx.obj.set_atomic(obj);
+
+  RGWRados::Object del_target(store, bucket_info, obj_ctx, obj);
+  RGWRados::Object::Delete del_op(&del_target);
+
+  del_op.params.bucket_owner = bucket_info.owner;
+  del_op.params.versioning_status = bucket_info.versioning_status();
+
+  ret = del_op.delete_obj();
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
+  }
+  return 0;
+}
