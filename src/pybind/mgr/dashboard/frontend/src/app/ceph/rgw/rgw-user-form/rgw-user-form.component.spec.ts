@@ -24,17 +24,9 @@ describe('RgwUserFormComponent', () => {
   }
 
   configureTestBed({
-    declarations: [ RgwUserFormComponent ],
-    imports: [
-      HttpClientTestingModule,
-      ReactiveFormsModule,
-      RouterTestingModule,
-      SharedModule
-    ],
-    providers: [
-      BsModalService,
-      { provide: RgwUserService, useClass: MockRgwUserService }
-    ]
+    declarations: [RgwUserFormComponent],
+    imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
+    providers: [BsModalService, { provide: RgwUserService, useClass: MockRgwUserService }]
   });
 
   beforeEach(() => {
@@ -67,14 +59,12 @@ describe('RgwUserFormComponent', () => {
       component.setS3Key(key);
       expect(component.s3Keys.length).toBe(1);
       expect(component.s3Keys[0].user).toBe('test1:subuser2');
-      expect(rgwUserService.addS3Key).toHaveBeenCalledWith(
-        'test1', {
-          subuser: 'subuser2',
-          generate_key: 'false',
-          access_key: undefined,
-          secret_key: undefined
-        }
-      );
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
+        subuser: 'subuser2',
+        generate_key: 'false',
+        access_key: undefined,
+        secret_key: undefined
+      });
     });
 
     it('should set key w/o subuser', () => {
@@ -83,14 +73,12 @@ describe('RgwUserFormComponent', () => {
       component.setS3Key(key);
       expect(component.s3Keys.length).toBe(1);
       expect(component.s3Keys[0].user).toBe('test1');
-      expect(rgwUserService.addS3Key).toHaveBeenCalledWith(
-        'test1', {
-          subuser: '',
-          generate_key: 'false',
-          access_key: undefined,
-          secret_key: undefined
-        }
-      );
+      expect(rgwUserService.addS3Key).toHaveBeenCalledWith('test1', {
+        subuser: '',
+        generate_key: 'false',
+        access_key: undefined,
+        secret_key: undefined
+      });
     });
   });
 
