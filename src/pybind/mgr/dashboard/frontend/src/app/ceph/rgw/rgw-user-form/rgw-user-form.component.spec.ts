@@ -6,9 +6,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { of as observableOf } from 'rxjs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
 

@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
+import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../../../shared/components/components.module';
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { Permissions } from '../../../../shared/models/permissions';
@@ -10,7 +11,6 @@ import { DimlessPipe } from '../../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { FormatterService } from '../../../../shared/services/formatter.service';
 import { SharedModule } from '../../../../shared/shared.module';
-import { configureTestBed } from '../../../../shared/unit-test-helper';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
 import { OsdDetailsComponent } from '../osd-details/osd-details.component';
 import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
