@@ -12,12 +12,9 @@ describe('RgwUserSubuserModalComponent', () => {
   let fixture: ComponentFixture<RgwUserSubuserModalComponent>;
 
   configureTestBed({
-    declarations: [ RgwUserSubuserModalComponent ],
-    imports: [
-      ReactiveFormsModule,
-      SharedModule
-    ],
-    providers: [ BsModalRef ]
+    declarations: [RgwUserSubuserModalComponent],
+    imports: [ReactiveFormsModule, SharedModule],
+    providers: [BsModalRef]
   });
 
   beforeEach(() => {

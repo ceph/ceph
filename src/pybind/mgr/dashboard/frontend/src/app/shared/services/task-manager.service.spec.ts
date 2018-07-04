@@ -27,9 +27,12 @@ describe('TaskManagerService', () => {
     filesystems: [{ id: 1, name: 'cephfs_a' }]
   };
 
-  configureTestBed({
-    providers: [TaskManagerService, { provide: SummaryService, useValue: fakeService }]
-  }, true);
+  configureTestBed(
+    {
+      providers: [TaskManagerService, { provide: SummaryService, useValue: fakeService }]
+    },
+    true
+  );
 
   beforeEach(() => {
     taskManagerService = TestBed.get(TaskManagerService);
