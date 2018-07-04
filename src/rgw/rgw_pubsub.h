@@ -238,6 +238,17 @@ public:
   int get_sub(const string& name, rgw_pubsub_user_sub_config *result);
   int add_sub(const string& name, const string& topic, const rgw_pubsub_user_sub_dest& dest);
   int remove_sub(const string& name, const string& topic, const rgw_pubsub_user_sub_dest& dest);
+
+  struct list_events_result {
+    string next_marker;
+    bool is_truncated{false};
+    std::vector<rgw_pubsub_event> events;
+
+    void dump(Formatter *f) const;
+  };
+
+  int list_events(const string& sub_name, const string& marker, int max_events, list_events_result *result);
+  int remove_event(const string& sub_name, const string& event_id);
 };
 
 template <class T>
