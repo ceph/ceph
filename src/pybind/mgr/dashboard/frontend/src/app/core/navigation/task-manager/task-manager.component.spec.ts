@@ -53,17 +53,17 @@ describe('TaskManagerComponent', () => {
   it('should get executing message for task', () => {
     component._handleTasks(tasks.executing, []);
     expect(component.executingTasks.length).toBe(1);
-    expect(component.executingTasks[0].description).toBe('Deleting RBD \'somePool/someImage\'');
+    expect(component.executingTasks[0].description).toBe(`Deleting RBD 'somePool/someImage'`);
   });
 
   it('should get finished message for task', () => {
     component._handleTasks([], tasks.finished);
     expect(component.finishedTasks.length).toBe(2);
-    expect(component.finishedTasks[0].description).toBe('Copy RBD \'somePool/someImage\'');
+    expect(component.finishedTasks[0].description).toBe(`Copy RBD 'somePool/someImage'`);
     expect(component.finishedTasks[0].errorMessage).toBe(undefined);
-    expect(component.finishedTasks[1].description).toBe('Clone RBD \'somePool/someImage\'');
+    expect(component.finishedTasks[1].description).toBe(`Clone RBD 'somePool/someImage'`);
     expect(component.finishedTasks[1].errorMessage).toBe(
-      'Name \'somePool/someImage\' is already in use.'
+      `Name 'somePool/someImage' is already in use.`
     );
   });
 
