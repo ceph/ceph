@@ -515,14 +515,13 @@ void Log::start()
 
 void Log::stop()
 {
-  if (is_started()) {
-    pthread_mutex_lock(&m_queue_mutex);
-    m_stop = true;
-    pthread_cond_signal(&m_cond_flusher);
-    pthread_cond_broadcast(&m_cond_loggers);
-    pthread_mutex_unlock(&m_queue_mutex);
-    join();
-  }
+  assert(is_started());
+  pthread_mutex_lock(&m_queue_mutex);
+  m_stop = true;
+  pthread_cond_signal(&m_cond_flusher);
+  pthread_cond_broadcast(&m_cond_loggers);
+  pthread_mutex_unlock(&m_queue_mutex);
+  join();
 }
 
 void *Log::entry()
