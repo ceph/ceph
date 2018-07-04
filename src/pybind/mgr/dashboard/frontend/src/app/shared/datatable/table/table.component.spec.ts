@@ -19,7 +19,7 @@ describe('TableComponent', () => {
       data.push({
         a: i,
         b: i * i,
-        c: [-(i % 10), 'score' + (i % 16 + 6)],
+        c: [-(i % 10), 'score' + ((i % 16) + 6)],
         d: !(i % 2)
       });
     }
