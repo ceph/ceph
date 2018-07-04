@@ -1135,7 +1135,7 @@ class CephManager:
             )
         return proc.stdout.getvalue()
 
-    def raw_cluster_cmd_result(self, *args):
+    def raw_cluster_cmd_result(self, *args, **kwargs):
         """
         Start ceph on a cluster.  Return success or failure information.
         """
@@ -1152,10 +1152,9 @@ class CephManager:
             self.cluster,
         ]
         ceph_args.extend(args)
-        proc = self.controller.run(
-            args=ceph_args,
-            check_status=False,
-            )
+        kwargs['args'] = ceph_args
+        kwargs['check_status'] = False
+        proc = self.controller.run(**kwargs)
         return proc.exitstatus
 
     def run_ceph_w(self):
