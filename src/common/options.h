@@ -19,6 +19,7 @@ struct Option {
     TYPE_FLOAT,
     TYPE_BOOL,
     TYPE_ADDR,
+    TYPE_ADDRVEC,
     TYPE_UUID,
     TYPE_SIZE,
     TYPE_SECS,
@@ -32,6 +33,7 @@ struct Option {
     case TYPE_FLOAT: return "double";
     case TYPE_BOOL: return "bool";
     case TYPE_ADDR: return "entity_addr_t";
+    case TYPE_ADDRVEC: return "entity_addrvec_t";
     case TYPE_UUID: return "uuid_d";
     case TYPE_SIZE: return "size_t";
     case TYPE_SECS: return "secs";
@@ -86,6 +88,7 @@ struct Option {
     double,
     bool,
     entity_addr_t,
+    entity_addrvec_t,
     std::chrono::seconds,
     size_t,
     uuid_d>;
@@ -154,6 +157,8 @@ struct Option {
       value = false; break;
     case TYPE_ADDR:
       value = entity_addr_t(); break;
+    case TYPE_ADDRVEC:
+      value = entity_addrvec_t(); break;
     case TYPE_UUID:
       value = uuid_d(); break;
     case TYPE_SIZE:

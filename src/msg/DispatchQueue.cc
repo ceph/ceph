@@ -26,7 +26,7 @@
  */
 
 #undef dout_prefix
-#define dout_prefix *_dout << "-- " << msgr->get_myaddr() << " "
+#define dout_prefix *_dout << "-- " << msgr->get_myaddrs() << " "
 
 double DispatchQueue::get_max_age(utime_t now) const {
   Mutex::Locker l(lock);

@@ -98,7 +98,7 @@ public:
 		    void *cb_user_context);
 
   /* Messenger interface */
-  virtual void set_addr_unknowns(const entity_addr_t &addr) override
+  virtual bool set_addr_unknowns(const entity_addrvec_t &addr) override
     { } /* XXX applicable? */
   virtual void set_addr(const entity_addr_t &addr) override
     { } /* XXX applicable? */

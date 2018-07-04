@@ -25,3 +25,7 @@
   filesystem ``cephfs_a``, use command:
 
     - ``ceph auth caps client.foo mon 'allow r' osd 'allow rw tag cephfs data=cephfs_a' mds 'allow rw, allow rws path=/bar'``
+
+* The ``osd_heartbeat_addr`` option has been removed as it served no
+  (good) purpose: the OSD should always check heartbeats on both the
+  public and cluster networks.

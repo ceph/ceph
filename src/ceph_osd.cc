@@ -470,20 +470,6 @@ flushjournal_out:
     forker.exit(0);
   }
 
-  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC
-                                |CEPH_PICK_ADDRESS_CLUSTER);
-
-  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
-  entity_addr_t caddr = g_conf->get_val<entity_addr_t>("cluster_addr");
-
-
-  if (paddr.is_blank_ip() && !caddr.is_blank_ip()) {
-    derr << TEXT_YELLOW
-	 << " ** WARNING: specified cluster addr but not public addr; we recommend **\n"
-	 << " **          you specify neither or both.                             **"
-	 << TEXT_NORMAL << dendl;
-  }
-
   std::string msg_type = g_conf->get_val<std::string>("ms_type");
   std::string public_msg_type =
     g_conf->get_val<std::string>("ms_public_type");
@@ -526,7 +512,6 @@ flushjournal_out:
   ms_hb_front_server->set_cluster_protocol(CEPH_OSD_PROTOCOL);
 
   cout << "starting osd." << whoami
-       << " at " << ms_public->get_myaddr()
        << " osd_data " << data_path
        << " " << ((journal_path.empty()) ?
 		  "(no journal)" : journal_path)
@@ -574,10 +559,14 @@ flushjournal_out:
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  if (ms_public->bind(paddr) < 0)
+  entity_addrvec_t public_addrs, cluster_addrs;
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs);
+  pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_CLUSTER, &cluster_addrs);
+
+  if (ms_public->bindv(public_addrs) < 0)
     forker.exit(1);
 
-  if (ms_cluster->bind(caddr) < 0)
+  if (ms_cluster->bindv(cluster_addrs) < 0)
     forker.exit(1);
 
   bool is_delay = g_conf->get_val<bool>("osd_heartbeat_use_min_delay_socket");
@@ -588,26 +577,22 @@ flushjournal_out:
     ms_hb_front_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
   }
 
-  // hb back should bind to same ip as cluster_addr (if specified)
-  entity_addr_t haddr = g_conf->get_val<entity_addr_t>("osd_heartbeat_addr");
-  if (haddr.is_blank_ip()) {
-    haddr = caddr;
-    if (haddr.is_ip())
-      haddr.set_port(0);
+  entity_addrvec_t hb_front_addrs = public_addrs;
+  for (auto& a : hb_front_addrs.v) {
+    a.set_port(0);
   }
+  if (ms_hb_front_server->bindv(hb_front_addrs) < 0)
+    forker.exit(1);
+  if (ms_hb_front_client->client_bind(hb_front_addrs.front()) < 0)
+    forker.exit(1);
 
-  if (ms_hb_back_server->bind(haddr) < 0)
+  entity_addrvec_t hb_back_addrs = cluster_addrs;
+  for (auto& a : hb_back_addrs.v) {
+    a.set_port(0);
+  }
+  if (ms_hb_back_server->bindv(hb_back_addrs) < 0)
     forker.exit(1);
-  if (ms_hb_back_client->client_bind(haddr) < 0)
-    forker.exit(1);
-
-  // hb front should bind to same ip as public_addr
-  entity_addr_t hb_front_addr = paddr;
-  if (hb_front_addr.is_ip())
-    hb_front_addr.set_port(0);
-  if (ms_hb_front_server->bind(hb_front_addr) < 0)
-    forker.exit(1);
-  if (ms_hb_front_client->client_bind(hb_front_addr) < 0)
+  if (ms_hb_back_client->client_bind(hb_back_addrs.front()) < 0)
     forker.exit(1);
 
   // install signal handlers

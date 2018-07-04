@@ -268,6 +268,8 @@ struct entity_addr_t {
 
   uint32_t get_type() const { return type; }
   void set_type(uint32_t t) { type = t; }
+  bool is_legacy() const { return type == TYPE_LEGACY; }
+  bool is_msgr2() const { return type == TYPE_MSGR2; }
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
@@ -620,6 +622,21 @@ struct entity_addrvec_t {
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(entity_addrvec_t);
+
+namespace std {
+  template<> struct hash< entity_addrvec_t >
+  {
+    size_t operator()( const entity_addrvec_t& x ) const
+    {
+      static blobhash H;
+      size_t r = 0;
+      for (auto& i : x.v) {
+	r += H((const char*)&i, sizeof(i));
+      }
+      return r;
+    }
+  };
+} // namespace std
 
 /*
  * a particular entity instance

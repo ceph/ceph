@@ -834,7 +834,7 @@ public:
 
           // if client drops we may not have a session to draw information from.
           if (s) {
-            ss << "from='" << s->inst << "' "
+            ss << "from='" << s->name << " " << s->addrs << "' "
               << "entity='" << s->entity_name << "' ";
           } else {
             ss << "session dropped for command ";

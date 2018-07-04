@@ -242,6 +242,12 @@ int Option::parse_value(
       return -EINVAL;
     }
     *out = addr;
+  } else if (type == Option::TYPE_ADDR) {
+    entity_addrvec_t addr;
+    if (!addr.parse(val.c_str())){
+      return -EINVAL;
+    }
+    *out = addr;
   } else if (type == Option::TYPE_UUID) {
     uuid_d uuid;
     if (!uuid.parse(val.c_str())) {
@@ -918,9 +924,29 @@ std::vector<Option> get_global_options() {
     .set_default(100_M)
     .set_description(""),
 
+    Option("ms_bind_ipv4", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Bind servers to IPV4 address(es)")
+    .add_see_also("ms_bind_ipv6"),
+
     Option("ms_bind_ipv6", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Bind servers to IPV6 address(es)")
+    .add_see_also("ms_bind_ipv4"),
+
+    Option("ms_bind_prefer_ipv4", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Prefer IPV4 over IPV6 address(es)"),
+
+    Option("ms_bind_msgr1", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Bind servers to msgr1 (legacy) protocol address(es)")
+    .add_see_also("ms_bind_msgr2"),
+
+    Option("ms_bind_msgr2", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Bind servers to msgr2 (nautilus+) protocol address(es)")
+    .add_see_also("ms_bind_msgr1"),
 
     Option("ms_bind_port_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(6800)
@@ -2888,10 +2914,6 @@ std::vector<Option> get_global_options() {
 
     Option("osd_command_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(15_min)
-    .set_description(""),
-
-    Option("osd_heartbeat_addr", Option::TYPE_ADDR, Option::LEVEL_ADVANCED)
-    .set_default(entity_addr_t())
     .set_description(""),
 
     Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
