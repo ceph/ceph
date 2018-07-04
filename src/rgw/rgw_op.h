@@ -203,7 +203,7 @@ public:
 
   using client_id = rgw::dmclock::client_id;
   virtual client_id dmclock_client() { return client_id::metadata; }
-  virtual rgw::dmclock::Cost dmclock_cost() { return 0; }
+  virtual rgw::dmclock::Cost dmclock_cost() { return 1; }
 };
 
 class RGWDefaultResponseOp : public RGWOp {
