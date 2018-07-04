@@ -47,7 +47,7 @@ void JournalTool::usage()
     << "      inspect\n"
     << "      import <path> [--force]\n"
     << "      export <path>\n"
-    << "      reset [--force]\n"
+    << "      destroy [--force]\n"
     << "  cephfs-journal-tool [options] header <get|set <field> <value>\n"
     << "    <field>: [trimmed_pos|expire_pos|write_pos|pool_id]"
     << "  cephfs-journal-tool [options] event <effect> <selector> <output> [special options]\n"
@@ -218,7 +218,7 @@ int JournalTool::main_journal(std::vector<const char*> &argv)
       derr << "Missing path" << dendl;
       return -EINVAL;
     }
-  } else if (command == "reset") {
+  } else if (command == "destroy") {
     bool force = false;
     if (argv.size() == 2) {
       if (std::string(argv[1]) == "--force") {
