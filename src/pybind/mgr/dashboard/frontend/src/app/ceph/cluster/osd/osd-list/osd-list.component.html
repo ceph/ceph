@@ -10,7 +10,7 @@
           selectionType="single"
           (updateSelection)="updateSelection($event)"
           [updateSelectionOnRefresh]="false">
-  <div class="table-actions"
+  <div class="table-actions btn-toolbar"
        *ngIf="permission.update">
     <div class="btn-group"
          dropdown>
@@ -40,6 +40,14 @@
         </li>
       </ul>
     </div>
+
+    <button class="btn btn-sm btn-default btn-label tc_configureCluster"
+            type="button"
+            (click)="configureClusterAction()">
+      <i class="fa fa-fw fa-cog"
+         aria-hidden="true"></i>
+      <ng-container i18n>Set Cluster-wide OSD Flags</ng-container>
+    </button>
   </div>
 
   <cd-osd-details cdTableDetail

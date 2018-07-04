@@ -13,12 +13,13 @@ import { ConfigurationComponent } from './configuration/configuration.component'
 import { HostsComponent } from './hosts/hosts.component';
 import { MonitorComponent } from './monitor/monitor.component';
 import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
+import { OsdFlagsModalComponent } from './osd/osd-flags-modal/osd-flags-modal.component';
 import { OsdListComponent } from './osd/osd-list/osd-list.component';
 import { OsdPerformanceHistogramComponent } from './osd/osd-performance-histogram/osd-performance-histogram.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
 
 @NgModule({
-  entryComponents: [OsdDetailsComponent, OsdScrubModalComponent],
+  entryComponents: [OsdDetailsComponent, OsdScrubModalComponent, OsdFlagsModalComponent],
   imports: [
     CommonModule,
     PerformanceCounterModule,
@@ -37,7 +38,8 @@ import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.co
     OsdListComponent,
     OsdDetailsComponent,
     OsdPerformanceHistogramComponent,
-    OsdScrubModalComponent
+    OsdScrubModalComponent,
+    OsdFlagsModalComponent
   ]
 })
 export class ClusterModule {}
