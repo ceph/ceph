@@ -104,7 +104,7 @@ private:
   std::deque<version_t> projected;
 
   // request load average for this session
-  DecayCounter load_avg;
+  mutable DecayCounter load_avg;
   DecayRate    load_avg_rate;
 
 public:
@@ -208,6 +208,9 @@ public:
   void set_load_avg_decay_rate(double rate) {
     assert(is_open() || is_stale());
     load_avg_rate.set_halflife(rate);
+  }
+  uint64_t get_load_avg() const {
+    return (uint64_t)load_avg.get(ceph_clock_now(), load_avg_rate);
   }
   void hit_session() {
     load_avg.hit(ceph_clock_now(), load_avg_rate);
