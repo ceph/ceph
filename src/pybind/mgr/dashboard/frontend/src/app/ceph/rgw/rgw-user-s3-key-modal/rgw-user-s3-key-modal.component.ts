@@ -1,10 +1,12 @@
 import { Component, EventEmitter, Output } from '@angular/core';
-import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal/bs-modal-ref.service';
 
-import { CdValidators } from '../../../shared/validators/cd-validators';
+import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
+import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import { CdValidators } from '../../../shared/forms/cd-validators';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 
 @Component({
@@ -18,11 +20,11 @@ export class RgwUserS3KeyModalComponent {
    */
   @Output() submitAction = new EventEmitter();
 
-  formGroup: FormGroup;
+  formGroup: CdFormGroup;
   viewing = true;
   userCandidates: string[] = [];
 
-  constructor(private formBuilder: FormBuilder, public bsModalRef: BsModalRef) {
+  constructor(private formBuilder: CdFormBuilder, public bsModalRef: BsModalRef) {
     this.createForm();
     this.listenToChanges();
   }
