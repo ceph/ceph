@@ -22,25 +22,28 @@ class SAI_DiskAgent(MetricsAgent):
     measurement = 'sai_disk'
 
     @staticmethod
-    def _get_disk_type(is_ssd, vendor, model):
+    def _convert_disk_type(is_ssd, sata_version, protocol):
         """ return type:
             0: "Unknown", 1: "HDD",
             2: "SSD",     3: "SSD NVME",
             4: "SSD SAS", 5: "SSD SATA",
             6: "HDD SAS", 7: "HDD SATA"
         """
+        disk_type = 0
         if is_ssd:
-            if vendor:
-                disk_type = 4
-            elif model:
+            if sata_version and not protocol:
                 disk_type = 5
+            elif 'SCSI' in protocol:
+                disk_type = 4
+            elif 'NVMe' in protocol:
+                disk_type = 3
             else:
                 disk_type = 2
         else:
-            if vendor:
-                disk_type = 6
-            elif model:
+            if sata_version and not protocol:
                 disk_type = 7
+            elif 'SCSI' in protocol:
+                disk_type = 6
             else:
                 disk_type = 1
         return disk_type
@@ -105,8 +108,16 @@ class SAI_DiskAgent(MetricsAgent):
                 is_ssd = True if s_val.get('rotation_rate') == 0 else False
                 vendor = s_val.get('vendor', None)
                 model = s_val.get('model_name', None)
+                if s_val.get('sata_version', {}).get('string'):
+                    sata_version = s_val['sata_version']['string']
+                else:
+                    sata_version = ''
+                if s_val.get('device', {}).get('protocol'):
+                    protocol = s_val['device']['protocol']
+                else:
+                    protocol = ''
                 d_data.fields['disk_type'] = \
-                    self._get_disk_type(is_ssd, vendor, model)
+                    self._convert_disk_type(is_ssd, sata_version, protocol)
                 d_data.fields['firmware_version'] = \
                     str(s_val.get('firmware_version'))
                 if model:
@@ -114,8 +125,7 @@ class SAI_DiskAgent(MetricsAgent):
                 if vendor:
                     d_data.fields['vendor'] = str(vendor)
                 if s_val.get('sata_version', {}).get('string'):
-                    d_data.fields['sata_version'] = \
-                        str(s_val['sata_version']['string'])
+                    d_data.fields['sata_version'] = sata_version
                 if s_val.get('logical_block_size'):
                     d_data.fields['sector_size'] = \
                         str(str(s_val['logical_block_size']))

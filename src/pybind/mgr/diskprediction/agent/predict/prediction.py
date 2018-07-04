@@ -44,24 +44,8 @@ class Prediction_Agent(BaseAgent):
                 disk_type = 1
         return disk_type
 
-    def _read_prediction_file(self):
-        self._logger.info("Read prediction file.")
-        data = {}
-        if os.path.isfile(PREDICTION_FILE):
-            try:
-                with open(PREDICTION_FILE, 'r') as f:
-                    data = json.load(f)
-            except Exception as e:
-                self._logger.error(str(e))
-        return data
-
-    def _write_prediction_file(self, result):
-        self._logger.info("Write prediction file.")
-        try:
-            with open(PREDICTION_FILE, 'w') as f:
-                json.dump(result, f)
-        except Exception as e:
-            self._logger.error(str(e))
+    def _store_prediction_result(self, result):
+        self._ceph_context._prediction_result = result
 
     def _parse_prediction_data(self, host_domain_id, disk_domain_id):
         result = {}
@@ -228,7 +212,7 @@ class Prediction_Agent(BaseAgent):
                 check_dev_id = check_dev_id.replace(' ', '_')
                 for dev_n, dev_info in devs_info.iteritems():
                     if dev_info.get('dev_id', '').find(check_dev_id) >= 0:
-                        dev_id = dev_info.get['dev_id']
+                        dev_id = dev_info['dev_id']
                         break
 
                 if predicted and dev_id and life_expectancy_day:
@@ -296,4 +280,4 @@ class Prediction_Agent(BaseAgent):
     def run(self):
         result = self._fetch_prediction_result()
         if result:
-            self._write_prediction_file(result)
+            self._store_prediction_result(result)

@@ -109,19 +109,8 @@ class Module(MgrModule):
             'perm': 'rw'
         },
         {
-            'cmd': 'diskprediction self-test',
-            'desc': 'Prints hello world to mgr.x.log',
-            'perm': 'r'
-        },
-        {
             'cmd': 'diskprediction config-show',
             'desc': 'Prints diskprediction configuration',
-            'perm': 'r'
-        },
-        {
-            'cmd': 'diskprediction get-predicted-status '
-                   'name=osd_id,type=CephString,req=true',
-            'desc': 'Get osd physical disk predicted result',
             'perm': 'r'
         },
         {
@@ -132,6 +121,12 @@ class Module(MgrModule):
                    'name=port,type=CephInt,req=false ',
             'desc': 'Configure Disk Prediction service',
             'perm': 'rw'
+        },
+        {
+            'cmd': 'diskprediction get-predicted-status '
+                   'name=osd_id,type=CephString,req=true',
+            'desc': 'Get osd physical disk predicted result',
+            'perm': 'r'
         },
         {
             'cmd': 'diskprediction run-metrics-forced',
@@ -149,6 +144,11 @@ class Module(MgrModule):
             'perm': 'r'
         },
         {
+            'cmd': 'diskprediction self-test',
+            'desc': 'Prints hello world to mgr.x.log',
+            'perm': 'r'
+        },
+        {
             'cmd': 'diskprediction status',
             'desc': 'Check diskprediction status',
             'perm': 'r'
@@ -162,6 +162,7 @@ class Module(MgrModule):
         self.run = True
         self._tasks = []
         self._activate_cloud = False
+        self._prediction_result = {}
 
     @property
     def config_keys(self):
@@ -249,10 +250,13 @@ class Module(MgrModule):
     def _get_predicted_status(self, inbuf, cmd):
         osd_data = dict()
         physical_data = dict()
-        from .agent.predict.prediction import PREDICTION_FILE
         try:
-            with open(PREDICTION_FILE, "r+") as fd:
-                pre_data = json.load(fd)
+            if not self._prediction_result:
+                for _task in self._tasks:
+                    if isinstance(_task, PredictionTask):
+                        _task.event.set()
+                        break
+            pre_data = self._prediction_result
             fsid = self.get('mon_map')['fsid']
             for d_host, d_val in pre_data.get(fsid, {}).iteritems():
                 if "osd.%s" % cmd['osd_id'] in d_val.get("osd", {}).keys():
@@ -260,10 +264,10 @@ class Module(MgrModule):
                     for dev in s_data.get("physicalDisks", []):
                         p_data = dev.get('prediction', {})
                         if not p_data.get('predicted'):
-                            predicted = None
+                            predicted = ''
                         else:
                             predicted = datetime.fromtimestamp(int(
-                                p_data.get('predicted')) / 1000 / 1000 / 1000)
+                                p_data.get('predicted')) / (1000 ** 3))
                         d_data = {
                             'device': dev.get("diskName"),
                             'near_failure': p_data.get('near_failure'),
