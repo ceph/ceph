@@ -4,10 +4,10 @@ import { inject, TestBed } from '@angular/core/testing';
 import { ToastModule } from 'ng2-toastr';
 import { Observable } from 'rxjs/Observable';
 
+import { configureTestBed } from '../../../testing/unit-test-helper';
 import { ExecutingTask } from '../models/executing-task';
 import { FinishedTask } from '../models/finished-task';
 import { SharedModule } from '../shared.module';
-import { configureTestBed } from '../unit-test-helper';
 import { NotificationService } from './notification.service';
 import { TaskManagerService } from './task-manager.service';
 import { TaskWrapperService } from './task-wrapper.service';

@@ -2,10 +2,10 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { Component, Input } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { CephfsListComponent } from './cephfs-list.component';
 
 @Component({ selector: 'cd-cephfs-detail', template: '' })

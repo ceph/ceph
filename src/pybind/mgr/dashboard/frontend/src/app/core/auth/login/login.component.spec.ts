@@ -3,9 +3,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { AuthService } from '../../../shared/api/auth.service';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { configureTestBed } from '../../../shared/unit-test-helper';
 import { LoginComponent } from './login.component';
 
 describe('LoginComponent', () => {
