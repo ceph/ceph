@@ -7,6 +7,7 @@ from . import create
 from . import trigger
 from . import listing
 from . import zap
+from . import auto
 
 
 class LVM(object):
@@ -21,6 +22,7 @@ class LVM(object):
 
     mapper = {
         'activate': activate.Activate,
+        'auto': auto.Auto,
         'prepare': prepare.Prepare,
         'create': create.Create,
         'trigger': trigger.Trigger,
