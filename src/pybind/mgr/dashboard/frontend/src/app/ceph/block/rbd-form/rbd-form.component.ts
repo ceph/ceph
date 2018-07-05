@@ -209,7 +209,9 @@ export class RbdFormComponent implements OnInit {
       this.route.params.subscribe((params: { pool: string; name: string; snap: string }) => {
         const poolName = decodeURIComponent(params.pool);
         const rbdName = decodeURIComponent(params.name);
-        this.snapName = decodeURIComponent(params.snap);
+        if (params.snap) {
+          this.snapName = decodeURIComponent(params.snap);
+        }
         this.rbdService.get(poolName, rbdName).subscribe((resp: RbdFormResponseModel) => {
           this.setResponse(resp, this.snapName);
         });
