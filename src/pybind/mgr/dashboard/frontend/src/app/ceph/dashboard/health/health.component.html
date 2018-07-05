@@ -1,20 +1,10 @@
 <div *ngIf="contentData">
   <div class="row">
     <!-- HEALTH -->
-    <div class="col-md-6">
-      <div class="well">
-        <fieldset>
-          <legend i18n>Health</legend>
-          <ng-container i18n>Overall status: </ng-container>
-          <span [ngStyle]="contentData.health.status | healthColor">{{ contentData.health.status }}</span>
-          <ul>
-            <li *ngFor="let check of contentData.health.checks">
-              <span [ngStyle]="check.severity | healthColor">{{ check.type }}</span>: {{ check.summary.message }}
-            </li>
-          </ul>
-        </fieldset>
-      </div>
-    </div>
+    <cd-info-card
+      *ngIf="healthStatusCard"
+      [infoCard]="healthStatusCard">
+    </cd-info-card>
 
     <div class="col-md-6">
       <!--STATS -->

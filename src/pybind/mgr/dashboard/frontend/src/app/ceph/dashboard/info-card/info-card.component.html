@@ -7,12 +7,16 @@
       </div>
       <div class="media-body">
                 <span class="media-heading" i18n>
-                  <a [routerLink]="infoCard.titleLink">{{ infoCard.title }}</a>
+                  <a *ngIf="infoCard.titleLink; else title" [routerLink]="infoCard.titleLink">{{ infoCard.title }}</a>
+                  <ng-template #title>
+                    {{ infoCard.title }}
+                    <hr style="border-bottom: 1px solid #e5e5e5; margin-top: 0px; margin-bottom: 6px; padding: 0px" />
+                  </ng-template>
                 </span>
-        <span [class]="infoCard.infoClass">{{ infoCard.info }}</span>
+        <span [class]="infoCard.infoClass" [ngStyle]="infoCard.infoStyle">{{ infoCard.info }}</span>
         <ul *ngIf="infoCard.additionalInfo">
-          <li *ngFor="let additionalText of infoCard.additionalInfo">
-            {{ additionalText }}
+          <li *ngFor="let additionalRow of infoCard.additionalInfo">
+            <span [ngStyle]="additionalRow.style">{{ additionalRow.text }}</span>
           </li>
         </ul>
       </div>

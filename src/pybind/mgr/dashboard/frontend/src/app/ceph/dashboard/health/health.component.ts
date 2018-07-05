@@ -8,6 +8,8 @@ import {InfoCard} from "../info-card/info-card";
 
 import {MonSummaryPipe} from "../mon-summary.pipe";
 import {OsdSummaryPipe} from "../osd-summary.pipe";
+import {HealthColorPipe} from "../../../shared/pipes/health-color.pipe";
+import {InfoCardAdditionalInfo} from "../info-card/info-card-additional-info";
 
 @Component({
   selector: 'cd-health',
@@ -17,6 +19,8 @@ import {OsdSummaryPipe} from "../osd-summary.pipe";
 export class HealthComponent implements OnInit, OnDestroy {
   contentData: any;
   interval: number;
+
+  healthStatusCard: InfoCard;
   monitorsCard: InfoCard;
   osdCard: InfoCard;
 
@@ -24,6 +28,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     private dashboardService: DashboardService,
     private monSummaryPipe: MonSummaryPipe,
     private osdSummaryPipe: OsdSummaryPipe,
+    private healthColorPipe: HealthColorPipe,
     ) {}
 
   ngOnInit() {
@@ -41,7 +46,9 @@ export class HealthComponent implements OnInit, OnDestroy {
     this.dashboardService.getHealth().subscribe((data: any) => {
       this.contentData = data;
 
-      this.initializeCards();
+      if (this.contentData) {
+        this.initInfoCards();
+      }
     });
   }
 
@@ -110,7 +117,29 @@ export class HealthComponent implements OnInit, OnDestroy {
     chart.labels = poolLabels;
   }
 
-  private initializeCards() {
+  private initInfoCards() {
+    this.initHealthStatusCard();
+    this.initMonitorsCard();
+    this.initOsdCard();
+  }
+
+  private initHealthStatusCard() {
+    this.healthStatusCard = new InfoCard('HEALTH');
+    this.healthStatusCard.info = this.contentData.health.status;
+    this.healthStatusCard.infoStyle = this.healthColorPipe.transform(this.healthStatusCard.info);
+
+    let additionalInfo: InfoCardAdditionalInfo[] = [];
+    for (let check of this.contentData.health.checks) {
+      let additionalRow = new InfoCardAdditionalInfo(check.summary.message);
+      additionalRow.style = this.healthColorPipe.transform(check.severity);
+
+      additionalInfo.push(additionalRow);
+    }
+
+    this.healthStatusCard.additionalInfo = additionalInfo;
+  }
+
+  private initMonitorsCard() {
     if (this.contentData.mon_status) {
       this.monitorsCard = new InfoCard('MONITORS');
       this.monitorsCard.titleLink = '/monitor/';
@@ -118,7 +147,9 @@ export class HealthComponent implements OnInit, OnDestroy {
       this.monitorsCard.info = this.monSummaryPipe.transform(this.contentData.mon_status);
       this.monitorsCard.infoClass = 'media-text';
     }
+  }
 
+  private initOsdCard() {
     if (this.contentData.osd_map) {
       this.osdCard = new InfoCard('OSDS');
       this.osdCard.titleLink = '/osd/';
