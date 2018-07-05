@@ -2,6 +2,7 @@ from datetime import datetime
 from threading import Event
 import json
 import errno
+import six
 import time
 
 from mgr_module import MgrModule
@@ -110,7 +111,7 @@ class Module(MgrModule):
 
         now = datetime.utcnow().isoformat() + 'Z'
 
-        for daemon, counters in self.get_all_perf_counters().iteritems():
+        for daemon, counters in six.iteritems(self.get_all_perf_counters()):
             svc_type, svc_id = daemon.split(".", 1)
             metadata = self.get_metadata(svc_type, svc_id)
 
