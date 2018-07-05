@@ -248,7 +248,7 @@ before attempting an install.
 Debian Packages
 ---------------
 
-Ceph requires additional additional third party libraries.
+Ceph requires additional third party libraries.
 
 - libaio1
 - libsnappy1
