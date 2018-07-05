@@ -20,21 +20,10 @@
         </cd-info-card>
       </div>
       <div class="row">
-        <div class="col-md-6">
-          <div class="well"
-               *ngIf="contentData.fs_map">
-            <div class="media">
-              <div class="media-left">
-                <i class="fa fa-folder fa-fw"></i>
-              </div>
-              <div class="media-body">
-                <span class="media-heading"
-                      i18n>Metadata servers</span>
-                <span class="media-text">{{ contentData.fs_map | mdsSummary }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <cd-info-card
+          *ngIf="mdsCard"
+          [infoCard]="mdsCard">
+        </cd-info-card>
         <div class="col-md-6">
           <div class="well"
                *ngIf="contentData.mgr_map">

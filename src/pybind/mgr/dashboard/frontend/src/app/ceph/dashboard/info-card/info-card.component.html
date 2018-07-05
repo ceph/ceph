@@ -10,7 +10,7 @@
                   <a *ngIf="infoCard.titleLink; else title" [routerLink]="infoCard.titleLink">{{ infoCard.title }}</a>
                   <ng-template #title>
                     {{ infoCard.title }}
-                    <hr style="border-bottom: 1px solid #e5e5e5; margin-top: 0px; margin-bottom: 6px; padding: 0px" />
+                    <hr *ngIf="infoCard.titleLink" style="border-bottom: 1px solid #e5e5e5; margin-top: 0px; margin-bottom: 6px; padding: 0px" />
                   </ng-template>
                 </span>
         <span [class]="infoCard.infoClass" [ngStyle]="infoCard.infoStyle">{{ infoCard.info }}</span>
