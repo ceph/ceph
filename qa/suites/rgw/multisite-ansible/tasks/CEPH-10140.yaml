@@ -1,0 +1,50 @@
+tasks:
+- ssh-keys: null
+- ceph-ansible:
+    vars:
+      cluster: c1
+- ceph-ansible:
+    vars:
+      cluster: c2
+- new_rgw_multisite:
+   realm:
+     name: test-realm
+     is_default: true
+   zonegroups:
+     - name: test-zg
+       is_master: true
+       is_default: true
+       zones:
+         - name: test-zone
+           is_master: true
+           is_default: true
+           endpoints: [c1.rgw.0]
+         - name: test-zone2
+           is_default: true
+           is_read_only: true
+           endpoints: [c2.rgw.1]
+- multisite-test.userexec:
+      master_client: c1.rgw.0
+      test_dir_version: v1
+      master_config:
+        cluster_name: c1
+        user_count: 3
+      target_client: c2.rgw.1
+- sleep:
+   duration: 60
+- multisite-test:
+      master_client: c1.rgw.0
+      target_client: c1.rgw.0
+      target_config:
+        bucket_count: 2
+        objects_count: 20
+        max_file_size: 10
+        min_file_size: 5
+      test-name: test_Mbuckets_with_Nobjects
+      test_dir_version: v1
+- sleep:
+   duration: 60
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info
+
