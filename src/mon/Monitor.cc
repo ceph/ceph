@@ -3655,7 +3655,6 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   } else if (!session->closed) {
     RoutedRequest *rr = new RoutedRequest;
     rr->tid = ++routed_request_tid;
-    rr->client_inst = req->get_source_inst();
     rr->con = req->get_connection();
     rr->con_features = rr->con->get_features();
     encode_message(req, CEPH_FEATURES_ALL, rr->request_bl);   // for my use only; use all features
@@ -3687,7 +3686,11 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
 
 // fake connection attached to forwarded messages
 struct AnonConnection : public Connection {
-  explicit AnonConnection(CephContext *cct) : Connection(cct, NULL) {}
+  entity_addr_t socket_addr;
+  explicit AnonConnection(CephContext *cct,
+			  const entity_addr_t& sa)
+    : Connection(cct, NULL),
+      socket_addr(sa) {}
 
   int send_message(Message *m) override {
     assert(!"send_message on anonymous connection");
@@ -3702,13 +3705,18 @@ struct AnonConnection : public Connection {
     // silengtly ignore
   }
   bool is_connected() override { return false; }
+  entity_addr_t get_peer_socket_addr() const override {
+    return socket_addr;
+  }
 };
 
 //extract the original message and put it into the regular dispatch function
 void Monitor::handle_forward(MonOpRequestRef op)
 {
   MForward *m = static_cast<MForward*>(op->get_req());
-  dout(10) << "received forwarded message from " << m->client
+  dout(10) << "received forwarded message from "
+	   << ceph_entity_type_name(m->client_type)
+	   << " " << m->client_addrs
 	   << " via " << m->get_source_inst() << dendl;
   MonSession *session = op->get_session();
   assert(session);
@@ -3722,13 +3730,13 @@ void Monitor::handle_forward(MonOpRequestRef op)
     PaxosServiceMessage *req = m->claim_message();
     assert(req != NULL);
 
-    ConnectionRef c(new AnonConnection(cct));
+    ConnectionRef c(new AnonConnection(cct, m->client_socket_addr));
     MonSession *s = new MonSession(req->get_source(),
 				   req->get_source_addrs(),
 				   static_cast<Connection*>(c.get()));
     c->set_priv(RefCountedPtr{s, false});
-    c->set_peer_addr(m->client.addr);
-    c->set_peer_type(m->client.name.type());
+    c->set_peer_addrs(m->client_addrs);
+    c->set_peer_type(m->client_type);
     c->set_features(m->con_features);
 
     s->authenticated = true;
@@ -3890,13 +3898,17 @@ void Monitor::resend_routed_requests()
       delete rr;
     } else {
       auto q = rr->request_bl.cbegin();
-      PaxosServiceMessage *req = (PaxosServiceMessage *)decode_message(cct, 0, q);
+      PaxosServiceMessage *req =
+	(PaxosServiceMessage *)decode_message(cct, 0, q);
       rr->op->mark_event("resend forwarded message to leader");
-      dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req << dendl;
+      dout(10) << " resend to mon." << mon << " tid " << rr->tid << " " << *req
+	       << dendl;
       MForward *forward = new MForward(rr->tid, req, rr->con_features,
 				       rr->session->caps);
       req->put();  // forward takes its own ref; drop ours.
-      forward->client = rr->client_inst;
+      forward->client_type = rr->con->get_peer_type();
+      forward->client_addrs = rr->con->get_peer_addrs();
+      forward->client_socket_addr = rr->con->get_peer_socket_addr();
       forward->set_priority(req->get_priority());
       send_mon_message(forward, mon);
     }
