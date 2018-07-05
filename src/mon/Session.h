@@ -94,7 +94,12 @@ struct MonSession : public RefCountedObject {
       CEPH_ENTITY_TYPE_MON,
       entity_name,
       service, "", args,
-      mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X);
+      mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X,
+      get_peer_addr());
+  }
+
+  const entity_addr_t& get_peer_addr() {
+    return inst.addr;
   }
 };
 
