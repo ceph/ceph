@@ -1,6 +1,6 @@
 <div class="col-md-6">
   <div class="well"
-       *ngIf="infoCard.info">
+       *ngIf="infoCard.message">
     <div class="media">
       <div *ngIf="infoCard.titleImageClass" class="media-left">
         <i [class]="infoCard.titleImageClass"></i>
@@ -14,7 +14,8 @@
                         style="border-bottom: 1px solid #e5e5e5; margin-top: 0px; margin-bottom: 6px; padding: 0px" />
                   </ng-template>
                 </span>
-        <span [class]="infoCard.infoClass" [ngStyle]="infoCard.infoStyle">{{ infoCard.info }}</span>
+        <span>{{ infoCard.description }}</span>
+        <span [class]="infoCard.messageClass" [ngStyle]="infoCard.messageStyle">{{ infoCard.message }}</span>
         <ul *ngIf="infoCard.additionalInfo">
           <li *ngFor="let additionalRow of infoCard.additionalInfo">
             <span [ngStyle]="additionalRow.style">{{ additionalRow.text }}</span>

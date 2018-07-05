@@ -132,9 +132,10 @@ export class HealthComponent implements OnInit, OnDestroy {
   }
 
   private initHealthStatusCard() {
-    this.healthStatusCard = new InfoCard('HEALTH');
-    this.healthStatusCard.info = this.contentData.health.status;
-    this.healthStatusCard.infoStyle = this.healthColorPipe.transform(this.healthStatusCard.info);
+    this.healthStatusCard = new InfoCard('Health');
+    this.healthStatusCard.description = 'Overall status: ';
+    this.healthStatusCard.message= this.contentData.health.status;
+    this.healthStatusCard.messageStyle = this.healthColorPipe.transform(this.contentData.health.status);
 
     let additionalInfo: InfoCardAdditionalInfo[] = [];
     for (let check of this.contentData.health.checks) {
@@ -152,8 +153,8 @@ export class HealthComponent implements OnInit, OnDestroy {
       this.monitorsCard = new InfoCard('MONITORS');
       this.monitorsCard.titleLink = '/monitor/';
       this.monitorsCard.titleImageClass = 'fa fa-database fa-fw';
-      this.monitorsCard.info = this.monSummaryPipe.transform(this.contentData.mon_status);
-      this.monitorsCard.infoClass = 'media-text';
+      this.monitorsCard.message= this.monSummaryPipe.transform(this.contentData.mon_status);
+      this.monitorsCard.messageClass = 'media-text';
     }
   }
 
@@ -162,8 +163,8 @@ export class HealthComponent implements OnInit, OnDestroy {
       this.osdCard = new InfoCard('OSDS');
       this.osdCard.titleLink = '/osd/';
       this.osdCard.titleImageClass = 'fa fa-hdd-o fa-fw';
-      this.osdCard.info = this.osdSummaryPipe.transform(this.contentData.osd_map);
-      this.osdCard.infoClass = 'media-text';
+      this.osdCard.message= this.osdSummaryPipe.transform(this.contentData.osd_map);
+      this.osdCard.messageClass = 'media-text';
     }
   }
 
@@ -171,8 +172,8 @@ export class HealthComponent implements OnInit, OnDestroy {
     if (this.contentData.fs_map) {
       this.mdsCard = new InfoCard('METADATA SERVERS');
       this.mdsCard.titleImageClass = 'fa fa-folder fa-fw';
-      this.mdsCard.info = this.mdsSummaryPipe.transform(this.contentData.fs_map);
-      this.mdsCard.infoClass = 'media-text';
+      this.mdsCard.message= this.mdsSummaryPipe.transform(this.contentData.fs_map);
+      this.mdsCard.messageClass = 'media-text';
     }
   }
 
@@ -180,8 +181,8 @@ export class HealthComponent implements OnInit, OnDestroy {
     if (this.contentData.mgr_map) {
       this.mgrCard = new InfoCard('MANAGER DAEMONS');
       this.mgrCard.titleImageClass = 'fa fa-cog fa-fw';
-      this.mgrCard.info = this.mgrSummaryPipe.transform(this.contentData.mgr_map);
-      this.mgrCard.infoClass = 'media-text';
+      this.mgrCard.message= this.mgrSummaryPipe.transform(this.contentData.mgr_map);
+      this.mgrCard.messageClass = 'media-text';
     }
   }
 }
