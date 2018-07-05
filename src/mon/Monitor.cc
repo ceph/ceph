@@ -2930,7 +2930,8 @@ bool Monitor::_allowed_command(MonSession *s, string &module, string &prefix,
     CEPH_ENTITY_TYPE_MON,
     s->entity_name,
     module, prefix, param_str_map,
-    cmd_r, cmd_w, cmd_x);
+    cmd_r, cmd_w, cmd_x,
+    s->get_peer_addr());
 
   dout(10) << __func__ << " " << (capable ? "" : "not ") << "capable" << dendl;
   return capable;
