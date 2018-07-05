@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, NgZone } from '@angular/core';
 
-import { Subject } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 
 import { AuthStorageService } from './auth-storage.service';
 import { ServicesModule } from './services.module';
@@ -11,7 +11,7 @@ import { ServicesModule } from './services.module';
 })
 export class SummaryService {
   // Observable sources
-  private summaryDataSource = new Subject();
+  private summaryDataSource = new BehaviorSubject(null);
 
   // Observable streams
   summaryData$ = this.summaryDataSource.asObservable();

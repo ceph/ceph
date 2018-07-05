@@ -28,6 +28,9 @@ export class TaskManagerService {
 
   constructor(summaryService: SummaryService) {
     summaryService.summaryData$.subscribe((data: any) => {
+      if (!data) {
+        return;
+      }
       const executingTasks = data.executing_tasks;
       const finishedTasks = data.finished_tasks;
       const newSubscriptions: Array<TaskSubscription> = [];
