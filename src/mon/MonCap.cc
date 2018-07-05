@@ -22,6 +22,7 @@
 
 #include "MonCap.h"
 #include "include/stringify.h"
+#include "include/ipaddr.h"
 #include "common/debug.h"
 #include "common/Formatter.h"
 
@@ -137,6 +138,12 @@ BOOST_FUSION_ADAPT_STRUCT(StringConstraint,
 			  (std::string, value))
 
 // </magic>
+
+void MonCapGrant::parse_network()
+{
+  network_valid = ::parse_network(network.c_str(), &network_parsed,
+				  &network_prefix);
+}
 
 void MonCapGrant::expand_profile(int daemon_type, const EntityName& name) const
 {
@@ -401,11 +408,21 @@ bool MonCap::is_capable(
 		   << " addr " << addr
 		   << " on cap " << *this
 		   << dendl;
+
   mon_rwxa_t allow = 0;
   for (vector<MonCapGrant>::const_iterator p = grants.begin();
        p != grants.end(); ++p) {
     if (cct)
-      ldout(cct, 20) << " allow so far " << allow << ", doing grant " << *p << dendl;
+      ldout(cct, 20) << " allow so far " << allow << ", doing grant " << *p
+		     << dendl;
+
+    if (p->network.size() &&
+	(!p->network_valid ||
+	 !network_contains(p->network_parsed,
+			   p->network_prefix,
+			   addr))) {
+      continue;
+    }
 
     if (p->is_allow_all()) {
       if (cct)
@@ -587,6 +604,9 @@ bool MonCap::parse(const string& str, ostream *err)
   //bool r = qi::phrase_parse(iter, end, g, ascii::space, foo);
   if (r && iter == end) {
     text = str;
+    for (auto& g : grants) {
+      g.parse_network();
+    }
     return true;
   }
 
