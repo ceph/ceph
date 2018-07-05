@@ -319,10 +319,15 @@ key, removes the OSD from the OSD map, and removes the OSD from the
 ``ceph.conf`` file. If your host has multiple drives, you may need to remove an
 OSD for each drive by repeating this procedure.
 
-#. Let the cluster forget the OSD first. This step removes the OSD from the CRUSH
-   map, removes its authentication key. And it is removed from the OSD map as
-   well. Please note the `purge subcommand`_ is introduced in Luminous, for older
-   versions, please see below ::
+#. Stop the OSD process in question. For example, for the OSD with id 5,
+   run the following command as root on the relevant OSD node ::
+
+    systemctl stop ceph-osd@5.service
+
+#. Purge the OSD. This causes the cluster to "forget" the OSD by removing it from
+   the CRUSH and OSD maps, and removing its authentication key (the
+   `purge subcommand`_ was introduced in Luminous: instructions for pre-Luminous 
+   are given below) ::
 
     ceph osd purge {id} --yes-i-really-mean-it
 
