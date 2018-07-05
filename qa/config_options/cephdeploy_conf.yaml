@@ -1,5 +1,6 @@
 overrides:
    ceph-deploy:
+      ceph-deploy-branch: '1.5.39-stable'
       conf:
          global:
              mon pg warn min per osd: 2
