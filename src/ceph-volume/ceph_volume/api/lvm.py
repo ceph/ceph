@@ -401,19 +401,27 @@ def create_pv(device):
     ])
 
 
-def create_vg(name, *devices):
+def create_vg(devices, name=None):
     """
     Create a Volume Group. Command looks like::
 
         vgcreate --force --yes group_name device
 
     Once created the volume group is returned as a ``VolumeGroup`` object
+
+    :param devices: A list of devices to create a VG. Optionally, a single
+                    device (as a string) can be used.
+    :param name: Optionally set the name of the VG, defaults to 'ceph-{uuid}'
     """
+    if not isinstance(devices, list):
+        devices = [devices]
+    if name is None:
+        name = "ceph-%s" % str(uuid.uuid4())
     process.run([
         'vgcreate',
         '--force',
         '--yes',
-        name] + list(devices)
+        name] + devices
     )
 
     vg = get_vg(vg_name=name)
