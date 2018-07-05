@@ -24,23 +24,10 @@
           [infoCard]="monitorsCard">
         </cd-info-card>
 
-        <div class="col-md-6">
-          <div class="well"
-               *ngIf="contentData.osd_map">
-            <div class="media">
-              <div class="media-left">
-                <i class="fa fa-hdd-o fa-fw"></i>
-              </div>
-              <div class="media-body">
-                <span class="media-heading"
-                      i18n="ceph OSDs">
-                  <a routerLink="/osd/">OSDs</a>
-                </span>
-                <span class="media-text">{{ contentData.osd_map | osdSummary }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <cd-info-card
+          *ngIf="osdCard"
+          [infoCard]="osdCard">
+        </cd-info-card>
       </div>
       <div class="row">
         <div class="col-md-6">

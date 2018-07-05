@@ -7,6 +7,7 @@ import { DashboardService } from '../../../shared/api/dashboard.service';
 import {InfoCard} from "../info-card/info-card";
 
 import {MonSummaryPipe} from "../mon-summary.pipe";
+import {OsdSummaryPipe} from "../osd-summary.pipe";
 
 @Component({
   selector: 'cd-health',
@@ -17,8 +18,13 @@ export class HealthComponent implements OnInit, OnDestroy {
   contentData: any;
   interval: number;
   monitorsCard: InfoCard;
+  osdCard: InfoCard;
 
-  constructor(private dashboardService: DashboardService, private monSummaryPipe: MonSummaryPipe) {}
+  constructor(
+    private dashboardService: DashboardService,
+    private monSummaryPipe: MonSummaryPipe,
+    private osdSummaryPipe: OsdSummaryPipe,
+    ) {}
 
   ngOnInit() {
     this.getInfo();
@@ -106,12 +112,19 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   private initializeCards() {
     if (this.contentData.mon_status) {
-
-      this.monitorsCard = new InfoCard('Monitors');
+      this.monitorsCard = new InfoCard('MONITORS');
       this.monitorsCard.titleLink = '/monitor/';
       this.monitorsCard.titleImageClass = 'fa fa-database fa-fw';
       this.monitorsCard.info = this.monSummaryPipe.transform(this.contentData.mon_status);
       this.monitorsCard.infoClass = 'media-text';
+    }
+
+    if (this.contentData.osd_map) {
+      this.osdCard = new InfoCard('OSDS');
+      this.osdCard.titleLink = '/osd/';
+      this.osdCard.titleImageClass = 'fa fa-hdd-o fa-fw';
+      this.osdCard.info = this.osdSummaryPipe.transform(this.contentData.osd_map);
+      this.osdCard.infoClass = 'media-text';
     }
   }
 }

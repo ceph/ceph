@@ -10,7 +10,7 @@
                   <a [routerLink]="infoCard.titleLink">{{ infoCard.title }}</a>
                 </span>
         <span [class]="infoCard.infoClass">{{ infoCard.info }}</span>
-        <ul>
+        <ul *ngIf="infoCard.additionalInfo">
           <li *ngFor="let additionalText of infoCard.additionalInfo">
             {{ additionalText }}
           </li>
