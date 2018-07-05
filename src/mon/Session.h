@@ -44,6 +44,7 @@ struct MonSession : public RefCountedObject {
   uint64_t con_features = 0;  // zero if AnonConnection
   entity_name_t name;
   entity_addrvec_t addrs;
+  entity_addr_t socket_addr;
   utime_t session_timeout;
   bool closed = false;
   xlist<MonSession*>::item item;
@@ -73,6 +74,7 @@ struct MonSession : public RefCountedObject {
     con_type(c->get_peer_type()),
     name(n),
     addrs(av),
+    socket_addr(c->get_peer_socket_addr()),
     item(this) {
     if (c->get_messenger()) {
       // only fill in features if this is a non-anonymous connection
@@ -95,11 +97,11 @@ struct MonSession : public RefCountedObject {
       entity_name,
       service, "", args,
       mask & MON_CAP_R, mask & MON_CAP_W, mask & MON_CAP_X,
-      get_peer_addr());
+      get_peer_socket_addr());
   }
 
-  const entity_addr_t& get_peer_addr() {
-    return inst.addr;
+  const entity_addr_t& get_peer_socket_addr() {
+    return socket_addr;
   }
 };
 
