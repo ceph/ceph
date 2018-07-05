@@ -19,7 +19,7 @@ export class AboutComponent implements OnInit, OnDestroy {
   constructor(public modalRef: BsModalRef, private summaryService: SummaryService) {}
 
   ngOnInit() {
-    this.subs = this.summaryService.summaryData$.subscribe((summary: any) => {
+    this.subs = this.summaryService.subscribe((summary: any) => {
       if (!summary) {
         return;
       }
