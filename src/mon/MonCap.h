@@ -166,7 +166,8 @@ struct MonCap {
 		  EntityName name,
 		  const string& service,
 		  const string& command, const map<string,string>& command_args,
-		  bool op_may_read, bool op_may_write, bool op_may_exec) const;
+		  bool op_may_read, bool op_may_write, bool op_may_exec,
+		  const entity_addr_t& addr) const;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);

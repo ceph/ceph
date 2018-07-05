@@ -381,18 +381,21 @@ void MonCap::set_allow_all()
   text = "allow *";
 }
 
-bool MonCap::is_capable(CephContext *cct,
-			int daemon_type,
-			EntityName name,
-			const string& service,
-			const string& command, const map<string,string>& command_args,
-			bool op_may_read, bool op_may_write, bool op_may_exec) const
+bool MonCap::is_capable(
+  CephContext *cct,
+  int daemon_type,
+  EntityName name,
+  const string& service,
+  const string& command, const map<string,string>& command_args,
+  bool op_may_read, bool op_may_write, bool op_may_exec,
+  const entity_addr_t& addr) const
 {
   if (cct)
     ldout(cct, 20) << "is_capable service=" << service << " command=" << command
 		   << (op_may_read ? " read":"")
 		   << (op_may_write ? " write":"")
 		   << (op_may_exec ? " exec":"")
+		   << " addr " << addr
 		   << " on cap " << *this
 		   << dendl;
   mon_rwxa_t allow = 0;
