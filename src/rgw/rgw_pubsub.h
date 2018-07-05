@@ -237,7 +237,7 @@ public:
   int remove_topic(const string& name);
   int get_sub(const string& name, rgw_pubsub_user_sub_config *result);
   int add_sub(const string& name, const string& topic, const rgw_pubsub_user_sub_dest& dest);
-  int remove_sub(const string& name, const string& topic, const rgw_pubsub_user_sub_dest& dest);
+  int remove_sub(const string& name, const string& topic);
 
   struct list_events_result {
     string next_marker;

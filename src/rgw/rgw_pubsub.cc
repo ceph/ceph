@@ -311,7 +311,7 @@ int RGWUserPubSub::add_sub(const string& name, const string& topic, const rgw_pu
   return 0;
 }
 
-int RGWUserPubSub::remove_sub(const string& name, const string& _topic, const rgw_pubsub_user_sub_dest& dest)
+int RGWUserPubSub::remove_sub(const string& name, const string& _topic)
 {
   string topic = _topic;
 

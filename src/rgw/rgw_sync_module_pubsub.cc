@@ -3,6 +3,7 @@
 #include "rgw_sync_module.h"
 #include "rgw_data_sync.h"
 #include "rgw_sync_module_pubsub.h"
+#include "rgw_sync_module_pubsub_rest.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_tools.h"
@@ -1161,15 +1162,10 @@ RGWDataSyncModule *RGWPSSyncModuleInstance::get_data_handler()
 }
 
 RGWRESTMgr *RGWPSSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *orig) {
-#warning REST filter implementation missing
-#if 0
   if (dialect != RGW_REST_S3) {
     return orig;
   }
-  delete orig;
-  return new RGWRESTMgr_MDSearch_S3();
-#endif
-  return orig;
+  return new RGWRESTMgr_PubSub_S3(orig);
 }
 
 int RGWPSSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
