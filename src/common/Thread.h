@@ -27,7 +27,6 @@
 class Thread {
  private:
   pthread_t thread_id;
-  pid_t pid;
   int ioprio_class, ioprio_priority;
   int cpuid;
   const char *thread_name;
@@ -49,16 +48,15 @@ class Thread {
 
  public:
   const pthread_t &get_thread_id() const;
-  pid_t get_pid() const { return pid; }
   bool is_started() const;
   bool am_self() const;
   int kill(int signal);
   int try_create(size_t stacksize);
-  void create(const char *name, size_t stacksize = 0);
+  void create(const char *name, int ioprio_class = -1,
+	      int ioprio_priority = -1, int cpuid = -1,
+	      size_t stacksize = 0);
   int join(void **prval = 0);
   int detach();
-  int set_ioprio(int cls, int prio);
-  int set_affinity(int cpuid);
 };
 
 // Functions for with std::thread

@@ -528,9 +528,6 @@ public:
    * If it is not NULL, blocks until the given work queue does not have
    * any items left to process. */
   void drain(WorkQueue_* wq = 0);
-
-  /// set io priority
-  void set_ioprio(int cls, int priority);
 };
 
 class GenContextWQ :
