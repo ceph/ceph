@@ -11,6 +11,7 @@ import {OsdSummaryPipe} from "../osd-summary.pipe";
 import {HealthColorPipe} from "../../../shared/pipes/health-color.pipe";
 import {InfoCardAdditionalInfo} from "../info-card/info-card-additional-info";
 import {MdsSummaryPipe} from "../mds-summary.pipe";
+import {MgrSummaryPipe} from "../mgr-summary.pipe";
 
 @Component({
   selector: 'cd-health',
@@ -25,6 +26,7 @@ export class HealthComponent implements OnInit, OnDestroy {
   monitorsCard: InfoCard;
   osdCard: InfoCard;
   mdsCard: InfoCard;
+  mgrCard: InfoCard;
 
   constructor(
     private dashboardService: DashboardService,
@@ -32,6 +34,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     private osdSummaryPipe: OsdSummaryPipe,
     private healthColorPipe: HealthColorPipe,
     private mdsSummaryPipe: MdsSummaryPipe,
+    private mgrSummaryPipe: MgrSummaryPipe,
     ) {}
 
   ngOnInit() {
@@ -125,6 +128,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     this.initMonitorsCard();
     this.initOsdCard();
     this.initMdsCard();
+    this.initMgrCard();
   }
 
   private initHealthStatusCard() {
@@ -169,6 +173,15 @@ export class HealthComponent implements OnInit, OnDestroy {
       this.mdsCard.titleImageClass = 'fa fa-folder fa-fw';
       this.mdsCard.info = this.mdsSummaryPipe.transform(this.contentData.fs_map);
       this.mdsCard.infoClass = 'media-text';
+    }
+  }
+
+  private initMgrCard() {
+    if (this.contentData.mgr_map) {
+      this.mgrCard = new InfoCard('MANAGER DAEMONS');
+      this.mgrCard.titleImageClass = 'fa fa-cog fa-fw';
+      this.mgrCard.info = this.mgrSummaryPipe.transform(this.contentData.mgr_map);
+      this.mgrCard.infoClass = 'media-text';
     }
   }
 }

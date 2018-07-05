@@ -24,21 +24,11 @@
           *ngIf="mdsCard"
           [infoCard]="mdsCard">
         </cd-info-card>
-        <div class="col-md-6">
-          <div class="well"
-               *ngIf="contentData.mgr_map">
-            <div class="media">
-              <div class="media-left">
-                <i class="fa fa-cog fa-fw"></i>
-              </div>
-              <div class="media-body">
-                <span class="media-heading"
-                      i18n>Manager daemons</span>
-                <span class="media-text">{{ contentData.mgr_map | mgrSummary }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+
+        <cd-info-card
+          *ngIf="mgrCard"
+          [infoCard]="mgrCard">
+        </cd-info-card>
       </div>
     </div>
   </div>
