@@ -4,6 +4,10 @@ import * as _ from 'lodash';
 
 import { DashboardService } from '../../../shared/api/dashboard.service';
 
+import {InfoCard} from "../info-card/info-card";
+
+import {MonSummaryPipe} from "../mon-summary.pipe";
+
 @Component({
   selector: 'cd-health',
   templateUrl: './health.component.html',
@@ -12,8 +16,9 @@ import { DashboardService } from '../../../shared/api/dashboard.service';
 export class HealthComponent implements OnInit, OnDestroy {
   contentData: any;
   interval: number;
+  monitorsCard: InfoCard;
 
-  constructor(private dashboardService: DashboardService) {}
+  constructor(private dashboardService: DashboardService, private monSummaryPipe: MonSummaryPipe) {}
 
   ngOnInit() {
     this.getInfo();
@@ -26,9 +31,11 @@ export class HealthComponent implements OnInit, OnDestroy {
     clearInterval(this.interval);
   }
 
-  getInfo() {
+  private getInfo() {
     this.dashboardService.getHealth().subscribe((data: any) => {
       this.contentData = data;
+
+      this.initializeCards();
     });
   }
 
@@ -95,5 +102,16 @@ export class HealthComponent implements OnInit, OnDestroy {
     chart.dataset[0].data = poolData;
     chart.colors = [{ backgroundColor: colors }];
     chart.labels = poolLabels;
+  }
+
+  private initializeCards() {
+    if (this.contentData.mon_status) {
+
+      this.monitorsCard = new InfoCard('Monitors');
+      this.monitorsCard.titleLink = '/monitor/';
+      this.monitorsCard.titleImageClass = 'fa fa-database fa-fw';
+      this.monitorsCard.info = this.monSummaryPipe.transform(this.contentData.mon_status);
+      this.monitorsCard.infoClass = 'media-text';
+    }
   }
 }

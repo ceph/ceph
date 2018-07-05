@@ -1,0 +1,21 @@
+<div class="col-md-6">
+  <div class="well"
+       *ngIf="infoCard.info">
+    <div class="media">
+      <div *ngIf="infoCard.titleImageClass" class="media-left">
+        <i [class]="infoCard.titleImageClass"></i>
+      </div>
+      <div class="media-body">
+                <span class="media-heading" i18n>
+                  <a [routerLink]="infoCard.titleLink">{{ infoCard.title }}</a>
+                </span>
+        <span [class]="infoCard.infoClass">{{ infoCard.info }}</span>
+        <ul>
+          <li *ngFor="let additionalText of infoCard.additionalInfo">
+            {{ additionalText }}
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
