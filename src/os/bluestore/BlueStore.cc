@@ -10934,6 +10934,7 @@ int BlueStore::_do_gc(
 {
   auto& extents_to_collect = gc.get_extents_to_collect();
 
+  bool dirty_range_updated = false;
   WriteContext wctx_gc;
   wctx_gc.fork(wctx); // make a clone for garbage collection
 
@@ -10950,11 +10951,16 @@ int BlueStore::_do_gc(
 
     if (*dirty_start > it->offset) {
       *dirty_start = it->offset;
+      dirty_range_updated = true;
     }
 
     if (*dirty_end < it->offset + it->length) {
       *dirty_end = it->offset + it->length;
+      dirty_range_updated = true;
     }
+  }
+  if (dirty_range_updated) {
+    o->extent_map.fault_range(db, *dirty_start, *dirty_end);
   }
 
   dout(30) << __func__ << " alloc write" << dendl;
@@ -11037,9 +11043,10 @@ int BlueStore::_do_write(
              << dendl;
         goto out;
       }
+      dout(20)<<__func__<<" gc range is " << std::hex << dirty_start
+	      << "~" << dirty_end - dirty_start << std::dec << dendl;
     }
   }
-
   o->extent_map.compress_extent_map(dirty_start, dirty_end - dirty_start);
   o->extent_map.dirty_range(dirty_start, dirty_end - dirty_start);
 
