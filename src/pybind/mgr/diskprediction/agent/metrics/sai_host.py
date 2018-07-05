@@ -19,6 +19,8 @@ class SAI_HostAgent(MetricsAgent):
         osd_data = db.get_osds()
         for _data in osd_data:
             osd_id = _data['osd']
+            if not _data.get('in'):
+                continue
             osd_addr = _data['public_addr'].split(':')[0]
             osd_metadata = db.get_osd_metadata(osd_id)
             if osd_metadata:

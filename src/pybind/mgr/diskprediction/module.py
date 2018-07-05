@@ -247,6 +247,9 @@ class Module(MgrModule):
         except Exception as e:
             return 0, str(e), ''
 
+    def _self_test(self, inbuf, cmd):
+        return 0, 'self-test completed', ''
+
     def _get_predicted_status(self, inbuf, cmd):
         osd_data = dict()
         physical_data = dict()

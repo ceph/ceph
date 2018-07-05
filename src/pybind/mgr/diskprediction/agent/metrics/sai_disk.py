@@ -56,6 +56,8 @@ class SAI_DiskAgent(MetricsAgent):
         for osd in osds:
             if osd.get('osd') is None:
                 continue
+            if not osd.get('in'):
+                continue
             osds_meta = obj_api.get_osd_metadata(osd.get('osd'))
             if not osds_meta:
                 continue
@@ -124,7 +126,7 @@ class SAI_DiskAgent(MetricsAgent):
                     d_data.fields['model'] = str(model)
                 if vendor:
                     d_data.fields['vendor'] = str(vendor)
-                if s_val.get('sata_version', {}).get('string'):
+                if sata_version:
                     d_data.fields['sata_version'] = sata_version
                 if s_val.get('logical_block_size'):
                     d_data.fields['sector_size'] = \
@@ -133,9 +135,17 @@ class SAI_DiskAgent(MetricsAgent):
                 d_data.fields['vendor'] = \
                     str(s_val.get('model_family', '')).replace("\"", "'")
                 d_data.fields['agent_version'] = str(AGENT_VERSION)
+                try:
+                    if isinstance(s_val.get('user_capacity'), dict):
+                        user_capacity = \
+                            s_val['user_capacity'].get('bytes', {}).get('n', 0)
+                    else:
+                        user_capacity = s_val.get('user_capacity', 0)
+                except ValueError:
+                    user_capacity = 0
                 d_data.fields['size'] = \
-                    get_human_readable(
-                        int(s_val.get('user_capacity', '0')), 0)
+                    get_human_readable(int(user_capacity), 0)
+
                 if s_val.get('smart_status', {}).get('passed'):
                     d_data.fields['smart_health_status'] = 'PASSED'
                 else:

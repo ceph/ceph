@@ -23,6 +23,8 @@ class SAI_DiskSmartAgent(MetricsAgent):
             osds_smart = None
             if osd.get('osd') is None:
                 continue
+            if not osd.get('in'):
+                continue
             osds_meta = obj_api.get_osd_metadata(osd.get('osd'))
             if not osds_meta:
                 continue

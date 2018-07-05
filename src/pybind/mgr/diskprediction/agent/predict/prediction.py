@@ -122,6 +122,8 @@ class Prediction_Agent(BaseAgent):
             osd_uuid = osd.get('uuid')
             if osd_id is None:
                 continue
+            if not osd.get('in'):
+                continue
             osds_meta = obj_api.get_osd_metadata(osd_id)
             if not osds_meta:
                 continue
@@ -180,6 +182,14 @@ class Prediction_Agent(BaseAgent):
 
                 tmp['sata_version'] = s_val.get('sata_version', {}).get('string', '')
                 tmp['sector_size'] = str(s_val.get('logical_block_size', ''))
+                try:
+                    if isinstance(s_val.get('user_capacity'), dict):
+                        user_capacity = \
+                            s_val['user_capacity'].get('bytes', {}).get('n', 0)
+                    else:
+                        user_capacity = s_val.get('user_capacity', 0)
+                except ValueError:
+                    user_capacity = 0
                 disk_info = {
                     'diskName': dev_name,
                     'diskType': str(disk_type),
@@ -191,7 +201,7 @@ class Prediction_Agent(BaseAgent):
                     'sataVersion': tmp['sata_version'],
                     'smartHealthStatus': tmp['smart_health_status'],
                     'sectorSize': tmp['sector_size'],
-                    'size': str(s_val.get('user_capacity', '0')),
+                    'size': str(user_capacity),
                     'prediction': self._parse_prediction_data(host_domain_id, tmp['disk_domain_id'])
                 }
                 info_list.append(disk_info)

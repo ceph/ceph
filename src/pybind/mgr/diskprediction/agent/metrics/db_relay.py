@@ -65,6 +65,8 @@ class DB_RelayAgent(MetricsAgent):
         osd_data = db.get_osds()
         for _data in osd_data:
             osd_id = _data['osd']
+            if not _data.get('in'):
+                continue
             osd_addr = _data['public_addr'].split(':')[0]
             osd_metadata = db.get_osd_metadata(osd_id)
             if osd_metadata:
@@ -171,6 +173,8 @@ class DB_RelayAgent(MetricsAgent):
             osd_uuid = _data['uuid']
             osd_up = _data['up']
             osd_in = _data['in']
+            if not osd_in:
+                continue
             osd_weight = _data['weight']
             osd_public_addr = _data['public_addr']
             osd_cluster_addr = _data['cluster_addr']
@@ -311,6 +315,8 @@ class DB_RelayAgent(MetricsAgent):
         pg_stats = db.get_pg_stats()
         for osd_data in db.get_osds():
             osd_id = osd_data['osd']
+            if not osd_data.get('in'):
+                continue
             for _data in pg_stats:
                 state = _data.get('state')
                 up = _data.get('up')
@@ -393,12 +399,19 @@ class DB_RelayAgent(MetricsAgent):
                     disk_domain_id = str(serial_number)
                 else:
                     disk_domain_id = str(dev_name)
-
+                try:
+                    if isinstance(s_val.get('user_capacity'), dict):
+                        user_capacity = \
+                            s_val['user_capacity'].get('bytes', {}).get('n', 0)
+                    else:
+                        user_capacity = s_val.get('user_capacity', 0)
+                except ValueError:
+                    user_capacity = 0
                 dp_disk = MGRDpDisk(
                     host_domain_id= "{}_{}".format(cluster_id, hostname),
                     model=s_val.get('model_name', ''),
                     size=get_human_readable(
-                        int(s_val.get('user_capacity', '0')), 0)
+                        int(user_capacity), 0)
                 )
 
                 # create disk node
