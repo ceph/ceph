@@ -27,7 +27,7 @@ export class TaskManagerService {
   subscriptions: Array<TaskSubscription> = [];
 
   constructor(summaryService: SummaryService) {
-    summaryService.summaryData$.subscribe((data: any) => {
+    summaryService.subscribe((data: any) => {
       if (!data) {
         return;
       }
