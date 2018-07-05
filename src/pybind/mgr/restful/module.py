@@ -11,6 +11,7 @@ import inspect
 import tempfile
 import threading
 import traceback
+import six
 import socket
 
 from . import common
@@ -24,12 +25,6 @@ from werkzeug.serving import make_server, make_ssl_devcert
 
 from .hooks import ErrorHook
 from mgr_module import MgrModule, CommandResult
-
-
-try:
-    iteritems = dict.iteritems
-except:
-    iteritems = dict.items
 
 
 class CannotServe(Exception):
@@ -270,7 +265,7 @@ class Module(MgrModule):
     def refresh_keys(self):
         self.keys = {}
         rawkeys = self.get_store_prefix('keys/') or {}
-        for k, v in iteritems(rawkeys):
+        for k, v in six.iteritems(rawkeys):
             self.keys[k[5:]] = v  # strip of keys/ prefix
 
     def _serve(self):
