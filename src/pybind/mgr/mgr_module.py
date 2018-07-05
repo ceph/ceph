@@ -6,6 +6,7 @@ import ceph_module  # noqa
 
 import json
 import logging
+import six
 import threading
 from collections import defaultdict
 
@@ -142,7 +143,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
     def get_take_weight_osd_map(self, root):
         uglymap = self._get_take_weight_osd_map(root)
-        return { int(k): v for k, v in uglymap.get('weights', {}).iteritems() }
+        return { int(k): v for k, v in six.iteritems(uglymap.get('weights', {})) }
 
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     """
