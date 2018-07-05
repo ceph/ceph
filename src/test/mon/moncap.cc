@@ -197,6 +197,30 @@ TEST(MonCap, AllowAll) {
   ASSERT_TRUE(cap2.is_allow_all());
 }
 
+TEST(MonCap, Network) {
+  MonCap cap;
+  bool r = cap.parse("allow * network 192.168.0.0/16, allow * network 10.0.0.0/8", NULL);
+  ASSERT_TRUE(r);
+
+  entity_addr_t a, b, c;
+  a.parse("10.1.2.3");
+  b.parse("192.168.2.3");
+  c.parse("192.167.2.3");
+
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON, EntityName(),
+			     "foo", "asdf", map<string,string>(),
+			     true, true, true,
+			     a));
+  ASSERT_TRUE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON, EntityName(),
+			     "foo", "asdf", map<string,string>(),
+			     true, true, true,
+			     b));
+  ASSERT_FALSE(cap.is_capable(NULL, CEPH_ENTITY_TYPE_MON, EntityName(),
+			     "foo", "asdf", map<string,string>(),
+			     true, true, true,
+			     c));
+}
+
 TEST(MonCap, ProfileOSD) {
   MonCap cap;
   bool r = cap.parse("allow profile osd", NULL);

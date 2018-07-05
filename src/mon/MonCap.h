@@ -83,6 +83,13 @@ struct MonCapGrant {
   // restrict by network
   std::string network;
 
+  // these are filled in by parse_network(), called by MonCap::parse()
+  entity_addr_t network_parsed;
+  unsigned network_prefix = 0;
+  bool network_valid = true;
+
+  void parse_network();
+
   mon_rwxa_t allow;
 
   // explicit grants that a profile grant expands to; populated as
