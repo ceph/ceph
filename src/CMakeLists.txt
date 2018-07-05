@@ -546,6 +546,7 @@ set(libcommon_files
   common/hostname.cc
   common/util.cc
   common/PriorityCache.cc
+  common/SubProcess.cc
   librbd/Features.cc
   arch/probe.cc
   ${auth_files}
