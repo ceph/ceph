@@ -2,6 +2,7 @@ from mgr_module import MgrModule
 import datetime
 import errno
 import json
+import six
 
 
 DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
@@ -82,7 +83,7 @@ class Module(MgrModule):
 
         keeptime = datetime.timedelta(days=keep)
 
-        for key, meta in self.get_store_prefix('crash/').iteritems():
+        for key, meta in six.iteritems(self.get_store_prefix('crash/')):
             meta = json.loads(meta)
             stamp = self.time_from_string(meta['timestamp'])
             if stamp <= now - keeptime:
@@ -116,7 +117,7 @@ class Module(MgrModule):
                 'idlist': list()
             }
 
-        for key, meta in self.get_store_prefix('crash/').iteritems():
+        for key, meta in six.iteritems(self.get_store_prefix('crash/')):
             total += 1
             meta = json.loads(meta)
             stamp = self.time_from_string(meta['timestamp'])
