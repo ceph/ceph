@@ -2864,7 +2864,7 @@ bool Monitor::_allowed_command(MonSession *s, const string &module,
     s->entity_name,
     module, prefix, param_str_map,
     cmd_r, cmd_w, cmd_x,
-    s->get_peer_addr());
+    s->get_peer_socket_addr());
 
   dout(10) << __func__ << " " << (capable ? "" : "not ") << "capable" << dendl;
   return capable;

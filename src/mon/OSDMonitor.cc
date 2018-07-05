@@ -3344,7 +3344,7 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
 	CEPH_ENTITY_TYPE_MON,
 	session->entity_name,
         "osd", "osd pool rmsnap", {}, true, true, false,
-	session->get_peer_addr())) {
+	session->get_peer_socket_addr())) {
     dout(0) << "got preprocess_remove_snaps from entity with insufficient caps "
 	    << session->caps << dendl;
     goto ignore;
@@ -11897,7 +11897,7 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
 
       if (!is_unmanaged_snap_op_permitted(cct, mon->key_server,
                                           session->entity_name, session->caps,
-					  session->get_peer_addr(),
+					  session->get_peer_socket_addr(),
                                           pool_name)) {
         dout(0) << "got unmanaged-snap pool op from entity with insufficient "
                 << "privileges. message: " << *m  << std::endl
