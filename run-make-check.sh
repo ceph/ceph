@@ -126,7 +126,7 @@ EOM
 
     ccache -s # print the ccache statistics to evaluate the efficiency
 
-    # prevent OSD EMFILE death on tests, make sure large than 1024
+    # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
     $DRY_RUN ulimit -n $(ulimit -Hn)
     if [ $(ulimit -n) -lt 1024 ];then
         echo "***ulimit -n too small, better bigger than 1024 for test***"
