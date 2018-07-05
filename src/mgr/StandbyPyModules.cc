@@ -14,6 +14,7 @@
 #include "StandbyPyModules.h"
 
 #include "common/debug.h"
+#include "common/errno.h"
 
 #include "mgr/MgrContext.h"
 #include "mgr/Gil.h"
