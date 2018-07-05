@@ -356,6 +356,7 @@ class RGWHTTPArgs {
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
+  int get_int(const char *name, int *val, int def_val);
 
   /** Get the value for specific system argument parameter */
   std::string sys_get(const string& name, bool *exists = nullptr) const;
