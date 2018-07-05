@@ -1116,7 +1116,7 @@ public:
         }
       }
       /* FIXME: what do do in case of error */
-      if (!marker_handle->marker.empty()) {
+      if (sync_status == 0 && !marker_handle->marker.empty()) {
         /* update marker */
         yield call(marker_tracker->finish(marker_handle->marker));
       }
