@@ -227,6 +227,7 @@ BuildRequires:	python%{_python_buildid}-pecan
 BuildRequires:	python%{_python_buildid}-werkzeug
 BuildRequires:	python%{_python_buildid}-tox
 BuildRequires:	python%{_python_buildid}-coverage
+BuildRequires:	python%{_python_buildid}-six
 %if 0%{?fedora}
 BuildRequires:	python%{_python_buildid}-bcrypt
 %endif
@@ -243,6 +244,7 @@ BuildRequires:	python%{_python_buildid}-numpy-devel
 BuildRequires:	python%{_python_buildid}-bcrypt
 BuildRequires:	python%{_python_buildid}-tox
 BuildRequires:	python%{_python_buildid}-coverage
+BuildRequires:	python%{_python_buildid}-six
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
@@ -369,9 +371,10 @@ Group:          System/Filesystems
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
-Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-jinja2
 Requires:       python%{_python_buildid}-pecan
+Requires:       python%{_python_buildid}-routes
+Requires:       python%{_python_buildid}-six
 Requires:       python%{_python_buildid}-werkzeug
 Requires:       pyOpenSSL%{_python_buildid}
 %if 0%{?fedora}
@@ -388,6 +391,7 @@ Requires:       python%{_python_buildid}-Jinja2
 Requires:       python%{_python_buildid}-Werkzeug
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-pyOpenSSL
+Requires:       python%{_python_buildid}-six
 Requires:       python%{_python_buildid}-bcrypt
 Recommends:     python%{_python_buildid}-influxdb
 %endif
