@@ -215,7 +215,6 @@ Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
-Recommends: ceph-common,
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Description: monitor server for the ceph storage system
@@ -248,7 +247,6 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
-Recommends: ceph-common (= ${binary:Version}),
 Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Description: OSD server for the ceph storage system
