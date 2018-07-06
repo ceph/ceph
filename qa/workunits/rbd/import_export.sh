@@ -136,7 +136,7 @@ if rbd help export | grep -q export-format; then
     rbd import --stripe-count 1000 --stripe-unit 4096 ${TMPDIR}/img testimg
     rbd export --export-format 2 testimg ${TMPDIR}/img_v2
     rbd import --export-format 2 ${TMPDIR}/img_v2 testimg_import
-    rbd info testimg_import|grep "stripe unit"|awk '{print $3}'|grep -Ei '(4K|4096)'
+    rbd info testimg_import|grep "stripe unit"|grep -Ei '(4 KiB|4096)'
     rbd info testimg_import|grep "stripe count"|awk '{print $3}'|grep 1000
 
     rm ${TMPDIR}/img_v2

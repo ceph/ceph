@@ -357,6 +357,14 @@ std::string get_short_features_help(bool append_suffix) {
   bool first_feature = true;
   oss << "[";
   for (auto &pair : ImageFeatures::FEATURE_MAPPING) {
+    if ((pair.first & RBD_FEATURES_IMPLICIT_ENABLE) != 0ULL) {
+      // hide implicitly enabled features from list
+      continue;
+    } else if (!append_suffix && (pair.first & RBD_FEATURES_MUTABLE) == 0ULL) {
+      // hide non-mutable features for the 'rbd feature XYZ' command
+      continue;
+    }
+
     if (!first_feature) {
       oss << ", ";
     }
