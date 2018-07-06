@@ -89,7 +89,7 @@ struct PSSubConfig { /* subscription config */
   string data_bucket_name;
   string data_oid_prefix;
 
-  void from_user_conf(const rgw_pubsub_user_sub_config& uc) {
+  void from_user_conf(const rgw_pubsub_sub_config& uc) {
     name = uc.name;
     topic = uc.topic;
     push_endpoint = uc.dest.push_endpoint;
@@ -597,7 +597,7 @@ public:
 
   PSSubscription(RGWDataSyncEnv *_sync_env,
                  PSEnvRef _env,
-                 rgw_pubsub_user_sub_config& user_sub_conf) : sync_env(_sync_env),
+                 rgw_pubsub_sub_config& user_sub_conf) : sync_env(_sync_env),
                                       env(_env),
                                       sub_conf(std::make_shared<PSSubConfig>()),
                                       data_access(std::make_shared<RGWDataAccess>(sync_env->store)) {
@@ -649,7 +649,7 @@ class PSManager
     PSConfigRef conf;
 
     PSSubConfigRef sub_conf;
-    rgw_pubsub_user_sub_config user_sub_conf;
+    rgw_pubsub_sub_config user_sub_conf;
   public:
     GetSubCR(RGWDataSyncEnv *_sync_env,
                       PSManagerRef& _mgr,
@@ -677,7 +677,7 @@ class PSManager
 
           *ref = PSSubscription::get_shared(sync_env, mgr->env, sub_conf);
         } else {
-          using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_user_sub_config>;
+          using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_sub_config>;
           yield {
             RGWUserPubSub ups(sync_env->store, owner);
             rgw_raw_obj obj;
@@ -832,8 +832,10 @@ class RGWPSFindBucketTopicsCR : public RGWCoroutine {
 
   RGWUserPubSub ups;
 
-  rgw_raw_obj obj;
-  rgw_pubsub_user_topics bucket_topics;
+  rgw_raw_obj bucket_obj;
+  rgw_raw_obj user_obj;
+  rgw_pubsub_bucket_topics bucket_topics;
+  rgw_pubsub_user_topics user_topics;
   TopicsRef *topics;
 public:
   RGWPSFindBucketTopicsCR(RGWDataSyncEnv *_sync_env,
@@ -853,14 +855,14 @@ public:
   }
   int operate() override {
     reenter(this) {
-      ups.get_bucket_meta_obj(bucket, &obj);
+      ups.get_bucket_meta_obj(bucket, &bucket_obj);
+      ups.get_user_meta_obj(&user_obj);
 
-
-      using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_user_topics>;
+      using ReadInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_bucket_topics>;
       yield {
         bool empty_on_enoent = true;
         call(new ReadInfoCR(sync_env->async_rados, sync_env->store,
-                            obj,
+                            bucket_obj,
                             &bucket_topics, empty_on_enoent));
       }
       if (retcode < 0 && retcode != -ENOENT) {
@@ -869,11 +871,24 @@ public:
 
       ldout(sync_env->cct, 20) << "RGWPSFindBucketTopicsCR(): found " << bucket_topics.topics.size() << " topics for bucket " << bucket << dendl;
 
+      if (!bucket_topics.topics.empty()) {
+	using ReadUserTopicsInfoCR = RGWSimpleRadosReadCR<rgw_pubsub_user_topics>;
+	yield {
+	  bool empty_on_enoent = true;
+	  call(new ReadUserTopicsInfoCR(sync_env->async_rados, sync_env->store,
+					user_obj,
+					&user_topics, empty_on_enoent));
+	}
+	if (retcode < 0 && retcode != -ENOENT) {
+	  return set_cr_error(retcode);
+	}
+      }
+
       for (auto& titer : bucket_topics.topics) {
         auto& info = titer.second;
         shared_ptr<PSTopicConfig> tc = std::make_shared<PSTopicConfig>();
-        tc->name = info.topic.name;
-        tc->subs = info.subs;
+        tc->name = info.name;
+        tc->subs = user_topics.topics[info.name].subs;
         (*topics)->push_back(tc);
       }
 
