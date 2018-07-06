@@ -3481,7 +3481,9 @@ std::vector<Option> get_global_options() {
     .set_description("The block size for index partitions. (0 = rocksdb default)"),
 
     Option("mon_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("write_buffer_size=33554432,compression=kNoCompression")
+    .set_default("write_buffer_size=33554432,"
+		 "compression=kNoCompression,"
+		 "level_compaction_dynamic_level_bytes=true")
     .set_description(""),
 
     Option("osd_client_op_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
