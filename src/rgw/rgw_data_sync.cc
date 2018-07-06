@@ -1652,6 +1652,9 @@ public:
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
+  bool supports_user_writes() override {
+    return true;
+  }
 };
 
 int RGWDefaultSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance)

@@ -151,6 +151,7 @@ int RGWSI_Zone::do_start()
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
+#warning FIXME
   writeable_zone = (zone_public_config->tier_type.empty() || zone_public_config->tier_type == "rgw");
 
   /* first build all zones index */

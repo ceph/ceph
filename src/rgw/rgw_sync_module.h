@@ -42,6 +42,9 @@ public:
   virtual RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) {
     return orig;
   }
+  virtual bool supports_user_writes() {
+    return false;
+  }
 };
 
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
