@@ -487,6 +487,7 @@ Group:		System/Filesystems
 %endif
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	lvm2
+Requires:	sudo
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -995,6 +996,9 @@ ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 
 # udev rules
 install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
+
+# sudoers.d
+install -m 0600 -D sudoers.d/ceph-osd-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-osd-smartctl
 
 #set up placeholder directories
 mkdir -p %{buildroot}%{_sysconfdir}/ceph
@@ -1516,6 +1520,7 @@ fi
 %{_unitdir}/ceph-volume@.service
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 %config(noreplace) %{_sysctldir}/90-ceph-osd.conf
+%{_sysconfdir}/sudoers.d/ceph-osd-smartctl
 
 %post osd
 %if 0%{?suse_version}
