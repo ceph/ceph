@@ -13,10 +13,7 @@ of daemon. We recommend using other hosts for processes that utilize your
 data cluster (e.g., OpenStack, CloudStack, etc).
 
 
-.. tip:: Check out the Ceph blog too. Articles like `Ceph Write Throughput 1`_,
-   `Ceph Write Throughput 2`_, `Argonaut v. Bobtail Performance Preview`_, 
-   `Bobtail Performance - I/O Scheduler Comparison`_ and others are an
-   excellent source of information. 
+.. tip:: Check out the Ceph blog too.
 
 
 CPU
@@ -344,7 +341,5 @@ configurations for Ceph OSDs, and a lighter configuration for monitors.
 
 .. _Ceph Write Throughput 1: http://ceph.com/community/ceph-performance-part-1-disk-controller-write-throughput/
 .. _Ceph Write Throughput 2: http://ceph.com/community/ceph-performance-part-2-write-throughput-without-ssd-journals/
-.. _Argonaut v. Bobtail Performance Preview: http://ceph.com/uncategorized/argonaut-vs-bobtail-performance-preview/
-.. _Bobtail Performance - I/O Scheduler Comparison: http://ceph.com/community/ceph-bobtail-performance-io-scheduler-comparison/ 
 .. _Mapping Pools to Different Types of OSDs: ../../rados/operations/crush-map#placing-different-pools-on-different-osds
 .. _OS Recommendations: ../os-recommendations

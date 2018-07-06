@@ -233,8 +233,6 @@ If you rename a pool and you have per-pool capabilities for an authenticated
 user, you must update the user's capabilities (i.e., caps) with the new pool
 name.
 
-.. note:: Version ``0.48`` Argonaut and above.
-
 Show Pool Statistics
 ====================
 
@@ -250,17 +248,12 @@ To make a snapshot of a pool, execute::
 
 	ceph osd pool mksnap {pool-name} {snap-name}
 
-.. note:: Version ``0.48`` Argonaut and above.
-
-
 Remove a Snapshot of a Pool
 ===========================
 
 To remove a snapshot of a pool, execute::
 
 	ceph osd pool rmsnap {pool-name} {snap-name}
-
-.. note:: Version ``0.48`` Argonaut and above.
 
 .. _setpoolvalues:
 
@@ -370,7 +363,6 @@ You may set values for the following keys:
 :Description: Set/Unset HASHPSPOOL flag on a given pool.
 :Type: Integer
 :Valid Range: 1 sets flag, 0 unsets flag
-:Version: Version ``0.48`` Argonaut and above.
 
 .. _nodelete:
 
