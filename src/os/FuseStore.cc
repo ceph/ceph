@@ -1168,7 +1168,7 @@ int FuseStore::main()
     "-d", // debug
   };
   int c = 3;
-  auto fuse_debug = store->cct->_conf->get_val<bool>("fuse_debug");
+  auto fuse_debug = store->cct->_conf.get_val<bool>("fuse_debug");
   if (fuse_debug)
     ++c;
   return fuse_main(c, (char**)v, &fs_oper, (void*)this);
@@ -1186,7 +1186,7 @@ int FuseStore::start()
     "-d", // debug
   };
   int c = 3;
-  auto fuse_debug = store->cct->_conf->get_val<bool>("fuse_debug");
+  auto fuse_debug = store->cct->_conf.get_val<bool>("fuse_debug");
   if (fuse_debug)
     ++c;
   fuse_args a = FUSE_ARGS_INIT(c, (char**)v);

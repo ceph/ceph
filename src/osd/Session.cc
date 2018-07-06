@@ -89,7 +89,7 @@ bool Session::check_backoff(
   if (b) {
     dout(10) << __func__ << " session " << this << " has backoff " << *b
 	     << " for " << *m << dendl;
-    assert(!b->is_acked() || !g_conf->osd_debug_crash_on_ignored_backoff);
+    assert(!b->is_acked() || !g_conf()->osd_debug_crash_on_ignored_backoff);
     return true;
   }
   // we may race with ms_handle_reset.  it clears session->con before removing

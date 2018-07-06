@@ -3893,7 +3893,7 @@ public:
 
   void init(RGWRados *store) {
     store->register_chained_cache(this);
-    expiry = std::chrono::seconds(store->ctx()->_conf->get_val<uint64_t>(
+    expiry = std::chrono::seconds(store->ctx()->_conf.get_val<uint64_t>(
 				    "rgw_cache_expiry_interval"));
   }
 

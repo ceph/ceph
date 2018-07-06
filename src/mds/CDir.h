@@ -505,11 +505,11 @@ public:
   void merge(std::list<CDir*>& subs, std::list<MDSInternalContextBase*>& waiters, bool replay);
 
   bool should_split() const {
-    return (int)get_frag_size() > g_conf->mds_bal_split_size;
+    return (int)get_frag_size() > g_conf()->mds_bal_split_size;
   }
   bool should_split_fast() const;
   bool should_merge() const {
-    return (int)get_frag_size() < g_conf->mds_bal_merge_size;
+    return (int)get_frag_size() < g_conf()->mds_bal_merge_size;
   }
 
 private:

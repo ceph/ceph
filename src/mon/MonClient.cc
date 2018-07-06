@@ -61,7 +61,7 @@ MonClient::MonClient(CephContext *cct_) :
   want_monmap(true),
   had_a_connection(false),
   reopen_interval_multiplier(
-    cct_->_conf->get_val<double>("mon_client_hunt_interval_min_multiple")),
+    cct_->_conf.get_val<double>("mon_client_hunt_interval_min_multiple")),
   last_mon_command_tid(0),
   version_req_id(0)
 {}
@@ -163,7 +163,7 @@ out_msgr:
   messenger = nullptr;
 
   if (!monmap.fsid.is_zero()) {
-    cct->_conf->set_val("fsid", stringify(monmap.fsid));
+    cct->_conf.set_val("fsid", stringify(monmap.fsid));
   }
 
 out:
@@ -374,7 +374,7 @@ void MonClient::handle_config(MConfig *m)
 {
   ldout(cct,10) << __func__ << " " << *m << dendl;
   finisher.queue(new FunctionContext([this, m](int r) {
-	cct->_conf->set_mon_vals(cct, m->config, config_cb);
+	cct->_conf.set_mon_vals(cct, m->config, config_cb);
 	m->put();
       }));
   got_config = true;
@@ -818,9 +818,9 @@ void MonClient::_un_backoff()
 {
   // un-backoff our reconnect interval
   reopen_interval_multiplier = std::max(
-    cct->_conf->get_val<double>("mon_client_hunt_interval_min_multiple"),
+    cct->_conf.get_val<double>("mon_client_hunt_interval_min_multiple"),
     reopen_interval_multiplier /
-    cct->_conf->get_val<double>("mon_client_hunt_interval_backoff"));
+    cct->_conf.get_val<double>("mon_client_hunt_interval_backoff"));
   ldout(cct, 20) << __func__ << " reopen_interval_multipler now "
 		 << reopen_interval_multiplier << dendl;
 }

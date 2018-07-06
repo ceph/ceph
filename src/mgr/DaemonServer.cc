@@ -52,21 +52,21 @@ DaemonServer::DaemonServer(MonClient *monc_,
 			   LogChannelRef audit_clog_)
     : Dispatcher(g_ceph_context),
       client_byte_throttler(new Throttle(g_ceph_context, "mgr_client_bytes",
-					 g_conf->get_val<Option::size_t>("mgr_client_bytes"))),
+					 g_conf().get_val<Option::size_t>("mgr_client_bytes"))),
       client_msg_throttler(new Throttle(g_ceph_context, "mgr_client_messages",
-					g_conf->get_val<uint64_t>("mgr_client_messages"))),
+					g_conf().get_val<uint64_t>("mgr_client_messages"))),
       osd_byte_throttler(new Throttle(g_ceph_context, "mgr_osd_bytes",
-				      g_conf->get_val<Option::size_t>("mgr_osd_bytes"))),
+				      g_conf().get_val<Option::size_t>("mgr_osd_bytes"))),
       osd_msg_throttler(new Throttle(g_ceph_context, "mgr_osd_messsages",
-				     g_conf->get_val<uint64_t>("mgr_osd_messages"))),
+				     g_conf().get_val<uint64_t>("mgr_osd_messages"))),
       mds_byte_throttler(new Throttle(g_ceph_context, "mgr_mds_bytes",
-				      g_conf->get_val<Option::size_t>("mgr_mds_bytes"))),
+				      g_conf().get_val<Option::size_t>("mgr_mds_bytes"))),
       mds_msg_throttler(new Throttle(g_ceph_context, "mgr_mds_messsages",
-				     g_conf->get_val<uint64_t>("mgr_mds_messages"))),
+				     g_conf().get_val<uint64_t>("mgr_mds_messages"))),
       mon_byte_throttler(new Throttle(g_ceph_context, "mgr_mon_bytes",
-				      g_conf->get_val<Option::size_t>("mgr_mon_bytes"))),
+				      g_conf().get_val<Option::size_t>("mgr_mon_bytes"))),
       mon_msg_throttler(new Throttle(g_ceph_context, "mgr_mon_messsages",
-				     g_conf->get_val<uint64_t>("mgr_mon_messages"))),
+				     g_conf().get_val<uint64_t>("mgr_mon_messages"))),
       msgr(nullptr),
       monc(monc_),
       finisher(finisher_),
@@ -76,29 +76,29 @@ DaemonServer::DaemonServer(MonClient *monc_,
       clog(clog_),
       audit_clog(audit_clog_),
       auth_cluster_registry(g_ceph_context,
-                    g_conf->auth_supported.empty() ?
-                      g_conf->auth_cluster_required :
-                      g_conf->auth_supported),
+                    g_conf()->auth_supported.empty() ?
+                      g_conf()->auth_cluster_required :
+                      g_conf()->auth_supported),
       auth_service_registry(g_ceph_context,
-                   g_conf->auth_supported.empty() ?
-                      g_conf->auth_service_required :
-                      g_conf->auth_supported),
+                   g_conf()->auth_supported.empty() ?
+                      g_conf()->auth_service_required :
+                      g_conf()->auth_supported),
       lock("DaemonServer"),
       pgmap_ready(false)
 {
-  g_conf->add_observer(this);
+  g_conf().add_observer(this);
 }
 
 DaemonServer::~DaemonServer() {
   delete msgr;
-  g_conf->remove_observer(this);
+  g_conf().remove_observer(this);
 }
 
 int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 {
   // Initialize Messenger
-  std::string public_msgr_type = g_conf->ms_public_type.empty() ?
-    g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
+  std::string public_msgr_type = g_conf()->ms_public_type.empty() ?
+    g_conf().get_val<std::string>("ms_type") : g_conf()->ms_public_type;
   msgr = Messenger::create(g_ceph_context, public_msgr_type,
 			   entity_name_t::MGR(gid),
 			   "mgr",
@@ -887,9 +887,9 @@ bool DaemonServer::handle_command(MCommand *m)
     std::string val;
     cmd_getval(cct, cmdctx->cmdmap, "key", key);
     cmd_getval(cct, cmdctx->cmdmap, "value", val);
-    r = cct->_conf->set_val(key, val, &ss);
+    r = cct->_conf.set_val(key, val, &ss);
     if (r == 0) {
-      cct->_conf->apply_changes(nullptr);
+      cct->_conf.apply_changes(nullptr);
     }
     cmdctx->reply(0, ss);
     return true;
@@ -1073,14 +1073,14 @@ bool DaemonServer::handle_command(MCommand *m)
       return true;
     }
     
-    double max_change = g_conf->get_val<double>("mon_reweight_max_change");
+    double max_change = g_conf().get_val<double>("mon_reweight_max_change");
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "max_change", max_change);
     if (max_change <= 0.0) {
       ss << "max_change " << max_change << " must be positive";
       cmdctx->reply(-EINVAL, ss);
       return true;
     }
-    int64_t max_osds = g_conf->get_val<int64_t>("mon_reweight_max_osds");
+    int64_t max_osds = g_conf().get_val<int64_t>("mon_reweight_max_osds");
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "max_osds", max_osds);
     if (max_osds <= 0) {
       ss << "max_osds " << max_osds << " must be positive";
@@ -2002,7 +2002,7 @@ bool DaemonServer::handle_command(MCommand *m)
 void DaemonServer::_prune_pending_service_map()
 {
   utime_t cutoff = ceph_clock_now();
-  cutoff -= g_conf->get_val<double>("mgr_service_beacon_grace");
+  cutoff -= g_conf().get_val<double>("mgr_service_beacon_grace");
   auto p = pending_service_map.services.begin();
   while (p != pending_service_map.services.end()) {
     auto q = p->second.daemons.begin();
@@ -2042,7 +2042,7 @@ void DaemonServer::_prune_pending_service_map()
 void DaemonServer::send_report()
 {
   if (!pgmap_ready) {
-    if (ceph_clock_now() - started_at > g_conf->get_val<int64_t>("mgr_stats_period") * 4.0) {
+    if (ceph_clock_now() - started_at > g_conf().get_val<int64_t>("mgr_stats_period") * 4.0) {
       pgmap_ready = true;
       reported_osds.clear();
       dout(1) << "Giving up on OSDs that haven't reported yet, sending "
@@ -2232,8 +2232,8 @@ void DaemonServer::_send_configure(ConnectionRef c)
   assert(lock.is_locked_by_me());
 
   auto configure = new MMgrConfigure();
-  configure->stats_period = g_conf->get_val<int64_t>("mgr_stats_period");
-  configure->stats_threshold = g_conf->get_val<int64_t>("mgr_stats_threshold");
+  configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");
+  configure->stats_threshold = g_conf().get_val<int64_t>("mgr_stats_threshold");
   c->send_message(configure);
 }
 

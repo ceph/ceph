@@ -282,11 +282,11 @@ public:
   void enqueue_front(OpQueueItem&& qi);
 
   void maybe_inject_dispatch_delay() {
-    if (g_conf->osd_debug_inject_dispatch_delay_probability > 0) {
+    if (g_conf()->osd_debug_inject_dispatch_delay_probability > 0) {
       if (rand() % 10000 <
-	  g_conf->osd_debug_inject_dispatch_delay_probability * 10000) {
+	  g_conf()->osd_debug_inject_dispatch_delay_probability * 10000) {
 	utime_t t;
-	t.set_from_double(g_conf->osd_debug_inject_dispatch_delay_duration);
+	t.set_from_double(g_conf()->osd_debug_inject_dispatch_delay_duration);
 	t.sleep();
       }
     }

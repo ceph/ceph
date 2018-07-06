@@ -780,7 +780,7 @@ void Server::find_idle_sessions()
     dout(10) << "autoclosing stale session " << session->info.inst << " last "
              << session->last_cap_renew << dendl;
 
-    if (g_conf->mds_session_blacklist_on_timeout) {
+    if (g_conf()->mds_session_blacklist_on_timeout) {
       std::stringstream ss;
       mds->evict_client(session->get_client().v, false, true,
                         ss, nullptr);
@@ -925,7 +925,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
     mds->clog->info() << "denied reconnect attempt (mds is "
        << ceph_mds_state_name(mds->get_state())
        << ") from " << m->get_source_inst()
-       << " after " << delay << " (allowed interval " << g_conf->mds_reconnect_timeout << ")";
+       << " after " << delay << " (allowed interval " << g_conf()->mds_reconnect_timeout << ")";
     deny = true;
   } else if (!session->is_open()) {
     dout(1) << " session is closed, ignoring reconnect, sending close" << dendl;
@@ -1050,7 +1050,7 @@ void Server::reconnect_tick()
   }
 
   utime_t reconnect_end = reconnect_start;
-  reconnect_end += g_conf->mds_reconnect_timeout;
+  reconnect_end += g_conf()->mds_reconnect_timeout;
   if (ceph_clock_now() >= reconnect_end &&
       !client_reconnect_gather.empty()) {
     dout(10) << "reconnect timed out" << dendl;
@@ -1067,10 +1067,10 @@ void Server::reconnect_tick()
       dout(1) << "reconnect gave up on " << session->info.inst << dendl;
 
       mds->clog->warn() << "evicting unresponsive client " << *session
-                        << ", after waiting " << g_conf->mds_reconnect_timeout
+                        << ", after waiting " << g_conf()->mds_reconnect_timeout
                         << " seconds during MDS startup";
 
-      if (g_conf->mds_session_blacklist_on_timeout) {
+      if (g_conf()->mds_session_blacklist_on_timeout) {
         std::stringstream ss;
         mds->evict_client(session->get_client().v, false, true, ss,
                           gather.new_sub());
@@ -1125,8 +1125,8 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
 void Server::recall_client_state(void)
 {
   /* try to recall at least 80% of all caps */
-  uint64_t max_caps_per_client = Capability::count() * g_conf->get_val<double>("mds_max_ratio_caps_per_client");
-  uint64_t min_caps_per_client = g_conf->get_val<uint64_t>("mds_min_caps_per_client");
+  uint64_t max_caps_per_client = Capability::count() * g_conf().get_val<double>("mds_max_ratio_caps_per_client");
+  uint64_t min_caps_per_client = g_conf().get_val<uint64_t>("mds_min_caps_per_client");
   if (max_caps_per_client < min_caps_per_client) {
     dout(0) << "max_caps_per_client " << max_caps_per_client
             << " < min_caps_per_client " << min_caps_per_client << dendl;
@@ -1339,7 +1339,7 @@ void Server::perf_gather_op_latency(const MClientRequest* req, utime_t lat)
 
 void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
 {
-  if (!g_conf->mds_early_reply)
+  if (!g_conf()->mds_early_reply)
     return;
 
   if (mdr->no_early_reply) {
@@ -1558,9 +1558,9 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
 			    MDRequestRef& mdr)
 {
   // skip doing this for debugging purposes?
-  if (g_conf->mds_inject_traceless_reply_probability &&
+  if (g_conf()->mds_inject_traceless_reply_probability &&
       mdr->ls && !mdr->o_trunc &&
-      (rand() % 10000 < g_conf->mds_inject_traceless_reply_probability * 10000.0)) {
+      (rand() % 10000 < g_conf()->mds_inject_traceless_reply_probability * 10000.0)) {
     dout(5) << "deliberately skipping trace for " << *reply << dendl;
     return;
   }
@@ -1718,11 +1718,11 @@ void Server::handle_client_request(MClientRequest *req)
       mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
 
       if (session->get_num_trim_requests_warnings() > 0 &&
-	  session->get_num_completed_requests() * 2 < g_conf->mds_max_completed_requests)
+	  session->get_num_completed_requests() * 2 < g_conf()->mds_max_completed_requests)
 	session->reset_num_trim_requests_warnings();
     } else {
       if (session->get_num_completed_requests() >=
-	  (g_conf->mds_max_completed_requests << session->get_num_trim_requests_warnings())) {
+	  (g_conf()->mds_max_completed_requests << session->get_num_trim_requests_warnings())) {
 	session->inc_num_trim_requests_warnings();
 	stringstream ss;
 	ss << "client." << session->get_client() << " does not advance its oldest_client_tid ("
@@ -2493,8 +2493,8 @@ bool Server::check_access(MDRequestRef& mdr, CInode *in, unsigned mask)
 bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
 {
   const auto size = in->get_frag_size();
-  if (size >= g_conf->mds_bal_fragment_size_max) {
-    dout(10) << "fragment " << *in << " size exceeds " << g_conf->mds_bal_fragment_size_max << " (ENOSPC)" << dendl;
+  if (size >= g_conf()->mds_bal_fragment_size_max) {
+    dout(10) << "fragment " << *in << " size exceeds " << g_conf()->mds_bal_fragment_size_max << " (ENOSPC)" << dendl;
     respond_to_request(mdr, -ENOSPC);
     return false;
   }
@@ -2649,8 +2649,8 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   }
     
   if (allow_prealloc_inos &&
-      mdr->session->get_num_projected_prealloc_inos() < g_conf->mds_client_prealloc_inos / 2) {
-    int need = g_conf->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+      mdr->session->get_num_projected_prealloc_inos() < g_conf()->mds_client_prealloc_inos / 2) {
+    int need = g_conf()->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, need);
     assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
     mdr->session->pending_prealloc_inos.insert(mdr->prealloc_inos);
@@ -2666,7 +2666,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
-    in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
+    in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
   } else if (layout) {
     in->inode.layout = *layout;
   } else {
@@ -3545,7 +3545,7 @@ public:
 
     server->respond_to_request(mdr, 0);
 
-    assert(g_conf->mds_kill_openc_at != 1);
+    assert(g_conf()->mds_kill_openc_at != 1);
   }
 };
 
@@ -3827,7 +3827,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   unsigned max_bytes = req->head.args.readdir.max_bytes;
   if (!max_bytes)
     // make sure at least one item can be encoded
-    max_bytes = (512 << 10) + g_conf->mds_max_xattr_pairs_size;
+    max_bytes = (512 << 10) + g_conf()->mds_max_xattr_pairs_size;
 
   // start final blob
   bufferlist dirbl;
@@ -5027,7 +5027,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
     cur_xattrs_size += p.first.length() + p.second.length();
   }
 
-  if (((cur_xattrs_size + inc) > g_conf->mds_max_xattr_pairs_size)) {
+  if (((cur_xattrs_size + inc) > g_conf()->mds_max_xattr_pairs_size)) {
     dout(10) << "xattr kv pairs size too big. cur_xattrs_size " 
              << cur_xattrs_size << ", inc " << inc << dendl;
     respond_to_request(mdr, -ENOSPC);
@@ -5473,7 +5473,7 @@ void Server::handle_client_link(MDRequestRef& mdr)
   }
 
   // go!
-  assert(g_conf->mds_kill_link_at != 1);
+  assert(g_conf()->mds_kill_link_at != 1);
 
   // local or remote?
   if (targeti->is_auth()) 
@@ -5629,7 +5629,7 @@ void Server::_link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targ
   }
   dout(10) << " targeti auth has prepared nlink++/--" << dendl;
 
-  assert(g_conf->mds_kill_link_at != 2);
+  assert(g_conf()->mds_kill_link_at != 2);
 
   if (auto& desti_srnode = mdr->more()->desti_srnode) {
     delete desti_srnode;
@@ -5674,7 +5674,7 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
 	   << (inc ? "link ":"unlink ")
 	   << *dn << " to " << *targeti << dendl;
 
-  assert(g_conf->mds_kill_link_at != 3);
+  assert(g_conf()->mds_kill_link_at != 3);
 
   if (!mdr->more()->witnessed.empty())
     mdcache->logged_master_update(mdr->reqid);
@@ -5745,7 +5745,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
 	   << " on " << mdr->slave_request->get_object_info() 
 	   << dendl;
 
-  assert(g_conf->mds_kill_link_at != 4);
+  assert(g_conf()->mds_kill_link_at != 4);
 
   CInode *targeti = mdcache->get_inode(mdr->slave_request->get_object_info().ino);
   assert(targeti);
@@ -5759,7 +5759,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   mdr->auth_pin(targeti);
 
   //ceph_abort();  // test hack: make sure master can handle a slave that fails to prepare...
-  assert(g_conf->mds_kill_link_at != 5);
+  assert(g_conf()->mds_kill_link_at != 5);
 
   // journal it
   mdr->ls = mdlog->get_current_segment();
@@ -5844,7 +5844,7 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti, bool adjust_
   dout(10) << "_logged_slave_link " << *mdr
 	   << " " << *targeti << dendl;
 
-  assert(g_conf->mds_kill_link_at != 6);
+  assert(g_conf()->mds_kill_link_at != 6);
 
   // update the target
   targeti->pop_and_dirty_projected_inode(mdr->ls);
@@ -5888,7 +5888,7 @@ void Server::_commit_slave_link(MDRequestRef& mdr, int r, CInode *targeti)
 	   << " r=" << r
 	   << " " << *targeti << dendl;
 
-  assert(g_conf->mds_kill_link_at != 7);
+  assert(g_conf()->mds_kill_link_at != 7);
 
   if (r == 0) {
     // drop our pins, etc.
@@ -5909,7 +5909,7 @@ void Server::_committed_slave(MDRequestRef& mdr)
 {
   dout(10) << "_committed_slave " << *mdr << dendl;
 
-  assert(g_conf->mds_kill_link_at != 8);
+  assert(g_conf()->mds_kill_link_at != 8);
 
   MMDSSlaveRequest *req = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, 
 					       MMDSSlaveRequest::OP_COMMITTED);
@@ -5941,7 +5941,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
 	   << " ino " << rollback.ino
 	   << dendl;
 
-  assert(g_conf->mds_kill_link_at != 9);
+  assert(g_conf()->mds_kill_link_at != 9);
 
   mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
   assert(mdr || mds->is_resolve());
@@ -6017,7 +6017,7 @@ void Server::_link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
 {
   dout(10) << "_link_rollback_finish" << dendl;
 
-  assert(g_conf->mds_kill_link_at != 10);
+  assert(g_conf()->mds_kill_link_at != 10);
 
   mut->apply();
 
@@ -6040,7 +6040,7 @@ void Server::handle_slave_link_prep_ack(MDRequestRef& mdr, MMDSSlaveRequest *m)
 	   << " " << *m << dendl;
   mds_rank_t from = mds_rank_t(m->get_source().num());
 
-  assert(g_conf->mds_kill_link_at != 11);
+  assert(g_conf()->mds_kill_link_at != 11);
 
   // note slave
   mdr->more()->slaves.insert(from);
@@ -7130,7 +7130,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   }
   */
 
-  assert(g_conf->mds_kill_rename_at != 1);
+  assert(g_conf()->mds_kill_rename_at != 1);
 
   // -- open all srcdn inode frags, if any --
   // we need these open so that auth can properly delegate from inode to dirfrags
@@ -7252,9 +7252,9 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 
   // test hack: bail after slave does prepare, so we can verify it's _live_ rollback.
   if (!mdr->more()->slaves.empty() && !srci->is_dir())
-    assert(g_conf->mds_kill_rename_at != 3);
+    assert(g_conf()->mds_kill_rename_at != 3);
   if (!mdr->more()->slaves.empty() && srci->is_dir())
-    assert(g_conf->mds_kill_rename_at != 4);
+    assert(g_conf()->mds_kill_rename_at != 4);
 
   // -- declare now --
   mdr->set_mds_stamp(ceph_clock_now());
@@ -7304,9 +7304,9 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
 
   // test hack: test slave commit
   if (!mdr->more()->slaves.empty() && !in->is_dir())
-    assert(g_conf->mds_kill_rename_at != 5);
+    assert(g_conf()->mds_kill_rename_at != 5);
   if (!mdr->more()->slaves.empty() && in->is_dir())
-    assert(g_conf->mds_kill_rename_at != 6);
+    assert(g_conf()->mds_kill_rename_at != 6);
   
   // bump popularity
   mds->balancer->hit_dir(srcdn->get_dir(), META_POP_IWR);
@@ -7315,7 +7315,7 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
 
   // did we import srci?  if so, explicitly ack that import that, before we unlock and reply.
 
-  assert(g_conf->mds_kill_rename_at != 7);
+  assert(g_conf()->mds_kill_rename_at != 7);
 
   // reply
   respond_to_request(mdr, 0);
@@ -8978,7 +8978,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   int max_bytes = req->head.args.readdir.max_bytes;
   if (!max_bytes)
     // make sure at least one item can be encoded
-    max_bytes = (512 << 10) + g_conf->mds_max_xattr_pairs_size;
+    max_bytes = (512 << 10) + g_conf()->mds_max_xattr_pairs_size;
 
   __u64 last_snapid = 0;
   string offset_str = req->get_path2();
@@ -9087,7 +9087,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   
   std::string_view snapname = req->get_filepath().last_dentry();
 
-  if (mdr->client_request->get_caller_uid() < g_conf->mds_snap_min_uid || mdr->client_request->get_caller_uid() > g_conf->mds_snap_max_uid) {
+  if (mdr->client_request->get_caller_uid() < g_conf()->mds_snap_min_uid || mdr->client_request->get_caller_uid() > g_conf()->mds_snap_max_uid) {
     dout(20) << "mksnap " << snapname << " on " << *diri << " denied to uid " << mdr->client_request->get_caller_uid() << dendl;
     respond_to_request(mdr, -EPERM);
     return;
@@ -9235,7 +9235,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
 
   std::string_view snapname = req->get_filepath().last_dentry();
 
-  if (mdr->client_request->get_caller_uid() < g_conf->mds_snap_min_uid || mdr->client_request->get_caller_uid() > g_conf->mds_snap_max_uid) {
+  if (mdr->client_request->get_caller_uid() < g_conf()->mds_snap_min_uid || mdr->client_request->get_caller_uid() > g_conf()->mds_snap_max_uid) {
     dout(20) << "rmsnap " << snapname << " on " << *diri << " denied to uid " << mdr->client_request->get_caller_uid() << dendl;
     respond_to_request(mdr, -EPERM);
     return;
@@ -9371,8 +9371,8 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
     return;
   }
 
-  if (mdr->client_request->get_caller_uid() < g_conf->mds_snap_min_uid ||
-      mdr->client_request->get_caller_uid() > g_conf->mds_snap_max_uid) {
+  if (mdr->client_request->get_caller_uid() < g_conf()->mds_snap_min_uid ||
+      mdr->client_request->get_caller_uid() > g_conf()->mds_snap_max_uid) {
     respond_to_request(mdr, -EPERM);
     return;
   }

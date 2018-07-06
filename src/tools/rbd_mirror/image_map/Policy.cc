@@ -356,7 +356,7 @@ bool Policy::can_shuffle_image(const std::string &global_image_id) {
   assert(m_map_lock.is_locked());
 
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
-  int migration_throttle = cct->_conf->get_val<int64_t>(
+  int migration_throttle = cct->_conf.get_val<int64_t>(
     "rbd_mirror_image_policy_migration_throttle");
 
   auto it = m_image_states.find(global_image_id);

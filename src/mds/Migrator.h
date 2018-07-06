@@ -103,7 +103,7 @@ public:
 
   // -- cons --
   Migrator(MDSRank *m, MDCache *c) : mds(m), cache(c) {
-    inject_session_race = g_conf->get_val<bool>("mds_inject_migrator_session_race");
+    inject_session_race = g_conf().get_val<bool>("mds_inject_migrator_session_race");
   }
 
   void handle_conf_change(const md_config_t *conf,

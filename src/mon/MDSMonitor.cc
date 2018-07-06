@@ -122,7 +122,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
   // new map
   dout(4) << "new map" << dendl;
   print_map<0>(get_fsmap());
-  if (!g_conf->mon_mds_skip_sanity) {
+  if (!g_conf()->mon_mds_skip_sanity) {
     get_fsmap().sanity();
   }
 
@@ -155,7 +155,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // print map iff 'debug mon = 30' or higher
   print_map<30>(pending);
-  if (!g_conf->mon_mds_skip_sanity) {
+  if (!g_conf()->mon_mds_skip_sanity) {
     pending.sanity();
   }
 
@@ -259,14 +259,14 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 version_t MDSMonitor::get_trim_to() const
 {
   version_t floor = 0;
-  if (g_conf->mon_mds_force_trim_to > 0 &&
-      g_conf->mon_mds_force_trim_to < (int)get_last_committed()) {
-    floor = g_conf->mon_mds_force_trim_to;
+  if (g_conf()->mon_mds_force_trim_to > 0 &&
+      g_conf()->mon_mds_force_trim_to < (int)get_last_committed()) {
+    floor = g_conf()->mon_mds_force_trim_to;
     dout(10) << __func__ << " explicit mon_mds_force_trim_to = "
              << floor << dendl;
   }
 
-  unsigned max = g_conf->mon_max_mdsmap_epochs;
+  unsigned max = g_conf()->mon_max_mdsmap_epochs;
   version_t last = get_last_committed();
 
   if (last - get_first_committed() > max && floor < last - max)
@@ -561,7 +561,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   // boot?
   if (state == MDSMap::STATE_BOOT) {
     // zap previous instance of this name?
-    if (g_conf->mds_enforce_unique_name) {
+    if (g_conf()->mds_enforce_unique_name) {
       bool failed_mds = false;
       while (mds_gid_t existing = pending.find_mds_gid_by_name(m->get_name())) {
         if (!mon->osdmon()->is_writeable()) {
@@ -697,7 +697,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
               << info.rank << " damaged" << dendl;
 
       utime_t until = ceph_clock_now();
-      until += g_conf->get_val<double>("mon_mds_blacklist_interval");
+      until += g_conf().get_val<double>("mon_mds_blacklist_interval");
       const auto blacklist_epoch = mon->osdmon()->blacklist(info.addrs, until);
       request_proposal(mon->osdmon());
       pending.damaged(gid, blacklist_epoch);
@@ -1075,7 +1075,7 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
   epoch_t blacklist_epoch = 0;
   if (info.rank >= 0 && info.state != MDSMap::STATE_STANDBY_REPLAY) {
     utime_t until = ceph_clock_now();
-    until += g_conf->get_val<double>("mon_mds_blacklist_interval");
+    until += g_conf().get_val<double>("mon_mds_blacklist_interval");
     blacklist_epoch = mon->osdmon()->blacklist(info.addrs, until);
   }
 
@@ -1731,7 +1731,7 @@ bool MDSMonitor::maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid)
       mds++;
     }
     mds_gid_t newgid = fsmap.find_replacement_for({fscid, mds},
-                         name, g_conf->mon_force_standby_active);
+                         name, g_conf()->mon_force_standby_active);
     if (newgid == MDS_GID_NONE) {
       return false;
     }
@@ -1790,7 +1790,7 @@ void MDSMonitor::maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
   mono_time now = mono_clock::now();
   chrono::duration<double> since = now-latest_beacon;
   const bool may_replace = since.count() <
-      std::max(g_conf->mds_beacon_interval, g_conf->mds_beacon_grace * 0.5);
+      std::max(g_conf()->mds_beacon_interval, g_conf()->mds_beacon_grace * 0.5);
 
   // are we in?
   // and is there a non-laggy standby that can take over for us?
@@ -1801,7 +1801,7 @@ void MDSMonitor::maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
       may_replace &&
       !fsmap.get_filesystem(fscid)->mds_map.test_flag(CEPH_MDSMAP_NOT_JOINABLE) &&
       (sgid = fsmap.find_replacement_for({fscid, info.rank}, info.name,
-                g_conf->mon_force_standby_active)) != MDS_GID_NONE)
+                g_conf()->mon_force_standby_active)) != MDS_GID_NONE)
   {
     
     MDSMap::mds_info_t si = fsmap.get_info_gid(sgid);
@@ -1865,7 +1865,7 @@ bool MDSMonitor::maybe_promote_standby(FSMap &fsmap, std::shared_ptr<Filesystem>
     while (p != failed.end()) {
       mds_rank_t f = *p++;
       mds_gid_t sgid = fsmap.find_replacement_for({fs->fscid, f}, {},
-          g_conf->mon_force_standby_active);
+          g_conf()->mon_force_standby_active);
       if (sgid) {
         const MDSMap::mds_info_t si = fsmap.get_info_gid(sgid);
         dout(0) << " taking over failed mds." << f << " with " << sgid
@@ -1994,7 +1994,7 @@ void MDSMonitor::tick()
   chrono::duration<double> since_last = now-last_tick;
 
   if (since_last.count() >
-      (g_conf->mds_beacon_grace - g_conf->mds_beacon_interval)) {
+      (g_conf()->mds_beacon_grace - g_conf()->mds_beacon_interval)) {
     // This case handles either local slowness (calls being delayed
     // for whatever reason) or cluster election slowness (a long gap
     // between calls while an election happened)
@@ -2031,7 +2031,7 @@ void MDSMonitor::tick()
     }
 
 
-    if (since_last.count() >= g_conf->mds_beacon_grace) {
+    if (since_last.count() >= g_conf()->mds_beacon_grace) {
       auto &info = pending.get_info_gid(gid);
       dout(1) << "no beacon from mds." << info.rank << "." << info.inc
               << " (gid: " << gid << " addr: " << info.addrs

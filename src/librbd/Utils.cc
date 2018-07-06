@@ -67,7 +67,7 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
 
 uint64_t get_rbd_default_features(CephContext* cct)
 {
-  auto value = cct->_conf->get_val<std::string>("rbd_default_features");
+  auto value = cct->_conf.get_val<std::string>("rbd_default_features");
   return librbd::rbd_features_from_string(value, nullptr);
 }
 

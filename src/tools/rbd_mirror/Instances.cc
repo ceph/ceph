@@ -314,9 +314,9 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
     return;
   }
 
-  int after = m_cct->_conf->get_val<int64_t>("rbd_mirror_leader_heartbeat_interval") *
-    (1 + m_cct->_conf->get_val<int64_t>("rbd_mirror_leader_max_missed_heartbeats") +
-     m_cct->_conf->get_val<int64_t>("rbd_mirror_leader_max_acquire_attempts_before_break"));
+  int after = m_cct->_conf.get_val<int64_t>("rbd_mirror_leader_heartbeat_interval") *
+    (1 + m_cct->_conf.get_val<int64_t>("rbd_mirror_leader_max_missed_heartbeats") +
+     m_cct->_conf.get_val<int64_t>("rbd_mirror_leader_max_acquire_attempts_before_break"));
 
   bool schedule = false;
   utime_t oldest_time = time;

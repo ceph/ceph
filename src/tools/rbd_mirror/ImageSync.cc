@@ -60,7 +60,7 @@ ImageSync<I>::ImageSync(I *local_image_ctx, I *remote_image_ctx,
     m_work_queue(work_queue), m_instance_watcher(instance_watcher),
     m_progress_ctx(progress_ctx),
     m_lock(unique_lock_name("ImageSync::m_lock", this)),
-    m_update_sync_point_interval(m_local_image_ctx->cct->_conf->template get_val<double>(
+    m_update_sync_point_interval(m_local_image_ctx->cct->_conf.template get_val<double>(
         "rbd_mirror_sync_point_update_age")), m_client_meta_copy(*client_meta) {
 }
 

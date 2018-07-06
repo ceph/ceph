@@ -229,10 +229,10 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
       // they specified '-i <file>'
       data = cmd->get_data();
     }
-    if (data.length() > (size_t) g_conf->mon_config_key_max_entry_size) {
+    if (data.length() > (size_t) g_conf()->mon_config_key_max_entry_size) {
       ret = -EFBIG; // File too large
       ss << "error: entry size limited to "
-         << g_conf->mon_config_key_max_entry_size << " bytes. "
+         << g_conf()->mon_config_key_max_entry_size << " bytes. "
          << "Use 'mon config key max entry size' to manually adjust";
       goto out;
     }

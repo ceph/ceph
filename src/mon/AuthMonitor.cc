@@ -288,7 +288,7 @@ void AuthMonitor::increase_max_global_id()
 {
   assert(mon->is_leader());
 
-  max_global_id += g_conf->mon_globalid_prealloc;
+  max_global_id += g_conf()->mon_globalid_prealloc;
   dout(10) << "increasing max_global_id to " << max_global_id << dendl;
   Incremental inc;
   inc.inc_type = GLOBAL_ID;
@@ -350,7 +350,7 @@ void AuthMonitor::encode_full(MonitorDBStore::TransactionRef t)
 
 version_t AuthMonitor::get_trim_to() const
 {
-  unsigned max = g_conf->paxos_max_join_drift * 2;
+  unsigned max = g_conf()->paxos_max_join_drift * 2;
   version_t version = get_last_committed();
   if (mon->is_leader() && (version > max))
     return version - max;
@@ -419,8 +419,8 @@ uint64_t AuthMonitor::assign_global_id(MonOpRequestRef op, bool should_increase_
 
   // bump the max?
   while (mon->is_leader() &&
-	 (max_global_id < g_conf->mon_globalid_prealloc ||
-	  next_global_id >= max_global_id - g_conf->mon_globalid_prealloc / 2)) {
+	 (max_global_id < g_conf()->mon_globalid_prealloc ||
+	  next_global_id >= max_global_id - g_conf()->mon_globalid_prealloc / 2)) {
     increase_max_global_id();
   }
 
@@ -477,8 +477,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_MGR) {
-	if (g_conf->cephx_cluster_require_signatures ||
-	    g_conf->cephx_require_signatures) {
+	if (g_conf()->cephx_cluster_require_signatures ||
+	    g_conf()->cephx_require_signatures) {
 	  dout(1) << m->get_source_inst()
                   << " supports cephx but not signatures and"
                   << " 'cephx [cluster] require signatures = true';"
@@ -486,8 +486,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	  supported.erase(CEPH_AUTH_CEPHX);
 	}
       } else {
-	if (g_conf->cephx_service_require_signatures ||
-	    g_conf->cephx_require_signatures) {
+	if (g_conf()->cephx_service_require_signatures ||
+	    g_conf()->cephx_require_signatures) {
 	  dout(1) << m->get_source_inst()
                   << " supports cephx but not signatures and"
                   << " 'cephx [service] require signatures = true';"
@@ -500,8 +500,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
 	  entity_name.get_type() == CEPH_ENTITY_TYPE_MGR) {
-	if (g_conf->cephx_cluster_require_version >= 2 ||
-	    g_conf->cephx_require_version >= 2) {
+	if (g_conf()->cephx_cluster_require_version >= 2 ||
+	    g_conf()->cephx_require_version >= 2) {
 	  dout(1) << m->get_source_inst()
                   << " supports cephx but not v2 and"
                   << " 'cephx [cluster] require version >= 2';"
@@ -509,8 +509,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 	  supported.erase(CEPH_AUTH_CEPHX);
 	}
       } else {
-	if (g_conf->cephx_service_require_version >= 2 ||
-	    g_conf->cephx_require_version >= 2) {
+	if (g_conf()->cephx_service_require_version >= 2 ||
+	    g_conf()->cephx_require_version >= 2) {
 	  dout(1) << m->get_source_inst()
                   << " supports cephx but not v2 and"
                   << " 'cephx [service] require version >= 2';"

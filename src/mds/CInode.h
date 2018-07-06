@@ -1083,7 +1083,7 @@ public:
 public:
   void set_primary_parent(CDentry *p) {
     assert(parent == 0 ||
-	   g_conf->get_val<bool>("mds_hack_allow_loading_invalid_metadata"));
+	   g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata"));
     parent = p;
   }
   void remove_primary_parent(CDentry *dn) {

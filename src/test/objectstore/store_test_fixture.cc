@@ -61,14 +61,14 @@ void StoreTestFixture::SetUp()
   // we keep this stuff 'unsafe' out of test case scope to be able to update ANY
   // config settings. Hence setting it to 'safe' here to proceed with the test
   // case
-  g_conf->set_safe_to_start_threads();
+  g_conf().set_safe_to_start_threads();
 }
 
 void StoreTestFixture::TearDown()
 {
   // we keep this stuff 'unsafe' out of test case scope to be able to update ANY
   // config settings. Hence setting it to 'unsafe' here as test case is closing.
-  g_conf->_clear_safe_to_start_threads();
+  g_conf()._clear_safe_to_start_threads();
   PopSettings(0);
   if (store) {
     int r = store->umount();

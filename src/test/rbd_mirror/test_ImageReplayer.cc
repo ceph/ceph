@@ -82,9 +82,9 @@ public:
   TestImageReplayer()
     : m_local_cluster(new librados::Rados()), m_watch_handle(0)
   {
-    EXPECT_EQ(0, g_ceph_context->_conf->get_val("rbd_mirror_journal_commit_age",
+    EXPECT_EQ(0, g_ceph_context->_conf.get_val("rbd_mirror_journal_commit_age",
                                                 &m_journal_commit_age));
-    EXPECT_EQ(0, g_ceph_context->_conf->set_val("rbd_mirror_journal_commit_age",
+    EXPECT_EQ(0, g_ceph_context->_conf.set_val("rbd_mirror_journal_commit_age",
                                                 "0.1"));
 
     EXPECT_EQ("", connect_cluster_pp(*m_local_cluster.get()));
@@ -144,7 +144,7 @@ public:
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
-    EXPECT_EQ(0, g_ceph_context->_conf->set_val("rbd_mirror_journal_commit_age",
+    EXPECT_EQ(0, g_ceph_context->_conf.set_val("rbd_mirror_journal_commit_age",
                                                 m_journal_commit_age));
   }
 

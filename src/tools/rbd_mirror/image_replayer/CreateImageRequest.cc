@@ -451,7 +451,7 @@ void CreateImageRequest<I>::populate_image_options(
   // 3. Don't set the data pool explicitly.
   std::string data_pool;
   librados::Rados local_rados(m_local_io_ctx);
-  auto default_data_pool = g_ceph_context->_conf->get_val<std::string>("rbd_default_data_pool");
+  auto default_data_pool = g_ceph_context->_conf.get_val<std::string>("rbd_default_data_pool");
   auto remote_md_pool = m_remote_image_ctx->md_ctx.get_pool_name();
   auto remote_data_pool = m_remote_image_ctx->data_ctx.get_pool_name();
 

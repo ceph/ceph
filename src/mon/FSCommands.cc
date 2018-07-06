@@ -210,7 +210,7 @@ class FsNewHandler : public FileSystemCommandHandler
     // assign a standby to rank 0 to avoid health warnings
     std::string _name;
     mds_gid_t gid = fsmap.find_replacement_for({fs->fscid, 0}, _name,
-        g_conf->mon_force_standby_active);
+        g_conf()->mon_force_standby_active);
 
     if (gid != MDS_GID_NONE) {
       const auto &info = fsmap.get_info_gid(gid);

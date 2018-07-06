@@ -1119,7 +1119,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     stamp_delta += delta_t;
     pg_sum_delta.stats.add(d.stats);
     auto smooth_intervals =
-      cct ? cct->_conf->get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
+      cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
     if (pg_sum_deltas.size() > smooth_intervals) {
       pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
       stamp_delta -= pg_sum_deltas.front().second;
@@ -1961,7 +1961,7 @@ void PGMap::update_delta(
     *result_ts_delta += delta_t;
     result_pool_delta->stats.add(d.stats);
   }
-  size_t s = cct ? cct->_conf->get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
+  size_t s = cct ? cct->_conf.get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
   if (delta_avg_list->size() > s) {
     result_pool_delta->stats.sub(delta_avg_list->front().first.stats);
     *result_ts_delta -= delta_avg_list->front().second;
@@ -2180,7 +2180,7 @@ void PGMap::get_health_checks(
   health_check_map_t *checks) const
 {
   utime_t now = ceph_clock_now();
-  const auto max = cct->_conf->get_val<uint64_t>("mon_health_max_detail");
+  const auto max = cct->_conf.get_val<uint64_t>("mon_health_max_detail");
   const auto& pools = osdmap.get_pools();
 
   typedef enum pg_consequence_t {
@@ -2286,7 +2286,7 @@ void PGMap::get_health_checks(
     }
   }
 
-  utime_t cutoff = now - utime_t(cct->_conf->get_val<int64_t>("mon_pg_stuck_threshold"), 0);
+  utime_t cutoff = now - utime_t(cct->_conf.get_val<int64_t>("mon_pg_stuck_threshold"), 0);
   // Loop over all PGs, if there are any possibly-unhealthy states in there
   if (!possible_responses.empty()) {
     for (const auto& i : pg_stat) {
@@ -2527,7 +2527,7 @@ void PGMap::get_health_checks(
   unsigned num_in = osdmap.get_num_in_osds();
   auto sum_pg_up = std::max(static_cast<size_t>(pg_sum.up), pg_stat.size());
   const auto min_pg_per_osd =
-    cct->_conf->get_val<uint64_t>("mon_pg_warn_min_per_osd");
+    cct->_conf.get_val<uint64_t>("mon_pg_warn_min_per_osd");
   if (num_in && min_pg_per_osd > 0 && osdmap.get_pools().size() > 0) {
     auto per = sum_pg_up / num_in;
     if (per < min_pg_per_osd && per) {
@@ -2539,7 +2539,7 @@ void PGMap::get_health_checks(
   }
 
   // TOO_MANY_PGS
-  auto max_pg_per_osd = cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd");
+  auto max_pg_per_osd = cct->_conf.get_val<uint64_t>("mon_max_pg_per_osd");
   if (num_in && max_pg_per_osd > 0) {
     auto per = sum_pg_up / num_in;
     if (per > max_pg_per_osd) {
@@ -2555,11 +2555,11 @@ void PGMap::get_health_checks(
   if (!pg_stat.empty()) {
     list<string> pgp_detail, many_detail;
     const auto mon_pg_warn_min_objects =
-      cct->_conf->get_val<int64_t>("mon_pg_warn_min_objects");
+      cct->_conf.get_val<int64_t>("mon_pg_warn_min_objects");
     const auto mon_pg_warn_min_pool_objects =
-      cct->_conf->get_val<int64_t>("mon_pg_warn_min_pool_objects");
+      cct->_conf.get_val<int64_t>("mon_pg_warn_min_pool_objects");
     const auto mon_pg_warn_max_object_skew =
-      cct->_conf->get_val<double>("mon_pg_warn_max_object_skew");
+      cct->_conf.get_val<double>("mon_pg_warn_max_object_skew");
     for (auto p = pg_pool_sum.begin();
          p != pg_pool_sum.end();
          ++p) {
@@ -2610,8 +2610,8 @@ void PGMap::get_health_checks(
   // POOL_FULL
   // POOL_NEAR_FULL
   {
-    float warn_threshold = (float)g_conf->get_val<int64_t>("mon_pool_quota_warn_threshold")/100;
-    float crit_threshold = (float)g_conf->get_val<int64_t>("mon_pool_quota_crit_threshold")/100;
+    float warn_threshold = (float)g_conf().get_val<int64_t>("mon_pool_quota_warn_threshold")/100;
+    float crit_threshold = (float)g_conf().get_val<int64_t>("mon_pool_quota_crit_threshold")/100;
     list<string> full_detail, nearfull_detail;
     unsigned full_pools = 0, nearfull_pools = 0;
     for (auto it : pools) {
@@ -2900,7 +2900,7 @@ void PGMap::get_health_checks(
   }
 
   // POOL_APP
-  if (g_conf->get_val<bool>("mon_warn_on_pool_no_app")) {
+  if (g_conf().get_val<bool>("mon_warn_on_pool_no_app")) {
     list<string> detail;
     for (auto &it : pools) {
       const pg_pool_t &pool = it.second;
@@ -3171,7 +3171,7 @@ int process_pg_map_command(
       stuckop_vec.push_back("unclean");
     int64_t threshold;
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
-               g_conf->get_val<int64_t>("mon_pg_stuck_threshold"));
+               g_conf().get_val<int64_t>("mon_pg_stuck_threshold"));
 
     if (pg_map.dump_stuck_pg_stats(ds, f, (int)threshold, stuckop_vec) < 0) {
       *ss << "failed";
@@ -3368,7 +3368,7 @@ void PGMapUpdater::check_down_pgs(
   // if a large number of osds changed state, just iterate over the whole
   // pg map.
   if (need_check_down_pg_osds.size() > (unsigned)osdmap.get_num_osds() *
-      g_conf->get_val<double>("mon_pg_check_down_all_threshold")) {
+      g_conf().get_val<double>("mon_pg_check_down_all_threshold")) {
     check_all = true;
   }
 
@@ -3446,7 +3446,7 @@ int reweight::by_utilization(
       }
     }
 
-    if (!num_osds || (num_pg_copies / num_osds < g_conf->mon_reweight_min_pgs_per_osd)) {
+    if (!num_osds || (num_pg_copies / num_osds < g_conf()->mon_reweight_min_pgs_per_osd)) {
       *ss << "Refusing to reweight: we only have " << num_pg_copies
 	  << " PGs across " << num_osds << " osds!\n";
       return -EDOM;
@@ -3457,13 +3457,13 @@ int reweight::by_utilization(
     // by osd utilization
     int num_osd = std::max<size_t>(1, pgm.osd_stat.size());
     if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
-	< g_conf->mon_reweight_min_bytes_per_osd) {
+	< g_conf()->mon_reweight_min_bytes_per_osd) {
       *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
 	  << " kb across all osds!\n";
       return -EDOM;
     }
     if ((uint64_t)pgm.osd_sum.kb_used * 1024 / num_osd
-	< g_conf->mon_reweight_min_bytes_per_osd) {
+	< g_conf()->mon_reweight_min_bytes_per_osd) {
       *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb_used
 	  << " kb used across all osds!\n";
       return -EDOM;

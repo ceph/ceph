@@ -29,7 +29,7 @@
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
-#include "common/config_fwd.h"
+#include "common/config_proxy.h"
 
 #include "include/spinlock.h"
 
@@ -83,7 +83,7 @@ public:
   }
   void put();
 
-  md_config_t *_conf;
+  ConfigProxy _conf;
   ceph::logging::Log *_log;
 
   /* init ceph::crypto */

@@ -69,7 +69,7 @@ public:
   }
 
   template <unsigned SubV, int LvlV>
-  bool should_gather() {
+  bool should_gather() const {
     static_assert(SubV < get_num(), "wrong subsystem ID");
     static_assert(LvlV >= -1 && LvlV <= 200);
 
@@ -85,7 +85,7 @@ public:
 		    LvlV <= ceph_subsys_get_max_default_level(SubV));
     }
   }
-  bool should_gather(const unsigned sub, int level) {
+  bool should_gather(const unsigned sub, int level) const {
     assert(sub < m_subsys.size());
     return level <= static_cast<int>(m_gather_levels[sub]);
   }

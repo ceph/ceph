@@ -1194,7 +1194,7 @@ public:
    */
   bool should_trim() {
     int available_versions = get_version() - get_first_committed();
-    int maximum_versions = g_conf->paxos_min + g_conf->paxos_trim_min;
+    int maximum_versions = g_conf()->paxos_min + g_conf()->paxos_trim_min;
 
     if (trimming || (available_versions <= maximum_versions))
       return false;

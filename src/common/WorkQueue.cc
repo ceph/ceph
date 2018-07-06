@@ -183,7 +183,7 @@ void ThreadPool::start()
 
   if (_thread_num_option.length()) {
     ldout(cct, 10) << " registering config observer on " << _thread_num_option << dendl;
-    cct->_conf->add_observer(this);
+    cct->_conf.add_observer(this);
   }
 
   _lock.Lock();
@@ -198,7 +198,7 @@ void ThreadPool::stop(bool clear_after)
 
   if (_thread_num_option.length()) {
     ldout(cct, 10) << " unregistering config observer on " << _thread_num_option << dendl;
-    cct->_conf->remove_observer(this);
+    cct->_conf.remove_observer(this);
   }
 
   _lock.Lock();

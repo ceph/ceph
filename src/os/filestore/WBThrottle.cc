@@ -33,14 +33,14 @@ WBThrottle::WBThrottle(CephContext *cct) :
   for (unsigned i = l_wbthrottle_first + 1; i != l_wbthrottle_last; ++i)
     logger->set(i, 0);
 
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
 }
 
 WBThrottle::~WBThrottle() {
   assert(cct);
   cct->get_perfcounters_collection()->remove(logger);
   delete logger;
-  cct->_conf->remove_observer(this);
+  cct->_conf.remove_observer(this);
 }
 
 void WBThrottle::start()
