@@ -126,7 +126,11 @@ BuildRequires:	selinux-policy-devel
 %endif
 BuildRequires:	bc
 BuildRequires:	gperf
-BuildRequires:  cmake
+%if 0%{?rhel} == 7
+BuildRequires:  cmake3 > 3.5
+%else
+BuildRequires:  cmake > 3.5
+%endif
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
@@ -899,7 +903,12 @@ env | sort
 
 mkdir build
 cd build
-cmake .. \
+%if 0%{?rhel} == 7
+CMAKE=cmake3
+%else
+CMAKE=cmake
+%endif
+${CMAKE} .. \
     -DCMAKE_INSTALL_PREFIX=%{_prefix} \
     -DCMAKE_INSTALL_LIBDIR=%{_libdir} \
     -DCMAKE_INSTALL_LIBEXECDIR=%{_libexecdir} \
