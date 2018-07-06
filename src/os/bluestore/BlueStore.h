@@ -1589,12 +1589,16 @@ public:
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
-    explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o)
+    explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o,
+			  list<Context*> *on_commits)
       : ch(c),
 	osr(o),
 	ioc(cct, this),
 	start(ceph_clock_now()) {
       last_stamp = start;
+      if (on_commits) {
+	oncommits.swap(*on_commits);
+      }
     }
     ~TransContext() {
       delete deferred_txn;
@@ -2015,7 +2019,8 @@ private:
   template <int LogLevelV = 30> void _dump_extent_map(ExtentMap& em);
   template <int LogLevelV = 30> void _dump_transaction(Transaction *t);
 
-  TransContext *_txc_create(Collection *c, OpSequencer *osr);
+  TransContext *_txc_create(Collection *c, OpSequencer *osr,
+			    list<Context*> *on_commits);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_calc_cost(TransContext *txc);
