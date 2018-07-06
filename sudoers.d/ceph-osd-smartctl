@@ -1,0 +1,3 @@
+## allow ceph-osd (which runs as user ceph) to collect device health metrics
+
+ceph ALL=NOPASSWD: /usr/sbin/smartctl -a --json /dev/*
