@@ -102,8 +102,6 @@ def task(ctx, config):
     ceph_objectstore_tool: (true) whether to export/import a pg while an osd is down
     chance_move_pg: (1.0) chance of moving a pg if more than 1 osd is down (default 100%)
 
-    chance_thrash_cluster_full: .05
-
     example:
 
     tasks:
