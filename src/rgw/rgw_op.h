@@ -104,6 +104,10 @@ public:
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, std::string* error_content);
   virtual void dump(const string& code, const string& message) const {}
+
+  virtual bool supports_quota() {
+    return true;
+  }
 };
 
 
@@ -141,9 +145,11 @@ public:
   int get_ret() const { return op_ret; }
 
   virtual int init_processing() {
-    op_ret = init_quota();
-    if (op_ret < 0)
-      return op_ret;
+    if (dialect_handler->supports_quota()) {
+      op_ret = init_quota();
+      if (op_ret < 0)
+        return op_ret;
+    }
 
     return 0;
   }
