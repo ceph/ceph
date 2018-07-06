@@ -4977,13 +4977,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
-    if (bluefs) {
-      bluefs->umount();
-      delete bluefs;
-      bluefs = NULL;
-    }
-    delete db;
-    db = NULL;
+    _close_db();
     return -EIO;
   }
   dout(1) << __func__ << " opened " << kv_backend
