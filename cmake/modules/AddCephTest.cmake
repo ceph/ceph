@@ -38,13 +38,8 @@ endif()
 
 #sets uniform compiler flags and link libraries
 function(add_ceph_unittest unittest_name)
-  set(UNITTEST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name}")
-  # If the second argument is "parallel", it means we want a parallel run
-  if(WITH_GTEST_PARALLEL AND "${ARGV1}" STREQUAL "parallel")
-    ExternalProject_Get_Property(gtest-parallel_ext source_dir)
-    set(UNITTEST ${source_dir}/gtest-parallel ${UNITTEST})
-  endif()
-  add_ceph_test(${unittest_name} "${UNITTEST}")
+  add_ceph_test(${unittest_name} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name})
   target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
   set_target_properties(${unittest_name} PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 endfunction()
+
