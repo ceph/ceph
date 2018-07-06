@@ -277,6 +277,12 @@ public:
 
 class RGWHandler_REST_PSTopic_S3 : public RGWHandler_REST_S3 {
 protected:
+  int init_permissions(RGWOp* op) override {
+    return 0;
+  }
+  int read_permissions(RGWOp* op) override {
+    return 0;
+  }
   bool supports_quota() override {
     return false;
   }
@@ -608,6 +614,13 @@ public:
 
 class RGWHandler_REST_PSSub_S3 : public RGWHandler_REST_S3 {
 protected:
+  int init_permissions(RGWOp* op) override {
+    return 0;
+  }
+
+  int read_permissions(RGWOp* op) override {
+    return 0;
+  }
   bool supports_quota() override {
     return false;
   }
