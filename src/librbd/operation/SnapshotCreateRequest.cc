@@ -310,6 +310,17 @@ void SnapshotCreateRequest<I>::update_snap_context() {
   image_ctx.snapc.snaps.swap(snaps);
   image_ctx.data_ctx.selfmanaged_snap_set_write_ctx(
     image_ctx.snapc.seq, image_ctx.snaps);
+
+  if (!image_ctx.migration_info.empty()) {
+    auto it = image_ctx.migration_info.snap_map.find(CEPH_NOSNAP);
+    assert(it != image_ctx.migration_info.snap_map.end());
+    assert(!it->second.empty());
+    if (it->second[0] == CEPH_NOSNAP) {
+      ldout(cct, 5) << this << " " << __func__
+                    << ": updating migration snap_map" << dendl;
+      it->second[0] = m_snap_id;
+    }
+  }
 }
 
 } // namespace operation
