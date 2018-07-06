@@ -21,6 +21,9 @@ public:
   RGWPSSyncModuleInstance(CephContext *cct, const JSONFormattable& config);
   RGWDataSyncModule *get_data_handler() override;
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
+  bool supports_user_writes() override {
+    return true;
+  }
 };
 
 #endif
